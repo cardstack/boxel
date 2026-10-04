@@ -112,6 +112,11 @@ export const READ_URL_MAX_MEDIA_BYTES = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
 export const READ_URL_MAX_CONTENT_CHARS = 100_000;
 // How many image URLs a page lists.
 export const READ_URL_MAX_IMAGES = 50;
+// How many readUrl calls one response may make. Each read runs in turn for
+// up to READ_URL_TIMEOUT_MS and can add READ_URL_MAX_CONTENT_CHARS to the
+// conversation's history, so this keeps one turn's reads to about a minute
+// and a quarter and half a million characters.
+export const READ_URL_MAX_CALLS_PER_RESPONSE = 5;
 
 const USER_AGENT = 'Mozilla/5.0 (compatible; BoxelAIAssistant/1.0)';
 
@@ -144,10 +149,11 @@ export interface ReadUrlOptions {
   // Whether the model can read realm files in this room; decides which
   // alternative the realm refusal points it to.
   realmFileReadingAllowed?: boolean;
-  // Injectable for tests. The default fetch connects only to addresses
-  // guardedLookup has vetted.
+  // Injectable for tests of everything above the network: an injected fetch
+  // bypasses the connect-time address guard, so it never reaches a socket.
   fetch?: (url: string, init: ReadUrlRequestInit) => Promise<Response>;
-  // Injectable for tests: resolves a hostname to every address it has.
+  // Injectable for tests: resolves a hostname to every address it has. The
+  // default fetch's connect-time guard vets the addresses it returns.
   resolveHost?: (hostname: string) => Promise<string[]>;
   timeoutMs?: number;
 }
@@ -164,8 +170,13 @@ export interface ReadUrlRequestInit {
 // Addresses a public-web read must never reach: loopback, private and
 // link-local networks (cloud metadata services live at 169.254.169.254),
 // carrier-grade NAT, multicast, reserved and documentation ranges, and the
-// IPv6 equivalents. IPv4-mapped IPv6 addresses are unwrapped before the
-// check, so ::ffff:127.0.0.1 is treated as 127.0.0.1.
+// IPv6 equivalents. IPv4-mapped addresses (::ffff:a.b.c.d, in dotted or hex
+// form) are checked against the IPv4 ranges — BlockList treats the two forms
+// as one address — so ::ffff:7f00:1 is refused like 127.0.0.1. Every other
+// IPv6 range that embeds an IPv4 address (IPv4-compatible, IPv4-translated,
+// NAT64 well-known and local-use, 6to4, Teredo) is blocked whole: the
+// embedded address could be any of the IPv4 ranges above, and public sites
+// are reached over plain IPv4 or native IPv6 anyway.
 const blockedAddresses = (() => {
   let list = new BlockList();
   for (let [network, prefix] of [
@@ -188,10 +199,13 @@ const blockedAddresses = (() => {
     list.addSubnet(network, prefix, 'ipv4');
   }
   for (let [network, prefix] of [
-    ['::', 128],
-    ['::1', 128],
+    ['::', 96],
+    ['::ffff:0:0:0', 96],
     ['64:ff9b::', 96],
+    ['64:ff9b:1::', 48],
     ['100::', 64],
+    ['2001::', 32],
+    ['2002::', 16],
     ['2001:db8::', 32],
     ['fc00::', 7],
     ['fe80::', 10],
@@ -263,24 +277,33 @@ export function guardedLookup(
 
 let defaultDispatcher: Agent | undefined;
 
-function defaultFetch(
-  url: string,
-  init: ReadUrlRequestInit,
-): Promise<Response> {
-  defaultDispatcher ??= new Agent({
-    connect: { lookup: guardedLookup() },
-  });
-  return undiciFetch(url, {
-    ...init,
-    dispatcher: defaultDispatcher,
-  }) as unknown as Promise<Response>;
+// The fetch every real read uses: undici with a dispatcher whose sockets
+// resolve hostnames only through guardedLookup, so no connection is ever
+// made to an address that isn't public.
+function guardedFetch(
+  resolveHost?: (hostname: string) => Promise<string[]>,
+): (url: string, init: ReadUrlRequestInit) => Promise<Response> {
+  let dispatcher = resolveHost
+    ? new Agent({ connect: { lookup: guardedLookup(resolveHost) } })
+    : (defaultDispatcher ??= new Agent({
+        connect: { lookup: guardedLookup() },
+      }));
+  return (url, init) =>
+    undiciFetch(url, { ...init, dispatcher }) as unknown as Promise<Response>;
 }
 
 // --- Realm detection ------------------------------------------------------
 
-// Realm servers send this header on every response, so a response carrying
-// it came from a realm whatever URL led there.
+// Realm servers send this header on their API responses, so a response
+// carrying it came from a realm whatever URL led there.
 const REALM_URL_HEADER = 'x-boxel-realm-url';
+// A request that accepts HTML — as every readUrl request does — is answered
+// by a realm server with the Boxel host app's HTML shell rather than the
+// realm resource, and the shell carries no realm header. The shell is
+// recognised by the host's config meta tag, which every Boxel host page
+// carries.
+const BOXEL_HOST_SHELL_RE =
+  /<meta\s[^>]*name=["']@cardstack\/host\/config\/environment["']/i;
 
 // The origins of the realms the room's messages point at: the realm the user
 // is in, their workspaces, the cards they have open, and the file open in
@@ -358,11 +381,10 @@ export async function executeReadUrl(
   rawUrl: string,
   options: ReadUrlOptions = {},
 ): Promise<ReadUrlResult> {
-  let fetchImpl = options.fetch ?? defaultFetch;
+  let fetchImpl = options.fetch ?? guardedFetch(options.resolveHost);
   let realmOrigins = options.realmOrigins ?? new Set<string>();
   let realmFileReadingAllowed = options.realmFileReadingAllowed ?? false;
   let signal = AbortSignal.timeout(options.timeoutMs ?? READ_URL_TIMEOUT_MS);
-  let resolveHost = options.resolveHost ?? defaultResolveHost;
 
   let current: URL;
   try {
@@ -373,14 +395,7 @@ export async function executeReadUrl(
 
   try {
     for (let hop = 0; ; hop++) {
-      let refusal = await checkTarget(
-        current,
-        realmOrigins,
-        realmFileReadingAllowed,
-        // An injected fetch has no guarded lookup behind it, so vet
-        // hostnames here too; the default fetch vets them at connect time.
-        options.fetch ? resolveHost : undefined,
-      );
+      let refusal = checkTarget(current, realmOrigins, realmFileReadingAllowed);
       if (refusal) {
         return { ok: false, url: rawUrl, error: refusal };
       }
@@ -431,20 +446,23 @@ export async function executeReadUrl(
             `${current.href} answered ${response.status} ${response.statusText}`.trim(),
         };
       }
-      return await readBody(rawUrl, current, response);
+      return await readBody(rawUrl, current, response, () =>
+        realmRefusal(rawUrl, realmFileReadingAllowed),
+      );
     }
   } catch (e: any) {
     return { ok: false, url: rawUrl, error: describeFetchError(rawUrl, e) };
   }
 }
 
-// Why `url` must not be fetched, or undefined when it may be.
-async function checkTarget(
+// Why `url` must not be fetched, or undefined when it may be. A hostname is
+// vetted later, at connect time, by guardedLookup; an IP literal never goes
+// through a lookup, so it is checked here.
+function checkTarget(
   url: URL,
   realmOrigins: Set<string>,
   realmFileReadingAllowed: boolean,
-  resolveHost: ((hostname: string) => Promise<string[]>) | undefined,
-): Promise<string | undefined> {
+): string | undefined {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return `readUrl reads http and https URLs only, not ${url.protocol} URLs`;
   }
@@ -464,15 +482,6 @@ async function checkTarget(
     return isPublicAddress(hostname)
       ? undefined
       : `${url.host} is a private or reserved address, which readUrl does not read`;
-  }
-  if (resolveHost) {
-    let addresses = await resolveHost(hostname);
-    if (
-      addresses.length === 0 ||
-      addresses.some((address) => !isPublicAddress(address))
-    ) {
-      return `${url.host} resolves to a private or reserved address, which readUrl does not read`;
-    }
   }
   return undefined;
 }
@@ -499,6 +508,7 @@ async function readBody(
   rawUrl: string,
   finalUrl: URL,
   response: Response,
+  realmRefusalMessage: () => string,
 ): Promise<ReadUrlResult> {
   let contentTypeHeader = response.headers.get('content-type') ?? '';
   let [mimeType, ...params] = contentTypeHeader
@@ -529,6 +539,9 @@ async function readBody(
   }
   let bytes = await readCapped(response, READ_URL_MAX_TEXT_BYTES, rawUrl);
   let text = decodeText(bytes, params);
+  if (BOXEL_HOST_SHELL_RE.test(text)) {
+    return { ok: false, url: rawUrl, error: realmRefusalMessage() };
+  }
   let content =
     mimeType === 'text/html' || mimeType === 'application/xhtml+xml'
       ? renderHtmlDocument(rawUrl, finalUrl.href, processHtml(text, finalUrl))
@@ -777,6 +790,16 @@ export function processHtml(source: string, pageUrl: URL): ProcessedHtml {
             key === 'twitter:description'
           ) {
             description ??= attributes.content?.trim() || undefined;
+          }
+        }
+        // A <picture> offers its image variants on <source srcset>, which
+        // is omitted from the HTML, so its candidates are listed here.
+        if (name === 'source' && attributes.srcset) {
+          for (let candidate of srcsetUrls(attributes.srcset)) {
+            let resolved = resolve(candidate);
+            if (resolved) {
+              images.push(resolved);
+            }
           }
         }
         if (OMITTED_ELEMENTS.has(name) || UNWRAPPED_INLINE_ELEMENTS.has(name)) {

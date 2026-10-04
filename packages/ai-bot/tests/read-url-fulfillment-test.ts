@@ -2,7 +2,11 @@ import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
 import { fulfillReadUrlCalls } from '../lib/read-url-fulfillment.ts';
-import { READ_URL_TOOL_NAME, type ReadUrlResult } from '../lib/read-url.ts';
+import {
+  READ_URL_MAX_CALLS_PER_RESPONSE,
+  READ_URL_TOOL_NAME,
+  type ReadUrlResult,
+} from '../lib/read-url.ts';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -175,6 +179,45 @@ module('fulfillReadUrlCalls', () => {
 
     assert.strictEqual(reads, 0);
     assert.strictEqual(sent[0].content.failureReason, 'readUrl needs a url.');
+  });
+
+  test('calls past the per-response cap are answered without a read', async () => {
+    let { client, sent } = fakeClient();
+    let readUrls: string[] = [];
+    let calls = Array.from(
+      { length: READ_URL_MAX_CALLS_PER_RESPONSE + 2 },
+      (_, i) => readUrlCall(`call-${i}`, `https://example.com/${i}`),
+    );
+
+    let outcomes = await fulfillReadUrlCalls(
+      calls,
+      deps(client, async (url) => {
+        readUrls.push(url);
+        return {
+          ok: true,
+          kind: 'text',
+          url,
+          finalUrl: url,
+          name: url,
+          content: url,
+        };
+      }),
+    );
+
+    assert.strictEqual(readUrls.length, READ_URL_MAX_CALLS_PER_RESPONSE);
+    assert.strictEqual(sent.length, calls.length, 'every call gets a result');
+    let capped = sent.slice(READ_URL_MAX_CALLS_PER_RESPONSE);
+    assert.true(
+      capped.every((event) =>
+        event.content.failureReason.includes(
+          `one response reads at most ${READ_URL_MAX_CALLS_PER_RESPONSE} URLs`,
+        ),
+      ),
+    );
+    assert.deepEqual(
+      outcomes.map((o) => o.ok),
+      [...calls.map((_, i) => i < READ_URL_MAX_CALLS_PER_RESPONSE)],
+    );
   });
 
   test('calls are published one at a time, in order', async () => {

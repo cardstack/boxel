@@ -8,6 +8,7 @@ import type { MatrixClient } from 'matrix-js-sdk';
 import type { ChatCompletionMessageToolCall } from 'openai/resources';
 import {
   executeReadUrl,
+  READ_URL_MAX_CALLS_PER_RESPONSE,
   urlFromReadUrlArguments,
   type ReadUrlOptions,
   type ReadUrlResult,
@@ -50,7 +51,8 @@ export interface ReadUrlFulfillmentOutcome {
 // attached as text, so its content is inlined into the tool message; a read
 // image (or other media) is uploaded under its own content type and
 // attached as media, so the prompt embeds it for the model on the turn the
-// result starts. A failed read publishes the reason instead. Calls are
+// result starts. A failed read publishes the reason instead, and calls past
+// READ_URL_MAX_CALLS_PER_RESPONSE are answered without a read. Calls are
 // handled one at a time: each published result re-triggers the bot, and
 // publishing in sequence keeps every earlier result on the server before the
 // handler a later one triggers reads the room history.
@@ -59,10 +61,25 @@ export async function fulfillReadUrlCalls(
   deps: ReadUrlFulfillmentDeps,
 ): Promise<ReadUrlFulfillmentOutcome[]> {
   let outcomes: ReadUrlFulfillmentOutcome[] = [];
+  let read = 0;
   for (let call of calls) {
     if (call.type !== 'function') {
       continue;
     }
+    // Calls past the cap still get a result, so the turn settles and the
+    // model learns which reads to ask for again.
+    if (read >= READ_URL_MAX_CALLS_PER_RESPONSE) {
+      let url = urlFromReadUrlArguments(call.function.arguments);
+      outcomes.push(
+        await publishFailure(
+          call.id,
+          `${url ?? 'This URL'} was not read: one response reads at most ${READ_URL_MAX_CALLS_PER_RESPONSE} URLs. Read it on a later turn if you still need it.`,
+          deps,
+        ),
+      );
+      continue;
+    }
+    read++;
     outcomes.push(await fulfillOne(call, deps));
   }
   return outcomes;

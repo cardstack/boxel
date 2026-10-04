@@ -16,6 +16,8 @@ import {
   type ReadUrlRequestInit,
 } from '../lib/read-url.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 type FakeRoute = {
   status?: number;
@@ -45,8 +47,11 @@ function fakeFetch(routes: Record<string, FakeRoute>) {
   return { fetch, requested };
 }
 
-// Every hostname resolves to a public address unless the test says otherwise.
-const publicResolver = async () => ['93.184.215.14'];
+// The page a realm server sends to a request that accepts HTML: the Boxel
+// host app's shell, which carries no realm header.
+const BOXEL_HOST_SHELL = `<!DOCTYPE html><html><head><title>Boxel</title>
+  <meta name="@cardstack/host/config/environment" content="%7B%7D">
+  </head><body><script src="/assets/app.js"></script></body></html>`;
 
 module('readUrl address policy', () => {
   test('isPublicAddress refuses private, loopback, link-local and reserved addresses', () => {
@@ -65,6 +70,14 @@ module('readUrl address policy', () => {
       'fe80::1',
       '::ffff:127.0.0.1',
       '::ffff:169.254.169.254',
+      '::ffff:7f00:1',
+      '::127.0.0.1',
+      '::7f00:1',
+      '::ffff:0:7f00:1',
+      '64:ff9b::7f00:1',
+      '64:ff9b:1::a00:1',
+      '2002:7f00:1::1',
+      '2001:0:4136:e378:8000:63bf:3fff:fdd2',
       'not-an-address',
     ]) {
       assert.false(isPublicAddress(address), `${address} is not public`);
@@ -87,6 +100,26 @@ module('readUrl address policy', () => {
       error?.message.includes('private or reserved address'),
       'it says why',
     );
+  });
+
+  test('guardedLookup answers an all-addresses lookup with every vetted address', async () => {
+    // undici's connector asks for every address (`all: true`).
+    let lookup = guardedLookup(async () => [
+      '93.184.215.14',
+      '2606:4700::1111',
+    ]);
+    let entries = await new Promise<unknown>((resolve, reject) =>
+      (lookup as any)(
+        'example.com',
+        { all: true },
+        (err: Error | null, list: unknown) =>
+          err ? reject(err) : resolve(list),
+      ),
+    );
+    assert.deepEqual(entries, [
+      { address: '93.184.215.14', family: 4 },
+      { address: '2606:4700::1111', family: 6 },
+    ]);
   });
 
   test('guardedLookup passes the vetted addresses to the socket', async () => {
@@ -118,7 +151,6 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl('https://example.com/article', {
       fetch,
-      resolveHost: publicResolver,
     });
 
     assert.true(result.ok);
@@ -173,7 +205,6 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl('https://example.com/pics/one.png', {
       fetch,
-      resolveHost: publicResolver,
     });
 
     assert.true(result.ok);
@@ -192,7 +223,6 @@ module('executeReadUrl', () => {
       'http://localhost:4201/user/jane/realm/Person/1',
       {
         fetch,
-        resolveHost: publicResolver,
         realmOrigins: new Set(['http://localhost:4201']),
         realmFileReadingAllowed: true,
       },
@@ -206,7 +236,29 @@ module('executeReadUrl', () => {
     assert.strictEqual(requested.length, 0, 'nothing was fetched');
   });
 
-  test('a response from a realm server is refused and its body is not returned', async () => {
+  test('the Boxel host shell a realm server answers with is refused', async () => {
+    // Any realm URL — a card, its .json, an image — requested with an HTML
+    // accept header gets the host shell, with no realm header.
+    let { fetch } = fakeFetch({
+      'https://app.example.com/catalog/logo.png': {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+        body: BOXEL_HOST_SHELL,
+      },
+    });
+
+    let result = await executeReadUrl(
+      'https://app.example.com/catalog/logo.png',
+      { fetch, realmFileReadingAllowed: true },
+    );
+
+    assert.false(result.ok);
+    assert.ok(
+      !result.ok && result.error.includes('Read it with readRealmFile'),
+      'the model is pointed at readRealmFile',
+    );
+  });
+
+  test('a realm API response is refused and its body is not returned', async () => {
     let { fetch } = fakeFetch({
       'https://app.example.com/user/jane/realm/Person/1': {
         headers: {
@@ -219,7 +271,7 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl(
       'https://app.example.com/user/jane/realm/Person/1',
-      { fetch, resolveHost: publicResolver, realmFileReadingAllowed: false },
+      { fetch, realmFileReadingAllowed: false },
     );
 
     assert.false(result.ok);
@@ -241,16 +293,13 @@ module('executeReadUrl', () => {
         headers: { location: 'https://app.example.com/user/jane/realm/x' },
       },
       'https://app.example.com/user/jane/realm/x': {
-        status: 401,
-        headers: {
-          'x-boxel-realm-url': 'https://app.example.com/user/jane/realm/',
-        },
+        headers: { 'content-type': 'text/html' },
+        body: BOXEL_HOST_SHELL,
       },
     });
 
     let result = await executeReadUrl('https://short.example/abc', {
       fetch,
-      resolveHost: publicResolver,
       realmFileReadingAllowed: true,
     });
 
@@ -270,7 +319,6 @@ module('executeReadUrl', () => {
     ]) {
       let result = await executeReadUrl(url, {
         fetch,
-        resolveHost: publicResolver,
       });
       assert.false(result.ok, `${url} is refused`);
       assert.ok(
@@ -281,17 +329,33 @@ module('executeReadUrl', () => {
     assert.strictEqual(requested.length, 0, 'nothing was fetched');
   });
 
-  test('a hostname that resolves to a private address is refused', async () => {
-    let { fetch, requested } = fakeFetch({});
-
-    let result = await executeReadUrl('http://internal.example/', {
-      fetch,
-      resolveHost: async () => ['10.0.0.8'],
+  test('the real fetch never connects to a hostname that resolves to a private address', async () => {
+    // No injected fetch: this exercises the guarded dispatcher every real
+    // read uses. The server listens on loopback and must see no request.
+    let requests = 0;
+    let server = createServer((_req, res) => {
+      requests++;
+      res.end('internal');
     });
-
-    assert.false(result.ok);
-    assert.ok(!result.ok && result.error.includes('resolves to a private'));
-    assert.strictEqual(requested.length, 0);
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    let { port } = server.address() as AddressInfo;
+    try {
+      for (let addresses of [['127.0.0.1'], ['93.184.215.14', '127.0.0.1']]) {
+        let result = await executeReadUrl(`http://internal.test:${port}/`, {
+          resolveHost: async () => addresses,
+        });
+        assert.false(result.ok, `${addresses.join(', ')} is refused`);
+        assert.ok(
+          !result.ok && result.error.includes('resolves to a private'),
+          'it says why',
+        );
+      }
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    assert.strictEqual(requests, 0, 'the internal server was never reached');
   });
 
   test('a redirect to a private address is refused', async () => {
@@ -304,7 +368,6 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl('https://example.com/go', {
       fetch,
-      resolveHost: publicResolver,
     });
 
     assert.false(result.ok);
@@ -327,7 +390,6 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl('https://example.com/0', {
       fetch,
-      resolveHost: publicResolver,
     });
 
     assert.false(result.ok);
@@ -366,7 +428,6 @@ module('executeReadUrl', () => {
     ]) {
       let result = await executeReadUrl(url, {
         fetch,
-        resolveHost: publicResolver,
       });
       assert.ok(!result.ok && result.error.includes('is larger than'), url);
     }
@@ -382,7 +443,6 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl('https://example.com/long', {
       fetch,
-      resolveHost: publicResolver,
     });
 
     assert.true(result.ok);
@@ -404,12 +464,10 @@ module('executeReadUrl', () => {
 
     let zip = await executeReadUrl('https://example.com/app.zip', {
       fetch,
-      resolveHost: publicResolver,
     });
     assert.ok(!zip.ok && zip.error.includes('application/zip'));
     let missing = await executeReadUrl('https://example.com/missing', {
       fetch,
-      resolveHost: publicResolver,
     });
     assert.ok(!missing.ok && missing.error.includes('404'));
   });
@@ -424,7 +482,6 @@ module('executeReadUrl', () => {
 
     let result = await executeReadUrl('https://example.com/data.json', {
       fetch,
-      resolveHost: publicResolver,
     });
 
     assert.ok(
@@ -442,6 +499,19 @@ module('processHtml', () => {
       new URL('https://example.com/'),
     );
     assert.strictEqual(page.html, 'first\nsecond\ninline');
+  });
+
+  test('lists the srcset candidates of a picture source', () => {
+    let page = processHtml(
+      `<picture><source srcset="hero.avif 1x, hero@2x.avif 2x" type="image/avif">
+       <img src="hero.jpg" alt="Hero"></picture>`,
+      new URL('https://example.com/page/'),
+    );
+    assert.deepEqual(page.images, [
+      'https://example.com/page/hero.avif',
+      'https://example.com/page/hero@2x.avif',
+      'https://example.com/page/hero.jpg',
+    ]);
   });
 
   test('honors <base> when resolving URLs and drops nested dropped content', () => {
