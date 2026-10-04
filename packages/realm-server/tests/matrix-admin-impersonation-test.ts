@@ -12,14 +12,18 @@ import { matrixURL } from './helpers/index.ts';
 const admin = { matrixURL, adminUsername: 'admin', adminPassword: 'password' };
 const userId = '@test_realm:localhost';
 
-async function whoami(accessToken: string) {
+async function whoamiResponse(accessToken: string) {
   let response = await fetch(
     `${matrixURL.href}_matrix/client/v3/account/whoami`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
   return response.ok
-    ? ((await response.json()) as { user_id: string }).user_id
+    ? ((await response.json()) as { user_id: string; device_id?: string })
     : undefined;
+}
+
+async function whoami(accessToken: string) {
+  return (await whoamiResponse(accessToken))?.user_id;
 }
 
 async function adminDeviceIds(accessToken: string) {
@@ -52,9 +56,10 @@ module(basename(import.meta.filename), function () {
         adminToken,
         'the admin token is reused',
       );
-      assert.true(
-        devicesBefore.includes(SERVER_MATRIX_DEVICE_ID),
-        'the admin is logged in on the server device',
+      assert.strictEqual(
+        (await whoamiResponse(adminToken))?.device_id,
+        SERVER_MATRIX_DEVICE_ID,
+        'the admin token is on the server device',
       );
       assert.deepEqual(
         await adminDeviceIds(adminToken),
