@@ -37,6 +37,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { policyWarningsDuring } from './helpers/policy-log.ts';
 
 // The worked example's topology. The Education realm holds the cards a policy
 // governs, and its policy card lives in an Org realm. An IT admin reads both
@@ -1263,6 +1264,53 @@ module(basename(import.meta.filename), function (hooks) {
         read.status,
         404,
         'and the teacher is still refused the card itself',
+      );
+    });
+
+    test('a predicate that throws in a draft is reported to the asker and not logged as the realm’s fault', async function (assert) {
+      // The policy in force throws on this syllabus, and logs it.
+      let live = await policyWarningsDuring(async () => {
+        assert.strictEqual(
+          (await explain(TEACHER, ALGEBRA, 'read')).reason,
+          'predicate-threw',
+          'the policy in force',
+        );
+      });
+      assert.strictEqual(
+        live.filter((line) => line.includes('threw while deciding')).length,
+        1,
+        'logs its throw',
+      );
+
+      let drafted!: PolicyExplanation;
+      let warnings = await policyWarningsDuring(async () => {
+        drafted = await answer({
+          actor: TEACHER,
+          target: ALGEBRA,
+          operation: 'read',
+          draft: {
+            rules: [
+              {
+                targetType: {
+                  module: '../../education/syllabus',
+                  name: 'Syllabus',
+                },
+                grants: [{ operation: 'read', where: NUMERIC_TITLE }],
+              },
+            ],
+          },
+        });
+      });
+      assert.strictEqual(drafted.decision, 'failed');
+      assert.strictEqual(
+        drafted.reason,
+        'predicate-threw',
+        'a draft that throws the same way is reported to the asker',
+      );
+      assert.deepEqual(
+        warnings.filter((line) => line.includes('threw while deciding')),
+        [],
+        'and nothing is logged, since the draft is in force nowhere',
       );
     });
 

@@ -74,6 +74,9 @@ export interface CompiledRealmPolicy {
   // policy and cannot say what it grants, so the gate refuses every caller it
   // judges exactly as it refuses one when the realm's policy card is missing.
   uncompilable?: true;
+  // Set on a draft compiled for an explain (see `compileDraftPolicy`), which
+  // no realm holds in force.
+  draft?: true;
 }
 
 export interface CompiledPolicyRule {
@@ -436,9 +439,14 @@ const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 // quieter line for the warnings on grants that stay live. A policy with
 // deliberate reach records those on every compile, and at `warn` they would
 // read as a policy that is broken.
+//
+// Each issue is named by where it is and its code, and not by its message. A
+// message can quote the policy's predicates, and an unloadable card's quotes
+// the card's index error, so no line carries card content or predicate
+// source. The messages are what a validate of the policy answers.
 function logIssues(card: string, issues: PolicyIssue[]): void {
   let describe = (issue: PolicyIssue) =>
-    `${issue.path || '(card)'}: ${issue.code}: ${issue.message}`;
+    `${issue.path || '(card)'}: ${issue.code}`;
   let inactive = issues.filter((issue) => issue.severity === 'inactive');
   let warnings = issues.filter((issue) => issue.severity === 'warning');
   if (inactive.length > 0) {
@@ -772,7 +780,7 @@ export async function compileDraftPolicy(
     env,
     () => {},
   );
-  return { compiled, reads: inputs };
+  return { compiled: { ...compiled, draft: true }, reads: inputs };
 }
 
 // The rules a policy card's attributes hold, compiled.
