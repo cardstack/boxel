@@ -1,6 +1,6 @@
 ---
 name: operations-diagnosis
-description: Diagnose card operations and operation-permission policies from the realm server's own telemetry — the `boxel:operations` JSON channel (`kind`-less execution lines for operations that run a program, plus `policy-decision`, `policy-search-scope`, `policy-compile`, `policy-snapshot-read` and `capability-check` records), the `realm:policy` warnings (compile issues, predicate faults, withheld policy-card visits), and the "Policy Decisions" Grafana dashboard (uid `boxel-policy-decisions`). Answers the operator's questions rather than a realm owner's: (1) why did this user get a 403, a 404 or a 500 from a realm that has a policy — go from the account's Matrix id to its decision lines and read `outcome` / `reason` / `rules` / `grants` / `coarseDeclined`; (2) "the policy denied" versus "the policy couldn't be evaluated" — a predicate that threw answers a caller who may read the realm 500 `policy-predicate-failed` but a caller who may not the same 404 a denial gets, so the `realm:policy` fault line is the only signal there, and an unloadable policy is 500 `internal-error` for everyone; (3) which realm's policy won't compile and why, by issue code and `rules[i].grants[j].where` path, including a withheld index visit of the policy card that reads as `policy-card-unloadable` until the card is visited again; (4) a realm's grants stopped working after an edit — how long to wait (index visit plus the five-second revalidation bound) before concluding the new policy isn't live; (5) is the gate being reached more than it should be — gate reach, with capability checks excluded on `kind`; (6) which grant is matching everything — allows by grant, unconditional grants, distinct actors per grant, contributing search-lane grants; (7) a federated search silently missing a realm's rows (`meta.incomplete`, search-lane `failed`); (8) an operation built on `transform` refused, slow, or reading nothing — `outcome` / `code` / `totalMs` / read counts by tier / `missing[]`. Carries the traps: the `realm:policy` channel name is not on the line, no record carries a correlation id, a policy refusal never writes an execution line, a pending gate record is not a backlog, and the fault warning is rate-limited. For staging/prod this layers on `aws-access` and `tail-logs`; hand off to `policy-performance` for what a policy costs, to the boxel-skills `realm-policy-authoring` skill (explain / validate) for why one actor may or may not act on one card, to `realm-auth` for a refusal the gate never saw, and to `indexing-diagnostics` when the policy card itself won't index. Use when someone reports an unexpected 403/404/500 from a realm with a policy, a policy edit that "didn't take", a realm whose grants stopped working, a policy suspected of being wider than intended, a search missing rows, or a transform operation that refused or read stale values.
+description: Diagnose card operations and operation-permission policies from the realm server's own telemetry — the `boxel:operations` JSON channel (`kind`-less execution lines for operations that run a program, plus `policy-decision`, `policy-search-scope`, `policy-compile`, `policy-snapshot-read` and `capability-check` records), the `realm:policy` warnings (compile issues, predicate faults, withheld policy-card visits), and the "Policy Decisions" Grafana dashboard (uid `boxel-policy-decisions`). Answers the operator's questions rather than a realm owner's: (1) why did this user get a 403, a 404 or a 500 from a realm that has a policy — go from the account's Matrix id to its decision lines and read `outcome` / `reason` / `rules` / `grants` / `coarseDeclined`; (2) "the policy denied" versus "the policy couldn't be evaluated" — a predicate that threw answers a caller who may read the realm 500 `policy-predicate-failed` but a caller who may not the same 404 a denial gets, so the `realm:policy` fault line is the only signal there, and an unloadable policy is 500 `internal-error` for everyone; (3) which realm's policy won't compile and why, by issue code and `rules[i].grants[j].where` path, including a withheld index visit of the policy card that reads as `policy-card-unloadable` until the card is visited again; (4) a realm's grants stopped working after an edit — which `policy-compile` lines show the new policy live, read against the moment the policy card's index visit committed (each task revalidates in the background on that index move, and within five seconds for a move it never hears about); (5) is the gate being reached more than it should be — gate reach, with capability checks excluded on `kind`; (6) which grant is matching everything — allows by grant, unconditional grants, distinct actors per grant, contributing search-lane grants; (7) a federated search silently missing a realm's rows (`meta.incomplete`, search-lane `failed`); (8) an operation built on `transform` refused, slow, or reading nothing — `outcome` / `code` / `totalMs` / read counts by tier / `missing[]`. Carries the traps: the `realm:policy` channel name is not on the line, no record carries a correlation id, a policy refusal never writes an execution line, a pending gate record is not a backlog, and the fault warning is rate-limited. For staging/prod this layers on `aws-access` and `tail-logs`; hand off to `policy-performance` for what a policy costs, to the boxel-skills `realm-policy-authoring` skill (explain / validate) for why one actor may or may not act on one card, to `realm-auth` for a 401 or 403 the gate never saw, and to `indexing-diagnostics` when the policy card itself won't index. Use when someone reports an unexpected 403/404/500 from a realm with a policy, a policy edit that "didn't take", a realm whose grants stopped working, a policy suspected of being wider than intended, a search missing rows, or a transform operation that refused or read stale values.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -78,13 +78,13 @@ An explain runs the gate for an actor it names and records its decisions with `h
 
 `logThrow` writes at most one line per compiled predicate per minute, and starts over when the policy is compiled again. It also fires for throws under an explain or a capability check, which `reason="predicate-threw"` decision lines leave out. So the decision lines give the rate, and the warning gives the error's kind and the card it threw on. A draft's throw (an explain against a draft policy) is never logged.
 
-### 8. Compiles are per process and read-driven
+### 8. Compiles are per process, and a task with nothing cached is silent
 
-Every realm-server task holds its own cache, so one edit produces one compile per task that reads the policy. A revalidation happens when a read finds the cached policy stale, not on a timer, so a realm whose policy nobody reads writes no `policy-compile` lines at all — silence after an edit is not evidence of anything until someone the policy judges makes a request.
+Every realm-server task holds its own cache, so one edit produces one `policy-compile` line per task that holds the policy. A task revalidates in two ways. An index move in a realm the cached policy reads from (the policy card's realm, or the realm of a module a rule's type comes from) marks the entry stale and starts a revalidation straight away, in the background, with no request needed (`RealmPolicyCache#indexMoved` in `policy.ts`). And a read that finds the entry more than five seconds past its last revalidation revalidates before it answers. A task that has never read the policy holds no entry, so a move reaches nothing there and it writes no `policy-compile` line until someone the policy judges makes a request on it, which compiles on demand. So a `policy-compile` line is not evidence of traffic, and silence from a task after an edit means that task holds nothing, not that it missed the edit.
 
 ## Querying it
 
-For staging/prod, read **`aws-access`** first (the AWS session and Loki auth); `tail-logs` wraps the Loki plumbing. Keep the `|=` line filter ahead of the first `| json`, or the parser reads every realm-server line in the range and the query times out. Deployed lines arrive wrapped by the log router, so unwrap before the real parse:
+For staging/prod, read **`aws-access`** first (the AWS session and Loki auth); `tail-logs` wraps the Loki plumbing. Keep the `|=` line filter ahead of the first `| json`, or the parser reads every realm-server line in the range and the query times out. Deployed lines arrive firelens-wrapped (`{"log":"…"}`), so the record's own quotes are stored escaped (`\"kind\":\"policy-decision\"`) and a line filter that contains a quote matches nothing there. Filter on a substring with no quote in it, unwrap, parse again, and only then filter on the extracted fields — the same shape every Policy Decisions panel uses:
 
 ```logql
 {service="realm-server", env="$env"} |= "boxel:operations" | json
@@ -92,19 +92,24 @@ For staging/prod, read **`aws-access`** first (the AWS session and Loki auth); `
   | channel="boxel:operations"
 ```
 
-The recipes write `<ops>` for that selector; substitute it inline before pasting into Grafana Explore. Locally the stream is `env="local"` (see `client-perf-diagnosis` for bringing up the local observability stack). The placeholders `@alice:example.com` and `https://realms.example.com/alice/notes/` stand for the account and realm you are investigating.
+The recipes write `<ops>` for that selector and add `| kind="…"` after it; substitute it inline before pasting into Grafana Explore. Locally the stream is `env="local"` (see `client-perf-diagnosis` for bringing up the local observability stack). The placeholders `@alice:example.com` and `https://realms.example.com/alice/notes/` stand for the account and realm you are investigating.
 
-From a laptop, the same lines as raw JSON for `jq`:
+From a laptop, `tail-logs.sh` takes one line filter and drops it unescaped into `|= "<filter>"` (or `|~ "<regex>"`), so the same rules apply: no quote in it, and no backslash unless doubled. Narrow on a quote-free substring, then unwrap and select on `kind` with `jq`:
 
 ```bash
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
-  --filter '"kind":"policy-decision"' --since 1h --no-follow --limit 5000
+  --filter 'policy-decision' --since 1h --no-follow --limit 5000 > /tmp/decisions.log
+
+grep -o '{.*}' /tmp/decisions.log \
+  | jq -c 'if .log then (.log | fromjson? // empty) else . end
+           | select(.channel == "boxel:operations" and .kind == "policy-decision"
+                    and .hypothetical == false)'
 
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
   --filter 'a predicate in the policy of realm' --since 6h --no-follow
 ```
 
-`--filter` is a literal substring, and the realm server writes the JSON without spaces (`"kind":"policy-decision"`). Production needs `--confirm`. `policy-performance` has the `jq` unwrap for firelens-wrapped lines.
+The fault line is plain text, so its filter needs no unwrap. `--no-follow` returns at most `--limit` lines; check the count you got against it. Production needs `--confirm`.
 
 ## Reading a decision line
 
@@ -125,8 +130,10 @@ You have an account, a realm, a rough time, and a status.
 
 ```bash
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
-  --regex '--> [A-Z]+ .*realms\.example\.com/alice/notes/.*: (403|404|500)' --since 2h --no-follow
+  --regex '--> [A-Z]+ .*realms.example.com/alice/notes/.*: (403|404|500)' --since 2h --no-follow
 ```
+
+The pattern lands inside a double-quoted LogQL string, so a `\.` there is an invalid escape and the query fails to parse; an unescaped `.` is specific enough here (write `\\.` if you need a literal dot).
 
 **Step 2 — the decisions for that account in that realm.**
 
@@ -136,7 +143,7 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
   | line_format "{{.decidedAt}} {{.outcome}} {{.reason}} op={{.operation}} via={{.transport}} {{.route}} declined={{.coarseDeclined}} type={{.targetType}} rules={{.rules}} grants={{.grants}} tier={{.tier}}"
 ```
 
-None at that moment → trap 1: the gate was never reached; hand off to `realm-auth`. Several → line them up with step 1 by time and `route`.
+None at that moment → trap 1: whatever refused them was not the policy. A 401, or a 403 with no decision line, is `realm-auth`'s; otherwise read the request line and the realm server's errors around it, since the ACL let them through or something before the gate refused them. Several → line them up with step 1 by time and `route`.
 
 **Step 3 — read the reason against the status** (trap 2):
 
@@ -180,7 +187,21 @@ Whole-policy codes (path `(card)`): `policy-card-missing` (the pointer names a c
 
 **Step 3 — `policy-card-unloadable` after a healthy edit is usually a withheld visit.** When an index visit of the policy card fails with the failure kept off its row, the row reads as healthy but what it holds is an earlier visit's, so the card compiles to no rules and every declined caller gets a 500. Nothing else would visit it again, so the cache asks for a fresh visit itself the moment it reads such a row, and then at most once a minute while the cause lasts. Expect the policy back within about a minute of the cause clearing, plus however long the visit waits in the queue. A visit that fails outright logs `could not be indexed again after its latest visit was withheld`. If it stays unloadable, the card itself won't index: `indexing-diagnostics`.
 
-**Step 4 — is the edited policy live yet?** An edit reaches the gate in two steps: the policy card's index visit commits, and that index move makes every process's cache revalidate, in the background, before the next read. A move the process never hears about is caught by the staleness bound: a cached policy is answered from memory for at most **five seconds** without a revalidation (`MAX_UNVALIDATED_MS` in `policy.ts`). So wait for the card's indexing to finish, then five seconds, then make a request the policy judges. A `policy-compile` line with `outcome="compiled"` after that request means the new policy is in force on that task; `revalidated` means the cache read the card and found the version it already held — the edit has not been indexed. An edit to a type a rule names recompiles too; an edit to an unrelated card costs a revalidation and no compile.
+**Step 4 — is the edited policy live yet?** An edit reaches the gate in two steps: the policy card's index visit commits, and that index move reaches every task's cache. A task that holds the policy revalidates straight away, in the background, without waiting for a request (trap 8), so it writes its `policy-compile` line at about the moment the visit commits. A task that has never read the policy compiles on its first read instead. A move a task never hears about is caught by the staleness bound: a read that finds the entry more than **five seconds** past its last revalidation (`MAX_UNVALIDATED_MS` in `policy.ts`) revalidates before it answers.
+
+So look for a `policy-compile` line with `outcome="compiled"` for that `card` on each task **at or after the visit committed**, not only after your test request — in the normal case it lands before the request:
+
+```logql
+<ops> | kind="policy-compile" | realmURL=~".*realms.example.com/alice/notes/.*"
+  | line_format "{{.outcome}} card={{.card}} uncompilable={{.uncompilable}} rules={{.rules}} grants={{.grants}} issues={{.issues}}"
+```
+
+- `compiled` after the commit — the new policy is in force on that task. Check `uncompilable` and `issues` on the same line (step 1).
+- `revalidated` after a request, following such a `compiled` — the cache read the card and found the version it already held, which means only that nothing changed since the last compile. The first judged request more than five seconds after the last revalidation writes one. The edit is live.
+- `revalidated` with no `compiled` anywhere since the commit — the row the task read still held what it had compiled before: the visit had not committed when it read. A visit that failed or was withheld changes the row too, so it shows up as a `compiled` line with `uncompilable=true` (step 3), not as a `revalidated` one.
+- No line at all from a task — it holds nothing (trap 8); its first judged request will compile the current card.
+
+An edit to a type a rule names recompiles too; an edit to an unrelated card in a realm the policy reads from costs a revalidation and no compile.
 
 ## Investigation: a policy is suspected of being wider than intended
 
@@ -283,7 +304,7 @@ A user admitted after they should have lost access, on a grant that shows up her
 
 ## The dashboard
 
-**"Policy Decisions"**, uid `boxel-policy-decisions` (`packages/observability/grafanactl/resources/dashboards/boxel-status/policy-decisions.json`). `env` is a hidden constant per deployment, as on the other boards; the **Realm** textbox narrows every panel to realm URLs containing a substring. No panel counts capability checks or execution lines — every query filters on one of the four policy kinds — and every panel but the compile ones leaves out `hypothetical` records.
+**"Policy Decisions"**, uid `boxel-policy-decisions` (`packages/observability/grafanactl/resources/dashboards/boxel-status/policy-decisions.json`). `env` is a hidden constant per deployment, as on the other boards; the **Realm** textbox narrows every panel to realm URLs containing a substring. No panel counts `capability-check` or execution lines. Every query but one filters on one of the four policy kinds, and every one but the compile queries leaves out `hypothetical` records. The exception to both is query B of **Predicate error rate**: a plain `|= "a predicate in the policy of realm"` line filter on the fault warning, with no `kind` and no `hypothetical` filter, so it also counts throws under an explain or a capability check (trap 7).
 
 | row            | panel                                  | answers                                                                                                                           |
 | -------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -311,7 +332,7 @@ So: use the logs to find the realm, the actor, the operation, the grant path and
 
 - **`policy-performance`** — what the policy costs: `evaluationMs`, `predicateMs`, compile durations, the before/after method, and asserting on these records in realm-server tests through their sinks.
 - **`realm-policy-authoring`** (boxel-skills) — explain and validate, for one actor and one card.
-- **`realm-auth`** — a refusal with no decision line: tokens, sessions, the ACL itself.
+- **`realm-auth`** — a 401, or a 403 with no decision line: tokens, sessions, the ACL itself.
 - **`indexing-diagnostics`** — a policy card that won't index, or a target whose error row makes it unmatchable.
 - **`search-shape-diagnosis`** — the federated search's own line, including `incomplete`, for a search missing rows.
 - **`tail-logs`** / **`aws-access`** — reaching staging and production Loki.

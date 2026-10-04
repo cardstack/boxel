@@ -43,19 +43,19 @@ The "Policy Decisions" dashboard (`packages/observability/grafanactl/resources/d
 
 ## Pulling raw records
 
-`tail-logs.sh` (see the `tail-logs` and `aws-access` skills) fetches raw lines. Narrow on the channel and the kind with the line filter, then let `jq` do the arithmetic:
+`tail-logs.sh` (see the `tail-logs` and `aws-access` skills) fetches raw lines. Narrow with a quote-free line filter (`tail-logs.sh` drops it unescaped into `|= "…"`, and on firelens-wrapped lines the record's quotes are stored escaped), select on `kind` in `jq`, then let `jq` do the arithmetic:
 
 ```sh
 cd packages/observability
 AWS_PROFILE=claude-staging ./scripts/tail-logs.sh --env staging --service realm-server \
-  --since 1h --filter '"kind":"policy-decision"' --no-follow --limit 5000 > /tmp/decisions.log
+  --since 1h --filter 'policy-decision' --no-follow --limit 5000 > /tmp/decisions.log
 ```
 
 `--no-follow` returns a single batch of at most `--limit` lines, so a busy window needs a larger limit or a shorter `--since`; check the count you got against the limit. Production needs `--confirm`. Deployed lines arrive wrapped by the log router, so unwrap `.log` when it is there:
 
 ```sh
 grep -o '{.*}' /tmp/decisions.log \
-  | jq -c 'if .log then (.log | fromjson) else . end
+  | jq -c 'if .log then (.log | fromjson? // empty) else . end
            | select(.channel == "boxel:operations" and .kind == "policy-decision"
                     and .hypothetical == false)' > /tmp/decisions.jsonl
 
