@@ -46,6 +46,8 @@ export interface ReadUrlFulfillmentOutcome {
   commandRequestId: string;
   ok: boolean;
   error?: string;
+  // Whether the call's result reached the room.
+  published: boolean;
 }
 
 // Runs each readUrl call ai-bot owns and publishes its outcome as a
@@ -123,7 +125,7 @@ async function fulfillOne(
       deps,
     );
   }
-  await publishToolResult(
+  let published = await publishToolResult(
     deps.client,
     deps.roomId,
     {
@@ -152,7 +154,7 @@ async function fulfillOne(
     },
     'readUrl',
   );
-  return { commandRequestId: call.id, ok: true };
+  return { commandRequestId: call.id, ok: true, published };
 }
 
 async function publishFailure(
@@ -160,7 +162,7 @@ async function publishFailure(
   error: string,
   deps: ReadUrlFulfillmentDeps,
 ): Promise<ReadUrlFulfillmentOutcome> {
-  await publishToolResult(
+  let published = await publishToolResult(
     deps.client,
     deps.roomId,
     {
@@ -176,5 +178,5 @@ async function publishFailure(
     },
     'readUrl',
   );
-  return { commandRequestId, ok: false, error };
+  return { commandRequestId, ok: false, error, published };
 }

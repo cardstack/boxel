@@ -406,7 +406,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert
       .dom(`${tool} [data-test-tool-call-approval]`)
       .containsText(
-        'The assistant wants to read this page: To check the setup steps for the library you asked about.',
+        'The assistant wants to read this page and says: “To check the setup steps for the library you asked about.”',
         "the assistant's reason is shown",
       );
     assert
@@ -454,6 +454,33 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .dom('[data-test-tool-call-id="read-url-1"]')
       .hasClass('compact', 'an approved call shows as a running indicator');
     assert.dom('[data-test-tool-call-approval]').doesNotExist();
+  });
+
+  test('an approval that fails to send offers the choice again', async function (assert) {
+    let testScenario = await setupHeldReadUrlScenario(this.owner);
+    let matrixService = this.owner.lookup('service:matrix-service') as any;
+    let originalSend = matrixService.sendToolResultEvent;
+    matrixService.sendToolResultEvent = async () => {
+      throw new Error('the homeserver is unreachable');
+    };
+    try {
+      await renderRoomMessageComponent(testScenario);
+      await click(
+        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+      );
+      await waitUntil(() =>
+        document.querySelector(
+          '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+        ),
+      );
+      assert
+        .dom(
+          '[data-test-tool-call-id="read-url-1"] [data-test-tool-call-secondary-action="Decline"]',
+        )
+        .exists('Approve and Decline are offered again');
+    } finally {
+      matrixService.sendToolResultEvent = originalSend;
+    }
   });
 
   test('declining a held readUrl call sends an invalid result naming the decline', async function (assert) {

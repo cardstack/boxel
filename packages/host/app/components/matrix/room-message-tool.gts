@@ -366,8 +366,7 @@ export default class RoomMessageTool extends Component<Signature> {
         {{#if @messageTool.awaitsApproval}}
           <p class='approval-note' data-test-tool-call-approval>
             {{#if this.approvalReason}}
-              The assistant wants to read this page:
-              {{this.approvalReason}}
+              The assistant wants to read this page and says: “{{this.approvalReason}}”
               Approve if that's OK with you.
             {{else}}
               The assistant wants to read a page nobody in this conversation

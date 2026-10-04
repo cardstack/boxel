@@ -49,6 +49,7 @@ import {
   knownRealmOrigins,
   READ_URL_TOOL_NAME,
   readUrlCallsReleasedByApprovals,
+  settledToolCallIds,
   urlFromReadUrlArguments,
 } from './lib/read-url.ts';
 import { downloadFile, isApprovalResult } from '@cardstack/runtime-common/ai';
@@ -495,6 +496,13 @@ Common issues are:
           // again. The reads run after the room lock is released; each
           // result starts the continuation as any bot tool result does.
           if (urlReadingAllowed) {
+            // A claim lasts until the call's outcome is in the room.
+            let settled = settledToolCallIds(eventList);
+            for (let id of claimedReadUrlCallIds) {
+              if (settled.has(id)) {
+                claimedReadUrlCallIds.delete(id);
+              }
+            }
             pendingReleasedReadUrls = readUrlCallsReleasedByApprovals(
               eventList,
               aiBotUserId,
@@ -932,7 +940,7 @@ Common issues are:
           // handler just released. Fulfilling here (rather than inside the
           // lock) is what lets the continuation proceed.
           for (let released of pendingReleasedReadUrls) {
-            await fulfillReadUrlCalls([released.call as any], {
+            let [outcome] = await fulfillReadUrlCalls([released.call as any], {
               client,
               roomId: room.roomId,
               requestEventId: released.requestEventId,
@@ -942,6 +950,11 @@ Common issues are:
                 realmFileReadingAllowed,
               },
             });
+            // A result that never reached the room leaves the call to be
+            // read on a later run.
+            if (!outcome?.published) {
+              claimedReadUrlCallIds.delete(released.call.id);
+            }
           }
           if (
             pendingFulfillRequestEventId &&

@@ -81,7 +81,9 @@ module('fulfillReadUrlCalls', () => {
       ),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'call-1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'call-1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1);
     assert.strictEqual(sent[0].eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
     assert.strictEqual(
@@ -240,6 +242,28 @@ module('fulfillReadUrlCalls', () => {
       outcomes.map((o) => o.ok),
       [...calls.map((_, i) => i < READ_URL_MAX_CALLS_PER_RESPONSE)],
     );
+  });
+
+  test("a result that can't be published is reported as unpublished", async () => {
+    let client = {
+      sendEvent: async () => {
+        throw new Error('the homeserver is unreachable');
+      },
+    } as any;
+
+    let outcomes = await fulfillReadUrlCalls(
+      [readUrlCall('call-1', 'https://example.com/a')],
+      deps(client, async (url) => ({
+        ok: true,
+        kind: 'text',
+        url,
+        finalUrl: url,
+        name: 'a',
+        content: 'a',
+      })),
+    );
+
+    assert.false(outcomes[0].published);
   });
 
   test('calls are published one at a time, in order', async () => {

@@ -8,7 +8,7 @@ import { isTesting } from '@embroider/macros';
 
 import Ajv from 'ajv';
 
-import { dropTask, task, timeout, all } from 'ember-concurrency';
+import { task, timeout, all } from 'ember-concurrency';
 
 import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
@@ -1049,40 +1049,59 @@ export default class ToolService extends Service {
   // left alone.
   // The held calls this client has answered. A call stops awaiting approval
   // the moment it is answered, before the answer's event comes back, so a
-  // second click can't send a second answer.
+  // second click can't send a second answer; a send that fails offers the
+  // choice again.
   answeredApprovalIds = new TrackedSet<string>();
 
-  answerApproval = dropTask(
+  answerApproval = task(
     async (command: MessageTool, answer: 'approve' | 'decline') => {
-      if (!command.awaitsApproval || !command.toolRequest.id) {
+      let callId = command.toolRequest.id;
+      if (!command.awaitsApproval || !callId) {
         return;
       }
-      this.answeredApprovalIds.add(command.toolRequest.id);
-      let invokedToolFromEventId =
-        this.getCurrentEventIdForCommandRequest(
-          command.message.roomId,
-          command.toolRequest.id,
-        ) ?? command.eventId;
-      // The request's own arguments: `command.arguments` nests top-level
-      // fields under `attributes` for host tools, which a bot call has none
-      // of.
-      let url = command.toolRequest.arguments?.url;
-      await this.matrixService.sendToolResultEvent({
-        roomId: command.message.roomId,
-        invokedToolFromEventId,
-        toolCallId: command.toolRequest.id,
-        ...(answer === 'approve'
-          ? { status: 'approved' as const }
-          : {
-              status: 'invalid' as const,
-              failureReason: `The user declined to let you read ${
-                typeof url === 'string' ? url : 'this URL'
-              }. Do not request it again unless the user asks you to.`,
-            }),
-        context: await this.operatorModeStateService.getSummaryForAIBot(),
-      });
+      this.answeredApprovalIds.add(callId);
+      try {
+        await this.sendApprovalAnswer(command, callId, answer);
+      } catch (e) {
+        // The answer never reached the room: offer the choice again.
+        this.answeredApprovalIds.delete(callId);
+        console.error(
+          `could not send the answer to held tool call ${callId}`,
+          e,
+        );
+      }
     },
   );
+
+  private async sendApprovalAnswer(
+    command: MessageTool,
+    callId: string,
+    answer: 'approve' | 'decline',
+  ) {
+    let invokedToolFromEventId =
+      this.getCurrentEventIdForCommandRequest(
+        command.message.roomId,
+        command.toolRequest.id,
+      ) ?? command.eventId;
+    // The request's own arguments: `command.arguments` nests top-level
+    // fields under `attributes` for host tools, which a bot call has none
+    // of.
+    let url = command.toolRequest.arguments?.url;
+    await this.matrixService.sendToolResultEvent({
+      roomId: command.message.roomId,
+      invokedToolFromEventId,
+      toolCallId: callId,
+      ...(answer === 'approve'
+        ? { status: 'approved' as const }
+        : {
+            status: 'invalid' as const,
+            failureReason: `The user declined to let you read ${
+              typeof url === 'string' ? url : 'this URL'
+            }. Do not request it again unless the user asks you to.`,
+          }),
+      context: await this.operatorModeStateService.getSummaryForAIBot(),
+    });
+  }
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageTool) => {

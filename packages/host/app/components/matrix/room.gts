@@ -1432,6 +1432,9 @@ export default class Room extends Component<Signature> {
       myLastMessage.attachedFiles,
       myLastMessage.clientGeneratedId,
       true,
+      // A retry resends the message as it was: one the app composed stays
+      // unmarked.
+      myLastMessage.typedByUser === true,
     );
   }
 
@@ -1820,6 +1823,7 @@ export default class Room extends Component<Signature> {
       files?: FileDef[],
       clientGeneratedId: string = uuidv4(),
       keepInputAndAttachments = false,
+      typedByUser = true,
     ) => {
       this.unknownMessageSendError = undefined;
       const isRetry = keepInputAndAttachments;
@@ -1886,8 +1890,9 @@ export default class Room extends Component<Signature> {
           ...(await this.operatorModeStateService.getSummaryForAIBot(
             openCardIds,
           )),
-          // This is the chat composer: the user typed this message.
-          typedByUser: true,
+          // Sent from the chat composer, the user typed this message; a
+          // retry carries over the original message's mark.
+          typedByUser,
         };
         let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {

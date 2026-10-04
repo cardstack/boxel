@@ -127,6 +127,18 @@ export default class MessageBuilder {
     return (this.event.content as CardMessageContent).clientGeneratedId;
   }
 
+  get typedByUser() {
+    let data: unknown = (this.event.content as CardMessageContent).data;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch {
+        return false;
+      }
+    }
+    return (data as CardMessageContent['data'])?.context?.typedByUser === true;
+  }
+
   get attachedCardIds() {
     let content = this.event.content as CardMessageContent;
     let attachedCardIds: string[] = [];
@@ -181,6 +193,7 @@ export default class MessageBuilder {
       event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
     ) {
       message.clientGeneratedId = this.clientGeneratedId;
+      message.typedByUser = this.typedByUser;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
       message.reloadBillingData = shouldReloadBillingData(event.content);

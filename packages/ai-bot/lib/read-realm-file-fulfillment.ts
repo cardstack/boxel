@@ -349,13 +349,14 @@ async function publish(
 // Publishes a tool-result event for a call ai-bot fulfilled itself — the
 // same shape a host command result takes, so prompt reconstruction pairs it
 // with the request and the event re-triggers the bot for the continuation
-// turn. Never throws: a publish failure is logged so the turn still settles.
+// turn. Never throws: a publish failure is logged so the turn still settles,
+// and reported by returning false.
 export async function publishToolResult(
   client: MatrixClient,
   roomId: string,
   content: Record<string, any>,
   toolName: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     // eventIdToReplace must stay undefined: sendMatrixEvent overwrites
     // m.relates_to with an m.replace relation when it's set, which would clobber
@@ -367,11 +368,13 @@ export async function publishToolResult(
       content,
       undefined,
     );
+    return true;
   } catch (e: any) {
     log.error(
       `${toolName}: failed to publish result for ${content.commandRequestId}: ${
         e?.message ?? e
       }`,
     );
+    return false;
   }
 }

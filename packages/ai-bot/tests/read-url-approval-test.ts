@@ -336,6 +336,9 @@ module('readUrl approval', () => {
       'https://en.wikipedia.org/wiki/Boxer_(dog)',
       'https://example.com/search?q=how+to+configure+charts',
       'https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'https://blog.example.com/2024/03/15/release-notes-for-version-12',
+      'https://github.com/org/repo/tree/v2/packages/api/src/v2/handlers/page2',
+      'https://wiki.example.com/wiki/Page2/Section3/Part4/Chapter5/Appendix6',
     ]) {
       assert.false(carriesEncodedData(url), url);
     }

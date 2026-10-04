@@ -547,6 +547,25 @@ export async function collectPreapprovedUrls(
 // read or declined is never released again. A human's approval of anything
 // else (a call not held, a host tool) releases nothing, and the bot's own
 // events never approve. Returns each call with the bot message carrying it.
+// The tool calls in `history` that have an outcome: a result other than a
+// user's approval.
+export function settledToolCallIds(
+  history: DiscreteMatrixEvent[],
+): Set<string> {
+  let settled = new Set<string>();
+  for (let event of history) {
+    let content = event.content as Record<string, any>;
+    if (
+      isToolResultEventType(event.type) &&
+      typeof content?.commandRequestId === 'string' &&
+      content?.['m.relates_to']?.key !== 'approved'
+    ) {
+      settled.add(content.commandRequestId);
+    }
+  }
+  return settled;
+}
+
 export function readUrlCallsReleasedByApprovals(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -621,31 +640,34 @@ export function readUrlCallsReleasedByApprovals(
   return released;
 }
 
-// A run of encoded-looking data in a URL the model composed: 32 or more
-// base64 or hex characters mixing letters and digits. That is the shape of
+// A run of encoded-looking data in a URL the model composed: a path segment,
+// query key or value, or fragment holding 32 or more base64 or hex
+// characters in a row, mixing letters and digits. Each part is checked on its
+// own, so an ordinary path whose segments happen to hold digits (a dated
+// blog post, a versioned API) doesn't add up to a match. That is the shape of
 // conversation content smuggled out through a URL, and no ordinary page
 // address carries one the model would have to compose itself — a page's own
 // long ids reach readUrl as links on a page already read, which need no
 // approval. A URL carrying one is refused rather than offered for approval.
-const ENCODED_RUN_RE = /[A-Za-z0-9+/=]{32,}/g;
+const ENCODED_RUN_RE = /[A-Za-z0-9+=]{32,}/g;
 
 export function carriesEncodedData(url: string): boolean {
-  let target: string;
+  let parts: string[];
   try {
     let parsed = new URL(url);
-    target = decodeURIComponentSafe(
-      `${parsed.pathname}${parsed.search}${parsed.hash}`,
-    );
+    parts = [
+      ...parsed.pathname.split('/'),
+      ...[...parsed.searchParams.entries()].flat(),
+      parsed.hash.slice(1),
+    ].map(decodeURIComponentSafe);
   } catch {
     return false;
   }
-  for (let match of target.matchAll(ENCODED_RUN_RE)) {
-    let run = match[0];
-    if (/[0-9]/.test(run) && /[A-Za-z]/.test(run)) {
-      return true;
-    }
-  }
-  return false;
+  return parts.some((part) =>
+    [...part.matchAll(ENCODED_RUN_RE)].some(
+      ([run]) => /[0-9]/.test(run) && /[A-Za-z]/.test(run),
+    ),
+  );
 }
 
 export function encodedDataRefusal(url: string): string {
