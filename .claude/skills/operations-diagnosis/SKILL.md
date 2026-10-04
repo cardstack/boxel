@@ -94,10 +94,10 @@ For staging/prod, read **`aws-access`** first (the AWS session and Loki auth); `
 
 The recipes write `<ops>` for that selector and add `| kind="…"` after it; substitute it inline before pasting into Grafana Explore. Locally the stream is `env="local"` (see `client-perf-diagnosis` for bringing up the local observability stack). The placeholders `@alice:example.com` and `https://realms.example.com/alice/notes/` stand for the account and realm you are investigating.
 
-From a laptop, `tail-logs.sh` takes one line filter and drops it unescaped into `|= "<filter>"` (or `|~ "<regex>"`), so the same rules apply: no quote in it, and no backslash unless doubled. Narrow on a quote-free substring, then unwrap and select on `kind` with `jq`:
+From a laptop, `tail-logs.sh` takes one line filter and drops it unescaped into `|= "<filter>"` (or `|~ "<regex>"`), so the same rules apply, more sharply: a quote ends the LogQL string and the query fails to parse, and a single backslash is read as a string escape (`\.` fails to parse), so write no quote and double any backslash. The script has no `--profile` flag and reads the ambient AWS session, so pass the profile `aws-access` set up in `AWS_PROFILE`. Narrow on a quote-free substring, then unwrap and select on `kind` with `jq`:
 
 ```bash
-packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+AWS_PROFILE=claude-staging packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
   --filter 'policy-decision' --since 1h --no-follow --limit 5000 > /tmp/decisions.log
 
 grep -o '{.*}' /tmp/decisions.log \
@@ -105,11 +105,11 @@ grep -o '{.*}' /tmp/decisions.log \
            | select(.channel == "boxel:operations" and .kind == "policy-decision"
                     and .hypothetical == false)'
 
-packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+AWS_PROFILE=claude-staging packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
   --filter 'a predicate in the policy of realm' --since 6h --no-follow
 ```
 
-The fault line is plain text, so its filter needs no unwrap. `--no-follow` returns at most `--limit` lines; check the count you got against it. Production needs `--confirm`.
+The fault line is plain text, so its filter needs no unwrap. `--no-follow` returns at most `--limit` lines, and 5000 is the most the deployed Loki accepts; check the count you got against it, and shorten `--since` when it is reached. Production needs `AWS_PROFILE=claude-prod`, `--env production` and `--confirm`.
 
 ## Reading a decision line
 
@@ -129,7 +129,7 @@ You have an account, a realm, a rough time, and a status.
 **Step 1 — confirm the request.** Find the realm server's own line for it, which carries the URL and the status:
 
 ```bash
-packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+AWS_PROFILE=claude-staging packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
   --regex '--> [A-Z]+ .*realms.example.com/alice/notes/.*: (403|404|500)' --since 2h --no-follow
 ```
 
@@ -294,7 +294,7 @@ Read them with these in mind:
 
 ## Snapshot-read windows
 
-A predicate annotated `snapshot: true` that reads a computed value or a linked card's field is judged against the index row, which lags the stored source: someone taken off a roster a computed value reads is admitted until the card is indexed again. Each such evaluation writes a `policy-snapshot-read` line — the window a realm accepted — with `grant`, `targetType`, `decidedAt`, `outcome` (`held`, `did-not-hold`, `threw`) and `indexed` (`false` means the card had no row, and the predicate does not hold):
+A predicate annotated `snapshot: true` that reads a computed value or a linked card's field is judged against the index row, which lags the stored source: someone taken off a roster a computed value reads is admitted until the card is indexed again. Each such evaluation writes a `policy-snapshot-read` line — the window a realm accepted — with `grant`, `targetType` (an object, which `| json` flattens to `targetType_module` and `targetType_name`), `decidedAt`, `outcome` (`held`, `did-not-hold`, `threw`) and `indexed` (`false` means the card had no row, and the predicate does not hold):
 
 ```logql
 sum by (realmURL, grant, outcome, indexed) (count_over_time(<ops> | kind="policy-snapshot-read" | hypothetical="false" [24h]))

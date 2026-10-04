@@ -51,7 +51,7 @@ AWS_PROFILE=claude-staging ./scripts/tail-logs.sh --env staging --service realm-
   --since 1h --filter 'policy-decision' --no-follow --limit 5000 > /tmp/decisions.log
 ```
 
-`--no-follow` returns a single batch of at most `--limit` lines, so a busy window needs a larger limit or a shorter `--since`; check the count you got against the limit. Production needs `--confirm`. Deployed lines arrive wrapped by the log router, so unwrap `.log` when it is there:
+`--no-follow` returns a single batch of at most `--limit` lines, and 5000 is the most the deployed Loki accepts (a larger limit is refused with HTTP 400), so a busy window needs a shorter `--since`, or several consecutive windows; check the count you got against the limit. Production needs `AWS_PROFILE=claude-prod`, `--env production` and `--confirm`. Deployed lines arrive wrapped by the log router, so unwrap `.log` when it is there:
 
 ```sh
 grep -o '{.*}' /tmp/decisions.log \
