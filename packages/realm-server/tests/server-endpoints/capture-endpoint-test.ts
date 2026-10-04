@@ -16,7 +16,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         .set('Content-Type', 'application/vnd.api+json')
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL: testRealmURL.href,
               cardId: `${testRealmURL.href}Person/fadhlan`,
@@ -38,7 +38,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           .set('Content-Type', 'application/vnd.api+json')
           .send({
             data: {
-              type: 'capture-card',
+              type: 'capture',
               attributes: {
                 realmURL: testRealmURL.href,
                 cardId: `${testRealmURL.href}Person/fadhlan`,
@@ -76,7 +76,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         )
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               cardId: `${testRealmURL.href}Person/fadhlan`,
               format: 'isolated',
@@ -108,7 +108,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         )
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL: testRealmURL.href,
               format: 'isolated',
@@ -140,7 +140,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         )
         .send({
           data: {
-            type: 'capture-card',
+            type: 'capture',
             attributes: {
               realmURL: testRealmURL.href,
               cardId: `${testRealmURL.href}Person/fadhlan`,
@@ -182,6 +182,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     // Puppeteer-based prerenderer for fast test runs. The validation
     // tests above cover the realm-server-side handler contract; the
     // worker task path is covered by the lean handler test in
-    // `capture-card-test.ts`.
+    // `capture-test.ts`.
   });
 });

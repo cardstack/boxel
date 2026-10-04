@@ -29,7 +29,7 @@ import {
   ensureTrailingSlash,
 } from '../index.ts';
 
-// The capture a job persists (see `CaptureCardArgs.persist`). Its ledger row
+// The capture a job persists (see `CaptureArgs.persist`). Its ledger row
 // is keyed by this and by the authority the job rendered with, which the task
 // takes from `runAs` rather than from the producer.
 export interface CapturePersistArgs extends JSONTypes.Object {
@@ -40,7 +40,7 @@ export interface CapturePersistArgs extends JSONTypes.Object {
   lane: MediaCacheLane;
 }
 
-export interface CaptureCardArgs extends JSONTypes.Object {
+export interface CaptureArgs extends JSONTypes.Object {
   realmURL: string;
   realmUsername: string;
   // The reader the capture renders as: the user who asked for it, or
@@ -86,9 +86,9 @@ export interface CaptureCardArgs extends JSONTypes.Object {
 
 export type CaptureSourceKind = 'card' | 'file';
 
-export { captureCard };
+export { capture };
 
-const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
+const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
   reportStatus,
   log,
   dbAdapter,
@@ -114,7 +114,7 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
     let kind: CaptureSourceKind = sourceKind ?? 'card';
     let taskStart = Date.now();
     log.debug(
-      `${jobIdentity(jobInfo)} starting capture-card for job: ${JSON.stringify({
+      `${jobIdentity(jobInfo)} starting capture for job: ${JSON.stringify({
         realmURL,
         runAs,
         cardId,
@@ -349,11 +349,11 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
           : null;
       if (renderedSpecHash !== persist.captureSpecHash) {
         log.error(
-          `${jobIdentity(jobInfo)} capture-card persist identity hash ${persist.captureSpecHash} does not match the rendered captureSpec's hash ${renderedSpecHash}; refusing to persist this render under another spec's identity`,
+          `${jobIdentity(jobInfo)} capture persist identity hash ${persist.captureSpecHash} does not match the rendered captureSpec's hash ${renderedSpecHash}; refusing to persist this render under another spec's identity`,
         );
       } else if (!mediaCacheAdapter) {
         log.warn(
-          `${jobIdentity(jobInfo)} capture-card asked to persist but this worker has no media cache adapter configured; skipping`,
+          `${jobIdentity(jobInfo)} capture asked to persist but this worker has no media cache adapter configured; skipping`,
         );
       } else {
         // Persist failure must not fail the capture: the response still
@@ -380,7 +380,7 @@ const captureCard: Task<CaptureCardArgs, CapturePrerenderResponse> = ({
         } catch (e: any) {
           persistOutcome = 'failed';
           log.error(
-            `${jobIdentity(jobInfo)} capture-card failed to persist capture to the media cache`,
+            `${jobIdentity(jobInfo)} capture failed to persist capture to the media cache`,
             e,
           );
         }

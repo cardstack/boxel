@@ -43,7 +43,7 @@ import {
   REALM_AUTHORITY_RENDER,
   revokeUserSessions,
   query,
-  captureCard,
+  capture,
   setCapturePerfSink,
 } from '@cardstack/runtime-common';
 
@@ -52,8 +52,8 @@ import Router from '@koa/router';
 import supertest from 'supertest';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-import { enqueueCaptureCardJob } from '@cardstack/runtime-common/jobs/capture-card';
-import handleCaptureCard from '../handlers/handle-capture-card.ts';
+import { enqueueCaptureJob } from '@cardstack/runtime-common/jobs/capture';
+import handleCapture from '../handlers/handle-capture.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { jwtMiddleware } from '../middleware/index.ts';
 import { createJWT } from '../utils/jwt.ts';
@@ -665,7 +665,7 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    // Registers the real capture-card task on the test runner, with a
+    // Registers the real capture task on the test runner, with a
     // stub prerenderer standing in for the Chrome pool. Only tests that
     // want a capture to complete start the worker; the rest leave enqueued
     // jobs unclaimed on purpose. `prerenderResult` swaps in a non-ready
@@ -734,8 +734,8 @@ module(basename(import.meta.filename), function () {
         },
       } as unknown as Prerenderer;
       await runner.register(
-        'capture-card',
-        captureCard({
+        'capture',
+        capture({
           dbAdapter,
           queuePublisher: publisher,
           prerenderer,
@@ -747,7 +747,7 @@ module(basename(import.meta.filename), function () {
           definitionLookup: null as unknown as DefinitionLookup,
           virtualNetwork,
           getReader: () => {
-            throw new Error('getReader is not used by capture-card');
+            throw new Error('getReader is not used by capture');
           },
           getAuthedFetch: async () => globalThis.fetch,
           createPrerenderAuth: () => 'test-auth',
@@ -885,13 +885,13 @@ module(basename(import.meta.filename), function () {
     // prove one capture satisfies both the POST response and its GET
     // `_capture/` URL. The matrix stub is never consulted: the realm's
     // permissions have no `users` grant.
-    function postCaptureCard(attributes: Record<string, unknown>) {
+    function postCapture(attributes: Record<string, unknown>) {
       let app = new Koa();
       let router = new Router();
       router.post(
         '/_capture',
         jwtMiddleware(realmSecretSeed, dbAdapter),
-        handleCaptureCard({
+        handleCapture({
           dbAdapter,
           queue: publisher,
           matrixClient: {
@@ -911,7 +911,7 @@ module(basename(import.meta.filename), function () {
       return supertest(app.callback())
         .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
-        .send({ data: { type: 'capture-card', attributes } });
+        .send({ data: { type: 'capture', attributes } });
     }
 
     test('an already-captured spec serves on a gated realm with zero capture work', async function (assert) {
@@ -1230,7 +1230,7 @@ module(basename(import.meta.filename), function () {
       await seedInstanceRow('card-1');
       await startWorker();
 
-      let job = await enqueueCaptureCardJob(
+      let job = await enqueueCaptureJob(
         {
           realmURL: REALM_URL,
           realmUsername: OWNER,
@@ -1280,7 +1280,7 @@ module(basename(import.meta.filename), function () {
         format: 'isolated',
         type: 'pdf',
       });
-      let job = await enqueueCaptureCardJob(
+      let job = await enqueueCaptureJob(
         {
           realmURL: REALM_URL,
           realmUsername: OWNER,
@@ -1381,7 +1381,7 @@ module(basename(import.meta.filename), function () {
       await seedInstanceRow('card-1');
       await startWorker();
 
-      let job = await enqueueCaptureCardJob(
+      let job = await enqueueCaptureJob(
         {
           realmURL: REALM_URL,
           realmUsername: OWNER,
@@ -1434,7 +1434,7 @@ module(basename(import.meta.filename), function () {
       // second request reaches the queue and can coalesce instead of
       // failing fast.
       let job = await insertJob(dbAdapter, {
-        job_type: 'capture-card',
+        job_type: 'capture',
         concurrency_group: `capture:${REALM_URL}`,
         status: 'resolved',
         finished_at: new Date().toISOString(),
@@ -1478,7 +1478,7 @@ module(basename(import.meta.filename), function () {
       // worker started it stays pending, and pending × the default capture
       // estimate dwarfs the budget.
       await insertJob(dbAdapter, {
-        job_type: 'capture-card',
+        job_type: 'capture',
         concurrency_group: `capture:${REALM_URL}`,
       });
 
@@ -1894,7 +1894,7 @@ module(basename(import.meta.filename), function () {
         deviceScaleFactor: 2,
       };
 
-      let response = await postCaptureCard({
+      let response = await postCapture({
         realmURL: REALM_URL,
         cardId: `${REALM_URL}card-1`,
         format: 'isolated',
@@ -1948,7 +1948,7 @@ module(basename(import.meta.filename), function () {
         captureSpec,
       };
 
-      let response = await postCaptureCard(attributes);
+      let response = await postCapture(attributes);
       assert.strictEqual(response.status, 503);
       assert.ok(
         Number(response.headers['retry-after']) >= 1,
@@ -1982,7 +1982,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let capturesSoFar = captureCalls;
-      let retry = await postCaptureCard(attributes);
+      let retry = await postCapture(attributes);
       assert.strictEqual(retry.status, 201);
       assert.strictEqual(
         captureCalls,
@@ -2140,7 +2140,7 @@ module(basename(import.meta.filename), function () {
         await seedInstanceRow('card-1');
         await seedRealmConfigRow(true);
         await insertJob(dbAdapter, {
-          job_type: 'capture-card',
+          job_type: 'capture',
           concurrency_group: `capture:${REALM_URL}`,
         });
 

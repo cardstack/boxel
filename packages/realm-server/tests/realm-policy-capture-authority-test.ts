@@ -433,7 +433,7 @@ module(basename(import.meta.filename), function (hooks) {
       )
       .send({
         data: {
-          type: 'capture-card',
+          type: 'capture',
           attributes: {
             realmURL: BOARD,
             cardId,
@@ -460,7 +460,7 @@ module(basename(import.meta.filename), function (hooks) {
       )
       .send({
         data: {
-          type: 'capture-card',
+          type: 'capture',
           attributes: { realmURL, fileURL, format: 'isolated' },
         },
       });

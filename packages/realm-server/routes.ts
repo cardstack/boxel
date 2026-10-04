@@ -84,7 +84,7 @@ import {
 } from './handlers/handle-webhook-commands.ts';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts';
 import handleRunCommand from './handlers/handle-run-command.ts';
-import handleCaptureCard from './handlers/handle-capture-card.ts';
+import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
@@ -314,7 +314,7 @@ export function createRoutes(args: CreateRoutesArgs) {
       createPrerenderAuth,
     }),
   );
-  // Captures a card or a file in a realm (see handle-capture-card). The
+  // Captures a card or a file in a realm (see handle-capture). The
   // endpoint's former names answer through the same handler: `boxel-cli` is
   // installed and pinned independently of this server, and a host tab can run
   // an older build than the server it talks to, so released clients post
@@ -323,7 +323,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     router.post(
       path,
       jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-      handleCaptureCard(args),
+      handleCapture(args),
     );
   }
   router.post(
