@@ -53,6 +53,8 @@ import {
   constructHistory,
   currentTurnToolResultMedia,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
+  MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
   getPromptParts,
   getRelevantCards,
   getTools,
@@ -7776,8 +7778,10 @@ new
         ? (trailing as any[]).map((p) => p.text ?? '').join('\n')
         : (trailing as string);
       assert.ok(
-        text.includes('capture.png (image/png)'),
-        'the note names the image',
+        text.includes(
+          'capture.png (https://example.com/capture.png): the active model does not accept image files',
+        ),
+        'the note names the image and why it was not sent',
       );
       assert.ok(
         text.includes('you cannot see them'),
@@ -7845,7 +7849,10 @@ new
         );
       }
 
-      let media = currentTurnToolResultMedia(history, '@aibot:localhost');
+      let { included: media } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
 
       assert.deepEqual(
         media.map((f) => f.name),
@@ -7874,10 +7881,243 @@ new
       ];
 
       assert.deepEqual(
-        currentTurnToolResultMedia(history, '@aibot:localhost').map(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
           (f) => f.name,
         ),
         ['final.png'],
+      );
+    });
+
+    test('a retried call takes the position of its latest result', () => {
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['call-a', 'call-b']),
+        toolResult('3', 3, {
+          requestId: 'call-a',
+          requestEventId: '2',
+          status: 'failed',
+          attachedFiles: [png('a-first-attempt.png')],
+        }),
+        toolResult('4', 4, {
+          requestId: 'call-b',
+          requestEventId: '2',
+          attachedFiles: [png('b.png')],
+        }),
+        toolResult('5', 5, {
+          requestId: 'call-a',
+          requestEventId: '2',
+          attachedFiles: [png('a-retry.png')],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['b.png', 'a-retry.png'],
+        'the retried call is newer than the call that finished before its retry',
+      );
+    });
+
+    test('files the model cannot take do not use up the media slots', () => {
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i < MAX_CURRENT_TURN_TOOL_RESULT_MEDIA; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [png(`image-${i}.png`)],
+          }),
+        );
+      }
+      history.push(botToolRequest('req-pdf', 100, ['call-pdf']));
+      history.push(
+        toolResult('res-pdf', 101, {
+          requestId: 'call-pdf',
+          requestEventId: 'req-pdf',
+          attachedFiles: [
+            {
+              sourceUrl: 'https://example.com/report.pdf',
+              url: 'http://test.com/report.pdf-uploaded',
+              name: 'report.pdf',
+              contentType: 'application/pdf',
+              contentSize: 4096,
+            },
+          ],
+        }),
+      );
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+        ['text', 'image'],
+      );
+
+      assert.strictEqual(
+        included.length,
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+        'every image still fits',
+      );
+      assert.deepEqual(
+        omitted.map(({ file, reason }) => [file.name, reason]),
+        [['report.pdf', 'the active model does not accept PDF files']],
+      );
+    });
+
+    test('currentTurnToolResultMedia leaves out files over the per-file limit or of unknown size', () => {
+      let tooLarge = {
+        ...png('huge.png'),
+        contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+      };
+      let { contentSize: _omit, ...unsized } = png('unsized.png');
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [png('small.png'), tooLarge, unsized],
+        }),
+      ];
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        included.map((f) => f.name),
+        ['small.png'],
+      );
+      assert.deepEqual(
+        omitted.map(({ file, reason }) => [file.name, reason]),
+        [
+          ['huge.png', 'it is larger than 5 MiB'],
+          ['unsized.png', 'its size is unknown'],
+        ],
+      );
+    });
+
+    test('currentTurnToolResultMedia keeps the newest files within the byte budget', () => {
+      let fileSize = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+      let fitting = Math.floor(
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / fileSize,
+      );
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i <= fitting; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [
+              { ...png(`image-${i}.png`), contentSize: fileSize },
+            ],
+          }),
+        );
+      }
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        included.map((f) => f.name),
+        Array.from({ length: fitting }, (_, i) => `image-${i + 1}.png`),
+        'the newest files that fit the budget are kept',
+      );
+      assert.deepEqual(
+        omitted.map(({ file }) => file.name),
+        ['image-0.png'],
+        'the oldest file is left out once the budget is spent',
+      );
+    });
+
+    test('the trailing note names tool-result media the limits left out', async () => {
+      let small = png('small.png');
+      mockImage(small);
+      let tooLarge = {
+        ...png('huge.png'),
+        contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+      };
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [small, tooLarge],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(small)]);
+      let text = trailingParts(prompt)
+        .filter((p) => p.type === 'text')
+        .map((p) => p.text)
+        .join('\n');
+      assert.ok(
+        text.includes(
+          'huge.png (https://example.com/huge.png): it is larger than 5 MiB',
+        ),
+        'the note names the left-out file and why',
+      );
+      assert.ok(
+        text.includes('you cannot see them'),
+        'the note says the model cannot see it',
+      );
+    });
+
+    test("the human message's own media precede the tool-result media", async () => {
+      let attached = png('attached.png');
+      let captured = png('captured.png');
+      mockImage(attached);
+      mockImage(captured);
+      let message = humanMessage('1', 1, 'Compare mine with the capture');
+      (message.content as any).data.attachedFiles = [attached];
+      let history = [
+        message,
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [captured],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(attached),
+        dataUrlOf(captured),
+      ]);
+      let labels = trailingParts(prompt)
+        .filter(
+          (p) =>
+            p.type === 'text' && p.text.startsWith('Attached to a tool result'),
+        )
+        .map((p) => p.text);
+      assert.deepEqual(
+        labels,
+        [
+          'Attached to a tool result: captured.png (https://example.com/captured.png)',
+        ],
+        "only the tool result's image is labelled",
       );
     });
 
@@ -7907,7 +8147,7 @@ new
       ];
 
       assert.deepEqual(
-        currentTurnToolResultMedia(history, '@aibot:localhost').map(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
           (f) => f.name,
         ),
         ['current.png'],
