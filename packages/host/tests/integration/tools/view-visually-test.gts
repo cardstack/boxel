@@ -49,7 +49,7 @@ module('Integration | tools | view-visually', function (hooks) {
 
   setupRealmServerEndpoints(hooks, [
     {
-      route: '_capture-card',
+      route: '_capture',
       getResponse: async (req: Request) => {
         requests.push(await req.clone().json());
         return respondWith();

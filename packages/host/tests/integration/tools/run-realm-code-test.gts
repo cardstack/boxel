@@ -32,7 +32,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   setupRealmServerEndpoints(hooks, [
     {
-      route: '_capture-card',
+      route: '_capture',
       getResponse: async (req: Request) => {
         captureRequests.push(await req.clone().json());
         return new Response(

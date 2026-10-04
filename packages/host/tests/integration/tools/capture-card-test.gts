@@ -58,7 +58,7 @@ module('Integration | tools | capture-card', function (hooks) {
 
   setupRealmServerEndpoints(hooks, [
     {
-      route: '_capture-card',
+      route: '_capture',
       getResponse: async (req: Request) => {
         captured.authorization = req.headers.get('Authorization');
         captured.method = req.method;
@@ -153,7 +153,7 @@ module('Integration | tools | capture-card', function (hooks) {
     assert.strictEqual(captured.method, 'POST', 'uses POST');
     assert.strictEqual(
       captured.pathname,
-      '/_capture-card',
+      '/_capture',
       'hits the realm-server endpoint',
     );
 

@@ -8,7 +8,7 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// The nested capture spec the `/_capture-card` endpoint accepts, assembled
+// The nested capture spec the `/_capture` endpoint accepts, assembled
 // from the tool's flat JSON-primitive input fields. Only the fields the caller
 // supplied are set; an empty spec is the canonical (format-only) capture. Every
 // field here is part of the capture's canonical identity, so a capture carrying
@@ -129,7 +129,7 @@ export default class CaptureCardTool extends HostBaseTool<
       Authorization: `Bearer ${token}`,
     };
 
-    let endpoint = new URL('/_capture-card', this.realmServer.url);
+    let endpoint = new URL('/_capture', this.realmServer.url);
     let response = await vn.fetch(endpoint.href, {
       method: 'POST',
       headers,

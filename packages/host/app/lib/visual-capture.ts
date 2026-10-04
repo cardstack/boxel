@@ -7,7 +7,7 @@ import type RealmServerService from '../services/realm-server';
 import type { FileDef } from '@cardstack/base/file-api';
 
 // How the assistant sees something visually: it captures a card instance or a
-// workspace file through `POST /_capture-card`, which renders it as the user
+// workspace file through `POST /_capture`, which renders it as the user
 // who asked, then uploads the image to the room so a tool result can attach
 // it. A capture only reaches what lives in a workspace the user can read;
 // anything else gets an error that names what the assistant should do instead.
@@ -156,7 +156,7 @@ export async function captureForAgent(
   }
 
   let vn = loaderService.loader.getVirtualNetwork()!;
-  let endpoint = new URL('/_capture-card', realmServer.url).href;
+  let endpoint = new URL('/_capture', realmServer.url).href;
   let body = JSON.stringify({
     data: {
       type: 'capture-card',
