@@ -1007,6 +1007,137 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('pressure-mode eviction keeps spreading across the fleet after the server holding the least recently used affinity leaves', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let mockPrerenderC = makeMockPrerender();
+      let serverUrlC = `http://127.0.0.1:${(mockPrerenderC.server.address() as any).port}`;
+      try {
+        let { app } = buildPrerenderManagerApp();
+        let request: SuperTest<Test> = supertest(app.callback());
+        for (let url of [serverUrlA, serverUrlB, serverUrlC]) {
+          await request.post('/prerender-servers').send({
+            data: {
+              type: 'prerender-server',
+              attributes: { capacity: 1, url },
+            },
+          });
+        }
+
+        // One affinity per server fills the fleet; R0 is the least recently
+        // used of the three.
+        let targets = new Map<string, string>();
+        for (let realm of ['R0', 'R1', 'R2']) {
+          let response = await request
+            .post('/prerender-visit')
+            .send(
+              makeBody(
+                `https://realm.example/${realm}`,
+                `https://realm.example/${realm}/1`,
+              ),
+            );
+          assert.strictEqual(response.status, 201, `${realm} proxied`);
+          targets.set(realm, response.headers['x-boxel-prerender-target']);
+        }
+        assert.strictEqual(
+          new Set(targets.values()).size,
+          3,
+          'each affinity lands on its own server',
+        );
+
+        // The server holding R0 leaves, as a server does when a deploy
+        // replaces it.
+        let departed = targets.get('R0')!;
+        let unregister = await request
+          .delete('/prerender-servers')
+          .query({ url: departed });
+        assert.strictEqual(unregister.status, 204, 'unregister 204');
+        let remaining = [targets.get('R1')!, targets.get('R2')!];
+
+        // Both remaining servers are full, so each new affinity evicts the
+        // least recently used affinity still assigned somewhere: R1, then R2.
+        let r3 = await request
+          .post('/prerender-visit')
+          .send(
+            makeBody('https://realm.example/R3', 'https://realm.example/R3/1'),
+          );
+        let r4 = await request
+          .post('/prerender-visit')
+          .send(
+            makeBody('https://realm.example/R4', 'https://realm.example/R4/1'),
+          );
+        assert.strictEqual(r3.status, 201, 'R3 proxied');
+        assert.strictEqual(r4.status, 201, 'R4 proxied');
+        assert.strictEqual(
+          r3.headers['x-boxel-prerender-target'],
+          targets.get('R1'),
+          'R3 takes the slot of R1, the least recently used assigned affinity',
+        );
+        assert.strictEqual(
+          r4.headers['x-boxel-prerender-target'],
+          targets.get('R2'),
+          'R4 takes the slot of R2, the next least recently used',
+        );
+        assert.deepEqual(
+          [
+            r3.headers['x-boxel-prerender-target'],
+            r4.headers['x-boxel-prerender-target'],
+          ].sort(),
+          [...remaining].sort(),
+          'the two new affinities spread across both remaining servers',
+        );
+      } finally {
+        await mockPrerenderC.stop();
+      }
+    });
+
+    test('fallback assignment spreads across servers instead of always taking the first registered one', async function (assert) {
+      process.env.PRERENDER_MULTIPLEX = '1';
+      let { app, registry, chooseServerForAffinity } =
+        buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      for (let url of [serverUrlA, serverUrlB]) {
+        await request.post('/prerender-servers').send({
+          data: {
+            type: 'prerender-server',
+            attributes: { capacity: 1, url },
+          },
+        });
+      }
+
+      // Assignments that never complete a request record no access time, so
+      // once both servers are full there is nothing for pressure mode to
+      // evict and assignment falls back.
+      let first = chooseServerForAffinity('realm', 'https://realm.example/X1');
+      let second = chooseServerForAffinity('realm', 'https://realm.example/X2');
+      assert.deepEqual(
+        [first, second].sort(),
+        [serverUrlA!, serverUrlB!].sort(),
+        'each server takes one affinity',
+      );
+      assert.strictEqual(
+        registry.lastAccessByAffinity.size,
+        0,
+        'no affinity has a recorded access',
+      );
+
+      // B, the second-registered server, was assigned to longest ago.
+      registry.servers.get(serverUrlA!)!.lastAssignedAt = 2;
+      registry.servers.get(serverUrlB!)!.lastAssignedAt = 1;
+
+      let third = chooseServerForAffinity('realm', 'https://realm.example/X3');
+      let fourth = chooseServerForAffinity('realm', 'https://realm.example/X4');
+      assert.strictEqual(
+        third,
+        serverUrlB,
+        'fallback takes the server assigned to longest ago',
+      );
+      assert.strictEqual(
+        fourth,
+        serverUrlA,
+        'the next fallback moves on to the other server',
+      );
+    });
+
     test('unreachable server is removed by health sweep', async function (assert) {
       process.env.PRERENDER_MULTIPLEX = '2';
       let { app, sweepServers } = buildPrerenderManagerApp();
