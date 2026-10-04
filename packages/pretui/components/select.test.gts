@@ -16,7 +16,7 @@ function trigger(): HTMLElement {
 module('Pretui | components/select', function (hooks) {
   setupCardTest(hooks);
 
-  test('a label pointing at @controlId names the trigger', async function (assert) {
+  test('a label pointing at @controlId names the trigger, then the value', async function (assert) {
     await render(
       <template>
         <label for='tea-select'>Tea</label>
@@ -25,7 +25,22 @@ module('Pretui | components/select', function (hooks) {
     );
     let labelEl = document.querySelector('label[for="tea-select"]') as HTMLElement;
     assert.ok(labelEl.id, 'the label gets an id');
-    assert.strictEqual(trigger().getAttribute('aria-labelledby'), labelEl.id, 'and the trigger points at it');
+    assert.strictEqual(
+      trigger().getAttribute('aria-labelledby'),
+      `${labelEl.id} ${trigger().id}`,
+      'the name is the label, then the trigger, so the chosen value is still read',
+    );
+  });
+
+  test('a label wrapping the Select names it too', async function (assert) {
+    await render(
+      <template>
+        <label>Tea <Select @options={{OPTIONS}} /></label>
+      </template>,
+    );
+    let wrapping = trigger().closest('label') as HTMLElement;
+    assert.ok(wrapping?.id, 'the wrapping label gets an id');
+    assert.strictEqual(trigger().getAttribute('aria-labelledby'), `${wrapping.id} ${trigger().id}`);
   });
 
   test('@label and @labelledBy name the trigger directly', async function (assert) {

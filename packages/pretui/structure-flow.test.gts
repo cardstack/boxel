@@ -282,6 +282,28 @@ module('Pretui | structure-flow | Wizard', function (hooks) {
       .doesNotExist('step four is not optional, so there is nothing to skip');
   });
 
+  test('a skipped step that is later completed shows as complete', async function (assert) {
+    const OPEN_STEPS: WizardStep[] = [
+      { id: 'one', label: 'Account' },
+      { id: 'two', label: 'Plan' },
+      { id: 'three', label: 'Team', optional: true },
+      { id: 'four', label: 'Review' },
+    ];
+    await render(<template>
+      <Wizard @steps={{OPEN_STEPS}}>
+        <:step as |step|><span data-test-panel>{{step.label}}</span></:step>
+      </Wizard>
+    </template>);
+    let states = () => Array.from(document.querySelectorAll('[data-test-pretui-step-list-items] [data-state]')).map((el) => el.getAttribute('data-state'));
+    await click('[data-test-pretui-wizard-next]');
+    await click('[data-test-pretui-wizard-next]');
+    await click('[data-test-pretui-wizard-skip]');
+    assert.strictEqual(states()[2], 'upcoming', 'skipped: not complete');
+    await click('[data-test-pretui-wizard-back]');
+    await click('[data-test-pretui-wizard-next]');
+    assert.strictEqual(states()[2], 'complete', 'completed with Next after all');
+  });
+
   test('the terminal step commits instead of advancing', async function (assert) {
     let state = new WizardState();
     state.index = 3;

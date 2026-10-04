@@ -1,7 +1,9 @@
 // Pretui — Form: the host that owns issues, submit, and the context its parts register with.
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
 import { on } from '@ember/modifier';
 import { hash } from '@ember/helper';
+import { CompoundField } from './compound-field';
 import { ErrorSummary } from './error-summary';
 import { FieldError } from './field-error';
 import { FormField } from './form-field';
@@ -47,6 +49,8 @@ export interface FormApi {
   Section: any;
   /** ErrorSummary, pre-bound to this form's context. */
   Summary: any;
+  /** CompoundField, pre-bound to this form's context. */
+  Compound: any;
   /** FieldError, for rendering an issue outside a field. */
   Error: any;
   context: FormContext;
@@ -172,11 +176,35 @@ export class Form extends Component<FormSignature> implements FormHost {
     this.context.markDirty();
   };
 
+  private formEl: HTMLFormElement | undefined;
+  captureForm = modifier((el: HTMLFormElement) => {
+    this.formEl = el;
+    return () => {
+      this.formEl = undefined;
+    };
+  });
+
+  // Through the element, so native validation and the caller's own listeners
+  // see the same submit and reset a button would produce.
   requestSubmit = (): void => {
-    this.handleSubmit(new Event('submit', { cancelable: true }));
+    if (this.disabled) {
+      return;
+    }
+    if (this.formEl) {
+      this.formEl.requestSubmit();
+    } else {
+      this.handleSubmit(new Event('submit', { cancelable: true }));
+    }
   };
   requestReset = (): void => {
-    this.handleReset(new Event('reset'));
+    if (this.disabled) {
+      return;
+    }
+    if (this.formEl) {
+      this.formEl.reset();
+    } else {
+      this.handleReset(new Event('reset'));
+    }
   };
 
   <template>
@@ -193,6 +221,7 @@ export class Form extends Component<FormSignature> implements FormHost {
       data-test-pretui-form
       {{on 'submit' this.handleSubmit}}
       {{on 'reset' this.handleReset}}
+      {{this.captureForm}}
       {{on 'input' this.handleEdit}}
       {{on 'change' this.handleEdit}}
       ...attributes
@@ -202,6 +231,7 @@ export class Form extends Component<FormSignature> implements FormHost {
           Field=(component FormField form=this.context)
           Layout=(component FormLayout form=this.context)
           Section=(component FormSection form=this.context)
+          Compound=(component CompoundField form=this.context)
           Summary=(component ErrorSummary form=this.context)
           Error=FieldError
           context=this.context

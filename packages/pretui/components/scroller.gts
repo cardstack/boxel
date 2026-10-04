@@ -67,7 +67,19 @@ const scrollEdges = modifier(
     // the scroll extent while every observed box keeps its size (a slide
     // appended to a full-width flex track), so DOM changes re-measure too and
     // hand new direct children to the resize observer.
-    let observer = new ResizeObserver(update);
+    // observer callbacks coalesce into one measurement per frame; the frame
+    // is owned here and cancelled on teardown
+    let frame: number | undefined;
+    let schedule = () => {
+      if (frame !== undefined) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        update();
+      });
+    };
+    let observer = new ResizeObserver(schedule);
     let observeChildren = () => {
       for (let child of Array.from(element.children)) {
         observer.observe(child);
@@ -77,7 +89,7 @@ const scrollEdges = modifier(
     observeChildren();
     let mutations = new MutationObserver(() => {
       observeChildren();
-      update();
+      schedule();
     });
     mutations.observe(element, {
       childList: true,
@@ -90,6 +102,9 @@ const scrollEdges = modifier(
       element.removeEventListener('scroll', update);
       observer.disconnect();
       mutations.disconnect();
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
     };
   },
 );

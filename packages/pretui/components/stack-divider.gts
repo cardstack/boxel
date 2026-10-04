@@ -1,6 +1,14 @@
 // Pretui — StackDivider: the layout-local hairline that pairs with Stack.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { pretuiOrientation } from '../internal/structure-layout';
 import type { Orientation, OrientationAlias } from '../internal/structure-layout';
+
+const axisOf = (orientation?: string, direction?: string): Orientation =>
+  pretuiOrientation(orientation, direction, 'vertical');
+
+// the rule runs across the Stack, so it is announced perpendicular to its axis
+const ruleOf = (orientation?: string, direction?: string): Orientation =>
+  axisOf(orientation, direction) === 'horizontal' ? 'vertical' : 'horizontal';
 
 /**
  * A hairline, exported here because `Stack` documents it as the semantic
@@ -23,9 +31,9 @@ export const StackDivider: TemplateOnlyComponent<StackDividerSignature> =
   <template>
     <span
       class='pretui-stack-divider'
-      data-orientation={{if @orientation @orientation (if @direction @direction 'vertical')}}
+      data-orientation={{axisOf @orientation @direction}}
       role={{if @semantic 'separator'}}
-      aria-orientation={{if @semantic (if @orientation @orientation 'vertical')}}
+      aria-orientation={{if @semantic (ruleOf @orientation @direction)}}
       aria-hidden={{unless @semantic 'true'}}
       data-test-pretui-stack-divider
       ...attributes

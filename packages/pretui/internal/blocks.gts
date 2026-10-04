@@ -1,4 +1,4 @@
-// Pretui — blocks: stateless sample assemblies (Appendix I, Blocks tier).
+// Pretui — blocks: stateless sample assemblies (the Blocks tier).
 //
 // A BLOCK is not a component. It takes all of its data through args,
 // composes components the kit already ships, and owns nothing persistent —
@@ -10,7 +10,7 @@
 // block that hides state is a lie about composition.
 //
 // Corollary, and it is load-bearing: there is almost no new CSS here beyond
-// layout and the Appendix E variant recipes. Where one of these blocks
+// layout and the kit's variant recipes. Where one of these blocks
 // wanted a visual treatment the kit does not own, the gap is written down
 // in the doc comment as a finding against the COMPONENT rather than patched
 // locally. `!important`, `:deep()` and `:global()` do not appear, and the

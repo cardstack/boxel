@@ -58,7 +58,7 @@
 // target), which is what actually produces the lag fan under continuous
 // retargeting. `transition-delay` is still correct for one-shot moves.
 //
-// Appendix F contract in force throughout: no dark-mode branches; every
+// Theming contract throughout: no dark-mode branches; every
 // color is var(--token, lightFallback); decorative layers are
 // aria-hidden + pointer-events: none so nothing underneath is ever
 // blocked; prefers-reduced-motion collapses each effect to its END state

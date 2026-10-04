@@ -27,14 +27,13 @@ import type { Orientation, OrientationAlias, SizeAlias } from '../internal/struc
 //      mechanism in both modes, and is typed.
 //   2. **`min-width: 0` is missing everywhere.** A flex row child defaults to
 //      `min-width: auto`, so one long unbroken label blows the row out of its
-//      container. Appendix O.3's C2 names the fix as four declarations, not
-//      one: the cell gets `min-inline-size: 0` here and `.pretui-truncate` is
+//      container. The fix is four declarations, not one: the cell gets `min-inline-size: 0` here and `.pretui-truncate` is
 //      the caller's half.
 //   3. **Physical `direction: 'row-reverse'` and `left`/`right` alignment.**
 //      Everything here is logical (`flex-direction: row`, `inset-inline`,
 //      `align-self`), so RTL is free rather than a second stylesheet.
 //   4. **`spacing` is a free-form CSS length in Mantine.** Here `@gap` rides
-//      the Appendix E size scale so a season recompile re-rhythms every
+// the kit's size scale so a season recompile re-rhythms every
 //      Stack in the kit at once; a raw length is still accepted through
 //      `@gapLength`, validated by the kit guard.
 
@@ -54,7 +53,7 @@ export interface StackSignature<T = unknown> {
     orientation?: Orientation;
     /** Alias for `@orientation`; also accepts `row` / `column`. */
     direction?: OrientationAlias;
-    /** Gap on the Appendix E scale. `sm`/`md`/`lg`/`default` resolve too. */
+    /** Gap on the kit's size scale. `sm`/`md`/`lg`/`default` resolve too. */
     gap?: StackGap | SizeAlias;
     /**
      * A raw CSS length for the gap, when the scale is genuinely wrong (a
@@ -203,7 +202,7 @@ export class Stack<T = unknown> extends Component<StackSignature<T>> {
         .pretui-stack[data-wrap='true'] {
           flex-wrap: wrap;
         }
-        /* Gap rides the Appendix E scale, so a season recompile re-rhythms every
+        /* Gap rides the kit's size scale, so a season recompile re-rhythms every
            Stack at once. `--pretui-stack-gap` (from @gapLength or any ancestor)
            wins where a caller genuinely needs a length. */
         .pretui-stack[data-gap='none'] {
@@ -258,8 +257,7 @@ export class Stack<T = unknown> extends Component<StackSignature<T>> {
         .pretui-stack[data-justify='evenly'] {
           justify-content: space-evenly;
         }
-        /* The cell exists to carry the overflow fix Appendix O.3 C2 names: a
-           flex child defaults to min-size auto, so one long token blows the row
+        /* The cell exists to carry the overflow fix: a flex child defaults to min-size auto, so one long token blows the row
            out. The caller's half is `.pretui-truncate` on their own text. */
         .pretui-stack-cell {
           min-inline-size: 0;

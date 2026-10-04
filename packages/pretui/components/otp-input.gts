@@ -20,12 +20,10 @@ import { fn } from '@ember/helper';
 // value.length === @length in @onValueChange instead).
 // A11y per Spectrum's segmented-input notes: role='group' with a group
 // label, plus a per-digit label ('Digit N of L') on every segment.
-// Review pass 2026-08-12 fixed: Backspace on the empty fill-edge segment now
-// splices the previous character (it took two presses); Home/End reach the
-// first/last segment; the focus ring rides --ring (it hard-coded --primary,
-// so the theme's ring knob was ignored) and carries a transparent outline so
-// it survives forced-colors; and completion is no longer conveyed by ring
-// colour alone — a polite live region says so.
+// Backspace on the empty fill-edge segment splices the previous character;
+// Home/End reach the first/last segment; the focus ring rides --ring and
+// carries a transparent outline so it survives forced-colors; and completion
+// is never conveyed by ring colour alone — a polite live region says so.
 
 export type OtpInputType = 'numeric' | 'alpha' | 'alphanumeric';
 

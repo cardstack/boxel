@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { CopyFit } from './copy-fit';
 
-// ── CopyFit (formerly FittedCard) ← fitted-card/usage.gts ────────────────
+// ── CopyFit ← fitted-card/usage.gts ──────────────────────────────────────
 // Dropped knobs: imageAlt (the media image is decorative — alt='' baked in);
 // imageLoading (no arg); titleTag (title renders as a span, not a heading);
 // layout (container queries only — no forced direction); subtitle,
@@ -31,7 +31,7 @@ class CopyFitUsage extends GlimmerComponent {
   <template>
     <FreestyleUsage
       @name='CopyFit'
-      @description='The copy-fitting layout mechanism (formerly FittedCard). One adaptive design across the badge / strip / tile / card sub-formats, chosen automatically via CSS container queries on the card root — media-forward when media exists, monogram placeholder otherwise. Content is supplied via args; only title is required.'
+      @description='The copy-fitting layout mechanism. One adaptive design across the badge / strip / tile / card sub-formats, chosen automatically via CSS container queries on the card root — media-forward when media exists, monogram placeholder otherwise. Content is supplied via args; only title is required.'
     >
       <:example>
         {{! FIXED-SIZE FORMAT BOXES — one adaptive design, four sub-formats,

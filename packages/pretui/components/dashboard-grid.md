@@ -48,7 +48,7 @@ Where it is thinner: one authored arrangement re-flowed by column count rather t
 - **Every tile's handle is named** through `@labelFor`, so a grid of twelve does not present twelve identical drag handles.
 - **`@animate` is always off under `prefers-reduced-motion`**, and lands on the end state rather than freezing mid-displacement.
 - **Read-only mode removes the affordances rather than disabling them**, so a keyboard user is not tabbing through handles that refuse.
-- **Drag has a keyboard equivalent through the item's handle** — which is the whole reason the handle is a button rather than a grip.
+- **Drag has a keyboard equivalent through the item's handle**, a focusable `role="button"` rather than a bare grip. It is not a native `<button>` because gridstack's drag engine ignores presses on those.
 - **Every move announces the tile's new column and row**, which is what actually orients a screen-reader user — and in read-only mode, with no engine to fight, the cells are in visual order in the DOM.
 
 ## Theming

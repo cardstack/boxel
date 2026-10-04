@@ -111,11 +111,14 @@ export class Lookup extends Component<LookupSignature> {
 
   decorate = (record: PickerRecord): PickerRecord => {
     let hit = this.optionCache.get(record.id);
+    let search =
+      record.search ?? `${record.label} ${record.meta ?? ''} ${record.id}`;
     if (
       hit &&
       hit.label === record.label &&
       hit.meta === record.meta &&
-      hit.icon === record.icon
+      hit.icon === record.icon &&
+      hit.search === search
     ) {
       return hit;
     }
@@ -125,7 +128,7 @@ export class Lookup extends Component<LookupSignature> {
     }
     let made: PickerRecord = {
       ...record,
-      search: record.search ?? `${record.label} ${record.meta ?? ''} ${record.id}`,
+      search,
     };
     this.optionCache.set(record.id, made);
     return made;

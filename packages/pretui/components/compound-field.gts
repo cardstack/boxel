@@ -5,7 +5,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FieldError } from './field-error';
 import { FormSection } from './form-section';
 import { issuesForPath } from '../internal/forms-core';
-import type { FormIssue } from '../internal/forms-core';
+import type { FormIssue, FormContext } from '../internal/forms-core';
 import { tracksStyle } from '../internal/forms-record';
 import type { ContextualComponent } from '../internal/forms-record';
 
@@ -84,6 +84,9 @@ export interface CompoundFieldSignature {
     /** Issues for the whole form. Only those whose `targetPath` EQUALS
      *  @path render here; sub-field issues render on their own fields. */
     issues?: FormIssue[];
+    /** The owning form's context. Supplied automatically by `form.Compound`,
+     *  so a collapsed compound opens when a refused submit focuses into it. */
+    form?: FormContext;
     /** Visible description under the title. Guidance a user needs in order to
      *  answer must be visible: a hover tooltip does not exist on touch and is
      *  missed on desktop. Wired to the fieldset with `aria-describedby` by
@@ -221,7 +224,10 @@ export class CompoundField extends Component<CompoundFieldSignature> {
     return this.args.variant === 'address' ? 'address' : 'default';
   }
   get issues(): FormIssue[] {
-    return issuesForPath(this.args.issues ?? [], this.args.path);
+    return issuesForPath(
+      this.args.issues ?? this.args.form?.issues ?? [],
+      this.args.path,
+    );
   }
   /** the compound claims its own path, or FormSection would drop its issues */
   get ownPaths(): string[] | undefined {
@@ -241,6 +247,7 @@ export class CompoundField extends Component<CompoundFieldSignature> {
         @description={{@hint}}
         @issues={{this.issues}}
         @paths={{this.ownPaths}}
+        @form={{@form}}
         @collapsible={{@collapsible}}
         @defaultOpen={{@defaultOpen}}
         @open={{@open}}

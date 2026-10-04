@@ -373,6 +373,11 @@ export class Wizard extends Component<WizardSignature> {
       return;
     }
     this.refused = false;
+    // completing a step with Next clears an earlier skip of it
+    let leaving = this.steps[from];
+    if (reason === 'next' && leaving && this.wasSkipped(leaving.id)) {
+      this.skippedIds = this.skippedIds.filter((id) => id !== leaving.id);
+    }
     this.navToken = this.navToken + 1;
     if (index > this.furthestSeen) {
       this.furthestSeen = index;
@@ -615,7 +620,7 @@ export class Wizard extends Component<WizardSignature> {
           white-space: nowrap;
         }
         /* Reserved line: a refusal arriving late must not shove the footer
-           down the page (Appendix O — a value that arrives late reserves its
+           down the page (a value that arrives late reserves its
            space). */
         .pretui-wizard-refusal {
           margin: 0;

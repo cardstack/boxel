@@ -41,8 +41,8 @@
 // JSON through it would force every value into `label: string`, erasing
 // exactly the distinctions this component exists to show: `42` vs `"42"`,
 // `""` vs `null`, `[]` vs `{}`. And `JsonEditor` needs `role='treegrid'`,
-// which `Tree` cannot be talked into. What IS reused is the foundation
-// Appendix L names — `focus.gts` (`focusWhen`, `rovingTabindex`, `listen`) —
+// which `Tree` cannot be talked into. What IS reused is the kit's focus
+// foundation — `focus.gts` (`focusWhen`, `rovingTabindex`, `listen`) —
 // plus `Tree`'s flat-rows + roving-tabindex architecture, copied faithfully
 // including the load-bearing `onFocusIn` early return.
 //

@@ -1090,7 +1090,7 @@ module('Pretui | colour | render', function (hooks) {
 //     — these test a custom element's attribute/property reflection, its
 //       popover and its anchoring. None of it exists here: reflection is
 //       Glimmer args, the popover is `Popup` (already tested), and
-//       theming is the Theme card's job (Appendix F). The behaviours they
+// theming is the Theme card's job. The behaviours they
 //       cover that DO exist (space switching preserving the colour, alpha
 //       suppression, the popover) are covered by the render module and by
 //       forms-render / theme-frame instead.

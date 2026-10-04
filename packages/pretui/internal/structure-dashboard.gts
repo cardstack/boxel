@@ -77,9 +77,9 @@
 //
 // The engine instance is created in `mountDashboardPlane` (an
 // `ember-modifier`) and `destroy(false)`d in that modifier's destructor,
-// along with the ResizeObserver and every listener — per the matrix's
-// Appendix M.3 ruling, that ownership is what makes the engine's internal
-// drag timers legal in a realm.
+// along with the ResizeObserver and every listener. That ownership is what
+// makes the engine's internal drag timers legal in a realm: a timer is
+// allowed when the element that owns it clears it.
 //
 // ── READ-ONLY MODE ──────────────────────────────────────────────────────
 // A dashboard is edited rarely and read constantly, so `@editable={{false}}`

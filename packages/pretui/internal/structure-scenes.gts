@@ -11,7 +11,7 @@
 //                   pure position:sticky pinning + static nth-child scale)
 //   Dock          ← motion-primitives Dock (cursor-distance spring
 //                   magnification → :hover/:has sibling falloff)
-// Appendix F contract in force: no dark-mode branches; every color is
+// Theming contract: no dark-mode branches; every color is
 // var(--token, lightFallback); prefers-reduced-motion honored wherever
 // anything moves. Per-component delta notes sit on each section.
 //

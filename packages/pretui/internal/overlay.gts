@@ -203,7 +203,7 @@ function positionPopup(
 // positioning primitive: the same offset/flip/shift behavior floating-ui's
 // middleware provides, measured against the REAL panel box — floating-ui
 // itself is not realm-importable, and boxel-ui's Velcro path portals to the
-// app root, outside the theme island (Appendix F renderInPlace decision).
+// app root, outside the theme island.
 export const anchorTo = modifier(
   (
     el: HTMLElement,

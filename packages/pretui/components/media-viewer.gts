@@ -24,16 +24,15 @@
 //      ("images under 2 MP", "audio with a transcript").
 //   3. **The fallback names the gap.** An unrouted asset does not render a
 //      blank box; it renders what kind it is, what would handle it, and a
-//      link to open the file. Appendix M lists ModelViewer, Lightbox,
-//      ImageCropper and Waveform as planned — until they exist, the shell
-//      says so out loud rather than failing silently.
+//      link to open the file when that link is safe. A kind with no adapter
+//      registered says so out loud rather than failing silently.
 //
 // BETTER THAN THE INSPIRATION: every DAM viewer surveyed picks its viewer
 // with an if-chain inside the gallery component, which is why adding a kind
 // means editing the gallery. Here the gallery knows nothing.
 import Component from '@glimmer/component';
 import { EmptyState } from './empty-state';
-import { adapterFor, resolveAsset } from '../internal/media-viewer';
+import { adapterFor, resolveAsset, safeHref } from '../internal/media-viewer';
 import type { MediaAdapter, MediaAssetSpec, ResolvedMediaAsset } from '../internal/media-viewer';
 
 // What the fallback says it is waiting for. Naming the intended component
@@ -71,6 +70,9 @@ export class MediaViewer extends Component<MediaViewerSignature> {
   get fallbackTitle(): string {
     return `Nothing here opens ${this.asset.kind === 'unknown' ? 'this file' : `${this.asset.kind} assets`} yet`;
   }
+  get openHref(): string | undefined {
+    return safeHref(this.asset.src);
+  }
   get fallbackMessage(): string {
     return (
       PLANNED[this.asset.kind] ??
@@ -98,12 +100,14 @@ export class MediaViewer extends Component<MediaViewerSignature> {
             {{this.fallbackMessage}}
           </:default>
           <:action>
-            <a
-              class='pretui-mviewer-link'
-              href={{this.asset.src}}
-              target='_blank'
-              rel='noopener noreferrer'
-            >Open {{this.asset.label}} in a new tab</a>
+            {{#if this.openHref}}
+              <a
+                class='pretui-mviewer-link'
+                href={{this.openHref}}
+                target='_blank'
+                rel='noopener noreferrer'
+              >Open {{this.asset.label}} in a new tab</a>
+            {{/if}}
           </:action>
         </EmptyState>
       {{/if}}

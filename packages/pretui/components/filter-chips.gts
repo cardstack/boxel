@@ -58,10 +58,9 @@ export interface FilterChipsSignature {
 
 // Adopted from Beautiful UI: status chips that filter live data.
 //
-// **Semantics rebuilt 2026-08-13**, with SegmentedControl, for the same
-// reason: `role='tablist'` over plain `<button>`s is invalid ARIA (a
+// **A radiogroup, not a tablist**, like SegmentedControl: `role='tablist'` over plain `<button>`s is invalid ARIA (a
 // tablist's children must be tabs) and the wrong pattern — a filter row picks
-// a value, it does not swap a panel. Single-select is now native
+// a value, it does not swap a panel. Single-select is native
 // `<input type='radio'>` in a `role='radiogroup'`, sharing `RadioGroup`'s
 // foundation and inheriting the whole APG contract for free; multi-select is
 // native `<input type='checkbox'>` in a `role='group'`. The chip dress is

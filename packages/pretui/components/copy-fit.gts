@@ -5,8 +5,7 @@
 //
 // Naming (catalog-taxonomy.md): `fitted` is a Boxel rendering format; CopyFit
 // is the layout MECHANISM that makes copy and optional media adapt across the
-// fitted format's quantums. The component was previously named FittedCard —
-// a temporary compatibility alias lives in fitted-card.gts.
+// fitted format's quantums.
 import Component from '@glimmer/component';
 import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 import { statusHue } from '../internal/ink';

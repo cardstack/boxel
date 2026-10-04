@@ -145,7 +145,7 @@ export interface ToggleMatrixSignature {
     disabled?: boolean;
     /** size scale for the cells */
     size?: PretuiSize;
-    /** hue for switched-on cells (Appendix E), default `primary` */
+    /** hue for switched-on cells, default `primary` */
     tone?: PretuiTone;
   };
   Blocks: {

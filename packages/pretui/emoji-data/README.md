@@ -93,7 +93,7 @@ path in this directory or in `emoji-picker.gts` performs a network request.**
 Even had all three resolved, the picker's controls arrive inside its own shadow
 root with **27 documented CSS custom properties and zero slots**. Reachable:
 colours, focus outline, emoji size, column count, a few radii. Not reachable:
-any font-family for the UI text (so Appendix J's type spec cannot land), any
+any font-family for the UI text (so the kit's type scale cannot land), any
 shadow (so Law 1's hairline-plus-shadow cannot land — upstream separates with
 `--border-color`, which Law 1 forbids), per-control radii, spacing, the nav
 treatment, or any structural substitution (Law 7 wants slots, and there are

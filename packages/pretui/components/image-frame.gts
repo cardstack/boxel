@@ -5,9 +5,9 @@ import { Token } from './token';
 import type { ResolvedMediaAsset } from '../internal/media-viewer';
 
 /**
- * A framed still. Deliberately small: Appendix M gives images to Lightbox
- * (PhotoSwipe) and ImageCropper (Cropper.js), neither of which is vendored
- * yet. What this DOES do is the part those libraries do not — reserve the
+ * A framed still. Deliberately small: zooming and cropping belong to Lightbox
+ * (PhotoSwipe) and ImageCropper (Cropper.js). What this DOES do is the part
+ * those libraries do not — reserve the
  * exact aspect ratio before the bytes arrive, so nothing reflows, and carry
  * real alt text.
  */

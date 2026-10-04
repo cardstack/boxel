@@ -7,6 +7,7 @@ import { modifier } from 'ember-modifier';
 import { cssStyleFrom } from '../pretui-css';
 import { Scroller } from './scroller';
 import { clamp, scrollBehavior } from '../internal/structure-scroll';
+import { OWNS_KEYS } from '../focus';
 
 // ── Carousel ─────────────────────────────────────────────────────────────
 
@@ -51,8 +52,6 @@ function nearestIndex(viewport: HTMLElement, track: HTMLElement, current: number
 // slider, a listbox or a rich-text field; taking ArrowLeft from any of those
 // to advance the carousel would break the control the reader is actually
 // using.
-const CAROUSEL_KEY_EXEMPT =
-  'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"], [role="slider"], [role="spinbutton"], [role="listbox"], [role="combobox"], [role="menu"], [role="tree"], [role="grid"]';
 
 /**
  * The keyboard path, bound inside the modifier rather than with `{{on}}`:
@@ -69,7 +68,7 @@ const carouselKeys = modifier(
   (root: HTMLElement, [go]: [(delta: number | 'first' | 'last') => void]) => {
     let onKeydown = (event: KeyboardEvent) => {
       let target = event.target as Element | null;
-      if (target?.closest?.(CAROUSEL_KEY_EXEMPT)) {
+      if (target?.closest?.(OWNS_KEYS)) {
         return;
       }
       let key = event.key;
@@ -198,8 +197,10 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
     if (index === this.shownIndex) {
       return;
     }
+    // the first placement is a jump, not an animation in from slide one
+    let instant = this.shownIndex === undefined;
     this.shownIndex = index;
-    this.scrollToIndex(index);
+    this.scrollToIndex(index, instant);
   });
 
   get count(): number {
@@ -323,7 +324,7 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
     return rest === undefined || Math.abs(viewport.scrollLeft - rest) <= 1;
   }
 
-  private scrollToIndex(index: number): void {
+  private scrollToIndex(index: number, instant = false): void {
     let viewport = this.viewportEl;
     let track = this.trackEl;
     if (!viewport || !track) {
@@ -338,7 +339,7 @@ export class Carousel<T = unknown> extends Component<CarouselSignature<T>> {
       return;
     }
     this.pendingIndex = index;
-    viewport.scrollTo({ left: rest, behavior: scrollBehavior() });
+    viewport.scrollTo({ left: rest, behavior: instant ? 'auto' : scrollBehavior() });
   }
 
   <template>

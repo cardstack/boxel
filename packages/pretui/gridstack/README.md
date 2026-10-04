@@ -44,7 +44,9 @@ Exported (a lean entry — not gridstack's full `export *` surface):
 Built with, from the checkout root:
 
     esbuild lean.ts --bundle --format=esm --minify --line-limit=500 \
-      --legal-comments=none --target=es2022 --outfile=index.js
+      --legal-comments=none --target=es2022 \
+      --banner:js="/*! gridstack.js 13.1.2+18 (d9c9bc41) | SPDX-License-Identifier: MIT | Copyright (c) 2019-2025 Alain Dumesny | https://gridstackjs.com | see ./LICENSE */" \
+      --outfile=index.js
 
 where `lean.ts` is three re-export lines pointing at that checkout's
 `src/gridstack`, `src/gridstack-engine` and `src/utils`.
@@ -73,9 +75,8 @@ where `lean.ts` is three re-export lines pointing at that checkout's
 
 - **Timers are the engine's, and are owned.** gridstack schedules
   `setTimeout`s around drag/animation and one `requestAnimationFrame`
-  auto-scroll loop while dragging; both are cancelled on drag end. Per the
-  matrix's Appendix M.3 ruling, that is legal because the modifier that
-  creates the instance calls `grid.destroy(false)` in its destructor.
+  auto-scroll loop while dragging; both are cancelled on drag end. That is
+  legal in a realm because the modifier that creates the instance calls `grid.destroy(false)` in its destructor.
   **Always pass `false`** — `destroy(true)` removes the container from the
   DOM, which is Glimmer's node.
 

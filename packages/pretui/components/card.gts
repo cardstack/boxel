@@ -46,7 +46,7 @@ import type { Orientation, OrientationAlias, SizeAlias } from '../internal/struc
 //      is the state that actually exists when a keyboard user is in the card.
 //   4. **Mantine's root is unconditionally `overflow: hidden`**, which clips
 //      every Popover, Menu, Tooltip and focus ring rendered inline inside a
-//      card — and the kit renders overlays in place (Appendix F). Here the
+// card — and the kit renders overlays in place. Here the
 //      root does NOT clip; the media band carries its own corner radii and
 //      its own `overflow: hidden`, which is the only place clipping was ever
 //      needed.
@@ -56,7 +56,7 @@ import type { Orientation, OrientationAlias, SizeAlias } from '../internal/struc
 //      wrapped away.
 //   6. **Tone is a colour prop.** Chakra/Mantine spell card emphasis as
 //      `variant` + `colorPalette` resolved in a theme file the component
-//      cannot document. This takes the Appendix E two-axis grid, so a
+// cannot document. This takes the kit's tone × appearance grid, so a
 //      `danger` `filled` card is the same recipe as a `danger` `filled`
 //      Button rather than a parallel table.
 //   7. **`className` is the styling API upstream.** Here it is tokens plus
@@ -72,11 +72,11 @@ export interface CardSignature {
     description?: string;
     /** Small uppercase line above the title. */
     eyebrow?: string;
-    /** Appendix E tone. Default `neutral`. */
+    /** Tone. Default `neutral`. */
     tone?: PretuiTone;
-    /** Appendix E appearance. Default `outlined` — the hairline surface. */
+    /** Appearance. Default `outlined` — the hairline surface. */
     appearance?: CardAppearance;
-    /** Appendix E size; sets the host font-size, everything inside is em. */
+    /** Size; sets the host font-size, everything inside is em. */
     size?: SizeAlias;
     /** `vertical` (default) stacks media above the body; `horizontal` puts
      * media on the start edge. `direction` is accepted as an alias. */
@@ -243,13 +243,13 @@ export class Card extends Component<CardSignature> {
           /* Deliberately NOT `overflow: hidden`. Mantine clips its card root
              unconditionally, which kills every Popover, Menu and Tooltip
              rendered inline inside a card — and this kit renders overlays in
-             place (Appendix F). Only the media band ever needed clipping, and
+             place. Only the media band ever needed clipping, and
              it carries its own corners below. */
           transition: box-shadow var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease);
         }
         /* size — font-size only; every internal dimension below is em, so one
-           declaration scales the whole card (Appendix E.2). */
+           declaration scales the whole card. */
         .pretui-card[data-size='xs'] {
           font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
         }
@@ -262,8 +262,8 @@ export class Card extends Component<CardSignature> {
         .pretui-card[data-size='xl'] {
           font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
         }
-        /* tone — one hue token in, the appearance recipes below read it out.
-           Appendix E.1, written once. */
+        /* tone — one hue token in, the appearance recipes below read it out,
+           written once. */
         .pretui-card[data-tone='primary'] {
           --pretui-tone: var(--primary);
           --pretui-tone-on: var(--primary-foreground);

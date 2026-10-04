@@ -10,8 +10,8 @@
 // `Scroller` is deliberately first and deliberately small: "content
 // continues past this edge" is a fact half the kit's collections need, and
 // before this it was re-solved (or skipped) per component. `Carousel`
-// consumes it rather than reimplementing edge detection, which is the
-// Appendix K foundation rule — build the primitive before its consumers.
+// consumes it rather than reimplementing edge detection: the primitive is
+// built before its consumers.
 //
 // ── The realm's timer law, and how the whole file obeys it ───────────────
 //
