@@ -1660,6 +1660,25 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual((published[0]?.args as any)?.persist, null);
     });
 
+    test('a file without a registered extension is captured but not persisted', async function (assert) {
+      // `notes` shares its spelling with a card id, so persisting it would key
+      // its capture as a card capture of `notes`.
+      await seedFileRow(1, {
+        url: `${REALM_URL}notes`,
+        alias: `${REALM_URL}notes`,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        fileURL: `${REALM_URL}notes`,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.strictEqual((published[0]?.args as any)?.sourceKind, 'file');
+      assert.strictEqual((published[0]?.args as any)?.persist, null);
+    });
+
     test("an instance row does not stand in for a file's liveness", async function (assert) {
       // A card's own row is not the file row a file capture is keyed by, so
       // naming the card's `.json` as a file finds no live file and persists
@@ -2165,6 +2184,55 @@ module(basename(import.meta.filename), function () {
         differentRunAs.hasTwin,
         'a different-runAs job is not a twin',
       );
+
+      // The job carries no kind, so it is a card capture: a file capture of
+      // the same identity cannot join it.
+      let asFile = await estimateCaptureQueueWait(dbAdapter, concurrencyGroup, {
+        ...twinKey,
+        runAs: '@owner:localhost',
+        sourceKind: 'file',
+      });
+      assert.false(asFile.hasTwin, 'a file capture is not a card job’s twin');
+    });
+
+    test('a job published under the former job type is a twin', async function (assert) {
+      // A realm server on a previous revision publishes captures as
+      // `capture-card` during a rollout.
+      let concurrencyGroup = 'capture:http://example.test/';
+      let persist = {
+        realmURL: 'http://example.test/',
+        sourceURL: 'http://example.test/Person/fadhlan',
+        captureSpecHash: 'abc123',
+        sourceGeneration: 1,
+        lane: 'on-demand',
+      };
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          job_type: 'capture-card',
+          concurrency_group: concurrencyGroup,
+          args: {
+            cardId: persist.sourceURL,
+            format: 'isolated',
+            runAs: '@owner:localhost',
+            persist,
+          },
+        },
+        { jsonFields: ['args'] },
+      );
+      await query(dbAdapter, insert('jobs', nameExpressions, valueExpressions));
+
+      let estimate = await estimateCaptureQueueWait(
+        dbAdapter,
+        concurrencyGroup,
+        {
+          sourceURL: persist.sourceURL,
+          captureSpecHash: persist.captureSpecHash,
+          sourceGeneration: persist.sourceGeneration,
+          runAs: '@owner:localhost',
+        },
+      );
+      assert.true(estimate.hasTwin, 'the former-type job is joinable');
+      assert.strictEqual(estimate.pending, 1, 'and counts as pending');
     });
   });
 
@@ -2215,6 +2283,17 @@ module(basename(import.meta.filename), function () {
         persist: { ...PERSIST, captureSpecHash: 'custom456' },
       };
     }
+
+    test('a capture joins a twin published under the former job type', function (assert) {
+      let decision = chooseCaptureCoalesceDecision({
+        incoming: jobSpec(canonicalArgs()),
+        candidates: [
+          { ...jobSpec(canonicalArgs()), jobType: 'capture-card', id: 7 },
+        ],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'join', jobId: 7 });
+    });
 
     test('a card capture and a file capture of one URL are never twins', function (assert) {
       let decision = chooseCaptureCoalesceDecision({
