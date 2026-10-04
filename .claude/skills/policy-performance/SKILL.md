@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # Policy performance
 
-A realm's policy is consulted only for a caller its ACL declined. For those callers every invocation passes the gate (`card-operations/gate.ts`), every search composes the policy's query filters (`card-operations/policy-query.ts`), and the realm keeps a compiled copy of the policy card (`RealmPolicyCache` in `card-operations/policy.ts`). Each of those writes one JSON record per event on the `boxel:operations` channel (`card-operations/telemetry.ts`). These records are how the cost is measured.
+A realm's policy is consulted only for a caller its ACL declined. For those callers every invocation passes the gate (`card-operations/gate.ts`), every search composes the policy's query filters (`card-operations/policy-query.ts`), and the realm keeps a compiled copy of the policy card (`RealmPolicyCache` in `card-operations/policy.ts`). Each of those writes one JSON record per event on the `boxel:operations` channel (`card-operations/telemetry.ts`). These records are how the cost is measured. For what they say about correctness rather than cost — why a caller was refused, which policy won't compile, which grant admits too much — read `operations-diagnosis`.
 
 ## The records
 
