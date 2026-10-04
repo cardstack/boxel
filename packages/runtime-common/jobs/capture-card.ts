@@ -38,7 +38,7 @@ export const CAPTURE_CARD_JOB_TIMEOUT_SEC = 60;
 // job.
 //
 // Only persist-carrying jobs coalesce — both surfaces publish them: the GET
-// `_capture/` lane always, `POST /_capture-card` whenever the instance
+// `_capture/` lane always, `POST /_capture` whenever the instance
 // is indexed and the server has a store. A persist target pins the source
 // generation, so a joined caller can never be handed a capture of a
 // different revision. A `persist: null` job (unindexed card, or a server

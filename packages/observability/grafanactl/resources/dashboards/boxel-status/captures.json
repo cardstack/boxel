@@ -717,7 +717,7 @@
             "legendFormat": "{{surface}}"
           }
         ],
-        "description": "get-dsl is the GET _capture/ DSL route; post is POST /_capture-card."
+        "description": "get-dsl is the GET _capture/ DSL route; post is POST /_capture."
       },
       {
         "datasource": {

@@ -70,7 +70,7 @@ export function isDeclaredCaptureFormat(
 }
 
 // The capture spec: every way a capture can be parameterized,
-// shared by the POST /_capture-card body and the GET `_capture/` URL
+// shared by the POST /_capture body and the GET `_capture/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
 // both. The spec's canonical form is what keys the MediaCache ledger, so
 // everything here is deliberately strict: two requests that mean the same
@@ -249,7 +249,7 @@ export function captureIdentityOverrides(
 // ---------------------------------------------------------------------------
 // CaptureRequestSpec bounds + strict parse — one enforcement point for
 // every surface that accepts a spec off the wire (the realm-server's POST
-// /_capture-card body, the GET `_capture/` URL DSL via
+// /_capture body, the GET `_capture/` URL DSL via
 // `parseCaptureSpecParams`, and the prerender server's /prerender-capture
 // route), and the home of the caps the capture path itself enforces for the
 // extents only it can know (a fullPage capture's document size).
@@ -995,7 +995,7 @@ export function parseCaptureSpecParams(
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
   if (!isCanonicalCaptureFormat(format)) {
-    // Deliberately narrower than the POST /_capture-card roster
+    // Deliberately narrower than the POST /_capture roster
     // (ON_DEMAND_CAPTURE_FORMATS): CANONICAL_CAPTURE_FORMATS is the canonical ledger/GET-DSL
     // serving contract and stays viewport-filling only, so this message
     // speaks its own roster.

@@ -118,7 +118,7 @@ module(basename(import.meta.filename), function () {
       let app = new Koa();
       let router = new Router();
       router.post(
-        '/_capture-card',
+        '/_capture',
         jwtMiddleware(realmSecretSeed, args.dbAdapter),
         handleCaptureCard(args),
       );
@@ -148,7 +148,7 @@ module(basename(import.meta.filename), function () {
       let cardId = `${realmURL}Person/fadhlan`;
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -209,7 +209,7 @@ module(basename(import.meta.filename), function () {
       };
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -244,7 +244,7 @@ module(basename(import.meta.filename), function () {
       let cardId = `${realmURL}Person/fadhlan`;
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -281,7 +281,7 @@ module(basename(import.meta.filename), function () {
       let cardId = `${realmURL}Person/fadhlan`;
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -344,7 +344,7 @@ module(basename(import.meta.filename), function () {
       let cardId = `${realmURL}Person/fadhlan`;
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -386,7 +386,7 @@ module(basename(import.meta.filename), function () {
       let realmURL = 'http://example.test/';
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -455,7 +455,7 @@ module(basename(import.meta.filename), function () {
       let realmURL = 'http://example.test/';
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -579,7 +579,7 @@ module(basename(import.meta.filename), function () {
       let realmURL = 'http://example.test/';
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -618,7 +618,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -768,7 +768,7 @@ module(basename(import.meta.filename), function () {
       let app = buildApp(buildArgs(makeDbAdapter(), queue));
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .send({
           data: {
             attributes: {
@@ -792,7 +792,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -816,7 +816,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -840,7 +840,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -869,7 +869,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -896,7 +896,7 @@ module(basename(import.meta.filename), function () {
       let fileURL = 'http://example.test/brand/guide.html';
 
       await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -925,7 +925,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -954,7 +954,7 @@ module(basename(import.meta.filename), function () {
       );
 
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -984,7 +984,7 @@ module(basename(import.meta.filename), function () {
         realmSecretSeed,
       );
       let response = await supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({
           data: {
@@ -1225,7 +1225,7 @@ module(basename(import.meta.filename), function () {
       let app = new Koa();
       let router = new Router();
       router.post(
-        '/_capture-card',
+        '/_capture',
         jwtMiddleware(realmSecretSeed, dbAdapter),
         handleCaptureCard({
           dbAdapter,
@@ -1276,7 +1276,7 @@ module(basename(import.meta.filename), function () {
         realmSecretSeed,
       );
       return supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({ data: { type: 'capture-card', attributes } });
     }

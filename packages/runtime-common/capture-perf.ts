@@ -10,7 +10,7 @@
 //
 //   - `request` — emitted by a serving surface (the GET `_capture/`
 //     route in `realm.ts` — `get-dsl` for capture-spec params, `get-named`
-//     for `?name=` manifest addressing — or `POST /_capture-card`) when a
+//     for `?name=` manifest addressing — or `POST /_capture`) when a
 //     capture-relevant request completes: what the caller experienced
 //     (ledger hit / rendered / 503 / 403) and where its wall-clock went.
 //     Plain uncaptured-miss 404s and request-shape 400s do not emit — they

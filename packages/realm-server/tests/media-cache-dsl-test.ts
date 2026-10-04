@@ -880,7 +880,7 @@ module(basename(import.meta.filename), function () {
       return response!;
     }
 
-    // The realm-server's POST /_capture-card surface wired to this
+    // The realm-server's POST /_capture surface wired to this
     // suite's real queue and MediaCache store, so cross-surface tests can
     // prove one capture satisfies both the POST response and its GET
     // `_capture/` URL. The matrix stub is never consulted: the realm's
@@ -889,7 +889,7 @@ module(basename(import.meta.filename), function () {
       let app = new Koa();
       let router = new Router();
       router.post(
-        '/_capture-card',
+        '/_capture',
         jwtMiddleware(realmSecretSeed, dbAdapter),
         handleCaptureCard({
           dbAdapter,
@@ -909,7 +909,7 @@ module(basename(import.meta.filename), function () {
         realmSecretSeed,
       );
       return supertest(app.callback())
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Authorization', `Bearer ${token}`)
         .send({ data: { type: 'capture-card', attributes } });
     }

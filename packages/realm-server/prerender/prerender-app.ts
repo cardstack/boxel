@@ -815,7 +815,7 @@ export function buildPrerenderApp(options: {
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
     let formatIsValid = isOnDemandCaptureFormat(rawFormat);
-    // Same strict parse + bounds as the realm-server's POST /_capture-card
+    // Same strict parse + bounds as the realm-server's POST /_capture
     // body: this route is its own HTTP surface, and an unvalidated spec here
     // would reach `page.setViewport` on a pooled page with none of the cost
     // caps applied. The parse also normalizes (defaults elided, empty spec

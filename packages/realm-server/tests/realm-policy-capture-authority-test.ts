@@ -419,7 +419,7 @@ module(basename(import.meta.filename), function (hooks) {
     cardId = BOARD_CARD,
   ) {
     return request
-      .post('/_capture-card')
+      .post('/_capture')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/vnd.api+json')
       .set(
