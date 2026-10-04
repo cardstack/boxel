@@ -139,7 +139,7 @@ Every merge to `main` that touches `packages/boxel-cli/**` triggers the `unstabl
 3. Classifies the bump level and decides per-surface bumps.
 4. Writes new versions into `package.json` and/or `plugin.json`.
 5. Commits `chore(release): boxel-cli npm=<v> plugin=<v> [skip ci]` back to `main` and tags `boxel-cli-v<npmVer>` if npm bumped.
-6. If npm bumped, publishes `@cardstack/boxel-cli@<base>-unstable.<n>` under npm dist-tag `unstable` (Ember canary pattern). `<n>` is `git rev-list --count <last-stable-tag>..HEAD`, so it's monotonic across reruns.
+6. If npm bumped, publishes `@cardstack/boxel-cli@<base>-unstable.<n>` under npm dist-tag `unstable` (Ember canary pattern). `<n>` is one past the highest `<base>-unstable.<n>` already on npm, so it never collides with a published version.
 
 The plugin update reaches users on the next `/plugin marketplace update && /plugin update` (or automatic refresh on Claude Code startup). The marketplace cache is keyed on `plugin.json` `version` — **the auto-bump is what unlocks the update**.
 
