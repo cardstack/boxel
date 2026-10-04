@@ -51,6 +51,8 @@ interface Signature {
     messageTool: MessageTool;
     roomId: string;
     runCommand: () => void;
+    // Declines a call ai-bot holds for the user's approval.
+    declineCommand?: () => void;
     isError?: boolean;
     isPending?: boolean;
     isCompact?: boolean;
@@ -267,10 +269,13 @@ export default class RoomMessageTool extends Component<Signature> {
     return this.args.messageTool.status === 'failed' && !this.failedToolState;
   }
 
+  // "Try Anyway" re-runs a host tool; a call ai-bot runs has nothing on the
+  // host to retry, so its failure reason shows without the action.
   private get invalidToolCallState() {
     return (
       this.args.messageTool.status === 'invalid' &&
-      !!this.args.messageTool.failureReason
+      !!this.args.messageTool.failureReason &&
+      !this.args.messageTool.isBotExecuted
     );
   }
 
@@ -350,6 +355,20 @@ export default class RoomMessageTool extends Component<Signature> {
             <codeBlock.editor />
           {{/if}}
         </CodeBlock>
+        {{#if @messageTool.awaitsApproval}}
+          <Alert @type='warning' data-test-tool-call-approval as |Alert|>
+            <Alert.Messages
+              @messages={{array
+                'The assistant wants to read a web page nobody in this conversation linked to. Check the full URL above and approve it only if it contains nothing from your conversation.'
+              }}
+            />
+            <Alert.Action
+              @action={{@declineCommand}}
+              @actionName='Decline'
+              data-test-tool-call-decline
+            />
+          </Alert>
+        {{/if}}
         {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
             <Alert.Messages @messages={{array this.failedToolState.message}} />

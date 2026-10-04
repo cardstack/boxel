@@ -2094,6 +2094,9 @@ export default class Room extends Component<Signature> {
         (command.status === 'ready' || command.status === undefined) &&
         !this.toolService.currentlyExecutingToolRequestIds.has(command.id!) &&
         !this.toolService.executedToolRequestIds.has(command.id!) &&
+        // A call ai-bot holds for approval is answered on its own, with its
+        // full URL in view, never in bulk.
+        !command.awaitsApproval &&
         // Commands destined for auto-execution must not surface the manual
         // Accept All / Cancel bar, even during the ~100ms debounce before
         // tool-service flips `acceptingAllRoomIds`. Without this filter,

@@ -1041,6 +1041,40 @@ export default class ToolService extends Service {
     return undefined;
   }
 
+  // Answers a call ai-bot holds for the user's approval (see
+  // MessageTool.awaitsApproval). Approving sends an 'approved' result, which
+  // releases the call: ai-bot runs it and publishes its real result.
+  // Declining sends an 'invalid' result saying so, which settles the call;
+  // the model reads the reason on its next turn. A call already answered is
+  // left alone.
+  answerApproval = task(
+    async (command: MessageTool, answer: 'approve' | 'decline') => {
+      if (!command.awaitsApproval || !command.toolRequest.id) {
+        return;
+      }
+      let invokedToolFromEventId =
+        this.getCurrentEventIdForCommandRequest(
+          command.message.roomId,
+          command.toolRequest.id,
+        ) ?? command.eventId;
+      let url = command.arguments?.url;
+      await this.matrixService.sendToolResultEvent({
+        roomId: command.message.roomId,
+        invokedToolFromEventId,
+        toolCallId: command.toolRequest.id,
+        ...(answer === 'approve'
+          ? { status: 'approved' as const }
+          : {
+              status: 'invalid' as const,
+              failureReason: `The user declined to let you read ${
+                typeof url === 'string' ? url : 'this URL'
+              }. Do not request it again unless the user asks you to.`,
+            }),
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+    },
+  );
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageTool) => {
     // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to

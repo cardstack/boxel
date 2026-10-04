@@ -457,8 +457,10 @@ export default class MessageBuilder {
         toolRequest,
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
-        false, // requiresApproval — never prompts or runs
-        'Apply', // actionVerb — unused; the indicator shows status, not a Run button
+        false, // requiresApproval — the host never runs it
+        // The only button a bot-run call can show is the approval of a call
+        // ai-bot holds for it (see MessageTool.awaitsApproval).
+        'Approve',
         (toolResultEvent
           ? toolResultEvent.content['m.relates_to']?.key || 'applied'
           : 'applying') as ToolCallStatus,
