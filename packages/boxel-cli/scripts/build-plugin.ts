@@ -236,7 +236,10 @@ async function syncCodexManifest(): Promise<boolean> {
   // would otherwise make every regeneration a diff that the pre-commit hook
   // reformats back into an empty commit.
   const next = await format(JSON.stringify(codex, null, 2), {
-    ...((await resolveConfig(CODEX_MANIFEST_PATH)) ?? {}),
+    // `editorconfig: true` matches the Prettier CLI that lint-staged runs,
+    // which reads `.editorconfig` by default; the API does not.
+    ...((await resolveConfig(CODEX_MANIFEST_PATH, { editorconfig: true })) ??
+      {}),
     filepath: CODEX_MANIFEST_PATH,
   });
   const prior = existsSync(CODEX_MANIFEST_PATH)

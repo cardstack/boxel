@@ -101,6 +101,11 @@ function packTarball(destDir: string): string {
 // dist-tag like `unstable` / `latest`.
 const CONCRETE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
+// npm accepts a publish minutes before `npm view` can resolve it: four
+// releases on one day resolved 4m10s to 8m14s after pnpm reported them
+// published, so the wait allows well over twice the slowest of those.
+const PROPAGATION_TIMEOUT_MS = 20 * 60_000;
+
 /**
  * Poll `npm view` until `version` is resolvable, absorbing post-publish
  * registry propagation delay.
@@ -115,11 +120,6 @@ const CONCRETE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
  * workflow's job outputs); a dist-tag is only for ad-hoc local runs and
  * gets a loud warning here.
  */
-// npm accepts a publish minutes before `npm view` can resolve it: four
-// releases on one day resolved 4m10s to 8m14s after pnpm reported them
-// published, so the wait allows well over twice the slowest of those.
-const PROPAGATION_TIMEOUT_MS = 20 * 60_000;
-
 function waitForPublishedVersion(version: string): void {
   if (!CONCRETE_VERSION.test(version)) {
     console.warn(
