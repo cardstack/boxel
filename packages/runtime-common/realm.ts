@@ -67,6 +67,21 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // a conditional *write*, which is what `If-Match` asks about, and that question
 // is about the card rather than about the representation it was read in.
 const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
+
+// The request surfaces a policy decision record names as the one that reached
+// the gate (see `PolicyRoute`).
+const ENVELOPE_ROUTE: PolicyRoute = Object.freeze({
+  transport: 'envelope' as const,
+  route: '_operations',
+});
+
+function cardJsonRoute(method: string): PolicyRoute {
+  return { transport: 'card-json', route: method.toUpperCase() };
+}
+
+function byteRoute(route: 'source' | 'module'): PolicyRoute {
+  return { transport: 'byte-route', route };
+}
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -262,6 +277,7 @@ import {
 import {
   emitCapabilityCheck,
   type CapabilityCheckEvent,
+  type PolicyRoute,
 } from './card-operations/telemetry.ts';
 import {
   runOutputTransform,
@@ -5724,6 +5740,7 @@ export class Realm {
     let scope = newOperationScope(this.operationCore, {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
+      route: ENVELOPE_ROUTE,
     });
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
@@ -5874,7 +5891,7 @@ export class Realm {
       // Resolved once, and only for a batch that explains or validates: it can
       // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
-      for (let { entry, target, definition } of resolved) {
+      for (let { entry, target, definition, decision } of resolved) {
         if (isWrite(definition.base)) {
           continue;
         }
@@ -5884,14 +5901,21 @@ export class Realm {
             definition.base === 'explain' || definition.base === 'validate'
               ? await (principal ??= this.#sessionPrincipal(requestContext))
               : undefined;
-          result = await runOperation(this.operationCore, {
-            target,
-            name: entry.name,
-            ...(entry.data ? { params: paramsFor(entry) } : {}),
-            ...caller,
-            ...this.#readDeclined(requestContext),
-            ...(asker ? { principal: asker } : {}),
-          });
+          // On the decision the entry resolved to, so the gate decides each
+          // entry once.
+          result = await runOperation(
+            this.operationCore,
+            {
+              target,
+              name: entry.name,
+              ...(entry.data ? { params: paramsFor(entry) } : {}),
+              ...caller,
+              ...this.#readDeclined(requestContext),
+              ...(asker ? { principal: asker } : {}),
+              route: ENVELOPE_ROUTE,
+            },
+            { gated: { definition, decision } },
+          );
         } catch (err: unknown) {
           throw atEntry(err, entry.position);
         }
@@ -8216,6 +8240,7 @@ export class Realm {
             // what its headers are computed from.
             headersOnly: request.method === 'HEAD' ? true : undefined,
             ...(gated ? { coarseDeclined: true as const } : {}),
+            route: byteRoute('module'),
           },
         );
       } catch (e: unknown) {
@@ -8792,6 +8817,7 @@ export class Realm {
     // coordination exists to prevent.
     let stored = await this.#readStoredSource(caller, fileRef.path, {
       skipStoredFileMeta: true,
+      route: byteRoute('module'),
     });
     if (!stored) {
       // The path resolved to a file and that file is gone: a delete landing
@@ -9741,11 +9767,13 @@ export class Realm {
     localPath: LocalPath,
     {
       coarseDeclined,
+      route = byteRoute('source'),
       ...opts
     }: {
       headersOnly?: true;
       skipStoredFileMeta?: true;
       coarseDeclined?: true;
+      route?: PolicyRoute;
     } = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
@@ -9760,6 +9788,7 @@ export class Realm {
           name: 'readSource',
           ...caller,
           ...(coarseDeclined ? { coarseDeclined } : {}),
+          route,
         },
         // No route reaching here validates on the read's `version` — each
         // builds its own validator from a fingerprint of the file, hashed from
@@ -12237,6 +12266,7 @@ export class Realm {
     let scope = newOperationScope(core, {
       caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
       coarseDeclined,
+      route: cardJsonRoute(request.method),
     });
     let decision = await resolveFacadeWrite(core, target, base, scope);
     let assertSideLoads = (included: readonly unknown[] | undefined) => {
@@ -12789,6 +12819,7 @@ export class Realm {
             name: 'read',
             ...this.#callerOf(request, requestContext),
             ...coarseDeclined,
+            route: cardJsonRoute('HEAD'),
           },
           // No budget flag: a headers-only read assembles no closure, so there
           // is nothing for it to bound.
@@ -13242,6 +13273,7 @@ export class Realm {
           clientRequestId: caller.clientRequestId,
           ...(caller.coarseDeclined ? { coarseDeclined: true } : {}),
           ...(caller.seal ? { seal: caller.seal } : {}),
+          route: cardJsonRoute('GET'),
         },
         { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
       );

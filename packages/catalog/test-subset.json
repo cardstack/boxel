@@ -30,6 +30,7 @@
       "realm-policy-compile-test",
       "realm-policy-config-standing-test",
       "realm-policy-create-lane-test",
+      "realm-policy-decision-telemetry-test",
       "realm-policy-explain-test",
       "realm-policy-gate-test",
       "realm-policy-html-sharing-test",
