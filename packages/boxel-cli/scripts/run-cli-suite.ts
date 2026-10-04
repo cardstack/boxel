@@ -115,6 +115,11 @@ const CONCRETE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
  * workflow's job outputs); a dist-tag is only for ad-hoc local runs and
  * gets a loud warning here.
  */
+// npm accepts a publish minutes before `npm view` can resolve it: four
+// releases on one day resolved 4m10s to 8m14s after pnpm reported them
+// published, so the wait allows well over twice the slowest of those.
+const PROPAGATION_TIMEOUT_MS = 20 * 60_000;
+
 function waitForPublishedVersion(version: string): void {
   if (!CONCRETE_VERSION.test(version)) {
     console.warn(
@@ -124,7 +129,7 @@ function waitForPublishedVersion(version: string): void {
         `(e.g. 0.5.0-unstable.4) for a trustworthy post-publish check.`,
     );
   }
-  let deadline = Date.now() + 180_000;
+  let deadline = Date.now() + PROPAGATION_TIMEOUT_MS;
   let attempt = 0;
   for (;;) {
     let result = spawnSync(
@@ -138,7 +143,7 @@ function waitForPublishedVersion(version: string): void {
     }
     if (Date.now() > deadline) {
       throw new Error(
-        `${PKG_NAME}@${version} not resolvable after 180s. Last npm error:\n${result.stderr}`,
+        `${PKG_NAME}@${version} not resolvable after ${PROPAGATION_TIMEOUT_MS / 60_000} minutes. Last npm error:\n${result.stderr}`,
       );
     }
     let delay = Math.min(15_000, 2_000 * ++attempt);

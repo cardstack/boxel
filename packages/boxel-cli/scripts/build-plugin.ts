@@ -12,6 +12,7 @@
 import type { Command, Option } from 'commander';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { format, resolveConfig } from 'prettier';
 import { buildBoxelProgram } from '../src/build-program.ts';
 
 const PLUGIN_DIR = resolve(import.meta.dirname, '..', 'plugin');
@@ -190,7 +191,7 @@ function rewriteSkillFile(skill: string, body: string): boolean {
  */
 const CLAUDE_DESCRIPTION_PREFIX = 'Claude Code skills';
 
-function syncCodexManifest(): boolean {
+async function syncCodexManifest(): Promise<boolean> {
   const claude = JSON.parse(readFileSync(CLAUDE_MANIFEST_PATH, 'utf8'));
   // Fail rather than let a reworded Claude description carry "Claude Code"
   // into the Codex manifest, which a silent no-op replace would do.
@@ -230,7 +231,14 @@ function syncCodexManifest(): boolean {
       websiteURL: 'https://boxel.ai',
     },
   };
-  const next = JSON.stringify(codex, null, 2) + '\n';
+  // Formatted the way the repo's Prettier config would, so the file this
+  // writes is the file lint-staged leaves alone: a layout-only difference
+  // would otherwise make every regeneration a diff that the pre-commit hook
+  // reformats back into an empty commit.
+  const next = await format(JSON.stringify(codex, null, 2), {
+    ...((await resolveConfig(CODEX_MANIFEST_PATH)) ?? {}),
+    filepath: CODEX_MANIFEST_PATH,
+  });
   const prior = existsSync(CODEX_MANIFEST_PATH)
     ? readFileSync(CODEX_MANIFEST_PATH, 'utf8')
     : null;
@@ -240,7 +248,7 @@ function syncCodexManifest(): boolean {
   return true;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const program = buildBoxelProgram('0.0.0');
   let changed = 0;
   for (const spec of SKILL_SPECS) {
@@ -250,7 +258,7 @@ function main(): void {
       console.log(`updated plugin/skills/${spec.skill}/SKILL.md`);
     }
   }
-  if (syncCodexManifest()) {
+  if (await syncCodexManifest()) {
     changed++;
     console.log('updated plugin/.codex-plugin/plugin.json');
   }
@@ -261,4 +269,4 @@ function main(): void {
   );
 }
 
-main();
+await main();
