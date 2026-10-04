@@ -14,7 +14,12 @@ const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
 // authenticate, so fresh devices grow that table with logins × rooms. Logging
 // in to an existing device writes no change rows, and each login still gets
 // its own access token, so concurrent processes sharing the device don't
-// invalidate each other.
+// invalidate each other. Logging out, or deleting the device through the
+// admin API, deletes the device and so revokes every process's token at once;
+// nothing logs out with this client's token.
+//
+// Synapse dedupes sends by user, device and transaction id, so processes
+// sharing the device must never reuse a transaction id; see nextTxnId.
 export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
 
 export interface MatrixAccess {
@@ -30,6 +35,7 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loginPromise: Promise<void> | undefined;
+  private readonly txnPrefix = globalThis.crypto.randomUUID();
   private lastTxnTimestamp = 0;
   private txnSequence = 0;
 
@@ -490,7 +496,10 @@ export class MatrixClient {
   }
 
   private nextTxnId() {
-    // Ensure unique txn ids even when multiple events are sent in the same millisecond
+    // Unique per client instance, and within it even when several events are
+    // sent in the same millisecond. Every process logs in to the same device,
+    // and synapse answers a repeated (device, transaction id) send with the
+    // earlier event instead of storing the new one.
     let now = Date.now();
     if (now === this.lastTxnTimestamp) {
       this.txnSequence++;
@@ -498,7 +507,7 @@ export class MatrixClient {
       this.lastTxnTimestamp = now;
       this.txnSequence = 0;
     }
-    return `${now}-${this.txnSequence}`;
+    return `${this.txnPrefix}-${now}-${this.txnSequence}`;
   }
 }
 
