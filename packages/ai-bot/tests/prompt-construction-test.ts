@@ -7615,14 +7615,29 @@ new
 
     let png = (name: string): AttachedFile => ({
       sourceUrl: `https://example.com/${name}`,
-      url: `http://test.com/${name}-uploaded`,
+      // Matrix media ids are [A-Za-z0-9_-] only.
+      url: `mxc://localhost/${name.replace(/[^A-Za-z0-9_-]/g, '_')}`,
       name,
       contentType: 'image/png',
       contentSize: 2048,
     });
 
-    let mockImage = (file: AttachedFile) =>
-      mockResponses.set(file.url, { ok: true, text: `bytes-of-${file.name}` });
+    // The homeserver media endpoint a tool-result file is downloaded from.
+    let mediaDownloadUrl = (file: AttachedFile) =>
+      fakeMatrixClient.mxcUrlToHttp(
+        file.url,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )!;
+
+    let mockImage = (file: AttachedFile, text = `bytes-of-${file.name}`) => {
+      mockResponses.set(file.url, { ok: true, text });
+      mockResponses.set(mediaDownloadUrl(file), { ok: true, text });
+    };
 
     let dataUrlOf = (file: AttachedFile) =>
       `data:image/png;base64,${Buffer.from(`bytes-of-${file.name}`).toString('base64')}`;
@@ -7637,6 +7652,16 @@ new
       return Array.isArray(content)
         ? (content as any[]).map((p) => p.text ?? '').join('\n')
         : (content as string);
+    };
+
+    let trailingText = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content)
+        ? (content as any[])
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n')
+        : String(content ?? '');
     };
 
     let imageUrls = (prompt: { content?: unknown }[]) =>
@@ -7993,7 +8018,7 @@ new
       assert.deepEqual(
         omitted.map(({ file, reason }) => [file.name, reason]),
         [
-          ['huge.png', 'it is larger than 5 MiB'],
+          ['huge.png', 'it is larger than 3.75 MiB'],
           ['unsized.png', 'its size is unknown'],
         ],
       );
@@ -8067,13 +8092,108 @@ new
         .join('\n');
       assert.ok(
         text.includes(
-          'huge.png (https://example.com/huge.png): it is larger than 5 MiB',
+          'huge.png (https://example.com/huge.png): it is larger than 3.75 MiB',
         ),
         'the note names the left-out file and why',
       );
       assert.ok(
         text.includes('you cannot see them'),
         'the note says the model cannot see it',
+      );
+    });
+
+    test('a tool-result file that is not a Matrix media item is never fetched', async () => {
+      let elsewhere: AttachedFile = {
+        sourceUrl: 'https://example.com/elsewhere.png',
+        url: 'https://attacker.example/collect.png',
+        name: 'elsewhere.png',
+        contentType: 'image/png',
+        contentSize: 2048,
+      };
+      let fetched: string[] = [];
+      let fetchBefore = (globalThis as any).fetch;
+      (globalThis as any).fetch = async (url: string, init: unknown) => {
+        fetched.push(url);
+        return fetchBefore(url, init);
+      };
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [elsewhere],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.notOk(
+        fetched.some((url) => url.includes('attacker.example')),
+        'the bot token is never sent to the named host',
+      );
+      let text = trailingText(prompt);
+      assert.ok(
+        text.includes(
+          'elsewhere.png (https://example.com/elsewhere.png): it is not a file stored in this conversation',
+        ),
+      );
+    });
+
+    test('a downloaded tool-result file over the per-file limit is left out whatever its declared size', async () => {
+      let understated = png('understated.png');
+      mockImage(understated, 'x'.repeat(MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1));
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [understated],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.ok(
+        trailingText(prompt).includes(
+          'understated.png (https://example.com/understated.png): it is larger than 3.75 MiB',
+        ),
+      );
+    });
+
+    test('an image just under 5 MiB raw is over the limit, since its base64 is not', () => {
+      let { omitted } = currentTurnToolResultMedia(
+        [
+          humanMessage('1', 1, 'Go'),
+          botToolRequest('2', 2, ['call-1']),
+          toolResult('3', 3, {
+            requestId: 'call-1',
+            requestEventId: '2',
+            attachedFiles: [
+              { ...png('big.png'), contentSize: 5 * 1024 * 1024 - 1 },
+            ],
+          }),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(
+        omitted.map(({ file }) => file.name),
+        ['big.png'],
       );
     });
 
