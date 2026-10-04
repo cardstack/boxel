@@ -15,11 +15,12 @@ instructions live in two parallel directories:
   `.claude/skills` symlink). Describes the `boxel` CLI surface and the
   agent-owned status lifecycle.
 
-Both modes also fall back to `packages/boxel-cli/plugin/skills/` for
-shared domain skills (including `ember-best-practices` and
-`boxel-ui-component-discovery`, now sourced from boxel-skills). The
-monorepo-root `.agents/skills/` remains a fallback slot but is
-currently empty.
+Both modes also fall back to shared domain skills: the boxel-cli
+plugin's own skills in `packages/boxel-cli/plugin/skills/`, then the
+local clone of the pinned cardstack/boxel-skills release (`boxel`,
+`ember-best-practices`, `boxel-ui-component-discovery`, …) that
+`pnpm factory:setup` fetches. The monorepo-root `.agents/skills/`
+remains a fallback slot after those.
 
 ## Commands
 
@@ -37,8 +38,9 @@ currently empty.
 - `src/issue-loop.ts` — inner/outer issue scheduling loop.
 - `src/factory-skill-loader.ts` — resolves and loads skills from
   `packages/software-factory/.agents/skills-orchestrator/` (primary —
-  consumed by `pnpm factory:go`), `packages/boxel-cli/plugin/skills/`
-  (fallback), and monorepo root `.agents/skills/` (fallback). The
+  consumed by `pnpm factory:go`), then the fallbacks
+  `packages/boxel-cli/plugin/skills/`, the boxel-skills clone, and
+  monorepo root `.agents/skills/`. The
   interactive Claude Code path reads `.agents/skills/` directly via
   `.claude/skills`.
 - `src/workspace-fs.ts` — local-filesystem mirror of the target realm;

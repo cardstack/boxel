@@ -212,7 +212,7 @@ Scopes are allowed: `feat(profile): …`. One title covers both packages when a 
 
 A bumpable prefix is necessary but not sufficient: each flow also asks whether the merge changed anything its tarball ships, so a `fix:` touching only tests or CI config publishes nothing.
 
-**Edge case:** bumping `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` regenerates plugin skill content. Use `fix(skills):` (routine refresh) or `feat(skills):` (additive content), never `chore:` — a `chore:` prefix means no `plugin.json` bump, and the marketplace cache won't refresh for users. See `packages/boxel-cli/plugin/README.md` for full surface-scoping rules.
+**Boxel skills pin:** the content of cardstack/boxel-skills reaches users as its own `boxel-skills` plugin, which the `boxel-cli` plugin depends on, at the release tag pinned by the `ref` of the `boxel-skills` entry in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Moving the pin means editing both refs; nothing under `packages/boxel-cli/` changes, so the PR takes a plain title and no `plugin.json` bump (Claude Code keys the boxel-skills plugin on the pinned commit). The monorepo's own readers (the Software Factory and the BXL skill suite) read the same tag from a gitignored clone that `pnpm --filter @cardstack/boxel-cli fetch:skills` makes. See `packages/boxel-cli/plugin/README.md`.
 
 ## Production-safe selectors
 
