@@ -207,15 +207,27 @@ export async function getMatrixAdminToken({
   matrixURL,
   adminUsername,
   adminPassword,
-  refresh = false,
+  stale,
 }: {
   matrixURL: URL;
   adminUsername: string;
   adminPassword: string;
-  refresh?: boolean;
+  // A token synapse rejected. Passing it logs in again, unless another
+  // request already replaced it, so concurrent rejections share one login.
+  stale?: string;
 }): Promise<string> {
   let key = `${matrixURL.href} ${adminUsername}`;
-  let token = refresh ? undefined : adminTokens.get(key);
+  let token = adminTokens.get(key);
+  if (
+    token &&
+    stale !== undefined &&
+    (await token.catch(() => undefined)) === stale
+  ) {
+    if (adminTokens.get(key) === token) {
+      adminTokens.delete(key);
+    }
+    token = adminTokens.get(key);
+  }
   if (!token) {
     token = loginAsMatrixAdmin({ matrixURL, adminUsername, adminPassword });
     adminTokens.set(key, token);
@@ -244,19 +256,19 @@ export async function impersonateAsMatrixAdmin({
   userId: string;
 }): Promise<string> {
   let admin = { matrixURL, adminUsername, adminPassword };
+  let adminAccessToken = await getMatrixAdminToken(admin);
   try {
-    return await adminImpersonateUser({
-      matrixURL,
-      adminAccessToken: await getMatrixAdminToken(admin),
-      userId,
-    });
+    return await adminImpersonateUser({ matrixURL, adminAccessToken, userId });
   } catch (e) {
     if (!(e instanceof MatrixHttpError && e.status === 401)) {
       throw e;
     }
     return await adminImpersonateUser({
       matrixURL,
-      adminAccessToken: await getMatrixAdminToken({ ...admin, refresh: true }),
+      adminAccessToken: await getMatrixAdminToken({
+        ...admin,
+        stale: adminAccessToken,
+      }),
       userId,
     });
   }

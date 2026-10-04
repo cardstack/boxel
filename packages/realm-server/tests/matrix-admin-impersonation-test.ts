@@ -7,7 +7,7 @@ import {
   impersonateAsMatrixAdmin,
   logoutMatrixAccessToken,
 } from '../synapse.ts';
-import { matrixURL } from './helpers/index.ts';
+import { ensureMatrixAdminUser, matrixURL } from './helpers/index.ts';
 
 const admin = { matrixURL, adminUsername: 'admin', adminPassword: 'password' };
 const userId = '@test_realm:localhost';
@@ -37,7 +37,9 @@ async function adminDeviceIds(accessToken: string) {
 }
 
 module(basename(import.meta.filename), function () {
-  module('matrix admin impersonation', function () {
+  module('matrix admin impersonation', function (hooks) {
+    hooks.before(ensureMatrixAdminUser);
+
     test('impersonations share one admin token and add no admin devices', async function (assert) {
       let firstUserToken = await impersonateAsMatrixAdmin({
         ...admin,
@@ -111,6 +113,37 @@ module(basename(import.meta.filename), function () {
         revokedToken,
         'the shared admin token was replaced',
       );
+    });
+
+    test('concurrent impersonations after a revocation share one admin login', async function (assert) {
+      let revokedToken = await getMatrixAdminToken(admin);
+      await logoutMatrixAccessToken({ matrixURL, accessToken: revokedToken });
+
+      let realFetch = globalThis.fetch;
+      let logins = 0;
+      globalThis.fetch = (input, init) => {
+        if (/\/_matrix\/client\/[^/]+\/login$/.test(String(input))) {
+          logins++;
+        }
+        return realFetch(input, init);
+      };
+      let userTokens: string[];
+      try {
+        userTokens = await Promise.all(
+          [1, 2, 3].map(() => impersonateAsMatrixAdmin({ ...admin, userId })),
+        );
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+
+      assert.strictEqual(logins, 1, 'the admin logged in once');
+      for (let token of userTokens) {
+        assert.strictEqual(
+          await whoami(token),
+          userId,
+          'each impersonation acts as the user',
+        );
+      }
     });
   });
 });

@@ -12,14 +12,16 @@
 //   `device_lists_changes_converted_stream_position`.
 // - Answering "which users' devices changed since sync token X?". A token
 //   older than the table's oldest stream id gets a full device-list resync.
+// - Replaying a room's changes since its partial federated join started
+//   (`partial_state_rooms.device_lists_stream_id`) once the join completes.
 //
 // So the script deletes only a prefix: every row before a boundary stream.
 // That keeps the oldest-stream check sound, since every token the deleted rows
 // could answer is now older than the table and gets a resync. When no room
 // has a member on another homeserver, converting writes nothing but the
 // cursor, so the boundary is the newest stream and the cursor moves to it.
-// Otherwise the boundary is the cursor's stream, so no unconverted row is
-// lost.
+// Otherwise the boundary is the cursor's stream, or the oldest partial join's
+// start if that is earlier, so no row synapse still has to send is lost.
 //
 // Synapse caches the table's oldest stream id, so no running synapse may be
 // using the database. The script refuses while a running container mounts the
@@ -189,8 +191,21 @@ if (newest.stream_id === null) {
     // outbound pokes and only advances the cursor; do that directly.
     boundary = newest.stream_id;
   } else {
-    // Rows before the cursor's stream are already converted.
-    boundary = cursor.stream_id ?? 0;
+    // Rows before the cursor's stream are already converted, and a partial
+    // join replays the rows after the position it started from.
+    let partialJoinStart = hasTable('partial_state_rooms')
+      ? (
+          db
+            .prepare(
+              'SELECT MIN(device_lists_stream_id) AS stream_id FROM partial_state_rooms',
+            )
+            .get() as { stream_id: number | null }
+        ).stream_id
+      : null;
+    boundary = Math.min(
+      cursor.stream_id ?? 0,
+      partialJoinStart ?? Number.POSITIVE_INFINITY,
+    );
   }
 
   console.log(

@@ -5,6 +5,15 @@ import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
 
+async function isUnknownToken(response: Response) {
+  try {
+    let json = (await response.clone().json()) as { errcode?: string };
+    return json.errcode === 'M_UNKNOWN_TOKEN';
+  } catch {
+    return false;
+  }
+}
+
 const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
 
 // Every login from this client reuses one device per matrix user. A login
@@ -80,18 +89,42 @@ export class MatrixClient {
     includeAuth = true,
   ) {
     options.method = method;
-
-    if (includeAuth) {
-      if (!this.access) {
-        throw new Error(`Missing matrix access token`);
+    let url = `${this.matrixURL.href}${path}`;
+    if (!includeAuth) {
+      return fetch(url, options);
+    }
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let accessToken = this.access.accessToken;
+    let response = await fetch(url, this.withAuth(options, accessToken));
+    if (response.status === 401 && (await isUnknownToken(response))) {
+      // Every process shares one device, so deleting it revokes all of
+      // their tokens at once. Logging in again recreates the device.
+      // A concurrent request may already have logged in again; reuse that.
+      if (this.access?.accessToken === accessToken) {
+        this.access = undefined;
       }
-      options.headers = {
+      if (!this.access) {
+        await this.login();
+      }
+      response = await fetch(
+        url,
+        this.withAuth(options, this.access!.accessToken),
+      );
+    }
+    return response;
+  }
+
+  private withAuth(options: RequestInit, accessToken: string): RequestInit {
+    return {
+      ...options,
+      headers: {
         ...options.headers,
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.access.accessToken}`,
-      };
-    }
-    return fetch(`${this.matrixURL.href}${path}`, options);
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
   }
 
   async login() {
