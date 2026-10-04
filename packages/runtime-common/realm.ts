@@ -938,6 +938,11 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // path instead: for a data file or a card's document, whose bytes a
 // `readSource` grant reaches, and for nothing else they serve (see
 // `GRANTABLE_BYTES`).
+//
+// The hashed scoped-CSS serve consumes it too, and asks the gate nothing: a
+// stylesheet goes with the markup that references it, so every caller the
+// realm's policy judges is served it, and it applies the archived seal itself
+// (see `#routeRequest`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
 // Marks the consumers that apply an archived realm's seal themselves, where
 // they would run what a caller the ACL declined outright asked for (see
@@ -2270,15 +2275,16 @@ interface RequestDispatch {
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
-// A route as `Realm.routeDescriptions` lists it: a router route, or the
-// fallback file and module serve for one method, which answers whatever
-// path and media type no router route claimed.
+// A route as `Realm.routeDescriptions` lists it: a router route, the hashed
+// stylesheet serve under its path prefix, or the fallback file and module
+// serve for one method, which answers whatever path and media type no router
+// route claimed.
 export type DispatchDescription =
   | RouteDescription
   | {
       method: Method;
       mimeType: '*';
-      path: '*';
+      path: '*' | `/${typeof SCOPED_CSS_SERVING_PREFIX}*`;
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
       appliesArchivedSeal: boolean;
@@ -7564,15 +7570,27 @@ export class Realm {
     // `_scoped-css/` prefix, not just the filename shape, so a realm file
     // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
     // is the only producer of these hrefs and always roots them under the
-    // prefix. Inherits realm-read auth like capture serving; GET only for
-    // the same HEAD-oracle reason.
+    // prefix. GET only, for the same HEAD-oracle reason as capture serving.
+    //
+    // A stylesheet is part of the markup that references it, not code: the
+    // inline form carries the same bytes inside the href itself, and a search
+    // serves those hrefs to every caller it serves the row to. So in a realm
+    // that names a policy, the serve consumes the ACL's outcome and answers
+    // every authenticated caller the policy judges, not only the realm's
+    // readers. A realm with no policy serves no row to a caller who may not
+    // read it, and keeps the ACL's refusal. The lookup stays scoped to this
+    // realm's own `scoped_css` rows, so a hash names only a stylesheet this
+    // realm's index references. An archived realm seals such a caller only
+    // where it would serve them a stylesheet, as the search seals them only
+    // where a grant would answer with a row, so a hash it holds no stylesheet
+    // for is not found whether or not the realm is archived.
     if (
       request.method === 'GET' &&
       localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
       isHashedScopedCSSRequest(localPath)
     ) {
       return {
-        consumesCoarseOutcome: false,
+        ...APPLIES_ARCHIVED_SEAL,
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }
@@ -7764,10 +7782,13 @@ export class Realm {
   // `HEAD` by the same test on its own (see `headCard`). The seal answers a
   // `HEAD` of a sealed realm before it is routed, so neither reaches one.
   //
-  // Admitted means handed to the policy gate, not granted: every operation a
-  // consuming route resolves for this request is resolved with the ACL's
-  // refusal on it, and the gate refuses whatever no grant admits. So a caller
-  // is admitted only where a gate has something to decide:
+  // Admitted means handed to the realm's policy, not granted: every operation
+  // a consuming route resolves for this request is resolved with the ACL's
+  // refusal on it, and the gate refuses whatever no grant admits. The hashed
+  // stylesheet serve resolves no operation, and serves whoever is admitted
+  // here, since a stylesheet goes with the markup a grant serves (see
+  // `#routeRequest`). So a caller is admitted only where a policy has them to
+  // judge:
   //
   // - The realm names a policy. A realm with none answers every refusal
   //   exactly as the ACL gave it.
@@ -7942,11 +7963,23 @@ export class Realm {
 
   // Every route with whether it consumes the realm ACL's recorded outcome,
   // for checking that set without reaching each route: the router's routes,
-  // then the fallback file and module serve per method. The path-prefix
-  // dispatches in `#routeRequest` consume nothing and are not listed.
+  // the hashed stylesheet serve, then the fallback file and module serve per
+  // method. The stylesheet serve is the one path-prefix dispatch in
+  // `#routeRequest` that consumes it; the others consume nothing and are not
+  // listed.
   routeDescriptions(): DispatchDescription[] {
     return [
       ...this.#router.routes(),
+      {
+        method: 'GET' as const,
+        mimeType: '*' as const,
+        path: `/${SCOPED_CSS_SERVING_PREFIX}*` as const,
+        consumesCoarseOutcome: true,
+        coarseReadOnly: false,
+        appliesArchivedSeal: true,
+        grantableBytes: false,
+        operationalEndpoint: false,
+      },
       ...ROUTER_METHODS.map((method) => ({
         method,
         mimeType: '*' as const,
@@ -9353,6 +9386,9 @@ export class Realm {
     ])) as { css: string }[];
     if (rows.length === 0 || typeof rows[0].css !== 'string') {
       return notFound(request, requestContext);
+    }
+    if (requestContext.archivedSeal) {
+      throw requestContext.archivedSeal;
     }
     return createResponse({
       body: scopedCSSInjectorSource(pathname, rows[0].css),

@@ -103,6 +103,13 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person-1.json').set('Accept', SupportedMimeType.CardSource),
   },
+  // A hash this realm never interned, so the serve's own answer is a 404.
+  {
+    label: 'GET a hashed scoped stylesheet',
+    consumes: true,
+    send: (r) =>
+      r.get(`/_scoped-css/person.gts.md5-${'0'.repeat(32)}.glimmer-scoped.css`),
+  },
   {
     label: 'GET raw file',
     consumes: true,
@@ -481,8 +488,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          'GET * /_scoped-css/*',
         ].sort(),
-        'the consumer set is the card+json read and writes, the search, the operations envelope and the capability check',
+        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check and the hashed stylesheet serve',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -520,8 +528,9 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          'GET * /_scoped-css/*',
         ].sort(),
-        'the card+json read and writes, the search, the operations envelope and the capability check',
+        'the card+json read and writes, the search, the operations envelope, the capability check and the hashed stylesheet serve',
       );
       assert.deepEqual(
         testRealm
@@ -795,17 +804,20 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
-      // Two consumers answer an admitted caller with something other than a
-      // refusal, and each is pinned on its own. The search hands them to the
+      // Three consumers answer an admitted caller with something other than
+      // a refusal, and each is pinned on its own. The search hands them to the
       // policy's query lane, which answers with rows (below). The capability
       // check answers a decision per pair, a 200 with denials in it (its own
-      // module).
+      // module). The hashed stylesheet serve hands them nothing to judge and
+      // serves the stylesheet (the capture-authority module).
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
         .filter(
           (route) =>
-            route.path !== '/_search' && route.path !== '/_capabilities',
+            route.path !== '/_search' &&
+            route.path !== '/_capabilities' &&
+            route.path !== '/_scoped-css/*',
         )
         .map((route) => `${route.method} ${route.mimeType}`)
         .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
