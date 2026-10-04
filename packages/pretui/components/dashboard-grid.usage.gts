@@ -85,7 +85,7 @@ class DashboardGridUsage extends Component {
   <template>
     <FreestyleUsage
       @name='DashboardGrid'
-      @description="A grid the END USER arranges: drag a tile by its grip to move it, drag the corner to resize it, and everything else reflows around it. The arrangement is plain data — an {id,x,y,w,h}[] kept separately from the items, exactly as Board keeps KanbanPlacement separate from cards — so a Boxel card can hold it in a field and restore it verbatim. Runs on gridstack 13.1.2 (MIT, no dependencies) with a strict DOM-ownership split: Glimmer renders the tiles, the engine only positions them."
+      @description="A grid the END USER arranges: drag a tile by its grip to move it, drag the corner to resize it, and everything else reflows around it. The arrangement is plain data — an {id,x,y,w,h}[] kept separately from the items, exactly as Board keeps KanbanPlacement separate from cards — so a Boxel card can hold it in a field and restore it verbatim. Runs on gridstack 13.1.2 plus 18 commits (d9c9bc41; MIT, no dependencies) with a strict DOM-ownership split: Glimmer renders the tiles, the engine only positions them."
       @source={{GRID_SOURCE}}
       @viewportMode='fill'
     >

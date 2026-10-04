@@ -312,6 +312,19 @@ module('Pretui | structure-layout | Stack', function (hooks) {
     );
   });
 
+  test('StackDivider announces the rule across the axis, @direction included', async function (assert) {
+    await render(
+      <template>
+        <StackDivider @semantic={{true}} />
+        <StackDivider @semantic={{true}} @direction='row' />
+        <StackDivider @semantic={{true}} @direction='column' />
+      </template>,
+    );
+    let all = Array.from(document.querySelectorAll('[data-test-pretui-stack-divider]'));
+    assert.deepEqual(all.map((el) => el.getAttribute('aria-orientation')), ['horizontal', 'vertical', 'horizontal']);
+    assert.deepEqual(all.map((el) => el.getAttribute('data-orientation')), ['vertical', 'horizontal', 'vertical'], 'the alias resolves for the styles too');
+  });
+
   test('StackDivider is decorative by default and semantic on request', async function (assert) {
     await render(
       <template>
@@ -324,7 +337,7 @@ module('Pretui | structure-layout | Stack', function (hooks) {
     assert.strictEqual(all[0]?.getAttribute('aria-hidden'), 'true');
     assert.notOk(all[0]?.getAttribute('role'), 'decorative carries no role');
     assert.strictEqual(all[1]?.getAttribute('role'), 'separator');
-    assert.strictEqual(all[1]?.getAttribute('aria-orientation'), 'horizontal');
+    assert.strictEqual(all[1]?.getAttribute('aria-orientation'), 'vertical', 'a horizontal Stack is split by a vertical rule');
     assert.notOk(
       all[1]?.getAttribute('aria-hidden'),
       'a semantic separator is not hidden from the tree',

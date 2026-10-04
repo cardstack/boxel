@@ -130,10 +130,9 @@ function shellFor(body: NodeBodyComponent): unknown {
 //     <button>s with aria-labels inside `Controls`, so they are reachable
 //     and are the only keyboard route to pan or zoom.
 // THE REMAINING GAPS, stated plainly rather than papered over:
-//   1. CLOSED (2026-08-13). The ENGINE still has no keyboard path to
-//      create or reconnect an edge — connections are pointer-only here and
-//      in React Flow — but `@summary` is no longer a read-only caption.
-//      GraphOutline gives every node a real button (select and focus it in
+//   1. The ENGINE has no keyboard path to create or reconnect an edge —
+//      connections are pointer-only here and in React Flow — so `@summary`
+//      carries one. GraphOutline gives every node a real button (select and focus it in
 //      the picture) and a connect control: arm a source, activate a
 //      target, and the connection goes through the SAME `onConnect` a
 //      pointer drag uses. Reconnecting an existing edge is still

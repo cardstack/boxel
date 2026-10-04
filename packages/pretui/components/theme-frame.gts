@@ -30,7 +30,7 @@ import { SegmentedControl } from './segmented-control';
 // helpers are the part that was actually wanted.
 //
 // 'Auto' stamps no attribute, so the island follows the ambient host
-// scheme. Components never branch on dark (Appendix F) — the flip is
+// scheme. Components never branch on dark — the flip is
 // entirely token re-resolution.
 
 const THEME_MODES = [

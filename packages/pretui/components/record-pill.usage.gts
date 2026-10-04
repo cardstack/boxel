@@ -31,7 +31,7 @@ class RecordPillUsage extends Component {
   setDisabled = (v: boolean) => (this.disabled = v);
 
   get usage() {
-    let bits = ['@record={{this.record}}'];
+    let bits = ['@record={{record}}'];
     if (!this.removable) {
       bits.push('@removable={{false}}');
     }
@@ -39,7 +39,7 @@ class RecordPillUsage extends Component {
       bits.push('@disabled={{true}}');
     }
     bits.push('@onRemove={{this.remove}}');
-    return `<RecordPill ${bits.join(' ')} />`;
+    return `{{#each this.records as |record|}}\n  <RecordPill ${bits.join(' ')} />\n{{/each}}`;
   }
 
   <template>

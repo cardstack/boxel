@@ -61,9 +61,9 @@ import type { BlockHeadingLevel } from '../internal/blocks';
 //     so a hero can lead with a video or an audio piece and the right
 //     adapter is chosen without the caller knowing the kind.
 //
-// The stage never crops: ImageFrame fits the image inside a fixed `@ratio`.
-// A hero that wants a cropped, edge-to-edge image passes its own in the
-// media block.
+// A fixed `@ratio` letterboxes a landscape asset and centre-clips a portrait
+// one evenly; it never stretches. A hero that wants a specific crop passes
+// its own image in the media block.
 
 export interface HeroChip {
   label: string;

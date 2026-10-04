@@ -7,7 +7,7 @@ One cell of a **DashboardGrid**: a tile with a drag handle, a placement, and an 
 ```
 @id (required) — stable id; must match the placement's id
 @host?     — the grid that owns this cell. DashboardGrid supplies it
-@label?    — accessible label for the handle; normally the tile's title
+@label?    — accessible label for the handle. DashboardGrid supplies the tile's title, label or id; on its own the item falls back to its id
 @live?     — true when the grid is CONTROLLED, the only case where a later change
              to the placement may be pushed back into a live engine
 @x?, @y?, @w?, @h? — the placement: the seed at registration, and the push value when @live
@@ -38,9 +38,9 @@ Where it is thinner: one handle, no per-edge resize grips, and no per-tile const
 
 ## Accessibility
 
-- **The handle is a real button with a name** from `@label`, which is where the grid's keyboard path lives.
+- **The handle is a focusable `role="button"` with a name** from `@label`, not a native `<button>`: gridstack's drag engine ignores presses on native buttons, so a real button could never start a pointer drag. Enter, Space and the arrows on it are the grid's keyboard path.
 - **A tile with no host has no handle**, so an inert dashboard has no controls that lead nowhere.
-- **`@label` defaulting to the tile's title** is what keeps a grid of handles distinguishable without the caller doing anything.
+- **Inside a DashboardGrid, `@label` comes from the tile's title**, which keeps a grid of handles distinguishable without the caller doing anything. A standalone item falls back to its id, so pass `@label`.
 - **The tile's content keeps its own tab order.** The handle is an addition, not a wrapper that swallows what is inside.
 
 ## Theming

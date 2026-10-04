@@ -330,7 +330,7 @@ export class PretUISpec extends Spec {
     }
     // the same five facets, handed to the kit's StepList as an ordered
     // pipeline: it owns the list semantics, the per-step state text and the
-    // '5 of 5 complete' summary (which used to be a floating span here)
+    // '5 of 5 complete' summary
     get provenanceSteps(): StepItem[] {
       return this.facetPills.map((f) => ({
         label: f.label,

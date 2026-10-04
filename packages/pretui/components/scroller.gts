@@ -63,17 +63,48 @@ const scrollEdges = modifier(
     element.addEventListener('scroll', update, { passive: true });
     // Content can change size without a scroll ever happening — a lazy image
     // landing, a season swap changing the type scale. Observing the viewport
-    // AND its content covers both directions.
-    let observer = new ResizeObserver(update);
+    // AND its content covers both directions. Content inserted later can grow
+    // the scroll extent while every observed box keeps its size (a slide
+    // appended to a full-width flex track), so DOM changes re-measure too and
+    // hand new direct children to the resize observer.
+    // observer callbacks coalesce into one measurement per frame; the frame
+    // is owned here and cancelled on teardown
+    let frame: number | undefined;
+    let schedule = () => {
+      if (frame !== undefined) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        update();
+      });
+    };
+    let observer = new ResizeObserver(schedule);
+    let observeChildren = () => {
+      for (let child of Array.from(element.children)) {
+        observer.observe(child);
+      }
+    };
     observer.observe(element);
-    for (let child of Array.from(element.children)) {
-      observer.observe(child);
-    }
+    observeChildren();
+    let mutations = new MutationObserver(() => {
+      observeChildren();
+      schedule();
+    });
+    mutations.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
     update();
 
     return () => {
       element.removeEventListener('scroll', update);
       observer.disconnect();
+      mutations.disconnect();
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
+      }
     };
   },
 );

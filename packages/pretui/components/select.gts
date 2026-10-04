@@ -2,6 +2,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { guidFor } from '@ember/object/internals';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlNotifyArgs } from '../pretui-primitives';
@@ -76,27 +77,44 @@ const PoweredSelect = BoxelSelect as unknown as new (
   args: PoweredSelectSignature['Args'],
 ) => Component<PoweredSelectSignature>;
 
-// The trigger is a role='button' div, which a <label for> does not name, so
-// a label pointing at @controlId is linked through aria-labelledby instead.
+// The trigger is a role='button' div, which a <label> does not name, so a
+// label pointing at @controlId (or wrapping the Select) is linked through
+// aria-labelledby — label first, then the trigger itself, so the chosen
+// value is still announced after the name.
 const nameFromLabel = modifier(
-  (wrap: HTMLElement, [controlId, explicit]: [string | undefined, boolean]) => {
-    if (!controlId || explicit) {
+  (
+    wrap: HTMLElement,
+    [controlId, explicit, fallbackId]: [string | undefined, boolean, string],
+  ) => {
+    if (explicit) {
       return;
     }
-    let trigger = wrap.querySelector<HTMLElement>(`[id="${CSS.escape(controlId)}"]`);
-    let label = document.querySelector<HTMLElement>(`label[for="${CSS.escape(controlId)}"]`);
-    if (!trigger || !label) {
+    let trigger = wrap.querySelector<HTMLElement>('.pretui-selecttrigger');
+    if (!trigger) {
       return;
+    }
+    let label =
+      (controlId
+        ? document.querySelector<HTMLElement>(`label[for="${CSS.escape(controlId)}"]`)
+        : null) ?? wrap.closest('label');
+    if (!label) {
+      return;
+    }
+    if (!trigger.id) {
+      trigger.id = fallbackId;
     }
     if (!label.id) {
-      label.id = `${controlId}-label`;
+      label.id = `${trigger.id}-label`;
     }
-    trigger.setAttribute('aria-labelledby', label.id);
+    trigger.setAttribute('aria-labelledby', `${label.id} ${trigger.id}`);
   },
 );
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
+  get triggerId(): string {
+    return this.args.controlId ?? `${guidFor(this)}-trigger`;
+  }
   get explicitName(): boolean {
     return this.args.label !== undefined || this.args.labelledBy !== undefined;
   }
@@ -131,7 +149,7 @@ export class Select extends Component<SelectSignature> {
     <div
       class='pretui-selectwrap'
       data-test-pretui-select
-      {{nameFromLabel @controlId this.explicitName}}
+      {{nameFromLabel @controlId this.explicitName this.triggerId}}
       ...attributes
     >
       {{! id lands on the power-select trigger (label[for] wiring). It

@@ -6,6 +6,7 @@ import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 import { cssStyleFrom } from '../pretui-css';
 import { clamp } from '../internal/structure-scroll';
+import { OWNS_KEYS, OWNS_PRESS } from '../focus';
 
 // ── ZoomableFrame ────────────────────────────────────────────────────────
 
@@ -63,6 +64,10 @@ const framePointer = modifier(
       // Never swallow a click meant for the content: a press on a link or a
       // button inside the frame still belongs to that control.
       if (event.button !== 0) {
+        return;
+      }
+      let owner = (event.target as Element | null)?.closest?.(OWNS_PRESS);
+      if (owner && owner !== element && element.contains(owner)) {
         return;
       }
       points.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -147,6 +152,11 @@ const frameKeys = modifier(
     ],
   ) => {
     let onKeydown = (event: KeyboardEvent) => {
+      // text entry and composite widgets inside the frame keep their keys
+      let owner = (event.target as Element | null)?.closest?.(OWNS_KEYS);
+      if (owner && owner !== element) {
+        return;
+      }
       let step = event.shiftKey ? 96 : 24;
       let key = event.key;
       let handled = true;

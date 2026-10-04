@@ -33,6 +33,16 @@ module('Pretui | components/copy-fit', function (hooks) {
     assert.strictEqual(root().getAttribute('role'), null);
   });
 
+  test('footer blocks render the footer on their own and replace the string arg on their side', async function (assert) {
+    await render(<template><CopyFit @title='Ledger' @footerRight='live'><:footerLeft><b data-test-left>v0.4</b></:footerLeft></CopyFit></template>);
+    let sides = Array.from(root().querySelectorAll('.pretui-fitted-footer > span'));
+    assert.ok(sides[0]?.querySelector('[data-test-left]'), 'the left block is yielded');
+    assert.strictEqual(sides[1]?.textContent, 'live');
+
+    await render(<template><CopyFit @title='Ledger'><:footerRight><b data-test-right>4.8</b></:footerRight></CopyFit></template>);
+    assert.ok(root().querySelector('.pretui-fitted-footer [data-test-right]'), 'a block alone is enough to render the footer');
+  });
+
   test('a monogram source keys the hue, not the single letter, so "Ledger" and "Lantern" do not collide', async function (assert) {
     await render(<template><CopyFit @title='Lantern' @monogram='Lantern' /></template>);
     assert.strictEqual(media().querySelector('.pretui-fitted-mono')?.textContent, 'L');

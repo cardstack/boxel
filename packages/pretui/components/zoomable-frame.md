@@ -38,7 +38,7 @@ Where it is thinner: no fit-to-content or zoom-to-selection, no minimap, no rota
 - **The viewport is named**, which is the whole of what assistive technology can be told about it.
 - **Zoom has a keyboard path** through the step controls, independent of the toolbar's visibility.
 - **The readout is the orientation affordance.** Panning a zoomed surface with no indication of scale is disorienting for everyone and worse for anyone using magnification on top of it.
-- **Panning is a pointer gesture**; scrolling the viewport is the keyboard equivalent, and the content inside keeps its own tab order.
+- **The keyboard pans and zooms**: with the frame focused, the arrow keys pan (Shift for larger steps), `+` and `-` zoom and `0` resets. Text fields and composite widgets inside the frame keep their own keys, and the content inside keeps its own tab order.
 - **Zooming does not change what is announced.** The accessibility tree is the content's, unscaled — which is correct, and means a reader is unaffected by a scale someone else chose.
 
 ## Theming

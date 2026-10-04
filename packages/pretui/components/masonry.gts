@@ -89,13 +89,6 @@ export class Masonry<T = unknown> extends Component<MasonrySignature<T>> {
           -webkit-column-break-inside: avoid;
           min-width: 0;
         }
-        /* unnamed container query — resolves against the .pretui-masonry
-           ancestor container and styles its descendants */
-        @container (max-width: 22rem) {
-          .pretui-masonry-columns {
-            columns: 1;
-          }
-        }
       }
     </style>
   </template>

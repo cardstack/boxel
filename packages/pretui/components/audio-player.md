@@ -7,7 +7,7 @@ Like **VideoPlayer** it is a skin, not a rewrite — the transport, the transcri
 ## The contract
 
 ```
-every MediaPlayer arg except kind, poster and aspectRatio
+every MediaPlayer arg except kind, poster, placeholder, thumbnails and aspectRatio
 @cover?    — cover art URL
 @coverAlt? — alt text for the cover; empty by default, which marks it decorative
 @title?    — track title
@@ -19,7 +19,7 @@ every MediaPlayer arg except kind, poster and aspectRatio
 <:footer>   forwarded to MediaPlayer's footer
 ```
 
-**Three of the base's args are omitted rather than ignored**: the kind is fixed to `'audio'`, and the poster and aspect-ratio args have nothing to apply to when there is no picture. The type says so, so passing one is a compile error rather than a silent no-op.
+**Five of the base's args are omitted rather than ignored**: the kind is fixed to `'audio'`, and the poster, placeholder, thumbnails and aspect-ratio args have nothing to apply to when there is no picture. The type says so, so passing one is a compile error rather than a silent no-op.
 
 **`@title` is the fallback accessible name.** The label resolves as `@label`, then `@title`, then the literal `'Audio'` — so a player with a title is never nameless, and a player with neither is named honestly rather than not at all.
 

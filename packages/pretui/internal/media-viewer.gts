@@ -146,7 +146,32 @@ export function basenameOf(src: string): string {
   const cut = src.split('#')[0].split('?')[0];
   const slash = cut.lastIndexOf('/');
   const name = slash >= 0 ? cut.slice(slash + 1) : cut;
-  return name.length > 0 ? decodeURIComponent(name) : 'Untitled asset';
+  if (name.length === 0) {
+    return 'Untitled asset';
+  }
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    // a malformed escape such as `100%.png` names the file as written
+    return name;
+  }
+}
+
+/** `src` as a link target, or undefined when its scheme could run code
+ * (`javascript:`, `data:text/html`, …). Only http(s) and blob URLs link. */
+export function safeHref(src: string | undefined): string | undefined {
+  if (!src) {
+    return undefined;
+  }
+  try {
+    let base = globalThis.location?.href ?? 'http://localhost/';
+    let { protocol } = new URL(src, base);
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'blob:'
+      ? src
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Fill in kind, label and aspect ratio once, at the shell, so no adapter

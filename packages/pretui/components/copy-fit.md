@@ -17,7 +17,7 @@
 
 **`@mediaBg` is a caller string reaching an inline style, and it is validated against the kit allowlist** so it cannot carry its own declarations. That guard is the kit's convention wherever caller data reaches CSS (**Skeleton** does the same with its width/height custom properties), and it is what makes a data-driven background safe.
 
-The footer renders only when `@footerLeft` or `@footerRight` is present.
+The footer renders only when `@footerLeft`, `@footerRight`, `<:footerLeft>` or `<:footerRight>` is present. A block replaces the string arg on its side.
 
 ## Prior art
 
@@ -25,7 +25,7 @@ The Boxel fitted-format system is the direct context: **Grid** sizes its cells f
 
 Against the wider field: **React Spectrum's `Card`** has `size` and `orientation` props — the caller chooses. **shadcn's `Card`** is six sub-components and no adaptivity at all. **Web Awesome `wa-card`** has `appearance` and slot booleans, again caller-chosen.
 
-So the differentiator is real: **every other kit makes the format a prop, and this makes it a measurement.** The payoff is that one component covers four presentations with no call-site branching, and a card dropped into an unfamiliar slot renders sensibly. The cost is that a caller who *wants* the tile treatment in a wide box cannot ask for it — the container decides, and overriding means constraining the container.
+So the differentiator is real: **every other kit makes the format a prop, and this makes it a measurement.** The payoff is that one component covers four presentations with no call-site branching, and a card dropped into an unfamiliar slot renders sensibly. The cost is that a caller who _wants_ the tile treatment in a wide box cannot ask for it — the container decides, and overriding means constraining the container.
 
 Container queries here are **unnamed**, as they must be in realm code: the scoped-CSS transpiler silently drops every rule after a named `@container`, so a single named query would delete the rest of the stylesheet with no error anywhere. Same constraint as **FormLayout** and **Timeline**.
 

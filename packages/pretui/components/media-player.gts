@@ -7,8 +7,8 @@
 // Pill): they add defaults and a little chrome of their own and forward
 // everything else.
 //
-// WHY MEDIA CHROME AND NOT A PLAYER — Appendix M.1 picked it as "the
-// foundation every skin rides", and a checkout confirms why:
+// WHY MEDIA CHROME AND NOT A PLAYER — it is the foundation every skin can
+// ride, and a checkout confirms why:
 //
 //   • Pure Web Components. In Glimmer a custom element is just a tag, so
 //     there is no adapter, no wrapper component per control, and no React.
@@ -19,15 +19,14 @@
 //   • It disposes itself. `disconnectedCallback` stops the one rAF loop
 //     (the time-range playhead), clears the auto-hide timeout, disconnects
 //     both observers and unbinds every listener. Glimmer destroying the
-//     element is enough — the rAF ruling (Appendix M.3) is satisfied by the
-//     element lifecycle, so nothing here needs a modifier to police it.
+//     element is enough: the element lifecycle owns the frame loop, so
+//     nothing here needs a modifier to police it.
 //
 // BETTER THAN THE INSPIRATION — what Media Chrome's own defaults get wrong,
 // and what this file does instead:
 //
 //   1. `autohide` is ON by default, so after two seconds the controls are
-//      invisible but still focusable — precisely the failure Appendix M.8
-//      calls "worse than no control". Pretui defaults to `noautohide`, and
+//      invisible but still focusable, which is worse than no control. Pretui defaults to `noautohide`, and
 //      when a caller opts into cinema behaviour an outer-tree rule re-shows
 //      the bar on `:focus-within`. (Outer-tree rules on a slotted child beat
 //      the shadow root's `::slotted()` rules, whatever their specificity.)
@@ -38,8 +37,8 @@
 //      spinning under `prefers-reduced-motion`. Here every transport state
 //      also has a text channel, and reduced motion hides the spinner and
 //      leans on the text (Law 5's end state).
-//   4. There is no transcript surface at all. Appendix M.8 says a player
-//      without a track channel is incomplete; this one renders a real,
+//   4. There is no transcript surface at all, and a player without a track
+//      channel is incomplete; this one renders a real,
 //      seekable transcript in a native `<details>`, with the active cue
 //      marked by `aria-current`.
 //   5. Nothing reserves space, so the layout jumps when the poster resolves.
@@ -495,7 +494,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
   /** The live region says one thing and says it rarely: a failure. Play,
    * pause and seek are already announced by the transport buttons' own
    * labels, and repeating them would be the "announces per keystroke"
-   * failure Appendix L calls out. */
+   * failure. */
   get announcement(): string {
     return this.phase === 'error' ? this.snapshot.errorMessage : '';
   }
@@ -555,6 +554,8 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
   <template>
     <div
       class='pretui-media'
+      role={{if @label 'region'}}
+      aria-label={{@label}}
       style={{this.hostStyle}}
       data-kind={{this.kind}}
       data-phase={{this.phase}}
@@ -573,6 +574,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
         {{#if this.isAudio}}
           <audio
             slot='media'
+            aria-label={{@label}}
             src={{@src}}
             preload={{this.preload}}
             crossorigin={{@crossOrigin}}
@@ -594,6 +596,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
         {{else}}
           <video
             slot='media'
+            aria-label={{@label}}
             src={{@src}}
             preload={{this.preload}}
             crossorigin={{@crossOrigin}}
@@ -710,7 +713,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
           preference: realm lint's `no-nested-interactive` counts <details>
           as interactive and rejects any <button> inside it, cue buttons
           included. The platform element would have been the better answer
-          (Appendix L: platform behaviour before JS re-implementation) — it
+          (platform behaviour before JS re-implementation) — it
           is unavailable here, so the replacement carries the full
           contract instead: a real button, aria-expanded, aria-controls,
           and a region that stays in the DOM and hides with `hidden`, so
@@ -892,7 +895,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
           width: 68px;
         }
 
-        /* Appendix M.8 — a control that is focusable and invisible is worse
+        /* A control that is focusable and invisible is worse
            than no control. When a caller opts into auto-hide, focus brings the
            bar straight back. Rules in the outer tree beat the shadow root's
            ::slotted() rules on a slotted child, so this needs no !important

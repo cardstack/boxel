@@ -547,13 +547,9 @@ class RecordField extends Component<RecordFieldSignature> {
            the box the editor control will occupy: the kit's control height,
            and a text inset equal to the control's hairline plus its inner
            padding (1px + 9px on a boxel-ui-backed Input, 0 + 10px on a Pretui
-           face). It used to be a 24px box inset 5px, so clicking a field moved
-           its value 5px right and 2.5px down and pushed every row beneath it
-           down 5.3px — the still-frame test failed on the one frame the user
-           is looking hardest at. Now nothing about the row's geometry changes
-           when it flips to edit; only its dress does — measured in a browser,
-           opening one field moves every getBoundingClientRect on the form by
-           exactly 0.
+           face). Nothing about the row's geometry changes when it flips to
+           edit; only its dress does — measured in a browser, opening one
+           field moves every getBoundingClientRect on the form by exactly 0.
 
            The inset is spent as PADDING rather than as a transparent border,
            deliberately: forced-colors mode forces border-color to a system

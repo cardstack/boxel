@@ -101,6 +101,70 @@ module('Pretui | components/form', function (hooks) {
     assert.strictEqual(form().dataset['submitted'], 'true');
   });
 
+  test("focusOnInvalid='summary' focuses the summary on the first refused submit", async function (assert) {
+    const ISSUES: FormIssue[] = [TOTAL_ERR];
+    await render(
+      <template>
+        <Form @issues={{ISSUES}} @focusOnInvalid='summary' as |f|>
+          <f.Summary />
+          <f.Field @label='Total' @path='Total'><:control as |c|><input id={{c.id}} /></:control></f.Field>
+          <button type='submit' data-test-go>Save</button>
+        </Form>
+      </template>,
+    );
+    assert.strictEqual(summary(), null, 'no summary before the attempt');
+    await click('[data-test-go]');
+    assert.ok(summary(), 'the refused submit shows it');
+    assert.strictEqual(document.activeElement, summary(), 'and focus lands on it, not on the field');
+  });
+
+  test('a refused submit opens a collapsed compound before focusing into it', async function (assert) {
+    const ISSUES: FormIssue[] = [TOTAL_ERR];
+    await render(
+      <template>
+        <Form @issues={{ISSUES}} as |f|>
+          <f.Compound @label='Order' @path='Order' @collapsible={{true}} @defaultOpen={{false}}>
+            <f.Field @label='Total' @path='Total'><:control as |c|><input id={{c.id}} data-test-total /></:control></f.Field>
+          </f.Compound>
+          <button type='submit' data-test-go>Save</button>
+        </Form>
+      </template>,
+    );
+    let toggle = document.querySelector('.pretui-compound [aria-expanded]') as HTMLElement;
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'false', 'collapsed at rest');
+    await click('[data-test-go]');
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'true', 'the toggle says open');
+    assert.strictEqual(document.activeElement, document.querySelector('[data-test-total]'), 'and focus is in the field');
+  });
+
+  test('api.submit and api.reset go through the form element, and do nothing while disabled', async function (assert) {
+    let seen: string[] = [];
+    let onSubmit = () => seen.push('submit');
+    let onReset = () => seen.push('reset');
+    let native = (e: Event) => seen.push(`native ${e.type}`);
+    await render(
+      <template>
+        <Form @issues={{NONE}} @onSubmit={{onSubmit}} @onReset={{onReset}} {{on 'submit' native}} {{on 'reset' native}} as |api|>
+          <button type='button' data-test-api-submit {{on 'click' api.submit}}>Go</button>
+          <button type='button' data-test-api-reset {{on 'click' api.reset}}>Clear</button>
+        </Form>
+      </template>,
+    );
+    await click('[data-test-api-submit]');
+    await click('[data-test-api-reset]');
+    assert.deepEqual([...seen].sort(), ['native reset', 'native submit', 'reset', 'submit'], 'the form and the caller\'s own listeners see both');
+    seen = [];
+    await render(
+      <template>
+        <Form @issues={{NONE}} @disabled={{true}} @onSubmit={{onSubmit}} as |api|>
+          <button type='button' data-test-api-submit {{on 'click' api.submit}}>Go</button>
+        </Form>
+      </template>,
+    );
+    await click('[data-test-api-submit]');
+    assert.deepEqual(seen, [], 'a disabled form ignores api.submit');
+  });
+
   test('a field holds its errors until the first refused submit, but never its advisories', async function (assert) {
     const ISSUES: FormIssue[] = [TOTAL_WARN, TOTAL_ERR];
     await render(

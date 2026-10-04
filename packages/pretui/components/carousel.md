@@ -19,7 +19,7 @@ It is composed **on** **Scroller** rather than beside it, so edge detection is n
 <:slide> — one slide; receives the item and its zero-based index
 ```
 
-**`@onIndexChange` fires for every means of moving**, including a thumb drag on the track. A carousel that only reports its own buttons leaves a controlled caller out of sync the moment someone swipes.
+**`@onIndexChange` fires for every means of moving**, including a thumb drag on the track. A carousel that only reports its own buttons leaves a controlled caller out of sync the moment someone swipes. The other direction holds too: a parent that sets `@index` itself scrolls the viewport to that slide.
 
 **`@loop` defaults to false**, because stopping is the honest default when the control also disables itself at the end — a button that looks available and wraps is a different promise from one that stops.
 

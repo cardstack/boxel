@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
+import { modifier } from 'ember-modifier';
 import { iconFor } from '../icon-registry';
 import { FormContext, isBlocking, normalizeSeverity, sortIssues } from '../internal/forms-core';
 import type { FormIssue, FormSeverity } from '../internal/forms-core';
@@ -135,6 +136,12 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
     return iconFor('circle-alert');
   }
 
+  claimFocus = modifier((el: HTMLElement) => {
+    if (this.args.form?.takeSummaryFocus()) {
+      el.focus();
+    }
+  });
+
   goTo = (row: SummaryRow): void => {
     this.args.form?.focusPath(row.issue.targetPath);
   };
@@ -146,6 +153,7 @@ export class ErrorSummary extends Component<ErrorSummarySignature> {
         id={{this.id}}
         tabindex='-1'
         role={{this.role}}
+        {{this.claimFocus}}
         data-test-pretui-error-summary
         ...attributes
       >

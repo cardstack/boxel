@@ -17,7 +17,7 @@ A staggered multi-column wall of items of varying heights — a moodboard, a gal
 - **DOM order, keyboard order and screen-reader order are the order you pass `@items`.** Always. That is the accessible order and it never moves.
 - **The visual order is column-major.** Item 1 is top-left and item 2 is *below* it, not to its right; a column fills to the bottom before the next begins.
 
-So Masonry is right for a wall of peers and **wrong for ranked content**. Under a narrow container it collapses to one column, where column-major and row-major are the same thing.
+So Masonry is right for a wall of peers and **wrong for ranked content**. When the container is narrower than two `@min` columns it collapses to one column, where column-major and row-major are the same thing.
 
 ## Prior art
 
