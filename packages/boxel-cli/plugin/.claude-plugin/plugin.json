@@ -8,5 +8,6 @@
   },
   "homepage": "https://github.com/cardstack/boxel/tree/main/packages/boxel-cli/plugin",
   "repository": "https://github.com/cardstack/boxel.git",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": ["boxel-skills"]
 }
