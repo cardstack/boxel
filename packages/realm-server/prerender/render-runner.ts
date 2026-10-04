@@ -743,7 +743,9 @@ export class RenderRunner {
         } else {
           // The render route reads a file render's model from this stash,
           // with the realm alongside it (a file render has no response
-          // header to learn its realm from).
+          // header to learn its realm from). Every capture and every visit
+          // clears the stash before its own render, so it never outlives
+          // the render it was set for.
           await abortable(signal, () =>
             page.evaluate(
               (data) => {
@@ -846,15 +848,6 @@ export class RenderRunner {
         pool: poolInfo,
       };
     } finally {
-      // A file capture's stash names this render's file; a later render on
-      // this pooled tab must never read it.
-      if (callerRenderOptions?.fileRender) {
-        await page
-          .evaluate(() => {
-            delete (globalThis as any).__boxelFileRenderData;
-          })
-          .catch(() => undefined);
-      }
       release();
     }
   }
