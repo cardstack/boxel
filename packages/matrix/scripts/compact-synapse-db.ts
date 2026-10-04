@@ -3,28 +3,40 @@
 //
 // Synapse writes a `device_lists_changes_in_room` row for every room a user
 // has joined each time one of their devices changes, and never deletes those
-// rows. Server users that log in often and sit in many session rooms grow the
-// table into tens of gigabytes. The rows are a change feed, not room or user
+// rows. A user that gets a new device on every login and sits in thousands of
+// session rooms grows the table into tens of gigabytes. The rows are a change feed, not room or user
 // data: once synapse has fanned a row out to remote servers
 // (`converted_to_destinations`), it only reads it to answer "which users'
 // devices changed since sync token X?", and it answers a token older than the
 // table's oldest row with a full device-list resync. So the converted rows can
 // go; the unconverted ones are kept for synapse to process.
 //
-// Synapse caches the table's oldest stream id, so the container must be
-// stopped first:
+// Synapse caches the table's oldest stream id, so no running synapse may be
+// using the database. The script refuses while a running container mounts the
+// data directory; when that container is the dev synapse:
 //
 //   pnpm stop:synapse && pnpm compact:synapse-db && pnpm start:synapse
+//
+// The data directory is ./synapse-data (./synapse-data-<slug> in environment
+// mode), or SYNAPSE_DATA_DIR when set. Each checkout has its own, and the dev
+// synapse uses whichever checkout started it, so another checkout's database
+// can be compacted while synapse keeps running.
 //
 // Pass --no-backup to skip copying the database aside first.
 
 import { DatabaseSync } from 'node:sqlite';
 import { execFileSync } from 'child_process';
-import { copyFileSync, existsSync, renameSync, rmSync, statSync } from 'fs';
+import {
+  copyFileSync,
+  existsSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from 'fs';
 import { join, resolve } from 'path';
 import {
   getEnvironmentSlug,
-  getSynapseContainerName,
   isEnvironmentMode,
 } from '../support/environment-config.ts';
 
@@ -40,7 +52,6 @@ let dataDir = process.env.SYNAPSE_DATA_DIR
         : './synapse-data',
     );
 let dbPath = join(dataDir, 'db', 'homeserver.db');
-let containerName = getSynapseContainerName();
 
 function fail(message: string): never {
   console.error(message);
@@ -55,15 +66,31 @@ if (!existsSync(dbPath)) {
   fail(`No synapse database at ${dbPath}`);
 }
 
-let running = execFileSync(
-  'docker',
-  ['ps', '--quiet', '--filter', `name=^/${containerName}$`],
-  { encoding: 'utf8' },
-).trim();
-if (running) {
-  fail(
-    `Container '${containerName}' is running. Stop it with \`pnpm stop:synapse\` first; anything using this synapse loses it until \`pnpm start:synapse\`.`,
-  );
+function docker(args: string[]) {
+  return execFileSync('docker', args, { encoding: 'utf8' }).trim();
+}
+
+let runningIds = docker(['ps', '--quiet']).split('\n').filter(Boolean);
+if (runningIds.length > 0) {
+  let realDataDir = realpathSync(dataDir);
+  let mounting = docker([
+    'inspect',
+    '--format',
+    '{{.Name}} {{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}',
+    ...runningIds,
+  ])
+    .split('\n')
+    .map((line) => line.split(' '))
+    .filter(
+      ([, source]) =>
+        source && existsSync(source) && realpathSync(source) === realDataDir,
+    )
+    .map(([name]) => name.replace(/^\//, ''));
+  if (mounting.length > 0) {
+    fail(
+      `${dataDir} is in use by running container ${mounting.join(', ')}. Stop it first (\`pnpm stop:synapse\` for the dev synapse); anything using that synapse loses it until \`pnpm start:synapse\`.`,
+    );
+  }
 }
 
 console.log(`Compacting ${dbPath} (${gigabytes(dbPath)})`);
@@ -121,5 +148,5 @@ rmSync(`${dbPath}-wal`, { force: true });
 rmSync(`${dbPath}-shm`, { force: true });
 
 console.log(
-  `Done: ${gigabytes(dbPath)}. Start synapse with \`pnpm start:synapse\`.`,
+  `Done: ${gigabytes(dbPath)}. If you stopped synapse for this, start it again with \`pnpm start:synapse\`.`,
 );
