@@ -349,7 +349,7 @@ export class Waveform extends Component<WaveformSignature> {
         .pretui-wave-time {
           margin-inline-end: auto;
         }
-        /* State carries a word, not only a hue — Appendix M.8. */
+        /* State carries a word, not only a hue. */
         .pretui-wave-status {
           font-size: var(--text-ui-xs, 10.5px);
           font-weight: 600;

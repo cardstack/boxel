@@ -88,19 +88,19 @@ export const Board: TemplateOnlyComponent<BoardSignature> = <template>
         font-size: var(--text-ui-md, 12.5px);
         letter-spacing: var(--track-ui, 0.01em);
         color: var(--foreground);
-        --boxel-kanban-fg: var(--foreground);
-        --boxel-kanban-card-bg: var(--card);
-        --boxel-kanban-card-fg: var(--card-foreground);
+        --boxel-kanban-fg: var(--foreground, var(--boxel-dark));
+        --boxel-kanban-card-bg: var(--card, var(--boxel-light));
+        --boxel-kanban-card-fg: var(--card-foreground, var(--boxel-dark));
         --boxel-kanban-col-bg: var(--inset, var(--boxel-100));
-        --boxel-kanban-col-fg: var(--foreground);
-        --boxel-kanban-ring: var(--primary);
-        --boxel-kanban-primary: var(--primary);
-        --boxel-kanban-primary-fg: var(--primary-foreground);
-        --boxel-kanban-destructive: var(--destructive);
-        --boxel-kanban-destructive-fg: var(--destructive-foreground);
-        --boxel-kanban-muted-fg: var(--muted-foreground);
-        --boxel-kanban-radius: var(--radius);
-        --boxel-kanban-border: var(--border);
+        --boxel-kanban-col-fg: var(--foreground, var(--boxel-dark));
+        --boxel-kanban-ring: var(--primary, var(--boxel-highlight));
+        --boxel-kanban-primary: var(--primary, var(--boxel-highlight));
+        --boxel-kanban-primary-fg: var(--primary-foreground, var(--boxel-dark));
+        --boxel-kanban-destructive: var(--destructive, var(--boxel-danger));
+        --boxel-kanban-destructive-fg: var(--destructive-foreground, var(--boxel-light));
+        --boxel-kanban-muted-fg: var(--muted-foreground, var(--boxel-450));
+        --boxel-kanban-radius: var(--radius, var(--boxel-border-radius));
+        --boxel-kanban-border: var(--border, var(--boxel-border-color));
         --boxel-kanban-bg: transparent;
       }
     }

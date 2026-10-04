@@ -29,7 +29,7 @@
 //     holding a second device.
 //   * Error-correction level is settable, and rises to 'H' automatically when
 //     an overlay occludes the centre.
-//   * A modifier is no longer needed at all: the vendored encoder is pure and
+//   * No modifier: the vendored encoder is pure and
 //     DOM-free, so the matrix is a `@cached get` and the symbol is
 //     declarative markup. Zero timers, zero observers, zero engine to dispose.
 //
@@ -165,10 +165,14 @@ function clampInt(
  * Only `http:` and `https:` become a real anchor. Everything else — including
  * `javascript:`, `data:`, and anything unparseable — renders as inert text.
  */
+// a const, not an inline `!/…/` literal: content-tag misreads the negated
+// form and drops the template
+const HTTP_URL = /^https?:\/\//i;
+
 export function qrSafeHref(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
-  if (!/^https?:\/\//i.test(trimmed)) return undefined;
+  if (!HTTP_URL.test(trimmed)) return undefined;
   try {
     const url = new URL(trimmed);
     return url.protocol === 'http:' || url.protocol === 'https:'

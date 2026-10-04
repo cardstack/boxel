@@ -6,7 +6,7 @@ import { guidFor } from '@ember/object/internals';
 import { DataShell, DataSource } from '../data-component';
 import type { DataArgs, DataLoad, RowKey, RowKeyFn, SelectionMode } from '../data-component';
 import type { PretuiSize } from '../pretui-primitives';
-import { focusWhen, listen, rovingTabindex } from '../focus';
+import { OWNS_PRESS, focusWhen, listen, rovingTabindex } from '../focus';
 import { RowCursor } from '../internal/reading-listing';
 import type { ListingSizeArg } from '../internal/reading-listing';
 import { resolveSize } from '../pretui-primitives';
@@ -268,6 +268,23 @@ export class List<T> extends Component<ListSignature<T>> {
     this.args.onActivate?.(row, index);
   };
 
+  /** A click on a row activates it, unless it landed on a control inside. */
+  onClick = (event: Event) => {
+    if (!this.args.onActivate) {
+      return;
+    }
+    let target = event.target as Element | null;
+    let li = target?.closest?.('li[data-list-index]');
+    if (!li || target?.closest?.(OWNS_PRESS)) {
+      return;
+    }
+    let index = Number(li.getAttribute('data-list-index'));
+    let row = this.rows[index];
+    if (row !== undefined) {
+      this.args.onActivate(row, index);
+    }
+  };
+
   <template>
     <div
       class='pretui-list'
@@ -298,6 +315,7 @@ export class List<T> extends Component<ListSignature<T>> {
             aria-label={{this.label}}
             {{listen 'keydown' this.onKeydown}}
             {{listen 'focusin' this.onFocusIn}}
+            {{listen 'click' this.onClick}}
           >
             {{#each this.lines key='key' as |line|}}
               <li
@@ -480,7 +498,7 @@ export class List<T> extends Component<ListSignature<T>> {
           outline-offset: 2px;
         }
         /* Coarse pointers get the 44px floor without changing the fine-pointer
-           rhythm (Appendix L, touch). */
+           rhythm. */
         @media (pointer: coarse) {
           .pretui-list-row {
             min-block-size: 44px;

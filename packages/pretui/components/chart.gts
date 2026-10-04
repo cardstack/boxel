@@ -372,7 +372,15 @@ export class Chart<T> extends Component<ChartSignature<T>> {
     let rows = this.rows;
     let x = this.args.x;
     let y = this.args.y;
-    let series = this.args.series;
+    // the marks read the same string key the colour domain is built from, so
+    // a numeric, boolean or missing series value still matches its legend hue
+    let channel = this.args.series;
+    let series = this.hasSeries
+      ? (row: unknown, i: number): string => {
+          let name = readChannel(row as T, channel, i);
+          return name === null || name === undefined ? '—' : String(name);
+        }
+      : undefined;
     let stroke = this.hasSeries ? series : HUES[0];
     let fill = this.hasSeries ? series : HUES[0];
     let curve = this.args.curve ?? 'monotone-x';
@@ -740,10 +748,9 @@ export class Chart<T> extends Component<ChartSignature<T>> {
           ></div>
 
           {{#if this.allSeriesMuted}}
-            {{! Muting every legend key used to leave an empty frame with no
-                explanation and an accessible name reading "…0 data points" —
-                a state the reader created, so it must say so and say how to
-                undo it. }}
+            {{! Muting every legend key is a state the reader created, so the
+                frame says so and says how to undo it, rather than standing
+                empty with an accessible name reading "…0 data points". }}
             <p class='pretui-chart-allmuted' role='status'>
               Every series is hidden. Choose one above to draw it.
             </p>
@@ -879,7 +886,7 @@ export class Chart<T> extends Component<ChartSignature<T>> {
           font-size: var(--text-ui-sm, 11.5px);
           cursor: pointer;
           /* Coarse pointers get a real hit target without changing the
-             layout on a mouse (Appendix L: touch floor). */
+             layout on a mouse. */
           min-block-size: 24px;
         }
         @media (any-pointer: coarse) {

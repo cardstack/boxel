@@ -46,7 +46,7 @@
 // `@maxHighlightBytes` highlighting switches itself off rather than building
 // a hundred thousand spans.
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { CopyButton } from './copy-button';
@@ -306,6 +306,7 @@ export function tokenizeCode(
  */
 export function parseLineSet(
   spec: string | number[] | undefined,
+  lastLine = Number.POSITIVE_INFINITY,
 ): Set<number> {
   let out = new Set<number>();
   if (Array.isArray(spec)) {
@@ -322,7 +323,8 @@ export function parseLineSet(
       let a = Number(range[1]);
       let b = Number(range[2]);
       let lo = Math.min(a, b);
-      let hi = Math.max(a, b);
+      // a range never walks past the code's last line, however wide it is
+      let hi = Math.min(Math.max(a, b), lastLine);
       for (let n = lo; n <= hi; n++) {
         out.add(n);
       }
@@ -352,8 +354,9 @@ export function codeLines(
     highlight?: string | number[];
   } = {},
 ): CodeLine[] {
-  let marked = parseLineSet(options.highlight);
   let first = Math.max(1, Math.floor(options.startLine ?? 1));
+  let lineTotal = (code ?? '').split('\n').length;
+  let marked = parseLineSet(options.highlight, first + lineTotal - 1);
   let tokens = tokenizeCode(code ?? '', options.language);
   let lines: CodeLine[] = [];
   let current: CodeToken[] = [];
@@ -464,6 +467,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
     return this.code.length > ceiling;
   }
 
+  @cached
   get lines(): CodeLine[] {
     if (this.args.binary) {
       return [];
@@ -740,7 +744,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
              to nothing and the code silently loses its paragraphing. */
           min-height: calc(var(--pretui-code-leading, 1.6) * 1em);
         }
-        /* The mark carries a SHAPE as well as a tint (Appendix O.14), so it
+        /* The mark carries a SHAPE as well as a tint, so it
            survives greyscale and a colour-blind reader. */
         .pretui-code-line[data-marked='true'] {
           background: color-mix(

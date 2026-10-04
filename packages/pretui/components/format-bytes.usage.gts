@@ -218,7 +218,7 @@ class FormatBytesUsage extends Component {
     </FreestyleUsage>
     <style scoped>
       /* Every value rides a token with a LIGHT fallback; no dark branch
-         anywhere — the theme frame supplies the swap (Appendix F). */
+         anywhere — the theme frame supplies the swap. */
       .fmt-stack {
         display: flex;
         flex-direction: column;

@@ -107,7 +107,7 @@ class LightboxUsage extends Component {
         <Args.Object
           @name='assets'
           @value={{this.assets}}
-          @description='MediaAssetSpec[]. Anything whose kind does not resolve to `image` is dropped and COUNTED — the component says "1 asset is not an image and is not in this gallery" rather than quietly showing a shorter set.'
+          @description='MediaAssetSpec[]. Anything whose kind does not resolve to `image`, or whose source could run script, is dropped and COUNTED — the component says "1 asset is not a linkable image and is not in this gallery" rather than quietly showing a shorter set.'
         />
         <Args.Number
           @name='columns'

@@ -46,7 +46,7 @@ Also added: the four `aria-*count/index` properties (5), valid header row struct
 
 Remaining gaps:
 
-- **No accessible name arg** for the grid itself; a page with two Sheets has two unnamed grids.
+- **The grid's name defaults to "Data sheet".** Pass `@label` on every Sheet; two Sheets on a page left on the default share one name.
 - **In-range styling exists for a selection that cannot happen** — harmless, but a user told about multi-cell selection will not find it.
 - **`@validate` returning false keeps the editor open** and the invalid value visible, but nothing announces *why* it was rejected; there is no message channel (**WCAG 3.3.1/3.3.3**).
 - **Every visible row renders**; with no virtualisation, `aria-rowcount` equals the rendered count, which is honest but means large data sets are a performance problem before they are an accessibility one.

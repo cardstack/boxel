@@ -13,8 +13,8 @@
 //      destructor** — the rAF ruling, exactly. wavesurfer runs one
 //      `requestAnimationFrame` loop while playing and holds an AudioContext,
 //      a fetch, a ResizeObserver and a media element; `destroy()` releases all
-//      of them and it is called on teardown, on `@src` change, and on theme
-//      change. Nothing here constructs an engine in a getter, where the realm
+//      of them and it is called on teardown and whenever the engine key
+//      changes (`@src`, height, bar geometry). Nothing here constructs an engine in a getter, where the realm
 //      indexer could reach it outside a browser.
 //   2. **Construction is wrapped in try/catch and failure is a state, not a
 //      crash.** A waveform lives or dies on a decode, and a headless browser
@@ -23,7 +23,7 @@
 //      assert on what happened without asserting that a decode succeeded.
 //   3. **The waveform is a `role='slider'`, not a canvas you can only click.**
 //      wavesurfer gives pointer seeking and nothing else: no tab stop, no
-//      arrow keys, no announced position. Appendix M.8's floor is met here,
+//      arrow keys, no announced position. The keyboard floor is met here,
 //      not in the library: one tab stop, ←/→ by step, Shift for a coarse step,
 //      PageUp/PageDown, Home/End, Space to play, and an `aria-valuetext` that
 //      says "0:03 of 0:06" rather than reading out a float.
@@ -97,8 +97,8 @@ export interface WaveRegion {
 
 /** Read a Pretui token off the live element as a concrete colour. wavesurfer
  * paints into a canvas, and a canvas cannot resolve `var(--primary)` — so the
- * theme is resolved once, at construction, and the engine is rebuilt when the
- * theme changes. */
+ * theme is resolved once, at construction. A theme switch shows on the next
+ * rebuild (a new `@src`, height or bar geometry), not live. */
 function tokenColor(styles: CSSStyleDeclaration, name: string, fallback: string): string {
   const raw = styles.getPropertyValue(name).trim();
   return raw.length > 0 ? raw : fallback;
@@ -107,8 +107,8 @@ function tokenColor(styles: CSSStyleDeclaration, name: string, fallback: string)
 /**
  * Own one wavesurfer instance for the life of the element.
  *
- * The third positional is a plain key string: change `@src`, the height, the
- * bar geometry or the theme and the key changes, ember-modifier tears the
+ * The third positional is a plain key string: change `@src`, the height or the
+ * bar geometry and the key changes, ember-modifier tears the
  * engine down and it is rebuilt. wavesurfer reads its colours into a canvas
  * gradient at construction and has no setter for most of them, so a rebuild is
  * the honest answer rather than a pretend-live one.
@@ -150,7 +150,7 @@ export const waveEngine = modifier(
         interact: host.interact,
         dragToSeek: host.interact,
         autoScroll: !reduced,
-        // No autoplay, ever — Appendix M.8. Stated rather than defaulted.
+        // No autoplay, ever. Stated rather than defaulted.
         autoplay: false,
         plugins,
       });

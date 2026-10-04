@@ -2,7 +2,7 @@
 
 A highlighted source block with a header, a gutter, a copy control and a scroll ceiling.
 
-**DiffBlock** is a diff. **Token** is inline. This is the public component around the kit's vendored highlight.js.
+**DiffBlock** is a diff. **Token** is inline. It highlights with its own small lexer, coloured from the theme.
 
 ## The contract
 
@@ -37,7 +37,7 @@ A highlighted source block with a header, a gutter, a copy control and a scroll 
 
 ## Prior art
 
-The kit's vendored **highlight.js**, and the code block every documentation site ships.
+**highlight.js** and **Shiki**, and the code block every documentation site ships.
 
 Where Pretui is better: four failure modes handled that most implementations leave open — unbounded height, unbounded highlighting cost, binary content, and line numbers that come along with a copy-paste. The greyscale-safe highlight mark is the fifth.
 

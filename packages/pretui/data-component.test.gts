@@ -190,6 +190,70 @@ module('Pretui | DataComponent', function (hooks) {
     assert.strictEqual(root().dataset.status, 'ready', 'still ready');
   });
 
+  test('missing values sort last in both directions', async function (assert) {
+    const GAPPY = [
+      { id: 'B-1', tea: 'Gyokuro', kg: 61 },
+      { id: 'B-2', tea: 'Unweighed', kg: null },
+      { id: 'B-3', tea: 'Silver Needle', kg: 88 },
+    ];
+    await render(<template>
+      <DataComponent @rows={{GAPPY}} as |rows data|>
+        <button type='button' class='t-sort' {{on 'click' (fn data.toggleSort 'kg')}}>sort</button>
+        {{#each rows key='id' as |row|}}<span class='t-row'>{{row.tea}}</span>{{/each}}
+      </DataComponent>
+    </template>);
+    let order = () => Array.from(document.querySelectorAll('.t-row')).map((el) => el.textContent?.trim()).join('|');
+    await click('.t-sort');
+    assert.strictEqual(order(), 'Gyokuro|Silver Needle|Unweighed', 'ascending');
+    await click('.t-sort');
+    assert.strictEqual(order(), 'Silver Needle|Gyokuro|Unweighed', 'descending keeps the gap last');
+  });
+
+  test('all-selected means every visible row, and select-all keeps keys outside the view', async function (assert) {
+    class Lots {
+      @tracked rows: Lot[] = LOTS;
+      keys: string[] = [];
+      note = (keys: unknown[]) => (this.keys = keys as string[]);
+    }
+    let lots = new Lots();
+    await render(<template>
+      <DataComponent @rows={{lots.rows}} @selectionMode='multi' @onSelectionChange={{lots.note}} as |_rows data|>
+        <button type='button' class='t-all' {{on 'click' data.selectAll}}>all</button>
+        <span class='t-state'>{{if data.allSelected 'all' 'some'}}</span>
+      </DataComponent>
+    </template>);
+    let state = () => document.querySelector('.t-state')?.textContent?.trim();
+    await click('.t-all');
+    assert.strictEqual(state(), 'all');
+    lots.rows = [{ id: 'B-9', tea: 'Hojicha', kg: 12 }];
+    await settled();
+    assert.strictEqual(state(), 'some', 'three selected keys, none of them in view, is not all');
+    await click('.t-all');
+    assert.deepEqual(lots.keys, ['B-1', 'B-2', 'B-3', 'B-9'], 'selecting the view keeps the earlier keys');
+    await click('.t-all');
+    assert.deepEqual(lots.keys, ['B-1', 'B-2', 'B-3'], 'and deselecting it removes only the view');
+  });
+
+  test('eager rows take over from a load still in flight', async function (assert) {
+    class Swap {
+      @tracked rows: Lot[] | undefined = undefined;
+    }
+    let swap = new Swap();
+    let loads = new LoadState();
+    await render(<template>
+      <DataComponent @load={{loads.load}} @rows={{swap.rows}} as |rows|>
+        {{#each rows key='id' as |row|}}<span class='t-row'>{{row.tea}}</span>{{/each}}
+      </DataComponent>
+    </template>);
+    assert.strictEqual(root().dataset.status, 'loading');
+    swap.rows = LOTS;
+    await settled();
+    assert.strictEqual(root().dataset.status, 'ready', 'the eager rows are the truth now');
+    loads.pending[0]?.reject(new Error('late failure'));
+    await settled();
+    assert.strictEqual(root().dataset.status, 'ready', 'and a late failure of the old load does not override them');
+  });
+
   test('selection and sort work uncontrolled, and report every change', async function (assert) {
     let seen: unknown[] = [];
     let record = (keys: unknown[]) => seen.push(keys.join(','));

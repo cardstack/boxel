@@ -8,7 +8,7 @@
 // upgraded, that the transport is really in the DOM, and that teardown
 // leaves nothing behind.
 import { module, test } from 'qunit';
-import { render, clearRender, click } from '@ember/test-helpers';
+import { render, clearRender, click, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { AudioPlayer } from './components/audio-player';
 import { MediaPlayer } from './components/media-player';
@@ -278,6 +278,16 @@ module('Pretui | media', function (hooks) {
       'unsupported',
       'an unknown kind lands on the honest fallback, not a blank box',
     );
+  });
+
+  test('AssetGrid moves focus with the arrows through a production-safe hook', async function (assert) {
+    await render(<template><AssetGrid @rows={{SAMPLE_ASSETS}} /></template>);
+    let tiles = () => Array.from(document.querySelectorAll('.pretui-assets-hit')) as HTMLElement[];
+    tiles()[0]?.focus();
+    await triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', 'ArrowRight');
+    assert.strictEqual(document.activeElement, tiles()[1], 'ArrowRight moved focus to the next tile');
+    await triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', 'Home');
+    assert.strictEqual(document.activeElement, tiles()[0], 'Home moved it back');
   });
 
   test('AssetGrid rides DataComponent rather than reimplementing it', async function (assert) {

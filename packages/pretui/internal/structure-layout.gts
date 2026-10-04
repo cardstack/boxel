@@ -50,7 +50,16 @@ import type { PretuiSize } from '../pretui-primitives';
 // aliases resolve IN the component, docs teach the house name.
 
 /** Every spelling of a size this kit will accept. */
-export type SizeAlias = PretuiSize | 'sm' | 'md' | 'lg' | 'default';
+export type SizeAlias =
+  | PretuiSize
+  | 'sm'
+  | 'md'
+  | 'lg'
+  | 'default'
+  | 'small'
+  | 'medium'
+  | 'large'
+  | 'middle';
 
 /** Resolve any accepted size spelling to the house enum. */
 export function pretuiSize(

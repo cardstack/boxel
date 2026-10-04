@@ -5,11 +5,11 @@ bundled to a single self-contained ES module. v2 is a **Web Component** suite,
 not the v1 jQuery-era class: importing this module defines eight custom
 elements and you write them as plain tags in a `<template>`.
 
-## Provenance (M.10)
+## Provenance
 
 | | |
 |---|---|
-| **Source** | **npm**, `cropperjs@2.1.1`. **No local checkout existed** — `~/Projects` was searched for `*crop*` and has nothing, so the M.10 preference for a checkout could not be honoured. |
+| **Source** | **npm**, `cropperjs@2.1.1`. |
 | **Commit SHA** | n/a — built from the published tarball, not a git tree. |
 | **Version** | `cropperjs@2.1.1`. It is a monorepo façade: the bundle also contains **`@cropper/element` 2.1.1**, **`@cropper/elements` 2.1.1** and **`@cropper/utils` 2.1.1**, all at the same version and all MIT under the same copyright. |
 | **Licence** | **`MIT`**, read from the package's own `LICENSE` file, copied here verbatim as `LICENSE`. Copyright 2015-present Chen Fengyuan. |
@@ -42,7 +42,7 @@ where `cr.js` is `export * from 'cropperjs';`.
 
 ## The one adaptation, stated rather than hidden
 
-**Cropper.js failed the M.9 Node test as published, and the banner is what
+**Cropper.js fails the import-under-Node test as published, and the banner is what
 fixes it.** Evaluating the plain bundle under Node throws
 `ReferenceError: HTMLElement is not defined` — every element class is
 `class … extends HTMLElement` at module scope, and unlike Media Chrome,
@@ -69,8 +69,7 @@ If Cropper.js ever gains its own shim, delete the banner line and re-verify.
 ## Four things to know before using it
 
 - **No stylesheet.** Every element emits its CSS inside its own shadow root, so
-  the CSS-import trap does not arise — the M.3 budget applies to PhotoSwipe,
-  not to this. Theming crosses the shadow boundary through `theme-color`
+  the CSS-import trap that PhotoSwipe has to work around does not arise. Theming crosses the shadow boundary through `theme-color`
   attributes and `--theme-color`.
 - **Glimmer binds dynamic attributes through the property.** `movable={{''}}`
   sets `el.movable = ''`, which is falsy, so the element silently stays

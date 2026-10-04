@@ -491,7 +491,7 @@ module('Pretui | blocks | CtaBand', function (hooks) {
     assert.timeout(10000);
   });
 
-  test('reflects the resolved Appendix E axes', async function (assert) {
+  test('reflects the resolved appearance axes', async function (assert) {
     await render(
       <template>
         <CtaBand

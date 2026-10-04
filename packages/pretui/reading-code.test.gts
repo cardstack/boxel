@@ -213,6 +213,9 @@ module('Pretui | reading-code | language resolution', function () {
 module('Pretui | reading-code | line sets', function () {
   test('ranges, singles and arrays', function (assert) {
     assert.deepEqual(Array.from(parseLineSet('3, 7-9')).sort(), [3, 7, 8, 9]);
+    assert.deepEqual(Array.from(parseLineSet('2-999999999', 4)).sort(), [2, 3, 4], 'a huge range stops at the last line');
+    let lines = codeLines('a\nb\nc', { highlight: '1-999999999' });
+    assert.deepEqual(lines.map((l) => l.marked), [true, true, true], 'and codeLines clamps to its own length');
     assert.deepEqual(
       Array.from(parseLineSet('9-7')).sort(),
       [7, 8, 9],

@@ -10,8 +10,7 @@ import { KIND_WORD } from '../internal/media-assets';
 
 // ── MediaInspector ───────────────────────────────────────────────────────
 //
-// The metadata panel Appendix M.5 describes as "composes KeyValue" — so it
-// composes KeyValue rather than growing its own definition list. The only
+// The metadata panel. It composes KeyValue rather than growing its own definition list. The only
 // thing it adds is the derived row set: kind, dimensions, duration and size
 // are computed from the asset the same way the grid computes them, so the
 // panel and the tile can never disagree.

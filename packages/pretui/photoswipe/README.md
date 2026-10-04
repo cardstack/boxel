@@ -4,11 +4,11 @@
 (core + the `lightbox` entry) bundled to a single self-contained ES module.
 `style.ts` carries its stylesheet as a string — see "The CSS problem" below.
 
-## Provenance (M.10)
+## Provenance
 
 | | |
 |---|---|
-| **Source** | **npm**, `photoswipe@5.4.4`. **No local checkout existed** — `~/Projects` was searched for `*photoswipe*` and has nothing, so the M.10 preference for a checkout could not be honoured. |
+| **Source** | **npm**, `photoswipe@5.4.4`. |
 | **Commit SHA** | n/a — built from the published tarball, not a git tree. |
 | **Version** | 5.4.4 |
 | **Licence** | **`MIT`**, read from the package's own `LICENSE` file, copied here verbatim as `LICENSE`. Copyright (c) 2014-2022 Dmitry Semenov, https://dimsemenov.com. |
@@ -42,7 +42,7 @@ where `ps.js` re-exports `photoswipe` and `photoswipe/lightbox`.
 
 PhotoSwipe ships an ordinary stylesheet (`photoswipe/dist/photoswipe.css`) and
 its own docs tell you to `import 'photoswipe/style.css'`. **That import fails
-realm indexing outright** — the loader parses `.css` as JS (M.3). Glimmer's
+realm indexing outright** — the loader parses `.css` as JS. Glimmer's
 `<style scoped>` is no help either, because PhotoSwipe appends its root to
 `document.body`, outside every component subtree.
 
@@ -65,7 +65,7 @@ So both roads are closed and the stylesheet travels as a **string**:
 ## Four things to know before using it
 
 - **Import is DOM-free.** Evaluating this exact file under plain Node succeeds
-  (the M.9 decisive test). PhotoSwipe is not a Web Component library, so there
+  (the decisive test). PhotoSwipe is not a Web Component library, so there
   is no `customElements.define` at module scope to survive; the `new
   PhotoSwipeLightbox()` call is what needs a browser, and it happens in a
   modifier.

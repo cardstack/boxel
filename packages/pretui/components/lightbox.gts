@@ -18,7 +18,7 @@
 //   2. **The stylesheet is refcounted, not module-installed.** PhotoSwipe
 //      appends its root to `document.body`, outside every component subtree,
 //      so scoped CSS cannot reach it and a side-effect `.css` import breaks
-//      realm indexing (Appendix M.3). The CSS therefore travels as a string in
+//      realm indexing. The CSS therefore travels as a string in
 //      `photoswipe/style.ts` and is installed into `document.head` by the
 //      FIRST Lightbox and removed by the LAST — a module-level "install once"
 //      flag would leak a stylesheet across test modules, which is exactly the
@@ -40,7 +40,7 @@ import { modifier } from 'ember-modifier';
 import { PhotoSwipe, PhotoSwipeLightbox } from '../photoswipe/index.js';
 import { PHOTOSWIPE_CSS, PSWP_THEME_CSS } from '../photoswipe/style';
 import type { MediaAssetSpec, ResolvedMediaAsset } from '../internal/media-viewer';
-import { resolveAsset } from '../internal/media-viewer';
+import { resolveAsset, safeHref } from '../internal/media-viewer';
 import { cssDeclaration, cssStyleFrom } from '../pretui-css';
 import { EmptyState } from './empty-state';
 
@@ -48,10 +48,12 @@ import { EmptyState } from './empty-state';
 
 const STYLE_ID = 'pretui-photoswipe-css';
 let styleRefs = 0;
+/** the element this module installed; a host-owned sheet is never removed */
+let ownStyle: HTMLStyleElement | undefined;
 
 /** Install the vendored stylesheet on first use. Returns a release function;
- * the last release removes the element again. Idempotent against a host that
- * already installed it under the same id. */
+ * the last release removes the element again, but only one this module
+ * created: a host that installed it under the same id keeps it. */
 export function acquirePhotoSwipeStyles(): () => void {
   let released = false;
   if (typeof document === 'undefined') {
@@ -63,6 +65,7 @@ export function acquirePhotoSwipeStyles(): () => void {
     style.id = STYLE_ID;
     style.textContent = PHOTOSWIPE_CSS + '\n' + PSWP_THEME_CSS;
     document.head.appendChild(style);
+    ownStyle = style;
   }
   return () => {
     if (released) {
@@ -70,8 +73,9 @@ export function acquirePhotoSwipeStyles(): () => void {
     }
     released = true;
     styleRefs = Math.max(0, styleRefs - 1);
-    if (styleRefs === 0) {
-      document.getElementById(STYLE_ID)?.remove();
+    if (styleRefs === 0 && ownStyle) {
+      ownStyle.remove();
+      ownStyle = undefined;
     }
   };
 }
@@ -260,7 +264,11 @@ export interface LightboxSignature {
 export class Lightbox extends Component<LightboxSignature> implements LightboxEngineHost {
   get items(): LightboxItem[] {
     const all = this.args.assets ?? [];
-    const images = all.map((a) => resolveAsset(a)).filter(isLightboxable);
+    // an image whose src could run script never becomes a link
+    const images = all
+      .map((a) => resolveAsset(a))
+      .filter(isLightboxable)
+      .filter((a) => safeHref(a.src, { images: true }) !== undefined);
     return images.map((asset, i) => toItem(asset, i, images.length));
   }
   get skipped(): number {
@@ -269,8 +277,8 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
   get skippedNote(): string {
     const n = this.skipped;
     return n === 1
-      ? '1 asset is not an image and is not in this gallery.'
-      : `${n} assets are not images and are not in this gallery.`;
+      ? '1 asset is not a linkable image and is not in this gallery.'
+      : `${n} assets are not linkable images and are not in this gallery.`;
   }
   get loop(): boolean {
     return this.args.loop ?? true;

@@ -31,7 +31,7 @@ class MediaInspectorUsage extends Component {
   <template>
     <FreestyleUsage
       @name='MediaInspector'
-      @description="The metadata panel. Appendix M.5 says it composes KeyValue, so it composes KeyValue rather than growing a second definition list — the only thing it adds is the derived row set, computed from the asset exactly the way AssetGrid computes the same numbers, so the panel and the tile can never disagree. Machine values (dimensions, size, duration, format) get the Law-3 mono token; prose does not."
+      @description="The metadata panel. It composes KeyValue rather than growing a second definition list — the only thing it adds is the derived row set, computed from the asset exactly the way AssetGrid computes the same numbers, so the panel and the tile can never disagree. Machine values (dimensions, size, duration, format) get the Law-3 mono token; prose does not."
       @source={{this.usage}}
     >
       <:example>

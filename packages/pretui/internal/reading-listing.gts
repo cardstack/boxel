@@ -21,7 +21,7 @@
 // `Menu` for the column switcher; `FilterChips` for enum filters; `focus.gts`
 // for keyboard.
 //
-// ─── BETTER THAN THE INSPIRATION (Appendix K's acceptance test) ──────────
+// ─── BETTER THAN THE INSPIRATION ───────────────────────────────────
 // Read against shadcn's TanStack Data Table, Ant's Table, MUI's Table,
 // Mantine's Table and Tremor's Table. What they get wrong, and what is fixed:
 //
@@ -110,7 +110,7 @@ import type { PretuiSize } from '../pretui-primitives';
 // ── shared vocabulary ────────────────────────────────────────────────────
 
 /** Every `@size` spelling an agent might type, narrowed to the house scale.
- * The house enum stays `xs|s|m|l|xl` (Appendix E.2); `sm`/`md`/`lg` are the
+ * The house enum stays `xs|s|m|l|xl`; `sm`/`md`/`lg` are the
  * shadcn/Tailwind spellings, `small`/`medium`/`large` MUI's and Ant's, and
  * `middle` is Ant's deprecated one. */
 export type ListingSizeArg =

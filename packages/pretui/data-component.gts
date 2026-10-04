@@ -521,7 +521,9 @@ export interface DataApi<T> {
   isSelected: (row: T, index: number) => boolean;
   /** toggle a row per the selection mode (no-op when mode is `'none'`) */
   toggleSelected: (row: T, index: number) => void;
-  /** select every rendered row (multi only) */
+  /** is every visible row selected? */
+  allSelected: boolean;
+  /** toggle every visible row, keeping keys outside the view (multi only) */
   selectAll: () => void;
   /** drop the whole selection */
   clearSelection: () => void;
@@ -708,14 +710,16 @@ export class DataSource<T> implements DataState {
    *   idle    no rows and no loader: nobody has asked for anything.
    */
   get status(): DataStatus {
+    // eager @rows are the source of truth the moment they arrive, whatever an
+    // earlier @load left behind
+    if (this.a.rows !== undefined) {
+      return this.a.rows.length > 0 ? 'ready' : 'empty';
+    }
     if (this.failure) {
       return 'error';
     }
     if (this.inFlight) {
       return 'loading';
-    }
-    if (this.a.rows !== undefined) {
-      return this.a.rows.length > 0 ? 'ready' : 'empty';
     }
     if (this.a.load === undefined) {
       return 'idle';
@@ -731,7 +735,7 @@ export class DataSource<T> implements DataState {
   }
 
   get errorMessage(): string {
-    return this.failure ? this.failure.message : '';
+    return this.a.rows === undefined && this.failure ? this.failure.message : '';
   }
 
   /** The rows as given: `@rows` when eager, the loaded set otherwise. */
@@ -750,7 +754,7 @@ export class DataSource<T> implements DataState {
     let dir = sort.dir === 'desc' ? -1 : 1;
     // Annotated local: TS drops the `!sort` narrowing inside the closure.
     let active: SortState = sort;
-    return rows.slice().sort((a, b) => this.compare(a, b, active) * dir);
+    return rows.slice().sort((a, b) => this.compare(a, b, active, dir));
   }
 
   get count(): number {
@@ -811,8 +815,15 @@ export class DataSource<T> implements DataState {
     return this.rowsForKeys(this.selectedKeys);
   }
 
+  /** Every row the reader can see is selected; keys for rows outside the
+   *  current view do not count either way. */
   get allSelected(): boolean {
-    return this.count > 0 && this.selectedKeys.length === this.count;
+    let visible = this.visibleRows;
+    if (visible.length === 0) {
+      return false;
+    }
+    let selected = new Set(this.selectedKeys);
+    return visible.every((row, index) => selected.has(this.keyFor(row, index)));
   }
 
   isSelected = (row: T, index: number): boolean =>
@@ -840,9 +851,11 @@ export class DataSource<T> implements DataState {
     if (this.selectionMode !== 'multi') {
       return;
     }
-    this.commitSelection(
-      this.allSelected ? [] : this.visibleRows.map((r, i) => this.keyFor(r, i)),
-    );
+    // toggles the rows in view; keys selected outside the view are kept
+    let visible = this.visibleRows.map((r, i) => this.keyFor(r, i));
+    let shown = new Set(visible);
+    let kept = this.selectedKeys.filter((key) => !shown.has(key));
+    this.commitSelection(this.allSelected ? kept : [...kept, ...visible]);
   };
 
   clearSelection = (): void => {
@@ -914,10 +927,19 @@ export class DataSource<T> implements DataState {
     return current.dir === 'asc' ? 'ascending' : 'descending';
   };
 
-  private compare(a: T, b: T, sort: SortState): number {
-    return this.a.comparator
-      ? this.a.comparator(a, b, sort)
-      : compareValues(readField(a, sort.key), readField(b, sort.key));
+  private compare(a: T, b: T, sort: SortState, dir: number): number {
+    if (this.a.comparator) {
+      return this.a.comparator(a, b, sort) * dir;
+    }
+    let x = readField(a, sort.key);
+    let y = readField(b, sort.key);
+    let xMissing = x === undefined || x === null;
+    let yMissing = y === undefined || y === null;
+    // missing values sort last in either direction, so they skip `dir`
+    if (xMissing || yMissing) {
+      return compareValues(x, y);
+    }
+    return compareValues(x, y) * dir;
   }
 
   // ── the yielded hash ───────────────────────────────────────────────────
@@ -931,6 +953,7 @@ export class DataSource<T> implements DataState {
       selectionMode: this.selectionMode,
       selectedKeys: this.selectedKeys,
       selectedRows: this.selectedRows,
+      allSelected: this.allSelected,
       isSelected: this.isSelected,
       toggleSelected: this.toggleSelected,
       selectAll: this.selectAll,

@@ -11,7 +11,6 @@ optimisation — is inlined; no bare specifier survives.
 | | |
 |---|---|
 | **Source** | **npm registry** — `npm install qrcode@1.5.4` |
-| **Why not a local checkout** | there is **no** `node-qrcode` checkout under `~/Projects` (checked). Local checkouts are preferred where they exist, because they are often ahead of the published release; here npm is the only source. |
 | **Version** | `qrcode@1.5.4`, published release — so the version string alone identifies these bytes, and no commit SHA is needed |
 | **Bundled dep** | `dijkstrajs@1.0.3` |
 | **SPDX** | **MIT** (qrcode, Copyright (c) 2012 Ryan Day) and **MIT** (dijkstrajs, Copyright (C) 2008 Wyatt Baldwin) — both verified from the packages' own licence files |
@@ -21,10 +20,9 @@ Both licences are concatenated verbatim into `LICENSE`.
 clause is satisfied by that file plus the one-line banner at the top of
 `index.js`.
 
-If a `node-qrcode` checkout is ever added under `~/Projects`, rebuild from it
-and replace this table with source / commit SHA / `git describe` / tree state —
-and note that an untagged commit is identified only by its SHA, not by any
-published version.
+A rebuild from a git checkout replaces this table with source / commit SHA /
+`git describe` / tree state; an untagged commit is identified only by its SHA,
+not by any published version.
 
 **This replaces a runtime CDN import.** The two prior in-tree implementations
 (`boxel-catalog/fields/qr-code/qr-code.gts` and the `catalog-source` copy) did

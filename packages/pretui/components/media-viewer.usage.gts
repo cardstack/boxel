@@ -28,7 +28,7 @@ class MediaViewerUsage extends Component {
   <template>
     <FreestyleUsage
       @name='MediaViewer'
-      @description="The adapter shell (Appendix M.6): one signature, N adapters, selected by asset kind. Pick a different asset and a different viewer runs — image, audio, video — without the caller knowing what it is holding. Then pick the .glb and read the fallback: it names the kind, names the component that would open it, and offers the file. That is the point of the shell. Kind detection is data in one place (explicit kind, then MIME type — including the one inside a data: URL — then an extension table), and the registry is open and last-write-wins, so a consumer overrides a built-in by registering after this module loads. Adding PDF, SVG, font or CAD later is a registration, not a rewrite."
+      @description="The adapter shell: one signature, N adapters, selected by asset kind. Pick a different asset and a different viewer runs — image, audio, video — without the caller knowing what it is holding. Then pick the .glb and read the fallback: it names the kind, names the component that would open it, and offers the file. That is the point of the shell. Kind detection is data in one place (explicit kind, then MIME type — including the one inside a data: URL — then an extension table), and the registry is open and last-write-wins, so a consumer overrides a built-in by registering after this module loads. Adding PDF, SVG, font or CAD later is a registration, not a rewrite."
       @source={{this.usage}}
     >
       <:example>

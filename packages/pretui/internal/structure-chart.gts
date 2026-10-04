@@ -15,7 +15,7 @@
 // site and loses the axis, legend, table and empty-state config they had
 // tuned. Here the mark is one searchable enum — from line and bar through
 // band, timeline, waterfall and dumbbell — and everything else is shared. That is
-// the "consolidation" win named in Appendix K: one component with a `@mark`
+// the consolidation win: one component with a `@mark`
 // knob where the upstream ships many.
 //
 // ── The two Plot traps, both handled here ────────────────────────────────

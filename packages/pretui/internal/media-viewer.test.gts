@@ -18,5 +18,8 @@ module('Pretui | internal/media-viewer', function () {
     assert.strictEqual(safeHref('JavaScript:alert(1)'), undefined, 'case does not help');
     assert.strictEqual(safeHref('data:text/html,<b>x</b>'), undefined);
     assert.strictEqual(safeHref(undefined), undefined);
+    assert.strictEqual(safeHref('data:image/png;base64,AAAA'), undefined, 'a data image is not a link by default');
+    assert.strictEqual(safeHref('data:image/png;base64,AAAA', { images: true }), 'data:image/png;base64,AAAA', 'but a gallery may link one');
+    assert.strictEqual(safeHref('javascript:alert(1)', { images: true }), undefined, 'and still never a script');
   });
 });

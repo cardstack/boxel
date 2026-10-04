@@ -46,8 +46,8 @@ export interface DescriptionsItem {
   span?: number | 'fill';
   /** stable `{{#each}}` key; falls back to the label */
   key?: string;
-  /** machine value — mono + tabular numerals (Appendix J: mono is for
-   * machine values only) */
+  /** machine value — mono + tabular numerals (mono is for machine
+   * values only) */
   mono?: boolean;
 }
 

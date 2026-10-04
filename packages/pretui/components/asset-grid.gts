@@ -7,8 +7,7 @@
 // `DataComponent<T>` foundation, through the delegation route that
 // foundation documents — a `DataSource<T>` held as a field, with `DataShell`
 // pointed at it. This file adds a grid, a tile and a keyboard map, and
-// nothing else. Appendix M.5 is explicit that it "should not reimplement
-// any of that".
+// nothing else; it does not reimplement any of that.
 //
 // BETTER THAN THE INSPIRATION — the three defects the catalog sweep found in
 // every thumbnail grid it looked at, and what happens here instead:
@@ -58,8 +57,8 @@ const KIND_GLYPH: Readonly<Record<AssetKind, string>> = {
 };
 
 /** Hands an element to the host and drops it on teardown. The kit has three
- * of these now; this one is local until the focus foundation named in
- * Appendix L is consolidated. */
+ * of these now; this one is local until the kit's focus helpers are
+ * consolidated. */
 const captureElement = modifier(
   (el: HTMLElement, [sink]: [(el: HTMLElement | null) => void]) => {
     sink(el);
@@ -74,8 +73,7 @@ const captureElement = modifier(
  * A grid with `auto-fill` does not know its own column count in JS, and
  * every keyboard implementation surveyed either hard-codes it or guesses
  * from a tile width — which is how up-arrow ends up on the wrong tile at
- * some breakpoints. `ResizeObserver` is measurement, not a timer (Appendix
- * L is explicit about the distinction), and it disconnects on teardown.
+ * some breakpoints. `ResizeObserver` is measurement, not a timer, and it disconnects on teardown.
  */
 const trackColumns = modifier(
   (el: HTMLElement, [sink]: [(columns: number) => void]) => {
@@ -223,7 +221,7 @@ export class AssetGrid extends Component<AssetGridSignature> {
   };
 
   private focusTile(index: number): void {
-    const nodes = this.grid?.querySelectorAll('[data-test-pretui-asset]');
+    const nodes = this.grid?.querySelectorAll('.pretui-assets-hit');
     const node = nodes ? (nodes[index] as HTMLElement | undefined) : undefined;
     node?.focus();
   }

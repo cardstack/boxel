@@ -153,6 +153,26 @@ const DEFAULT_TRACK = 'minmax(7rem, 1fr)';
 /** commit sentinel — "this value never reaches the row" */
 const REJECT = Symbol('pretui-sheet-reject');
 
+
+// a const, not an inline `!/…/` literal: content-tag misreads the negated form
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A real calendar date in `yyyy-mm-dd`: `2026-02-30` is refused, where
+ *  `new Date` would quietly roll it into March. */
+function isCalendarDate(text: string): boolean {
+  let m = ISO_DATE.exec(text);
+  if (!m) {
+    return false;
+  }
+  let [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  let date = new Date(Date.UTC(y, mo - 1, d));
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === mo - 1 &&
+    date.getUTCDate() === d
+  );
+}
+
 function coerce(column: SheetColumn, next: unknown): unknown | typeof REJECT {
   switch (column.type) {
     case 'number': {
@@ -170,10 +190,7 @@ function coerce(column: SheetColumn, next: unknown): unknown | typeof REJECT {
       if (text === '') {
         return '';
       }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-        return REJECT;
-      }
-      return Number.isNaN(new Date(text).getTime()) ? REJECT : text;
+      return isCalendarDate(text) ? text : REJECT;
     }
     default:
       return String(next ?? '');

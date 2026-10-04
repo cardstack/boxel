@@ -8,22 +8,21 @@ camera, environment lighting, animation and AR, as one custom element.
 requires a statement of changes as well as an attribution notice, and this
 bundle *is* a modified distribution.
 
-## Provenance (M.10)
+## Provenance
 
 | | |
 |---|---|
-| **Source** | **Local checkout** at `~/Projects/model-viewer` — the M.10 preference honoured. It was NOT the empty clone the brief warned about; it is a complete working tree. |
-| **Commit SHA** | **`297ed2bd`** — `git describe --tags` reports `v4.3.1-12-g297ed2bd`, i.e. **12 commits after the v4.3.1 tag**, of which **10 touch `packages/model-viewer/src`**. Not a published release. |
+| **Source** | A git checkout of [google/model-viewer](https://github.com/google/model-viewer). |
+| **Commit SHA** | **`297ed2bd`** — `git describe --tags` reports `v4.3.1-12-g297ed2bd`, i.e. **12 commits after the v4.3.1 tag**, the count `NOTICE` and the `index.js` banner give. **10 of them change `packages/model-viewer/src`**; the other two are the version bump of the sibling packages (#5173) and a docs-deployment workflow fix (#5183), which ship nothing. Not a published release. |
 | **Version** | `@google/model-viewer` **4.3.1** as declared, plus those 10 source commits. Bundled deps: **three 0.183.2** (MIT), **lit 3.3.3** (BSD-3-Clause), **@monogrid/gainmap-js 3.4.0** (MIT). |
 | **Licence** | **`Apache-2.0`**, read from the checkout's own `LICENSE`, copied here verbatim. Each bundled dependency's licence is copied alongside as `LICENSE-three`, `LICENSE-lit`, `LICENSE-gainmap-js`. |
 
-**Why the checkout mattered here, concretely.** The ten source commits ahead of
+**Why the commit matters, concretely.** The ten source commits ahead of
 the tag are not noise — they include *"fix: emit finished event for one time
 animation"*, *"fix: apply orientation to extra-model elements"*, *"fix: don't
 warn with 'Invalid repetitionCount value: 1'"*, *"Remove leftover debug
 console.log statements"* and *"fix: enable Quick Look AR in third-party iOS
-browsers"*. Bundling npm 4.3.1 would have shipped every one of those bugs, in
-exactly the way M.10 was written to prevent.
+browsers"*. Bundling npm 4.3.1 would ship every one of those bugs, which is why this is built from a commit rather than the release.
 
 - 1.01 MB minified, **292 KB gzipped** — by far the heaviest bundle in the
   realm, and unavoidable: it is a WebGL renderer. `media-model.gts` is the
@@ -58,7 +57,7 @@ token` the moment anything evaluates it. The tsconfig used is minimal:
 
 Evaluating the plain bundle under Node throws — first `HTMLElement is not
 defined`, then `document`, then `createTreeWalker`. model-viewer ships **no**
-server-safe globals shim of its own (this is the M.9 test, and it is the point
+server-safe globals shim of its own (the import-under-Node test, and the point
 on which Media Chrome and model-viewer differ most).
 
 So the banner installs a small fake DOM and **the footer removes it again**:
@@ -96,7 +95,7 @@ Also re-exported by the upstream entry, incidentally rather than usefully:
 
 - **No stylesheet.** All of model-viewer's CSS lives in its shadow root.
   Theming is attributes and custom properties (`--poster-color`,
-  `--progress-bar-color`, `--progress-mask`). The M.3 CSS budget does not apply.
+  `--progress-bar-color`, `--progress-mask`). There is no stylesheet to install.
 - **It runs a render loop, and it stops it.** `disconnectedCallback` cancels
   the `requestAnimationFrame` loop and disconnects its observers, so Glimmer
   tearing the element down is enough — the same argument the Media Chrome

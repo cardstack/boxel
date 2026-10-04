@@ -756,6 +756,22 @@ module('Pretui | reading-listing', function (hooks) {
     assert.deepEqual(knobs.activations, ['B-1']);
   });
 
+  test('a click on a List row activates it, but a click on its radio only selects', async function (assert) {
+    let knobs = new Knobs();
+    knobs.selectionMode = 'single';
+    await render(
+      <template>
+        <List @items={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode={{knobs.selectionMode}} @onActivate={{knobs.onActivate}}>
+          <:item as |row|><span class='t-tea'>{{row.tea}}</span></:item>
+        </List>
+      </template>,
+    );
+    await click(listRoot().querySelectorAll('.t-tea')[1] as HTMLElement);
+    assert.deepEqual(knobs.activations, ['B-2'], 'the row text activates');
+    await click(listRoot().querySelectorAll('[data-test-pretui-list-select]')[0] as HTMLElement);
+    assert.deepEqual(knobs.activations, ['B-2'], 'the radio does not');
+  });
+
   test('List yields the row API and shows an empty state', async function (assert) {
     const none: Lot[] = [];
     await render(
@@ -876,6 +892,37 @@ module('Pretui | reading-listing | controlled selection', function (hooks) {
     await click(box);
     assert.strictEqual(asked.length, 1, 'the owner is asked');
     assert.false(box.checked, 'and the box did not drift');
+  });
+
+  test('a rejected radio change keeps the owner\'s radio checked', async function (assert) {
+    const HELD: RowKey[] = ['B-2'];
+    let ignore = () => {};
+    await render(
+      <template>
+        <DataTable @columns={{COLUMNS}} @rows={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode='single' @selected={{HELD}} @onSelectionChange={{ignore}} />
+      </template>,
+    );
+    let radios = () => Array.from(document.querySelectorAll('input.pretui-dt-radio')) as HTMLInputElement[];
+    let held = radios().findIndex((r) => r.checked);
+    let other = held === 0 ? 1 : 0;
+    await click(radios()[other] as HTMLElement);
+    assert.true(radios()[held]?.checked, 'the held row is still checked');
+    assert.false(radios()[other]?.checked, 'the clicked one is not');
+  });
+
+  test('a rejected select-all keeps the box indeterminate', async function (assert) {
+    const SOME: RowKey[] = ['B-2'];
+    let ignore = () => {};
+    await render(
+      <template>
+        <DataTable @columns={{COLUMNS}} @rows={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode='multi' @selected={{SOME}} @onSelectionChange={{ignore}} />
+      </template>,
+    );
+    let all = document.querySelector('thead input[type="checkbox"]') as HTMLInputElement;
+    assert.true(all.indeterminate, 'some selected at rest');
+    await click(all);
+    assert.false(all.checked, 'not all selected');
+    assert.true(all.indeterminate, 'and still reads as some');
   });
 });
 

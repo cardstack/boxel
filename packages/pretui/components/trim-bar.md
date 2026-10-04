@@ -17,7 +17,7 @@ Use it wherever a range of audio is being chosen — a clip, an excerpt, a loop.
 @onCommit?        — fires once when a pointer drag ends
 ```
 
-**`@onChange` and `@onCommit` are different events for different consumers.** Change fires continuously — use it to drive a live preview. Commit fires once at the end of a pointer drag — use it to persist. A keyboard interaction has no drag to end, so it fires change only.
+**`@onChange` and `@onCommit` are different events for different consumers.** Change fires continuously — use it to drive a live preview. Commit fires once at the end of a pointer drag — use it to persist. A key press (an arrow, Home or End) is a complete adjustment on its own, so it fires both, as a native range input does; debounce `@onCommit` if a held key should not write on every repeat.
 
 **The handles cannot cross**, and `@minGap` is the floor between them rather than merely a zero check. A trimmer whose handles can swap produces a negative range that every downstream consumer has to defend against.
 

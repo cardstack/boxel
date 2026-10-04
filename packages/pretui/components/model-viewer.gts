@@ -13,7 +13,7 @@
 //      element at its poster; `dismissPoster()` runs on the caller's click or
 //      Enter/Space. A 3D model is megabytes and a render loop — starting both
 //      because a component happened to scroll into view is the spatial version
-//      of autoplay, and Appendix M.8 forbids autoplay. It also makes the
+//      of autoplay, and the kit never autoplays. It also makes the
 //      poster the reserved space instead of a flash of empty canvas.
 //   2. **The orbit camera is keyboard-complete, and that is Pretui's work.**
 //      model-viewer's own keyboard support is arrow keys on a focused
@@ -46,6 +46,7 @@ import { Token } from './token';
 // server-safe globals shim and REMOVES it again in the same module body —
 // see ./model-viewer/README.md for why removal is the load-bearing half.
 import '../model-viewer/index.js';
+import { safeHref } from '../internal/media-viewer';
 
 // ── The lifecycle contract ───────────────────────────────────────────────
 
@@ -240,6 +241,9 @@ export class ModelViewer extends Component<ModelViewerSignature> implements Mode
   get isLoading(): boolean {
     return this.phase === 'loading';
   }
+  get openHref(): string | undefined {
+    return safeHref(this.args.src);
+  }
   get isFailed(): boolean {
     return this.phase === 'error';
   }
@@ -419,12 +423,14 @@ export class ModelViewer extends Component<ModelViewerSignature> implements Mode
           <p class='pretui-model-veil pretui-model-veil--bad'>
             <span aria-hidden='true'>⚠</span>
             {{if this.message this.message 'This model could not be loaded.'}}
-            <a
-              class='pretui-model-link'
-              href={{@src}}
-              target='_blank'
-              rel='noopener noreferrer'
-            >Open the file</a>
+            {{#if this.openHref}}
+              <a
+                class='pretui-model-link'
+                href={{this.openHref}}
+                target='_blank'
+                rel='noopener noreferrer'
+              >Open the file</a>
+            {{/if}}
           </p>
         {{/if}}
       </div>

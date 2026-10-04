@@ -32,14 +32,13 @@ No APG pattern applies, and — as with **Toolbar** — it is worth being explic
 
 What matters here is its relationship to the grid, and that is where the notable behaviour lives:
 
-- **The header chrome is deliberately excluded from Sheet's Tab interception.** Sheet's capture-phase handler always lets Tab through inside the header chrome, **so the sort buttons and this toolbar are reachable at all**. Without that carve-out the engine's unconditional Tab binding would swallow focus before it ever reached the strip. Worth knowing: this component is reachable because Sheet explicitly arranged for it.
+- **The strip sits outside the grid element**, so the engine's Tab binding, which listens on the grid root, never sees its keys: Tab moves through the filter and actions like any other content. Sheet's carve-out is for the sort buttons in the header row, which do sit inside the grid.
 - **The quick filter is a SearchInput**, and inherits its gaps: no Escape-to-clear, no `role="search"` landmark, and no accessible name unless one is passed.
 
 Gaps:
 
 - **Filter results are announced by Sheet's live status line, not by this component.** That is the right division — the count belongs to the grid — but it means a SheetToolbar used outside a Sheet announces nothing.
-- **`@title` is a plain span**, not a heading and not the grid's name. The Sheet names its grid from its own `@label`, so give the two the same words.
-- **The title is not wired to the grid.** A `<Sheet>` with a `SheetToolbar` titled "Line items" still has an unnamed `role="grid"`; `aria-labelledby` from the grid to this title would fix both problems at once and is the clearest improvement available here.
+- **`@title` is a plain span**, not a heading. The grid takes its name from Sheet's `@label`, not from this title, so give the two the same words.
 - **No search-results relationship.** The quick filter and the grid are connected only through the api; `aria-controls` from the input to the grid would state it.
 - Target sizes in a dense strip should be checked against WCAG **2.5.8**'s 24×24 minimum.
 

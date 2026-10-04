@@ -90,7 +90,8 @@ export type PretuiSizeArg =
   | 'default'
   | 'small'
   | 'medium'
-  | 'large';
+  | 'large'
+  | 'middle';
 
 export function resolveSize(
   size: string | undefined,

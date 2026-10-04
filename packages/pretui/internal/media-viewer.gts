@@ -157,11 +157,20 @@ export function basenameOf(src: string): string {
   }
 }
 
+const DATA_IMAGE = /^data:image\//i;
+
 /** `src` as a link target, or undefined when its scheme could run code
- * (`javascript:`, `data:text/html`, …). Only http(s) and blob URLs link. */
-export function safeHref(src: string | undefined): string | undefined {
+ * (`javascript:`, `data:text/html`, …). http(s) and blob URLs link; with
+ * `images`, so do `data:image/` URLs, which a gallery may legitimately hold. */
+export function safeHref(
+  src: string | undefined,
+  { images = false }: { images?: boolean } = {},
+): string | undefined {
   if (!src) {
     return undefined;
+  }
+  if (images && DATA_IMAGE.test(src.trim())) {
+    return src;
   }
   try {
     let base = globalThis.location?.href ?? 'http://localhost/';

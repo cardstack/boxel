@@ -23,6 +23,9 @@ host-provided modules (`@ember/*`, `@glimmer/*`, `@cardstack/boxel-ui`,
   verbatim from each npm package: `canvas/LICENSE.xyflow` and
   `canvas/LICENSE.d3`.
 - `layout/` inlines no third-party package.
+- `grid/` inlines `@tanstack/table-core@9.0.0-alpha.36` and
+  `@tanstack/store@0.11.0` (both MIT). Their notices ship beside the bundle
+  as `grid/LICENSE.tanstack`, verbatim from each npm package.
 
 ## Notes
 

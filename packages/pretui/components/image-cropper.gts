@@ -302,8 +302,13 @@ export class ImageCropper extends Component<ImageCropperSignature> implements Cr
     const height = Math.max(1, Math.min(merged.height, this.boundsHeight));
     const x = Math.max(0, Math.min(merged.x, this.boundsWidth - width));
     const y = Math.max(0, Math.min(merged.y, this.boundsHeight - height));
-    this.selection?.$change(x, y, width, height);
-    this.readBox({ x, y, width, height });
+    if (this.selection) {
+      // $change emits the selection's `change` event synchronously, and that
+      // handler already reads the box, so reading it here would report twice
+      this.selection.$change(x, y, width, height);
+    } else {
+      this.readBox({ x, y, width, height });
+    }
   };
 
   setField = (which: 'x' | 'y' | 'width' | 'height', event: Event): void => {

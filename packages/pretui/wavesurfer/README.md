@@ -4,11 +4,11 @@
 **7.12.11** plus its **regions** plugin, bundled to a single self-contained ES
 module.
 
-## Provenance (M.10)
+## Provenance
 
 | | |
 |---|---|
-| **Source** | **npm**, `wavesurfer.js@7.12.11`. **No local checkout existed** — `~/Projects` was searched for `*wave*` and holds nothing for this package, so the M.10 preference for a checkout could not be honoured. |
+| **Source** | **npm**, `wavesurfer.js@7.12.11`. |
 | **Commit SHA** | n/a — built from the published tarball, not a git tree. |
 | **Version** | 7.12.11 (and the regions plugin shipped inside that same package). |
 | **Licence** | **`BSD-3-Clause`**, read from the package's own `LICENSE` file, copied here verbatim as `LICENSE`. Copyright (c) 2012-2023, katspaugh and contributors. |
@@ -48,7 +48,7 @@ export { default as RegionsPlugin } from 'wavesurfer.js/dist/plugins/regions.esm
 ## Five things to know before using it
 
 - **Import is DOM-free; `create()` is not.** Evaluating this exact file under
-  plain Node succeeds and touches no DOM API (the M.9 decisive test — run it
+  plain Node succeeds and touches no DOM API (the decisive test — run it
   before trusting any future bundle). `WaveSurfer.create()` needs `document`,
   an `AudioContext` and a real container, so it must be built inside an
   `ember-modifier` and nowhere else.

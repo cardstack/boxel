@@ -21,8 +21,7 @@ import { resolveSize } from '../pretui-primitives';
 //     all, which has the opposite failure: a list of section headings that
 //     announces as body text.
 //   • Both leave the flex-overflow bug open: a long title in a flex row
-//     pushes the trailing meta off the end. Appendix O rule 8 (as corrected
-//     by C2) is applied in full here — `min-width: 0` AND the three
+//     pushes the trailing meta off the end. The fix is applied in full here — `min-width: 0` AND the three
 //     truncation declarations, never one without the others.
 //   • Ant's `actions` are an `<ul>` of `<li>`s with `<em>` separators, which
 //     is list markup used for spacing. Here the actions slot is a plain flex
@@ -147,7 +146,7 @@ export class Item extends Component<ItemSignature> {
         }
         /* min-width:0 is half the fix; without the three truncation
            declarations on the text it hard-clips instead of ellipsising
-           (Appendix O, correction C2). */
+           */
         .pretui-item-body {
           flex: 1 1 auto;
           min-width: 0;

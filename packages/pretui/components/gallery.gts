@@ -618,7 +618,7 @@ export class Gallery extends Component<GallerySignature> {
         .pretui-gallery-count {
           font-size: var(--text-ui-sm, 11.5px);
           /* Tabular so "9 of 12" does not shift the arrows when it becomes
-             "10 of 12" — Appendix O.6. */
+             "10 of 12". */
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }

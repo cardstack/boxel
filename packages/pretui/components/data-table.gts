@@ -60,7 +60,7 @@ export interface DataColumn<T> {
   /** `'start'` (default), `'end'` for numbers, `'center'` for glyphs */
   align?: ColumnAlign;
   /** machine value — mono, tabular numerals, `'end'` alignment implied for
-   * numbers (Appendix J: mono is machine values only) */
+   * numbers (mono is for machine values only) */
   mono?: boolean;
   /** any CSS length. REQUIRED on a pinned column and on every pinned column
    * before it — offsets are summed from declared widths, never measured. */
@@ -229,7 +229,7 @@ export interface DataTableSignature<T> {
      *
      * The first param is the PRINTED value: a string, already through the
      * `@placeholder` rule. It is not the raw field, and that is deliberate.
-     * A generic row's field is `unknown`, and Appendix L is explicit that a
+     * A generic row's field is `unknown`, and a
      * caller should never have to narrow `unknown` inside a template — if
      * they must, the component's types are wrong. The row itself is the
      * second param, fully typed, so `{{row.kg}}` is always available.
@@ -838,12 +838,25 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
   // A controlled @selected may not take the change; the browser has already
   // flipped the box, so set it back from the selection state.
   toggleRow = (row: T, index: number, event: Event) => {
+    let box = event.target as HTMLInputElement;
     this.table.toggleSelected(row, index);
-    (event.target as HTMLInputElement).checked = this.table.isSelected(row, index);
+    if (box.type === 'radio') {
+      // the browser unchecked the group's previous radio too; put every radio
+      // back to what its row says, which is the owner's selection
+      let table = box.closest('table');
+      table?.querySelectorAll<HTMLInputElement>('input.pretui-dt-radio').forEach((radio) => {
+        radio.checked = radio.closest('tr')?.getAttribute('aria-selected') === 'true';
+      });
+      box.checked = this.table.isSelected(row, index);
+    } else {
+      box.checked = this.table.isSelected(row, index);
+    }
   };
   toggleAll = (event: Event) => {
+    let box = event.target as HTMLInputElement;
     this.table.selectAll();
-    (event.target as HTMLInputElement).checked = this.allSelected;
+    box.checked = this.allSelected;
+    box.indeterminate = this.someSelected;
   };
   clearSelection = () => {
     this.table.clearSelection();

@@ -10,7 +10,7 @@
 // over machinery that already exists in this kit. Neither ships a drop
 // engine, a file input, a media adapter or a zoom viewer, because
 // `controls-files.gts`, `media-viewer.gts` and `media-lightbox.gts` already
-// own those. Appendix M.6's adapter contract is the reason a gallery of
+// own those. MediaViewer's adapter contract is the reason a gallery of
 // mixed kinds works here at all: the hero renders `<MediaViewer>` and never
 // asks what it is looking at.
 //
@@ -27,7 +27,7 @@
 //
 // Nothing here virtualizes. A rail is a known, bounded set — that is its
 // definition. A corpus large enough to need windowing wants `AssetGrid` plus
-// TanStack Virtual's core (Appendix M.1), not a rail.
+// TanStack Virtual's core, not a rail.
 //
 // ── Better than the inspiration ─────────────────────────────────────────
 //
@@ -152,7 +152,7 @@ export interface AssetWellSignature {
     hint?: string;
     /** Aspect ratio reserved for the preview — `'16 / 9'`, `'1 / 1'`.
      * Defaults to the asset's own, then to 4 / 3. Reserving it before the
-     * bytes arrive is why the card never reflows (Appendix M.8). */
+     * bytes arrive is why the card never reflows. */
     ratio?: string;
     /** icon-registry name for the empty state's glyph. @default 'ImagePlaceholder' */
     icon?: string;
@@ -474,8 +474,7 @@ export class AssetWell extends Component<AssetWellSignature> {
         {{else if this.isError}}
           <div class='pretui-well-fail'>
             {{!-- The failure channel is a glyph AND a word AND a role,
-                never a colour — Appendix L, and the one thing the source had
-                no answer for at all. --}}
+                never a colour. --}}
             <p class='pretui-well-failLine'>
               <span class='pretui-well-failMark' aria-hidden='true'>!</span>
               <span class='pretui-well-failText'>{{this.errorText}}</span>
@@ -658,7 +657,7 @@ export class AssetWell extends Component<AssetWellSignature> {
           gap: var(--space-1, 4px);
           /* Never hover-only: the tools are always present, and they simply
              gain contrast when the well is engaged. A control that is
-             focusable and invisible is worse than no control (Appendix M.8). */
+             focusable and invisible is worse than no control. */
           opacity: 0.72;
           transition: opacity var(--pretui-well-transition, 140ms) ease;
         }
