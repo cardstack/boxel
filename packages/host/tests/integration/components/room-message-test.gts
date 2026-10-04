@@ -359,6 +359,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
           name: 'readUrl',
           arguments: {
             url: 'https://docs.example.com/guide?section=setup',
+            reason: 'To check the setup steps for the library you asked about.',
             description:
               'Read web page: https://docs.example.com/guide?section=setup',
           },
@@ -402,7 +403,12 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert
       .dom(`${tool} [data-test-apply-state="ready"]`)
       .hasText('Approve', 'approval is never automatic');
-    assert.dom(`${tool} [data-test-tool-call-approval]`).exists();
+    assert
+      .dom(`${tool} [data-test-tool-call-approval]`)
+      .containsText(
+        'The assistant wants to read this page: To check the setup steps for the library you asked about.',
+        "the assistant's reason is shown",
+      );
     assert
       .dom(`${tool} [data-test-tool-call-secondary-action="Decline"]`)
       .hasText('Decline', 'Decline sits beside Approve in the header');
@@ -425,6 +431,16 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     let [approval] = sentToolResults(testScenario.roomId!);
     assert.strictEqual(approval.content['m.relates_to'].key, 'approved');
+    assert
+      .dom(
+        '[data-test-tool-call-id="read-url-1"] [data-test-apply-state="ready"]',
+      )
+      .doesNotExist('an answered call offers no second approval');
+    assert.strictEqual(
+      sentToolResults(testScenario.roomId!).length,
+      1,
+      'one approval is sent',
+    );
     assert.strictEqual(approval.content.failureReason, undefined);
 
     let tool = (testScenario as any).message.tools[0] as MessageTool;

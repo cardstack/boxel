@@ -8,7 +8,7 @@ import { isTesting } from '@embroider/macros';
 
 import Ajv from 'ajv';
 
-import { task, timeout, all } from 'ember-concurrency';
+import { dropTask, task, timeout, all } from 'ember-concurrency';
 
 import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
@@ -1047,11 +1047,17 @@ export default class ToolService extends Service {
   // Declining sends an 'invalid' result saying so, which settles the call;
   // the model reads the reason on its next turn. A call already answered is
   // left alone.
-  answerApproval = task(
+  // The held calls this client has answered. A call stops awaiting approval
+  // the moment it is answered, before the answer's event comes back, so a
+  // second click can't send a second answer.
+  answeredApprovalIds = new TrackedSet<string>();
+
+  answerApproval = dropTask(
     async (command: MessageTool, answer: 'approve' | 'decline') => {
       if (!command.awaitsApproval || !command.toolRequest.id) {
         return;
       }
+      this.answeredApprovalIds.add(command.toolRequest.id);
       let invokedToolFromEventId =
         this.getCurrentEventIdForCommandRequest(
           command.message.roomId,

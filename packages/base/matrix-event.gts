@@ -232,6 +232,10 @@ export interface BoxelContext {
     activeSpecId?: string;
   };
   debug?: boolean;
+  // Set by the chat composer on a message the user typed. Messages the app
+  // composes and posts as the user (an error report, a prompt a tool sends)
+  // never carry it, so readers can tell what the user actually wrote.
+  typedByUser?: boolean;
   requireToolCall?: boolean;
   functions?: Tool['function'][];
 }

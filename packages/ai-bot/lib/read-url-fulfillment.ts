@@ -32,6 +32,8 @@ export interface ReadUrlFulfillmentDeps {
   requestEventId: string;
   agentId: string | undefined;
   readOptions: ReadUrlOptions;
+  // Why a call's URL must not be read at all, if it must not.
+  refusal?: (url: string) => string | undefined;
   // Injectable for tests.
   read?: (url: string, options: ReadUrlOptions) => Promise<ReadUrlResult>;
   upload?: (
@@ -92,6 +94,10 @@ async function fulfillOne(
   let url = urlFromReadUrlArguments(call.function.arguments);
   if (!url) {
     return await publishFailure(call.id, 'readUrl needs a url.', deps);
+  }
+  let refusal = deps.refusal?.(url);
+  if (refusal) {
+    return await publishFailure(call.id, refusal, deps);
   }
   let read = deps.read ?? executeReadUrl;
   let upload =

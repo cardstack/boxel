@@ -43,13 +43,15 @@ import {
 } from './lib/read-realm-file.ts';
 import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
 import {
+  carriesEncodedData,
   collectPreapprovedUrls,
+  encodedDataRefusal,
   knownRealmOrigins,
   READ_URL_TOOL_NAME,
-  readUrlCallReleasedByApproval,
+  readUrlCallsReleasedByApprovals,
   urlFromReadUrlArguments,
 } from './lib/read-url.ts';
-import { downloadFile } from '@cardstack/runtime-common/ai';
+import { downloadFile, isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { fulfillReadUrlCalls } from './lib/read-url-fulfillment.ts';
 import { Responder } from './lib/responder.ts';
@@ -83,6 +85,11 @@ import {
 } from './lib/credit-tracking.ts';
 
 let log = logger('ai-bot');
+
+// Held readUrl calls this process has taken on reading after the user
+// approved them, so a call is read once however many events show its
+// approval before the read's result lands.
+const claimedReadUrlCallIds = new Set<string>();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -396,9 +403,15 @@ Common issues are:
         let pendingFulfillRequestEventId: string | undefined;
         let pendingFulfillAgentId: string | undefined;
         let pendingRealmOrigins: Set<string> = new Set();
+        let pendingReleasedReadUrls: ReturnType<
+          typeof readUrlCallsReleasedByApprovals
+        > = [];
+        let pendingReleasedAgentId: string | undefined;
         // Whether a readUrl of a URL waits for the user's approval; known
         // once the room's preapproved URLs are collected.
         let readUrlNeedsApproval: (url: string) => boolean = () => true;
+        let readUrlRefusal: (url: string) => string | undefined = () =>
+          undefined;
 
         try {
           log.info(
@@ -444,11 +457,10 @@ Common issues are:
           if (
             isToolResultEventType(event.getType()) &&
             triggerCommandRequestId &&
-            !eventList.some(
-              (e: any) =>
-                isToolResultEventType(e.type) &&
-                e.content?.commandRequestId === triggerCommandRequestId,
-            )
+            // Matched by event id, not by call: a call can already have
+            // another result in the fetch (the user's approval of a held
+            // readUrl) while this one is still missing.
+            !eventList.some((e: any) => e.event_id === event.getId())
           ) {
             eventList.push({
               type: event.getType(),
@@ -475,25 +487,31 @@ Common issues are:
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
 
-          // The user approved a readUrl call the bot held for approval: read
-          // it now. The approval is not the call's outcome, so it starts no
-          // turn of its own (getShouldRespond ignores it); the read's result,
-          // published after the room lock is released, starts the
-          // continuation as any bot tool result does.
-          let releasedReadUrl = urlReadingAllowed
-            ? readUrlCallReleasedByApproval(
-                eventList,
-                { sender: event.getSender(), content: event.getContent() },
-                aiBotUserId,
-              )
-            : undefined;
-          if (releasedReadUrl) {
-            pendingFulfillBotToolCalls = [
-              releasedReadUrl.call as (typeof pendingFulfillBotToolCalls)[number],
-            ];
-            pendingFulfillRequestEventId = releasedReadUrl.requestEventId;
-            pendingFulfillAgentId = agentId;
-            pendingRealmOrigins = knownRealmOrigins(eventList, aiBotUserId);
+          // Read every held readUrl call the user has approved and the bot
+          // hasn't read yet, whatever event this handler runs for: an
+          // approval whose own handler was stood down for a newer event is
+          // picked up here. Claimed in-process so an approval that lands while
+          // an earlier read of the same call is in flight doesn't read it
+          // again. The reads run after the room lock is released; each
+          // result starts the continuation as any bot tool result does.
+          if (urlReadingAllowed) {
+            pendingReleasedReadUrls = readUrlCallsReleasedByApprovals(
+              eventList,
+              aiBotUserId,
+            ).filter(
+              (released) => !claimedReadUrlCallIds.has(released.call.id),
+            );
+            for (let released of pendingReleasedReadUrls) {
+              claimedReadUrlCallIds.add(released.call.id);
+            }
+            if (pendingReleasedReadUrls.length > 0) {
+              pendingReleasedAgentId = agentId;
+              pendingRealmOrigins = knownRealmOrigins(eventList, aiBotUserId);
+            }
+          }
+          // An approval is not a turn of its own (getShouldRespond ignores
+          // it), so its handler stops here.
+          if (isApprovalResult({ content: event.getContent() })) {
             return;
           }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
@@ -564,7 +582,15 @@ Common issues are:
                 aiBotUserId,
                 (file) => downloadFile(client, file as SerializedFileDef),
               );
-              readUrlNeedsApproval = (url) => !preapproved.has(url);
+              // A URL the room gave is read; a composed one carrying
+              // encoded data is refused outright; any other composed URL
+              // waits for the user.
+              readUrlNeedsApproval = (url) =>
+                !preapproved.has(url) && !carriesEncodedData(url);
+              readUrlRefusal = (url) =>
+                !preapproved.has(url) && carriesEncodedData(url)
+                  ? encodedDataRefusal(url)
+                  : undefined;
               responder.setReadUrlApproval(readUrlNeedsApproval);
             }
             if (promptParts.pendingCodePatchCorrectnessChecks) {
@@ -905,6 +931,18 @@ Common issues are:
           // continuation turn; that re-trigger acquires the room lock this
           // handler just released. Fulfilling here (rather than inside the
           // lock) is what lets the continuation proceed.
+          for (let released of pendingReleasedReadUrls) {
+            await fulfillReadUrlCalls([released.call as any], {
+              client,
+              roomId: room.roomId,
+              requestEventId: released.requestEventId,
+              agentId: pendingReleasedAgentId,
+              readOptions: {
+                realmOrigins: pendingRealmOrigins,
+                realmFileReadingAllowed,
+              },
+            });
+          }
           if (
             pendingFulfillRequestEventId &&
             pendingFulfillBotToolCalls.length > 0
@@ -935,6 +973,7 @@ Common issues are:
                 roomId: room.roomId,
                 requestEventId: pendingFulfillRequestEventId,
                 agentId: pendingFulfillAgentId,
+                refusal: readUrlRefusal,
                 readOptions: {
                   realmOrigins: pendingRealmOrigins,
                   realmFileReadingAllowed,

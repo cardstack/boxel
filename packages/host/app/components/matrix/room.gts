@@ -1882,8 +1882,13 @@ export default class Room extends Component<Signature> {
           ...(this.operatorModeStateService.getOpenCardIds() || []),
           ...this.autoAttachedCardIds,
         ]) as Set<RealmResourceIdentifier>;
-        let context =
-          await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
+        let context = {
+          ...(await this.operatorModeStateService.getSummaryForAIBot(
+            openCardIds,
+          )),
+          // This is the chat composer: the user typed this message.
+          typedByUser: true,
+        };
         let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just

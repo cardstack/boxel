@@ -279,6 +279,12 @@ export default class RoomMessageTool extends Component<Signature> {
     );
   }
 
+  // Why the assistant wants a call it holds for approval, in its own words.
+  private get approvalReason() {
+    let reason = this.args.messageTool.toolRequest.arguments?.reason;
+    return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
+  }
+
   private get commandDescription() {
     return this.args.messageTool.description ?? 'Preparing tool call...';
   }
@@ -359,8 +365,14 @@ export default class RoomMessageTool extends Component<Signature> {
         </CodeBlock>
         {{#if @messageTool.awaitsApproval}}
           <p class='approval-note' data-test-tool-call-approval>
-            Nobody in this conversation linked to this page. Approve it only if
-            the URL contains nothing from your conversation.
+            {{#if this.approvalReason}}
+              The assistant wants to read this page:
+              {{this.approvalReason}}
+              Approve if that's OK with you.
+            {{else}}
+              The assistant wants to read a page nobody in this conversation
+              linked to. Approve if that's OK with you.
+            {{/if}}
           </p>
         {{/if}}
         {{#if this.failedToolState}}

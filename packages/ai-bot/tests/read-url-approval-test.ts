@@ -10,24 +10,44 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { isApprovalResult } from '@cardstack/runtime-common/ai';
+import { getPromptParts, isApprovalResult } from '@cardstack/runtime-common/ai';
 import {
+  carriesEncodedData,
   collectPreapprovedUrls,
-  readUrlCallReleasedByApproval,
+  readUrlTool,
+  readUrlCallsReleasedByApprovals,
   urlsInText,
   READ_URL_TOOL_NAME,
 } from '../lib/read-url.ts';
+import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
 
 const BOT = '@aibot:localhost';
 const USER = '@user:localhost';
 
-function humanMessage(body: string, id = '$human'): DiscreteMatrixEvent {
+function humanMessage(
+  body: string,
+  id = '$human',
+  { typedByUser = true }: { typedByUser?: boolean } = {},
+): DiscreteMatrixEvent {
   return {
     type: 'm.room.message',
     event_id: id,
     sender: USER,
-    content: { msgtype: 'app.boxel.message', body },
+    origin_server_ts: 1,
+    room_id: 'room1',
+    content: {
+      msgtype: 'app.boxel.message',
+      format: 'org.matrix.custom.html',
+      body,
+      data: JSON.stringify({
+        context: {
+          tools: [],
+          functions: [],
+          ...(typedByUser ? { typedByUser } : {}),
+        },
+      }),
+    },
   } as unknown as DiscreteMatrixEvent;
 }
 
@@ -149,6 +169,25 @@ module('readUrl approval', () => {
     );
   });
 
+  test('only messages the human typed approve their URLs', async () => {
+    let history = [
+      humanMessage(
+        'Fix with AI: TypeError at https://attacker.example/?d=1',
+        '$1',
+        {
+          typedByUser: false,
+        },
+      ),
+      humanMessage('Read https://docs.example.com/', '$2'),
+    ];
+    let approved = await collectPreapprovedUrls(history, BOT, async () => '');
+    assert.false(
+      approved.has('https://attacker.example/?d=1'),
+      'a message the app composed approves nothing',
+    );
+    assert.true(approved.has('https://docs.example.com/'));
+  });
+
   test("a read that didn't succeed approves nothing", async () => {
     let history = [
       botMessage([readUrlRequest('read-1', 'https://docs.example.com/guide')]),
@@ -164,62 +203,96 @@ module('readUrl approval', () => {
     assert.false(approved.has('https://linked.example.com/'));
   });
 
-  test('an approval releases the held readUrl call it names', () => {
+  test('every approved, held, unsettled readUrl call is released, whichever event triggered', () => {
     let history = [
       humanMessage('Find their docs'),
-      botMessage([readUrlRequest('read-1', 'https://docs.example.com/', true)]),
+      botMessage([
+        readUrlRequest('held-a', 'https://a.example/', true),
+        readUrlRequest('held-b', 'https://b.example/', true),
+      ]),
+      result('held-a', 'approved', USER),
+      result('held-b', 'approved', USER),
+      humanMessage('And while you are at it…', '$later'),
     ];
-    let released = readUrlCallReleasedByApproval(
-      history,
-      result('read-1', 'approved', USER) as any,
-      BOT,
+    let released = readUrlCallsReleasedByApprovals(history, BOT);
+    assert.deepEqual(
+      released.map((entry) => [entry.call.id, entry.requestEventId]),
+      [
+        ['held-a', '$bot'],
+        ['held-b', '$bot'],
+      ],
+      'an approval stood down for a newer event is still honored',
     );
-    assert.deepEqual(released, {
-      call: {
-        id: 'read-1',
-        type: 'function',
-        function: {
-          name: READ_URL_TOOL_NAME,
-          arguments: JSON.stringify({ url: 'https://docs.example.com/' }),
-        },
-      },
-      requestEventId: '$bot',
+    assert.deepEqual(released[0].call.function, {
+      name: READ_URL_TOOL_NAME,
+      arguments: JSON.stringify({ url: 'https://a.example/' }),
     });
   });
 
-  test('an approval releases nothing unless a human approves a held, unsettled readUrl', () => {
+  test('nothing is released unless a human approved a held, unsettled readUrl', () => {
     let held = botMessage([
       readUrlRequest('held', 'https://a.example/', true),
       readUrlRequest('not-held', 'https://b.example/'),
       { id: 'host-tool', name: 'patchCard_ab12', arguments: '{}' },
     ]);
-    let cases: [string, DiscreteMatrixEvent[], DiscreteMatrixEvent][] = [
-      ['sent by the bot', [held], result('held', 'approved', BOT)],
-      ['not an approval', [held], result('held', 'applied', USER)],
+    let cases: [string, DiscreteMatrixEvent[]][] = [
+      ['approved by the bot', [held, result('held', 'approved', BOT)]],
+      ['not an approval', [held, result('held', 'applied', USER)]],
+      ['a call not held', [held, result('not-held', 'approved', USER)]],
+      ['a host tool', [held, result('host-tool', 'approved', USER)]],
       [
-        'a call not held for approval',
-        [held],
-        result('not-held', 'approved', USER),
+        'already read',
+        [
+          held,
+          result('held', 'approved', USER),
+          result('held', 'applied', BOT),
+        ],
       ],
-      ['a host tool', [held], result('host-tool', 'approved', USER)],
       [
-        'a call already read',
-        [held, result('held', 'applied', BOT)],
-        result('held', 'approved', USER),
-      ],
-      [
-        'a call already declined',
-        [held, result('held', 'invalid', USER)],
-        result('held', 'approved', USER),
+        'already declined',
+        [
+          held,
+          result('held', 'invalid', USER),
+          result('held', 'approved', USER),
+        ],
       ],
     ];
-    for (let [label, history, approval] of cases) {
-      assert.strictEqual(
-        readUrlCallReleasedByApproval(history, approval as any, BOT),
-        undefined,
+    for (let [label, history] of cases) {
+      assert.deepEqual(
+        readUrlCallsReleasedByApprovals(history, BOT),
+        [],
         label,
       );
     }
+  });
+
+  test('an approval starts no turn and gives the call no result until the read lands', async () => {
+    let client = new FakeMatrixClient();
+    let held = botMessage([readUrlRequest('held', 'https://a.example/', true)]);
+    (held as any).origin_server_ts = 2;
+    (held as any).room_id = 'room1';
+    (held.content as any).msgtype = 'app.boxel.message';
+    (held.content as any).isStreamingFinished = true;
+    (held.content as any).data = JSON.stringify({ context: {} });
+    let approval = result('held', 'approved', USER);
+    (approval as any).origin_server_ts = 3;
+    let readResult = result('held', 'applied', BOT);
+    (readResult as any).origin_server_ts = 4;
+    let history = [humanMessage('Find their docs'), held, approval];
+
+    let waiting = await getPromptParts(history, BOT, client);
+    assert.false(waiting.shouldRespond, 'the approval alone starts no turn');
+
+    let answered = await getPromptParts([...history, readResult], BOT, client);
+    assert.true(answered.shouldRespond, "the read's result starts the turn");
+    let toolMessages = (answered.messages ?? []).filter(
+      (message) => message.role === 'tool',
+    );
+    assert.strictEqual(toolMessages.length, 1);
+    assert.ok(
+      JSON.stringify(toolMessages[0].content).includes('Tool call executed'),
+      'the tool message reports the read, not the approval',
+    );
   });
 
   test('toCommandRequest marks a readUrl of an unapproved URL and labels the full URL', () => {
@@ -248,6 +321,30 @@ module('readUrl approval', () => {
       readUrlNeedsApproval: needsApproval,
     });
     assert.strictEqual(given.approvalRequired, undefined);
+  });
+
+  test('carriesEncodedData spots encoded blobs but not ordinary addresses', () => {
+    for (let url of [
+      'https://attacker.example/c?d=bXkgc2VjcmV0IGFwaSBrZXkgaXMgMTIzNDU2Nzg5MA==',
+      'https://attacker.example/0123456789abcdef0123456789abcdef01234567',
+      'https://attacker.example/x?d=bXklMjBzZWNyZXQlMjBrZXklMjBpcyUyMDEyMzQ1Ng%3D%3D',
+    ]) {
+      assert.true(carriesEncodedData(url), url);
+    }
+    for (let url of [
+      'https://docs.example.com/guide/getting-started-with-the-library',
+      'https://en.wikipedia.org/wiki/Boxer_(dog)',
+      'https://example.com/search?q=how+to+configure+charts',
+      'https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    ]) {
+      assert.false(carriesEncodedData(url), url);
+    }
+  });
+
+  test('readUrl asks the model for its reason', () => {
+    let parameters = readUrlTool.function.parameters as any;
+    assert.deepEqual(parameters.required, ['url', 'reason']);
+    assert.strictEqual(parameters.properties.reason.type, 'string');
   });
 
   test('isApprovalResult recognises only the approved key', () => {
