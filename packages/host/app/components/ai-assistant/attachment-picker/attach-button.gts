@@ -166,9 +166,9 @@ export default class AttachButton extends Component<Signature> {
     let chosenFiles: FileDef[] | undefined = await chooseFile({
       multiSelect: true,
     });
-    for (let file of chosenFiles ?? []) {
-      await this.args.chooseFile(file);
-    }
+    // Hand every file over before awaiting any, so restarting this task (the
+    // chooser reopened) or one file failing to attach can't drop the rest.
+    await Promise.all((chosenFiles ?? []).map((f) => this.args.chooseFile(f)));
     return chosenFiles;
   });
 

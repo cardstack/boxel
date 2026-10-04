@@ -315,6 +315,91 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       .exists('second Space-selected file is attached');
   });
 
+  test('an upload in the multi-select file chooser keeps the files already selected', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await click('[data-test-file="pet.gts"]');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+    await waitUntil(() => fileUploadService.activeUploads.length > 0);
+    fileUploadService.activeUploads[0]!.__provideFileForTesting(
+      new File(['hello upload'], 'uploaded.txt', { type: 'text/plain' }),
+    );
+
+    await waitFor(`[data-test-attached-file="${testRealmURL}uploaded.txt"]`, {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-choose-file-modal]').doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .exists('the file selected before the upload is attached');
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}uploaded.txt"]`)
+      .exists('the uploaded file is attached');
+  });
+
+  test('files selected in another workspace while an upload runs resolve in that workspace', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+    await waitUntil(() => fileUploadService.activeUploads.length > 0);
+
+    await click('[data-test-choose-file-modal-realm-chooser]');
+    let otherRealm = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-test-realm-dropdown-menu] [data-test-boxel-menu-item-text]',
+      ),
+    ].find((item) => item.textContent?.trim() !== realmName);
+    if (!otherRealm) {
+      throw new Error('expected a second workspace in the realm dropdown');
+    }
+    await click(otherRealm);
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-file="pet.gts"]') &&
+        document.querySelector('[data-test-file]'),
+      { timeout: 10000 },
+    );
+    let otherFile = document.querySelector<HTMLElement>('[data-test-file]')!;
+    let otherPath = otherFile.dataset.path!;
+    await click(otherFile);
+
+    fileUploadService.activeUploads[0]!.__provideFileForTesting(
+      new File(['hello upload'], 'uploaded.txt', { type: 'text/plain' }),
+    );
+
+    await waitFor(`[data-test-attached-file="${testRealmURL}uploaded.txt"]`, {
+      timeout: 10000,
+    });
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}${otherPath}"]`)
+      .doesNotExist(
+        'the other workspace path is not looked up in the upload realm',
+      );
+    assert
+      .dom(`[data-test-attached-file$="/${otherPath}"]`)
+      .exists('the file selected in the other workspace is attached');
+  });
+
   test('attach menu shows card, workspace file, and local file options', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(

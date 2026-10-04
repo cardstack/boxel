@@ -48,6 +48,9 @@ export default class FileChooserModal extends Component<Signature> {
   @tracked deferred?: Deferred<FileDef[] | undefined>;
   @tracked multiSelect = false;
   @tracked selectedFiles: LocalPath[] = [];
+  // The realm `selectedFiles` are paths in, captured when a file is picked so
+  // they resolve against that realm even if the dropdown has moved on since.
+  private selectionRealm?: FileChooserRealm;
   @tracked fileTypeFilter?: CodeRef;
   @tracked fileFieldFilter?: Record<string, unknown>;
   @tracked fileTypeName?: string;
@@ -113,8 +116,9 @@ export default class FileChooserModal extends Component<Signature> {
     return multiSelect ? files : files[0];
   }
 
-  // `uploaded` holds files already loaded by an upload; they are returned
-  // after the picked paths, skipping any the paths already produced.
+  // `paths` are resolved against `selectedRealm`. `uploaded` holds files
+  // already loaded by an upload; they are returned after the picked paths,
+  // skipping any the paths already produced.
   private pickTask = task(
     async (
       selectedRealm: FileChooserRealm | undefined,
@@ -123,9 +127,13 @@ export default class FileChooserModal extends Component<Signature> {
     ) => {
       let deferred = this.deferred;
       try {
-        if (deferred && selectedRealm && (paths.length || uploaded.length)) {
-          let realmPaths = new RealmPaths(selectedRealm.id);
-          let fileIds = paths.map((path) => realmPaths.fileRRI(path));
+        let realmPaths = selectedRealm
+          ? new RealmPaths(selectedRealm.id)
+          : undefined;
+        let fileIds = realmPaths
+          ? paths.map((path) => realmPaths.fileRRI(path))
+          : [];
+        if (deferred && (fileIds.length || uploaded.length)) {
           let loaded = await Promise.all(
             fileIds.map((fileId) =>
               this.store.get(fileId, { type: 'file-meta' }),
@@ -163,7 +171,8 @@ export default class FileChooserModal extends Component<Signature> {
   );
 
   @action
-  private handleFileSelected(path: LocalPath) {
+  private handleFileSelected(path: LocalPath, realm: FileChooserRealm) {
+    this.selectionRealm = realm;
     if (!this.multiSelect) {
       this.selectedFiles = [path];
     } else if (this.selectedFiles.includes(path)) {
@@ -203,18 +212,20 @@ export default class FileChooserModal extends Component<Signature> {
     // Stage cleared on workspace switch — the previous pick lived in a
     // different realm.
     this.selectedFiles = [];
+    this.selectionRealm = undefined;
   }
 
   // An upload confirms the chooser. In multi-select the files already
-  // selected are kept alongside the uploaded one; the selection is always in
-  // the realm the upload went to, since switching realms clears it.
+  // selected are kept alongside the uploaded one. They resolve against the
+  // realm they were picked in, which need not be the realm the upload went
+  // to: the workspace can be switched while an upload is running.
   @action
-  private handleUploadComplete(fileDef: FileDef, realm: FileChooserRealm) {
+  private handleUploadComplete(fileDef: FileDef) {
     if (!this.deferred) {
       return;
     }
     if (this.multiSelect) {
-      this.pickTask.perform(realm, this.selectedFiles, [fileDef]);
+      this.pickTask.perform(this.selectionRealm, this.selectedFiles, [fileDef]);
       return;
     }
     this.deferred.fulfill([fileDef]);
@@ -224,6 +235,7 @@ export default class FileChooserModal extends Component<Signature> {
   private resetState() {
     this.multiSelect = false;
     this.selectedFiles = [];
+    this.selectionRealm = undefined;
     this.fileTypeFilter = undefined;
     this.fileFieldFilter = undefined;
     this.fileTypeName = undefined;

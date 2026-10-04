@@ -39,9 +39,9 @@ interface Signature {
     fileFieldFilter?: Record<string, unknown>;
     acceptTypes?: string;
     onRealmChange?: (realm: FileChooserRealm) => void;
-    onFileSelected?: (path: LocalPath) => void;
+    onFileSelected?: (path: LocalPath, realm: FileChooserRealm) => void;
     onFileConfirmed?: (path: LocalPath) => void;
-    onUploadComplete: (file: FileDef, realm: FileChooserRealm) => void;
+    onUploadComplete: (file: FileDef) => void;
   };
   Blocks: {
     default: [
@@ -145,7 +145,9 @@ export default class FileChooser extends Component<Signature> {
 
   @action
   private handleFileSelected(path: LocalPath) {
-    this.args.onFileSelected?.(path);
+    if (this.selectedRealm) {
+      this.args.onFileSelected?.(path, this.selectedRealm);
+    }
   }
 
   @action
@@ -162,7 +164,7 @@ export default class FileChooser extends Component<Signature> {
       realm: this.selectedRealm.id,
       acceptTypes: this.args.acceptTypes,
     });
-    this.beginUpload(this.selectedRealm, task);
+    this.beginUpload(task);
   }
 
   @action
@@ -226,15 +228,15 @@ export default class FileChooser extends Component<Signature> {
       realm: this.selectedRealm.id,
       file,
     });
-    this.beginUpload(this.selectedRealm, task);
+    this.beginUpload(task);
   }
 
-  private beginUpload(realm: FileChooserRealm, task: FileUploadTask) {
+  private beginUpload(task: FileUploadTask) {
     this.currentUpload = task;
     task.result.then((fileDef) => {
       if (fileDef) {
         this.currentUpload = undefined;
-        this.args.onUploadComplete(fileDef, realm);
+        this.args.onUploadComplete(fileDef);
       } else if (task.state !== 'error') {
         this.currentUpload = undefined;
       }
