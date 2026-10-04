@@ -220,7 +220,7 @@ export async function renderHTML(
     `renderHTML captured format=${format} ancestorLevel=${ancestorLevel} status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(opts.expectedId, result, 'render.html');
+    return renderCaptureToError(opts, result, 'render.html');
   }
   log.debug(
     `renderHTML success format=${format} ancestorLevel=${ancestorLevel} length=${result.value.length}`,
@@ -244,7 +244,7 @@ export async function renderIcon(
     `renderIcon captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(opts.expectedId, result, 'render.icon');
+    return renderCaptureToError(opts, result, 'render.icon');
   }
   log.debug(`renderIcon success length=${result.value.length}`);
   return cleanCapturedHTML(result.value);
@@ -264,7 +264,7 @@ export async function renderMeta(
     `renderMeta captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(opts.expectedId, result, 'render.meta');
+    return renderCaptureToError(opts, result, 'render.meta');
   }
   if (result.id && result.id !== opts.expectedId) {
     return buildInvalidRenderResponseError(
@@ -321,7 +321,7 @@ export async function renderTypes(
     `renderTypes captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(opts.expectedId, result, 'render.types');
+    return renderCaptureToError(opts, result, 'render.types');
   }
   if (result.id && result.id !== opts.expectedId) {
     return buildInvalidRenderResponseError(
@@ -592,11 +592,38 @@ async function waitForPrerenderSettle(page: Page): Promise<void> {
   );
 }
 
+function stripJsonExtension(id: string): string {
+  return id.replace(/\.json$/, '');
+}
+
 function renderCaptureToError(
-  renderId: string,
+  opts: Pick<CaptureOptions, 'expectedId' | 'expectedNonce'>,
   capture: RenderCapture,
   context: string,
 ): RenderError {
+  let renderId = opts.expectedId;
+  // An error the page wrote is only this render's error when the element it
+  // came from belongs to this render. When no element matches, the capture
+  // falls back to whatever result element the tab still holds, which can be a
+  // previous render's error naming that render. Compare the element's own
+  // id and nonce, not the payload's `error.id`, which legitimately names a
+  // failing dependency.
+  let staleBy =
+    capture.id &&
+    stripJsonExtension(capture.id) !== stripJsonExtension(renderId)
+      ? `prerender output for ${capture.id} (expected ${renderId})`
+      : capture.nonce &&
+          opts.expectedNonce &&
+          capture.nonce !== opts.expectedNonce
+        ? `prerender output for nonce ${capture.nonce} (expected ${opts.expectedNonce})`
+        : undefined;
+  if (staleBy) {
+    return buildInvalidRenderResponseError(
+      renderId,
+      `${context} captured a stale error from ${staleBy}`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
   try {
     let error = JSON.parse(capture.value) as RenderError;
     error.evict = capture.status === 'unusable';
@@ -929,18 +956,11 @@ export async function captureResult(
       if (!expectingRender) {
         targetId = null;
         targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      } else if (!targetNonce) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');
           if (renderIdx !== -1) {
-            if (!targetId && segments[renderIdx + 1]) {
-              let decoded = decodeURIComponent(segments[renderIdx + 1]);
-              if (decoded.endsWith('.json')) {
-                decoded = decoded.slice(0, -5);
-              }
-              targetId = decoded;
-            }
             if (!targetNonce && segments[renderIdx + 2]) {
               targetNonce = segments[renderIdx + 2];
             }
@@ -1026,18 +1046,11 @@ export async function captureResult(
       if (!expectingRender) {
         targetId = null;
         targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      } else if (!targetNonce) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');
           if (renderIdx !== -1) {
-            if (!targetId && segments[renderIdx + 1]) {
-              let decoded = decodeURIComponent(segments[renderIdx + 1]);
-              if (decoded.endsWith('.json')) {
-                decoded = decoded.slice(0, -5);
-              }
-              targetId = decoded;
-            }
             if (!targetNonce && segments[renderIdx + 2]) {
               targetNonce = segments[renderIdx + 2];
             }
@@ -2008,7 +2021,7 @@ export async function runCapture(
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
-        opts.expectedId,
+        opts,
         { status: terminal.status, value: terminal.raw },
         'render.capture',
       );
@@ -2287,7 +2300,7 @@ async function captureRenderBasedEntry(
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
-        opts.expectedId,
+        opts,
         { status: terminal.status, value: terminal.raw },
         'render.capture',
       );
@@ -2352,7 +2365,7 @@ export async function captureDeclared(
   await waitForPrerenderSettle(page);
   let result = await captureResult(page, 'textContent', opts);
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(opts.expectedId, result, 'render.captures');
+    return renderCaptureToError(opts, result, 'render.captures');
   }
   let roster: DeclaredCaptureRoster;
   try {

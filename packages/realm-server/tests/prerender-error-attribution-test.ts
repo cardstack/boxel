@@ -4,6 +4,7 @@ import { basename } from 'path';
 import {
   captureFileExtract,
   captureModule,
+  renderIcon,
   withTimeout,
   isRenderError,
 } from '../prerender/utils.ts';
@@ -115,5 +116,66 @@ module(basename(import.meta.filename), function () {
     });
     assert.true(isRenderError(result), 'the capture fails');
     assert.strictEqual((result as RenderError).error.id, requested);
+  });
+
+  // An error the page wrote names whatever render wrote it. When the tab
+  // still holds the previous render's error element, that error must be
+  // refused as stale rather than recorded against the requested render.
+  function tabHoldingErrorFrom(id: string, nonce: string): Page {
+    let pageError = {
+      type: 'instance-error',
+      error: {
+        id,
+        status: 500,
+        title: 'Previous render failed',
+        message: 'boom',
+        additionalErrors: null,
+      },
+    };
+    let capture = {
+      status: 'error',
+      value: JSON.stringify(pageError),
+      id,
+      nonce,
+    };
+    return tabStillShowing(
+      `https://app.test.example/render/${encodeURIComponent(id)}/${nonce}/%7B%7D/icon`,
+      {
+        waitForFunction: async () => undefined,
+        evaluate: async () => capture,
+      },
+    );
+  }
+
+  test("a captured error from the previous render's element names the requested render", async function (assert) {
+    let result = await renderIcon(tabHoldingErrorFrom(previousRender, '7'), {
+      expectedId: requested,
+      expectedNonce: '8',
+    });
+    assert.true(isRenderError(result), 'the capture is refused');
+    let error = (result as RenderError).error;
+    assert.strictEqual(error.title, 'Stale render response');
+    assert.strictEqual(error.id, requested);
+    assert.true((result as RenderError).evict, 'the tab is evicted');
+  });
+
+  test("a captured error from the previous job's nonce names the requested render", async function (assert) {
+    let result = await renderIcon(tabHoldingErrorFrom(requested, '7'), {
+      expectedId: requested,
+      expectedNonce: '8',
+    });
+    let error = (result as RenderError).error;
+    assert.strictEqual(error.title, 'Stale render response');
+    assert.strictEqual(error.id, requested);
+  });
+
+  test("the requested render's own captured error passes through unchanged", async function (assert) {
+    let result = await renderIcon(tabHoldingErrorFrom(requested, '8'), {
+      expectedId: requested,
+      expectedNonce: '8',
+    });
+    let error = (result as RenderError).error;
+    assert.strictEqual(error.title, 'Previous render failed');
+    assert.strictEqual(error.id, requested);
   });
 });
