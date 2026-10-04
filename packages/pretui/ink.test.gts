@@ -1,5 +1,5 @@
-// Pretui — semantics proof for Chip, StatusChip, Token, Delta, Meter, Avatar
-// and AvatarGroup.
+// Pretui — semantics proof for Chip, StatusChip, Delta, Meter, Avatar and
+// AvatarGroup. Token's tests live in components/token.test.gts.
 //
 // Nothing here asserts a computed style: the components' own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
@@ -15,7 +15,6 @@ import { Chip } from './components/chip';
 import { Delta } from './components/delta';
 import { Meter } from './components/meter';
 import { StatusChip } from './components/status-chip';
-import { Token } from './components/token';
 import { statusHue } from './internal/ink';
 
 function q(sel: string): HTMLElement {
@@ -94,20 +93,6 @@ module('Pretui | ink', function (hooks) {
       q('[data-test-pretui-status-chip]').getAttribute('style')?.includes('var(--chart-1)'),
       'the caller hue wins',
     );
-  });
-
-  // ── Token ───────────────────────────────────────────────────────────────
-  test('Token renders as <code>, prefers @value, and carries an allowed hue', async function (assert) {
-    await render(<template><Token @value='SKU-8812' @hue='var(--chart-2)'>ignored</Token></template>);
-    let el = q('[data-test-pretui-token]');
-    assert.strictEqual(el.tagName, 'CODE', 'a machine value is marked up as code');
-    assert.strictEqual(el.textContent?.trim(), 'SKU-8812');
-    assert.true(el.getAttribute('style')?.includes('--pretui-token-hue: var(--chart-2)'));
-  });
-
-  test('Token falls back to its block', async function (assert) {
-    await render(<template><Token>0x41</Token></template>);
-    assert.strictEqual(q('[data-test-pretui-token]').textContent?.trim(), '0x41');
   });
 
   // ── Delta ───────────────────────────────────────────────────────────────
