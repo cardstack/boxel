@@ -2552,12 +2552,18 @@ export const buildCurrentTurnMediaParts = async (
   let unsupportedFiles: { name: string; contentType: string }[] = [];
   let files = [
     ...messageFiles.map((file) => ({ file, fromToolResult: false })),
-    ...toolResultMedia.included.map((file) => ({
+    // Newest first, so the per-turn byte budget keeps the newest media;
+    // their parts are put back in chronological order below.
+    ...[...toolResultMedia.included].reverse().map((file) => ({
       file,
       fromToolResult: true,
     })),
   ];
+  let toolResultPartGroups: ContentPart[][] = [];
   let omittedAtDownload: CurrentTurnToolResultMedia['omitted'] = [];
+  // The bytes tool-result media actually downloaded this turn; declared
+  // sizes chose the files, but the budget holds on what arrives.
+  let toolResultBytes = 0;
   for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
       continue;
@@ -2595,11 +2601,22 @@ export const buildCurrentTurnMediaParts = async (
         downloadUrl,
         f.contentType!,
       );
-      if (
-        fromToolResult &&
-        base64DataUrlByteLength(dataUrl) > MAX_TOOL_RESULT_MEDIA_FILE_BYTES
-      ) {
-        throw new OversizedToolResultMediaError();
+      if (fromToolResult) {
+        let bytes = base64DataUrlByteLength(dataUrl);
+        if (bytes > MAX_TOOL_RESULT_MEDIA_FILE_BYTES) {
+          throw new OversizedToolResultMediaError(
+            `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`,
+          );
+        }
+        if (
+          toolResultBytes + bytes >
+          MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES
+        ) {
+          throw new OversizedToolResultMediaError(
+            `newer tool-result media already fill the ${formatMiB(MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES)} sent per turn`,
+          );
+        }
+        toolResultBytes += bytes;
       }
       return dataUrl;
     };
@@ -2641,10 +2658,7 @@ export const buildCurrentTurnMediaParts = async (
       }
     } catch (e) {
       if (e instanceof OversizedToolResultMediaError) {
-        omittedAtDownload.push({
-          file: f,
-          reason: `it is larger than ${formatMiB(MAX_TOOL_RESULT_MEDIA_FILE_BYTES)}`,
-        });
+        omittedAtDownload.push({ file: f, reason: e.message });
         continue;
       }
       // A failed download only affects this turn's volatile message; the
@@ -2657,7 +2671,12 @@ export const buildCurrentTurnMediaParts = async (
         text: `Attached to a tool result: ${mediaFileLabel(f)}`,
       });
     }
+    if (fromToolResult) {
+      toolResultPartGroups.unshift(mediaParts.splice(partCountBefore));
+    }
   }
+  mediaParts.push(...toolResultPartGroups.flat());
+  omittedAtDownload.reverse();
   let notes: string[] = [];
   if (unsupportedFiles.length > 0) {
     let fileList = unsupportedFiles

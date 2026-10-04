@@ -8176,6 +8176,58 @@ new
       );
     });
 
+    test('the per-turn budget holds on downloaded bytes, keeping the newest', async () => {
+      let perFile = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+      let fitting = Math.floor(
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / perFile,
+      );
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      let files: AttachedFile[] = [];
+      for (let i = 0; i <= fitting; i++) {
+        // Each declares 2 KiB but downloads the full per-file limit.
+        let file = png(`under${i}.png`);
+        mockImage(file, 'x'.repeat(perFile));
+        files.push(file);
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [file],
+          }),
+        );
+      }
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.strictEqual(imageUrls(prompt).length, fitting);
+      assert.ok(
+        trailingText(prompt).includes(
+          'under0.png (https://example.com/under0.png): newer tool-result media already fill',
+        ),
+        'the oldest is left out once downloads fill the budget',
+      );
+      let labels = trailingParts(prompt)
+        .filter((p) => p.type === 'text' && p.text.startsWith('Attached to'))
+        .map((p) => p.text);
+      assert.deepEqual(
+        labels,
+        files
+          .slice(1)
+          .map(
+            (f) =>
+              `Attached to a tool result: ${f.name} (https://example.com/${f.name})`,
+          ),
+        'kept media stay in chronological order',
+      );
+    });
+
     test('an image just under 5 MiB raw is over the limit, since its base64 is not', () => {
       let { omitted } = currentTurnToolResultMedia(
         [
