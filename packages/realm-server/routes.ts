@@ -314,20 +314,18 @@ export function createRoutes(args: CreateRoutesArgs) {
       createPrerenderAuth,
     }),
   );
-  router.post(
-    '/_capture-card',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleCaptureCard(args),
-  );
-  // The legacy spelling of `/_capture-card`. `boxel-cli` is installed and
-  // pinned independently of this server, and released versions post here, so
-  // it is answered by the same handler for as long as those versions are in
-  // use.
-  router.post(
-    '/_screenshot-card',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleCaptureCard(args),
-  );
+  // Captures a card or a file in a realm (see handle-capture-card). The
+  // endpoint's former names answer through the same handler: `boxel-cli` is
+  // installed and pinned independently of this server, and a host tab can run
+  // an older build than the server it talks to, so released clients post
+  // there for as long as those versions are in use.
+  for (let path of ['/_capture', '/_capture-card', '/_screenshot-card']) {
+    router.post(
+      path,
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+      handleCaptureCard(args),
+    );
+  }
   router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

@@ -6,13 +6,13 @@ import { realmSecretSeed, insertUser } from '../helpers/index.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
-  module('/_capture-card endpoint', function (hooks) {
+  module('/_capture endpoint', function (hooks) {
     // Auth / body-validation only — the cardId never has to resolve, so use `blank`.
     let context = setupServerEndpointsTest(hooks, { fixture: 'blank' });
 
     test('requires auth', async function (assert) {
       let response = await context.request
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Content-Type', 'application/vnd.api+json')
         .send({
           data: {
@@ -27,30 +27,32 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(response.status, 401, 'HTTP 401 without auth');
     });
 
-    test('still answers to /_screenshot-card', async function (assert) {
-      // A released boxel-cli is installed and pinned independently of this
-      // server and still posts to the endpoint's former name. 401 rather than
-      // 404 is the assertion that matters: it says the path is routed to the
-      // same handler, which is what an unrenamed client depends on.
-      let response = await context.request
-        .post('/_screenshot-card')
-        .set('Content-Type', 'application/vnd.api+json')
-        .send({
-          data: {
-            type: 'capture-card',
-            attributes: {
-              realmURL: testRealmURL.href,
-              cardId: `${testRealmURL.href}Person/fadhlan`,
-              format: 'isolated',
+    // Clients installed and pinned independently of this server (released
+    // boxel-cli versions, a host tab still running an older build) post to the
+    // endpoint's former names. 401 rather than 404 is the assertion that
+    // matters: it says each path is routed to the same handler.
+    for (let formerName of ['/_capture-card', '/_screenshot-card']) {
+      test(`still answers to ${formerName}`, async function (assert) {
+        let response = await context.request
+          .post(formerName)
+          .set('Content-Type', 'application/vnd.api+json')
+          .send({
+            data: {
+              type: 'capture-card',
+              attributes: {
+                realmURL: testRealmURL.href,
+                cardId: `${testRealmURL.href}Person/fadhlan`,
+                format: 'isolated',
+              },
             },
-          },
-        });
-      assert.strictEqual(
-        response.status,
-        401,
-        'routed to the capture handler, not unrouted',
-      );
-    });
+          });
+        assert.strictEqual(
+          response.status,
+          401,
+          'routed to the capture handler, not unrouted',
+        );
+      });
+    }
 
     test('rejects missing realmURL', async function (assert) {
       let matrixUserId = '@capture-test1:localhost';
@@ -62,7 +64,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
 
       let response = await context.request
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
         .set(
@@ -94,7 +96,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
 
       let response = await context.request
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
         .set(
@@ -126,7 +128,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
 
       let response = await context.request
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
         .set(
@@ -159,7 +161,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
 
       let response = await context.request
-        .post('/_capture-card')
+        .post('/_capture')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
         .set(

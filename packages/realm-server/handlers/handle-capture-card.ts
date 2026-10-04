@@ -68,7 +68,8 @@ interface CaptureResult {
 }
 
 /**
- * Handler for `POST /_capture-card`.
+ * Handler for `POST /_capture`, also answered at its former names
+ * `/_capture-card` and `/_screenshot-card`.
  *
  * Captures one card — or one file in the realm, named by `fileURL` in place
  * of `cardId` — as its requester — with their reach across realms, on
