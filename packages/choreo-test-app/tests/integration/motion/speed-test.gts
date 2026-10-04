@@ -33,7 +33,9 @@ import { nextFrame, sleep } from '../../helpers/motion';
  * box (`offsetLeft`, which ignores the projection's transform) says where the
  * element lands, and the animation is over once the drawn box gets within
  * half a pixel of it. That is the same fraction of the trip at any speed, so
- * the ratio of two timings is the ratio of the durations.
+ * the ratio of two timings tracks the ratio of the durations. It stays under
+ * it, because each timing also carries the fixed cost of the render and
+ * `settled()` before the first frame — which is why the bar sits below five.
  *
  * A per-frame "has it stopped moving" test is not: the browser sometimes
  * delivers two animation frames a millisecond apart, the element barely moves
