@@ -109,8 +109,10 @@ function getLog() {
  *      with line numbers, in the history message that attached them.
  *    - Media types are listed in history as metadata ([contentType,
  *      contentSize bytes]); their bodies are embedded only for the
- *      current message, as native content parts on the volatile trailing
- *      message (after the history cache breakpoint):
+ *      current turn — the current human message's attachments and those
+ *      of every tool result since it (see currentTurnToolResultMedia) — as
+ *      native content parts on the volatile trailing message (after the
+ *      history cache breakpoint):
  *      - Supported images (PNG, JPEG, WEBP, GIF) → `image_url` parts.
  *      - PDF (application/pdf) → `file` parts with base64 data URL in
  *        `file_data`.
@@ -125,11 +127,11 @@ function getLog() {
  *      it can carry the current media without touching history bytes.
  *
  * 4. **Model capability gating**: When `inputModalities` is provided
- *    (from the active LLM's model configuration), the current message's
+ *    (from the active LLM's model configuration), the current turn's
  *    media parts are only included if the model supports the required
- *    modality. Gated files are listed in a warning on the trailing
- *    message. When `inputModalities` is undefined, all modalities pass
- *    through.
+ *    modality. Gated files are named in a note on the trailing message
+ *    that tells the model it cannot see them. When `inputModalities` is
+ *    undefined, all modalities pass through.
  *
  * 5. **Read-file command scoping**: When the AI requests to read a file
  *    via a tool call, the file URL must match a sourceUrl previously
@@ -1836,6 +1838,7 @@ export async function buildPromptForModel(
     client,
     currentUserMessageEvent,
     inputModalities,
+    currentTurnToolResultMedia(history, aiBotUserId),
   );
   let trailingContent = [
     contextContent,
@@ -2381,28 +2384,88 @@ export const buildAttachmentsMessagePart = async (
   return text;
 };
 
-// Downloads the current message's media attachments (images, PDFs, audio,
+// The most media files one turn's tool results contribute to the trailing
+// message. A tool loop that collects more keeps only the newest: each file
+// is re-downloaded and re-encoded on every request of the turn, so the
+// request size must stay bounded however many results the loop produces.
+export const MAX_CURRENT_TURN_TOOL_RESULT_MEDIA = 8;
+
+// The media files (images, PDFs, audio, video) attached to the tool results
+// of the current turn — every tool-result event after the last message a
+// human sent, whoever published it: results the bot fulfilled itself and
+// results a client ran and sent alike. A multi-step tool loop therefore keeps
+// the media it collected earlier in the same turn. Only the latest result for
+// each tool call counts (a retry supersedes an earlier attempt, matching how
+// the call's outcome is chosen for the tool message). Files are returned
+// oldest first, capped at MAX_CURRENT_TURN_TOOL_RESULT_MEDIA by keeping the
+// newest. Text-based attachments are excluded: their content rides in the
+// tool message itself.
+export function currentTurnToolResultMedia(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): SerializedFileDef[] {
+  let lastHumanMessageIndex = findLastIndex(
+    history,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      event.type === 'm.room.message' &&
+      !isToolOrCodePatchResult(event),
+  );
+  let latestResultByRequestId = new Map<string, DiscreteMatrixEvent>();
+  for (let event of history.slice(lastHumanMessageIndex + 1)) {
+    if (!isToolResultEventType(event.type)) {
+      continue;
+    }
+    let requestId =
+      (event.content as { commandRequestId?: string }).commandRequestId ??
+      event.event_id;
+    // Re-inserting moves a retried call to its latest position.
+    latestResultByRequestId.delete(requestId);
+    latestResultByRequestId.set(requestId, event);
+  }
+  let media: SerializedFileDef[] = [];
+  for (let event of latestResultByRequestId.values()) {
+    let attachedFiles: SerializedFileDef[] =
+      (event as MatrixEventWithBoxelContext).content?.data?.attachedFiles ?? [];
+    for (let file of attachedFiles) {
+      if (file.url && requiredModality(file.contentType)) {
+        media.push(toFileDefMetadata(file));
+      }
+    }
+  }
+  return media.slice(-MAX_CURRENT_TURN_TOOL_RESULT_MEDIA);
+}
+
+// Downloads the current turn's media attachments (images, PDFs, audio,
 // video) and renders them as native content parts for the volatile trailing
-// message. Media bodies never ride in history: embedding them there would
-// grow the request by every media file ever attached — re-downloaded and
-// re-encoded on each turn, with nothing bounding it — while gating on "is
-// this the newest message" would rewrite an older message's bytes as
-// history grows and reset the cache prefix. The trailing message is rebuilt
-// every turn anyway (it carries the current time), so the current media can
-// ride there without touching a single history byte; history lists the same
-// files as stable metadata (see buildAttachmentsMessagePart).
+// message: the media attached to the current human message, then the media
+// attached to the current turn's tool results (see
+// currentTurnToolResultMedia), each of the latter preceded by a text part
+// naming the file so the model can tell which result an image came from.
+// Media bodies never ride in history: embedding them there would grow the
+// request by every media file ever attached — re-downloaded and re-encoded
+// on each turn, with nothing bounding it — while gating on "is this the
+// newest message" would rewrite an older message's bytes as history grows
+// and reset the cache prefix. The trailing message is rebuilt every turn
+// anyway (it carries the current time), so the current media can ride there
+// without touching a single history byte; history lists the same files as
+// stable metadata (see buildAttachmentsMessagePart).
 export const buildCurrentTurnMediaParts = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext | undefined,
   inputModalities?: string[],
+  toolResultMedia: SerializedFileDef[] = [],
 ): Promise<{ mediaParts: ContentPart[]; unsupportedNote?: string }> => {
   let mediaParts: ContentPart[] = [];
-  if (!matrixEvent) {
-    return { mediaParts };
-  }
-  let attachedFiles = await getAttachedFiles(client, matrixEvent);
+  let messageFiles = matrixEvent
+    ? await getAttachedFiles(client, matrixEvent)
+    : [];
   let unsupportedFiles: { name: string; contentType: string }[] = [];
-  for (let f of attachedFiles) {
+  let files = [
+    ...messageFiles.map((file) => ({ file, fromToolResult: false })),
+    ...toolResultMedia.map((file) => ({ file, fromToolResult: true })),
+  ];
+  for (let { file: f, fromToolResult } of files) {
     if (!f.url) {
       continue;
     }
@@ -2418,6 +2481,7 @@ export const buildCurrentTurnMediaParts = async (
       });
       continue;
     }
+    let partCountBefore = mediaParts.length;
     try {
       if (isImageContentType(f.contentType)) {
         let dataUrl = await downloadFileAsBase64DataUrl(
@@ -2475,16 +2539,27 @@ export const buildCurrentTurnMediaParts = async (
       // file's metadata is still in history, so nothing byte-stable drifts.
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
+    if (fromToolResult && mediaParts.length > partCountBefore) {
+      mediaParts.splice(partCountBefore, 0, {
+        type: 'text',
+        text: `Attached to a tool result: ${mediaFileLabel(f)}`,
+      });
+    }
   }
   let unsupportedNote: string | undefined;
   if (unsupportedFiles.length > 0) {
     let fileList = unsupportedFiles
       .map((f) => `${f.name} (${f.contentType})`)
       .join(', ');
-    unsupportedNote = `Note: The following files were not sent to the model because it does not support their input type: ${fileList}`;
+    unsupportedNote = `Note: The following files were not sent to the model because it does not support their input type, so you cannot see them: ${fileList}. Do not guess at their contents; tell the user you cannot view them with the current model.`;
   }
   return { mediaParts, unsupportedNote };
 };
+
+function mediaFileLabel(file: SerializedFileDef): string {
+  let name = file.name ?? 'unnamed file';
+  return file.sourceUrl ? `${name} (${file.sourceUrl})` : name;
+}
 
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
