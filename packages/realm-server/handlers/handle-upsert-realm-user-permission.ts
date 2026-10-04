@@ -14,10 +14,9 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import {
-  adminImpersonateUser,
   appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
-  loginAsMatrixAdmin,
+  impersonateAsMatrixAdmin,
   logoutMatrixAccessToken,
 } from '../synapse.ts';
 
@@ -186,17 +185,12 @@ export default function handleUpsertRealmUserPermission({
         matrixAdminPassword,
       );
       if (creds.ok) {
-        let adminToken: string | undefined;
         let userToken: string | undefined;
         try {
-          adminToken = await loginAsMatrixAdmin({
+          userToken = await impersonateAsMatrixAdmin({
             matrixURL: matrixClient.matrixURL,
             adminUsername: creds.username,
             adminPassword: creds.password,
-          });
-          userToken = await adminImpersonateUser({
-            matrixURL: matrixClient.matrixURL,
-            adminAccessToken: adminToken,
             userId: user,
           });
           let { alreadyPresent } = await appendRealmToUserAccountData({
@@ -225,35 +219,22 @@ export default function handleUpsertRealmUserPermission({
             `[grafana-upsert-realm-user-permission] ${matrixAccountDataWarning}`,
           );
         } finally {
-          // Synapse admin login + admin-impersonate both mint
-          // non-expiring tokens by default. Invalidate them after the
-          // sync so each grafana grant doesn't leave a long-lived
-          // credential behind in synapse's access_tokens table.
-          // Best-effort: a logout failure does not change the sync
-          // result reported above.
-          let cleanups: Promise<unknown>[] = [];
+          // The impersonation token never expires by default, so log it out
+          // once the sync is done rather than leave a credential behind per
+          // grant. It has no device, so this deletes only the token. The
+          // admin token is shared across requests and stays logged in.
+          // Best-effort: a logout failure does not change the sync result
+          // reported above.
           if (userToken) {
-            cleanups.push(
-              logoutMatrixAccessToken({
+            try {
+              await logoutMatrixAccessToken({
                 matrixURL: matrixClient.matrixURL,
                 accessToken: userToken,
-              }),
-            );
-          }
-          if (adminToken) {
-            cleanups.push(
-              logoutMatrixAccessToken({
-                matrixURL: matrixClient.matrixURL,
-                accessToken: adminToken,
-              }),
-            );
-          }
-          let results = await Promise.allSettled(cleanups);
-          for (let r of results) {
-            if (r.status === 'rejected') {
+              });
+            } catch (e: any) {
               log.warn(
                 `[grafana-upsert-realm-user-permission] token logout failed: ${
-                  (r.reason as any)?.message ?? String(r.reason)
+                  e?.message ?? String(e)
                 }`,
               );
             }
