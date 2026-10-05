@@ -1,20 +1,17 @@
 {
   "extends": "@ember/library-tsconfig",
-  "include": ["src/**/*", "unpublished-development-types/**/*"],
+  "include": ["src/**/*", "tests/**/*", "unpublished-development-types/**/*"],
   "compilerOptions": {
     "allowJs": true,
-    "declarationDir": "declarations",
     /**
-      https://www.typescriptlang.org/tsconfig#rootDir
-      "Default: The longest common path of all non-declaration input files."
-
-      Because we want our declarations' structure to match our rollup output,
-      we need this "rootDir" to match the "srcDir" in the rollup.config.mjs.
-
-      This way, we can have simpler `package.json#exports` that matches
-      imports to files on disk
+      The test harness imports glimmer-motion by its public specifiers, and
+      those resolve to the source, so type-checking needs nothing built. The
+      declarations build (tsconfig.declarations.json) covers `src` alone.
     */
-    "rootDir": "./src",
+    "paths": {
+      "glimmer-motion": ["./src/index.ts"],
+      "glimmer-motion/*": ["./src/*"]
+    },
     "types": ["ember-source/types"]
   }
 }
