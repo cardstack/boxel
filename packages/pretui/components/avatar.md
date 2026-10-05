@@ -26,7 +26,7 @@ Element: HTMLSpanElement
 }
 ```
 
-**`@hue`, `@size` and a caller's `style` work together.** Glimmer lets a caller's `style` attribute replace a component's own, so Avatar also writes `--pretui-avatar-size` and `--pretui-chip-hue` as single properties on top of whatever style the element ends up with, and writes them again if the caller's style changes later. The caller's own declarations are kept, and so is a property another modifier on the element sets, such as boxel-ui's `setCssVar`. If the caller's style sets one of them too, `@size` and `@hue` win, and the caller's value comes back when the arg is cleared. The name-derived hue is a default rather than an arg, so a `--pretui-chip-hue` in the caller's style wins over it.
+**`@hue`, `@size` and a caller's `style` work together.** Glimmer lets a caller's `style` attribute replace a component's own, so Avatar also writes `--pretui-avatar-size` and `--pretui-chip-hue` as single properties on top of whatever style the element ends up with, and writes them again if the caller's style changes later. The caller's own declarations are kept, and so is a property another modifier on the element sets, such as boxel-ui's `setCssVar`. If the caller's style sets one of them too, `@size` and `@hue` win, and the caller's value comes back when the arg is cleared. The name-derived hue is a default rather than an arg, so a `--pretui-chip-hue` in the caller's style wins over it. One rewrite is not told apart from another modifier's write: a caller style that sets both properties exactly as Avatar wrote them and changes some other declaration. Its values are not taken as the caller's, so clearing the arg brings back the caller's earlier value.
 
 ## Prior art
 

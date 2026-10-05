@@ -23,13 +23,24 @@
 //   property.
 //
 // The observer drains the record of each of the modifier's own writes as soon
-// as it makes one. A record it delivers is either a caller rewrite or a
+// as it makes one, so the old value of the first record in a batch it
+// delivers is the attribute as the modifier left it. What changed since is
+// either a caller rewrite, which replaces the whole attribute, or a
 // single-property write by something else on the element (boxel-ui's
-// `setCssVar`, passed through `...attributes`), which leaves our values in
-// place. So the modifier remembers what it wrote, and a value equal to that is
-// never adopted as the caller's. A later caller rewrite that repeats our value
-// exactly is therefore treated as ours, and clearing the argument afterwards
-// removes it.
+// `setCssVar`, passed through `...attributes`), which leaves the kept
+// properties in place. So a batch is taken as a caller rewrite when it changed
+// one of the kept properties, or when it changed no declaration at all, which
+// only a rewrite of the attribute does (a single-property write that changes
+// nothing queues no record). After a caller rewrite, the kept properties as the
+// element now has them are the caller's. After any other batch, the caller's
+// values stay as they were.
+//
+// The cost: a caller rewrite that sets each kept property exactly as the
+// modifier wrote it, and changes some other declaration, looks like another
+// modifier's write. Its values are not taken as the caller's, so when an
+// argument is cleared the caller's earlier value comes back, or the property
+// is removed if the caller had none; and a default it repeats is still
+// replaced when the default changes.
 //
 // Values must already be safe: a validated `cssValue`, or a number the
 // component formatted itself. Property names are authored literals.
@@ -43,6 +54,17 @@ export interface KeptProperty {
   strength: KeptStrength;
 }
 
+// The declarations of a style as a sorted list of `property:value`, to tell
+// whether a rewrite changed anything regardless of order.
+function declarations(style: CSSStyleDeclaration): string {
+  let list: string[] = [];
+  for (let i = 0; i < style.length; i++) {
+    let property = style.item(i);
+    list.push(`${property}:${style.getPropertyValue(property).trim()}`);
+  }
+  return list.sort().join('\n');
+}
+
 export const keepStyle = modifier(
   (el: HTMLElement, [entries]: [KeptProperty[]]) => {
     let kept = entries.filter(
@@ -54,14 +76,23 @@ export const keepStyle = modifier(
     let read = (property: string) =>
       el.style.getPropertyValue(property).trim() || undefined;
     let callerValues = new Map<string, string | undefined>();
-    let ours = new Map<string, string>();
     let readCaller = () => {
       for (let { property } of kept) {
-        let value = read(property);
-        if (value === undefined || value !== ours.get(property)) {
-          callerValues.set(property, value);
-        }
+        callerValues.set(property, read(property));
       }
+    };
+    let isCallerRewrite = (records: MutationRecord[]) => {
+      if (records.length === 0) {
+        return false;
+      }
+      let before = el.ownerDocument.createElement('span').style;
+      before.cssText = records[0].oldValue ?? '';
+      let changedKept = kept.some(
+        ({ property }) =>
+          (before.getPropertyValue(property).trim() || undefined) !==
+          read(property),
+      );
+      return changedKept || declarations(before) === declarations(el.style);
     };
     let write = (observer?: MutationObserver) => {
       let wrote = false;
@@ -72,7 +103,6 @@ export const keepStyle = modifier(
         ) {
           continue;
         }
-        ours.set(property, value);
         if (read(property) !== value) {
           el.style.setProperty(property, value);
           wrote = true;
@@ -84,16 +114,25 @@ export const keepStyle = modifier(
     };
     readCaller();
     write();
-    let observer = new MutationObserver((_records, self) => {
-      readCaller();
+    let observer = new MutationObserver((records, self) => {
+      if (isCallerRewrite(records)) {
+        readCaller();
+      }
       write(self);
     });
-    observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+    observer.observe(el, {
+      attributes: true,
+      attributeFilter: ['style'],
+      attributeOldValue: true,
+    });
     return () => {
-      // A record still queued here is a caller rewrite in the same render as
-      // this teardown, and what it left is the caller's, so nothing is put
-      // back over it.
-      let rewritten = observer.takeRecords().length > 0;
+      // Records still queued here were written in the same render, before
+      // this teardown: Glimmer sets the caller's style and runs the caller's
+      // modifiers ahead of this one. If they make a caller rewrite, what the
+      // element has now is the caller's, so nothing is put back over it. If
+      // not (another modifier wrote its own property), the caller's values
+      // are put back as usual.
+      let rewritten = isCallerRewrite(observer.takeRecords());
       observer.disconnect();
       if (rewritten) {
         return;

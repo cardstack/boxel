@@ -188,6 +188,143 @@ module('Pretui | components/avatar', function (hooks) {
     assert.strictEqual(hue(el), statusHue('Alan Turing'), "the previous name's hue is not mistaken for the caller's");
   });
 
+  test("clearing @size in the same render as another modifier's write leaves no size behind", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked ring = 'var(--chart-3)';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Avatar
+          @name='Ada'
+          @size={{state.size}}
+          style={{RING_STYLE}}
+          {{setCssVar status-ring=state.ring}}
+        />
+      </template>,
+    );
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(size(el), '2.5rem');
+
+    state.ring = 'var(--chart-4)';
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(
+      el.style.getPropertyValue('--status-ring').trim(),
+      'var(--chart-4)',
+      'the other modifier wrote its property in the same render',
+    );
+    assert.strictEqual(size(el), '', "Avatar's own size is not mistaken for the caller's");
+  });
+
+  test("a @size change in the same render as another modifier's write does not keep the old size as the caller's", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked ring = 'var(--chart-3)';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Avatar
+          @name='Ada'
+          @size={{state.size}}
+          style={{RING_STYLE}}
+          {{setCssVar status-ring=state.ring}}
+        />
+      </template>,
+    );
+    let el = q('[data-test-pretui-avatar]');
+
+    state.ring = 'var(--chart-4)';
+    state.size = 48;
+    await settled();
+    assert.strictEqual(size(el), '3rem', 'the new @size wins');
+
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(size(el), '', 'neither @size is left behind');
+  });
+
+  test("a @name change in the same render as another modifier's write moves the hue to the new name", async function (assert) {
+    class State {
+      @tracked name = 'Ada Lovelace';
+      @tracked ring = 'var(--chart-3)';
+    }
+    let state = new State();
+    await render(
+      <template>
+        <Avatar
+          @name={{state.name}}
+          style={{RING_STYLE}}
+          {{setCssVar status-ring=state.ring}}
+        />
+      </template>,
+    );
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(hue(el), statusHue('Ada Lovelace'));
+
+    state.ring = 'var(--chart-4)';
+    state.name = 'Alan Turing';
+    await settled();
+    assert.strictEqual(hue(el), statusHue('Alan Turing'), "the previous name's hue is not mistaken for the caller's");
+  });
+
+  test("a caller's rewrite to the size @size set is the size that comes back when @size is cleared", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked style = CALLER_SIZE_STYLE;
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @size={{state.size}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+
+    state.style = htmlSafe('--pretui-avatar-size: 2.5rem');
+    await settled();
+    assert.strictEqual(size(el), '2.5rem');
+
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(size(el), '2.5rem', "the caller's current size, not the 3rem it replaced");
+  });
+
+  test("a caller's rewrite that repeats Avatar's size and hue exactly, and nothing else, is the caller's", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked style = CALLER_SIZE_STYLE;
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @size={{state.size}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+
+    state.style = htmlSafe(`--pretui-avatar-size: 2.5rem; --pretui-chip-hue: ${statusHue('Ada')}`);
+    await settled();
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(size(el), '2.5rem', 'a rewrite that changes no declaration is still a rewrite');
+  });
+
+  test("a caller's rewrite that repeats Avatar's size and hue exactly and changes another declaration is not told apart from another modifier's write", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked style = CALLER_SIZE_STYLE;
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @size={{state.size}} style={{state.style}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+
+    state.style = htmlSafe(`--pretui-avatar-size: 2.5rem; --pretui-chip-hue: ${statusHue('Ada')}; margin: 2px`);
+    await settled();
+    assert.strictEqual(el.style.margin, '2px');
+    state.size = undefined;
+    await settled();
+    assert.strictEqual(
+      size(el),
+      '3rem',
+      "the known cost: the rewrite looks like a single-property write, so the caller's earlier size comes back",
+    );
+  });
+
   test("the size and hue are put back after a later change to the caller's style", async function (assert) {
     class State {
       @tracked style = RING_STYLE;
