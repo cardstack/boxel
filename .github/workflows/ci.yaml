@@ -172,6 +172,10 @@ jobs:
               # is installable), so a pin-only change has to run that suite.
               - '.claude-plugin/marketplace.json'
               - '.agents/plugins/marketplace.json'
+              # boxel-cli depends on these for `boxel parse`, and its suite
+              # resolves their published `exports` to declarations.
+              - 'packages/glimmer-motion/**'
+              - 'packages/choreo/**'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
@@ -1534,6 +1538,14 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install chromium
         working-directory: packages/boxel-cli
+      # `tests/card-runtime-packages.test.ts` resolves these the way a
+      # published install does: through `exports` to `declarations/`, without
+      # the `developing:choreo` source condition, so both need their build.
+      # glimmer-motion builds first: choreo's declarations build resolves it.
+      - name: Build Glimmer Motion and Choreo
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
       - name: Run unit tests
         run: pnpm test:unit
         working-directory: packages/boxel-cli

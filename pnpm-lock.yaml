@@ -1145,6 +1145,9 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
         version: 5.2.0
+      '@cardstack/choreo':
+        specifier: workspace:*
+        version: link:../choreo
       '@cardstack/view-transitions':
         specifier: 'catalog:'
         version: 0.2.0(@babel/core@7.29.7(supports-color@8.1.1))(ember-modifier@4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(supports-color@8.1.1)
@@ -1238,6 +1241,9 @@ importers:
       flat:
         specifier: 'catalog:'
         version: 5.0.2
+      glimmer-motion:
+        specifier: workspace:*
+        version: link:../glimmer-motion
       ignore:
         specifier: 'catalog:'
         version: 5.3.2

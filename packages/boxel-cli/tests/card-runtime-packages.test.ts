@@ -262,6 +262,10 @@ describe('card-facing packages the host shims', () => {
     expect(specifiers).toContain('ember-modifier');
     expect(specifiers).toContain('@ember/test-helpers');
     expect(specifiers).toContain('@cardstack/runtime-common');
+    // Workspace packages that publish their own declarations, reached
+    // through their `exports` rather than a path alias.
+    expect(specifiers).toContain('glimmer-motion');
+    expect(specifiers).toContain('@cardstack/choreo/film');
   });
 
   it('resolve to real declarations from a boxel-cli install', () => {
