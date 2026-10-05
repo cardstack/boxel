@@ -79,7 +79,7 @@ export type ToastTone =
 
 /**
  * Where the stack lives. Logical `start`/`end` rather than physical
- * `left`/`right` (Appendix axis 8), so RTL is free. The React spellings
+ * `left`/`right`, so RTL is free. The React spellings
  * (`bottom-right`, `top-left`, …) are accepted and mapped.
  */
 export type ToastPlacement =

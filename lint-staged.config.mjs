@@ -36,6 +36,14 @@ const VERBATIM_COPIED_TREES = [
   '/packages/pretui/media-chrome/index.js',
   '/packages/pretui/surfaces/canvas/index.js',
   '/packages/pretui/surfaces/layout/index.js',
+  '/packages/pretui/cropper/index.js',
+  '/packages/pretui/model-viewer/index.js',
+  '/packages/pretui/photoswipe/index.js',
+  '/packages/pretui/photoswipe/style.ts',
+  '/packages/pretui/plot/index.js',
+  '/packages/pretui/qrcode/index.js',
+  '/packages/pretui/wavesurfer/index.js',
+  '/packages/pretui/surfaces/grid/index.js',
 ];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');

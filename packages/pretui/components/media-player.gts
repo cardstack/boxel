@@ -161,8 +161,8 @@ function safeAspect(value: string | undefined): string {
 // ── The one modifier: element capture + event subscription ───────────────
 //
 // Everything this player knows about playback arrives on media events —
-// there is no polling and no frame loop, which is the arrangement Appendix
-// M.3 asks for ("prefer event-driven state where it exists"). The modifier
+// there is no polling and no frame loop, because event-driven state is
+// preferred wherever it exists. The modifier
 // owns the listeners and removes every one of them in its destructor.
 //
 // It deliberately does NOT push a snapshot on install: a modifier body runs

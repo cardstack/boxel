@@ -139,7 +139,7 @@ to click. The runner:
   `eval-results/<session-id>/session.json` with everything.
 
 Watch the console for the irregularities the `ai-assistant-evals` skill lists (a
-failed pill, git-style markers, a repeated tool call, a stuck pill). The runner
+failed pill, a repeated tool call, a stuck pill). The runner
 stops such a run itself; do not stop a run for being slow or expensive.
 
 ## 4. Judge every result
@@ -164,7 +164,7 @@ model, from four sources:
 2. The screenshot next to it (open it with the Read tool): what the user would
    have seen, and whether it rendered at all.
 3. The result JSON in `eval-results/<session-id>/<model>.json`: verdict,
-   reasons, tool calls, blocks, files written, patch outcomes.
+   reasons, tool calls, realm writes, files written.
 4. The room, when anything is unclear or the run did not pass:
    `node .claude/skills/inspect-ai-room/scripts/inspect-room.mjs timeline '<roomId>'`
    from the repo root, and `usage` for the cache and cost per turn.
