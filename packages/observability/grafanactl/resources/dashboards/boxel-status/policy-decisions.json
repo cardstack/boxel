@@ -11,7 +11,7 @@
     "annotations": {
       "list": []
     },
-    "description": "Operations-permission policy decisions, search-lane scoping, snapshot reads, compiles and their costs, from the boxel:operations channel. See the policy-telemetry skill for how to read it.",
+    "description": "Operations-permission policy decisions, search-lane scoping, snapshot reads, compiles and their costs, from the boxel:operations channel. See the operations-diagnosis skill for how to read it.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 1,
