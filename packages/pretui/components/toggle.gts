@@ -47,14 +47,14 @@ export interface ToggleSignature {
     label?: string;
     /** draw the glyph only; `@label` becomes the sr-only name and the title */
     iconOnly?: boolean;
-    /** Appendix E hue, default `neutral`. Accepts `destructive`/`brand`/… */
+    /** Hue, default `neutral`. Accepts `destructive`/`brand`/… */
     tone?: PretuiToneArg;
     /** recipe worn at rest, default `outlined` */
     appearance?: PretuiAppearance;
     /** recipe worn while pressed, default `accent`. The pressed state is an
      * APPEARANCE SWAP rather than a tint, so it survives greyscale (Law 6). */
     pressedAppearance?: PretuiAppearance;
-    /** Appendix E.2 scale, default `m`. Accepts `sm`/`md`/`lg`/`default`. */
+    /** Scale, default `m`. Accepts `sm`/`md`/`lg`/`default`. */
     size?: PretuiSizeArg;
     /** dims and inerts, but stays focusable and announced (`aria-disabled`) */
     disabled?: boolean;
@@ -68,7 +68,7 @@ export interface ToggleSignature {
   };
   Blocks: {
     /** yields the resolved state, so a caller can swap the glyph in place
-     * (Appendix O.11) rather than render two of them and hide one */
+     * rather than render two of them and hide one */
     default: [{ pressed: boolean }];
   };
   Element: HTMLButtonElement;

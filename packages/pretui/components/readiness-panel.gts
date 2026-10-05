@@ -67,7 +67,7 @@ import type { BlockHeadingLevel } from '../internal/blocks';
 //   · A <ul>/<li> shape whose args could only ever hold one item → `gates`
 //     is a list and the markup is a list.
 //   · `#9a6700` raw beside tokenised siblings → every tone is a token with
-//     a light-value fallback (Appendix F, Law 2).
+// a light-value fallback (Law 2).
 //   · Boolean-only, no neutral state → seven states, three of which
 //     (`pending`, `skipped`, `unknown`) are neutral.
 //

@@ -25,10 +25,9 @@ function probeColor(): string {
   return getComputedStyle(probe).backgroundColor;
 }
 
-// The mode picker is a SegmentedControl, which became a radiogroup over
-// native <input type='radio'> on 2026-08-13 (it used to be role='tablist'
-// over <button>s — invalid ARIA). Accept either shape so the helper survives
-// the theme bar being re-cut again.
+// The mode picker is a SegmentedControl: a radiogroup over native
+// <input type='radio'>. The helper accepts a tab shape too, so it survives
+// the theme bar being re-cut.
 async function clickMode(label: string) {
   let candidates = Array.from(
     document.querySelectorAll('[data-test-pretui-theme-bar] button, [data-test-pretui-theme-bar] label'),

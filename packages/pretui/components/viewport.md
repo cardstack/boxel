@@ -22,7 +22,7 @@ State is reflected as `data-*`, so a season or a test can read the current mode.
 
 ## Prior art
 
-Built against the kit's artboard contract (Appendix H). The comparison set is design tooling rather than component libraries: **Storybook's viewport addon** (a dropdown of device presets that resizes the preview iframe), **Figma's frames**, and **Chrome DevTools' device toolbar**.
+Built against the kit's artboard contract. The comparison set is design tooling rather than component libraries: **Storybook's viewport addon** (a dropdown of device presets that resizes the preview iframe), **Figma's frames**, and **Chrome DevTools' device toolbar**.
 
 Where this differs from Storybook's viewport addon, which is the closest analogue:
 

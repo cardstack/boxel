@@ -23,10 +23,10 @@ import { fn } from '@ember/helper';
 // supplies — @now, the same argument RelativeTime takes — defaulting to each
 // segment's minimum (00 / 00 / 00 / AM) when it is omitted. Seeding is
 // therefore deterministic and testable, which the upstream is not.
-// Review pass 2026-08-12 also added Home/End (the ARIA spinbutton pattern
-// requires them; WA omits them), aria-disabled on the segments, and a
-// forced-colors-safe focus outline; the colon separator moved out of a
-// template function call into the precomputed segment view.
+// Home/End are handled (the ARIA spinbutton pattern requires them; WA omits
+// them), the segments carry aria-disabled, the focus outline is
+// forced-colors-safe, and the colon separator comes from the precomputed
+// segment view.
 
 export type TimeInputHourCycle = '24' | '12';
 

@@ -12,8 +12,8 @@ import { LABEL_FMT, MONTH_FMT, fromIso, toIso } from '../internal/reading-extras
 // Focus follows the arrow keys via a roving tabindex: the modifier focuses a
 // day button only when it just became the keyboard target (navigating flag —
 // never steals focus on plain renders).
-// (Both primitives now live in focus.gts, the kit's single focus/keyboard
-// foundation — Appendix L named this duplication; it is discharged here.)
+// (Both primitives live in focus.gts, the kit's single focus/keyboard
+// foundation.)
 
 interface DayCell {
   iso: string;

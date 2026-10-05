@@ -35,20 +35,15 @@
 //
 // ── Realm laws in force ─────────────────────────────────────────────────
 // No timers, no `Date.now()`, no `Math.random()`, no `!important`, no
-// `:deep()`, no `:global()`, no dark-mode branches (Appendix F), unnamed
+// `:deep()`, no `:global()`, no dark-mode branches, unnamed
 // container queries only, every colour a token with a light fallback.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the structure-layout group)
-
 // Pretui — the layout vocabulary shared by Stack, Card, Collapsible and StackDivider: the size and orientation alias maps.
 import type { PretuiSize } from '../pretui-primitives';
 
 // ── Shared vocabulary + the inbound alias map ────────────────────────────
 //
-// Appendix E owns the size scale (`xs | s | m | l | xl`). Agents trained on
+// The kit's size scale is `xs | s | m | l | xl`. Agents trained on
 // shadcn/Tailwind emit `sm | md | lg | default`; those resolve here rather
 // than becoming a second enum. This is Button's `@variant` model generalised:
 // aliases resolve IN the component, docs teach the house name.
@@ -85,12 +80,15 @@ export function pretuiSize(
 export type Orientation = 'horizontal' | 'vertical';
 export type OrientationAlias = Orientation | 'row' | 'column';
 
-const ORIENTATIONS: Record<string, Orientation> = {
-  horizontal: 'horizontal',
-  row: 'horizontal',
-  vertical: 'vertical',
-  column: 'vertical',
-};
+const ORIENTATIONS: Record<string, Orientation> = Object.assign(
+  Object.create(null) as Record<string, Orientation>,
+  {
+    horizontal: 'horizontal',
+    row: 'horizontal',
+    vertical: 'vertical',
+    column: 'vertical',
+  },
+);
 
 /** Resolve `@orientation` / `@direction` to the house enum. */
 export function pretuiOrientation(
