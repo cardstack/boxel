@@ -19,6 +19,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { isLiveRender, mayBeLiveRender } from '../render-context';
 
 import { FileObject } from './file-resources';
+import { fileContentRevision, urlAtRevision } from './file-revision';
 import type { FilePreviewSignature } from './file-preview-stage';
 
 // One live fetch's outcome, remembered with the URL it belongs to so a
@@ -36,6 +37,11 @@ interface LoadedDocument {
 // fallback rather than holding the loading state forever.
 const DOCUMENT_FETCH_TIMEOUT_MS = 30_000;
 
+// `loadDocument`'s arguments: the document URL, then the file's content
+// revision. The revision is never read; it is there so a write to the file
+// reruns the fetch.
+type LoadArgs = [url: string, revision: string];
+
 export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
   // The served document URL. `<object>`/`<embed>` loads bypass service
   // workers (per the ServiceWorker spec), so no Authorization header can be
@@ -52,6 +58,11 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
   // serve the file's bytes to an `<object>` rather than the host app shell.
   get resourceUrl(): string {
     return this.args.model?.resourceUrl ?? this.args.model?.url ?? '';
+  }
+
+  // Changes with every write to the file while the URL stays put.
+  get revision(): string {
+    return fileContentRevision(this.args.model);
   }
 
   @tracked private loaded: LoadedDocument | undefined;
@@ -73,16 +84,19 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
     );
   }
 
+  // The plain-URL fallback carries the revision, so an `<object>` that loads
+  // the document directly reloads it after a write.
   private get objectUrl(): string {
     let { loaded } = this;
     return loaded?.forUrl === this.resourceUrl && loaded.blobUrl
       ? loaded.blobUrl
-      : this.resourceUrl;
+      : urlAtRevision(this.resourceUrl, this.revision);
   }
 
   // Lives on the wrapper that survives the loading→loaded swap, so state
-  // flips never re-run it; it re-runs only when the document URL changes.
-  private loadDocument = modifier((element: HTMLElement, [url]: [string]) => {
+  // flips never re-run it; it re-runs when the document URL or the file's
+  // revision changes.
+  private loadDocument = modifier((element: HTMLElement, [url]: LoadArgs) => {
     let live = isLiveRender(element);
     let cancelled = false;
     if (live !== this.live) {
@@ -173,7 +187,10 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
         </div>
       </div>
     {{else}}
-      <div class='pdf-frame' {{this.loadDocument this.resourceUrl}}>
+      <div
+        class='pdf-frame'
+        {{this.loadDocument this.resourceUrl this.revision}}
+      >
         {{#if this.isLoading}}
           <div class='pdf-loading' data-test-pdf-loading>
             <LoadingIndicator />
