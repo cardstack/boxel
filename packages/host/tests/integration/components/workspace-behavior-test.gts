@@ -1,4 +1,11 @@
-import { click, find, render, waitUntil } from '@ember/test-helpers';
+import {
+  blur,
+  click,
+  find,
+  render,
+  triggerEvent,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -298,6 +305,18 @@ module('Integration | Card | workspace | visual', function (hooks) {
   const RAIL_SLOT = '[data-test-library-rail-slot]';
   const TOGGLE = '[data-test-rail-toggle]';
 
+  // Close the tooltip of the trigger `selector` and wait until none is
+  // rendered. A tooltip opens on hover over its trigger's wrapper, or on
+  // keyboard-visible focus, so take both away.
+  async function dismissTooltip(selector: string) {
+    await blur(selector);
+    let wrapper = find(selector)?.closest('[data-tooltip-trigger]');
+    if (wrapper) {
+      await triggerEvent(wrapper, 'mouseleave');
+    }
+    await waitUntil(() => !find('[data-test-tooltip-content]'));
+  }
+
   // Fixed boxes so the container queries resolve the same on every run.
   async function renderAt(width: string, height: string) {
     let api = await loader.import<typeof import('@cardstack/base/card-api')>(
@@ -342,6 +361,14 @@ module('Integration | Card | workspace | visual', function (hooks) {
 
     await click(TOGGLE);
     assert.dom(RAIL_SLOT).doesNotHaveAttribute('inert', 'the rail is open');
+    // The click leaves the toggle focused, which opens its tooltip. The rail's
+    // layout then moves the toggle, so where the tooltip lands depends on when
+    // it was placed, and the snapshot would differ from run to run. The
+    // snapshot is of the rail, so close the tooltip first.
+    await dismissTooltip(TOGGLE);
+    assert
+      .dom('[data-test-tooltip-content]')
+      .doesNotExist('no tooltip is open when the snapshot is taken');
     await percySnapshot(
       'Integration | Card | workspace | visual | narrow library with rail open',
     );
