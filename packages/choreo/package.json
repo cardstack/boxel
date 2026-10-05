@@ -20,14 +20,87 @@
   "author": "Cardstack",
   "exports": {
     ".": {
+      "developing:choreo": "./src/index.ts",
       "types": "./declarations/index.d.ts",
       "default": "./dist/index.js"
     },
     "./test-support": {
+      "developing:choreo": "./src/test-support/index.ts",
       "types": "./declarations/test-support/index.d.ts",
       "default": "./dist/test-support/index.js"
     },
+    "./choreo": {
+      "developing:choreo": "./src/choreo.gts",
+      "types": "./declarations/choreo.d.ts",
+      "default": "./dist/choreo.js"
+    },
+    "./film/clip": {
+      "developing:choreo": "./src/film/clip.gts",
+      "types": "./declarations/film/clip.d.ts",
+      "default": "./dist/film/clip.js"
+    },
+    "./film/film": {
+      "developing:choreo": "./src/film/film.gts",
+      "types": "./declarations/film/film.d.ts",
+      "default": "./dist/film/film.js"
+    },
+    "./film/graph/adjust": {
+      "developing:choreo": "./src/film/graph/adjust.gts",
+      "types": "./declarations/film/graph/adjust.d.ts",
+      "default": "./dist/film/graph/adjust.js"
+    },
+    "./film/graph/host": {
+      "developing:choreo": "./src/film/graph/host.gts",
+      "types": "./declarations/film/graph/host.d.ts",
+      "default": "./dist/film/graph/host.js"
+    },
+    "./film/graph/nodes": {
+      "developing:choreo": "./src/film/graph/nodes.gts",
+      "types": "./declarations/film/graph/nodes.d.ts",
+      "default": "./dist/film/graph/nodes.js"
+    },
+    "./film/joins": {
+      "developing:choreo": "./src/film/joins.gts",
+      "types": "./declarations/film/joins.d.ts",
+      "default": "./dist/film/joins.js"
+    },
+    "./film/overlays": {
+      "developing:choreo": "./src/film/overlays.gts",
+      "types": "./declarations/film/overlays.d.ts",
+      "default": "./dist/film/overlays.js"
+    },
+    "./film/picture": {
+      "developing:choreo": "./src/film/picture.gts",
+      "types": "./declarations/film/picture.d.ts",
+      "default": "./dist/film/picture.js"
+    },
+    "./film/plate": {
+      "developing:choreo": "./src/film/plate.gts",
+      "types": "./declarations/film/plate.d.ts",
+      "default": "./dist/film/plate.js"
+    },
+    "./film/player": {
+      "developing:choreo": "./src/film/player.gts",
+      "types": "./declarations/film/player.d.ts",
+      "default": "./dist/film/player.js"
+    },
+    "./film/rail": {
+      "developing:choreo": "./src/film/rail.gts",
+      "types": "./declarations/film/rail.d.ts",
+      "default": "./dist/film/rail.js"
+    },
+    "./film/titles": {
+      "developing:choreo": "./src/film/titles.gts",
+      "types": "./declarations/film/titles.d.ts",
+      "default": "./dist/film/titles.js"
+    },
+    "./steps": {
+      "developing:choreo": "./src/steps.gts",
+      "types": "./declarations/steps.d.ts",
+      "default": "./dist/steps.js"
+    },
     "./*": {
+      "developing:choreo": "./src/*.ts",
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
     },
@@ -51,6 +124,7 @@
   },
   "scripts": {
     "build": "rollup --config && node scripts/fix-declarations.mjs",
+    "check:packed-exports": "node ../glimmer-motion/scripts/check-exports.mjs --packed",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
@@ -59,6 +133,7 @@
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
+    "lint:exports": "node ../glimmer-motion/scripts/check-exports.mjs --source",
     "lint:types": "ember-tsc --noEmit",
     "prepack": "rollup --config && node scripts/fix-declarations.mjs",
     "start": "rollup --config --watch",

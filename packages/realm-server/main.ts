@@ -16,6 +16,7 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+  parseRateLimitSpec,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -191,6 +192,19 @@ const PRERENDER_COALESCE_ACROSS_PROCESSES =
 // from the load this process is under. The construction, and why it is not an
 // operator setting, live beside the gate it reads in `search-inflight.ts`.
 const linkShapePolicy = buildLinkShapePolicy();
+
+// The rate limit callers a realm's policy admits without a session get, as
+// `requests/windowSeconds`, wherever the realm's own `realm.json` sets none.
+// Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`. A value that is not a limit stops the
+// server rather than leaving every realm on a limit nobody chose.
+const anonymousRateLimit = process.env.BOXEL_ANONYMOUS_RATE_LIMIT
+  ? parseRateLimitSpec(process.env.BOXEL_ANONYMOUS_RATE_LIMIT)
+  : undefined;
+if (process.env.BOXEL_ANONYMOUS_RATE_LIMIT && !anonymousRateLimit) {
+  throw new Error(
+    `BOXEL_ANONYMOUS_RATE_LIMIT must be a limit as requests/windowSeconds, for example 300/60, not "${process.env.BOXEL_ANONYMOUS_RATE_LIMIT}"`,
+  );
+}
 
 let {
   port,
@@ -706,6 +720,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             ? { disableModuleCaching: true }
             : {}),
           linkShapePolicy,
+          ...(anonymousRateLimit ? { anonymousRateLimit } : {}),
         },
       );
       // Publish synchronously into realms[] + virtualNetwork. The

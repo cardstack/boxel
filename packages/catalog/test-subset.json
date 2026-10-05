@@ -42,6 +42,7 @@
       "realm-policy-reach-check-test",
       "realm-policy-render-search-test",
       "realm-policy-row-reach-test",
+      "realm-policy-school-example-test",
       "realm-policy-search-infrastructure-test",
       "realm-policy-snapshot-test",
       "realm-policy-source-read-test",

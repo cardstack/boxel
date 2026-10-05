@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
-import { defineConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
 
 import { boxelIframe } from '../choreo-gallery/scripts/iframe-plugin.mjs';
+import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
 
 /**
  * THE DRACO DECODER COMES FROM THREE, not from the repository.
@@ -156,6 +157,16 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     exclude: ['ember-cli-deprecation-workflow'],
   },
+  // glimmer-motion and @cardstack/choreo compile from their source through the
+  // `developing:choreo` export condition, so neither needs building first.
+  // CHOREO_LIBS=dist leaves the condition out and runs against their built
+  // output instead, the code npm consumers get; both packages must be built.
+  resolve: {
+    conditions:
+      process.env.CHOREO_LIBS === 'dist'
+        ? defaultClientConditions
+        : ['developing:choreo', ...defaultClientConditions],
+  },
   build: {
     rollupOptions: {
       // The tests entry only exists for the development build (see `test` in
@@ -171,6 +182,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [
+    glimmerMotionSource(),
     boxelIframe(),
     captureStill(),
     classicEmberSupport(),

@@ -1861,6 +1861,8 @@ export * from './document.ts';
 export * from './matrix-constants.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
+export * from './anonymous-access.ts';
+export * from './anonymous-rate-limiter.ts';
 export * from './queue.ts';
 export * from './host-shell-generation.ts';
 export * from './job-utils.ts';

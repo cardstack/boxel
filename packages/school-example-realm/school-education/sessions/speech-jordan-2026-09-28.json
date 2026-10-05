@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "heldOn": "2026-09-28",
+      "summary": "Worked on /r/ in initial position.",
+      "providerId": "@carmen:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/service-plan-session",
+        "name": "ServicePlanSession"
+      }
+    },
+    "relationships": {
+      "schedule": {
+        "links": {
+          "self": "../schedules/speech-jordan"
+        }
+      }
+    }
+  }
+}

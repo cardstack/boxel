@@ -1,19 +1,21 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
 
+import {
+  framerMotionDir,
+  framerMotionInternalPath,
+  isFramerMotionModule,
+  isReact,
+} from './scripts/source-resolution.mjs';
+
 const addon = new Addon({
   srcDir: 'src',
   destDir: 'dist',
 });
-
-const framerMotionDir = dirname(
-  createRequire(import.meta.url).resolve('framer-motion/package.json'),
-);
 
 // framer-motion is MIT-licensed: the chunk carrying its inlined modules
 // carries its copyright and permission notice, as a legal comment that
@@ -30,12 +32,6 @@ const framerMotionNotice = () => {
     .join('\n')}\n */`;
 };
 
-const isReact = (id) =>
-  id === 'react' ||
-  id.startsWith('react/') ||
-  id === 'react-dom' ||
-  id.startsWith('react-dom/');
-
 /**
  * src/framer-motion-internals.ts imports modules from framer-motion's
  * `dist/es` that its exports map doesn't expose. Resolve them on disk, past
@@ -50,16 +46,12 @@ const isReact = (id) =>
  * import.
  */
 function inlineFramerMotionInternals() {
-  const internal = 'framer-motion/dist/es/';
-  const isFramerMotionModule = (id) => id?.startsWith(framerMotionDir + sep);
   return {
     name: 'inline-framer-motion-internals',
     resolveId(id, importer) {
-      if (id.startsWith(internal)) {
-        return {
-          id: join(framerMotionDir, id.slice('framer-motion/'.length)),
-          moduleSideEffects: false,
-        };
+      const internal = framerMotionInternalPath(id);
+      if (internal) {
+        return { id: internal, moduleSideEffects: false };
       }
       if (!isFramerMotionModule(importer)) {
         return null;
@@ -114,7 +106,7 @@ export default {
   onwarn(warning, warn) {
     if (
       warning.code === 'MODULE_LEVEL_DIRECTIVE' &&
-      warning.id?.startsWith(framerMotionDir + sep)
+      isFramerMotionModule(warning.id)
     ) {
       return;
     }
