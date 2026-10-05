@@ -668,16 +668,24 @@ export function getReader(
   // to the file it stands for, such as a card's id to the card's `.json`.
   // Following that redirect would read another file's bytes under this path,
   // so the indexer would record a file at a URL where none exists, one that
-  // shares its id with the card. A redirected response therefore reads as no
-  // file, like a 404.
-  let servesFileAt = (response: Response): boolean =>
-    response.ok && !response.redirected;
+  // shares its id with the card. A response redirected to a different path
+  // therefore reads as no file, like a 404. A redirect that keeps the path,
+  // such as a scheme upgrade in front of the realm, still serves this file.
+  let servesFileAt = (url: URL, response: Response): boolean => {
+    if (!response.ok) {
+      return false;
+    }
+    if (!response.redirected || !response.url) {
+      return true;
+    }
+    return new URL(response.url).pathname === url.pathname;
+  };
 
   return {
     readFile: (url: URL) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
-        if (!servesFileAt(response)) {
+        if (!servesFileAt(url, response)) {
           return undefined;
         }
         let content: string;
@@ -745,7 +753,7 @@ export function getReader(
       withRetries('readStream', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
         watchdog.stop();
-        if (!servesFileAt(response)) {
+        if (!servesFileAt(url, response)) {
           return undefined;
         }
 
