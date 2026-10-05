@@ -96,10 +96,15 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
     return this.isFitted ? '' : this.sourceUrl;
   }
 
-  // The FileDef's content hash names the bytes the index last saw; it changes
-  // with every write to the file, while the URL stays put.
+  // Names the bytes the index last saw, so it changes with every write to the
+  // file while the URL stays put. The content hash alone isn't enough: above
+  // its whole-content limit it samples only the length and the two ends, so an
+  // edit confined to the middle of a large file keeps the same hash. Joining
+  // the modification time catches that edit, the same way the realm's ETags
+  // treat a sampled hash.
   get sourceRevision() {
-    return this.args.model?.contentHash;
+    let { contentHash, lastModified } = this.args.model ?? {};
+    return `${contentHash ?? ''}:${lastModified ?? ''}`;
   }
 
   get frameTitle() {
