@@ -663,11 +663,21 @@ export function getReader(
     return response;
   };
 
+  // Whether the response serves the file at the requested path. The realm
+  // answers a source request for a path with no file of its own by redirecting
+  // to the file it stands for, such as a card's id to the card's `.json`.
+  // Following that redirect would read another file's bytes under this path,
+  // so the indexer would record a file at a URL where none exists, one that
+  // shares its id with the card. A redirected response therefore reads as no
+  // file, like a 404.
+  let servesFileAt = (response: Response): boolean =>
+    response.ok && !response.redirected;
+
   return {
     readFile: (url: URL) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
-        if (!response.ok) {
+        if (!servesFileAt(response)) {
           return undefined;
         }
         let content: string;
@@ -735,7 +745,7 @@ export function getReader(
       withRetries('readStream', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
         watchdog.stop();
-        if (!response.ok) {
+        if (!servesFileAt(response)) {
           return undefined;
         }
 

@@ -235,6 +235,56 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test("invalidating a card's id does not index a file at that id", async function (assert) {
+      // The realm serves a card's id by redirecting to the card's `.json`;
+      // nothing is on disk at the id itself, so the index holds no file there.
+      let cardId = `${testRealm.url}person-1`;
+      let response = await request
+        .post('/_invalidate')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Content-Type', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'writer', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            type: 'invalidation-request',
+            attributes: { urls: [cardId] },
+          },
+        });
+
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+      let rowsAtCardId = (await dbAdapter.execute(
+        `SELECT type
+         FROM boxel_index
+         WHERE realm_url = $1
+           AND url = $2
+           AND is_deleted IS NOT TRUE`,
+        { bind: [testRealm.url, cardId] },
+      )) as { type: string }[];
+      assert.deepEqual(rowsAtCardId, [], 'no row is indexed at the card id');
+
+      let cardRows = (await dbAdapter.execute(
+        `SELECT type, has_error
+         FROM boxel_index
+         WHERE realm_url = $1
+           AND url = $2
+           AND is_deleted IS NOT TRUE
+         ORDER BY type`,
+        { bind: [testRealm.url, `${cardId}.json`] },
+      )) as { type: string; has_error: boolean }[];
+      assert.deepEqual(
+        cardRows,
+        [
+          { type: 'file', has_error: false },
+          { type: 'instance', has_error: false },
+        ],
+        "the card's own file and instance rows are unchanged",
+      );
+    });
+
     test('returns 204 and silently deduplicates urls', async function (assert) {
       let indexedURL = await aKnownIndexedURL();
       let response = await request
