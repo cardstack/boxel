@@ -1,87 +1,8 @@
-import { existsSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
-import { defineConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
 
-const choreoSrcDir = fileURLToPath(new URL('./src', import.meta.url));
-const glimmerMotionDir = fileURLToPath(
-  new URL('../glimmer-motion', import.meta.url),
-);
-const glimmerMotionSrcDir = join(glimmerMotionDir, 'src');
-
-const framerMotionDir = dirname(
-  createRequire(join(glimmerMotionDir, 'package.json')).resolve(
-    'framer-motion/package.json',
-  ),
-);
-
-/**
- * The suite imports choreo and glimmer-motion by their public specifiers
- * (`@cardstack/choreo/test-support`, `glimmer-motion/test-support`…). Both
- * resolve to their source, so the harness runs with no rollup build first,
- * and a glimmer-motion change is tested here as it stands in the tree.
- */
-function fromSource(packageName, srcDir) {
-  const candidates = (base) => [
-    base,
-    `${base}.ts`,
-    `${base}.gts`,
-    join(base, 'index.ts'),
-    join(base, 'index.gts'),
-  ];
-  return {
-    name: `${packageName}-from-source`,
-    enforce: 'pre',
-    resolveId(id) {
-      if (id !== packageName && !id.startsWith(`${packageName}/`)) {
-        return null;
-      }
-      const base = join(srcDir, id.slice(packageName.length));
-      return (
-        candidates(base).find((f) => existsSync(f) && statSync(f).isFile()) ??
-        null
-      );
-    },
-  };
-}
-
-/**
- * glimmer-motion's src/framer-motion-internals.ts imports modules from
- * framer-motion's `dist/es` that its exports map doesn't expose; its rollup
- * build inlines them into the published package. Here they're served from
- * framer-motion on disk. One of them imports React's `useRef` for a hook
- * glimmer-motion never calls, so React resolves to a stub that throws if it
- * ever is.
- */
-function framerMotionInternals() {
-  const internal = 'framer-motion/dist/es/';
-  const reactStub = '\0choreo-react-stub';
-  return {
-    name: 'framer-motion-internals',
-    enforce: 'pre',
-    resolveId(id, importer) {
-      if (id.startsWith(internal)) {
-        return join(framerMotionDir, id.slice('framer-motion/'.length));
-      }
-      if (id === 'react' && importer?.startsWith(framerMotionDir + sep)) {
-        return reactStub;
-      }
-      return null;
-    },
-    load(id) {
-      if (id === reactStub) {
-        return `export function useRef() {
-  throw new Error('glimmer-motion reached a React hook in framer-motion');
-}`;
-      }
-      return null;
-    },
-  };
-}
+import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
 
 // This vite pipeline serves and builds the test suite (see tests/index.html
 // and the `test` script). Publishing is a separate rollup build; see
@@ -96,6 +17,17 @@ export default defineConfig(({ mode }) => ({
     'process.env.NODE_ENV': JSON.stringify(mode),
   },
   resolve: {
+    // The suite imports choreo and glimmer-motion by their public specifiers
+    // (`@cardstack/choreo/test-support`, `glimmer-motion/test-support`…),
+    // which the `developing:choreo` export condition resolves to the source,
+    // so the harness runs with no rollup build first and tests glimmer-motion
+    // as it stands in the tree. CHOREO_LIBS=dist leaves the condition out and
+    // runs the suite against the built output instead, the code npm consumers
+    // get; both packages must be built.
+    conditions:
+      process.env.CHOREO_LIBS === 'dist'
+        ? defaultClientConditions
+        : ['developing:choreo', ...defaultClientConditions],
     alias: [
       // choreo and glimmer-motion declare the npm `@glimmer/tracking` and
       // `@glimmer/validator` for their types, and those real packages would
@@ -114,9 +46,7 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   plugins: [
-    fromSource('@cardstack/choreo', choreoSrcDir),
-    fromSource('glimmer-motion', glimmerMotionSrcDir),
-    framerMotionInternals(),
+    glimmerMotionSource(),
     ember(),
     babel({
       babelHelpers: 'runtime',

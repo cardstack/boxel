@@ -34,20 +34,24 @@ score from test-app (they move to the host with the gallery):
   `babel.config.mjs` (test build), `testem.cjs`, `tests/index.html`,
   `tests/test-helper.ts`. The publish build reads `babel.publish.config.json`.
 - `vite.config.mjs` resolves `@cardstack/choreo/*` and `glimmer-motion/*` to
-  their source, serves framer-motion's internals the way glimmer-motion's
-  harness does, aliases `@glimmer/tracking` / `@glimmer/validator` to
-  ember-source's copies, and serves `tests/public` at the root.
+  their source through the `developing:choreo` export condition, with
+  glimmer-motion's shared `glimmerMotionSource()` plugin for framer-motion's
+  internals. `CHOREO_LIBS=dist` drops the condition and runs the suite
+  against the built output. It aliases `@glimmer/tracking` /
+  `@glimmer/validator` to ember-source's copies and serves `tests/public` at
+  the root.
 - `tests/helpers/` carries the two helpers the suite uses:
   `setupFixtureViewport` and `nextFrame` / `sleep`.
 - `tsconfig.json` type-checks `tests/`; `tsconfig.declarations.json` stays on
   `src`.
 - CI: a `choreo-addon` change-check filter (`packages/choreo/**`,
   `packages/glimmer-motion/**`) gates a new `Choreo Addon Tests` job running
-  `pnpm test` in `packages/choreo`.
+  `pnpm test` in `packages/choreo`. The built-output job runs the same suite
+  with `CHOREO_LIBS=dist`.
 
 ## Testing
 
-- `pnpm test` in `packages/choreo`: 168 tests pass.
+- `pnpm test` in `packages/choreo`: 167 tests pass, from source and with `CHOREO_LIBS=dist`.
 - `pnpm test` in `packages/choreo-test-app` (after building glimmer-motion,
-  choreo and choreo-player): 185 tests pass.
+  choreo and choreo-player): 186 tests pass.
 - `pnpm lint` in both packages.

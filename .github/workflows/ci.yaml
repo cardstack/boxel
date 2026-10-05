@@ -581,7 +581,8 @@ jobs:
         working-directory: packages/glimmer-motion
 
   # choreo's own QUnit suite (Choreo and film), which compiles choreo and
-  # glimmer-motion from source.
+  # glimmer-motion from source through the `developing:choreo` export
+  # condition.
   choreo-addon-test:
     name: Choreo Addon Tests
     needs: [change-check]
@@ -621,7 +622,7 @@ jobs:
         run: pnpm test
         working-directory: packages/choreo-test-app
 
-  # glimmer-motion's suite and the Choreo test app's suite against the
+  # glimmer-motion's, choreo's and the Choreo test app's suites against the
   # packages' built output, the code npm consumers get. Only the rollup build
   # inlines and tree-shakes framer-motion's internals, so these are the runs
   # that exercise it. CHOREO_LIBS=dist leaves the `developing:choreo`
@@ -650,6 +651,12 @@ jobs:
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm test
         working-directory: packages/glimmer-motion
+        env:
+          CHOREO_LIBS: dist
+      - name: Choreo test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/choreo
         env:
           CHOREO_LIBS: dist
       - name: Choreo Test App test suite
