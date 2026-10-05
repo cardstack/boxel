@@ -359,12 +359,12 @@ module('Integration | tools | search-entries', function (hooks) {
       },
       realms: [testRealmURL],
     });
-    assert.ok(
-      result.results.some(
-        (r: { url: string }) => r.url === `${testRealmURL}Spec/author`,
-      ),
-      'the type filter runs and finds the spec',
+    assert.deepEqual(
+      result.results.map((r: { url: string }) => r.url),
+      [`${testRealmURL}Spec/author`],
+      'the type filter runs and finds exactly the spec',
     );
+    assert.strictEqual(result.total, 1, 'only the spec matches');
   });
 
   test('limit defaults to 5, is honored, and clamps at 10', async function (assert) {
