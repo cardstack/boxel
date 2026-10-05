@@ -4,11 +4,11 @@ import type { AnonymousRateLimit } from './anonymous-access.ts';
 // One anonymous invocation's charge against its realm's budget.
 export interface AnonymousRateCharge {
   realmURL: string;
-  // The caller's address in canonical form (`formatIP`).
+  // What the caller is counted under (`rateLimitKey`).
   clientIP: string;
   limit: AnonymousRateLimit;
-  // How many invocations this is. A batch is one charge for all its entries,
-  // so it is admitted or refused whole.
+  // How many invocations this is, a whole number of at least one. A batch is
+  // one charge for all its entries, so it is admitted or refused whole.
   cost: number;
 }
 
@@ -20,8 +20,6 @@ export type AnonymousRateOutcome =
     }
   | {
       admitted: false;
-      // The window's count before this charge, which was not taken.
-      count: number;
       retryAfterSeconds: number;
     };
 
@@ -64,12 +62,13 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
     let expiresAt = windowStart + limit.windowSeconds;
     let retryAfterSeconds = Math.max(1, expiresAt - nowSeconds);
 
+    if (!Number.isInteger(cost) || cost < 1) {
+      throw new Error(
+        `an anonymous rate-limit charge is a whole number of invocations of at least one, not ${cost}`,
+      );
+    }
     if (cost > limit.requests) {
-      return {
-        admitted: false,
-        count: await this.#count(realmURL, clientIP, windowStart, limit),
-        retryAfterSeconds,
-      };
+      return { admitted: false, retryAfterSeconds };
     }
 
     // A charge that doesn't fit matches the conflict but not the `WHERE`, so
@@ -100,33 +99,12 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
       void this.#sweep(nowSeconds);
     }
 
+    // A refusal is one statement, like an admission: a caller flooding the
+    // realm costs it no more than one who keeps under the limit.
     if (rows.length === 0) {
-      return {
-        admitted: false,
-        count: await this.#count(realmURL, clientIP, windowStart, limit),
-        retryAfterSeconds,
-      };
+      return { admitted: false, retryAfterSeconds };
     }
     return { admitted: true, count: Number(rows[0].count) };
-  }
-
-  async #count(
-    realmURL: string,
-    clientIP: string,
-    windowStart: number,
-    limit: AnonymousRateLimit,
-  ): Promise<number> {
-    let rows = await query(this.#dbAdapter, [
-      'SELECT count FROM anonymous_rate_limits WHERE realm_url =',
-      param(realmURL),
-      'AND client_ip =',
-      param(clientIP),
-      'AND window_start =',
-      param(windowStart),
-      'AND window_seconds =',
-      param(limit.windowSeconds),
-    ] as Expression);
-    return rows.length ? Number(rows[0].count) : 0;
   }
 
   async #sweep(nowSeconds: number) {

@@ -52,12 +52,12 @@ module(basename(import.meta.filename), function () {
       nowMs += 15_000;
       assert.deepEqual(
         await charge(),
-        { admitted: false, count: 3, retryAfterSeconds: 45 },
+        { admitted: false, retryAfterSeconds: 45 },
         'refused, told when the window turns, and not counted',
       );
       assert.deepEqual(
         await charge(),
-        { admitted: false, count: 3, retryAfterSeconds: 45 },
+        { admitted: false, retryAfterSeconds: 45 },
         'a refused retry does not push the count further over',
       );
       nowMs = WINDOW_START_MS + LIMIT.windowSeconds * 1000;
@@ -95,7 +95,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(await charge({ cost: 2 }), { admitted: true, count: 2 });
       assert.deepEqual(
         await charge({ cost: 2 }),
-        { admitted: false, count: 2, retryAfterSeconds: 60 },
+        { admitted: false, retryAfterSeconds: 60 },
         'two more would go over, so none are taken',
       );
       assert.deepEqual(
@@ -106,6 +106,21 @@ module(basename(import.meta.filename), function () {
       assert.false(
         (await charge({ clientIP: OTHER_CALLER, cost: 4 })).admitted,
         'a charge larger than the whole limit is never admitted',
+      );
+    });
+
+    test('a charge that is not a whole number of invocations is refused outright', async function (assert) {
+      for (let cost of [0, -5, 1.5]) {
+        await assert.rejects(
+          charge({ cost }),
+          /whole number of invocations/,
+          `a cost of ${cost} is not a charge`,
+        );
+      }
+      assert.deepEqual(
+        await charge(),
+        { admitted: true, count: 1 },
+        'and none of them moved the count',
       );
     });
 

@@ -15,6 +15,7 @@ import {
   parseRateLimit,
   parseRateLimitSpec,
   rangesContain,
+  rateLimitKey,
   resolveAnonymousAccess,
 } from '@cardstack/runtime-common';
 import {
@@ -55,6 +56,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(normalizeIP('2001:db8:0:1:0:0:0:0'), '2001:db8:0:1::');
       assert.strictEqual(normalizeIP('::'), '::');
       assert.strictEqual(normalizeIP('[2001:db8::1]'), '2001:db8::1');
+      assert.strictEqual(
+        normalizeIP('64:ff9b::192.0.2.1'),
+        '64:ff9b::c000:201',
+        'an embedded IPv4 address ends the address',
+      );
     });
 
     test('text that is not an address is not read as one', function (assert) {
@@ -69,9 +75,34 @@ module(basename(import.meta.filename), function () {
         '2001:db8:0:0:0:0:0:0:1',
         'fe80::1%eth0',
         '192.0.2.10:443',
+        '1.2.3.4::',
+        '1.2.3.4::1',
+        '::1.2.3.4:1',
       ]) {
         assert.strictEqual(parseIP(text), undefined, `"${text}" is refused`);
       }
+    });
+
+    test('an IPv4 caller is counted by address, and an IPv6 caller by the /64 they are in', function (assert) {
+      assert.strictEqual(rateLimitKey(parseIP(CALLER)!), CALLER);
+      assert.strictEqual(
+        rateLimitKey(parseIP(`::ffff:${CALLER}`)!),
+        CALLER,
+        'a mapped address is counted as the IPv4 address it maps',
+      );
+      assert.strictEqual(
+        rateLimitKey(parseIP('2001:db8:1:2:aaaa:bbbb:cccc:dddd')!),
+        '2001:db8:1:2::/64',
+      );
+      assert.strictEqual(
+        rateLimitKey(parseIP('2001:db8:1:2::1')!),
+        rateLimitKey(parseIP('2001:db8:1:2:ffff::9')!),
+        'two addresses in one /64 share a budget',
+      );
+      assert.notStrictEqual(
+        rateLimitKey(parseIP('2001:db8:1:2::1')!),
+        rateLimitKey(parseIP('2001:db8:1:3::1')!),
+      );
     });
 
     test('a range contains the addresses under its prefix, and a single address only itself', function (assert) {
