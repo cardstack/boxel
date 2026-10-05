@@ -606,6 +606,20 @@ export function userIdFromUsername(username: string, matrixURL: string) {
   return `@${username}:${host}`;
 }
 
+// Whether the text is a full Matrix user id: `@localpart:server`, the
+// localpart in the character set Synapse registers users with, and the server
+// a hostname or an IP literal with an optional port. For a value someone typed
+// into a setting, where a bare username or a stray space would otherwise name
+// no user and fail somewhere far from the setting.
+export function isMatrixUserId(text: string): boolean {
+  return (
+    text.length <= 255 &&
+    /^@[a-z0-9._=\-/+]+:(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/.test(
+      text,
+    )
+  );
+}
+
 export function ensureFullMatrixUserId(userId: string, matrixURL: string) {
   if (userId.startsWith('@') && userId.includes(':')) {
     return userId;
