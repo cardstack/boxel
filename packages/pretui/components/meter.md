@@ -29,7 +29,7 @@ Governing pattern: APG **Meter** — `role="meter"` with `aria-valuenow`, `aria-
 What is right: `aria-valuenow`, `aria-valuemin="0"`, `aria-valuemax` and `aria-label` are all present, and the visible label is required — so unlike most of this kit's small components, a Meter is never anonymous.
 
 - **`role="meter progressbar"`, a fallback role list.** `role="meter"` has uneven support: Firefox does not implement it at all, and a bare `meter` there announces as an unlabelled group, losing the level. The first role an engine understands wins, so meter-aware engines get `meter` and Firefox falls back to `progressbar`, which reads the same `aria-value*` attributes. React Aria's `useMeter` ships the same pair for the same reason.
-- **The level is clamped to `[0, @segments]`.** `@level={{9}} @segments={{3}}` announces 3 and lights three bars; a negative level announces 0 and lights none. The announced value never leaves `aria-valuemin..aria-valuemax`, and it always matches the lit count.
+- **The level is a whole number of bars in `[0, @segments]`.** `@level={{9}} @segments={{3}}` announces 3 and lights three bars; a negative level announces 0 and lights none. A fractional level rounds up, the way a partly reached step lights in the stepped ProgressBar, so `@level={{1.5}}` announces 2 and lights two bars. An unset or non-finite level announces 0 and lights none. The announced value never leaves `aria-valuemin..aria-valuemax`, and it always matches the lit count.
 
 Gaps:
 

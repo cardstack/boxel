@@ -28,11 +28,14 @@ export class Meter extends Component<MeterSignature> {
   get segmentsCount() {
     return this.args.segments ?? 3;
   }
-  // `@level` clamped into [0, segments], so `aria-valuenow` always sits
-  // between `aria-valuemin` and `aria-valuemax`, and what is announced is the
-  // number of bars a sighted user sees lit.
+  // `@level` as a whole number of bars in [0, segments], so `aria-valuenow`
+  // always sits between `aria-valuemin` and `aria-valuemax`, and what is
+  // announced is the number of bars a sighted user sees lit. A fraction rounds
+  // up, the way a partly reached step lights in the stepped ProgressBar, so 1.5
+  // lights and announces 2. An unset or non-finite level reads as 0.
   get levelNow() {
-    return Math.max(0, Math.min(this.args.level, this.segmentsCount));
+    let level = Number.isFinite(this.args.level) ? Math.ceil(this.args.level) : 0;
+    return Math.max(0, Math.min(level, this.segmentsCount));
   }
   get style() {
     return hueStyle('--pretui-meter-hue', this.args.hue);

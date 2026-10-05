@@ -183,6 +183,41 @@ module('Pretui | ink', function (hooks) {
     );
   });
 
+  test('Meter rounds a fractional level up, so the announced level matches the lit count', async function (assert) {
+    await render(<template><Meter @level={{1.5}} @segments={{3}} @label='Partial' /></template>);
+    assert.strictEqual(
+      q('[data-test-pretui-meter]').getAttribute('aria-valuenow'),
+      '2',
+      'announced as the whole number of lit bars',
+    );
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      ['true', 'true', undefined],
+      'two bars are lit',
+    );
+  });
+
+  test('Meter reads an unset or non-finite level as 0', async function (assert) {
+    // The signature requires a number, but an unset model property or a failed
+    // computation still reaches the component at runtime.
+    const UNSET = undefined as unknown as number;
+    const NOT_A_NUMBER = Number.NaN;
+    await render(
+      <template>
+        <Meter @level={{UNSET}} @label='Unset' data-test-unset />
+        <Meter @level={{NOT_A_NUMBER}} @label='NaN' data-test-nan />
+      </template>,
+    );
+    for (let sel of ['[data-test-unset]', '[data-test-nan]']) {
+      assert.strictEqual(q(sel).getAttribute('aria-valuenow'), '0', `${sel}: announced as the min, not NaN`);
+      assert.deepEqual(
+        Array.from(q(sel).querySelectorAll<HTMLElement>('.pretui-meter-bar')).map((b) => b.dataset['on']),
+        [undefined, undefined, undefined],
+        `${sel}: no bar is lit`,
+      );
+    }
+  });
+
   test('Meter reuses the last height when @segments outruns @heights', async function (assert) {
     const HEIGHTS = [4, 8];
     await render(

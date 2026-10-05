@@ -242,14 +242,67 @@ module('Pretui | components/progress-bar', function (hooks) {
     );
   });
 
-  test('a zero @max reads as an empty bar, not a NaN width', async function (assert) {
-    await render(<template><ProgressBar @value={{5}} @max={{0}} @label='Nothing to do' /></template>);
-    let el = bar();
-    assert.strictEqual(el.getAttribute('aria-valuenow'), '0', 'the value is clamped into the empty range');
-    assert.strictEqual(el.getAttribute('aria-valuemax'), '0');
-    assert.strictEqual(px(q('.pretui-progress-fill'), 'width'), '0%');
-    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0px');
-    assert.strictEqual(q('.pretui-progress-count').textContent?.trim(), '0%');
+  test('a zero @max is an empty range: a positive value does not fill the bar, and 0 / 0 is 0%, not NaN%', async function (assert) {
+    await render(
+      <template>
+        <ProgressBar @value={{5}} @max={{0}} @label='Nothing to do' data-test-positive />
+        <ProgressBar @value={{0}} @max={{0}} @label='Nothing to do' data-test-zero />
+      </template>,
+    );
+    for (let sel of ['[data-test-positive]', '[data-test-zero]']) {
+      let el = bar(sel);
+      assert.strictEqual(el.getAttribute('aria-valuenow'), '0', `${sel}: the value is clamped into the empty range`);
+      assert.strictEqual(el.getAttribute('aria-valuemax'), '0', `${sel}: the range is empty`);
+      let fill = el.querySelector('.pretui-progress-fill') as HTMLElement;
+      assert.strictEqual(px(fill, 'width'), '0%', `${sel}: the fill is empty, neither full nor NaN%`);
+      assert.strictEqual(px(fill, 'min-width'), '0px', `${sel}: an empty fill has no minimum`);
+      assert.strictEqual(
+        el.querySelector('.pretui-progress-count')?.textContent?.trim(),
+        '0%',
+        `${sel}: the visible readout is 0%`,
+      );
+    }
+  });
+
+  test('reads an unset or non-finite @value as 0, so nothing announces or paints NaN', async function (assert) {
+    // The signature requires a number, but an unset model property or a failed
+    // computation still reaches the component at runtime.
+    const UNSET = undefined as unknown as number;
+    const NOT_A_NUMBER = Number.NaN;
+    await render(
+      <template>
+        <ProgressBar @value={{UNSET}} @label='Unset' data-test-unset />
+        <ProgressBar @value={{NOT_A_NUMBER}} @label='NaN' data-test-nan />
+      </template>,
+    );
+    for (let sel of ['[data-test-unset]', '[data-test-nan]']) {
+      let el = bar(sel);
+      assert.strictEqual(el.getAttribute('aria-valuenow'), '0', `${sel}: announced as the min`);
+      let fill = el.querySelector('.pretui-progress-fill') as HTMLElement;
+      assert.strictEqual(px(fill, 'width'), '0%', `${sel}: the fill is empty, not a dropped NaN% width that paints full`);
+      assert.strictEqual(
+        el.querySelector('.pretui-progress-count')?.textContent?.trim(),
+        '0%',
+        `${sel}: the visible readout is 0%`,
+      );
+    }
+  });
+
+  test('reads a negative or non-finite @max as an empty range, so aria-valuemax never drops below aria-valuemin', async function (assert) {
+    const NOT_A_NUMBER = Number.NaN;
+    await render(
+      <template>
+        <ProgressBar @value={{3}} @max={{-5}} @label='Negative' data-test-negative />
+        <ProgressBar @value={{3}} @max={{NOT_A_NUMBER}} @label='NaN' data-test-nan />
+      </template>,
+    );
+    for (let sel of ['[data-test-negative]', '[data-test-nan]']) {
+      let el = bar(sel);
+      assert.strictEqual(el.getAttribute('aria-valuemax'), '0', `${sel}: the range is empty`);
+      assert.strictEqual(el.getAttribute('aria-valuenow'), '0', `${sel}: the value is clamped into it`);
+      let fill = el.querySelector('.pretui-progress-fill') as HTMLElement;
+      assert.strictEqual(px(fill, 'width'), '0%', `${sel}: the fill is empty`);
+    }
   });
 
   test('stays continuous for a small total when no @count is given', async function (assert) {

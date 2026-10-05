@@ -24,17 +24,22 @@ export interface ProgressBarSignature {
 // and is hidden from assistive tech, which hears the name and value from the
 // ARIA attributes instead.
 export class ProgressBar extends Component<ProgressBarSignature> {
+  // A negative or non-finite `@max` reads as an empty range, so `aria-valuemax`
+  // never drops below `aria-valuemin` and the stepped track is always a finite
+  // row.
   get max() {
-    return this.args.max ?? 100;
+    let max = this.args.max ?? 100;
+    return Number.isFinite(max) ? Math.max(0, max) : 0;
   }
-  // `@value` clamped into [0, max], so `aria-valuenow` always sits between
-  // `aria-valuemin` and `aria-valuemax` and agrees with the fill a sighted user
-  // sees.
+  // `@value` clamped into [0, max], with an unset or non-finite value read as
+  // 0, so `aria-valuenow` always sits between `aria-valuemin` and
+  // `aria-valuemax` and agrees with the fill a sighted user sees.
   get valueNow() {
-    return Math.max(0, Math.min(this.args.value, this.max));
+    let value = Number.isFinite(this.args.value) ? this.args.value : 0;
+    return Math.max(0, Math.min(value, this.max));
   }
-  // A zero `@max` has no fraction to show, so it reads as an empty bar rather
-  // than dividing by zero into a `NaN%` width and count.
+  // A zero `@max` has no fraction to show, so any value against it reads as an
+  // empty bar at 0%, with no division by zero.
   get pct() {
     return this.max > 0 ? (this.valueNow / this.max) * 100 : 0;
   }
