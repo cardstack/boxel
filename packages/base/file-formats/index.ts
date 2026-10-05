@@ -104,6 +104,7 @@ export {
   FileResource,
   FileVideo,
   applyFileFont,
+  fileElementURL,
   fileResourceURL,
   type FileResourceLike,
   type ResolvedFileResource,

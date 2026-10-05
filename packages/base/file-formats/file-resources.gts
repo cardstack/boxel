@@ -12,12 +12,13 @@ import { profileForFile, type FileTypeProfile } from './file-type-profile';
 // module remains the media-primitives barrel.
 import {
   FileImage,
+  fileElementURL,
   fileResourceURL,
   stringValue,
   type FileResourceLike,
 } from './file-image';
 
-export { FileImage, fileResourceURL, type FileResourceLike };
+export { FileImage, fileElementURL, fileResourceURL, type FileResourceLike };
 
 interface ResourceArgs {
   file?: FileResourceLike | null;
@@ -231,7 +232,9 @@ const preservePlaybackIntentWhileSeeking = modifier(
 // requests, so `<audio src>` normally just works. This opt-in covers the cases
 // it can't: a browser with no controlling worker yet, or one that declines to
 // route media element requests through it. The object URL is ephemeral and is
-// revoked on teardown, so it never reaches card data.
+// revoked on teardown, so it never reaches card data. The fetch reruns when the
+// URL changes; a URL resolved from the FileDef carries the file's content
+// revision (`fileElementURL`), so a write to the file refetches it.
 const loadProtectedMediaBlob = modifier(
   (
     element: HTMLMediaElement,
@@ -318,7 +321,7 @@ interface FileAudioSignature {
 export class FileAudio extends GlimmerComponent<FileAudioSignature> {
   get src() {
     return (
-      fileResourceURL(this.args.file, this.args.src ?? this.args.url) ||
+      fileElementURL(this.args.file, this.args.src ?? this.args.url) ||
       undefined
     );
   }
@@ -385,7 +388,7 @@ interface FileVideoSignature {
 export class FileVideo extends GlimmerComponent<FileVideoSignature> {
   get src() {
     return (
-      fileResourceURL(this.args.file, this.args.src ?? this.args.url) ||
+      fileElementURL(this.args.file, this.args.src ?? this.args.url) ||
       undefined
     );
   }
@@ -449,7 +452,7 @@ interface FileObjectSignature {
 export class FileObject extends GlimmerComponent<FileObjectSignature> {
   get data() {
     return (
-      fileResourceURL(this.args.file, this.args.data ?? this.args.url) ||
+      fileElementURL(this.args.file, this.args.data ?? this.args.url) ||
       undefined
     );
   }
