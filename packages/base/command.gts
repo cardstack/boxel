@@ -469,8 +469,8 @@ export class ViewVisuallyResult extends CardDef {
   @field attachedImages = containsMany(AttachedImageField);
 }
 
-// Former names: a stored capture-card tool result adopts from
-// `CaptureCardOutput`, and realm content references these types by name.
+// Aliases: a stored capture-card tool result adopts from `CaptureCardOutput`,
+// and realm content references these types by name.
 export { CaptureInput as CaptureCardInput, CaptureOutput as CaptureCardOutput };
 
 export class CheckCorrectnessInput extends CardDef {

@@ -416,7 +416,7 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     GenerateThumbnailToolModule,
   );
   shimHostToolModule(virtualNetwork, 'capture', CaptureToolModule);
-  // The tool's former module name, which realm content imports.
+  // An alias module name for the capture tool, which realm content imports.
   shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
   shimHostToolModule(virtualNetwork, 'view-visually', ViewVisuallyToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);

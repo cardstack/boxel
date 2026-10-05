@@ -45,6 +45,7 @@ import {
   waitForCompletedCommandRequest,
   waitForRealmState,
 } from '@cardstack/host/tools/utils';
+import ViewVisuallyTool from '@cardstack/host/tools/view-visually';
 
 import {
   addSkillToAiAssistant,
@@ -231,6 +232,30 @@ module('Acceptance | Tools tests', function (hooks) {
         });
 
         return undefined;
+      }
+    }
+
+    // A command from a realm that is a host tool in every way except where it
+    // is loaded from: it subclasses view-visually and returns an uploaded
+    // image the way that tool does, without capturing anything.
+    class RealmViewerCommand extends ViewVisuallyTool {
+      protected async run() {
+        let { ViewVisuallyResult, AttachedImageField } =
+          await this.loadToolModule();
+        return new ViewVisuallyResult({
+          sourceUrl: `${testRealmURL}Pet/mango`,
+          kind: 'card',
+          format: 'isolated',
+          attachedImages: [
+            new AttachedImageField({
+              name: 'mango.png',
+              sourceUrl: 'boxel-local://capture/mango.png',
+              url: 'mxc://localhost/mango',
+              contentType: 'image/png',
+              contentSize: 68,
+            }),
+          ],
+        });
       }
     }
 
@@ -457,6 +482,7 @@ module('Acceptance | Tools tests', function (hooks) {
           friends: [mangoPet],
         }),
         'maybe-boom-command.ts': { default: MaybeBoomCommand },
+        'realm-viewer-command.ts': { default: RealmViewerCommand },
         'command-runner-hello-command.ts': {
           GreetingCard,
           default: HelloCommand,
@@ -505,6 +531,30 @@ module('Acceptance | Tools tests', function (hooks) {
                 },
               ],
               cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        // The realm viewer without approval, so a request for it runs at once.
+        'Skill/realm-seeing.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions: 'Use the realm viewer to look at a card.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '../realm-viewer-command',
+                  },
+                  requiresApproval: false,
+                },
+              ],
+              cardTitle: 'Realm seeing',
               cardDescription: null,
               cardThumbnailURL: null,
             },
@@ -1554,6 +1604,63 @@ module('Acceptance | Tools tests', function (hooks) {
     } finally {
       unregisterRealmServerRoute('/_capture');
     }
+  });
+
+  test('a command loaded from a realm attaches nothing to its tool result, even one built on a host tool', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      aiAssistantOpen: true,
+    });
+    await waitFor('[data-test-message-field]');
+    await fillIn('[data-test-message-field]', 'Start a session');
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+    let roomId = getRoomIds().pop()!;
+    await addSkillToAiAssistant(`${testRealmURL}Skill/realm-seeing`);
+    await waitForNewRoomSkillsLoaded(roomId);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Looking at the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'realm-viewer-request',
+          name: buildCommandFunctionName(
+            { module: testRRI('realm-viewer-command'), name: 'default' },
+            undefined,
+            getService('network').virtualNetwork,
+          ),
+          arguments: JSON.stringify({
+            description: 'Look at the card',
+            attributes: { url: `${testRealmURL}Pet/mango` },
+          }),
+        },
+      ],
+      data: {
+        context: { agentId: getService('matrix-service').agentId },
+      },
+    });
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
+
+    let result = getRoomEvents(roomId)
+      .filter(
+        (event) =>
+          event.content['m.relates_to']?.rel_type ===
+            APP_BOXEL_TOOL_RESULT_REL_TYPE &&
+          event.content.commandRequestId === 'realm-viewer-request',
+      )
+      .pop()!;
+    assert.strictEqual(result.content['m.relates_to']?.key, 'applied');
+    let data = JSON.parse(result.content.data);
+    assert.deepEqual(
+      data.attachedFiles,
+      [],
+      'the image its result names is not attached for the model',
+    );
   });
 
   test('ShowCard command added from a skill, is not automatically executed when agentId does not match', async function (assert) {

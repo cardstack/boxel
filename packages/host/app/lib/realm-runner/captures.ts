@@ -50,7 +50,9 @@ export class RealmCaptures {
   }
 
   // `url` is the realm URL to capture, already resolved inside the run's
-  // realm; `path` is how the script named it.
+  // realm; `path` is how the script named it. Calls must not overlap: the
+  // limit is checked before the capture and counted after it, so the caller
+  // runs them one at a time (the realm session queues every call).
   async take(url: string, path: string, rawOptions: unknown) {
     if (this.taken.length >= MAX_CAPTURES) {
       throw new Error(

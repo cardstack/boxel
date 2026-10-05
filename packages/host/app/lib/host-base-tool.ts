@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import { Command, type ToolContext } from '@cardstack/runtime-common';
 
 import type LoaderService from '../services/loader-service';
-import type { CardDef, CardDefConstructor } from '@cardstack/base/card-api';
+import type { CardDefConstructor } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 // A file a tool's result attaches for the model to see with it. A file with a
@@ -39,7 +39,11 @@ export default abstract class HostBaseTool<
   // saved or images it captured. The tool service asks only tools the host
   // itself provides, so a command loaded from a realm cannot attach files
   // this way.
-  resultAttachments(_result: CardDef): ResultAttachment[] {
+  resultAttachments(
+    _result: CardResultType extends CardDefConstructor
+      ? InstanceType<CardResultType>
+      : never,
+  ): ResultAttachment[] {
     return [];
   }
 

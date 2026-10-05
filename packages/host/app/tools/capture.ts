@@ -268,6 +268,6 @@ export default class CaptureTool extends HostBaseTool<
   }
 }
 
-// Former names: realm content references these classes by named export in
-// imports and codeRefs, so the old names stay importable.
+// Aliases realm content imports and names in codeRefs, so each name it uses
+// resolves to this tool.
 export { CaptureTool as CaptureCardTool, CaptureTool as CaptureCardCommand };
