@@ -29,7 +29,11 @@ module('Integration | glimmer-motion and choreo', function (hooks) {
       </template>,
     );
     await animationsSettled();
-    assert.strictEqual(getComputedStyle(find('#fader')!).opacity, '1');
+    assert.strictEqual(
+      (find('#fader') as HTMLElement).style.opacity,
+      '1',
+      'the modifier wrote the animated value to the element',
+    );
   });
 
   test('a choreographed leaver stays in the document while its exit plays', async function (assert) {
