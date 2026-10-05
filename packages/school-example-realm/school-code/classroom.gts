@@ -98,18 +98,44 @@ class ClassroomIsolated extends Component<typeof Classroom> {
     return this.args.context?.canInvoke?.('update', this.classroom) === true;
   }
 
-  get rosterTeacherIds() {
-    return rosterIds(this.classroom.teachers);
+  get rosterTeachers() {
+    return rosterIds(this.classroom, 'teachers');
   }
 
-  get rosterLeadTeacherIds() {
-    return rosterIds(this.classroom.leadTeachers);
+  get rosterLeadTeachers() {
+    return rosterIds(this.classroom, 'leadTeachers');
+  }
+
+  // The ids both lists should hold, once every linked roster card has loaded
+  // and carries an id; otherwise why they can't be worked out yet.
+  get roster():
+    | { teacherIds: string[]; leadTeacherIds: string[] }
+    | { waiting: string } {
+    let teachers = this.rosterTeachers;
+    let leads = this.rosterLeadTeachers;
+    if (teachers.state === 'unusable') {
+      return { waiting: teachers.reason };
+    }
+    if (leads.state === 'unusable') {
+      return { waiting: leads.reason };
+    }
+    if (teachers.state === 'loading' || leads.state === 'loading') {
+      return { waiting: 'Loading the roster…' };
+    }
+    return { teacherIds: teachers.ids, leadTeacherIds: leads.ids };
+  }
+
+  get rosterWaiting(): string | undefined {
+    let roster = this.roster;
+    return 'waiting' in roster ? roster.waiting : undefined;
   }
 
   get mirrorIsCurrent(): boolean {
+    let roster = this.roster;
     return (
-      mirrors(this.classroom.teacherIds, this.rosterTeacherIds) &&
-      mirrors(this.classroom.leadTeacherIds, this.rosterLeadTeacherIds)
+      !('waiting' in roster) &&
+      mirrors(this.classroom.teacherIds, roster.teacherIds) &&
+      mirrors(this.classroom.leadTeacherIds, roster.leadTeacherIds)
     );
   }
 
@@ -143,13 +169,17 @@ class ClassroomIsolated extends Component<typeof Classroom> {
   // realm writer may update a classroom — the policy grants instructors no
   // `update` — so this is the IT admin's step after the roster changes.
   @action async syncStaffIds() {
+    let roster = this.roster;
+    if ('waiting' in roster) {
+      return;
+    }
     this.refusal = undefined;
     this.running = true;
     try {
       await operations(this.classroom).update({
         attributes: {
-          teacherIds: this.rosterTeacherIds,
-          leadTeacherIds: this.rosterLeadTeacherIds,
+          teacherIds: roster.teacherIds,
+          leadTeacherIds: roster.leadTeacherIds,
         },
       });
     } catch (err) {
@@ -213,13 +243,24 @@ class ClassroomIsolated extends Component<typeof Classroom> {
             The policy reads the id lists above, not these links. After the
             roster changes, sync the lists so the policy sees the change.
           </p>
+          <h3>Teachers</h3>
           <div class='staff'>
             {{#each @fields.teachers as |Teacher|}}
               <Teacher @format='embedded' />
             {{/each}}
           </div>
+          {{#if @model.leadTeachers.length}}
+            <h3>Lead teachers</h3>
+            <div class='staff'>
+              {{#each @fields.leadTeachers as |Lead|}}
+                <Lead @format='embedded' />
+              {{/each}}
+            </div>
+          {{/if}}
           {{#if this.mirrorIsCurrent}}
             <p class='subtle'>The id lists match the roster.</p>
+          {{else if this.rosterWaiting}}
+            <p class='subtle'>{{this.rosterWaiting}}</p>
           {{else}}
             <Alert @type='warning' as |Alert|>
               <Alert.Messages

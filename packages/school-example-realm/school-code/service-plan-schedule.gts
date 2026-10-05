@@ -34,26 +34,42 @@ class ScheduleIsolated extends Component<typeof ServicePlanSchedule> {
     return this.args.context?.canInvoke?.('update', this.schedule) === true;
   }
 
-  get rosterProviderId(): string | undefined {
-    return rosterIds([this.schedule.provider])[0];
+  get rosterProvider() {
+    return rosterIds(this.schedule, 'provider');
+  }
+
+  get rosterWaiting(): string | undefined {
+    let provider = this.rosterProvider;
+    return provider.state === 'loading'
+      ? 'Loading the roster…'
+      : provider.state === 'unusable'
+        ? provider.reason
+        : undefined;
   }
 
   get mirrorIsCurrent(): boolean {
-    let linked = this.rosterProviderId;
-    return mirrors(
-      this.schedule.providerId ? [this.schedule.providerId] : [],
-      linked ? [linked] : [],
+    let provider = this.rosterProvider;
+    return (
+      provider.state === 'ready' &&
+      mirrors(
+        this.schedule.providerId ? [this.schedule.providerId] : [],
+        provider.ids,
+      )
     );
   }
 
   // Copies the linked provider's id into the field the policy reads. A realm
   // writer's step; the policy grants no `update` on a schedule.
   @action async syncProviderId() {
+    let provider = this.rosterProvider;
+    if (provider.state !== 'ready') {
+      return;
+    }
     this.refusal = undefined;
     this.running = true;
     try {
       await operations(this.schedule).update({
-        attributes: { providerId: this.rosterProviderId ?? null },
+        attributes: { providerId: provider.ids[0] ?? null },
       });
     } catch (err) {
       this.refusal = refusalMessage(err);
@@ -85,6 +101,8 @@ class ScheduleIsolated extends Component<typeof ServicePlanSchedule> {
           <@fields.provider @format='embedded' />
           {{#if this.mirrorIsCurrent}}
             <p class='subtle'>The provider id matches the roster.</p>
+          {{else if this.rosterWaiting}}
+            <p class='subtle'>{{this.rosterWaiting}}</p>
           {{else}}
             <Alert @type='warning' as |Alert|>
               <Alert.Messages
