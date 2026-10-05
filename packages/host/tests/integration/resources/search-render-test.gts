@@ -1,14 +1,16 @@
 import { getOwner } from '@ember/owner';
-import { render } from '@ember/test-helpers';
+import { render, settled } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import { Stat } from '@cardstack/pretui/components/stat';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import type { Query } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument, Query } from '@cardstack/runtime-common';
+
+import type { SearchResource } from '@cardstack/host/resources/search';
 
 import {
   setupIntegrationTestRealm,
@@ -26,6 +28,17 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+class Ticker {
+  @tracked count = 0;
+}
+
+function titlesOf(instances: readonly object[]): string {
+  return instances
+    .map((card) => (card as { title?: string }).title)
+    .filter(Boolean)
+    .join(', ');
+}
+
 module('Integration | search resource | render', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -36,6 +49,9 @@ module('Integration | search resource | render', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
+
+  const bookRef = { module: testRRI('book'), name: 'Book' };
+  const byTitle: Query['sort'] = [{ by: 'title', on: bookRef }];
 
   hooks.beforeEach(async function () {
     class Book extends CardDef {
@@ -55,14 +71,24 @@ module('Integration | search resource | render', function (hooks) {
     });
   });
 
-  test('a live search count feeds a rolling Stat while the resource re-runs mid-render', async function (assert) {
+  // A live search read twice in one render, with `modify` re-run in between
+  // on arguments equal to the ones the resource holds. That is where a lazy
+  // re-run lands when it falls inside a render: the resource manager re-runs
+  // `modify` on the first read of the resource after something `modify` read
+  // has been written, so a write partway through a render puts the re-run
+  // after reads that render has already made. The first read groups by realm,
+  // so it reads the realms the resource searches as well as its result.
+  // `ticker` re-renders all three on demand, so a re-run can also land in a
+  // render where the result has gone through the client filtering step.
+  function liveSearchProbe(
+    query: Query,
+    { rerunMidRender = true }: { rerunMidRender?: boolean } = {},
+  ) {
     let store = getService('store');
-    let query: Query = {
-      filter: { type: { module: testRRI('book'), name: 'Book' } },
-    };
-    let rerunCount = 0;
+    let ticker = new Ticker();
+    let resource: SearchResource | undefined;
 
-    class LiveBookCount extends GlimmerComponent {
+    class LiveSearchProbe extends GlimmerComponent {
       books = store.getSearchResource(
         this,
         () => query,
@@ -70,14 +96,22 @@ module('Integration | search resource | render', function (hooks) {
         { isLive: true },
       );
 
-      // The resource manager re-runs `modify` on the first read of the
-      // resource after any input it consumed has changed, with arguments that
-      // may well equal the ones it already holds. Doing that here, between two
-      // reads of the resource in one render, is the situation a component
-      // meets when it reads its argument more than once per render — the
-      // rolling Stat below reads its value several times.
+      constructor(...args: ConstructorParameters<typeof GlimmerComponent>) {
+        super(...args);
+        resource = this.books;
+      }
+
+      get before() {
+        void ticker.count;
+        void this.books.instancesByRealm;
+        return titlesOf(this.books.instances);
+      }
+
       get rerunWithUnchangedArgs() {
-        rerunCount++;
+        void ticker.count;
+        if (!rerunMidRender) {
+          return '';
+        }
         this.books.modify([], {
           query: structuredClone(query),
           realms: [testRealmURL],
@@ -88,22 +122,102 @@ module('Integration | search resource | render', function (hooks) {
         return '';
       }
 
-      // Grouping by realm reads the realms the resource searches, so the
-      // re-run below meets them already used in this render.
+      get after() {
+        void ticker.count;
+        return titlesOf(this.books.instances);
+      }
+
       <template>
-        <span data-test-realm-groups>
-          {{this.books.instancesByRealm.length}}
-        </span>
+        <span data-test-before>{{this.before}}</span>
         {{this.rerunWithUnchangedArgs}}
-        <Stat @label='Books' @value={{this.books.instances.length}} />
+        <span data-test-after>{{this.after}}</span>
       </template>
     }
 
-    await render(<template><LiveBookCount /></template>);
+    return {
+      LiveSearchProbe,
+      ticker,
+      resource: () => resource!,
+    };
+  }
 
-    assert.ok(rerunCount > 0, 'the resource re-ran inside a render');
+  test('a re-run of modify with unchanged arguments mid-render leaves the result in place', async function (assert) {
+    let { LiveSearchProbe, ticker } = liveSearchProbe({
+      filter: { type: bookRef },
+      sort: byTitle,
+    });
+
+    await render(<template><LiveSearchProbe /></template>);
     assert
-      .dom('[data-test-pretui-stat] .pretui-odo-sr')
-      .hasText('3', 'the Stat rolls to the live search count');
+      .dom('[data-test-before]')
+      .hasText('Mango, Ringo, Van Gogh', 'read before the re-run');
+    assert
+      .dom('[data-test-after]')
+      .hasText('Mango, Ringo, Van Gogh', 'read after the re-run');
+
+    ticker.count++;
+    await settled();
+    assert
+      .dom('[data-test-after]')
+      .hasText(
+        'Mango, Ringo, Van Gogh',
+        'a re-run in a render that reads the filtered result leaves it in place',
+      );
+  });
+
+  test('a re-run of modify with unchanged arguments mid-render leaves a query with no filter in place', async function (assert) {
+    let { LiveSearchProbe, ticker } = liveSearchProbe({ sort: byTitle });
+
+    await render(<template><LiveSearchProbe /></template>);
+    ticker.count++;
+    await settled();
+    assert
+      .dom('[data-test-before]')
+      .hasText('Mango, Ringo, Van Gogh', 'read before the re-run');
+    assert
+      .dom('[data-test-after]')
+      .hasText('Mango, Ringo, Van Gogh', 'read after the re-run');
+  });
+
+  test('a re-run of modify with unchanged arguments keeps the client filtering step applied', async function (assert) {
+    let { LiveSearchProbe, resource } = liveSearchProbe(
+      { filter: { type: bookRef }, sort: byTitle },
+      // Only the re-run below, outside any render, so what this checks is the
+      // result it leaves rather than a write it makes mid-render.
+      { rerunMidRender: false },
+    );
+
+    await render(<template><LiveSearchProbe /></template>);
+
+    // In the Store only, so only the client filtering step can add it to the
+    // result: the server has never indexed it.
+    await getService('store').addWithoutPersisting({
+      data: {
+        type: 'card',
+        id: `${testRealmURL}books/local-only`,
+        attributes: { title: 'Austen' },
+        meta: { adoptsFrom: bookRef },
+      },
+    } as LooseSingleCardDocument);
+    await settled();
+    assert
+      .dom('[data-test-after]')
+      .hasText(
+        'Austen, Mango, Ringo, Van Gogh',
+        'the client filtering step adds the card that is only in the Store',
+      );
+
+    resource().modify([], {
+      query: { filter: { type: bookRef }, sort: byTitle },
+      realms: [testRealmURL],
+      isLive: true,
+      storeService: getService('store'),
+      owner: this.owner,
+    });
+    assert.strictEqual(
+      titlesOf(resource().instances),
+      'Austen, Mango, Ringo, Van Gogh',
+      'right after the re-run, the result still goes through the client filtering step',
+    );
   });
 });
