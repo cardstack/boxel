@@ -311,6 +311,7 @@ module(
     });
 
     module('font specimen', function (hooks) {
+      // The sources of the faces the specimen asks the browser to load.
       let requestedFaces: string[];
       let NativeFontFace: typeof FontFace;
 
@@ -325,7 +326,7 @@ module(
           ) {
             super(family, source, descriptors);
             if (typeof source === 'string') {
-              requestedFaces.push(`${family} from ${source}`);
+              requestedFaces.push(source);
             }
           }
         };
@@ -358,7 +359,7 @@ module(
           },
         );
         assert.true(
-          requestedFaces[requestedFaces.length - 1]!.includes('face.ttf'),
+          requestedFaces[requestedFaces.length - 1]!.includes('face.ttf?rev='),
           'the specimen loads the rewritten file as a new face',
         );
       });
