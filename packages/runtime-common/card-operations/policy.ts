@@ -450,16 +450,6 @@ export class RealmPolicyCache {
 // minute (see `Realm#revisitPolicyCard`).
 const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 
-// One line per compile for the issues that left part of the policy admitting
-// nothing, which is an operator's problem as much as an author's, and a
-// quieter line for the warnings on grants that stay live. A policy with
-// deliberate reach records those on every compile, and at `warn` they would
-// read as a policy that is broken.
-//
-// Each issue is named by where it is and its code, and not by its message. A
-// message can quote the policy's predicates, and an unloadable card's quotes
-// the card's index error, so no line carries card content or predicate
-// source. The messages are what a validate of the policy answers.
 // A problem a lower layer describes as a clause, written as a sentence of its
 // own: its first letter capitalized, and a full stop where it has no closing
 // punctuation and doesn't end in a list.
@@ -471,6 +461,16 @@ function asSentence(clause: string): string {
     : `${sentence}.`;
 }
 
+// One line per compile for the issues that left part of the policy admitting
+// nothing, which is an operator's problem as much as an author's, and a
+// quieter line for the warnings on grants that stay live. A policy with
+// deliberate reach records those on every compile, and at `warn` they would
+// read as a policy that is broken.
+//
+// Each issue is named by where it is and its code, and not by its message. A
+// message can quote the policy's predicates, and an unloadable card's quotes
+// the card's index error, so no line carries card content or predicate
+// source. The messages are what a validate of the policy answers.
 function logIssues(card: string, issues: PolicyIssue[]): void {
   let describe = (issue: PolicyIssue) =>
     `${issue.path || '(card)'}: ${issue.code}`;

@@ -592,7 +592,9 @@ module(basename(import.meta.filename), function () {
         where,
       );
       assert.true(
-        messages[0].includes("It uses something a search filter can't use"),
+        messages[0].includes(
+          "It uses something a search filter can't use:\n- ",
+        ),
         `${where}: ${messages[0]}`,
       );
     }
