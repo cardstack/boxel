@@ -166,7 +166,9 @@ a realm reader gets where a teacher gets a 404.
 4. **Fill in the roster.** Open each `StaffMember` card in `school-org`, switch
    it to edit, and set **Matrix User Id** to the account that person signs in
    with in this environment, e.g. `@school-alice:stack.cards`. This is the only
-   place a username is written.
+   place a username is written. Pushing `school-org` again writes the shipped roster cards back
+   over these edits, so push before configuring, or fill the ids in again
+   after.
 
 5. **Point the Education realm at its policy.** Open `school-education`'s
    settings card (`<realm-server>/<owner>/school-education/realm`), switch it to
