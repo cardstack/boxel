@@ -376,6 +376,7 @@ export default function handleSearch(opts: {
           let scope = await policyQueryScope(realm.operationCore, {
             ...invocation,
             principal,
+            transport: 'federated-search',
           });
           if (scope.kind === 'scoped') {
             access.scoped.set(url, scope.filters);

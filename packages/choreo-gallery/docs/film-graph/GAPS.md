@@ -243,7 +243,7 @@ runs on the path instead of on the frame does not need state.
 
 `c.Camera3D @settle={{seconds}}` reports a Hann-weighted average of the
 same spline, sampled fifteen times around the current progress
-(`settleThrough`, `packages/glimmer-motion/src/choreo/path.ts`). It is
+(`settleThrough`, `packages/choreo/src/path.ts`). It is
 centred, so unlike a spring it has NO lag. It is an average of one pure
 function of progress, so it is still a pure function of progress: play,
 scrub and `renderAt` agree, and the exact film gets the hand it was told

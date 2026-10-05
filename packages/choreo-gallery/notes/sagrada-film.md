@@ -225,7 +225,7 @@ it is simply not served with the film.
 
 ## Cut 10 — on the construct
 
-The film is now cut on `<Film>` (`glimmer-motion/film`): this component is
+The film is now cut on `<Film>` (`@cardstack/choreo/film`): this component is
 the shot list, the script with its measured reads, the chapters, the
 geometry sampled off the model, the year clock (`tAt`/`yearAt` as a
 `FilmClock`), and the front and back matter as named blocks. The engine —

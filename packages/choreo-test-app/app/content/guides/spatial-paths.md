@@ -27,6 +27,6 @@ Review the result at the distribution frame rate. Check velocity and curvature t
 
 ## API Coverage
 
-**glimmer-motion**: `Camera3DWaypoint`.
+**@cardstack/choreo**: `Camera3DWaypoint`.
 
 Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts).

@@ -21,7 +21,7 @@ import type { BlockHeadingLevel } from '../internal/blocks';
 // `structure.gts` is in the report.
 //
 // Built to be exemplary rather than elaborate: the entire visual range is
-// the Appendix E grid — `@tone` picks the hue and sets `--pretui-tone` /
+// the kit's grid — `@tone` picks the hue and sets `--pretui-tone` /
 // `--pretui-tone-on`, `@appearance` picks the recipe, and the recipes are
 // written once and read those two properties. Thirty-five dresses, zero
 // hand-authored pairs, and the resolved axes are reflected as `data-tone` /
@@ -53,9 +53,9 @@ export interface CtaBandSignature {
     headline: string;
     /** One paragraph under the headline. */
     lead?: string;
-    /** Semantic hue (Appendix E). Default `primary`. */
+    /** Semantic hue. Default `primary`. */
     tone?: PretuiTone;
-    /** Visual weight (Appendix E). Default `accent`. */
+    /** Visual weight. Default `accent`. */
     appearance?: PretuiAppearance;
     /** Text alignment. `center` (default) for a closing band, `start` when
      * it sits inside a column of left-aligned prose. */
@@ -176,7 +176,7 @@ export class CtaBand extends Component<CtaBandSignature> {
           margin-top: var(--space-1, 3px);
         }
 
-        /* ── Appendix E, axis 1: tone sets two custom properties. Nothing
+        /* ── Axis 1: tone sets two custom properties. Nothing
            else in this stylesheet knows a hue. ── */
         .pretui-cta[data-tone='neutral'] {
           --pretui-tone: var(--foreground);
@@ -207,7 +207,7 @@ export class CtaBand extends Component<CtaBandSignature> {
           --pretui-tone-on: var(--pretui-on-attention, var(--background));
         }
 
-        /* ── Appendix E, axis 2: the recipes. Written once, reading the two
+        /* ── Axis 2: the recipes. Written once, reading the two
            properties above — Law 2 generalised. `--pretui-band-ink` and
            `--pretui-band-ink-quiet` are what the type reads, so the eyebrow
            and lead follow the recipe without a second set of rules. ── */

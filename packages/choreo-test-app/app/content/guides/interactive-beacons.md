@@ -24,7 +24,7 @@ A **beacon** names a place on the page. Register it on the element whose bounds 
 </Choreo>
 ```
 
-Import `beacon`, `Choreo`, and `motion` from `glimmer-motion`. This excerpt describes what happens when application code removes a message. The parent still owns the archive action and updates the messages array.
+Import `beacon` and `Choreo` from `@cardstack/choreo`, and `motion` from `glimmer-motion`. This excerpt describes what happens when application code removes a message. The parent still owns the archive action and updates the messages array.
 
 The button remains a button. It does not become another representation of the message, and it does not need to stretch into the message's shape. Use this pattern when a destination is a place rather than a shared identity.
 
@@ -48,7 +48,7 @@ A BeaconRef identifies measured geometry; it does not transfer ownership of the 
 
 ## API Coverage
 
-**glimmer-motion**: `beacon`, `BeaconRef`.
+**@cardstack/choreo**: `beacon`, `BeaconRef`.
 
 **ChoreoContext**: `c.beacon`.
 

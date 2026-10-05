@@ -33,7 +33,7 @@ Gates belong to an ordered sequence and cannot be placed under a parallel contex
 
 ## API Coverage
 
-**glimmer-motion**: `Block`.
+**@cardstack/choreo**: `Block`.
 
 **ChoreoContext**: `c.Parallel`, `c.Sequence`.
 

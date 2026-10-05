@@ -20,14 +20,14 @@
  * these fails it is naming a real leak, not a flaky measurement — the assertions
  * are all counts and rest states, never bounds.
  */
-import { render, settled } from '@ember/test-helpers';
-import { setupRenderingTest } from 'ember-qunit';
-import { setMotionSpeed } from 'glimmer-motion';
 import {
   orphanCount,
   setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/choreo/test-support';
+} from '@cardstack/choreo/test-support';
+import { render, settled } from '@ember/test-helpers';
+import { setupRenderingTest } from 'ember-qunit';
+import { setMotionSpeed } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Enter } from 'test-app/components/examples/enter';

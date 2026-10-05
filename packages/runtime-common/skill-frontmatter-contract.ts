@@ -1,29 +1,21 @@
 /**
- * The description-parsing contract shared by the two hand-rolled skill
- * frontmatter readers:
+ * The description-parsing contract for `readFrontmatterDescription` in
+ * `packages/software-factory/src/skill-catalog.ts`, the hand-rolled skill
+ * frontmatter reader that fills what `list_skills` advertises to the agent:
+ * which block-scalar indicators it reads, how it joins folded and literal
+ * blocks, and which quotes it strips. A second reader of skill frontmatter
+ * should iterate the same cases, so two readers cannot advertise different
+ * descriptions for one skill.
  *
- *   - `parseFrontmatter` in `packages/boxel-cli/scripts/build-skills.ts`,
- *     which fills the plugin README's catalog tables, and
- *   - `readFrontmatterDescription` in
- *     `packages/software-factory/src/skill-catalog.ts`, which fills what
- *     `list_skills` advertises to the agent.
- *
- * They are two implementations of one behaviour — same block-scalar
- * indicators, same fold/literal join, same quote stripping — kept in
- * agreement by hand. Each package's test iterates these cases, so a change to
- * one reader that is not mirrored in the other fails a test here rather than
- * silently advertising two different descriptions for the same skill.
- *
- * Dependency-free on purpose: both packages import it as a
- * `@cardstack/runtime-common/<subpath>` module, and boxel-cli's type-check is
- * deliberately dependency-light.
+ * Dependency-free on purpose, so any package can import it as a
+ * `@cardstack/runtime-common/<subpath>` module.
  */
 export interface SkillFrontmatterCase {
   /** Case name; also used as the on-disk skill directory name in tests. */
   label: string;
   /** The frontmatter body between the `---` fences (fences excluded). */
   frontmatter: string;
-  /** The description both readers must extract from that frontmatter. */
+  /** The description a reader must extract from that frontmatter. */
   description: string;
 }
 

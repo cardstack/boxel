@@ -96,8 +96,8 @@ export class Tabs extends Component<TabsSignature> {
         .pretui-tab[data-state='active'] {
           color: var(--foreground);
         }
-        /* the 2px accent bar used to be this tab's own ::after; it is now the
-           shared SlidingHighlight in its underline cut, same geometry (bottom
+        /* the 2px accent bar is the shared SlidingHighlight in its underline
+           cut, same geometry (bottom
            edge of the tab box, square ends via a zero radius) */
         .pretui-tabs-rail {
           position: absolute;

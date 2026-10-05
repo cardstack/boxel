@@ -46,11 +46,6 @@
 //     Law 9 forbids the engine that would make them possible. They are named
 //     here rather than hidden (Law 7).
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the texture group)
-
 // Pretui — shared style helpers for the texture components (BackgroundField, Backdrop, PulsingBorder).
 import { htmlSafe } from '@ember/template';
 import { cssValue as sharedCssValue } from '../pretui-css';

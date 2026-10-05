@@ -3,7 +3,7 @@
 `test-app/app` remains the canonical gallery. This private package generates
 the Boxel adaptation; do not edit copied demos, notes, catalog, or styles here.
 The generated copies are gitignored. Shared film engine fixes live
-in `packages/glimmer-motion`, so the normal gallery benefits too.
+in `packages/choreo`, so the normal gallery benefits too.
 
 ## Rebuild
 

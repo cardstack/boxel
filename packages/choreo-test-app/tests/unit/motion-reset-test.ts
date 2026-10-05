@@ -3,9 +3,9 @@
  * layer added with `registerMotionReset()`. Choreo's test-support adds its
  * resets that way, so a beacon claimed in one test is gone by the next.
  */
-import 'glimmer-motion/choreo/test-support';
+import '@cardstack/choreo/test-support';
 
-import { measureBeacons, registerBeacon } from 'glimmer-motion/choreo/beacons';
+import { measureBeacons, registerBeacon } from '@cardstack/choreo/beacons';
 import { registerMotionReset, resetMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

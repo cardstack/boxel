@@ -10,41 +10,33 @@ import { guidFor } from '@ember/object/internals';
 // Adds an 'error' state Spectrum doesn't ship (tone: --destructive).
 // Per-state treatment flows through one --pretui-step-tone custom prop
 // per state.
-// Review pass 2026-08-12: the <ol> carries an explicit role='list' because
+// The <ol> carries an explicit role='list' because
 // `list-style: none` strips list semantics in WebKit; and each state's four
-// internals now read a --pretui-step-<state>-* knob first, so a consumer can
-// re-tone a state from any ancestor (they were previously literal values on
-// the element itself, i.e. unreachable from outside).
+// internals read a --pretui-step-<state>-* knob first, so a consumer can
+// re-tone a state from any ancestor.
 //
-// Review pass 2026-08-13 — @variant='track' + @summary. The provenance
-// panel on the Pretui component pages used to hand-roll its own five-stage
-// rail (.wb-pipe/.wb-pstep/.wb-pbar/.wb-pcap) with three defects this
-// component now absorbs, rather than a cousin component repeating them:
-//   1. it painted the LAST bar with the accent purely because it was last,
-//      so the accent read as information and encoded nothing. Here the
-//      accent is a state channel only — 'current' speaks --primary,
-//      'complete' speaks --success, 'error' speaks --destructive, and a
-//      run of five complete stages is five identical bars.
-//   2. its steps were div/span with a data-on attribute: no list
-//      semantics, no state text, completion by colour alone (WCAG 1.4.1).
-//      The track variant inherits the <ol>/<li>, the per-step visually
-//      hidden state text, and adds the check glyph as a second, non-colour
-//      visual channel.
-//   3. its '5 / 5 complete' count was a floating <span> in the panel
-//      header with no relationship to the rail. @summary renders that
-//      count from the step states and ties it to the list with
-//      aria-describedby, so it is announced when the list is entered.
-// Also new: the root is now a wrapper div declaring container-type:
+// @variant='track' + @summary — a five-stage provenance rail without
+// hand-rolled markup:
+//   1. the accent is a state channel only — 'current' speaks --primary,
+//      'complete' speaks --success, 'error' speaks --destructive — so a run
+//      of five complete stages is five identical bars, never an accent on
+//      the last bar because it is last.
+//   2. the track variant keeps the <ol>/<li>, the per-step visually hidden
+//      state text, and adds the check glyph as a second, non-colour visual
+//      channel (WCAG 1.4.1).
+//   3. @summary renders the '5 of 5 complete' count from the step states and
+//      ties it to the list with aria-describedby, so it is announced when
+//      the list is entered.
+// The root is a wrapper div declaring container-type:
 // inline-size, which buys the component the responsive behaviour BOTH
 // presentations were missing — the steps rail stacked its nowrap labels
 // into a column, the track rail folds into a legend list — measured
 // against the component's own box, never the viewport. Spectrum's
 // orientation prop is viewport-blind and leaves this to the caller.
-// Element changed HTMLOListElement -> HTMLDivElement in that pass;
 // data-test-pretui-step-list rides the root, the <ol> carries
 // data-test-pretui-step-list-items.
 
-// Review pass 2026-08-13 (boxel-catalog E6) — two states and a detail line.
+// Two more states and a detail line.
 // `complete | current | upcoming | error` describes where you ARE. It cannot
 // say that a stage is running right now, and it cannot say that a stage
 // cannot proceed and why — the two things a reader of a deploy pipeline, a
@@ -207,8 +199,7 @@ export class StepList extends Component<StepListSignature> {
     });
   }
   /** Reserve the detail slot on every step as soon as one step declares a
-   * detail, so a line arriving late does not re-flow the rail (Appendix O:
-   * a value that arrives late reserves its space). */
+   * detail, so a line arriving late does not re-flow the rail (* a value that arrives late reserves its space). */
   get reserveDetail() {
     return this.args.steps.some((s) => s.detail !== undefined);
   }
@@ -377,14 +368,14 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step[data-state='complete'] {
           --pretui-step-tone: var(--pretui-step-complete-tone, var(--muted-foreground));
           --pretui-step-marker-bg: var(--pretui-step-complete-marker-bg, color-mix(in oklch, var(--success, var(--boxel-success)) 15%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success, var(--boxel-success)));
+          --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success-ink));
           --pretui-step-ring: var(--pretui-step-complete-ring, color-mix(in oklch, var(--success, var(--boxel-success)) 40%, var(--border)));
           --pretui-step-bar-fill: var(--pretui-step-complete-bar, var(--success, var(--boxel-success)));
         }
         .pretui-step[data-state='error'] {
-          --pretui-step-tone: var(--pretui-step-error-tone, var(--destructive));
+          --pretui-step-tone: var(--pretui-step-error-tone, var(--destructive-ink));
           --pretui-step-marker-bg: var(--pretui-step-error-marker-bg, color-mix(in oklch, var(--destructive) 12%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-error-marker-fg, var(--destructive));
+          --pretui-step-marker-fg: var(--pretui-step-error-marker-fg, var(--destructive-ink));
           --pretui-step-ring: var(--pretui-step-error-ring, color-mix(in oklch, var(--destructive) 45%, var(--border)));
           --pretui-step-bar-fill: var(--pretui-step-error-bar, var(--destructive));
         }
@@ -402,7 +393,7 @@ export class StepList extends Component<StepListSignature> {
         .pretui-step[data-state='blocked'] {
           --pretui-step-tone: var(--pretui-step-blocked-tone, var(--foreground));
           --pretui-step-marker-bg: var(--pretui-step-blocked-marker-bg, color-mix(in oklch, var(--warning, var(--boxel-warning)) 14%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning, var(--boxel-warning)));
+          --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning-ink));
           --pretui-step-ring: var(--pretui-step-blocked-ring, color-mix(in oklch, var(--warning, var(--boxel-warning)) 50%, var(--border)));
           --pretui-step-bar-fill: var(--pretui-step-blocked-bar, var(--warning, var(--boxel-warning)));
         }

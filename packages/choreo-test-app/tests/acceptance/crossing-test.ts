@@ -10,9 +10,9 @@
  * animationsSettled(): the gallery is thirty live demos and several of
  * them — by design — never go idle.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, currentURL, visit, waitUntil } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { crossingActive, resetCrossing } from 'test-app/lib/crossing';
 import { setTempo } from 'test-app/lib/tempo';

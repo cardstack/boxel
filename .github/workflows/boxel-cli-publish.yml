@@ -3,11 +3,11 @@ name: boxel-cli publish
 # Single workflow file that owns both publish paths for @cardstack/boxel-cli:
 #
 #   • `unstable` job
-#       - On push to main touching `packages/boxel-cli/**` — regenerate plugin
-#         skill content, decide per-surface version bumps from the merged PR's
-#         title (conventional-commit prefix), commit the bumps back to main,
-#         tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>` under
-#         dist-tag `unstable`.
+#       - On push to main touching `packages/boxel-cli/**` — regenerate the
+#         plugin's command synopses, decide per-surface version bumps from the
+#         merged PR's title (conventional-commit prefix), commit the bumps back
+#         to main, tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>`
+#         under dist-tag `unstable`.
 #       - Via "Run workflow" with the `confirm` field left blank — skip the
 #         PR-driven bump/commit/tag dance, derive the next free
 #         `<base>-unstable.<n>` from npm (npm is the source of truth; the bump
@@ -127,12 +127,10 @@ jobs:
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "PR title: $PR_TITLE"
 
-      - name: Regenerate plugin synopsis and skills
+      - name: Regenerate plugin synopsis
         if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         working-directory: packages/boxel-cli
-        run: |
-          pnpm run build:plugin
-          pnpm run build:skills
+        run: pnpm run build:plugin
 
       - name: Compute release
         id: release
@@ -243,9 +241,7 @@ jobs:
           git add packages/boxel-cli/package.json \
                   packages/boxel-cli/plugin/.claude-plugin/plugin.json \
                   packages/boxel-cli/plugin/.codex-plugin/plugin.json \
-                  packages/boxel-cli/plugin/skills \
-                  packages/boxel-cli/plugin/README.md \
-                  packages/boxel-cli/scripts/.boxel-skills-manifest.json
+                  packages/boxel-cli/plugin/skills
           if git diff --cached --quiet; then
             echo "No changes to commit (regen produced no diff, bumps both none)."
             echo "pushed=false" >> "$GITHUB_OUTPUT"

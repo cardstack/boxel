@@ -28,10 +28,10 @@ Use `Film` when the presentation itself needs a shot list, chapter navigation, v
 
 ```ts title="Package Entry Points"
 import { createChoreoPlayer } from 'choreo-player';
-import { Film } from 'glimmer-motion/film';
+import { Film } from '@cardstack/choreo/film';
 ```
 
-Install `choreo-player` separately when you need that transport. Film is provided by the `glimmer-motion` package through its film subpath.
+Install `choreo-player` separately when you need that transport. Film is provided by the `@cardstack/choreo` package through its film subpath.
 
 ## Keeping the Original Interaction
 
@@ -47,9 +47,7 @@ Start with [Driving an External Clock](/docs/film-clock), then read [Building a 
 
 ## API Coverage
 
-**glimmer-motion**: `Film`.
-
-**glimmer-motion/film**: `Film`, `FilmContext`, `FilmSignature`.
+**@cardstack/choreo/film**: `Film`, `FilmContext`, `FilmSignature`.
 
 Read the implementation: [`film.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film.ts), [`film.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/film.gts).
 

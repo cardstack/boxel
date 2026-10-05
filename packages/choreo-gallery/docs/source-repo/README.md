@@ -255,7 +255,7 @@ class Carry extends StepComponent<StepArgs & { spring?: SpringSpec }> {
 Arming — _when_ a timeline should exist — is a first-class helper, because the same ids exist on ordinary passes too:
 
 ```ts
-import { createArming } from 'glimmer-motion';
+import { createArming } from '@cardstack/choreo';
 const crossing = createArming();
 crossing.begin(region); // watches the run, survives mid-flight replacement, stands down on settle
 crossing.active(); // tracked — render the timeline only while true
@@ -362,7 +362,7 @@ The mapping from three.js to CSS is **85 lines** (`test-app/app/lib/css3d.ts`): 
 Two films were cut by hand on the same engine before the construct was written — **Towers** (`/towers`) and **Sagrada Família** (`/sagrada`) — and 69% of the second was the first. `<Film>` is that 69%, lifted: a headless cutting room in which a 3D page takes the place of the video track, and everything else is a component reading one clock — the chased lens, the joins (wipe, dip, blend, iris, melt, blur, luma, flash, defocus), the lower third and the plate on Choreo, the timeline, the voice with its measured reads, the transport, the front door and the end card.
 
 ```gts
-import { Film, IframePicture } from 'glimmer-motion/film';
+import { Film, IframePicture } from '@cardstack/choreo/film';
 
 <Film @name='sagrada' @seek='exact' @clock={{CLOCK}} @over='everything'>
   <:picture as |register|>

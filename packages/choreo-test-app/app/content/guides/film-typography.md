@@ -31,7 +31,7 @@ Test caption changes during backward seeking and at a clip boundary. A lingering
 
 ## API Coverage
 
-**glimmer-motion/film**: `Type`, `Captions`, `Insert`, `Stamp`, `Track`, `Plate`, `PlateMode`.
+**@cardstack/choreo/film**: `Type`, `Captions`, `Insert`, `Stamp`, `Track`, `Plate`, `PlateMode`.
 
 **FilmVocabulary**: `f.Type`.
 
