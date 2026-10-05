@@ -1,7 +1,8 @@
+import { Choreo } from '@cardstack/choreo';
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { highlightSample } from 'test-app/lib/highlight';
 import { settings, toggleCode } from 'test-app/lib/tempo';
 

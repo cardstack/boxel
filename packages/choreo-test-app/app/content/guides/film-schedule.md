@@ -4,10 +4,10 @@ A film's schedule is arithmetic over its shot data. The same calculation can dri
 
 ## Reading the Timeline
 
-Import the functions from `glimmer-motion/film`. `totalSecs` calculates the nominal running time, `secsBefore` accumulates earlier beats, and `beatStart` resolves the actual start used by the film. `TICK` is two seconds in the current model. Lead intervals and the opening pose influence where later cues fall, so nominal cumulative duration and actual beat start are not always identical.
+Import the functions from `@cardstack/choreo/film`. `totalSecs` calculates the nominal running time, `secsBefore` accumulates earlier beats, and `beatStart` resolves the actual start used by the film. `TICK` is two seconds in the current model. Lead intervals and the opening pose influence where later cues fall, so nominal cumulative duration and actual beat start are not always identical.
 
 ```ts title="Component logic excerpt"
-import { schedule } from 'glimmer-motion/film';
+import { schedule } from '@cardstack/choreo/film';
 
 // beats and chapters are the compiled graph's data.
 const report = schedule(beats, chapters, 'dip');
@@ -32,8 +32,6 @@ When publishing runtime information, derive it from this schedule. A hard-coded 
 
 ## API Coverage
 
-**glimmer-motion**: `FilmClock`.
-
-**glimmer-motion/film**: `TICK`, `beatStart`, `chapterHeads`, `Content`, `contents`, `Cue`, `cues`, `joinInto`, `Schedule`, `schedule`, `secsBefore`, `tailFor`, `totalSecs`, `Waypoint`, `waypoints`, `FilmClock`.
+**@cardstack/choreo/film**: `TICK`, `beatStart`, `chapterHeads`, `Content`, `contents`, `Cue`, `cues`, `joinInto`, `Schedule`, `schedule`, `secsBefore`, `tailFor`, `totalSecs`, `Waypoint`, `waypoints`, `FilmClock`.
 
 Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`film.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/film.gts), [`schedule.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/schedule.ts).

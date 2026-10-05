@@ -1,8 +1,8 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { motion } from 'glimmer-motion';
 
 import { Choreo } from '../choreo.gts';
-import motion from '../motion.ts';
 import type { Beat, ElementModifier } from './types.ts';
 
 export interface InsertSignature {

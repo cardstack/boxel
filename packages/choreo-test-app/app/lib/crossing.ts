@@ -19,9 +19,9 @@
  * this crossing is (the region stays router-agnostic by design — §9), and
  * knowing where the arriving page wants the window.
  */
+import { type ChoreoContext, createArming } from '@cardstack/choreo';
 import type Transition from '@ember/routing/transition';
 import { tracked } from '@glimmer/tracking';
-import { type ChoreoContext, createArming } from 'glimmer-motion';
 import { factor, setCrossing } from 'test-app/lib/tempo';
 
 const DEMO_ROUTE = 'demo';

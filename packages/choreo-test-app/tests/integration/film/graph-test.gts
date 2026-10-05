@@ -10,9 +10,9 @@
  * the whole of Phase 2's first claim, and it is what lets the films
  * switch from `@beats` to the graph without a frame changing.
  */
+import { type CompiledGraph, FilmGraph } from '@cardstack/choreo/film';
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { type CompiledGraph, FilmGraph } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 import { SagradaScore } from 'test-app/components/films/sagrada-score';
 import { TowersScore } from 'test-app/components/films/towers-score';

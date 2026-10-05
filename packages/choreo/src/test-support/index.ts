@@ -1,8 +1,8 @@
 /**
- * glimmer-motion/choreo/test-support — how a test drives and checks <Choreo>.
+ * @cardstack/choreo/test-support — how a test drives and checks <Choreo>.
  *
  *   import { animationsSettled } from 'glimmer-motion/test-support';
- *   import { live, orphanCount, setupChoreo } from 'glimmer-motion/choreo/test-support';
+ *   import { live, orphanCount, setupChoreo } from '@cardstack/choreo/test-support';
  *
  *   module('…', function (hooks) {
  *     setupRenderingTest(hooks);
@@ -28,13 +28,13 @@
  * real one.
  */
 import { settled } from '@ember/test-helpers';
-import { frame, visualElementStore } from 'motion-dom';
-
 import {
   animationsSettled,
   registerMotionReset,
   setupMotion,
-} from '../../test-support/index.ts';
+} from 'glimmer-motion/test-support';
+import { frame, visualElementStore } from 'motion-dom';
+
 import { resetBeacons } from '../beacons.ts';
 import { resetBarrier } from '../far.ts';
 import { resetGestures } from '../gesture.ts';

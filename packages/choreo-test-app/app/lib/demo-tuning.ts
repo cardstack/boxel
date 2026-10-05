@@ -1,3 +1,4 @@
+import type { SpringSpec } from '@cardstack/choreo';
 import { tracked } from '@glimmer/tracking';
 import type {
   DialConfig,
@@ -5,7 +6,6 @@ import type {
   EasingConfig,
   SpringConfig,
 } from 'dialkit/vanilla';
-import type { SpringSpec } from 'glimmer-motion';
 import type { Transition } from 'motion-dom';
 
 /** Each control is registered at the demo's actual call site, with its own default. */

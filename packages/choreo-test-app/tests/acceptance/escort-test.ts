@@ -11,9 +11,9 @@
  * The assertions look MID-FLIGHT. At the ends any implementation agrees;
  * the frames in between are the ones a tween would have had to predict.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { resetCrossing } from 'test-app/lib/crossing';
 import { setTempo } from 'test-app/lib/tempo';

@@ -1,17 +1,12 @@
+import type { Sprite } from '@cardstack/choreo';
+import { Choreo, type ChoreoContext, createArming } from '@cardstack/choreo';
 import { concat, fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { Sprite } from 'glimmer-motion';
-import {
-  Choreo,
-  type ChoreoContext,
-  createArming,
-  motion,
-  styles,
-} from 'glimmer-motion';
+import { motion, styles } from 'glimmer-motion';
 import {
   DateField,
   EmailField,

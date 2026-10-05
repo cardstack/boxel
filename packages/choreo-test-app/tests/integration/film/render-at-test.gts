@@ -16,10 +16,10 @@
  * keeps every `pose()` it is handed), because the lens the picture was
  * told to take is the only lens that ends up in a frame.
  */
+import { Film, IframePicture } from '@cardstack/choreo/film';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
-import { Film, IframePicture } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 
 /** what the film publishes for a renderer to drive it by */

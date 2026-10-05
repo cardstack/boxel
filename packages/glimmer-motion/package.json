@@ -1,7 +1,7 @@
 {
   "name": "glimmer-motion",
   "version": "0.0.0",
-  "description": "Motion, Choreographed. The Motion engine for Ember — and a timeline for the scene.",
+  "description": "The Motion engine for Ember: Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.",
   "keywords": [
     "ember-addon",
     "animation",
@@ -23,10 +23,6 @@
     "./test-support": {
       "types": "./declarations/test-support/index.d.ts",
       "default": "./dist/test-support/index.js"
-    },
-    "./choreo/test-support": {
-      "types": "./declarations/choreo/test-support/index.d.ts",
-      "default": "./dist/choreo/test-support/index.js"
     },
     "./*": {
       "types": "./declarations/*.d.ts",

@@ -7,7 +7,7 @@ A connector is part of the explanation: it tells the reader which label, comment
 Select the endpoints with `@from` and `@to`. Supply a stable `@path` function that accepts their rectangles and returns SVG path data. The rectangles are expressed in the region's coordinate system, so the function can choose edges or centers without querying global screen positions.
 
 ```ts title="Component logic excerpt"
-import type { Rect } from 'glimmer-motion';
+import type { Rect } from '@cardstack/choreo';
 
 const connect = (from: Rect, to: Rect) => {
   const x1 = from.x + from.width;
