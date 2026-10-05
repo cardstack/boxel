@@ -466,7 +466,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     concurrency:
       group: pretui-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -489,16 +489,12 @@ jobs:
         run: |
           "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
       # `boxel test` caps a whole QUnit run at 300 s, so each job keeps a
-      # deterministic slice of the sorted test-file list. The divisor follows
-      # the matrix length, so resizing the matrix resizes the split.
+      # deterministic slice of the test files, balanced by the per-file run
+      # times in scripts/test-timings.json (refresh them with
+      # `node scripts/test-shards.mjs --record`). The shard count follows the
+      # matrix length, so resizing the matrix resizes the split.
       - name: Select this shard's test files
-        run: |
-          i=0
-          for f in $(find . -name '*.test.gts' | sort); do
-            if [ $((i % ${{ strategy.job-total }} + 1)) -ne ${{ matrix.shard }} ]; then rm "$f"; fi
-            i=$((i + 1))
-          done
-          echo "$(find . -name '*.test.gts' | wc -l) test file(s) in this shard"
+        run: node scripts/test-shards.mjs ${{ matrix.shard }} ${{ strategy.job-total }}
         working-directory: packages/pretui
       - name: Run tests
         run: boxel test .
