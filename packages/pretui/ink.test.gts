@@ -156,17 +156,31 @@ module('Pretui | ink', function (hooks) {
     assert.strictEqual(all('.pretui-meter-bar').length, 5);
   });
 
-  test('Meter has no clamp: a level outside 0..@segments ships as invalid aria-valuenow (KNOWN GAP)', async function (assert) {
-    // KNOWN GAP, pinned rather than patched: `@level` goes straight to
-    // aria-valuenow and the lit count is `i < level`, so 9 of 3 announces 9
-    // against aria-valuemax=3 and lights every bar, and -2 announces -2 below
-    // aria-valuemin=0. Both are invalid ARIA. A fix clamps to [0, segments];
-    // when it lands, these expectations flip to '3' / '0'.
+  test('Meter clamps a level outside 0..@segments, in what it announces and what it lights', async function (assert) {
+    // An aria-valuenow outside aria-valuemin..aria-valuemax is invalid ARIA,
+    // so the announced level is the same clamped count of lit bars.
     await render(<template><Meter @level={{9}} @segments={{3}} @label='Over' /></template>);
-    assert.strictEqual(q('[data-test-pretui-meter]').getAttribute('aria-valuenow'), '9', 'above max, unclamped');
-    assert.deepEqual(all('.pretui-meter-bar').map((b) => b.dataset['on']), ['true', 'true', 'true']);
+    assert.strictEqual(
+      q('[data-test-pretui-meter]').getAttribute('aria-valuenow'),
+      '3',
+      'above max, announced as the max',
+    );
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      ['true', 'true', 'true'],
+      'every bar is lit, and no more',
+    );
     await render(<template><Meter @level={{-2}} @segments={{3}} @label='Under' /></template>);
-    assert.strictEqual(q('[data-test-pretui-meter]').getAttribute('aria-valuenow'), '-2', 'below min, unclamped');
+    assert.strictEqual(
+      q('[data-test-pretui-meter]').getAttribute('aria-valuenow'),
+      '0',
+      'below min, announced as the min',
+    );
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      [undefined, undefined, undefined],
+      'no bar is lit',
+    );
   });
 
   test('Meter reuses the last height when @segments outruns @heights', async function (assert) {

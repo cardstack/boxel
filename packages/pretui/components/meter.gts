@@ -16,17 +16,23 @@ export interface MeterSignature {
 
 export class Meter extends Component<MeterSignature> {
   get bars(): { on: boolean; style: ReturnType<typeof htmlSafe> }[] {
-    let segments = this.args.segments ?? 3;
+    let segments = this.segmentsCount;
     let heights = this.args.heights ?? [6, 10, 14];
     let out = [];
     for (let i = 0; i < segments; i++) {
       let h = heights[i] ?? heights[heights.length - 1];
-      out.push({ on: i < this.args.level, style: htmlSafe(`height: ${h}px`) });
+      out.push({ on: i < this.levelNow, style: htmlSafe(`height: ${h}px`) });
     }
     return out;
   }
   get segmentsCount() {
     return this.args.segments ?? 3;
+  }
+  // `@level` clamped into [0, segments], so `aria-valuenow` always sits
+  // between `aria-valuemin` and `aria-valuemax`, and what is announced is the
+  // number of bars a sighted user sees lit.
+  get levelNow() {
+    return Math.max(0, Math.min(this.args.level, this.segmentsCount));
   }
   get style() {
     return hueStyle('--pretui-meter-hue', this.args.hue);
@@ -51,7 +57,7 @@ export class Meter extends Component<MeterSignature> {
       class='pretui-meter'
       style={{this.style}}
       role={{this.meterRole}}
-      aria-valuenow={{@level}}
+      aria-valuenow={{this.levelNow}}
       aria-valuemin='0'
       aria-valuemax={{this.segmentsCount}}
       aria-label={{@label}}

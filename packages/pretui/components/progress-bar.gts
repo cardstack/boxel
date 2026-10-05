@@ -27,8 +27,16 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get max() {
     return this.args.max ?? 100;
   }
+  // `@value` clamped into [0, max], so `aria-valuenow` always sits between
+  // `aria-valuemin` and `aria-valuemax` and agrees with the fill a sighted user
+  // sees.
+  get valueNow() {
+    return Math.max(0, Math.min(this.args.value, this.max));
+  }
+  // A zero `@max` has no fraction to show, so it reads as an empty bar rather
+  // than dividing by zero into a `NaN%` width and count.
   get pct() {
-    return Math.max(0, Math.min(100, (this.args.value / this.max) * 100));
+    return this.max > 0 ? (this.valueNow / this.max) * 100 : 0;
   }
   get stepped() {
     return this.args.steps ?? (this.args.count !== undefined && this.max <= 12);
@@ -42,7 +50,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get stepList(): { on: boolean }[] {
     let out = [];
     for (let i = 0; i < this.max; i++) {
-      out.push({ on: i < this.args.value });
+      out.push({ on: i < this.valueNow });
     }
     return out;
   }
@@ -73,7 +81,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       role='progressbar'
       aria-label={{this.accessibleLabel}}
       aria-valuemin='0'
-      aria-valuenow={{@value}}
+      aria-valuenow={{this.valueNow}}
       aria-valuemax={{this.max}}
       aria-valuetext={{this.valueText}}
       style={{this.style}}

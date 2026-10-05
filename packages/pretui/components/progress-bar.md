@@ -37,13 +37,13 @@ Governing role: `progressbar` with `aria-valuemin`, `aria-valuemax`, `aria-value
 What it does:
 
 - **The root element carries `role="progressbar"`** with `aria-valuemin="0"`, `aria-valuenow` and `aria-valuemax`, so `...attributes` reach the widget: `aria-label` and `aria-labelledby` name it directly.
+- **`aria-valuenow` is `@value` clamped to `[0, @max]`**, the same clamp the fill, the lit steps and the visible percentage use, so `@value={{180}}` against a max of 100 is announced as 100, and what assistive tech hears matches the bar a sighted user sees. A `@max` of 0 reads as an empty bar (0%), not a `NaN%` width.
 - **`@label` is the accessible name** as well as the visible header text. A caller's `aria-label` replaces it, and a caller's `aria-labelledby` takes precedence over both. A bar with none of these falls back to the name "Progress", so it passes the role's required-name rule, but a screen-reader user still hears "Progress, 60%" with no idea what is progressing — name it.
 - **`aria-valuetext`** is `@valueText` when given. In stepped mode it falls back to `@count`, so the bar announces "3 / 6" where "3" alone would be meaningless. A continuous bar does not fall back to its count, which can drop the total ("300 files"), so with no `@valueText` assistive tech derives a percentage from the value range.
 - **The visible header is inside the widget and `aria-hidden`.** The name and value already say what the label and count show, so they are not announced a second time as loose text.
 
 Gaps, and they are the kind that pass review by looking present:
 
-- **`aria-valuenow` is the raw `@value`.** The fill and the visible count are clamped to the range, but the announced value is not, so `@value={{180}}` against a max of 100 is announced as 180.
 - **No announcement on change.** A progress bar that advances silently is correct for a fast operation and unhelpful for a slow one; there is no live region and no hook for one.
 - **The fill fails WCAG 1.4.11 Non-text Contrast (3:1) against its track in the shipped light seasons.** The fill (`--pretui-progress-hue`, default `--primary`) sits on `--inset` with no border, and stepped mode tells lit from unlit segments by that colour alone. Measured against light `--inset`: the default `--primary` is 1.20:1 in SS26 (3.37:1 in AW26, 4.84:1 in SS27); `--warning` is 2.14, 1.58 and 2.01:1; AW26's `--pretui-attention` is 1.45:1 and its `--destructive` 2.90:1; SS26's `--success` and `--pretui-info` are 2.55 and 2.70:1. Every dark-mode pair passes, at 5.20:1 or higher.
 - The 4px bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.

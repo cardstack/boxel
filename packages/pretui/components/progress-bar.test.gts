@@ -216,16 +216,40 @@ module('Pretui | components/progress-bar', function (hooks) {
       ['0%', '100%'],
       'the visible readout is clamped with the fill',
     );
-    // KNOWN GAP, pinned rather than patched: aria-valuenow is the raw @value on
-    // both ProgressBar and ProgressRadial, so assistive tech hears -20 and 180
-    // against aria-valuemin=0 and aria-valuemax=100 — invalid ARIA, and it
-    // disagrees with the bar a sighted user sees. A fix routes aria-valuenow
-    // through the same clamp; when it lands these flip to ['0', '100'].
     assert.deepEqual(
       all('[role="progressbar"]').map((b) => b.getAttribute('aria-valuenow')),
-      ['-20', '180'],
-      'KNOWN GAP: the announced value is not clamped',
+      ['0', '100'],
+      'the announced value is clamped with the fill, so it stays inside aria-valuemin..aria-valuemax',
     );
+  });
+
+  test('clamps the announced value and the lit steps to @max in stepped mode', async function (assert) {
+    await render(
+      <template>
+        <ProgressBar @value={{9}} @max={{4}} @steps={{true}} data-test-over />
+        <ProgressBar @value={{-1}} @max={{4}} @steps={{true}} data-test-under />
+      </template>,
+    );
+    assert.strictEqual(bar('[data-test-over]').getAttribute('aria-valuenow'), '4');
+    assert.deepEqual(
+      all('[data-test-over] .pretui-progress-step').map((s) => s.dataset['on']),
+      ['true', 'true', 'true', 'true'],
+    );
+    assert.strictEqual(bar('[data-test-under]').getAttribute('aria-valuenow'), '0');
+    assert.deepEqual(
+      all('[data-test-under] .pretui-progress-step').map((s) => s.dataset['on']),
+      [undefined, undefined, undefined, undefined],
+    );
+  });
+
+  test('a zero @max reads as an empty bar, not a NaN width', async function (assert) {
+    await render(<template><ProgressBar @value={{5}} @max={{0}} @label='Nothing to do' /></template>);
+    let el = bar();
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '0', 'the value is clamped into the empty range');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '0');
+    assert.strictEqual(px(q('.pretui-progress-fill'), 'width'), '0%');
+    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0px');
+    assert.strictEqual(q('.pretui-progress-count').textContent?.trim(), '0%');
   });
 
   test('stays continuous for a small total when no @count is given', async function (assert) {
