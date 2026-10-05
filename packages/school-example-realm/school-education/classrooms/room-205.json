@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Room 205",
+      "gradeLevel": "Grade 4",
+      "teacherIds": ["@ben:school.example"],
+      "leadTeacherIds": ["@alice:school.example"]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/classroom",
+        "name": "Classroom"
+      }
+    },
+    "relationships": {
+      "teachers.0": {
+        "links": {
+          "self": "../../school-org/StaffMember/ben"
+        }
+      },
+      "leadTeachers.0": {
+        "links": {
+          "self": "../../school-org/StaffMember/alice"
+        }
+      }
+    }
+  }
+}
