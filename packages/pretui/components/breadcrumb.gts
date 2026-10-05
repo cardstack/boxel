@@ -18,7 +18,7 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
       {{#each @items as |item index|}}
         {{#if index}}<span class='sep' aria-hidden='true'>/</span>{{/if}}
         {{#if (this.isLast index)}}
-          <b>{{item.label}}</b>
+          <b aria-current='page'>{{item.label}}</b>
         {{else if item.href}}
           <a href={{item.href}}>{{item.label}}</a>
         {{else}}

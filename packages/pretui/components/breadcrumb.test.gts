@@ -40,6 +40,11 @@ module('Pretui | components/breadcrumb', function (hooks) {
       ],
     );
     assert.strictEqual(nav.querySelector('b')?.textContent?.trim(), 'Wuyi Origins', 'the leaf is not a link');
+    assert.deepEqual(
+      Array.from(nav.querySelectorAll('[aria-current]')).map((e) => [e.textContent?.trim(), e.getAttribute('aria-current')]),
+      [['Wuyi Origins', 'page']],
+      'only the leaf is announced as the current page',
+    );
     let seps = Array.from(nav.querySelectorAll('.sep'));
     assert.strictEqual(seps.length, 2, 'separators sit between, not before the first');
     assert.deepEqual(
@@ -60,6 +65,11 @@ module('Pretui | components/breadcrumb', function (hooks) {
     const ONE: CrumbSpec[] = [{ label: 'Realm', href: '/' }];
     await render(<template><Breadcrumb @items={{ONE}} /></template>);
     assert.strictEqual(q('[data-test-pretui-breadcrumb] b')?.textContent?.trim(), 'Realm');
+    assert.strictEqual(
+      q('[data-test-pretui-breadcrumb] b')?.getAttribute('aria-current'),
+      'page',
+      'a lone crumb with an href is still the current page, not a link',
+    );
     assert.strictEqual(all('.sep').length, 0);
   });
 });
