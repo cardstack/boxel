@@ -225,10 +225,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   // internals are not card-facing. Neither is motion-dom: cards reach it
   // through glimmer-motion's curated re-exports.
   //
-  // glimmer-motion's entry points are sync shims because host UI imports it,
-  // so it is in the initial bundle regardless. No host UI imports Choreo, so its shims are
-  // async and keep it out of the initial bundle until a card imports it.
-  // Switch them to sync if host UI starts importing Choreo.
+  // glimmer-motion's entry points are sync shims, which put it in the initial
+  // bundle: it is the animation library host UI is moving to, so the bundle
+  // carries it either way. Choreo's shims are async and keep it out of the
+  // initial bundle until a card imports it. Switch them to sync if host UI
+  // starts importing Choreo.
   virtualNetwork.shimModule('glimmer-motion', glimmerMotion);
   virtualNetwork.shimModule(
     'glimmer-motion/layout-group',
