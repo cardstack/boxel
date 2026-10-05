@@ -59,6 +59,7 @@ const BOOTSTRAP = `
           call('fs.replace', [path, search, replacement]),
         writeText: (path, content) => call('fs.writeText', [path, content]),
       }),
+      capture: (path, options) => call('capture', [path, options ?? {}]),
     });
     delete globalThis.__realmURL;
   })();
@@ -118,6 +119,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.exists',
   'fs.replace',
   'fs.writeText',
+  'capture',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a

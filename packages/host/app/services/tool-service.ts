@@ -22,6 +22,7 @@ import {
   identifyCard,
   rri,
   type PatchData,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
@@ -37,6 +38,7 @@ import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
+import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
@@ -123,6 +125,9 @@ async function withTimeout<T>(
     clearTimeout(timer!);
   }
 }
+
+// Every tool module the host provides is registered under this specifier.
+const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -1062,6 +1067,7 @@ export default class ToolService extends Service {
         commandRequestId,
       ) ?? command.eventId;
     let resultCard: CardDef | undefined;
+    let toolToRun: Command<any, any> | undefined;
     // Distinguishes "the tool never ran" from "the tool ran, the aftermath
     // failed" — the catch below must not tell the room a committed write
     // failed.
@@ -1084,8 +1090,6 @@ export default class ToolService extends Service {
       // that un-sticks the UI and the waiting ai-bot is only sent once this
       // settles.
       let performTool = async (): Promise<CardDef | undefined> => {
-        let toolToRun;
-
         // If we don't find it in the one-offs, start searching for
         // one in the skills we can construct
         let toolCodeRef = command.codeRef;
@@ -1170,7 +1174,8 @@ export default class ToolService extends Service {
         status: 'applied',
         resultCard,
         attachedFiles: this.attachedFilesForToolResult(
-          command.name,
+          command.codeRef,
+          toolToRun,
           resultCard,
         ),
         context: userContextForAiBot,
@@ -1205,7 +1210,8 @@ export default class ToolService extends Service {
             status: 'applied',
             resultCard,
             attachedFiles: this.attachedFilesForToolResult(
-              command.name,
+              command.codeRef,
+              toolToRun,
               resultCard,
             ),
           });
@@ -1243,32 +1249,26 @@ export default class ToolService extends Service {
     }
   });
 
+  // The files a tool result attaches for the model, as the tool that ran
+  // declares them. Only a tool the host itself provides is asked, so a command
+  // loaded from a realm cannot attach files this way. (A command can still
+  // attach a file through `FileForAttachmentCard`, which is handled
+  // separately.)
   private attachedFilesForToolResult(
-    toolName: string | undefined,
+    codeRef: ResolvedCodeRef | undefined,
+    tool: Command<any, any> | undefined,
     resultCard: CardDef | undefined,
   ): FileDef[] {
-    if (!resultCard || !toolName?.startsWith('run-realm-code_')) {
+    if (
+      !resultCard ||
+      !(tool instanceof HostBaseTool) ||
+      !codeRef?.module.startsWith(HOST_TOOL_MODULE_PREFIX)
+    ) {
       return [];
     }
-    let files = (
-      resultCard as CardDef & {
-        files?: Array<{ fileUrl?: string; status?: string }>;
-      }
-    ).files;
-    if (!Array.isArray(files)) {
-      return [];
-    }
-    return files.flatMap((file) => {
-      if (!file.fileUrl || file.status !== 'saved') {
-        return [];
-      }
-      return [
-        this.matrixService.fileAPI.createFileDef({
-          sourceUrl: file.fileUrl,
-          name: file.fileUrl.split('/').pop(),
-        }),
-      ];
-    });
+    return tool
+      .resultAttachments(resultCard)
+      .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
   // Which step each in-flight validation is on, for the slow-validation log.

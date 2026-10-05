@@ -11,7 +11,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-import CaptureCardTool from '@cardstack/boxel-host/tools/capture-card';
+import CaptureTool from '@cardstack/boxel-host/tools/capture';
 import { Button } from '@cardstack/boxel-ui/components';
 
 type OnDemandCaptureFormat = 'isolated' | 'embedded';
@@ -63,7 +63,7 @@ class Isolated extends Component<typeof CaptureCardDemo> {
     this.errorMessage = null;
     this.imageUrl = null;
     try {
-      let result = await new CaptureCardTool(toolContext).execute({
+      let result = await new CaptureTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });
