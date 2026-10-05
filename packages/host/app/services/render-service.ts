@@ -342,6 +342,10 @@ function getElementFromIdPath(
   return getElementFromIdPath(path, child);
 }
 
+// The element a card is rendered into for capture, apart from the app's own
+// DOM.
+export const ISOLATED_RENDER_ELEMENT_ID = 'isolated-render';
+
 export function getIsolatedRenderElement(
   document: SimpleDocument,
 ): SimpleElement {
@@ -352,7 +356,7 @@ export function getIsolatedRenderElement(
         'qunit-fixture',
         'ember-testing-container',
         'ember-testing',
-        'isolated-render',
+        ISOLATED_RENDER_ELEMENT_ID,
       ],
       document.body,
     );
@@ -365,14 +369,14 @@ export function getIsolatedRenderElement(
         throw new Error(`bug: cannot find ember testing container`);
       }
       element = document.createElement('div');
-      element.setAttribute('id', 'isolated-render');
+      element.setAttribute('id', ISOLATED_RENDER_ELEMENT_ID);
       parent.appendChild(element);
     }
   } else {
-    element = getElementFromIdPath(['isolated-render'], document.body);
+    element = getElementFromIdPath([ISOLATED_RENDER_ELEMENT_ID], document.body);
     if (!element) {
       element = document.createElement('div');
-      element.setAttribute('id', 'isolated-render');
+      element.setAttribute('id', ISOLATED_RENDER_ELEMENT_ID);
       document.body.appendChild(element);
     }
   }

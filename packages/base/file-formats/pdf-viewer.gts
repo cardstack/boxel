@@ -16,15 +16,10 @@ import { modifier } from 'ember-modifier';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import { isLiveRender } from '../render-context';
+
 import { FileObject } from './file-resources';
 import type { FilePreviewSignature } from './file-preview-stage';
-
-// Base cards read this global to tell a server-side prerender from a live
-// client render (same signal `query-field-support` and the 3D family use).
-function isLiveRender(): boolean {
-  return !(globalThis as { __boxelRenderContext?: unknown })
-    .__boxelRenderContext;
-}
 
 // One live fetch's outcome, remembered with the URL it belongs to so a
 // model swap can never serve a stale document: the getters below ignore any
@@ -84,8 +79,8 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
 
   // Lives on the wrapper that survives the loading→loaded swap, so state
   // flips never re-run it; it re-runs only when the document URL changes.
-  private loadDocument = modifier((_element: HTMLElement, [url]: [string]) => {
-    if (!url || !isLiveRender()) {
+  private loadDocument = modifier((element: HTMLElement, [url]: [string]) => {
+    if (!url || !isLiveRender(element)) {
       return;
     }
     let cancelled = false;

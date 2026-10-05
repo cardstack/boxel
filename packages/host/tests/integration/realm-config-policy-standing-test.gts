@@ -171,6 +171,32 @@ module('Integration | realm config policy standing', function (hooks) {
       .exists('clicking the card opens the policy in a new stack item');
   });
 
+  test('a view someone is looking at stays live while the tab renders a card for its own index', async function (assert) {
+    // The render context this tab's in-place render for its own index sets,
+    // naming the element that render mounts into. It is held for the whole
+    // test, so every view below is built while it is set, which is the window
+    // a live view could otherwise mistake for the indexer's render.
+    let context = globalThis as {
+      __boxelRenderContext?: unknown;
+      __boxelRenderContextScope?: unknown;
+    };
+    context.__boxelRenderContext = true;
+    context.__boxelRenderContextScope = 'isolated-render';
+    try {
+      await renderConfig(POLICY);
+      assert
+        .dom('[data-test-realm-policy-status="in-force"]')
+        .hasText('In force', 'the standing view asked the realm');
+      await waitFor('[data-test-realm-config-policy-card="shown"]');
+      assert
+        .dom('[data-test-realm-config-policy-card-fitted]')
+        .containsText('Education', 'and the policy card it names loaded');
+    } finally {
+      delete context.__boxelRenderContext;
+      delete context.__boxelRenderContextScope;
+    }
+  });
+
   test('a pointer to a card the index does not hold shows policy-card-missing, and no card', async function (assert) {
     await renderConfig(MISSING);
     assert
