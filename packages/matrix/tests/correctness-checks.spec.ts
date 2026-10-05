@@ -575,6 +575,8 @@ test.describe('Correctness Checks', () => {
   test('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
     page,
   }) => {
+    // The check can run more than once while the realm reindexes the module.
+    test.slow();
     const { username, password, credentials } =
       await createSubscribedUserAndLogin(
         page,
@@ -675,90 +677,108 @@ export class ImportCheck extends CardDef {
       touchedFiles: [moduleUrl],
     });
 
+    // The run-realm-code result says the module was saved, not that the realm
+    // has reindexed it, and the check reads the index. A check that runs
+    // first reports the previous state, so the check is sent again until it
+    // reports the expected result.
     async function runCorrectnessCommand(
-      commandRequestId: string,
       description: string,
-      expectedApplyState: 'applied' | 'applied-with-error' = 'applied',
+      expectCorrect: boolean,
     ) {
-      let toolRequests = [
-        {
-          id: commandRequestId,
-          name: 'checkCorrectness',
-          arguments: {
-            description,
-            attributes: {
-              targetType: 'file',
-              targetRef: moduleUrl,
-              fileUrl: moduleUrl,
-              roomId,
-            },
-          },
-        },
-      ];
-
-      await putEvent(
-        credentials.accessToken,
-        roomId,
-        'm.room.message',
-        commandRequestId,
-        {
-          body: '',
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          isStreamingFinished: true,
-          data: {
-            context: {
-              agentId,
-            },
-          },
-          [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
-        },
-      );
-
-      let commandContainer = page.locator(
-        `[data-test-tool-call-id="${commandRequestId}"]`,
-      );
-      await commandContainer.waitFor();
-      await commandContainer
-        .locator(`[data-test-apply-state="${expectedApplyState}"]`)
-        .waitFor();
-
-      let toolResultEvent: any;
+      let resultJson: any;
       await expect(async () => {
-        let events = await getRoomEvents(username, password, roomId);
-        toolResultEvent = events.find(
-          (e: any) =>
-            e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
-            e.content.commandRequestId === commandRequestId,
+        let commandRequestId = `check-module-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 6)}`;
+        let toolRequests = [
+          {
+            id: commandRequestId,
+            name: 'checkCorrectness',
+            arguments: {
+              description,
+              attributes: {
+                targetType: 'file',
+                targetRef: moduleUrl,
+                fileUrl: moduleUrl,
+                roomId,
+              },
+            },
+          },
+        ];
+
+        await putEvent(
+          credentials.accessToken,
+          roomId,
+          'm.room.message',
+          commandRequestId,
+          {
+            body: '',
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            data: {
+              context: {
+                agentId,
+              },
+            },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
+          },
         );
-        expect(toolResultEvent).toBeDefined();
-      }).toPass();
 
-      let commandResultData =
-        typeof toolResultEvent!.content.data === 'string'
-          ? JSON.parse(toolResultEvent!.content.data)
-          : toolResultEvent!.content.data;
-      expect(commandResultData.card).toBeDefined();
-      expect(commandResultData.card.url).toBeDefined();
+        let commandContainer = page.locator(
+          `[data-test-tool-call-id="${commandRequestId}"]`,
+        );
+        await commandContainer
+          .locator(
+            '[data-test-apply-state="applied"], [data-test-apply-state="applied-with-error"]',
+          )
+          .waitFor();
 
-      let cardUrl = commandResultData.card.url;
-      let response: Response | undefined;
-      await expect(async () => {
-        response = await fetch(cardUrl, {
-          headers: {
-            Authorization: `Bearer ${credentials.accessToken}`,
-          },
-        });
-        expect(response.ok).toBe(true);
-      }).toPass();
+        let toolResultEvent: any;
+        await expect(async () => {
+          let events = await getRoomEvents(username, password, roomId);
+          toolResultEvent = events.find(
+            (e: any) =>
+              e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+              e.content.commandRequestId === commandRequestId,
+          );
+          expect(toolResultEvent).toBeDefined();
+        }).toPass();
 
-      return await response!.json();
+        let commandResultData =
+          typeof toolResultEvent!.content.data === 'string'
+            ? JSON.parse(toolResultEvent!.content.data)
+            : toolResultEvent!.content.data;
+        expect(commandResultData.card).toBeDefined();
+        expect(commandResultData.card.url).toBeDefined();
+
+        let cardUrl = commandResultData.card.url;
+        let response: Response | undefined;
+        await expect(async () => {
+          response = await fetch(cardUrl, {
+            headers: {
+              Authorization: `Bearer ${credentials.accessToken}`,
+            },
+          });
+          expect(response.ok).toBe(true);
+        }).toPass();
+
+        resultJson = await response!.json();
+        expect(resultJson.data.attributes.correct).toBe(expectCorrect);
+        await expect(
+          commandContainer.locator(
+            `[data-test-apply-state="${
+              expectCorrect ? 'applied' : 'applied-with-error'
+            }"]`,
+          ),
+        ).toHaveCount(1);
+      }).toPass({ intervals: [1_000, 2_000, 5_000] });
+      return resultJson;
     }
 
     let failingResult = await runCorrectnessCommand(
-      `check-module-${Date.now()}`,
       'Check correctness of broken module',
-      'applied-with-error',
+      false,
     );
 
     expect(failingResult.data.attributes.correct).toBe(false);
@@ -790,9 +810,8 @@ export class ImportCheck extends CardDef {
     });
 
     let fixedResult = await runCorrectnessCommand(
-      `check-module-${Date.now()}`,
       'Check correctness after fixing module import',
-      'applied',
+      true,
     );
 
     expect(fixedResult.data.attributes.correct).toBe(true);
