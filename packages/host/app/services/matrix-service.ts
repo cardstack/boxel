@@ -163,6 +163,13 @@ import type {
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
+
+// Where the homeserver serves room media: the authenticated endpoint uploads
+// resolve to, and the legacy one.
+const ROOM_MEDIA_DOWNLOAD_PATHS = [
+  '/_matrix/client/v1/media/download/',
+  '/_matrix/media/v3/download/',
+];
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 // Backoff for retrying trusted servers that were unreachable at boot. Bounded
 // so a persistently-down server doesn't spin forever.
@@ -1832,8 +1839,8 @@ export default class MatrixService extends Service {
   // to the Matrix session, which an `<img>` request does not carry, so its
   // bytes are downloaded with the session and handed back as an object URL
   // that the caller revokes when done. Any other URL comes back unchanged.
-  // The session token goes only to the homeserver's own origin: card code
-  // can call this with any URL.
+  // Card code can call this with any URL, so the session is used only for
+  // the homeserver's media download endpoints, never for the rest of its API.
   loadRoomMedia = async (url: string): Promise<string> => {
     let parsed: URL;
     try {
@@ -1843,7 +1850,9 @@ export default class MatrixService extends Service {
     }
     if (
       parsed.origin !== new URL(this.client.baseUrl).origin ||
-      !parsed.pathname.startsWith('/_matrix/')
+      !ROOM_MEDIA_DOWNLOAD_PATHS.some((path) =>
+        parsed.pathname.startsWith(path),
+      )
     ) {
       return url;
     }

@@ -2800,5 +2800,56 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       realmFile,
       'a URL that is not room media comes back unchanged',
     );
+    let homeserverApi = new URL('/_matrix/client/v3/sync', ENV.matrixURL).href;
+    assert.strictEqual(
+      await matrixService.loadRoomMedia(homeserverApi),
+      homeserverApi,
+      'a homeserver URL outside its media downloads comes back unchanged',
+    );
+  });
+
+  test('a run-realm-code result lists the files it saved and the captures it took', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let captureUrl = new URL(
+      '/_matrix/client/v1/media/download/localhost/run-capture',
+      ENV.matrixURL,
+    ).href;
+    let pngBytes = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      ),
+      (c) => c.charCodeAt(0),
+    );
+    mockMatrixUtils
+      .getUploadedContents()
+      .set(captureUrl, pngBytes.buffer as ArrayBuffer);
+    let savedFile = `${testRealmURL}brand-guide.html`;
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-result',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [{ fileUrl: savedFile, status: 'saved' }],
+        scriptResult: 'done',
+        captures: [
+          {
+            name: 'brand-guide.html (isolated).png',
+            url: captureUrl,
+            contentType: 'image/png',
+          },
+        ],
+      }),
+    });
+
+    await waitFor('[data-test-realm-code-capture][src^="blob:"]');
+    assert
+      .dom(`[data-test-realm-code-file="${savedFile}"]`)
+      .containsText('saved', 'the saved file is listed with its status');
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .doesNotContainText(
+        'done',
+        "the script's own result stays out of the chat",
+      );
   });
 });
