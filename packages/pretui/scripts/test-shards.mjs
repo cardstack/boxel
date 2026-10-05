@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMINGS = join(root, 'scripts', 'test-timings.json');
+const BOOT_PERCENTILE = 0.02;
 
 function testFiles(dir = root) {
   let out = [];
@@ -40,19 +41,23 @@ function plan(total) {
   let timings = JSON.parse(readFileSync(TIMINGS, 'utf8'));
   let files = testFiles();
   // Every recording includes the harness boot, which a shard pays once, not
-  // once per file. The fastest file's time bounds that boot from below, so
-  // it comes off each recording; left on, it would make many-file shards
-  // look heavier than they run.
-  let recorded = Object.values(timings);
-  let boot = recorded.length ? Math.min(...recorded) : 0;
-  let known = files.filter((f) => f in timings).map((f) => timings[f] - boot);
+  // once per file. A low percentile of the recordings estimates that boot
+  // (the very fastest few files load less than the boot itself), and it
+  // comes off each recording; left on, it would make many-file shards look
+  // heavier than they run.
+  let recorded = Object.values(timings).sort((a, b) => a - b);
+  let boot = recorded.length
+    ? recorded[Math.floor(BOOT_PERCENTILE * (recorded.length - 1))]
+    : 0;
+  let weight = (file) => Math.max(timings[file] - boot, 0);
+  let known = files.filter((f) => f in timings).map(weight);
   let fallback = known.length
     ? Math.round(known.reduce((a, b) => a + b, 0) / known.length)
     : 1;
   let weighted = files
     .map((file) => ({
       file,
-      ms: file in timings ? timings[file] - boot : fallback,
+      ms: file in timings ? weight(file) : fallback,
     }))
     .sort((a, b) => b.ms - a.ms || (a.file < b.file ? -1 : 1));
   let shards = Array.from({ length: total }, () => ({ files: [], ms: 0 }));
