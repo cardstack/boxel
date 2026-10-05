@@ -76,6 +76,10 @@ function classroomModule(rosterField: string) {
         set: { status: 'locked' },
         nonGrantable: true,
       };
+      @operation static listOpen = {
+        base: 'query',
+        query: { filter: { type: () => Classroom } },
+      };
     }
     export class OpenClassroom extends Classroom {
       @operation static lock = {
@@ -822,87 +826,172 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a grant opens a base operation to callers who are not signed in, and a write names who it is made as', async function (assert) {
+    const OPEN_CLASSROOM = {
+      module: `${EDUCATION}classroom`,
+      name: 'OpenClassroom',
+    };
     await writeTo(
       org,
       'policies/education.json',
-      policyCard([
-        { operation: 'read', anonymous: true },
+      policyOf([
         {
-          operation: 'read',
-          anonymous: true,
-          where: '.teacherIds | any(. == actor())',
+          targetType: CLASSROOM,
+          grants: [
+            { operation: 'read', anonymous: true },
+            // A custom operation, built on a base one.
+            { operation: 'appendActivity', anonymous: true },
+            // A named query.
+            { operation: 'listOpen', anonymous: true },
+            // A write that names nobody to make it as, and one whose key is
+            // blank.
+            { operation: 'transform', anonymous: true },
+            { operation: 'update', anonymous: true, actingUser: '  ' },
+            {
+              operation: 'transform',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+            },
+            // A read names no acting user, whatever it is given.
+            { operation: 'readSource', anonymous: true, actingUser: 'reader' },
+            { operation: 'query', anonymous: true, where: '.status == "open"' },
+            // Opened to signed-in callers only.
+            { operation: 'delete' },
+          ],
         },
-        // A custom operation, built on a base one.
-        { operation: 'appendActivity', anonymous: true },
-        // A write that names nobody to make it as.
-        { operation: 'transform', anonymous: true },
         {
-          operation: 'transform',
-          anonymous: true,
-          actingUser: 'feedbackWriter',
+          // The only anonymous grant of its operation reads the caller.
+          targetType: OPEN_CLASSROOM,
+          grants: [
+            {
+              operation: 'update',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+              where: '.status == "public" or (.teacherIds | any(. == actor()))',
+            },
+          ],
         },
-        { operation: 'query', anonymous: true, where: '.status == "open"' },
-        // Opened to signed-in callers only.
-        { operation: 'update' },
       ]),
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      policy?.issues.map(({ code, path, severity }) => ({
+        code,
+        path,
+        severity,
+      })),
       [
         {
           code: 'anonymous-not-base-operation',
+          path: 'rules[0].grants[1].anonymous',
+          severity: 'inactive',
+        },
+        {
+          code: 'anonymous-not-base-operation',
           path: 'rules[0].grants[2].anonymous',
+          severity: 'inactive',
         },
         {
           code: 'anonymous-write-without-acting-user',
           path: 'rules[0].grants[3].actingUser',
+          severity: 'inactive',
+        },
+        {
+          code: 'anonymous-write-without-acting-user',
+          path: 'rules[0].grants[4].actingUser',
+          severity: 'inactive',
+        },
+        {
+          code: 'anonymous-grant-reads-actor',
+          path: 'rules[1].grants[0].where',
+          severity: 'warning',
         },
       ],
-      'a custom operation and a write with no acting user are refused, and nothing else',
+      'a custom operation, a named query and a write with no acting user are refused; a grant that reads the caller is warned about and kept',
     );
     let grants = policy?.rules[0]?.grants ?? [];
     assert.deepEqual(
       grants.map(({ path, anonymous }) => ({ path, anonymous })),
       [
         { path: 'rules[0].grants[0]', anonymous: {} },
-        { path: 'rules[0].grants[1]', anonymous: {} },
         {
-          path: 'rules[0].grants[4]',
+          path: 'rules[0].grants[5]',
           anonymous: { actingUserKey: 'feedbackWriter' },
         },
-        { path: 'rules[0].grants[5]', anonymous: {} },
-        { path: 'rules[0].grants[6]', anonymous: undefined },
+        { path: 'rules[0].grants[6]', anonymous: {} },
+        { path: 'rules[0].grants[7]', anonymous: {} },
+        { path: 'rules[0].grants[8]', anonymous: undefined },
       ],
-      'the refused grants are left out, and only the grants that opt in carry the opt-in',
+      'the refused grants are left out, only the grants that opt in carry the opt-in, and only a write names who it is made as',
     );
+    assert.ok(grants[3]?.filter, 'the anonymous query grant has a filter');
+    let readsCaller = policy?.rules[1]?.grants[0];
     assert.true(
-      grants[1]?.where?.readsActor,
+      readsCaller?.where?.readsActor,
       'a predicate that reads the caller says so',
     );
     assert.notOk(
       grants[3]?.where?.readsActor,
       'and one that reads only the card does not',
     );
-    assert.ok(grants[3]?.filter, 'the anonymous query grant has a filter');
     assert.deepEqual(
       policy?.anonymous,
-      { operations: ['query', 'read', 'transform'] },
-      'the policy records which operations it opens to callers who are not signed in',
+      { operations: ['query', 'read', 'readSource', 'transform'] },
+      'the operations opened to callers who are not signed in, leaving out the one whose only grant reads the caller',
     );
     assert.deepEqual(
       [...(await education.getAnonymousAdmission())].sort(),
-      ['query', 'read', 'transform'],
+      ['query', 'read', 'readSource', 'transform'],
       'and the realm reads them from the compiled policy',
     );
+  });
 
+  test('a query grant with no search filter opens nothing to callers who are not signed in', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        // Reads a realm setting, which a search does not resolve.
+        {
+          operation: 'query',
+          anonymous: true,
+          where: '.status == realmConfig("approver")',
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code }) => code),
+      ['policy-not-filterable'],
+    );
+    assert.strictEqual(policy?.anonymous, undefined);
+    assert.strictEqual((await education.getAnonymousAdmission()).size, 0);
+  });
+
+  test('a policy that opens nothing, or that does not compile, opens nothing to callers who are not signed in', async function (assert) {
     await writeTo(org, 'policies/education.json', policyCard(GRANTS));
-    let signedInOnly = await compiled();
     assert.strictEqual(
-      signedInOnly?.anonymous,
+      (await compiled())?.anonymous,
       undefined,
-      'a policy that opens nothing to callers who are not signed in records nothing',
+      'a policy that opens nothing records nothing',
     );
     assert.strictEqual((await education.getAnonymousAdmission()).size, 0);
+
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([{ operation: 'read', anonymous: true }], {
+        module: rri('@cardstack/base/card-api'),
+        name: 'CardDef',
+      }),
+    );
+    assert.true(
+      (await compiled())?.uncompilable,
+      'the policy does not compile',
+    );
+    assert.strictEqual(
+      (await education.getAnonymousAdmission()).size,
+      0,
+      'and opens nothing',
+    );
   });
 });
