@@ -4,9 +4,11 @@ import {
   captureOutputContentType,
   captureSpecHash,
   emitCapturePerf,
+  captureLedgerSourceURL,
   ensureTrailingSlash,
   fetchRealmPermissions,
-  findLiveInstanceGeneration,
+  findLiveRowGeneration,
+  urlNamesFile,
   findMediaCacheEntry,
   isCanonicalCaptureFormat,
   isOnDemandCaptureFormat,
@@ -25,11 +27,12 @@ import {
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import {
-  enqueueCaptureCardJob,
+  enqueueCaptureJob,
   estimateCaptureQueueWait,
   CAPTURE_SYNC_WAIT_BUDGET_MS,
-} from '@cardstack/runtime-common/jobs/capture-card';
+} from '@cardstack/runtime-common/jobs/capture';
 import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
+import type { CaptureSourceKind } from '@cardstack/runtime-common/tasks/capture';
 
 import {
   fetchRequestFromContext,
@@ -66,9 +69,11 @@ interface CaptureResult {
 }
 
 /**
- * Handler for `POST /_capture-card`.
+ * Handler for `POST /_capture`, also answered at its former names
+ * `/_capture-card` and `/_screenshot-card`.
  *
- * Captures one card as its requester — with their reach across realms, on
+ * Captures one card — or one file in the realm, named by `fileURL` in place
+ * of `cardId` — as its requester — with their reach across realms, on
  * an ordinary session a realm's policy scopes as them — and persists the
  * capture to the MediaCache under its canonical identity (instance URL ×
  * canonical capture spec × the instance's current index generation) and
@@ -101,14 +106,24 @@ interface CaptureResult {
  * the index doesn't know, a server without a MediaCache store, or a caller
  * without realm read) — embed the `base64` in that case.
  *
+ * A file capture renders the file's FileDef the way indexing renders it (the
+ * tab extracts the file's resource, then renders it in the requested format),
+ * so any file the index knows — HTML, markdown, an image, a PDF — can be
+ * captured. It persists under the file row's generation like a card capture
+ * persists under its instance's, which keeps coalescing and the 503-retry
+ * ledger hit, but its `url` is always null: the GET `_capture/` route
+ * resolves instances, not files, so a file capture is consumed through its
+ * `base64`.
+ *
  * Request body (JSON:API):
  * ```json
  * {
  *   "data": {
- *     "type": "capture-card",
+ *     "type": "capture",
  *     "attributes": {
  *       "realmURL": "https://realm.example/user/workspace/",
  *       "cardId": "https://realm.example/user/workspace/Person/fadhlan",
+       // or, for a file: "fileURL": "https://realm.example/user/workspace/brand.html"
  *       "format": "isolated",
  *       "includeBase64": true,
  *       "captureSpec": {
@@ -173,7 +188,7 @@ interface CaptureResult {
 // (runtime-common) so this handler and the prerender server's capture
 // route validate identically; see the constants and rules there.
 
-export default function handleCaptureCard({
+export default function handleCapture({
   dbAdapter,
   queue,
   matrixClient,
@@ -197,13 +212,23 @@ export default function handleCaptureCard({
       );
     }
 
-    let { realmURL, cardId, format, includeBase64 } = attrs;
+    let { realmURL, cardId, fileURL, format, includeBase64 } = attrs;
     if (!realmURL || typeof realmURL !== 'string') {
       return sendResponseForBadRequest(ctxt, 'realmURL is required');
     }
-    if (!cardId || typeof cardId !== 'string') {
-      return sendResponseForBadRequest(ctxt, 'cardId is required');
+    // A JSON `null` reads as absent, the same as an omitted field.
+    if (cardId != null && fileURL != null) {
+      return sendResponseForBadRequest(
+        ctxt,
+        'cardId and fileURL are mutually exclusive',
+      );
     }
+    let kind: CaptureSourceKind = fileURL != null ? 'file' : 'card';
+    let target: unknown = kind === 'file' ? fileURL : cardId;
+    if (!target || typeof target !== 'string') {
+      return sendResponseForBadRequest(ctxt, 'cardId or fileURL is required');
+    }
+    let targetField = kind === 'file' ? 'fileURL' : 'cardId';
     // Shared with the prerender server's capture route so both surfaces
     // accept exactly the same capture formats. Wider than the GET
     // `_capture/` DSL's formats: fitted is capture-only (it always
@@ -222,27 +247,43 @@ export default function handleCaptureCard({
     // Both URLs go through `new URL` resolution (dot segments,
     // percent-encoding, default ports) before anything derives from them:
     // the containment check below must mean real containment (a dotted
-    // `cardId` prefixed with the realm URL escapes a plain string-prefix
-    // test), and the persist identity must key an instance exactly the way
-    // the GET route's `paths.fileURL` derivation does.
+    // target prefixed with the realm URL escapes a plain string-prefix test),
+    // and the persist identity must key an instance exactly the way the GET
+    // route's `paths.fileURL` derivation does.
     let normalizedRealmURL: string;
-    let normalizedCardId: string;
+    let normalizedTarget: string;
     try {
       normalizedRealmURL = ensureTrailingSlash(new URL(realmURL).href);
-      normalizedCardId = new URL(cardId).href;
+      normalizedTarget = new URL(target).href;
     } catch {
       return sendResponseForBadRequest(
         ctxt,
-        'realmURL and cardId must be valid absolute URLs',
+        `realmURL and ${targetField} must be valid absolute URLs`,
       );
     }
-    // The persist identity (and the served URL) hang off the instance's
+    // The persist identity (and the served URL) hang off the target's
     // location within its realm.
-    if (!normalizedCardId.startsWith(normalizedRealmURL)) {
-      return sendResponseForBadRequest(ctxt, 'cardId must be within realmURL');
+    if (!normalizedTarget.startsWith(normalizedRealmURL)) {
+      return sendResponseForBadRequest(
+        ctxt,
+        `${targetField} must be within realmURL`,
+      );
     }
-    let sourceURL = normalizedCardId.replace(/\.json$/, '');
-    let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
+    // An instance is keyed by its extensionless id, a file by its own URL —
+    // the spellings their index rows carry.
+    let sourceURL = captureLedgerSourceURL(
+      normalizedTarget,
+      kind === 'file' ? 'file' : 'instance',
+    );
+    // A file without a registered extension shares its spelling with a card
+    // id — `X` beside the instance `X.json` — so its ledger key would be the
+    // card capture's key whenever the two rows carry one generation. Such a
+    // file is captured but never persisted.
+    let persistable = kind === 'card' || urlNamesFile(new URL(sourceURL));
+    // The durable served URL exists only for an instance: the GET
+    // `_capture/` route resolves instances, not files.
+    let servedLocalPath =
+      kind === 'card' ? sourceURL.slice(normalizedRealmURL.length) : null;
 
     let captureSpecParse = parseCaptureRequestSpec(attrs.captureSpec, format);
     if (captureSpecParse.error) {
@@ -287,7 +328,7 @@ export default function handleCaptureCard({
       let entryKey: MediaCacheCaptureKey | undefined;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
-      if (mediaCacheAdapter && spec) {
+      if (mediaCacheAdapter && spec && persistable) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -306,9 +347,10 @@ export default function handleCaptureCard({
         ).can(userId, 'read');
         if (mayRead) {
           let generationLookupStart = Date.now();
-          let generation = await findLiveInstanceGeneration(dbAdapter, {
+          let generation = await findLiveRowGeneration(dbAdapter, {
             realmURL: normalizedRealmURL,
-            instanceURL: sourceURL,
+            url: sourceURL,
+            type: kind === 'file' ? 'file' : 'instance',
           });
           generationLookupMs = Date.now() - generationLookupStart;
           if (generation !== undefined) {
@@ -362,7 +404,7 @@ export default function handleCaptureCard({
             entry,
             withBase64,
             normalizedRealmURL,
-            instanceLocalPath,
+            servedLocalPath,
             spec,
             mediaCacheAdapter: mediaCacheAdapter!,
             dbAdapter,
@@ -388,12 +430,13 @@ export default function handleCaptureCard({
       // job's default concurrency group) so this surface and the GET lane —
       // which keys off the realm's own URL — share one lane per realm.
       let enqueueStart = Date.now();
-      let job = await enqueueCaptureCardJob(
+      let job = await enqueueCaptureJob(
         {
           realmURL: normalizedRealmURL,
           realmUsername: userId,
           runAs: userId,
-          cardId: normalizedCardId,
+          cardId: normalizedTarget,
+          sourceKind: kind,
           format,
           captureSpec,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,
@@ -517,7 +560,7 @@ export default function handleCaptureCard({
             deviceScaleFactor: result.captures?.[0]?.deviceScaleFactor ?? null,
             pageCount: result.captures?.[0]?.pageCount,
             normalizedRealmURL,
-            instanceLocalPath,
+            servedLocalPath,
             spec,
           }),
         ];
@@ -528,7 +571,7 @@ export default function handleCaptureCard({
         new Response(
           JSON.stringify({
             data: {
-              type: 'capture-card-result',
+              type: 'capture-result',
               attributes,
             },
           }),
@@ -539,7 +582,7 @@ export default function handleCaptureCard({
         ),
       );
     } catch (error) {
-      console.error('Failed to execute capture-card job:', error);
+      console.error('Failed to execute capture job:', error);
       return sendResponseForSystemError(ctxt, 'Capture job failed');
     }
   };
@@ -553,7 +596,7 @@ function captureResult({
   deviceScaleFactor = null,
   pageCount,
   normalizedRealmURL,
-  instanceLocalPath,
+  servedLocalPath,
   spec,
 }: {
   withBase64: boolean;
@@ -563,16 +606,21 @@ function captureResult({
   deviceScaleFactor?: number | null;
   pageCount?: number;
   normalizedRealmURL: string;
-  instanceLocalPath: string;
+  // The instance's path within its realm, which its served URL hangs off;
+  // null for a file capture, which has no served URL.
+  servedLocalPath: string | null;
   spec: CaptureIdentity;
 }): CaptureResult {
   return {
     name: null,
-    url: captureURLFor({
-      realmURL: normalizedRealmURL,
-      instanceLocalPath,
-      spec,
-    }),
+    url:
+      servedLocalPath === null
+        ? null
+        : captureURLFor({
+            realmURL: normalizedRealmURL,
+            instanceLocalPath: servedLocalPath,
+            spec,
+          }),
     width,
     height,
     // The effective scale: the engine-reported factor when the capture just
@@ -595,7 +643,7 @@ async function respondFromLedger({
   entry,
   withBase64,
   normalizedRealmURL,
-  instanceLocalPath,
+  servedLocalPath,
   spec,
   mediaCacheAdapter,
   dbAdapter,
@@ -603,7 +651,7 @@ async function respondFromLedger({
   entry: MediaCacheEntry;
   withBase64: boolean;
   normalizedRealmURL: string;
-  instanceLocalPath: string;
+  servedLocalPath: string | null;
   spec: CaptureIdentity;
   mediaCacheAdapter: NonNullable<CreateRoutesArgs['mediaCacheAdapter']>;
   dbAdapter: DBAdapter;
@@ -640,14 +688,14 @@ async function respondFromLedger({
         width: entry.width,
         height: entry.height,
         normalizedRealmURL,
-        instanceLocalPath,
+        servedLocalPath,
         spec,
       }),
     ],
   };
   return new Response(
     JSON.stringify({
-      data: { type: 'capture-card-result', attributes },
+      data: { type: 'capture-result', attributes },
     }),
     {
       status: 201,

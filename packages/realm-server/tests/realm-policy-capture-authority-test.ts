@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
+import { colorCoverage } from './helpers/png.ts';
 import { dirSync } from 'tmp';
 import {
   SupportedMimeType,
@@ -345,6 +346,12 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(PRIVATE),
           fileSystem: {
             'schedules/open.json': schedule('Private open', OWNER),
+            'notes/private-notes.md':
+              '# Private notes\n\nOnly its readers see this.\n',
+            // A page whose body is a color no file chrome uses, so a capture
+            // shows whether the HTML itself was drawn.
+            'notes/swatch.html':
+              '<!doctype html><html><body style="margin:0;background:rgb(255,0,254);height:2000px"></body></html>',
           },
           permissions: { ...owner, [REQUESTER]: ['read'] },
         },
@@ -419,7 +426,7 @@ module(basename(import.meta.filename), function (hooks) {
     cardId = BOARD_CARD,
   ) {
     return request
-      .post('/_capture-card')
+      .post('/_capture')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/vnd.api+json')
       .set(
@@ -431,7 +438,7 @@ module(basename(import.meta.filename), function (hooks) {
       )
       .send({
         data: {
-          type: 'capture-card',
+          type: 'capture',
           attributes: {
             realmURL: BOARD,
             cardId,
@@ -439,6 +446,27 @@ module(basename(import.meta.filename), function (hooks) {
             includeBase64: false,
             captureSpec,
           },
+        },
+      });
+  }
+
+  // A POST of a file capture: the file is named by `fileURL` in its realm.
+  function postFileCapture(user: string, realmURL: string, fileURL: string) {
+    return request
+      .post('/_capture')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user, sessionRoom: `session-room-${user}` },
+          realmSecretSeed,
+        )}`,
+      )
+      .send({
+        data: {
+          type: 'capture',
+          attributes: { realmURL, fileURL, format: 'isolated' },
         },
       });
   }
@@ -527,6 +555,61 @@ module(basename(import.meta.filename), function (hooks) {
       pngHeight(servedToOther.body as Buffer),
       otherCapture.height,
       'the capture drawn as them, never the requester’s',
+    );
+  });
+
+  test('a file capture through the endpoint draws the rendered HTML of an HTML file', async function (assert) {
+    let response = await postFileCapture(
+      REQUESTER,
+      PRIVATE,
+      `${PRIVATE}notes/swatch.html`,
+    );
+    assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+    let attrs = response.body.data.attributes;
+    assert.strictEqual(attrs.status, 'ready', `rendered: ${attrs.error}`);
+    let coverage = colorCoverage(attrs.captures[0].base64, [255, 0, 254]);
+    assert.true(
+      coverage > 0.33,
+      `the page's own body color fills the preview (${Math.round(coverage * 100)}% of the capture)`,
+    );
+  });
+
+  // The caller who cannot read the realm is refused before any tab runs: the
+  // task finds no permissions for them there. A reader's in-tab read of the
+  // file uses the same per-user session the card branch's reads do, which the
+  // card tests above pin.
+  test('a file capture draws the file for a reader of its realm and nothing for anyone else', async function (assert) {
+    let fileURL = `${PRIVATE}notes/private-notes.md`;
+
+    let reader = await postFileCapture(REQUESTER, PRIVATE, fileURL);
+    assert.strictEqual(reader.status, 201, JSON.stringify(reader.body));
+    assert.strictEqual(
+      reader.body.data.attributes.status,
+      'ready',
+      `a reader of the realm is drawn the file: ${reader.body.data.attributes.error}`,
+    );
+    assert.ok(
+      reader.body.data.attributes.captures[0].base64,
+      'and handed its image',
+    );
+
+    let outsider = await postFileCapture(OTHER_READER, PRIVATE, fileURL);
+    assert.notStrictEqual(
+      outsider.body?.data?.attributes?.status,
+      'ready',
+      `a caller who cannot read the realm is drawn nothing: ${JSON.stringify(outsider.body)}`,
+    );
+    assert.notOk(
+      outsider.body?.data?.attributes?.base64,
+      'and handed no image',
+    );
+    let persistedForOutsider = await db.execute(
+      `SELECT 1 FROM media_cache_ledger WHERE source_url = '${fileURL}' AND rendered_as LIKE '${OTHER_READER}%'`,
+    );
+    assert.strictEqual(
+      persistedForOutsider.length,
+      0,
+      'and nothing is stored for them',
     );
   });
 

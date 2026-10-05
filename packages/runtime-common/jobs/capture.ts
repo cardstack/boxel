@@ -10,10 +10,7 @@ import type {
   CapturePrerenderResponse,
   DBAdapter,
 } from '../index.ts';
-import type {
-  CaptureCardArgs,
-  CapturePersistArgs,
-} from '../tasks/capture-card.ts';
+import type { CaptureArgs, CapturePersistArgs } from '../tasks/capture.ts';
 
 // Timeout for a capture job — a wedged-worker backstop covering one render +
 // settle + the capture loop. A batch captures every entry from a single settle,
@@ -24,20 +21,21 @@ import type {
 // capped at `cardRenderTimeout` (RENDER_TIMEOUT_MS, default 60s), so a slow
 // render surfaces as a Render timeout regardless of this value — this is the
 // backstop for a worker wedged outside the render (dispatch, result upload).
-export const CAPTURE_CARD_JOB_TIMEOUT_SEC = 60;
+export const CAPTURE_JOB_TIMEOUT_SEC = 60;
 
 // Concurrent requests for one capture fold onto one job: the per-realm
 // concurrency group serializes execution but does not dedupe, so without
 // this two simultaneous misses for the same spec would each run a full
 // render (the store's dedupe-on-write only saves the second upload, not the
-// Chrome work). A twin must match the whole capture identity — card, format,
-// render identity, captureSpec, and persist target — since joining hands the
-// incoming caller the twin's result verbatim. Queued and in-flight twins
+// Chrome work). A twin must match the whole capture identity — card or file
+// (and which of the two it is), format, render identity, captureSpec, and
+// persist target — since joining hands the incoming caller the twin's result
+// verbatim. Queued and in-flight twins
 // both join; an in-flight join just registers a late waiter on the running
 // job.
 //
 // Only persist-carrying jobs coalesce — both surfaces publish them: the GET
-// `_capture/` lane always, `POST /_capture-card` whenever the instance
+// `_capture/` lane always, `POST /_capture` whenever the instance
 // is indexed and the server has a store. A persist target pins the source
 // generation, so a joined caller can never be handed a capture of a
 // different revision. A `persist: null` job (unindexed card, or a server
@@ -52,22 +50,35 @@ export const CAPTURE_CARD_JOB_TIMEOUT_SEC = 60;
 // within one render identity: every capture renders as the reader who asked
 // for it, so two readers' captures of one spec never join, whichever surface
 // each came through.
-export function chooseCaptureCardCoalesceDecision(
+// The capture job type, and the former name a realm server on a previous
+// revision publishes the same job under during a rollout. The coalescer and
+// every queue probe below treat them as one family: a job published under the
+// former name is always a card capture with wire-identical args.
+export const CAPTURE_JOB_TYPE = 'capture';
+export const CAPTURE_JOB_TYPES: readonly string[] = [
+  CAPTURE_JOB_TYPE,
+  'capture-card',
+];
+const CAPTURE_JOB_TYPES_SQL = CAPTURE_JOB_TYPES.map((t) => `'${t}'`).join(', ');
+
+export function chooseCaptureCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
-  let incomingArgs = parseCaptureCardArgs(incoming.args);
+  let incomingArgs = parseCaptureArgs(incoming.args);
   if (!incomingArgs || !incomingArgs.persist) {
     return { type: 'insert' };
   }
   let twin = [...candidates, ...inFlightCandidates].find((candidate) => {
-    if (candidate.jobType !== incoming.jobType) {
+    if (!CAPTURE_JOB_TYPES.includes(candidate.jobType)) {
       return false;
     }
-    let candidateArgs = parseCaptureCardArgs(candidate.args);
+    let candidateArgs = parseCaptureArgs(candidate.args);
     return (
       candidateArgs !== undefined &&
       candidateArgs.cardId === incomingArgs.cardId &&
+      (candidateArgs.sourceKind ?? 'card') ===
+        (incomingArgs.sourceKind ?? 'card') &&
       candidateArgs.format === incomingArgs.format &&
       candidateArgs.runAs === incomingArgs.runAs &&
       sameCaptureIdentity(
@@ -83,7 +94,7 @@ export function chooseCaptureCardCoalesceDecision(
   return { type: 'join', jobId: twin.id };
 }
 
-function parseCaptureCardArgs(args: unknown): CaptureCardArgs | undefined {
+function parseCaptureArgs(args: unknown): CaptureArgs | undefined {
   let obj: unknown = args;
   if (typeof args === 'string') {
     try {
@@ -103,7 +114,7 @@ function parseCaptureCardArgs(args: unknown): CaptureCardArgs | undefined {
   ) {
     return undefined;
   }
-  return obj as CaptureCardArgs;
+  return obj as CaptureArgs;
 }
 
 // Field-by-field rather than JSON.stringify: one side round-trips through
@@ -178,8 +189,8 @@ function samePersist(
 }
 
 registerQueueJobDefinition({
-  jobType: 'capture-card',
-  coalesce: chooseCaptureCardCoalesceDecision,
+  jobType: CAPTURE_JOB_TYPE,
+  coalesce: chooseCaptureCoalesceDecision,
 });
 
 // How long a GET `_capture/` request holds its connection waiting for an
@@ -232,6 +243,9 @@ export async function estimateCaptureQueueWait(
     sourceURL: string;
     captureSpecHash: string;
     sourceGeneration: number;
+    // Which rendering the caller asks for; a card when absent, as the
+    // coalescer reads a job that carries no kind.
+    sourceKind?: 'card' | 'file';
     runAs: string;
   },
 ): Promise<CaptureQueueEstimate> {
@@ -242,7 +256,7 @@ export async function estimateCaptureQueueWait(
     query(dbAdapter, [
       `SELECT COUNT(*) AS pending FROM jobs
         WHERE status = 'unfulfilled'
-          AND job_type = 'capture-card'
+          AND job_type IN (${CAPTURE_JOB_TYPES_SQL})
           AND concurrency_group =`,
       param(concurrencyGroup),
     ] as Expression) as Promise<{ pending: number | string }[]>,
@@ -258,7 +272,7 @@ export async function estimateCaptureQueueWait(
          SELECT EXTRACT(EPOCH FROM (j.finished_at - MAX(jr.created_at))) * 1000 AS ms
            FROM jobs j
            JOIN job_reservations jr ON jr.job_id = j.id AND jr.completed_at IS NOT NULL
-          WHERE j.job_type = 'capture-card'
+          WHERE j.job_type IN (${CAPTURE_JOB_TYPES_SQL})
             AND j.status = 'resolved'
             AND j.finished_at > NOW() - INTERVAL '${CAPTURE_DURATION_LOOKBACK_HOURS} hours'
             AND j.concurrency_group =`,
@@ -277,7 +291,7 @@ export async function estimateCaptureQueueWait(
           `SELECT EXISTS (
              SELECT 1 FROM jobs
               WHERE status = 'unfulfilled'
-                AND job_type = 'capture-card'
+                AND job_type IN (${CAPTURE_JOB_TYPES_SQL})
                 AND concurrency_group =`,
           param(concurrencyGroup),
           `AND args->'persist'->>'sourceURL' =`,
@@ -288,6 +302,8 @@ export async function estimateCaptureQueueWait(
           param(String(twinOf.sourceGeneration)),
           `AND args->>'runAs' =`,
           param(twinOf.runAs),
+          `AND COALESCE(args->>'sourceKind', 'card') =`,
+          param(twinOf.sourceKind ?? 'card'),
           `) AS has_twin`,
         ] as Expression) as Promise<{ has_twin: boolean }[]>)
       : Promise.resolve([{ has_twin: false }]),
@@ -304,17 +320,17 @@ export async function estimateCaptureQueueWait(
   };
 }
 
-export async function enqueueCaptureCardJob(
-  args: CaptureCardArgs,
+export async function enqueueCaptureJob(
+  args: CaptureArgs,
   queue: QueuePublisher,
   _dbAdapter: DBAdapter,
   priority: number,
   opts?: { concurrencyGroup?: string },
 ) {
   let job = await queue.publish<CapturePrerenderResponse>({
-    jobType: 'capture-card',
+    jobType: CAPTURE_JOB_TYPE,
     concurrencyGroup: opts?.concurrencyGroup ?? `capture:${args.realmURL}`,
-    timeout: CAPTURE_CARD_JOB_TIMEOUT_SEC,
+    timeout: CAPTURE_JOB_TIMEOUT_SEC,
     priority,
     args,
   });

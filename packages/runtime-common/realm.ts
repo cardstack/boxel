@@ -434,10 +434,10 @@ import {
   MEDIA_CACHE_MAX_AGE_SECONDS,
 } from './media-cache-serving.ts';
 import {
-  enqueueCaptureCardJob,
+  enqueueCaptureJob,
   estimateCaptureQueueWait,
   CAPTURE_SYNC_WAIT_BUDGET_MS,
-} from './jobs/capture-card.ts';
+} from './jobs/capture.ts';
 import {
   emitCapturePerf,
   type CaptureRequestPerfEvent,
@@ -9634,7 +9634,7 @@ export class Realm {
     );
     let precheckMs = Date.now() - precheckStart;
     // A request whose capture is already queued or rendering coalesces onto
-    // that job (see `chooseCaptureCardCoalesceDecision`) and costs no new
+    // that job (see `chooseCaptureCoalesceDecision`) and costs no new
     // Chrome work, so the lane's depth is not its wait — only a genuinely new
     // capture faces the congestion gate. Without this, the second viewer of a
     // card that is mid-render is 503'd against a wait it would never incur.
@@ -9651,12 +9651,13 @@ export class Realm {
     }
 
     let enqueueStart = Date.now();
-    let job = await enqueueCaptureCardJob(
+    let job = await enqueueCaptureJob(
       {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
         cardId: entryKey.sourceURL,
+        sourceKind: 'card',
         format: spec.format,
         // The spec's geometry overrides (viewport / dsf / fullPage / clip)
         // ride to the capture engine; the entry key's `captureSpecHash`

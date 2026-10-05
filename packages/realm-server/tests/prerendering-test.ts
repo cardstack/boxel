@@ -1,7 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { inflateSync } from 'zlib';
 import type {
   RealmPermissions,
   RealmAdapter,
@@ -26,6 +25,7 @@ import {
 } from './helpers/index.ts';
 import { prerenderCard, prerenderFileExtract } from './helpers/prerender.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { colorCoverage, decodePngRGBA, type RgbaImage } from './helpers/png.ts';
 import {
   baseCardRef,
   trimExecutableExtension,
@@ -33,6 +33,7 @@ import {
   baseRealmRRI,
   baseRRI,
   executableExtensions,
+  FILEDEF_CODE_REF_BY_EXTENSION,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -266,119 +267,6 @@ function firstMediaBox(
     width: Number(m[3]) - Number(m[1]),
     height: Number(m[4]) - Number(m[2]),
   };
-}
-
-interface RgbaImage {
-  width: number;
-  height: number;
-  // Row-major RGBA, 4 bytes per pixel.
-  data: Uint8Array;
-}
-
-// Decode a base64 PNG into raw RGBA pixels — enough of the format to
-// pixel-compare two Chromium captures, without pulling in an image
-// library (the header-only `decodePng` above shares this no-dependency
-// stance). Handles what `page.screenshot` actually emits: 8-bit,
-// non-interlaced, truecolor with (colorType 6) or without (colorType 2) an
-// alpha channel. Anything else throws rather than silently misreading.
-function decodePngRGBA(base64: string): RgbaImage {
-  let buf = Buffer.from(base64, 'base64');
-  let signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  if (buf.length < 24 || !signature.every((byte, i) => buf[i] === byte)) {
-    throw new Error('not a PNG');
-  }
-  let width = buf.readUInt32BE(16);
-  let height = buf.readUInt32BE(20);
-  let bitDepth = buf[24];
-  let colorType = buf[25];
-  let interlace = buf[28];
-  if (bitDepth !== 8) {
-    throw new Error(`unsupported PNG bit depth ${bitDepth}`);
-  }
-  if (colorType !== 6 && colorType !== 2) {
-    throw new Error(`unsupported PNG color type ${colorType}`);
-  }
-  if (interlace !== 0) {
-    throw new Error('interlaced PNGs are not supported');
-  }
-  let channels = colorType === 6 ? 4 : 3;
-
-  // Concatenate the (possibly split) IDAT chunk payloads, then inflate.
-  let idat: Buffer[] = [];
-  let offset = 8;
-  while (offset + 8 <= buf.length) {
-    let length = buf.readUInt32BE(offset);
-    let type = buf.toString('ascii', offset + 4, offset + 8);
-    let dataStart = offset + 8;
-    if (type === 'IDAT') {
-      idat.push(buf.subarray(dataStart, dataStart + length));
-    } else if (type === 'IEND') {
-      break;
-    }
-    offset = dataStart + length + 4; // skip data + CRC
-  }
-  let raw = inflateSync(Buffer.concat(idat));
-
-  // Reverse the per-scanline PNG filters (spec §9.2). Each scanline is
-  // prefixed with a 1-byte filter type; reconstruction reads already-decoded
-  // bytes to the left (a=bpp back) and above (b=prior row), so it must run
-  // top-to-bottom, left-to-right.
-  let bpp = channels;
-  let stride = width * bpp;
-  let out = new Uint8Array(width * height * 4);
-  let prev = new Uint8Array(stride);
-  let cur = new Uint8Array(stride);
-  let paeth = (a: number, b: number, c: number) => {
-    let p = a + b - c;
-    let pa = Math.abs(p - a);
-    let pb = Math.abs(p - b);
-    let pc = Math.abs(p - c);
-    if (pa <= pb && pa <= pc) return a;
-    if (pb <= pc) return b;
-    return c;
-  };
-  for (let y = 0; y < height; y++) {
-    let rowStart = y * (stride + 1);
-    let filter = raw[rowStart];
-    for (let i = 0; i < stride; i++) {
-      let x = raw[rowStart + 1 + i];
-      let a = i >= bpp ? cur[i - bpp] : 0;
-      let b = prev[i];
-      let c = i >= bpp ? prev[i - bpp] : 0;
-      let recon: number;
-      switch (filter) {
-        case 0:
-          recon = x;
-          break;
-        case 1:
-          recon = x + a;
-          break;
-        case 2:
-          recon = x + b;
-          break;
-        case 3:
-          recon = x + ((a + b) >> 1);
-          break;
-        case 4:
-          recon = x + paeth(a, b, c);
-          break;
-        default:
-          throw new Error(`unknown PNG filter type ${filter}`);
-      }
-      cur[i] = recon & 0xff;
-    }
-    // Expand the scanline into RGBA, filling alpha for truecolor sources.
-    for (let px = 0; px < width; px++) {
-      let src = px * bpp;
-      let dst = (y * width + px) * 4;
-      out[dst] = cur[src];
-      out[dst + 1] = cur[src + 1];
-      out[dst + 2] = cur[src + 2];
-      out[dst + 3] = channels === 4 ? cur[src + 3] : 0xff;
-    }
-    [prev, cur] = [cur, prev];
-  }
-  return { width, height, data: out };
 }
 
 // Count the pixels exactly matching an RGB color — enough to assert a
@@ -1103,6 +991,24 @@ module(basename(import.meta.filename), function () {
         ...(captureSpec ? { captureSpec } : {}),
       });
 
+    // A file capture: the file is extracted and rendered through the FileDef
+    // its extension maps to, as the capture task asks for one.
+    let captureFile = (fileURL: string) =>
+      prerenderer.prerenderCapture({
+        realm: realmURL,
+        url: fileURL,
+        auth: auth(),
+        format: 'isolated',
+        renderOptions: {
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef:
+            FILEDEF_CODE_REF_BY_EXTENSION[
+              fileURL.slice(fileURL.lastIndexOf('.'))
+            ],
+        },
+      });
+
     hooks.before(async () => {
       prerenderer = getPrerendererForTesting({
         maxPages: 2,
@@ -1140,6 +1046,10 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            // A page whose rendered body is a solid color no shell chrome
+            // uses, so a capture shows whether the HTML itself was drawn.
+            'swatch.html': `<!doctype html><html><head><title>Swatch</title></head><body style="margin:0;background:rgb(255,0,254);height:2000px"><h1>Swatch</h1></body></html>`,
+            'notes.md': `# Release notes\n\nThe capture draws this markdown file.\n`,
             'long.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Long extends CardDef {
@@ -1342,6 +1252,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(png.height, 600, 'PNG is 600px tall');
       assert.strictEqual(response.width, 800, 'reports 800 CSS px wide');
       assert.strictEqual(response.height, 600, 'reports 600 CSS px tall');
+    });
+
+    test('a file capture draws the rendered HTML of an HTML file', async function (assert) {
+      let { response } = await captureFile(`${realmURL}swatch.html`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG');
+      assert.strictEqual(png.width, 800, 'PNG is 800px wide');
+      // The page's body color fills its rendered area, so it should cover a
+      // large share of the frame, not just paint a stray pixel.
+      let coverage = colorCoverage(response.base64!, [255, 0, 254]);
+      assert.true(
+        coverage > 0.33,
+        `the page's own body color fills the preview (${Math.round(coverage * 100)}% of the capture)`,
+      );
+    });
+
+    test('a file capture draws a markdown file', async function (assert) {
+      let { response } = await captureFile(`${realmURL}notes.md`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
+      assert.true(decodePng(response.base64!).isPng, 'payload is a PNG');
+    });
+
+    test('a card capture on a tab that just captured a file renders the card', async function (assert) {
+      let fileCapture = await captureFile(`${realmURL}swatch.html`);
+      assert.strictEqual(fileCapture.response.status, 'ready');
+      let { response } = await capture(`${realmURL}1`);
+      assert.strictEqual(response.status, 'ready', 'card capture succeeded');
+      assert.strictEqual(
+        colorCoverage(response.base64!, [255, 0, 254]),
+        0,
+        "the card capture shows none of the file's page",
+      );
     });
 
     test('viewport override widens the capture to 1280', async function (assert) {

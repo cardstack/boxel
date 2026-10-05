@@ -2025,7 +2025,7 @@ export class RealmConfig extends CardDef {
   // unless the realm turns it on; the gate blocks Chrome work only, never
   // serving — any capture whose canonical spec already has a MediaCache
   // ledger entry streams regardless, including one a write-holder published
-  // via POST /_capture-card (which persists under the same canonical
+  // via POST /_capture (which persists under the same canonical
   // identity the GET resolves). Read from the realm's indexed config at
   // request time, so editing this takes effect with the index update, no
   // restart.

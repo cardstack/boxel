@@ -337,13 +337,15 @@ export class Worker {
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      capture: () =>
+        this.#queue.register(`capture`, Tasks['capture'](taskArgs)),
+      // The job type's former names. Workers roll before realm servers, and a
+      // realm server still on a previous revision publishes captures under
+      // them; the args are wire-identical, so the same task claims them.
       'capture-card': () =>
-        this.#queue.register(`capture-card`, Tasks['captureCard'](taskArgs)),
-      // The job type's legacy name. Workers roll before realm servers, and a
-      // realm server still on the previous revision publishes captures under
-      // it; the args are wire-identical, so the same task claims them.
+        this.#queue.register(`capture-card`, Tasks['capture'](taskArgs)),
       'screenshot-card': () =>
-        this.#queue.register(`screenshot-card`, Tasks['captureCard'](taskArgs)),
+        this.#queue.register(`screenshot-card`, Tasks['capture'](taskArgs)),
     };
     let jobTypes = this.#indexJobsOnly
       ? (INDEX_JOB_TYPES as readonly string[])
