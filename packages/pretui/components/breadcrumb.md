@@ -9,7 +9,7 @@ The trail showing where you are in a hierarchy, with each ancestor a link and th
 Element: HTMLElement (a <nav>)
 ```
 
-One arg. Three render branches per item, in priority order: **the last item is always `<b>`** regardless of whether it has an `href`; otherwise an item with `href` is an `<a>`; otherwise a plain `<span>`.
+One arg. Three render branches per item, in priority order: **the last item is always `<b aria-current="page">`** regardless of whether it has an `href`; otherwise an item with `href` is an `<a>`; otherwise a plain `<span>`.
 
 That last-item rule is the whole opinion. The current location is not a link even if you gave it one, because linking to where you already are is a dead affordance — and making it structurally impossible means no call site has to remember. The `<span>` branch exists for intermediate ancestors that are real but unreachable (a folder you cannot open, a realm you cannot read), which is a genuine Boxel case.
 
@@ -27,15 +27,16 @@ Where it is behind: no overflow handling. Web Awesome and SLDS both collapse lon
 
 ## Accessibility
 
-Governing pattern: APG **Breadcrumb**. Two of three bullets are met.
+Governing pattern: APG **Breadcrumb**. All three bullets are met.
 
 - **Navigation landmark: yes.** The root is a `<nav aria-label="Breadcrumb">`, correctly labelled and correctly distinguished from other navs.
 - **Keyboard: nothing to do**, and correctly nothing is done — links are ordinary tab stops.
-- **`aria-current="page"`: missing.** The current item is a `<b>`, which conveys emphasis visually and nothing semantically. This is the one property the pattern requires and it is absent. Web Awesome applies it automatically; React Aria defaults it. One attribute on the last branch closes it.
+- **`aria-current="page"`: yes.** The current item is a `<b aria-current="page">`, so assistive tech announces it as the current page; the bold weight on its own is visual only. It sits on the one branch that renders the last item, so every trail marks exactly one crumb as current, with or without an `href` — the same result Web Awesome reaches by applying it to the last item automatically. APG puts the attribute on a link to the current page; here the current item is never a link (above), and `aria-current` is a global state, valid on a non-link element.
+
+The separators are hidden from assistive tech: each `/` is `aria-hidden="true"`, so a three-level trail is read as its three crumbs, not as "Realm slash Projects slash Q3 Report" — the treatment shadcn and Web Awesome use.
 
 Further gaps:
 
-- **The separators are real text content.** `<span class='sep'>/</span>` is announced by screen readers, so a three-level trail reads "Realm slash Projects slash Q3 Report". Every reference implementation marks separators `aria-hidden="true"` (shadcn, Web Awesome) or renders them as CSS `::before` content. This is the second-clearest fix.
 - **No list semantics.** APG does not require `<ol>`, so this is not a failure — but a list would let a screen reader announce "3 items", which is useful context in a deep hierarchy. Every reference implementation uses one.
 - **The `<b>` element carries no heading or landmark role**, so the current location is not reachable except by reading the nav.
 - **Links have `text-decoration: none` at rest** and underline only on hover. Since they sit in `--muted-foreground` against the page and the current item is `--foreground`, **colour and weight are the only resting distinction between a link and non-link item** — a WCAG **1.4.1 Use of Colour** concern for the link/non-link distinction specifically. Underlining at rest, or accepting that breadcrumbs are a known convention, are the two defensible answers.
