@@ -2,7 +2,12 @@ import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { Alert, Button, Pill } from '@cardstack/boxel-ui/components';
+import {
+  Alert,
+  Button,
+  FittedCard,
+  Pill,
+} from '@cardstack/boxel-ui/components';
 import CalendarClockIcon from '@cardstack/boxel-icons/calendar-clock';
 import {
   CardDef,
@@ -218,6 +223,21 @@ export class ServicePlanSchedule extends CardDef {
   } satisfies OperationDeclaration;
 
   static isolated = ScheduleIsolated;
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <FittedCard @titleTag='h2'>
+        <:placeholder><CalendarClockIcon
+            width='28'
+            height='28'
+          /></:placeholder>
+        <:eyebrow>Service plan</:eyebrow>
+        <:title>{{@model.title}}</:title>
+        <:subtitle>{{@model.studentName}}</:subtitle>
+        <:footer><span>{{@model.meets}}</span></:footer>
+      </FittedCard>
+    </template>
+  };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
