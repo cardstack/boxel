@@ -104,8 +104,9 @@ export interface CompiledOperationGrant {
   where?: CompiledPolicyPredicate;
   // Set on a grant that also admits callers who aren't signed in. A write
   // grant names the key, in the governed realm's `realm.json` settings, whose
-  // value is the user its writes are made as. The realm resolves it on every
-  // invocation, so the policy names a setting and never a user.
+  // value is the user its writes are made as, and no other grant carries one.
+  // The realm resolves it on every invocation, so the policy names a setting
+  // and never a user.
   anonymous?: { actingUserKey?: string };
   // For a grant on a query, the search filter the grant admits: the cards of
   // the rule's type that its predicate holds for, as a wire filter template
@@ -152,9 +153,8 @@ export interface CompiledPolicyPredicate {
   // reads the stored source alone is judged against the stored source, and
   // pays no index read.
   snapshot: boolean;
-  // Set when the predicate calls `actor()`. A caller who isn't signed in has
-  // no actor, so such a predicate never holds for one, and is not evaluated
-  // for one either.
+  // Set when the predicate calls `actor()`. The realm doesn't evaluate such a
+  // predicate for a caller who isn't signed in, so it never admits one.
   readsActor?: true;
 }
 
@@ -317,7 +317,12 @@ export class RealmPolicyCache {
     let compiled: CompiledRealmPolicy | undefined;
     try {
       compiled = await this.get();
-    } catch {
+    } catch (e: unknown) {
+      log.warn(
+        `could not read the realm's policy to answer a caller who isn't signed in, so it opens nothing to them: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
       return NO_OPERATIONS;
     }
     return compiled?.uncompilable || !compiled?.anonymous
@@ -1157,9 +1162,11 @@ async function compileDocument(
           );
           continue;
         }
+        // Used exactly as written, so the key the policy shows is the key the
+        // realm looks up. One that is blank names nothing.
         let actingUserKey =
           typeof grant.actingUser === 'string' && grant.actingUser.trim()
-            ? grant.actingUser.trim()
+            ? grant.actingUser
             : undefined;
         if (isWrite(granted.base) && !actingUserKey) {
           issue(
@@ -1169,7 +1176,8 @@ async function compileDocument(
           );
           continue;
         }
-        anonymous = actingUserKey ? { actingUserKey } : {};
+        anonymous =
+          isWrite(granted.base) && actingUserKey ? { actingUserKey } : {};
       }
       let where = readPredicate(grant?.where);
       if (where === 'malformed') {
@@ -1196,6 +1204,13 @@ async function compileDocument(
       if ('problem' in outcome) {
         issue(outcome.code, `${grantPath}.where`, outcome.problem);
         continue;
+      }
+      if (anonymous && outcome.readsActor) {
+        issue(
+          'anonymous-grant-reads-actor',
+          `${grantPath}.where`,
+          `this grant opens \`${operation}\` to callers who aren't signed in, but its \`where\` uses \`actor()\`, which isn't evaluated for a caller with no actor, so it never admits one. It still applies to signed-in callers. To open it to anyone, give the anonymous grant a \`where\` that reads only the card`,
+        );
       }
       // Which tier the predicate reads is settled here, from the rule's type,
       // and ahead of the search filter: a predicate that reads the index
@@ -1567,14 +1582,19 @@ function safeURL(
 
 // The operations the policy's live grants open to callers who aren't signed
 // in, recorded on the compiled policy when there are any. A query grant that
-// has no search filter admits no search, so it opens nothing.
+// has no search filter admits no search, and a grant whose `where` reads the
+// caller admits nobody without one, so neither opens anything.
 function anonymousSummary(
   rules: CompiledPolicyRule[],
 ): Pick<CompiledRealmPolicy, 'anonymous'> {
   let operations = new Set<string>();
   for (let rule of rules) {
     for (let grant of rule.grants) {
-      if (grant.anonymous && (grant.operation !== 'query' || grant.filter)) {
+      if (
+        grant.anonymous &&
+        !grant.where?.readsActor &&
+        (grant.operation !== 'query' || grant.filter)
+      ) {
         operations.add(grant.operation);
       }
     }
