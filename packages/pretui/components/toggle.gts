@@ -88,7 +88,7 @@ export interface ToggleSignature {
  * `ToggleGroup` could adopt it unchanged. Radix also has no visual opinion at
  * all, so every consumer re-derives "what does pressed look like" and almost
  * every one of them reaches for a tint — colour-only signalling. Here pressed
- * is an Appendix-E appearance recipe swap over the tone channel, so it reads
+ * is an appearance recipe swap over the tone channel, so it reads
  * in greyscale AND re-tints with a season it has never seen. Radix has no
  * pending state; `@busy` here is React Aria's *pending* semantics (`aria-busy`
  * + retained focus) rather than a disable. And Radix's `data-state` is the

@@ -104,7 +104,7 @@ export interface ToggleGroupSignature {
 // name and no relationship. Both were also every-item-a-tab-stop with no
 // arrow keys. `tag-filter-group`'s active chip painted `--boxel-dark`, a
 // fixed-polarity token that inverts wrongly the moment a dark theme loads;
-// here the pressed face is an Appendix-E appearance recipe over the tone
+// here the pressed face is an appearance recipe over the tone
 // channel, so it re-tints with a season it has never seen. Zero options used
 // to render as silence — it now says so, and yields `:empty` for a caller who
 // wants an `EmptyState` in that space. `:deep(.atom-format)` reaching into a

@@ -119,7 +119,7 @@ module('Pretui | feedback', function (hooks) {
       all('[data-test-pretui-radial]').map((e) => px(e, '--pretui-radial-pct')),
       ['75', '100'],
     );
-    // KNOWN GAP (same defect as ProgressBar): the announced value is raw.
+    // KNOWN GAP: ProgressRadial clamps its fill but announces the raw value.
     assert.deepEqual(
       all('[data-test-pretui-radial]').map((e) => e.getAttribute('aria-valuenow')),
       ['3', '9'],

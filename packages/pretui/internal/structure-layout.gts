@@ -39,6 +39,7 @@
 // container queries only, every colour a token with a light fallback.
 //
 // Pretui — the layout vocabulary shared by Stack, Card, Collapsible and StackDivider: the size and orientation alias maps.
+import { resolveSize } from '../pretui-primitives';
 import type { PretuiSize } from '../pretui-primitives';
 
 // ── Shared vocabulary + the inbound alias map ────────────────────────────
@@ -49,27 +50,23 @@ import type { PretuiSize } from '../pretui-primitives';
 // aliases resolve IN the component, docs teach the house name.
 
 /** Every spelling of a size this kit will accept. */
-export type SizeAlias = PretuiSize | 'sm' | 'md' | 'lg' | 'default';
-
-const SIZE_ALIASES: Record<string, PretuiSize> = {
-  xs: 'xs',
-  s: 's',
-  sm: 's',
-  m: 'm',
-  md: 'm',
-  default: 'm',
-  l: 'l',
-  lg: 'l',
-  xl: 'xl',
-};
+export type SizeAlias =
+  | PretuiSize
+  | 'sm'
+  | 'md'
+  | 'lg'
+  | 'default'
+  | 'small'
+  | 'medium'
+  | 'large'
+  | 'middle';
 
 /** Resolve any accepted size spelling to the house enum. */
 export function pretuiSize(
   raw: string | undefined,
   fallback: PretuiSize = 'm',
 ): PretuiSize {
-  let hit = raw === undefined ? undefined : SIZE_ALIASES[raw];
-  return hit ?? fallback;
+  return resolveSize(raw, fallback);
 }
 
 /**
