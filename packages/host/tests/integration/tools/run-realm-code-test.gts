@@ -113,6 +113,35 @@ module('Integration | tools | run-realm-code', function (hooks) {
     assert.ok(result.captures[0].url, 'the capture is uploaded to the room');
   });
 
+  test('the result attaches the files the run saved, then the captures it took', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('seen.json', '{}');
+return await realm.capture('seen.json');`,
+    });
+
+    let attachments = command.resultAttachments(result);
+    assert.deepEqual(
+      attachments.map((file) => file.sourceUrl),
+      [`${testRealmURL}seen.json`, result.captures[0].sourceUrl],
+      'the saved file, then the capture',
+    );
+    assert.strictEqual(
+      attachments[0].url,
+      undefined,
+      'the saved file is uploaded from the realm when the result is sent',
+    );
+    assert.strictEqual(
+      attachments[1].url,
+      result.captures[0].url,
+      'the capture rides as the media already uploaded',
+    );
+  });
+
   test('realm.capture refuses a fourth capture in one run', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);

@@ -1,11 +1,13 @@
 import { rri, urlNamesFile } from '@cardstack/runtime-common';
 import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
 
+import type { ResultAttachment } from './host-base-tool';
 import type LoaderService from '../services/loader-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type { AttachedImageField } from '@cardstack/base/command';
 import type { FileDef } from '@cardstack/base/file-api';
 
 // How the assistant sees something visually: it captures a card instance or a
@@ -343,6 +345,27 @@ export async function captureForAgent(
 // When the capture must answer for a view that has to be done by `doneBy`.
 export function captureDeadline(doneBy: number): number {
   return doneBy - UPLOAD_RESERVE_MS;
+}
+
+// The uploaded captures a tool result carries, as the files it attaches for
+// the model. An image without its uploaded media URL attaches nothing.
+export function uploadedImages(
+  images: AttachedImageField[] | undefined,
+): ResultAttachment[] {
+  return (images ?? []).flatMap((image) =>
+    image?.url && image.sourceUrl
+      ? [
+          {
+            sourceUrl: image.sourceUrl,
+            url: image.url,
+            name: image.name,
+            contentType: image.contentType,
+            contentHash: image.contentHash,
+            contentSize: image.contentSize,
+          },
+        ]
+      : [],
+  );
 }
 
 // The capture as the model can take it: unchanged when it is within the edge

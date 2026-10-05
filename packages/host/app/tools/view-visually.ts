@@ -1,10 +1,11 @@
 import { service } from '@ember/service';
 
-import HostBaseTool from '../lib/host-base-tool';
+import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import {
   captureDeadline,
   captureForAgent,
   resolveViewTarget,
+  uploadedImages,
   type ViewFormat,
 } from '../lib/visual-capture';
 
@@ -90,5 +91,12 @@ export default class ViewVisuallyTool extends HostBaseTool<
         }),
       ],
     });
+  }
+
+  // The image it captured.
+  resultAttachments(
+    result: BaseToolModule.ViewVisuallyResult,
+  ): ResultAttachment[] {
+    return uploadedImages(result.attachedImages);
   }
 }

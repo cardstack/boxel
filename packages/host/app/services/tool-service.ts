@@ -17,12 +17,12 @@ import type { Command, ToolContext } from '@cardstack/runtime-common';
 import {
   Deferred,
   ToolContextStamp,
-  buildToolFunctionNameFromResolvedRef,
   delay,
   getClass,
   identifyCard,
   rri,
   type PatchData,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
@@ -38,6 +38,7 @@ import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
+import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
@@ -125,25 +126,8 @@ async function withTimeout<T>(
   }
 }
 
-// The function names of the two host tools whose results carry captures.
-const VIEW_VISUALLY_TOOL_NAME = buildToolFunctionNameFromResolvedRef({
-  module: '@cardstack/boxel-host/tools/view-visually',
-  name: 'default',
-});
-const RUN_REALM_CODE_TOOL_NAME = buildToolFunctionNameFromResolvedRef({
-  module: '@cardstack/boxel-host/tools/run-realm-code',
-  name: 'default',
-});
-
-// An uploaded capture a tool result carries (base's `AttachedImageField`).
-interface AttachedImage {
-  name?: string;
-  sourceUrl?: string;
-  url?: string;
-  contentType?: string;
-  contentHash?: string;
-  contentSize?: number;
-}
+// Every tool module the host provides is registered under this specifier.
+const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -1083,6 +1067,7 @@ export default class ToolService extends Service {
         commandRequestId,
       ) ?? command.eventId;
     let resultCard: CardDef | undefined;
+    let toolToRun: Command<any, any> | undefined;
     // Distinguishes "the tool never ran" from "the tool ran, the aftermath
     // failed" — the catch below must not tell the room a committed write
     // failed.
@@ -1105,8 +1090,6 @@ export default class ToolService extends Service {
       // that un-sticks the UI and the waiting ai-bot is only sent once this
       // settles.
       let performTool = async (): Promise<CardDef | undefined> => {
-        let toolToRun;
-
         // If we don't find it in the one-offs, start searching for
         // one in the skills we can construct
         let toolCodeRef = command.codeRef;
@@ -1191,7 +1174,8 @@ export default class ToolService extends Service {
         status: 'applied',
         resultCard,
         attachedFiles: this.attachedFilesForToolResult(
-          command.name,
+          command.codeRef,
+          toolToRun,
           resultCard,
         ),
         context: userContextForAiBot,
@@ -1226,7 +1210,8 @@ export default class ToolService extends Service {
             status: 'applied',
             resultCard,
             attachedFiles: this.attachedFilesForToolResult(
-              command.name,
+              command.codeRef,
+              toolToRun,
               resultCard,
             ),
           });
@@ -1264,68 +1249,26 @@ export default class ToolService extends Service {
     }
   });
 
-  // The files a tool result attaches for the model: the source files a
-  // run-realm-code call saved, and the captures the two host capturing tools
-  // took for the model to look at (view-visually's `attachedImages`,
-  // run-realm-code's `captures`). Those fields are read only from those two
-  // tools' results, matched by their exact function names, so another
-  // command cannot attach images through them. (A command can still attach a
-  // file through `FileForAttachmentCard`, which is handled separately.) The
-  // images are already uploaded to the room's media, so they ride as they
-  // are.
+  // The files a tool result attaches for the model, as the tool that ran
+  // declares them. Only a tool the host itself provides is asked, so a command
+  // loaded from a realm cannot attach files this way. (A command can still
+  // attach a file through `FileForAttachmentCard`, which is handled
+  // separately.)
   private attachedFilesForToolResult(
-    toolName: string | undefined,
+    codeRef: ResolvedCodeRef | undefined,
+    tool: Command<any, any> | undefined,
     resultCard: CardDef | undefined,
   ): FileDef[] {
-    if (!resultCard) {
+    if (
+      !resultCard ||
+      !(tool instanceof HostBaseTool) ||
+      !codeRef?.module.startsWith(HOST_TOOL_MODULE_PREFIX)
+    ) {
       return [];
     }
-    let result = resultCard as CardDef & {
-      files?: Array<{ fileUrl?: string; status?: string }>;
-      attachedImages?: AttachedImage[];
-      captures?: AttachedImage[];
-    };
-    let savedFiles =
-      toolName?.startsWith('run-realm-code_') && Array.isArray(result.files)
-        ? result.files.flatMap((file) => {
-            if (!file.fileUrl || file.status !== 'saved') {
-              return [];
-            }
-            return [
-              this.matrixService.fileAPI.createFileDef({
-                sourceUrl: file.fileUrl,
-                name: file.fileUrl.split('/').pop(),
-              }),
-            ];
-          })
-        : [];
-    let capturing =
-      toolName === VIEW_VISUALLY_TOOL_NAME ||
-      toolName === RUN_REALM_CODE_TOOL_NAME;
-    let images = (
-      capturing
-        ? [
-            ...(Array.isArray(result.attachedImages)
-              ? result.attachedImages
-              : []),
-            ...(Array.isArray(result.captures) ? result.captures : []),
-          ]
-        : []
-    ).flatMap((image) =>
-      image?.url && image.sourceUrl
-        ? [
-            this.matrixService.fileAPI.createFileDef({
-              sourceUrl: image.sourceUrl,
-              url: image.url,
-              name: image.name,
-              contentType: image.contentType,
-              contentHash: image.contentHash,
-              contentSize: image.contentSize,
-            }),
-          ]
-        : [],
-    );
-    return [...savedFiles, ...images];
+    return tool
+      .resultAttachments(resultCard)
+      .map((file) => this.matrixService.fileAPI.createFileDef(file));
   }
 
   // Which step each in-flight validation is on, for the slow-validation log.

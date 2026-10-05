@@ -2,13 +2,14 @@ import { service } from '@ember/service';
 
 import { logger, rri } from '@cardstack/runtime-common';
 
-import HostBaseTool from '../lib/host-base-tool';
+import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
+import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import runRealmCode from '../lib/realm-runner/runner';
 import {
   captureDeadline,
   captureForAgent,
   resolveViewTarget,
-  UPLOAD_RESERVE_MS,
+  uploadedImages,
   type ViewedImage,
   type ViewOptions,
 } from '../lib/visual-capture';
@@ -39,27 +40,6 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
-// How many captures one run may attach with `realm.capture`.
-const MAX_CAPTURES = 3;
-// A capture must finish this long before the run's own time limit, so the
-// script still has time to use what it saw and return.
-const CAPTURE_MARGIN_MS = 3_000;
-// A capture started with less time than this left before its own deadline is
-// refused: the capture needs a few seconds after the upload reserve. An
-// admitted capture is bounded: its card probe has a short timeout of its own,
-// its capture request is aborted at its deadline, and ending the run stops
-// every step that waits.
-const MIN_CAPTURE_BUDGET_MS = UPLOAD_RESERVE_MS + 5_000;
-
-// Captures one realm URL and uploads the image, done by `doneBy`, or stopped
-// when `signal` aborts.
-type CaptureURL = (
-  url: string,
-  options: ViewOptions,
-  doneBy: number,
-  signal: AbortSignal,
-) => Promise<ViewedImage>;
-
 // Saves one file and returns the content that was saved (lint may reformat
 // it). `expected` is the content the script last saw, undefined for a file
 // that did not exist; the save refuses if the realm no longer matches it.
@@ -79,20 +59,15 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
-  // Captures `realm.capture` attached, in the order they were taken.
-  readonly captures: ViewedImage[] = [];
-  // When the script's own time limit runs out; set as the run starts.
-  runEndsAt = Number.POSITIVE_INFINITY;
+  // What `realm.capture` takes in this run.
+  readonly captures: RealmCaptures;
   // Calls and saves refused because the run had already ended.
-  refusedAfterClose = 0;
+  private refused = 0;
   private queue: Promise<unknown> = Promise.resolve();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
   private closed = false;
-  // Aborted when the run ends, so a capture still in flight stops there rather
-  // than uploading after the tool has reported.
-  private capturesInFlight = new AbortController();
 
   constructor(
     private realmURL: string,
@@ -100,15 +75,22 @@ class RealmFsSession {
       url: string,
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
-    private captureURL: CaptureURL,
-  ) {}
+    captureURL: CaptureURL,
+  ) {
+    this.captures = new RealmCaptures(captureURL);
+  }
+
+  // Calls, saves and captures refused because the run had already ended.
+  get refusedAfterClose() {
+    return this.refused + this.captures.refusedAfterClose;
+  }
 
   // Calls run one at a time, so two unawaited calls cannot race over the same
   // file.
   call(method: RealmRunnerCallMethod, args: unknown[]): Promise<unknown> {
     let result = this.queue.then(() => {
       if (this.closed) {
-        this.refusedAfterClose += 1;
+        this.refused += 1;
         throw new Error('The run has ended; this realm call was not made');
       }
       return this.dispatch(method, args);
@@ -119,7 +101,7 @@ class RealmFsSession {
 
   close() {
     this.closed = true;
-    this.capturesInFlight.abort();
+    this.captures.close();
   }
 
   // Settles once every call already made has finished or been refused.
@@ -197,41 +179,7 @@ class RealmFsSession {
       }
       case 'capture': {
         let url = this.resolve(method, args[0]);
-        if (this.captures.length >= MAX_CAPTURES) {
-          throw new Error(
-            `realm.capture may run at most ${MAX_CAPTURES} times in one run; use the view-visually tool for more`,
-          );
-        }
-        let doneBy = this.runEndsAt - CAPTURE_MARGIN_MS;
-        if (doneBy - Date.now() < MIN_CAPTURE_BUDGET_MS) {
-          throw new Error(
-            `Not enough time left in this run to capture ${url}; use the view-visually tool instead`,
-          );
-        }
-        let viewed = await this.captureURL(
-          url,
-          captureOptions(args[1]),
-          doneBy,
-          this.capturesInFlight.signal,
-        );
-        if (this.closed) {
-          this.refusedAfterClose += 1;
-          throw new Error(
-            `The run has ended; the capture of ${url} was dropped`,
-          );
-        }
-        this.captures.push(viewed);
-        // The image itself goes to the model with the tool result; the
-        // script gets only what it needs to carry on.
-        return {
-          path: this.relative(url),
-          kind: viewed.kind,
-          format: viewed.format,
-          width: viewed.width ?? null,
-          height: viewed.height ?? null,
-          ...(viewed.note ? { note: viewed.note } : {}),
-          attached: true,
-        };
+        return await this.captures.take(url, this.relative(url), args[1]);
       }
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
@@ -297,34 +245,13 @@ class RealmFsSession {
       throw new Error(`File is too large after editing: ${url}`);
     }
     if (this.closed) {
-      this.refusedAfterClose += 1;
+      this.refused += 1;
       throw new Error(`The run has ended; ${url} was not saved`);
     }
     let saved = await this.writeFile(url, content, expected);
     this.known.set(url, saved);
     this.saved.add(url);
   }
-}
-
-// The options a script may pass to `realm.capture`, taken field by field so
-// nothing else reaches the capture.
-function captureOptions(raw: unknown): ViewOptions {
-  let options = (raw && typeof raw === 'object' ? raw : {}) as Record<
-    string,
-    unknown
-  >;
-  return {
-    ...(typeof options.format === 'string'
-      ? { format: options.format as ViewOptions['format'] }
-      : {}),
-    ...(typeof options.viewportWidth === 'number'
-      ? { viewportWidth: options.viewportWidth }
-      : {}),
-    ...(typeof options.viewportHeight === 'number'
-      ? { viewportHeight: options.viewportHeight }
-      : {}),
-    ...(options.fullPage === true ? { fullPage: true } : {}),
-  };
 }
 
 export default class RunRealmCodeTool extends HostBaseTool<
@@ -400,7 +327,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     // The worker allows the script `RUN_TIMEOUT_MS` once QuickJS is ready;
     // measured from here it is a conservative end, since sandbox start only
     // pushes the real one later.
-    session.runEndsAt = Date.now() + RUN_TIMEOUT_MS;
+    session.captures.runEndsAt = Date.now() + RUN_TIMEOUT_MS;
     try {
       runnerResult = await runRealmCode(
         {
@@ -450,7 +377,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
       scriptResult: runnerResult.scriptResult,
-      captures: session.captures.map(
+      captures: session.captures.taken.map(
         (viewed) =>
           new commandModule.AttachedImageField({
             name: viewed.file.name,
@@ -464,6 +391,18 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
     });
+  }
+
+  // The files it saved, then the captures it took.
+  resultAttachments(
+    result: BaseToolModule.RunRealmCodeResult,
+  ): ResultAttachment[] {
+    let saved = (result.files ?? []).flatMap((file) =>
+      file?.fileUrl && file.status === 'saved'
+        ? [{ sourceUrl: file.fileUrl, name: file.fileUrl.split('/').pop() }]
+        : [],
+    );
+    return [...saved, ...uploadedImages(result.captures)];
   }
 
   private async captureURL(

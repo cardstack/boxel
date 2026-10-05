@@ -190,6 +190,23 @@ module('Integration | tools | view-visually', function (hooks) {
     assert.true((image.contentSize ?? 0) > 0, 'the image carries its size');
   });
 
+  test('the result attaches the captured image', async function (assert) {
+    let viewer = tool();
+    let result = await viewer.execute({ url: `${testRealmURL}Pet/mango` });
+
+    let [image] = result.attachedImages;
+    assert.deepEqual(viewer.resultAttachments(result), [
+      {
+        sourceUrl: image.sourceUrl,
+        url: image.url,
+        name: image.name,
+        contentType: image.contentType,
+        contentHash: image.contentHash,
+        contentSize: image.contentSize,
+      },
+    ]);
+  });
+
   test('a workspace file is captured as a file', async function (assert) {
     let result = await tool().execute({
       url: `${testRealmURL}brand.html`,
