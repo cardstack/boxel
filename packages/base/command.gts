@@ -444,9 +444,9 @@ export class AttachedImageField extends FieldDef {
 export class RunRealmCodeResult extends CardDef {
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
-  // What the script looked at with `realm.view`: each capture rides the tool
+  // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
-  @field views = containsMany(AttachedImageField);
+  @field captures = containsMany(AttachedImageField);
 }
 
 export class ViewVisuallyInput extends CardDef {

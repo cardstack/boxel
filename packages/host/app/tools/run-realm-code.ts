@@ -39,21 +39,21 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
-// How many captures one run may attach with `realm.view`.
-const MAX_VIEWS = 3;
-// A view must finish this long before the run's own time limit, so the
+// How many captures one run may attach with `realm.capture`.
+const MAX_CAPTURES = 3;
+// A capture must finish this long before the run's own time limit, so the
 // script still has time to use what it saw and return.
-const VIEW_MARGIN_MS = 3_000;
-// A view started with less time than this left before its own deadline is
+const CAPTURE_MARGIN_MS = 3_000;
+// A capture started with less time than this left before its own deadline is
 // refused: the capture needs a few seconds after the upload reserve. An
-// admitted view is bounded: its card probe has a short timeout of its own,
+// admitted capture is bounded: its card probe has a short timeout of its own,
 // its capture request is aborted at its deadline, and ending the run stops
 // every step that waits.
-const MIN_VIEW_BUDGET_MS = UPLOAD_RESERVE_MS + 5_000;
+const MIN_CAPTURE_BUDGET_MS = UPLOAD_RESERVE_MS + 5_000;
 
 // Captures one realm URL and uploads the image, done by `doneBy`, or stopped
 // when `signal` aborts.
-type ViewURL = (
+type CaptureURL = (
   url: string,
   options: ViewOptions,
   doneBy: number,
@@ -79,8 +79,8 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
-  // Captures `realm.view` attached, in the order they were taken.
-  readonly views: ViewedImage[] = [];
+  // Captures `realm.capture` attached, in the order they were taken.
+  readonly captures: ViewedImage[] = [];
   // When the script's own time limit runs out; set as the run starts.
   runEndsAt = Number.POSITIVE_INFINITY;
   // Calls and saves refused because the run had already ended.
@@ -90,9 +90,9 @@ class RealmFsSession {
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
   private closed = false;
-  // Aborted when the run ends, so a view still capturing stops there rather
+  // Aborted when the run ends, so a capture still in flight stops there rather
   // than uploading after the tool has reported.
-  private viewsInFlight = new AbortController();
+  private capturesInFlight = new AbortController();
 
   constructor(
     private realmURL: string,
@@ -100,7 +100,7 @@ class RealmFsSession {
       url: string,
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
-    private viewURL: ViewURL,
+    private captureURL: CaptureURL,
   ) {}
 
   // Calls run one at a time, so two unawaited calls cannot race over the same
@@ -119,7 +119,7 @@ class RealmFsSession {
 
   close() {
     this.closed = true;
-    this.viewsInFlight.abort();
+    this.capturesInFlight.abort();
   }
 
   // Settles once every call already made has finished or been refused.
@@ -195,30 +195,32 @@ class RealmFsSession {
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
       }
-      case 'view': {
+      case 'capture': {
         let url = this.resolve(method, args[0]);
-        if (this.views.length >= MAX_VIEWS) {
+        if (this.captures.length >= MAX_CAPTURES) {
           throw new Error(
-            `realm.view may capture at most ${MAX_VIEWS} times in one run; use the view-visually tool for more`,
+            `realm.capture may run at most ${MAX_CAPTURES} times in one run; use the view-visually tool for more`,
           );
         }
-        let doneBy = this.runEndsAt - VIEW_MARGIN_MS;
-        if (doneBy - Date.now() < MIN_VIEW_BUDGET_MS) {
+        let doneBy = this.runEndsAt - CAPTURE_MARGIN_MS;
+        if (doneBy - Date.now() < MIN_CAPTURE_BUDGET_MS) {
           throw new Error(
             `Not enough time left in this run to capture ${url}; use the view-visually tool instead`,
           );
         }
-        let viewed = await this.viewURL(
+        let viewed = await this.captureURL(
           url,
-          viewOptions(args[1]),
+          captureOptions(args[1]),
           doneBy,
-          this.viewsInFlight.signal,
+          this.capturesInFlight.signal,
         );
         if (this.closed) {
           this.refusedAfterClose += 1;
-          throw new Error(`The run has ended; the view of ${url} was dropped`);
+          throw new Error(
+            `The run has ended; the capture of ${url} was dropped`,
+          );
         }
-        this.views.push(viewed);
+        this.captures.push(viewed);
         // The image itself goes to the model with the tool result; the
         // script gets only what it needs to carry on.
         return {
@@ -304,9 +306,9 @@ class RealmFsSession {
   }
 }
 
-// The options a script may pass to `realm.view`, taken field by field so
+// The options a script may pass to `realm.capture`, taken field by field so
 // nothing else reaches the capture.
-function viewOptions(raw: unknown): ViewOptions {
+function captureOptions(raw: unknown): ViewOptions {
   let options = (raw && typeof raw === 'object' ? raw : {}) as Record<
     string,
     unknown
@@ -339,7 +341,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
 
   description =
     'Run safe Realm code that reads and edits realm source files, and can ' +
-    'look at what it made with realm.view.';
+    'look at what it made with realm.capture.';
   static actionVerb = 'Run';
 
   async getInputType() {
@@ -382,7 +384,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
       (url, options, doneBy, signal) =>
-        this.viewURL(url, options, doneBy, signal),
+        this.captureURL(url, options, doneBy, signal),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -448,7 +450,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
       scriptResult: runnerResult.scriptResult,
-      views: session.views.map(
+      captures: session.captures.map(
         (viewed) =>
           new commandModule.AttachedImageField({
             name: viewed.file.name,
@@ -464,7 +466,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     });
   }
 
-  private async viewURL(
+  private async captureURL(
     url: string,
     options: ViewOptions,
     doneBy: number,

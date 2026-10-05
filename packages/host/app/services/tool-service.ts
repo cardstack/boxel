@@ -1267,7 +1267,7 @@ export default class ToolService extends Service {
   // The files a tool result attaches for the model: the source files a
   // run-realm-code call saved, and the captures the two host capturing tools
   // took for the model to look at (view-visually's `attachedImages`,
-  // run-realm-code's `views`). Those fields are read only from those two
+  // run-realm-code's `captures`). Those fields are read only from those two
   // tools' results, matched by their exact function names, so another
   // command cannot attach images through them. (A command can still attach a
   // file through `FileForAttachmentCard`, which is handled separately.) The
@@ -1283,7 +1283,7 @@ export default class ToolService extends Service {
     let result = resultCard as CardDef & {
       files?: Array<{ fileUrl?: string; status?: string }>;
       attachedImages?: AttachedImage[];
-      views?: AttachedImage[];
+      captures?: AttachedImage[];
     };
     let savedFiles =
       toolName?.startsWith('run-realm-code_') && Array.isArray(result.files)
@@ -1308,7 +1308,7 @@ export default class ToolService extends Service {
             ...(Array.isArray(result.attachedImages)
               ? result.attachedImages
               : []),
-            ...(Array.isArray(result.views) ? result.views : []),
+            ...(Array.isArray(result.captures) ? result.captures : []),
           ]
         : []
     ).flatMap((image) =>

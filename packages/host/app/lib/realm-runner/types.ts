@@ -6,7 +6,7 @@ export type RealmRunnerCallMethod =
   | 'fs.exists'
   | 'fs.replace'
   | 'fs.writeText'
-  | 'view';
+  | 'capture';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,
