@@ -32,7 +32,14 @@ module('Unit | instance-filter-matcher', function (hooks) {
   let fancyPersonRef: CodeRef;
   let catRef: CodeRef;
   let eventRef: CodeRef;
+  let rankedRef: CodeRef;
   let cards: Record<string, CardDef> = {};
+  // Two cards carrying a real field literally named `_matchRelevance` (the name
+  // is not reserved), used to prove the synthetic relevance sort key shadows a
+  // same-named field rather than resolving it. `rankedA` sorts first by URL but
+  // last by the field's value, so the two orderings disagree.
+  let rankedA: CardDef;
+  let rankedB: CardDef;
   let fileDef: FileDef;
 
   hooks.beforeEach(async function () {
@@ -123,11 +130,19 @@ module('Unit | instance-filter-matcher', function (hooks) {
       @field venue = contains(StringField);
       @field date = contains(DateField);
     }
+    // `_matchRelevance` is not a reserved field name, so a card may declare one.
+    // The sort key of the same name is synthetic (computed per query), and must
+    // win over this field rather than resolving it.
+    class Ranked extends CardDef {
+      @field name = contains(StringField);
+      @field _matchRelevance = contains(NumberField);
+    }
 
     loader.shimModule(`${testRealmURL}person`, { Person });
     loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
     loader.shimModule(`${testRealmURL}cat`, { Cat });
     loader.shimModule(`${testRealmURL}event`, { Event });
+    loader.shimModule(`${testRealmURL}ranked`, { Ranked });
 
     personRef = { module: rri(`${testRealmURL}person`), name: 'Person' };
     fancyPersonRef = {
@@ -136,6 +151,7 @@ module('Unit | instance-filter-matcher', function (hooks) {
     };
     catRef = { module: rri(`${testRealmURL}cat`), name: 'Cat' };
     eventRef = { module: rri(`${testRealmURL}event`), name: 'Event' };
+    rankedRef = { module: rri(`${testRealmURL}ranked`), name: 'Ranked' };
 
     let ringo = new Person({
       name: 'Ringo',
@@ -180,6 +196,16 @@ module('Unit | instance-filter-matcher', function (hooks) {
       card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
+
+    // `rankedA` sorts before `rankedB` by URL (ascending id) but after it by
+    // `_matchRelevance` descending (1 vs 9), so a comparator that resolved the
+    // field would invert the URL order.
+    rankedA = new Ranked({ name: 'a', _matchRelevance: 1 });
+    rankedB = new Ranked({ name: 'b', _matchRelevance: 9 });
+    rankedA.id = rri(`${testRealmURL}ranked/a`);
+    rankedB.id = rri(`${testRealmURL}ranked/b`);
+    setCardAsSavedForTest(rankedA);
+    setCardAsSavedForTest(rankedB);
 
     let fileURL = `${testRealmURL}files/hello.md`;
     fileDef = new FileDef({
@@ -723,21 +749,24 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
   });
 
-  test('comparator treats a relevance sort the same with or without on', function (assert) {
-    // `_matchRelevance` is computed per query, never a card field, so an `on`
-    // beside it must not send it down the card-field path — either spelling
-    // has no client-side value and falls back to URL order, mirroring the
-    // engine's key-only dispatch.
-    let { mango, ringo } = cards;
+  test('a relevance sort ignores a same-named field and falls back to URL order', function (assert) {
+    // `_matchRelevance` is a synthetic sort key computed per query, not a card
+    // field — so even on `Ranked`, which declares a real `_matchRelevance`
+    // field, the comparator must not resolve it. Both spellings (with and
+    // without `on`) yield no client-side value and fall back to URL order,
+    // mirroring the engine's key-only dispatch. `rankedA`/`rankedB` disagree on
+    // URL order vs. the field's descending order, so removing the key-only
+    // short-circuit in `sortValue` would resolve the field for the `on` spelling
+    // and invert the result — which this asserts against.
     for (let sort of [
       [{ by: '_matchRelevance', direction: 'desc' }],
-      [{ by: '_matchRelevance', on: personRef, direction: 'desc' }],
+      [{ by: '_matchRelevance', on: rankedRef, direction: 'desc' }],
     ] as Sort[]) {
-      let sorted = [ringo, mango].sort(makeInstanceComparator(sort, api));
+      let sorted = [rankedB, rankedA].sort(makeInstanceComparator(sort, api));
       assert.deepEqual(
         sorted.map((c) => c.id),
-        [mango.id, ringo.id],
-        `${JSON.stringify(sort)} falls back to URL order`,
+        [rankedA.id, rankedB.id],
+        `${JSON.stringify(sort)} ignores the _matchRelevance field and sorts by URL`,
       );
     }
   });
