@@ -159,8 +159,13 @@ export default defineConfig(({ mode }) => ({
   },
   // glimmer-motion and @cardstack/choreo compile from their source through the
   // `developing:choreo` export condition, so neither needs building first.
+  // CHOREO_LIBS=dist leaves the condition out and runs against their built
+  // output instead, the code npm consumers get; both packages must be built.
   resolve: {
-    conditions: ['developing:choreo', ...defaultClientConditions],
+    conditions:
+      process.env.CHOREO_LIBS === 'dist'
+        ? defaultClientConditions
+        : ['developing:choreo', ...defaultClientConditions],
   },
   build: {
     rollupOptions: {
