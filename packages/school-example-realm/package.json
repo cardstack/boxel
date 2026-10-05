@@ -13,18 +13,28 @@
     "lint:types": "ember-tsc --noEmit"
   },
   "devDependencies": {
+    "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.0.4",
     "@glint/ember-tsc": "catalog:",
     "@glint/template": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
     "concurrently": "catalog:",
+    "ember-eslint-parser": "catalog:",
     "ember-source": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
     "typescript": "catalog:"
   }
 }
