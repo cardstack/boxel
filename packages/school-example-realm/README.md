@@ -128,35 +128,60 @@ a realm reader gets where a teacher gets a 404.
    boxel realm create school-education "School Education"
    ```
 
-2. **Push the files** into each one:
+2. **Push the files** into each one. `boxel realm push` writes its own
+   bookkeeping (`.boxel-sync.json`, `.boxel-history/`) into the directory it
+   pushes, so push from a copy rather than from this package:
 
    ```sh
-   boxel realm push packages/school-example-realm/school-code <realm-server>/<owner>/school-code/
-   boxel realm push packages/school-example-realm/school-org <realm-server>/<owner>/school-org/
-   boxel realm push packages/school-example-realm/school-education <realm-server>/<owner>/school-education/
+   cp -r packages/school-example-realm/school-* /tmp/school/
+   boxel realm push /tmp/school/school-code <realm-server>/<owner>/school-code/
+   boxel realm push /tmp/school/school-org <realm-server>/<owner>/school-org/
+   boxel realm push /tmp/school/school-education <realm-server>/<owner>/school-education/
    ```
 
-3. **Let everyone read `school-code`.** In the realm's settings, give `*` read
-   — or `PATCH <school-code>/_permissions` with
-   `{"data":{"type":"permissions","id":"<school-code>","attributes":{"permissions":{"*":["read"]}}}}`.
+3. **Let everyone read `school-code`.** The realm's permissions take a `*`
+   entry for every signed-in user. From the browser's console while signed in
+   as the IT admin, with `realm` set to the `school-code` URL:
 
-4. **Fill in the roster.** Open each `StaffMember` card in `school-org` and set
-   **Matrix user id** to the account that person signs in with in this
-   environment, e.g. `@alice-demo:stack.cards`. This is the only place a
-   username is written.
+   ```js
+   let token = JSON.parse(localStorage.getItem('boxel-session'))[realm];
+   await fetch(`${realm}_permissions`, {
+     method: 'PATCH',
+     headers: {
+       'Content-Type': 'application/vnd.api+json',
+       Authorization: token,
+     },
+     body: JSON.stringify({
+       data: {
+         type: 'permissions',
+         id: realm,
+         attributes: { permissions: { '*': ['read'] } },
+       },
+     }),
+   });
+   ```
 
-5. **Point the Education realm at its policy.** Edit `school-education`'s
-   `realm.json` (the realm settings card) and set **Policy** to the policy
-   card's absolute URL, `<realm-server>/<owner>/school-org/policies/education`.
-   The pointer must be absolute; until it is set the realm has no policy and
-   answers every staff member on its realm permissions alone, which grant them
-   nothing.
+4. **Fill in the roster.** Open each `StaffMember` card in `school-org`, switch
+   it to edit, and set **Matrix User Id** to the account that person signs in
+   with in this environment, e.g. `@school-alice:stack.cards`. This is the only
+   place a username is written.
+
+5. **Point the Education realm at its policy.** Open `school-education`'s
+   settings card (`<realm-server>/<owner>/school-education/realm`), switch it to
+   edit, press **Link Realm Policy** and choose **Education realm policy** from
+   `school-org`. The settings card then shows the policy **In force**. The
+   pointer it stores is the policy card's absolute URL; until it is set the
+   realm has no policy and answers every staff member on its realm permissions
+   alone, which grant them nothing.
 
 6. **Sync the mirrors.** As the IT admin, open each classroom in
    `school-education/classrooms/` and each schedule in
-   `school-education/schedules/`, and press **Sync ids from the roster**.
+   `school-education/schedules/`, and press **Sync ids from the roster**. The
+   button waits until every linked roster card has loaded, so a sync never
+   writes a partial list.
 
-7. **Optional:** give the fifth account read on `school-education`.
+7. **Optional:** give the fifth account read on `school-education` the same way
+   as step 3, with `{ "<their Matrix id>": ["read"] }`.
 
 Then sign in as each member of staff and follow a link into the Education realm,
 or open `school-code/SchoolPortal/portal` for a provider's schedules.

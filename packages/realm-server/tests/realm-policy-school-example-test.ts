@@ -25,6 +25,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
@@ -172,26 +173,50 @@ module(basename(import.meta.filename), function (hooks) {
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
   }
 
-  // One server for the whole file. Booting it indexes all three realms inside
-  // the first test's budget, so that budget is extended past the per-test
-  // timeout. The only write any test makes is an activity, which no other
-  // test reads.
-  hooks.before(function (assert) {
-    assert.timeout(300_000);
+  // Every test boots the three realms in its `beforeEach`, from a template
+  // database they were indexed into once, inside the test's own budget.
+  hooks.beforeEach(function (assert) {
+    assert.timeout(180_000);
+  });
+
+  // The current test's boot. The teardown waits for it, so a test that timed
+  // out while its boot was still running still closes what that boot opens.
+  let booting: Promise<void> | undefined;
+
+  async function stop() {
+    for (let realm of [code, org, education]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
   });
 
   setupDB(hooks, {
-    before: async (dbAdapter, publisher, runner) => {
-      await start({ dbAdapter, publisher, runner });
+    templateDatabase,
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      booting = start({ dbAdapter, publisher, runner });
+      await booting;
     },
-    after: async () => {
-      for (let realm of [code, org, education]) {
-        realm?.unsubscribe();
+    afterEach: async () => {
+      let booted = await booting?.then(
+        () => true,
+        () => false,
+      );
+      booting = undefined;
+      if (booted) {
+        await stop();
+      } else {
+        resetCatalogRealms();
       }
-      if (server) {
-        await closeServer(server);
-      }
-      resetCatalogRealms();
     },
   });
 
