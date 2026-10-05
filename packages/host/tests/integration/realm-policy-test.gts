@@ -102,13 +102,12 @@ const educationPolicy = policyDocument([
   },
 ]);
 
+// The character a policy issue's message marks its code spans with.
+const BACKTICK = '`';
+
 // A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
 // hold ahead of the one that admitted the delete.
-// Spelled by char code: a backtick character in a `.gts` file's script can
-// confuse the template-tag preprocessor.
-const BACKTICK = String.fromCharCode(96);
-
 const TEACHER = '@teacher:localhost';
 const COLLEAGUE = '@colleague:localhost';
 const leadsPredicate = '.leadTeacherIds | any(. == actor())';
@@ -986,7 +985,11 @@ module('Integration | realm policy', function (hooks) {
       .hasText('read', 'the first is the grant’s operation');
     assert
       .dom('[data-test-policy-issue-message]')
-      .doesNotIncludeText(BACKTICK, 'and no backtick shows');
+      .doesNotIncludeText(BACKTICK, 'and no backtick shows')
+      .includesText(
+        'read on Roster sends',
+        'and the text reads on across a span, spaces kept',
+      );
     assert
       .dom(
         '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"] code',
