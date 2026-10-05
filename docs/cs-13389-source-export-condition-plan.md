@@ -122,12 +122,14 @@ are the same set.
   build doesn't go through Vite, so it keeps whatever it needs until CS-13302
   retires it. choreo-player isn't covered by this ticket, so its `paths`
   entries stay.
-- **CI:** the test-app job builds only choreo-player now. A second job,
-  Choreo Test App Tests (built output), runs the same suite with
-  `CHOREO_LIBS=dist`. That drops the condition from the test app's Vite
-  config, so the suite runs against both packages' rollup output. Only that
-  build inlines and tree-shakes framer-motion's internals, and nothing at
-  publish time runs it in a browser. The Choreo Tests job
+- **CI:** the test-app job builds only choreo-player now. glimmer-motion's own
+  test harness also compiles its source through the condition: the package
+  imports itself by name, and its `exports` resolve that to `src/`. A separate
+  job, Glimmer Motion and Choreo Tests (built output), runs both suites with
+  `CHOREO_LIBS=dist`. That drops the condition from each suite's Vite config,
+  so they run against the packages' rollup output. Only that build inlines and
+  tree-shakes framer-motion's internals, and nothing at publish time runs it
+  in a browser. The Choreo Tests job
   keeps its build of all three, because the gallery's realm bundle reads
   `dist/`, and it adds the packed-exports check for both packages. Host's
   tests compile glimmer-motion's and choreo's source, so `ci-host.yaml`'s

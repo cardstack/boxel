@@ -5,13 +5,11 @@
     "allowJs": true,
     /**
       The test harness imports glimmer-motion by its public specifiers, and
-      those resolve to the source, so type-checking needs nothing built. The
-      declarations build (tsconfig.declarations.json) covers `src` alone.
+      the `developing:choreo` export condition resolves those to the source,
+      so type-checking needs nothing built. The declarations build
+      (tsconfig.declarations.json) covers `src` alone.
     */
-    "paths": {
-      "glimmer-motion": ["./src/index.ts"],
-      "glimmer-motion/*": ["./src/*"]
-    },
+    "customConditions": ["developing:choreo"],
     "types": ["ember-source/types"]
   }
 }
