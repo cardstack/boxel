@@ -105,6 +105,10 @@ const educationPolicy = policyDocument([
 // A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
 // hold ahead of the one that admitted the delete.
+// Spelled by char code: a backtick character in a `.gts` file's script can
+// confuse the template-tag preprocessor.
+const BACKTICK = String.fromCharCode(96);
+
 const TEACHER = '@teacher:localhost';
 const COLLEAGUE = '@colleague:localhost';
 const leadsPredicate = '.leadTeacherIds | any(. == actor())';
@@ -972,6 +976,27 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-policy-issue-message]')
       .includesText('no rule lets anyone read Student cards');
+
+    // The compiler marks the identifiers in a message as code with backticks,
+    // as markdown does. The card renders each one as code, so no backtick
+    // shows, in the issue list and in the grant's warning alike.
+    assert
+      .dom('[data-test-policy-issue-message] code')
+      .exists('the identifiers in the message render as code')
+      .hasText('read', 'the first is the grant’s operation');
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .doesNotIncludeText(BACKTICK, 'and no backtick shows');
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"] code',
+      )
+      .exists('the grant’s warning renders them as code too');
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"]',
+      )
+      .doesNotIncludeText(BACKTICK);
   });
 
   test('a policy whose issues only leave grants inactive marks no warning', async function (assert) {
