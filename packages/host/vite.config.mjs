@@ -342,8 +342,8 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     // glimmer-motion and @cardstack/choreo compile from their source through
-    // the `developing:choreo` export condition, the way boxel-ui does, so
-    // neither needs building first. npm consumers get their built output.
+    // the `developing:choreo` export condition, so neither needs building
+    // first. npm consumers, which don't set it, get their built output.
     conditions: ['developing:choreo', ...defaultClientConditions],
     alias: [
       ...hostToolAliases(),
