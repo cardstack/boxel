@@ -778,7 +778,14 @@ export class ImportCheck extends CardDef {
       roomId,
       agentId,
       realmURL,
-      code: replaceScript(moduleUrl, brokenImport, originalImport),
+      // The lint step that runs before each save can re-wrap the import, so
+      // the fix searches only the broken module specifier, which stays
+      // unique however the line is wrapped.
+      code: replaceScript(
+        moduleUrl,
+        `'@cardstack/base/card-api-broken'`,
+        `'@cardstack/base/card-api'`,
+      ),
       touchedFiles: [moduleUrl],
     });
 
