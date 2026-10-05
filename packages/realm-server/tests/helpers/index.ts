@@ -57,7 +57,11 @@ import {
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
+import {
+  getLocalConfig as getSynapseConfig,
+  loginAsMatrixAdmin,
+  registerUser,
+} from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
 import type { LiveSearchCache } from '../../live-search-cache.ts';
 import jsonwebtoken from 'jsonwebtoken';
@@ -419,6 +423,31 @@ function getMatrixRegistrationSecret(): string {
 }
 
 export const matrixRegistrationSecret = getMatrixRegistrationSecret();
+
+// Tests that act as the synapse admin `@admin:localhost` (password
+// `password`) call this first. CI registers only the realm-owning users, so
+// the admin is registered on first use; a synapse that already has it keeps
+// the same credentials.
+export async function ensureMatrixAdminUser(): Promise<void> {
+  try {
+    await loginAsMatrixAdmin({
+      matrixURL,
+      adminUsername: 'admin',
+      adminPassword: 'password',
+    });
+    return;
+  } catch {
+    // not registered yet
+  }
+  await registerUser({
+    matrixURL,
+    displayname: 'admin',
+    username: 'admin',
+    password: 'password',
+    registrationSecret: matrixRegistrationSecret,
+    admin: true,
+  });
+}
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 

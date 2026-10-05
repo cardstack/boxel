@@ -635,6 +635,11 @@ module(basename(import.meta.filename), function () {
         ),
       );
       assert.strictEqual(headers.body, undefined, 'no bytes in this mode');
+      assert.strictEqual(
+        headers.openBody,
+        undefined,
+        'nothing to open in this mode',
+      );
       assert.strictEqual(headers.contentType, 'text/markdown');
 
       let withBody = sourceOf(
@@ -643,7 +648,14 @@ module(basename(import.meta.filename), function () {
           request(target, 'readSource'),
         ),
       );
-      let { body: _body, ...metadata } = withBody;
+      // `body` and `openBody` are the bytes and the way to open them, not
+      // values a header is computed from.
+      let { body: _body, openBody, ...metadata } = withBody;
+      assert.strictEqual(
+        typeof openBody,
+        'function',
+        'the bytes mode can open its body and measure it',
+      );
       assert.deepEqual(
         metadata,
         headers,
