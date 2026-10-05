@@ -70,8 +70,9 @@ await esbuild.build({
   target: 'es2022',
   mainFields: ['module', 'main'],
   conditions: ['import', 'module', 'default'],
-  // tsconfig.json maps glimmer-motion and choreo-player to their source for
-  // type-checking. The realm bundles their built output, so skip it.
+  // tsconfig.json resolves glimmer-motion, choreo and choreo-player to their
+  // source for type-checking. The realm bundles their built output, so skip
+  // it, and leave the `developing:choreo` condition out of `conditions`.
   tsconfigRaw: {},
   splitting: false,
   // Boxel currently evaluates lazy dependency initializers through a classic

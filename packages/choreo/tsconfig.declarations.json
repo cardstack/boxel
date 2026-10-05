@@ -13,6 +13,6 @@
       imports to files on disk
     */
     "rootDir": "./src",
-    "paths": {}
+    "customConditions": []
   }
 }

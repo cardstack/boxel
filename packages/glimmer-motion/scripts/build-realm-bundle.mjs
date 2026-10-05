@@ -95,8 +95,9 @@ await esbuild.build({
   target: 'es2022',
   mainFields: ['module', 'main'],
   conditions: ['import', 'module', 'default'],
-  // choreo's tsconfig.json maps glimmer-motion to its source for
-  // type-checking. The realm bundles the built output, so skip it.
+  // choreo's tsconfig.json resolves glimmer-motion to its source for
+  // type-checking. The realm bundles the built output, so skip it, and leave
+  // the `developing:choreo` condition out of `conditions`.
   tsconfigRaw: {},
   // Syntax minification rewrites `strictMode: true` to `!0` inside the
   // precompileTemplate options, which the realm's template-compilation

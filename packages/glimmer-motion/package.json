@@ -17,14 +17,42 @@
   "author": "Cardstack",
   "exports": {
     ".": {
+      "developing:choreo": "./src/index.ts",
       "types": "./declarations/index.d.ts",
       "default": "./dist/index.js"
     },
     "./test-support": {
+      "developing:choreo": "./src/test-support/index.ts",
       "types": "./declarations/test-support/index.d.ts",
       "default": "./dist/test-support/index.js"
     },
+    "./layout-group": {
+      "developing:choreo": "./src/layout-group.gts",
+      "types": "./declarations/layout-group.d.ts",
+      "default": "./dist/layout-group.js"
+    },
+    "./motion-config": {
+      "developing:choreo": "./src/motion-config.gts",
+      "types": "./declarations/motion-config.d.ts",
+      "default": "./dist/motion-config.js"
+    },
+    "./presence": {
+      "developing:choreo": "./src/presence.gts",
+      "types": "./declarations/presence.d.ts",
+      "default": "./dist/presence.js"
+    },
+    "./reorder/group": {
+      "developing:choreo": "./src/reorder/group.gts",
+      "types": "./declarations/reorder/group.d.ts",
+      "default": "./dist/reorder/group.js"
+    },
+    "./reorder/item": {
+      "developing:choreo": "./src/reorder/item.gts",
+      "types": "./declarations/reorder/item.d.ts",
+      "default": "./dist/reorder/item.js"
+    },
     "./*": {
+      "developing:choreo": "./src/*.ts",
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
     },
@@ -46,6 +74,7 @@
   ],
   "scripts": {
     "build": "rollup --config && node scripts/fix-declarations.mjs",
+    "check:packed-exports": "node scripts/check-exports.mjs --packed",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
@@ -54,6 +83,7 @@
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
+    "lint:exports": "node scripts/check-exports.mjs --source",
     "lint:types": "ember-tsc --noEmit",
     "prepack": "rollup --config && node scripts/fix-declarations.mjs",
     "realm": "node scripts/build-realm-bundle.mjs",

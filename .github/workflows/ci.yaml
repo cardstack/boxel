@@ -83,8 +83,10 @@ jobs:
               - 'packages/observability/scripts/**'
             boxel:
               - *shared
-              # The host compiles this package's source as a workspace dependency,
-              # so a change here is a host change.
+              # The host compiles these packages' source as workspace
+              # dependencies, so a change in one is a host change.
+              - 'packages/choreo/**'
+              - 'packages/glimmer-motion/**'
               - 'packages/pretui/**'
               - '.github/workflows/build-host.yml'
               - '.github/workflows/deploy-host.yml'
@@ -527,6 +529,13 @@ jobs:
           (cd packages/glimmer-motion && pnpm run build)
           (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
+      # npm consumers resolve every subpath to the built output, without the
+      # `developing:choreo` condition the workspace builds from source with.
+      - name: Check the packed glimmer-motion and Choreo exports
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run check:packed-exports)
+          (cd packages/choreo && pnpm run check:packed-exports)
       - name: Choreo Player unit tests
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run test:unit
@@ -580,14 +589,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
-      # The test app resolves these packages through their built output
-      # (package.json#exports maps into dist/ and declarations/). glimmer-motion
-      # builds first: choreo's declarations build resolves it the same way.
-      - name: Build Glimmer Motion, Choreo and Choreo Player
-        run: |
-          (cd packages/glimmer-motion && pnpm run build)
-          (cd packages/choreo && pnpm run build)
-          (cd packages/choreo-player && pnpm run build)
+      # The test app compiles glimmer-motion and Choreo from source through the
+      # `developing:choreo` export condition, but resolves choreo-player
+      # through its built output.
+      - name: Build Choreo Player
+        run: pnpm run build
+        working-directory: packages/choreo-player
       - name: Run test suite
         run: pnpm test
         working-directory: packages/choreo-test-app
