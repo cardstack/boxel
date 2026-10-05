@@ -188,19 +188,21 @@ module('Pretui | ink', function (hooks) {
     assert.strictEqual(el.textContent?.trim(), 'ML', 'first two words only, uppercased');
     assert.strictEqual(el.getAttribute('aria-label'), 'Mei Ling Chen');
     assert.strictEqual(el.getAttribute('title'), 'Mei Ling Chen');
-    assert.true(el.getAttribute('style')?.includes('width: 24px'), 'defaults to 24px');
+    assert.strictEqual(
+      el.style.getPropertyValue('--pretui-avatar-size'),
+      '',
+      "defaults to the stylesheet's 1.5rem (24px at a 16px root)",
+    );
     assert.true(
       el.getAttribute('style')?.includes(statusHue('Mei Ling Chen')),
       'the hue is derived from the name, so the same person keeps the same colour',
     );
   });
 
-  test('Avatar scales its type with @size', async function (assert) {
+  test('Avatar writes @size as rem, which the stylesheet sizes the disc and its type from', async function (assert) {
     await render(<template><Avatar @name='Ada' @size={{40}} /></template>);
-    let style = q('[data-test-pretui-avatar]').getAttribute('style') ?? '';
-    assert.true(style.includes('width: 40px'));
-    assert.true(style.includes('height: 40px'));
-    assert.true(style.includes('font-size: 17px'), '0.42 of the box, rounded');
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(el.style.getPropertyValue('--pretui-avatar-size').trim(), '2.5rem');
   });
 
   test('Avatar shows the image when given one and falls back to initials once it fails', async function (assert) {
