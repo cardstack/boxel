@@ -372,10 +372,10 @@ function fieldSignature(name: string, field: FieldDefinition): string {
   return `${name} ${stableStringify(field)}`;
 }
 
-// A reach warning is read on the policy card and in a realm's log alike. Each
+// A reach warning is read on the policy card and in a `validate` answer. Each
 // idea is its own paragraph, separated by a blank line, and the fixes an
-// author can choose between are a list, one per line beginning `- `. The card
-// lays the paragraphs and the list out; in a log they read as plain text.
+// author can choose between are a list, one per line beginning `- `, which
+// the card lays out.
 
 function documentMessage(
   reach: ReachingGrant,
@@ -391,12 +391,10 @@ function documentMessage(
       ? `\`${operation}\` on ${from} sends each card along with the cards it links to.`
       : `\`${operation}\` on ${from} sends its results along with the cards they link to.`;
   return [
-    `${sends} So everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}.`,
-    fixes('To stop sending them', [
-      `${narrowingFix(reach)}, so the response names each linked card without sending it`,
-      ...deliberately(to, kind, anyType),
-    ]),
+    `${sends} So everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, ${ungrantedClause(to, kind, anyType)}.`,
+    fixes('To stop sending them', [narrowingFix(reach)]),
     `Changing how ${to} is declared won't help: a linked card is sent whatever its own type declares.`,
+    ...deliberately(to, kind, anyType),
   ].join('\n\n');
 }
 
@@ -410,13 +408,13 @@ function renderingMessage(
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
   return [
-    `The pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, and ${ungrantedClause(to, kind, anyType)}.`,
+    `The pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, ${ungrantedClause(to, kind, anyType)}.`,
     `Setting \`links\` doesn't help here: a card's page displays its linked cards either way.`,
     fixes('To keep them off the page', [
       withholdingFix(reach),
       `change ${from}'s templates so they don't display them (this warning stays, since the check can't read templates)`,
-      ...deliberately(to, kind, anyType),
     ]),
+    ...deliberately(to, kind, anyType),
   ].join('\n\n');
 }
 
@@ -442,12 +440,12 @@ function ungrantedClause(
   switch (kind) {
     case 'ungranted':
       return anyType
-        ? `no rule lets anyone read ${to} cards, and a link to a ${to} can point to a card of any type`
-        : `no rule lets anyone read ${to} cards`;
+        ? `and no rule lets anyone read ${to} cards; a link to a ${to} can point to a card of any type`
+        : `and no rule lets anyone read ${to} cards`;
     case 'policy card':
-      return `${to} is a policy card, which no rule can share: a policy card holds every one of its rules`;
+      return `but ${to} is a policy card, which no rule can share: a policy card holds every one of its rules`;
     case 'config card':
-      return `${to} is the realm's settings card, which no rule can share`;
+      return `but ${to} is the realm's settings card, which no rule can share`;
   }
 }
 
@@ -460,7 +458,9 @@ function deliberately(
   anyType: boolean,
 ): string[] {
   return kind === 'ungranted' && !anyType
-    ? [`add a rule that lets people read ${to}, to share them on purpose`]
+    ? [
+        `To share them on purpose instead, add a rule that lets people read ${to}.`,
+      ]
     : [];
 }
 
@@ -469,11 +469,11 @@ function narrowingFix(reach: ReachingGrant): string {
   let { operation } = reach.grant;
   switch (reach.governedBy) {
     case 'read':
-      return `add \`links: 'ids'\` to ${from}'s \`${operation}\``;
+      return `add \`links: 'ids'\` to ${from}'s \`${operation}\`, so the response names each linked card without sending it`;
     case 'named-query':
-      return `add \`links: 'ids'\` to the \`${operation}\` query`;
+      return `add \`links: 'ids'\` to the \`${operation}\` query, so its results name each linked card without sending it`;
     case 'ad-hoc-query':
-      return `grant a named query that sets \`links: 'ids'\` instead of the general \`query\`, which can't be limited this way`;
+      return `grant a named query that sets \`links: 'ids'\` instead of the general \`query\`. The general \`query\` can't be limited this way`;
   }
 }
 

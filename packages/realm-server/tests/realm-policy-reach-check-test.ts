@@ -417,6 +417,14 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       `a type two links away is named with the whole path: ${guardian}`,
     );
+    // The policy card lays a message out by its blank lines and its `- `
+    // lines: what is shared, the fix, why the reached type can't help, and
+    // sharing on purpose.
+    assert.strictEqual(
+      student.split('\n\n').length,
+      4,
+      `one idea per paragraph: ${student}`,
+    );
     assert.true(
       student.includes("add `links: 'ids'` to Classroom's `read`"),
       `the fix is named on the granted type: ${student}`,
@@ -649,6 +657,12 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       message.includes("Setting `links` doesn't help here"),
       `it says why the declared ids is no fix: ${message}`,
+    );
+    assert.true(
+      message.includes(
+        'To keep them off the page, either:\n- mark every page format',
+      ),
+      `its fixes are a list: ${message}`,
     );
 
     policy = await compile([rule(CLASSROOM, 'read')]);

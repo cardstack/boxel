@@ -984,6 +984,12 @@ module('Integration | realm policy', function (hooks) {
       .exists('the identifiers in the message render as code')
       .hasText('read', 'the first is the grant’s operation');
     assert
+      .dom('[data-test-policy-issue-message] .message-paragraph')
+      .exists(
+        { count: 4 },
+        'the message is laid out one idea per paragraph, as the compiler writes it',
+      );
+    assert
       .dom('[data-test-policy-issue-message]')
       .doesNotIncludeText(BACKTICK, 'and no backtick shows')
       .includesText(

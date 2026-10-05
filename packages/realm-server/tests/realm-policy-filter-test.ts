@@ -428,7 +428,7 @@ module(basename(import.meta.filename), function () {
 
   test('a field the stored source does not hold records `unsnapshotted-policy-read` rather than `policy-not-filterable`, and compiles no grant', async function (assert) {
     for (let [where, reason] of [
-      ['.summary == actor()', /computed.*snapshot: true/],
+      ['.summary == actor()', /computed[\s\S]*snapshot: true/],
       ['.roster | any(.id == actor())', /filled in by a search/],
     ] as [string, RegExp][]) {
       let { grant, issues, messages } = await filterFor(where);
@@ -592,7 +592,7 @@ module(basename(import.meta.filename), function () {
         where,
       );
       assert.true(
-        messages[0].includes("it uses something a search filter can't use"),
+        messages[0].includes("It uses something a search filter can't use"),
         `${where}: ${messages[0]}`,
       );
     }

@@ -461,7 +461,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the create grant judged against the snapshot is recorded, since the card a create mints has no index row',
     );
     assert.true(
-      /a card being created isn't in the index until it's saved/.test(
+      /a card being created isn't in the index until it's saved/i.test(
         issues[0]?.message ?? '',
       ),
       `the issue says why: ${issues[0]?.message}`,
