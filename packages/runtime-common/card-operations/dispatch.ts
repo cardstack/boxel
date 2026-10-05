@@ -223,6 +223,17 @@ export interface OperationStoredFile {
     start: number,
     end: number,
   ) => ReadableStream<Uint8Array> | Readable;
+  // Opens `content` and reports the byte length of exactly what it delivers,
+  // where the adapter can measure what it opened; `size` above is the stat
+  // the handle opened with, which a write elsewhere can leave describing a
+  // version of the file the stream does not read. The content returned is
+  // the stream `content` yields.
+  openContent?: () => {
+    content: OperationSourceBody;
+    size?: number;
+    // The opened content's modification time, in milliseconds.
+    lastModifiedMs?: number;
+  };
 }
 
 export interface OperationStoredFileMeta {

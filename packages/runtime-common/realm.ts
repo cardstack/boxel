@@ -864,6 +864,19 @@ export interface FileRef {
     start: number,
     end: number,
   ) => ReadableStream<Uint8Array> | Readable;
+  // Open `content` and report the byte length of exactly what it delivers,
+  // for an adapter whose `size` can disagree with the bytes it streams (a
+  // path stat on a network filesystem can describe a version of the file
+  // another host has since replaced). The returned content is the same stream
+  // `content` yields. `size` is absent when the adapter could not measure the
+  // opened content. `lastModifiedMs` is the opened content's modification
+  // time, at the same precision as the ref's own `lastModifiedMs`, so the two
+  // can be compared to tell whether the ref's stat described these bytes.
+  openContent?: () => {
+    content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
+    size?: number;
+    lastModifiedMs?: number;
+  };
 
   [key: symbol]: object;
 }
@@ -9979,6 +9992,22 @@ export class Realm {
       ...(handle.createRangeStream
         ? { createRangeStream: handle.createRangeStream }
         : {}),
+      // The length a whole-body response declares comes with the bytes, from
+      // the operation that opens them, rather than from either stat.
+      ...(source.openBody
+        ? {
+            openContent: () => {
+              let opened = source.openBody!();
+              return {
+                content: opened.body as FileRef['content'],
+                ...(opened.size != null ? { size: opened.size } : {}),
+                ...(opened.lastModifiedMs != null
+                  ? { lastModifiedMs: opened.lastModifiedMs }
+                  : {}),
+              };
+            },
+          }
+        : {}),
     };
     // A shimmed module is not stored content at all, and the response says so
     // in a header of its own; the marker rides on the handle.
@@ -10168,13 +10197,43 @@ export class Realm {
       });
     }
 
+    // Everything that reaches here sends the whole file, including a `GET`
+    // whose `Range` was set aside. Where the adapter can measure what it
+    // opens, the declared length is taken from the opened content rather than
+    // from the size the ranges were judged against: that size can describe a
+    // version of the file the stream does not read, and a declared length
+    // larger than the body leaves the client waiting for bytes that never
+    // arrive, one that is smaller cuts the body short.
+    let openedContent =
+      request.method === 'GET' ? ref.openContent?.() : undefined;
+    if (openedContent) {
+      if (openedContent.size != null) {
+        headers['content-length'] = String(openedContent.size);
+      } else {
+        delete headers['content-length'];
+      }
+      // The validators were built from the same stat, so when the opened
+      // content has a different modification time they describe another
+      // version of the file. Sending them would let a client store these bytes
+      // under that version's validator; the response carries none instead,
+      // and the next request is answered from whatever the file is then.
+      if (
+        openedContent.lastModifiedMs != null &&
+        ref.lastModifiedMs != null &&
+        openedContent.lastModifiedMs !== ref.lastModifiedMs
+      ) {
+        delete headers['etag'];
+        delete headers['last-modified'];
+      }
+    }
+    let content = openedContent?.content ?? ref.content;
     if (
-      ref.content instanceof ReadableStream ||
-      ref.content instanceof Uint8Array ||
-      typeof ref.content === 'string'
+      content instanceof ReadableStream ||
+      content instanceof Uint8Array ||
+      typeof content === 'string'
     ) {
       return createResponse({
-        body: ref.content as BodyInit,
+        body: content as BodyInit,
         init: { headers },
         requestContext,
       });
@@ -10191,7 +10250,7 @@ export class Realm {
       requestContext,
     }) as ResponseWithNodeStream;
 
-    response.nodeStream = ref.content;
+    response.nodeStream = content;
     return response;
   }
 

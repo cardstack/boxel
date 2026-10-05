@@ -114,7 +114,7 @@ export interface RenderCapture {
 }
 
 export interface CaptureOptions {
-  expectedId?: string;
+  expectedId: string;
   expectedNonce?: string;
   simulateTimeoutMs?: number;
   timeoutMs?: number;
@@ -193,7 +193,7 @@ export async function renderHTML(
   page: Page,
   format: string,
   ancestorLevel: number,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<string | RenderError> {
   log.debug(
     `renderHTML start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
@@ -220,7 +220,7 @@ export async function renderHTML(
     `renderHTML captured format=${format} ancestorLevel=${ancestorLevel} status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.html');
+    return renderCaptureToError(opts, result, 'render.html');
   }
   log.debug(
     `renderHTML success format=${format} ancestorLevel=${ancestorLevel} length=${result.value.length}`,
@@ -232,7 +232,7 @@ export async function renderHTML(
 
 export async function renderIcon(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<string | RenderError> {
   log.debug(`renderIcon start url=${page.url()}`);
   await transitionTo(page, 'render.icon');
@@ -244,7 +244,7 @@ export async function renderIcon(
     `renderIcon captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.icon');
+    return renderCaptureToError(opts, result, 'render.icon');
   }
   log.debug(`renderIcon success length=${result.value.length}`);
   return cleanCapturedHTML(result.value);
@@ -252,7 +252,7 @@ export async function renderIcon(
 
 export async function renderMeta(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<PrerenderMeta | RenderError> {
   log.debug(`renderMeta start url=${page.url()}`);
   await transitionTo(page, 'render.meta');
@@ -264,11 +264,11 @@ export async function renderMeta(
     `renderMeta captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.meta');
+    return renderCaptureToError(opts, result, 'render.meta');
   }
-  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+  if (result.id && result.id !== opts.expectedId) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.meta captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
       { title: 'Stale render response', evict: true },
     );
@@ -279,7 +279,7 @@ export async function renderMeta(
     result.nonce !== opts.expectedNonce
   ) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.meta captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
       { title: 'Stale render response', evict: true },
     );
@@ -294,7 +294,7 @@ export async function renderMeta(
       );
     });
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.meta returned a non-JSON response: ${result.value}`,
       { title: 'Invalid render meta response' },
     );
@@ -309,7 +309,7 @@ export async function renderMeta(
 // on the linksTo / linksToMany fields those renders marked as "used".
 export async function renderTypes(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<PrerenderTypes | RenderError> {
   log.debug(`renderTypes start url=${page.url()}`);
   await transitionTo(page, 'render.types');
@@ -321,11 +321,11 @@ export async function renderTypes(
     `renderTypes captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.types');
+    return renderCaptureToError(opts, result, 'render.types');
   }
-  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+  if (result.id && result.id !== opts.expectedId) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.types captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
       { title: 'Stale render response', evict: true },
     );
@@ -336,7 +336,7 @@ export async function renderTypes(
     result.nonce !== opts.expectedNonce
   ) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.types captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
       { title: 'Stale render response', evict: true },
     );
@@ -351,7 +351,7 @@ export async function renderTypes(
       );
     });
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.types returned a non-JSON response: ${result.value}`,
       { title: 'Invalid render types response' },
     );
@@ -361,7 +361,7 @@ export async function renderTypes(
 async function waitForRoutePathSuffix(
   page: Page,
   suffix: string,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<void> {
   let waitTimeoutMs = effectiveRouteWaitTimeoutMs(opts);
   log.debug(`waitForRoutePathSuffix start suffix=${suffix} url=${page.url()}`);
@@ -473,7 +473,7 @@ async function waitForRoutePathSuffix(
     },
     { timeout: waitTimeoutMs },
     suffix,
-    opts?.expectedId ?? null,
+    opts.expectedId,
     opts?.expectedNonce ?? null,
   );
   let matchedByPath = false;
@@ -592,11 +592,38 @@ async function waitForPrerenderSettle(page: Page): Promise<void> {
   );
 }
 
+function stripJsonExtension(id: string): string {
+  return id.replace(/\.json$/, '');
+}
+
 function renderCaptureToError(
-  page: Page,
+  opts: Pick<CaptureOptions, 'expectedId' | 'expectedNonce'>,
   capture: RenderCapture,
   context: string,
 ): RenderError {
+  let renderId = opts.expectedId;
+  // An error the page wrote is only this render's error when the element it
+  // came from belongs to this render. When no element matches, the capture
+  // falls back to whatever result element the tab still holds, which can be a
+  // previous render's error naming that render. Compare the element's own
+  // id and nonce, not the payload's `error.id`, which legitimately names a
+  // failing dependency.
+  let staleBy =
+    capture.id &&
+    stripJsonExtension(capture.id) !== stripJsonExtension(renderId)
+      ? `prerender output for ${capture.id} (expected ${renderId})`
+      : capture.nonce &&
+          opts.expectedNonce &&
+          capture.nonce !== opts.expectedNonce
+        ? `prerender output for nonce ${capture.nonce} (expected ${opts.expectedNonce})`
+        : undefined;
+  if (staleBy) {
+    return buildInvalidRenderResponseError(
+      renderId,
+      `${context} captured a stale error from ${staleBy}`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
   try {
     let error = JSON.parse(capture.value) as RenderError;
     error.evict = capture.status === 'unusable';
@@ -607,7 +634,7 @@ function renderCaptureToError(
         ? 'Invalid render meta response'
         : 'Invalid render response';
     return buildInvalidRenderResponseError(
-      page,
+      renderId,
       `${context} returned an invalid error payload: ${capture.value}`,
       {
         evict: capture.status === 'unusable',
@@ -617,24 +644,22 @@ function renderCaptureToError(
   }
 }
 
+// The error builders below take the id of the card, module, or file the job
+// is rendering — never the tab's address. A pooled tab still shows the
+// previous job's URL until the new route transition completes, so an id read
+// from the page would attribute this job's failure to whatever the tab
+// rendered before it, and the indexer would record that unrelated URL as a
+// dependency of this row.
 function buildInvalidRenderResponseError(
-  page: Page,
+  renderId: string,
   message: string,
   options?: { title?: string; evict?: boolean },
 ): RenderError {
-  let id: string | null = null;
-  try {
-    let pathname = new URL(page.url()).pathname;
-    let match = /\/render\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    id = null;
-  }
-  let deps = fallbackRenderDeps(id);
+  let deps = fallbackRenderDeps(renderId);
   return {
     type: 'instance-error',
     error: {
-      id,
+      id: renderId,
       status: 500,
       title: options?.title ?? 'Invalid render response',
       message,
@@ -645,10 +670,7 @@ function buildInvalidRenderResponseError(
   };
 }
 
-function fallbackRenderDeps(id: string | null): string[] {
-  if (!id) {
-    return [];
-  }
+function fallbackRenderDeps(id: string): string[] {
   let deps = new Set<string>([id]);
   if (id.endsWith('.json')) {
     deps.add(id.replace(/\.json$/, ''));
@@ -659,22 +681,14 @@ function fallbackRenderDeps(id: string | null): string[] {
 }
 
 export function buildInvalidModuleResponseError(
-  page: Page,
+  renderId: string,
   message: string,
   options?: { title?: string; evict?: boolean },
 ): RenderError {
-  let id: string | null = null;
-  try {
-    let pathname = new URL(page.url()).pathname;
-    let match = /\/module\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    id = null;
-  }
   return {
     type: 'module-error',
     error: {
-      id,
+      id: renderId,
       status: 500,
       title: options?.title ?? 'Invalid module response',
       message,
@@ -688,7 +702,7 @@ export async function renderAncestors(
   page: Page,
   format: 'embedded' | 'fitted',
   types: string[],
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<Record<string, string> | RenderError> {
   let ancestors: Record<string, string> = {};
   for (let i = 0; i < types.length; i++) {
@@ -701,7 +715,7 @@ export async function renderAncestors(
 
 export async function captureModule(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<ModuleCapture | RenderError> {
   try {
     await page.waitForFunction(
@@ -732,12 +746,12 @@ export async function captureModule(
         return value.trim().length > 0;
       },
       { timeout: cardRenderTimeout },
-      opts?.expectedId ?? null,
+      opts.expectedId,
       opts?.expectedNonce ?? null,
     );
   } catch (_e) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       'module prerender timed out waiting for module output',
       { title: 'Module capture timeout', evict: true },
     );
@@ -765,22 +779,22 @@ export async function captureModule(
 
   if (!capture) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       'module prerender did not produce output',
       { title: 'Invalid module response' },
     );
   }
 
-  if (opts?.expectedId && capture.id !== opts.expectedId) {
+  if (capture.id !== opts.expectedId) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       `module prerender captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
       { title: 'Stale module response', evict: true },
     );
   }
   if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       `module prerender captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
       { title: 'Stale module response', evict: true },
     );
@@ -795,7 +809,7 @@ export async function captureModule(
 
 export async function captureFileExtract(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<FileExtractCapture | RenderError> {
   try {
     await page.waitForFunction(
@@ -826,12 +840,12 @@ export async function captureFileExtract(
         return value.trim().length > 0;
       },
       { timeout: cardRenderTimeout },
-      opts?.expectedId ?? null,
+      opts.expectedId,
       opts?.expectedNonce ?? null,
     );
   } catch (_e) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       'file extract timed out waiting for output',
       { title: 'File extract capture timeout', evict: true },
     );
@@ -859,22 +873,22 @@ export async function captureFileExtract(
 
   if (!capture) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       'file extract did not produce output',
       { title: 'Invalid file extract response' },
     );
   }
 
-  if (opts?.expectedId && capture.id !== opts.expectedId) {
+  if (capture.id !== opts.expectedId) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       `file extract captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
       { title: 'Stale file extract response', evict: true },
     );
   }
   if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       `file extract captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
       { title: 'Stale file extract response', evict: true },
     );
@@ -888,22 +902,14 @@ export async function captureFileExtract(
 }
 
 export function buildInvalidFileExtractResponseError(
-  page: Page,
+  renderId: string,
   message: string,
   options?: { title?: string; evict?: boolean },
 ): RenderError {
-  let id: string | null = null;
-  try {
-    let pathname = new URL(page.url()).pathname;
-    let match = /\/render\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    id = null;
-  }
   return {
     type: 'file-error',
     error: {
-      id,
+      id: renderId,
       status: 500,
       title: options?.title ?? 'Invalid file extract response',
       message,
@@ -921,7 +927,7 @@ export function buildInvalidFileExtractResponseError(
 export async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<RenderCapture> {
   const statuses: RenderStatus[] = ['ready', 'error', 'unusable'];
   await page.waitForFunction(
@@ -950,18 +956,11 @@ export async function captureResult(
       if (!expectingRender) {
         targetId = null;
         targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      } else if (!targetNonce) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');
           if (renderIdx !== -1) {
-            if (!targetId && segments[renderIdx + 1]) {
-              let decoded = decodeURIComponent(segments[renderIdx + 1]);
-              if (decoded.endsWith('.json')) {
-                decoded = decoded.slice(0, -5);
-              }
-              targetId = decoded;
-            }
             if (!targetNonce && segments[renderIdx + 2]) {
               targetNonce = segments[renderIdx + 2];
             }
@@ -1027,7 +1026,7 @@ export async function captureResult(
     },
     { timeout: cardRenderTimeout },
     statuses,
-    opts?.expectedId ?? null,
+    opts.expectedId,
     opts?.expectedNonce ?? null,
   );
   let result = await page.evaluate(
@@ -1047,18 +1046,11 @@ export async function captureResult(
       if (!expectingRender) {
         targetId = null;
         targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      } else if (!targetNonce) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');
           if (renderIdx !== -1) {
-            if (!targetId && segments[renderIdx + 1]) {
-              let decoded = decodeURIComponent(segments[renderIdx + 1]);
-              if (decoded.endsWith('.json')) {
-                decoded = decoded.slice(0, -5);
-              }
-              targetId = decoded;
-            }
             if (!targetNonce && segments[renderIdx + 2]) {
               targetNonce = segments[renderIdx + 2];
             }
@@ -1269,7 +1261,7 @@ export async function captureResult(
     },
     capture,
     statuses,
-    opts?.expectedId ?? null,
+    opts.expectedId,
     opts?.expectedNonce ?? null,
   );
   if (opts?.simulateTimeoutMs) {
@@ -1550,7 +1542,7 @@ async function detectTerminalPrerenderError(
 async function waitForEnvelopeBox(
   page: Page,
   envelope: { width: number; height: number },
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
   slotName?: string,
 ): Promise<void> {
   await page.waitForFunction(
@@ -1593,7 +1585,7 @@ async function waitForEnvelopeBox(
 async function waitForRenderSlotMarker(
   page: Page,
   slotName: string,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<void> {
   await page.waitForFunction(
     (name: string) => {
@@ -1640,6 +1632,7 @@ async function setCaptureBackground(
 
 async function captureOneEntry(
   page: Page,
+  renderId: string,
   entry: CaptureRequestEntry,
   deviceScaleFactor: number,
   output?: DeclaredEntryOutput,
@@ -1659,7 +1652,7 @@ async function captureOneEntry(
     // callers that assemble capture entries directly.
     if (entry.target || entry.clip || entry.fullPage || entry.viewport) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture "${entry.name}" cannot combine pdf output with target, clip, fullPage, or viewport`,
         { title: 'Invalid capture spec' },
       );
@@ -1686,7 +1679,7 @@ async function captureOneEntry(
       });
       let bounds = checkPdfCaptureBounds(entry.name, bytes);
       if (bounds.error !== undefined) {
-        return buildInvalidRenderResponseError(page, bounds.error, {
+        return buildInvalidRenderResponseError(renderId, bounds.error, {
           title: 'PDF capture too large',
         });
       }
@@ -1721,14 +1714,14 @@ async function captureOneEntry(
       handle = await page.$(entry.target);
     } catch (err) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture "${entry.name}" target selector is invalid: ${entry.target}`,
         { title: 'Invalid capture spec' },
       );
     }
     if (!handle) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture "${entry.name}" target matched no element: ${entry.target}`,
         { title: 'Capture target not found' },
       );
@@ -1774,7 +1767,7 @@ async function captureOneEntry(
       dims.height * deviceScaleFactor > CAPTURE_MAX_PHYSICAL_EDGE_PX
     ) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `fullPage capture "${entry.name}" of ${dims.width}x${dims.height} CSS px at ${deviceScaleFactor}x exceeds ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels per edge`,
         { title: 'Capture too large' },
       );
@@ -1863,7 +1856,7 @@ export async function runCapture(
   // the narrower roster their parsers enforce.
   format: OnDemandCaptureFormat | DeclaredCaptureFormat,
   ancestorLevel: number,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<PrerenderCapture | RenderError> {
   let captureSpec = opts?.captureSpec;
   let entries = normalizeCaptureEntries(captureSpec);
@@ -1883,21 +1876,21 @@ export async function runCapture(
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" cannot set both fullPage and clip`,
         { title: 'Invalid capture spec' },
       );
     }
     if (entry.target && entry.clip) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" cannot set both target and clip`,
         { title: 'Invalid capture spec' },
       );
     }
     if (entry.target && entry.fullPage) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" cannot set both target and fullPage`,
         { title: 'Invalid capture spec' },
       );
@@ -1907,7 +1900,7 @@ export async function runCapture(
     // the in-process callers that assemble capture options directly.
     if (entry.type === 'pdf' && entries.length > 1) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" requests pdf output, which is only valid on a singular capture`,
         { title: 'Invalid capture spec' },
       );
@@ -1922,7 +1915,7 @@ export async function runCapture(
   for (let entry of entries) {
     if ((entry.media ?? 'screen') !== firstMedia) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture batch mixes media values (${firstMedia} and ${entry.media ?? 'screen'}); a batch renders under one media`,
         { title: 'Invalid capture spec' },
       );
@@ -2028,7 +2021,7 @@ export async function runCapture(
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
-        page,
+        opts,
         { status: terminal.status, value: terminal.raw },
         'render.capture',
       );
@@ -2110,6 +2103,7 @@ export async function runCapture(
       let captureStart = Date.now();
       let item = await captureOneEntry(
         page,
+        opts.expectedId,
         entry,
         currentViewport.deviceScaleFactor,
         opts?.entryOutput?.[entry.name],
@@ -2190,6 +2184,7 @@ function renderErrorMessage(e: RenderError): string {
 // frame would cache the wrong pixels until the next generation.
 async function waitForCapturePendingClear(
   page: Page,
+  renderId: string,
   name: string,
 ): Promise<RenderError | undefined> {
   try {
@@ -2225,14 +2220,14 @@ async function waitForCapturePendingClear(
     );
     if (legacySignal) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture-only component for capture "${name}" signals with ${legacySignal}, which is no longer read — rename it to ${legacySignal.replace('screenshot', 'capture')}`,
         { title: 'Capture render never painted' },
       );
     }
   } catch {
     return buildInvalidRenderResponseError(
-      page,
+      renderId,
       `capture-only component for capture "${name}" still signals data-capture-pending after ${CAPTURE_PENDING_WAIT_MS}ms`,
       { title: 'Capture render never painted' },
     );
@@ -2248,7 +2243,7 @@ async function waitForCapturePendingClear(
   );
   if (failure != null) {
     return buildInvalidRenderResponseError(
-      page,
+      renderId,
       `capture-only component for capture "${name}" signaled data-capture-failed${
         failure && failure !== 'true' ? `: ${failure}` : ''
       }`,
@@ -2274,7 +2269,7 @@ async function waitForCapturePendingClear(
 async function captureRenderBasedEntry(
   page: Page,
   resolved: ResolvedDeclaredEntry,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<CaptureRequestItem | RenderError> {
   let { name, payload, deviceScaleFactor } = resolved;
   let isPdf = resolved.outputType === 'pdf';
@@ -2305,18 +2300,23 @@ async function captureRenderBasedEntry(
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
-        page,
+        opts,
         { status: terminal.status, value: terminal.raw },
         'render.capture',
       );
     }
     await waitForImagePaint(page);
-    let pendingError = await waitForCapturePendingClear(page, name);
+    let pendingError = await waitForCapturePendingClear(
+      page,
+      opts.expectedId,
+      name,
+    );
     if (pendingError) {
       return pendingError;
     }
     return await captureOneEntry(
       page,
+      opts.expectedId,
       isPdf
         ? { name, type: 'pdf', media: 'print' }
         : { name, viewport: box, deviceScaleFactor },
@@ -2356,7 +2356,7 @@ export async function captureDeclared(
   page: Page,
   args: DeclaredCaptureVisitArgs,
   kind: 'instance' | 'file',
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<DeclaredCaptureVisitResult | RenderError> {
   let priorManifest = args.priorManifests?.[kind] ?? null;
   log.debug(`captureDeclared start url=${page.url()}`);
@@ -2365,7 +2365,7 @@ export async function captureDeclared(
   await waitForPrerenderSettle(page);
   let result = await captureResult(page, 'textContent', opts);
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.captures');
+    return renderCaptureToError(opts, result, 'render.captures');
   }
   let roster: DeclaredCaptureRoster;
   try {
@@ -2375,7 +2375,7 @@ export async function captureDeclared(
     roster = parsed?.roster ?? {};
   } catch {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.captures returned a non-JSON response: ${result.value}`,
       { title: 'Invalid captures roster response' },
     );
@@ -2599,7 +2599,7 @@ export async function captureDeclared(
                 ? shot
                 : (shot.captures.find((c) => c.name === resolved.name) ??
                   buildInvalidRenderResponseError(
-                    page,
+                    opts.expectedId,
                     `pdf capture "${resolved.name}" produced no document`,
                     { title: 'PDF capture produced no document' },
                   ));
@@ -2905,6 +2905,10 @@ async function runWithAffinityProfile<T>(
 
 export async function withTimeout<T>(
   page: Page,
+  // The id of the card, module, or file this render is for. A timeout error
+  // carries it as its `id`; see `buildInvalidRenderResponseError` for why the
+  // page's own address can't stand in for it.
+  renderId: string,
   fn: () => Promise<T>,
   timeoutMs = cardRenderTimeout,
   profileContext?: RenderProfileContext,
@@ -3013,9 +3017,6 @@ export async function withTimeout<T>(
     'timeout' in (result as { timeout?: boolean })
   ) {
     let message = `Render timed-out after ${timeoutMs} ms`;
-    let url = new URL(page.url());
-    let [_a, _b, encodedId] = url.pathname.split('/');
-    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
     // Render-hang discriminators, captured here only on the timeout
     // path — the responsiveness probe and CPU sampling do real work, so
@@ -3178,7 +3179,7 @@ export async function withTimeout<T>(
       .map(([stage, ms]) => `${stage}=${ms}ms`)
       .join(' ');
     log.warn(
-      `render of ${id} timed out after ${timeoutMs}ms` +
+      `render of ${renderId} timed out after ${timeoutMs}ms` +
         ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
         ` stageAgeMs=${richDiagnostics?.stageAgeMs ?? '<unknown>'}` +
         // The model-build stages that closed before the stall, so the
@@ -3305,7 +3306,7 @@ export async function withTimeout<T>(
     let timeoutError: RenderError = {
       type: 'instance-error',
       error: {
-        id,
+        id: renderId,
         status: 504,
         title: 'Render timeout',
         message,

@@ -434,9 +434,131 @@ export class Worker {
   }
 }
 
+// How long a reader request may go without progress — no response yet, or no
+// further bytes of its body — before it is abandoned. Progress resets the
+// clock, so a large file that keeps arriving is never cut off; what this ends
+// is a request that has stopped moving. The HTTP client's own limits are five
+// minutes per phase, which is the time one stuck request would otherwise hold
+// an index job's whole visit loop.
+export const READER_STALL_TIMEOUT_MS = 60_000;
+
+// A stalled or dropped request is retried once, on a request of its own. A
+// failure that a fresh request does not fix is reported to the caller.
+const READER_ATTEMPTS = 2;
+
+interface AttemptProgress {
+  phase: 'headers' | 'body';
+  declaredLength: string | null;
+  received: number;
+  // The attempt failed in the request or its body read, rather than in what
+  // was done with the bytes once they arrived.
+  failedInTransfer: boolean;
+}
+
+export class ReaderStallError extends Error {
+  readonly phase: 'headers' | 'body';
+  readonly stallTimeoutMs: number;
+
+  constructor(phase: 'headers' | 'body', stallTimeoutMs: number) {
+    super(`no progress for ${stallTimeoutMs}ms while awaiting the ${phase}`);
+    this.name = 'ReaderStallError';
+    this.phase = phase;
+    this.stallTimeoutMs = stallTimeoutMs;
+  }
+}
+
+interface StallWatchdog {
+  signal: AbortSignal;
+  // Rejects with a `ReaderStallError` once the watchdog fires; raced against
+  // each await so a fetch that does not honor `signal` still lets go.
+  stalled: Promise<never>;
+  // Starts or restarts the clock for the given phase.
+  progress(phase: 'headers' | 'body'): void;
+  stop(): void;
+}
+
+function stallWatchdog(stallTimeoutMs: number): StallWatchdog {
+  let controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fire!: (error: ReaderStallError) => void;
+  let stalled = new Promise<never>((_resolve, reject) => {
+    fire = reject;
+  });
+  // Nothing awaits `stalled` once its request has finished.
+  stalled.catch(() => undefined);
+  return {
+    signal: controller.signal,
+    stalled,
+    progress(phase) {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        let error = new ReaderStallError(phase, stallTimeoutMs);
+        controller.abort(error);
+        fire(error);
+      }, stallTimeoutMs);
+    },
+    stop() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+// The error and every `cause` behind it, which is where the HTTP client puts
+// what actually happened (a body timeout, a reset socket) beneath a generic
+// "terminated" or "fetch failed".
+function describeErrorChain(error: unknown): string {
+  let parts: string[] = [];
+  let current: any = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    let code = current.code ? ` [${current.code}]` : '';
+    parts.push(
+      `${current.name ?? 'Error'}${code}: ${current.message ?? current}`,
+    );
+    current = current.cause;
+  }
+  return parts.join(' <- ');
+}
+
+async function readBodyBytes(
+  body: ReadableStream<Uint8Array>,
+  watchdog: StallWatchdog,
+  onBytes: (count: number) => void,
+): Promise<Uint8Array> {
+  let reader = body.getReader();
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  watchdog.progress('body');
+  try {
+    for (;;) {
+      let result = await Promise.race([reader.read(), watchdog.stalled]);
+      if (result.done) {
+        break;
+      }
+      let value = result.value;
+      chunks.push(value);
+      total += value.byteLength;
+      onBytes(value.byteLength);
+      watchdog.progress('body');
+    }
+  } catch (error) {
+    reader.cancel(error).catch(() => undefined);
+    throw error;
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export function getReader(
   _fetch: typeof globalThis.fetch,
   realmURL: string,
+  {
+    stallTimeoutMs = READER_STALL_TIMEOUT_MS,
+  }: { stallTimeoutMs?: number } = {},
 ): Reader {
   let readerLog = logger('worker');
   let parseResponseMetadata = (
@@ -473,104 +595,187 @@ export function getReader(
     return { lastModified, created, path };
   };
 
-  return {
-    readFile: async (url: URL) => {
-      let response: ResponseWithNodeStream = await _fetch(url, {
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-      let content: string;
+  // Runs one read up to `READER_ATTEMPTS` times. Each attempt gets its own
+  // request and its own stall clock; `attempt` reports where it got to, so a
+  // failure is logged with what the next occurrence needs to explain itself:
+  // the phase it stopped in, how long it ran, and how much of the declared
+  // body had arrived — a body that stops short of its `Content-Length` points
+  // at the server, a response that never starts points at the path to it.
+  let withRetries = async <T>(
+    operation: string,
+    url: URL,
+    attempt: (watchdog: StallWatchdog, progress: AttemptProgress) => Promise<T>,
+  ): Promise<T> => {
+    for (let attemptNumber = 1; ; attemptNumber++) {
+      let progress: AttemptProgress = {
+        phase: 'headers',
+        declaredLength: null,
+        received: 0,
+        failedInTransfer: false,
+      };
+      let started = Date.now();
+      let watchdog = stallWatchdog(stallTimeoutMs);
+      watchdog.progress('headers');
       try {
-        if ('nodeStream' in response && response.nodeStream) {
-          content = await fileContentToText({
-            content: response.nodeStream,
-          });
-        } else {
-          content = await response.text();
+        return await attempt(watchdog, progress);
+      } catch (error: unknown) {
+        // A fresh request can get past a stalled or dropped one; it cannot
+        // get past a failure in handling bytes that arrived intact.
+        let retrying =
+          attemptNumber < READER_ATTEMPTS &&
+          (error instanceof ReaderStallError || progress.failedInTransfer);
+        readerLog.warn(
+          `${operation} of ${url.href} failed in ${progress.phase} after ${Date.now() - started}ms ` +
+            `(attempt ${attemptNumber}/${READER_ATTEMPTS}, declared Content-Length ${progress.declaredLength ?? 'none'}, ` +
+            `received ${progress.received} bytes): ${describeErrorChain(error)}` +
+            (retrying ? '; retrying' : ''),
+        );
+        if (!retrying) {
+          throw error;
         }
-      } catch (err: any) {
-        // An in-process realm serves file bodies as lazy node streams: the
-        // realm checks existence when it builds the response, but the
-        // underlying open() happens only when we consume the body here. A
-        // file deleted in that window surfaces as an ENOENT on the body
-        // read even though the response itself was ok. That is a
-        // not-found, same as the !response.ok branch above — callers
-        // already treat undefined as "file no longer exists".
-        if (err?.code === 'ENOENT') {
-          readerLog.info(
-            `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
-          );
+      } finally {
+        watchdog.stop();
+      }
+    }
+  };
+
+  let fetchSource = async (
+    url: URL,
+    watchdog: StallWatchdog,
+    progress: AttemptProgress,
+  ): Promise<ResponseWithNodeStream> => {
+    let response: ResponseWithNodeStream;
+    try {
+      response = await Promise.race([
+        _fetch(url, {
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+          signal: watchdog.signal,
+        }),
+        watchdog.stalled,
+      ]);
+    } catch (error) {
+      progress.failedInTransfer = true;
+      throw error;
+    }
+    progress.declaredLength = response.headers.get('content-length');
+    return response;
+  };
+
+  return {
+    readFile: (url: URL) =>
+      withRetries('readFile', url, async (watchdog, progress) => {
+        let response = await fetchSource(url, watchdog, progress);
+        if (!response.ok) {
           return undefined;
         }
-        throw err;
-      }
-      let { lastModified, created, path } = parseResponseMetadata(
-        response,
-        url,
-      );
-      return {
-        content,
-        lastModified,
-        created,
-        path,
-        ...(Symbol.for('shimmed-module') in response ||
-        response.headers.get('X-Boxel-Shimmed-Module')
-          ? { isShimmed: true }
-          : {}),
-      };
-    },
-
-    readStream: async (url: URL) => {
-      let response: ResponseWithNodeStream = await _fetch(url, {
-        headers: {
-          Accept: SupportedMimeType.CardSource,
-        },
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-
-      let stream: ByteStream;
-      if ('nodeStream' in response && response.nodeStream) {
-        // Lazy-load node stream in the node worker path; browsers never hit
-        // this branch (no response.nodeStream) and don't need the module.
-        let { Readable } = (await import('stream')) as {
-          Readable: typeof NodeReadable;
-        };
-        if (Readable.toWeb) {
-          stream = Readable.toWeb(
-            response.nodeStream,
-          ) as ReadableStream<Uint8Array>;
-        } else {
-          stream = await fileContentToBytes({
-            content: response.nodeStream,
-          });
+        let content: string;
+        try {
+          if ('nodeStream' in response && response.nodeStream) {
+            // An in-process realm's body is a local file stream with no
+            // network beneath it to stall.
+            watchdog.stop();
+            content = await fileContentToText({
+              content: response.nodeStream,
+            });
+          } else if (response.body) {
+            progress.phase = 'body';
+            let bytes: Uint8Array;
+            try {
+              bytes = await readBodyBytes(
+                response.body,
+                watchdog,
+                (count) => (progress.received += count),
+              );
+            } catch (error) {
+              progress.failedInTransfer = true;
+              throw error;
+            }
+            content = new TextDecoder().decode(bytes);
+          } else {
+            content = '';
+          }
+        } catch (err: any) {
+          // An in-process realm serves file bodies as lazy node streams: the
+          // realm checks existence when it builds the response, but the
+          // underlying open() happens only when we consume the body here. A
+          // file deleted in that window surfaces as an ENOENT on the body
+          // read even though the response itself was ok. That is a
+          // not-found, same as the !response.ok branch above — callers
+          // already treat undefined as "file no longer exists".
+          if (err?.code === 'ENOENT') {
+            readerLog.info(
+              `file ${url.href} disappeared while reading its body (ENOENT); treating as not found`,
+            );
+            return undefined;
+          }
+          throw err;
         }
-      } else if (response.body) {
-        stream = response.body;
-      } else {
-        stream = new Uint8Array();
-      }
+        let { lastModified, created, path } = parseResponseMetadata(
+          response,
+          url,
+        );
+        return {
+          content,
+          lastModified,
+          created,
+          path,
+          ...(Symbol.for('shimmed-module') in response ||
+          response.headers.get('X-Boxel-Shimmed-Module')
+            ? { isShimmed: true }
+            : {}),
+        };
+      }),
 
-      let { lastModified, created, path } = parseResponseMetadata(
-        response,
-        url,
-      );
-      return {
-        stream,
-        lastModified,
-        created,
-        path,
-        ...(Symbol.for('shimmed-module') in response ||
-        response.headers.get('X-Boxel-Shimmed-Module')
-          ? { isShimmed: true }
-          : {}),
-      };
-    },
+    // The body is handed to the caller to consume at its own pace, so only
+    // the wait for the response is guarded here: a stall clock on the body
+    // would fire whenever the caller paused.
+    readStream: (url: URL) =>
+      withRetries('readStream', url, async (watchdog, progress) => {
+        let response = await fetchSource(url, watchdog, progress);
+        watchdog.stop();
+        if (!response.ok) {
+          return undefined;
+        }
+
+        let stream: ByteStream;
+        if ('nodeStream' in response && response.nodeStream) {
+          // Lazy-load node stream in the node worker path; browsers never hit
+          // this branch (no response.nodeStream) and don't need the module.
+          let { Readable } = (await import('stream')) as {
+            Readable: typeof NodeReadable;
+          };
+          if (Readable.toWeb) {
+            stream = Readable.toWeb(
+              response.nodeStream,
+            ) as ReadableStream<Uint8Array>;
+          } else {
+            stream = await fileContentToBytes({
+              content: response.nodeStream,
+            });
+          }
+        } else if (response.body) {
+          stream = response.body;
+        } else {
+          stream = new Uint8Array();
+        }
+
+        let { lastModified, created, path } = parseResponseMetadata(
+          response,
+          url,
+        );
+        return {
+          stream,
+          lastModified,
+          created,
+          path,
+          ...(Symbol.for('shimmed-module') in response ||
+          response.headers.get('X-Boxel-Shimmed-Module')
+            ? { isShimmed: true }
+            : {}),
+        };
+      }),
 
     mtimes: async () => {
       // Env-mode boot race: the realm-server writes its Traefik dynamic

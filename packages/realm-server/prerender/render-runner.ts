@@ -492,6 +492,7 @@ export class RenderRunner {
 
       let waitResult = await withTimeout(
         page,
+        requestId,
         async () => {
           const jsHandle = await page.waitForFunction(
             (expectedNonce: string) => {
@@ -742,7 +743,7 @@ export class RenderRunner {
             })
           : {
               error: buildInvalidFileExtractResponseError(
-                page,
+                url,
                 'a file capture needs the file definition to render it with',
                 { title: 'Invalid capture request' },
               ),
@@ -791,6 +792,7 @@ export class RenderRunner {
         };
         capture = await withTimeout(
           page,
+          url,
           async () => {
             await transitionTo(
               page,
@@ -893,6 +895,7 @@ export class RenderRunner {
     };
     let capture = await withTimeout(
       page,
+      url,
       async () => {
         await transitionTo(
           page,
@@ -918,7 +921,7 @@ export class RenderRunner {
     } catch {
       return {
         error: buildInvalidFileExtractResponseError(
-          page,
+          url,
           'file extract returned an invalid payload',
           { title: 'Invalid file extract response' },
         ),
@@ -929,7 +932,7 @@ export class RenderRunner {
         error:
           extract.error ??
           buildInvalidFileExtractResponseError(
-            page,
+            url,
             `file extract of ${url} produced no resource`,
             { title: 'Invalid file extract response' },
           ),
@@ -1028,6 +1031,7 @@ export class RenderRunner {
 
       let capture = await withTimeout(
         page,
+        url,
         async () => {
           await transitionTo(
             page,
@@ -1068,7 +1072,7 @@ export class RenderRunner {
           response = JSON.parse(moduleCapture.value) as ModuleRenderResponse;
           if (response.status !== moduleCapture.status) {
             let renderError = buildInvalidModuleResponseError(
-              page,
+              url,
               `module prerender status mismatch (${moduleCapture.status} vs ${response.status})`,
               { title: 'Invalid module response', evict: true },
             );
@@ -1109,7 +1113,7 @@ export class RenderRunner {
           }
         } catch (_e) {
           let renderError = buildInvalidModuleResponseError(
-            page,
+            url,
             `module prerender returned invalid payload: ${moduleCapture.value}`,
             { title: 'Invalid module response' },
           );
@@ -1445,6 +1449,7 @@ export class RenderRunner {
         let extractStart = Date.now();
         let capture = await withTimeout(
           page,
+          url,
           async () => {
             await transitionTo(
               page,
@@ -1502,7 +1507,7 @@ export class RenderRunner {
             ) as FileExtractResponse;
             if (extractResponse.status !== fileCapture.status) {
               let renderError = buildInvalidFileExtractResponseError(
-                page,
+                url,
                 `file extract status mismatch (${fileCapture.status} vs ${extractResponse.status})`,
                 { title: 'Invalid file extract response', evict: true },
               );
@@ -1527,7 +1532,7 @@ export class RenderRunner {
             }
           } catch (_e) {
             let renderError = buildInvalidFileExtractResponseError(
-              page,
+              url,
               `file extract returned invalid payload: ${fileCapture.value}`,
               { title: 'Invalid file extract response' },
             );
@@ -1657,6 +1662,7 @@ export class RenderRunner {
           let stepResult = await this.#step(affinityKey, step, () =>
             withTimeout(
               page,
+              url,
               fn,
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, step, jobId),
@@ -1690,6 +1696,7 @@ export class RenderRunner {
           let isolatedStart = Date.now();
           let isolatedResult = await withTimeout(
             page,
+            url,
             async () => {
               await transitionTo(
                 page,
@@ -2195,6 +2202,7 @@ export class RenderRunner {
             let isolatedStart = Date.now();
             let isolatedResult = await withTimeout(
               page,
+              url,
               async () => {
                 await transitionTo(
                   page,
@@ -2249,6 +2257,7 @@ export class RenderRunner {
             let iconStart = Date.now();
             let iconResult = await withTimeout(
               page,
+              url,
               async () => {
                 await transitionTo(
                   page,
@@ -2289,6 +2298,7 @@ export class RenderRunner {
               () =>
                 withTimeout(
                   page,
+                  url,
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, 'file head/0', jobId),
@@ -2384,6 +2394,7 @@ export class RenderRunner {
               let res = await this.#step(affinityKey, step.name, () =>
                 withTimeout(
                   page,
+                  url,
                   step.cb,
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, step.name, jobId),
@@ -2673,6 +2684,7 @@ export class RenderRunner {
     let stepResult = await this.#step(affinityKey, label, () =>
       withTimeout(
         page,
+        url,
         () => captureDeclared(page, captures, kind, captureOptions),
         timeoutMs,
         this.#profileContext(affinityKey, url, label, jobId),
