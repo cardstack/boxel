@@ -123,15 +123,22 @@ export const BUNDLED_BASE_MODULES: Record<
   // `image-file-def` are bundled on that footing: each re-exports a class
   // `card-api` declares, and `card-api` keeps the credit.
   //
-  // The closure rule is what keeps a module out. `command` imports
-  // `commands/search-card-result`, `commands/search-entry-result` and
-  // `markdown`; `commands/search-card-result` imports
-  // `commands/search-result-list`. The table holds none of those four, so
-  // neither importer can join it.
+  // Two rules keep a module out. Closure, above; and attribution — a bundled
+  // module must not be the only one naming a class another bundled module
+  // declares, because one bundled module asking for another resolves inside
+  // the chunk, so the declarer is never served and never names it.
   //
-  // `markdown`, `text-area`, `file-api`, `index`, `command-field` and
-  // `file-formats/index` import nothing the table lacks. They are fetched
-  // because bundling them is follow-on work, not because anything blocks it.
+  // `command` is the one module attribution keeps out: its `linksToMany(Spec)`
+  // fields name `Spec`, which `spec` declares, and `lint:bundled-base` reports
+  // `command names Spec from spec` when it is added. Closure blocks it today as
+  // well, but that is the removable half — bundle its siblings and attribution
+  // is what remains.
+  //
+  // Nothing else here is blocked. `commands/search-card-result`,
+  // `commands/search-entry-result` and `commands/search-result-list` pass the
+  // check together at 204, as do `markdown`, `text-area`, `file-api`, `index`,
+  // `command-field` and `file-formats/index`, which import nothing the table
+  // lacks. All of them are follow-on work rather than exclusions.
   // `string` has a reason of its own: it is `export default StringField` in a
   // `.ts`, so a dynamic `import()` of it here pulls that file into the
   // TypeScript program, where TS reads the `.ts` as CommonJS and retypes the
@@ -271,13 +278,16 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/color-field/util/color-utils'),
   'color-field/util/css-color-parsers': () =>
     import('@cardstack/base/color-field/util/css-color-parsers'),
-  // `command` and `commands/search-card-result` are out for the closure rule
-  // above. `command` imports `./commands/search-card-result`,
-  // `./commands/search-entry-result` and `./markdown`;
-  // `commands/search-card-result` imports `./commands/search-result-list`.
-  // This table holds none of those, so bundling either would compile its
-  // siblings into that chunk while a direct import of a sibling still fetched
-  // a separate copy. Bundling these two waits on their siblings.
+  // `commands/search-card-result` is not blocked: adding it with
+  // `commands/search-entry-result` and `commands/search-result-list` passes
+  // the check at 204. The three are follow-on work.
+  //
+  // `command` is blocked, and by attribution rather than closure. Its
+  // `linksToMany(Spec)` fields name `Spec`, which `spec` declares; bundling
+  // both resolves `command`'s import of `spec` inside the chunk, so the loader
+  // is never asked for `spec` and never names `Spec`. A link's type is read as
+  // data, and the chooser filters on it. `lint:bundled-base` reports
+  // `command names Spec from spec`.
   'components/markdown-editor-mode-select': () =>
     import('@cardstack/base/components/markdown-editor-mode-select'),
   'components/time-slots': () =>
