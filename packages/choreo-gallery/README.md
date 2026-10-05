@@ -13,7 +13,6 @@ From the monorepo root:
 pnpm build:boxel
 pnpm --filter choreo-gallery lint:types
 pnpm --filter choreo-gallery test:realm
-pnpm --filter choreo-gallery test:boxel
 ```
 
 `sync-gallery.mjs` copies the current demos and applies the host adapters.
