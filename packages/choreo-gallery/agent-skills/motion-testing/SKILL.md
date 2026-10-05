@@ -69,9 +69,12 @@ module('the inbox', function (hooks) {
 - DOM-read start values need a second frame in a real browser (the suite
   runs in Chrome, not jsdom); if a ported upstream literal was changed, the
   reason goes inline next to it.
-- Run: `pnpm test` (builds the addon, runs the suite in Chrome);
-  `pnpm --filter test-app exec vite --port 4202 --strictPort` +
-  `/tests` for interactive runs.
+- Run: the Motion ports with `pnpm test` in `packages/glimmer-motion` (runs
+  the suite in headless Chrome, compiled from source), or `pnpm start:test`
+  there for interactive runs. The Choreo suites run with `pnpm test` in
+  test-app (builds the suite, runs it in Chrome), or
+  `pnpm --filter test-app exec vite --port 4202 --strictPort` + `/tests` for
+  interactive runs.
 
 Reference suites: `test-app/tests/integration/choreo/` (the Choreo contract
-suite) and the upstream ports under `test-app/tests/`.
+suite) and the upstream ports under `packages/glimmer-motion/tests/`.
