@@ -285,6 +285,61 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test("invalidating a card's id removes a file row indexed at that id", async function (assert) {
+      // A file row at the card's id: the card's own file row, copied to the
+      // id, which is the row the index holds once something has recorded the
+      // card's bytes there.
+      let cardId = `${testRealm.url}person-1`;
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index
+         SELECT (jsonb_populate_record(
+           null::boxel_index,
+           to_jsonb(b) || jsonb_build_object('url', $2::text, 'file_alias', $2::text)
+         )).*
+         FROM boxel_index b
+         WHERE b.realm_url = $3
+           AND b.url = $1
+           AND b.type = 'file'`,
+        { bind: [`${cardId}.json`, cardId, testRealm.url] },
+      );
+      let seeded = (await dbAdapter.execute(
+        `SELECT type FROM boxel_index WHERE realm_url = $1 AND url = $2`,
+        { bind: [testRealm.url, cardId] },
+      )) as { type: string }[];
+      assert.deepEqual(
+        seeded,
+        [{ type: 'file' }],
+        'a file row is at the card id',
+      );
+
+      let response = await request
+        .post('/_invalidate')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Content-Type', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'writer', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            type: 'invalidation-request',
+            attributes: { urls: [cardId] },
+          },
+        });
+
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+      let rowsAtCardId = (await dbAdapter.execute(
+        `SELECT type
+         FROM boxel_index
+         WHERE realm_url = $1
+           AND url = $2
+           AND is_deleted IS NOT TRUE`,
+        { bind: [testRealm.url, cardId] },
+      )) as { type: string }[];
+      assert.deepEqual(rowsAtCardId, [], 'the file row at the card id is gone');
+    });
+
     test('returns 204 and silently deduplicates urls', async function (assert) {
       let indexedURL = await aKnownIndexedURL();
       let response = await request
