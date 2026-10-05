@@ -406,13 +406,13 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [student, guardian] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /`read` on Classroom .* the Student cards linked through `students`, but no rule lets anyone read Student cards/.test(
+      /`read` on Classroom .* the Student cards linked through `students`, and no rule lets anyone read Student cards/.test(
         student,
       ),
       `the message names the granted type, the reached type and the path: ${student}`,
     );
     assert.true(
-      /the Guardian cards linked through `students\.guardian`, but no rule lets anyone read Guardian cards/.test(
+      /the Guardian cards linked through `students\.guardian`, and no rule lets anyone read Guardian cards/.test(
         guardian,
       ),
       `a type two links away is named with the whole path: ${guardian}`,
@@ -641,13 +641,13 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [message] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /the pages `listIds` shows for Classroom cards can display the Student cards linked through `students`/.test(
+      /The pages `listIds` shows for Classroom cards can display the Student cards linked through `students`/.test(
         message,
       ),
       message,
     );
     assert.true(
-      message.includes("changing `links` won't keep them off the page"),
+      message.includes("Setting `links` doesn't help here"),
       `it says why the declared ids is no fix: ${message}`,
     );
 
