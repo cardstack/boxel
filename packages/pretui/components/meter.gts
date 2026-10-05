@@ -25,8 +25,13 @@ export class Meter extends Component<MeterSignature> {
     }
     return out;
   }
+  // `@segments` as a whole number of bars, 3 when omitted. A fraction rounds
+  // up, the way it draws (2.5 draws three bars), and a negative or non-finite
+  // count reads as no bars, so `aria-valuemax` is always the number of bars
+  // drawn and never drops below `aria-valuemin`.
   get segmentsCount() {
-    return this.args.segments ?? 3;
+    let segments = this.args.segments ?? 3;
+    return Number.isFinite(segments) ? Math.max(0, Math.ceil(segments)) : 0;
   }
   // `@level` as a whole number of bars in [0, segments], so `aria-valuenow`
   // always sits between `aria-valuemin` and `aria-valuemax`, and what is

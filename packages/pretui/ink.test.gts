@@ -218,6 +218,35 @@ module('Pretui | ink', function (hooks) {
     }
   });
 
+  test('Meter reads a NaN @segments as no bars, so aria-valuemax is 0, not NaN', async function (assert) {
+    const NOT_A_NUMBER = Number.NaN;
+    await render(<template><Meter @level={{2}} @segments={{NOT_A_NUMBER}} @label='NaN' /></template>);
+    let el = q('[data-test-pretui-meter]');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '0', 'no bars, so the max is 0');
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '0', 'the level is clamped into the empty range');
+    assert.strictEqual(all('.pretui-meter-bar').length, 0, 'no bars are drawn');
+  });
+
+  test('Meter reads a negative @segments as no bars, so aria-valuemax never drops below aria-valuemin', async function (assert) {
+    await render(<template><Meter @level={{2}} @segments={{-2}} @label='Negative' /></template>);
+    let el = q('[data-test-pretui-meter]');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '0', 'no bars, so the max is 0');
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '0', 'the level is clamped into the empty range');
+    assert.strictEqual(all('.pretui-meter-bar').length, 0, 'no bars are drawn');
+  });
+
+  test('Meter rounds a fractional @segments up, so aria-valuemax is the number of bars drawn', async function (assert) {
+    await render(<template><Meter @level={{3}} @segments={{2.5}} @label='Fractional' /></template>);
+    let el = q('[data-test-pretui-meter]');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '3', 'three bars drawn, so the max is 3');
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '3', 'a full meter announces the whole max');
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      ['true', 'true', 'true'],
+      'all three bars are lit',
+    );
+  });
+
   test('Meter reuses the last height when @segments outruns @heights', async function (assert) {
     const HEIGHTS = [4, 8];
     await render(

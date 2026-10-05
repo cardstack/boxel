@@ -33,10 +33,14 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   }
   // `@value` clamped into [0, max], with an unset or non-finite value read as
   // 0, so `aria-valuenow` always sits between `aria-valuemin` and
-  // `aria-valuemax` and agrees with the fill a sighted user sees.
+  // `aria-valuemax`. It is also what a sighted user sees: a continuous bar's
+  // fill paints the exact value, and a stepped bar lights a partly reached step
+  // whole, so there the value rounds up to the number of lit steps (2.5 of 6
+  // lights and announces 3), as Meter does with a fractional level.
   get valueNow() {
     let value = Number.isFinite(this.args.value) ? this.args.value : 0;
-    return Math.max(0, Math.min(value, this.max));
+    let clamped = Math.max(0, Math.min(value, this.max));
+    return this.stepped ? Math.min(Math.ceil(clamped), this.max) : clamped;
   }
   // A zero `@max` has no fraction to show, so any value against it reads as an
   // empty bar at 0%, with no division by zero.

@@ -30,6 +30,7 @@ What is right: `aria-valuenow`, `aria-valuemin="0"`, `aria-valuemax` and `aria-l
 
 - **`role="meter progressbar"`, a fallback role list.** `role="meter"` has uneven support: Firefox does not implement it at all, and a bare `meter` there announces as an unlabelled group, losing the level. The first role an engine understands wins, so meter-aware engines get `meter` and Firefox falls back to `progressbar`, which reads the same `aria-value*` attributes. React Aria's `useMeter` ships the same pair for the same reason.
 - **The level is a whole number of bars in `[0, @segments]`.** `@level={{9}} @segments={{3}}` announces 3 and lights three bars; a negative level announces 0 and lights none. A fractional level rounds up, the way a partly reached step lights in the stepped ProgressBar, so `@level={{1.5}}` announces 2 and lights two bars. An unset or non-finite level announces 0 and lights none. The announced value never leaves `aria-valuemin..aria-valuemax`, and it always matches the lit count.
+- **`@segments` is a whole number of bars too, 3 when omitted.** `aria-valuemax` is the number of bars drawn. A fractional count rounds up, the way it draws, so `@segments={{2.5}}` draws three bars and reports a max of 3. A negative or non-finite count draws no bars and reports a max of 0, so `aria-valuemax` never reads `NaN` or drops below `aria-valuemin`.
 
 Gaps:
 

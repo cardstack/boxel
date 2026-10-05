@@ -242,6 +242,39 @@ module('Pretui | components/progress-bar', function (hooks) {
     );
   });
 
+  test('rounds a fractional value up to the lit steps in stepped mode, and keeps it exact on a continuous bar', async function (assert) {
+    await render(
+      <template>
+        <ProgressBar @value={{2.5}} @max={{6}} @steps={{true}} @label='Gates' data-test-stepped />
+        <ProgressBar @value={{2.5}} @max={{6}} @count='2.5 / 6' data-test-counted />
+        <ProgressBar @value={{2.5}} @max={{6}} @label='Gates' data-test-continuous />
+      </template>,
+    );
+    let stepped = bar('[data-test-stepped]');
+    assert.strictEqual(stepped.getAttribute('aria-valuenow'), '3', 'announced as the number of lit steps');
+    assert.deepEqual(
+      all('[data-test-stepped] .pretui-progress-step').map((s) => s.dataset['on']),
+      ['true', 'true', 'true', undefined, undefined, undefined],
+      'the partly reached third step is lit',
+    );
+    assert.strictEqual(
+      stepped.querySelector('.pretui-progress-count')?.textContent?.trim(),
+      '50%',
+      'the visible percentage reads the lit steps too',
+    );
+    assert.notOk(stepped.hasAttribute('aria-valuetext'), 'with no @count or @valueText there is no valuetext');
+
+    let counted = bar('[data-test-counted]');
+    assert.strictEqual(counted.getAttribute('aria-valuenow'), '3', 'a count does not change the announced number');
+    assert.strictEqual(counted.getAttribute('aria-valuetext'), '2.5 / 6', 'the caller\'s count is still the valuetext');
+    assert.strictEqual(counted.querySelector('.pretui-progress-count')?.textContent?.trim(), '2.5 / 6');
+
+    let continuous = bar('[data-test-continuous]');
+    assert.strictEqual(continuous.getAttribute('aria-valuenow'), '2.5', 'a continuous bar announces the exact value');
+    let fill = continuous.querySelector('.pretui-progress-fill') as HTMLElement;
+    assert.ok(px(fill, 'width')?.startsWith('41.66'), 'and its fill paints that value, unrounded');
+  });
+
   test('a zero @max is an empty range: a positive value does not fill the bar, and 0 / 0 is 0%, not NaN%', async function (assert) {
     await render(
       <template>
