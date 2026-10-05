@@ -153,6 +153,24 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(cards.length, 1, 'one card returned');
     });
 
+    test('rejects a multi-operator filter at the engine, not just the wire', async function (assert) {
+      // The wire surfaces reject this through `assertQuery`, but a query-backed
+      // field is indexed straight through `searchCards` with no `assertQuery` in
+      // the path. Without the engine's own backstop it would silently compile on
+      // whichever operator `filterCondition` reaches first, diverging from the
+      // host's live refresh, which rejects the same query.
+      await assert.rejects(
+        engine.searchCards(new URL(testRealmURL), {
+          filter: {
+            on: { module: `${testRealmURL}pet`, name: 'Pet' },
+            eq: {},
+            contains: {},
+          } as unknown as Parameters<typeof engine.searchCards>[1]['filter'],
+        }),
+        /a filter may use only one operator, but found "eq", "contains"/,
+      );
+    });
+
     test('matches via stemming (plays / playing)', async function (assert) {
       let { meta } = await engine.searchCards(new URL(testRealmURL), {
         filter: { matches: 'playing' },

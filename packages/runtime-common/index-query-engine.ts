@@ -55,6 +55,7 @@ import {
   RANGE_OPERATORS,
   InvalidQueryError,
   collectPositiveMatchTerms,
+  filterOperators,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -1541,6 +1542,23 @@ export class IndexQueryEngine {
 
     if (typeRef && Object.keys(filter).length === 1) {
       return this.typeCondition(typeRef);
+    }
+
+    // The validator rejects a multi-operator node on the wire, but a
+    // query-backed field is indexed through here with no `assertQuery` in the
+    // path. Each branch below picks a single operator, so without this backstop
+    // such a node would compile on whichever one comes first and silently drop
+    // the rest — diverging from the host, which rejects the same query. Reject
+    // here too so every path agrees. `type`/`on` are not operators.
+    let operators = filterOperators(filter);
+    if (operators.length > 1) {
+      throw new InvalidQueryError(
+        `a filter may use only one operator, but found ${operators
+          .map((key) => `"${key}"`)
+          .join(
+            ', ',
+          )}; combine operators by nesting them under "every" or "any"`,
+      );
     }
 
     if ('eq' in filter) {

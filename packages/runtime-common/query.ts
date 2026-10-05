@@ -524,9 +524,12 @@ function assertFilter(
     assertCardType(filter.on, pointer.concat('on'));
   }
 
-  // The engine and the client-side matcher each pick an operator from a node
-  // in their own order, so a node carrying several would be validated on one
-  // operator and executed on another. Only `type`/`on` may sit beside one.
+  // Each consumer — this validator, the SQL compiler (`filterCondition`) and
+  // the client-side matcher — picks a single operator from a node in its own
+  // order, so a node carrying several would be read differently by each. All
+  // three reject it, the engine through its own backstop for the
+  // query-backed-field path that never reaches this validator, so they agree by
+  // construction. Only `type`/`on` may sit beside one operator.
   let operators = filterOperators(filter);
   if (operators.length > 1) {
     throw new InvalidQueryError(
