@@ -1,11 +1,11 @@
 // Drift guard for the card-authoring skill.
 //
-// The `bxl-authoring` agent skill
-// (packages/boxel-cli/plugin/skills/bxl-authoring/SKILL.md) teaches card
-// authors a set of concrete behaviors — which tag preserves `\(…)`, what the
-// derive profile refuses, how an aggregate reads a collection, what a blank
-// input produces. It ships to authors who cannot run the engine to check, so
-// each behavioral claim is pinned here twice:
+// The `bxl-authoring` agent skill (`skills/bxl-authoring/SKILL.md` in
+// cardstack/boxel-skills, read from the clone of the release this repo pins)
+// teaches card authors a set of concrete behaviors — which tag preserves
+// `\(…)`, what the derive profile refuses, how an aggregate reads a
+// collection, what a blank input produces. It ships to authors who cannot run
+// the engine to check, so each behavioral claim is pinned here twice:
 //
 //   1. The snippet the skill shows must still appear in the skill text, so a
 //      rewrite that changes an example has to come through this file.
@@ -41,6 +41,7 @@ import {
   loadAllFormulaExtensions,
 } from '../../src/index.ts';
 import { categoryForBxlFunction } from '../../src/bxl/profiles/function-safety.ts';
+import { ensureBoxelSkills } from '../../../boxel-cli/scripts/boxel-skills.mts';
 
 // The host folds every lazy formula family into the default library set before
 // serving `@cardstack/bxl` to card code, so a card reaches `NPV` and `isEmail`
@@ -49,10 +50,7 @@ import { categoryForBxlFunction } from '../../src/bxl/profiles/function-safety.t
 await loadAllFormulaExtensions();
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..', '..');
-const SKILL_PATH = join(
-  REPO_ROOT,
-  'packages/boxel-cli/plugin/skills/bxl-authoring/SKILL.md',
-);
+const SKILL_PATH = join(ensureBoxelSkills(), 'bxl-authoring', 'SKILL.md');
 
 let pass = 0;
 let fail = 0;

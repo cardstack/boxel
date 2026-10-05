@@ -120,10 +120,10 @@ export function createAuthErrorGuard(
 
 // A refused stylesheet is not an auth failure of whatever is rendering: a
 // stylesheet that won't load leaves its entry unstyled and nothing else (see
-// the search resource's `loadStylesheets`). A row a policy admits a reader to
-// carries stylesheets served from its own realm, which that reader may not be
-// able to read, and failing the render on one would drop the whole render for
-// the sake of its styling.
+// the search resource's `loadStylesheets`). A row carries stylesheets served
+// from the realm that answered with it, which can still refuse the request (a
+// session it has not signed in to, say), and failing the render on one would
+// drop the whole render for the sake of its styling.
 export function authErrorEventMiddleware(
   target: EventTarget | undefined = typeof window !== 'undefined'
     ? window

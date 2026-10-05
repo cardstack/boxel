@@ -1,4 +1,9 @@
-import { getQuickJS, shouldInterruptAfterDeadline } from 'quickjs-emscripten';
+import {
+  newQuickJSWASMModuleFromVariant,
+  newVariant,
+  RELEASE_SYNC,
+  shouldInterruptAfterDeadline,
+} from 'quickjs-emscripten';
 
 import type {
   RealmRunnerCallMethod,
@@ -8,6 +13,7 @@ import type {
 import type {
   QuickJSContext,
   QuickJSDeferredPromise,
+  QuickJSWASMModule,
 } from 'quickjs-emscripten';
 
 const worker = globalThis as unknown as {
@@ -15,21 +21,25 @@ const worker = globalThis as unknown as {
   postMessage(message: RealmRunnerResponse): void;
 };
 
-// Load QuickJS as soon as the worker starts rather than when the first request
-// arrives, so the WASM fetch and compile overlap with the message round trip.
-// Announcing `ready` lets the caller time the submitted script alone; startup
-// can take seconds on a cold cache and is not the script's cost to bear.
-const quickJSReady = getQuickJS();
-quickJSReady.then(
-  () => worker.postMessage({ type: 'ready' }),
-  (error: unknown) =>
-    worker.postMessage({
-      type: 'error',
-      error: `Realm runner failed to load QuickJS: ${
+// The host posts `run` as soon as it creates the worker, so loading QuickJS
+// here costs no more than loading it at startup. Announcing `ready` lets the
+// caller time the submitted script alone; startup can take seconds on a cold
+// cache and is not the script's cost to bear.
+async function loadQuickJS(wasmURL: string): Promise<QuickJSWASMModule> {
+  try {
+    let QuickJS = await newQuickJSWASMModuleFromVariant(
+      newVariant(RELEASE_SYNC, { wasmLocation: wasmURL }),
+    );
+    worker.postMessage({ type: 'ready' });
+    return QuickJS;
+  } catch (error) {
+    throw new Error(
+      `Realm runner failed to load QuickJS: ${
         error instanceof Error ? error.message : String(error)
       }`,
-    }),
-);
+    );
+  }
+}
 
 // The guest sees only `realm`. Each method is a thin wrapper that hands its
 // arguments to the host and parses the host's JSON answer; the host does the
@@ -156,7 +166,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
   }
 
   try {
-    let QuickJS = await quickJSReady;
+    let QuickJS = await loadQuickJS(request.wasmURL);
     let runtime = QuickJS.newRuntime();
     runtime.setMemoryLimit(8 * 1024 * 1024);
     runtime.setMaxStackSize(512 * 1024);

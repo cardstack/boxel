@@ -67,6 +67,21 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // a conditional *write*, which is what `If-Match` asks about, and that question
 // is about the card rather than about the representation it was read in.
 const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
+
+// The request surfaces a policy decision record names as the one that reached
+// the gate (see `PolicyRoute`).
+const ENVELOPE_ROUTE: PolicyRoute = Object.freeze({
+  transport: 'envelope' as const,
+  route: '_operations',
+});
+
+function cardJsonRoute(method: string): PolicyRoute {
+  return { transport: 'card-json', route: method.toUpperCase() };
+}
+
+function byteRoute(route: 'source' | 'module'): PolicyRoute {
+  return { transport: 'byte-route', route };
+}
 import {
   CARD_DOCUMENT_CACHE_HEADER,
   type CardDocumentCache,
@@ -262,6 +277,7 @@ import {
 import {
   emitCapabilityCheck,
   type CapabilityCheckEvent,
+  type PolicyRoute,
 } from './card-operations/telemetry.ts';
 import {
   runOutputTransform,
@@ -911,8 +927,20 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // out. A route consumes the outcome only if every operation it resolves is
 // resolved with the ACL's refusal on it.
 //
-// No other route does, and each of the rest is a write no grant can reach
-// rather than one left out:
+// The realm's `_info` consumes it too, and resolves no operation: it answers
+// any signed-in caller the realm hands to its policy (see
+// `#admitsDespiteCoarseRefusal`), whether or not a grant reaches them, since
+// it asks the gate nothing. Such a caller is shown only how the realm
+// presents itself, its name, icon and background, which a view of a card a
+// grant admits them to shows (see `realmInfo`). The policy's own pointer is
+// kept out of it. Since it runs nothing a grant admits, an archived realm
+// answers such a caller as it does while active, so the answer does not say
+// the realm is archived (see `APPLIES_ARCHIVED_SEAL`).
+//
+// No other route does, but for the byte routes and the hashed scoped-CSS
+// serve described below. Each of the rest is marked `ACL_ONLY` where it is
+// declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
+// is one no grant can reach rather than one left out:
 //
 // - The card+source write, its octet-stream spelling and the card+source
 //   removal put or remove whatever bytes they are sent at whatever path they
@@ -929,6 +957,19 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   does.
 // - The realm's administration routes (`_reindex`, `_invalidate`,
 //   `_permissions` and the rest) do not act on a card at all.
+// - The card+html, file-meta+html, markdown and file-meta reads serve what the
+//   index holds for a path without running an operation, so no grant's `read`
+//   is consulted and no projection it declares narrows what they serve. A
+//   caller a grant admits reads the card through the card+json read or the
+//   search, which resolve the read through the gate.
+// - `_types`, `_mtimes`, `_publishability` and `_indexing-errors` answer for
+//   the whole realm at once: every type it holds, every file's modification
+//   time, and every card's indexing state. A grant reaches a card, not the
+//   realm.
+// - `_dependencies`, `_card-dependencies` and `_lint` read the realm's
+//   modules, which are code.
+// - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
+//   alone admits a caller to.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as do the directory
@@ -938,16 +979,25 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // path instead: for a data file or a card's document, whose bytes a
 // `readSource` grant reaches, and for nothing else they serve (see
 // `GRANTABLE_BYTES`).
+//
+// The hashed scoped-CSS serve consumes it too, and asks the gate nothing: a
+// stylesheet goes with the markup that references it, so every caller the
+// realm's policy judges is served it, and it applies the archived seal itself
+// (see `#routeRequest`).
 const CONSUMES_COARSE_OUTCOME = { consumesCoarseOutcome: true } as const;
+// Marks the routes left to the realm ACL by decision (see
+// `CONSUMES_COARSE_OUTCOME` for why each is, and `RouteOptions.aclOnly`).
+const ACL_ONLY = { aclOnly: true } as const;
 // Marks the consumers that apply an archived realm's seal themselves, where
 // they would run what a caller the ACL declined outright asked for (see
 // `RouteOptions.appliesArchivedSeal`): the card+json read once the gate admits
 // the read, the search once a grant would answer it with a row, the operations
 // envelope once every entry has resolved, the capability check once it would
 // admit a pair, and each card+json write once the gate has decided it and
-// before its batch runs (see `#sealAdmittedCardWrite`). A consumer
-// marked only `CONSUMES_COARSE_OUTCOME` seals a caller as soon as it admits
-// them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
+// before its batch runs (see `#sealAdmittedCardWrite`). The realm info is
+// one too, and never runs anything a grant admits, so it never applies the
+// seal. A consumer marked only `CONSUMES_COARSE_OUTCOME` seals a caller as
+// soon as it admits them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
 // every `HEAD` through.
 const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
@@ -2270,20 +2320,22 @@ interface RequestDispatch {
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
-// A route as `Realm.routeDescriptions` lists it: a router route, or the
-// fallback file and module serve for one method, which answers whatever
-// path and media type no router route claimed.
+// A route as `Realm.routeDescriptions` lists it: a router route, the hashed
+// stylesheet serve under its path prefix, or the fallback file and module
+// serve for one method, which answers whatever path and media type no router
+// route claimed.
 export type DispatchDescription =
   | RouteDescription
   | {
       method: Method;
       mimeType: '*';
-      path: '*';
+      path: '*' | `/${typeof SCOPED_CSS_SERVING_PREFIX}*`;
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
       appliesArchivedSeal: boolean;
       grantableBytes: boolean;
       operationalEndpoint: boolean;
+      aclOnly: boolean;
     };
 
 type CoarseAdmission = (
@@ -2763,10 +2815,30 @@ export class Realm {
     this.#policyCache = this.#makePolicyCache();
 
     this.#router = new Router(new URL(url))
-      .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .query('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
-      .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
-      .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
+      // Answers a signed-in caller the realm hands to its policy, as well as
+      // one its ACL lets read it (see `CONSUMES_COARSE_OUTCOME`).
+      .get(
+        '/_info',
+        SupportedMimeType.RealmInfo,
+        this.realmInfo.bind(this),
+        APPLIES_ARCHIVED_SEAL,
+      )
+      .query(
+        '/_info',
+        SupportedMimeType.RealmInfo,
+        this.realmInfo.bind(this),
+        APPLIES_ARCHIVED_SEAL,
+      )
+      // These read the realm's modules, or answer for the whole realm at
+      // once, so they are answered on the realm ACL alone (see
+      // `CONSUMES_COARSE_OUTCOME`).
+      .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this), ACL_ONLY)
+      .get(
+        '/_mtimes',
+        SupportedMimeType.Mtimes,
+        this.realmMtimes.bind(this),
+        ACL_ONLY,
+      )
       .get(
         '/_search',
         SupportedMimeType.CardJson,
@@ -2779,30 +2851,36 @@ export class Realm {
         this.searchEntriesResponse.bind(this),
         APPLIES_ARCHIVED_SEAL,
       )
+      // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
         '/_types',
         SupportedMimeType.CardTypeSummary,
         this.fetchCardTypeSummary.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_dependencies',
         SupportedMimeType.JSONAPI,
         this.getDependencies.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_publishability',
         SupportedMimeType.JSONAPI,
         this.publishability.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_indexing-errors',
         SupportedMimeType.JSONAPI,
         this.indexingErrors.bind(this),
+        ACL_ONLY,
       )
       .get(
         '/_card-dependencies',
         SupportedMimeType.CardDependencies,
         this.getCardDependencies.bind(this),
+        ACL_ONLY,
       )
       .post(
         '/_session',
@@ -2810,20 +2888,27 @@ export class Realm {
         this.createSession.bind(this),
         OPERATIONAL_ENDPOINT,
       )
+      // Signs the URLs of the capture serve, which the realm ACL alone admits
+      // a caller to, so it is answered on the ACL alone too.
       .query(
         '/_sign-capture-urls',
         SupportedMimeType.JSON,
         this.signCaptureURLs.bind(this),
+        ACL_ONLY,
       )
+      // The administration routes, here and below, do not act on a card, and
+      // are answered on the realm ACL alone (see `CONSUMES_COARSE_OUTCOME`).
       .get(
         '/_permissions',
         SupportedMimeType.Permissions,
         this.getRealmPermissions.bind(this),
+        ACL_ONLY,
       )
       .patch(
         '/_permissions',
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
+        ACL_ONLY,
       )
       .get(
         READINESS_CHECK_PATH,
@@ -2837,6 +2922,7 @@ export class Realm {
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
+        ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
       // extension and under the plain JSON:API one it extends. Both reach the
@@ -2889,17 +2975,25 @@ export class Realm {
         '/_cancel-indexing-job',
         SupportedMimeType.JSON,
         this.cancelIndexingJob.bind(this),
+        ACL_ONLY,
       )
-      .post('/_reindex', SupportedMimeType.JSON, this.queueReindex.bind(this))
+      .post(
+        '/_reindex',
+        SupportedMimeType.JSON,
+        this.queueReindex.bind(this),
+        ACL_ONLY,
+      )
       .post(
         '/_full-reindex',
         SupportedMimeType.JSON,
         this.queueFullReindex.bind(this),
+        ACL_ONLY,
       )
       .post(
         '/_invalidate',
         SupportedMimeType.JSONAPI,
         this.invalidateURLs.bind(this),
+        ACL_ONLY,
       )
       .post(
         '(/|/.+/)',
@@ -2913,13 +3007,29 @@ export class Realm {
         this.getCard.bind(this),
         APPLIES_ARCHIVED_SEAL,
       )
-      .get('/.*', SupportedMimeType.CardHtml, this.getCardHtml.bind(this))
+      // The card+html, file-meta+html and markdown reads serve what the index
+      // holds for a path without running an operation, so they are answered
+      // on the realm ACL alone, as the file-meta read below is: a caller a
+      // policy grant admits reads the card through the card+json read or the
+      // search (see `CONSUMES_COARSE_OUTCOME`).
+      .get(
+        '/.*',
+        SupportedMimeType.CardHtml,
+        this.getCardHtml.bind(this),
+        ACL_ONLY,
+      )
       .get(
         '/.*',
         SupportedMimeType.FileMetaHtml,
         this.getFileMetaHtml.bind(this),
+        ACL_ONLY,
       )
-      .get('/.*', SupportedMimeType.Markdown, this.getCardMarkdown.bind(this))
+      .get(
+        '/.*',
+        SupportedMimeType.Markdown,
+        this.getCardMarkdown.bind(this),
+        ACL_ONLY,
+      )
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -2940,6 +3050,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
+        ACL_ONLY,
       )
       // The octet-stream spelling of the card+source write: the same one-file
       // `update` operation, sent as bytes rather than text.
@@ -2947,8 +3058,14 @@ export class Realm {
         '/.*',
         SupportedMimeType.OctetStream,
         this.upsertBinaryFile.bind(this),
+        ACL_ONLY,
       )
-      .get('/.*', SupportedMimeType.FileMeta, this.getFileMeta.bind(this))
+      .get(
+        '/.*',
+        SupportedMimeType.FileMeta,
+        this.getFileMeta.bind(this),
+        ACL_ONLY,
+      )
       .head(
         '/.*',
         SupportedMimeType.CardSource,
@@ -2965,6 +3082,7 @@ export class Realm {
         '/.+',
         SupportedMimeType.CardSource,
         this.removeCardSource.bind(this),
+        ACL_ONLY,
       )
       .get(
         '.*/',
@@ -5718,6 +5836,7 @@ export class Realm {
     let scope = newOperationScope(this.operationCore, {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
+      route: ENVELOPE_ROUTE,
     });
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
@@ -5868,7 +5987,7 @@ export class Realm {
       // Resolved once, and only for a batch that explains or validates: it can
       // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
-      for (let { entry, target, definition } of resolved) {
+      for (let { entry, target, definition, decision } of resolved) {
         if (isWrite(definition.base)) {
           continue;
         }
@@ -5878,14 +5997,21 @@ export class Realm {
             definition.base === 'explain' || definition.base === 'validate'
               ? await (principal ??= this.#sessionPrincipal(requestContext))
               : undefined;
-          result = await runOperation(this.operationCore, {
-            target,
-            name: entry.name,
-            ...(entry.data ? { params: paramsFor(entry) } : {}),
-            ...caller,
-            ...this.#readDeclined(requestContext),
-            ...(asker ? { principal: asker } : {}),
-          });
+          // On the decision the entry resolved to, so the gate decides each
+          // entry once.
+          result = await runOperation(
+            this.operationCore,
+            {
+              target,
+              name: entry.name,
+              ...(entry.data ? { params: paramsFor(entry) } : {}),
+              ...caller,
+              ...this.#readDeclined(requestContext),
+              ...(asker ? { principal: asker } : {}),
+              route: ENVELOPE_ROUTE,
+            },
+            { gated: { definition, decision } },
+          );
         } catch (err: unknown) {
           throw atEntry(err, entry.position);
         }
@@ -7564,15 +7690,27 @@ export class Realm {
     // `_scoped-css/` prefix, not just the filename shape, so a realm file
     // whose path merely looks hashed isn't shadowed — `scopedCSSServingHref`
     // is the only producer of these hrefs and always roots them under the
-    // prefix. Inherits realm-read auth like capture serving; GET only for
-    // the same HEAD-oracle reason.
+    // prefix. GET only, for the same HEAD-oracle reason as capture serving.
+    //
+    // A stylesheet is part of the markup that references it, not code: the
+    // inline form carries the same bytes inside the href itself, and a search
+    // serves those hrefs to every caller it serves the row to. So in a realm
+    // that names a policy, the serve consumes the ACL's outcome and answers
+    // every authenticated caller the policy judges, not only the realm's
+    // readers. A realm with no policy serves no row to a caller who may not
+    // read it, and keeps the ACL's refusal. The lookup stays scoped to this
+    // realm's own `scoped_css` rows, so a hash names only a stylesheet this
+    // realm's index references. An archived realm seals such a caller only
+    // where it would serve them a stylesheet, as the search seals them only
+    // where a grant would answer with a row, so a hash it holds no stylesheet
+    // for is not found whether or not the realm is archived.
     if (
       request.method === 'GET' &&
       localPath.startsWith(SCOPED_CSS_SERVING_PREFIX) &&
       isHashedScopedCSSRequest(localPath)
     ) {
       return {
-        consumesCoarseOutcome: false,
+        ...APPLIES_ARCHIVED_SEAL,
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }
@@ -7764,10 +7902,13 @@ export class Realm {
   // `HEAD` by the same test on its own (see `headCard`). The seal answers a
   // `HEAD` of a sealed realm before it is routed, so neither reaches one.
   //
-  // Admitted means handed to the policy gate, not granted: every operation a
-  // consuming route resolves for this request is resolved with the ACL's
-  // refusal on it, and the gate refuses whatever no grant admits. So a caller
-  // is admitted only where a gate has something to decide:
+  // Admitted means handed to the realm's policy, not granted: every operation
+  // a consuming route resolves for this request is resolved with the ACL's
+  // refusal on it, and the gate refuses whatever no grant admits. The hashed
+  // stylesheet serve resolves no operation, and serves whoever is admitted
+  // here, since a stylesheet goes with the markup a grant serves (see
+  // `#routeRequest`). So a caller is admitted only where a policy has them to
+  // judge:
   //
   // - The realm names a policy. A realm with none answers every refusal
   //   exactly as the ACL gave it.
@@ -7942,11 +8083,24 @@ export class Realm {
 
   // Every route with whether it consumes the realm ACL's recorded outcome,
   // for checking that set without reaching each route: the router's routes,
-  // then the fallback file and module serve per method. The path-prefix
-  // dispatches in `#routeRequest` consume nothing and are not listed.
+  // the hashed stylesheet serve, then the fallback file and module serve per
+  // method. The stylesheet serve is the one path-prefix dispatch in
+  // `#routeRequest` that consumes it; the others consume nothing and are not
+  // listed.
   routeDescriptions(): DispatchDescription[] {
     return [
       ...this.#router.routes(),
+      {
+        method: 'GET' as const,
+        mimeType: '*' as const,
+        path: `/${SCOPED_CSS_SERVING_PREFIX}*` as const,
+        consumesCoarseOutcome: true,
+        coarseReadOnly: false,
+        appliesArchivedSeal: true,
+        grantableBytes: false,
+        operationalEndpoint: false,
+        aclOnly: false,
+      },
       ...ROUTER_METHODS.map((method) => ({
         method,
         mimeType: '*' as const,
@@ -7956,6 +8110,7 @@ export class Realm {
         appliesArchivedSeal: false,
         grantableBytes: method === 'GET' || method === 'HEAD',
         operationalEndpoint: false,
+        aclOnly: false,
       })),
     ];
   }
@@ -8183,6 +8338,7 @@ export class Realm {
             // what its headers are computed from.
             headersOnly: request.method === 'HEAD' ? true : undefined,
             ...(gated ? { coarseDeclined: true as const } : {}),
+            route: byteRoute('module'),
           },
         );
       } catch (e: unknown) {
@@ -8759,6 +8915,7 @@ export class Realm {
     // coordination exists to prevent.
     let stored = await this.#readStoredSource(caller, fileRef.path, {
       skipStoredFileMeta: true,
+      route: byteRoute('module'),
     });
     if (!stored) {
       // The path resolved to a file and that file is gone: a delete landing
@@ -9354,6 +9511,9 @@ export class Realm {
     if (rows.length === 0 || typeof rows[0].css !== 'string') {
       return notFound(request, requestContext);
     }
+    if (requestContext.archivedSeal) {
+      throw requestContext.archivedSeal;
+    }
     return createResponse({
       body: scopedCSSInjectorSource(pathname, rows[0].css),
       init: {
@@ -9705,11 +9865,13 @@ export class Realm {
     localPath: LocalPath,
     {
       coarseDeclined,
+      route = byteRoute('source'),
       ...opts
     }: {
       headersOnly?: true;
       skipStoredFileMeta?: true;
       coarseDeclined?: true;
+      route?: PolicyRoute;
     } = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
@@ -9724,6 +9886,7 @@ export class Realm {
           name: 'readSource',
           ...caller,
           ...(coarseDeclined ? { coarseDeclined } : {}),
+          route,
         },
         // No route reaching here validates on the read's `version` — each
         // builds its own validator from a fingerprint of the file, hashed from
@@ -12201,6 +12364,7 @@ export class Realm {
     let scope = newOperationScope(core, {
       caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
       coarseDeclined,
+      route: cardJsonRoute(request.method),
     });
     let decision = await resolveFacadeWrite(core, target, base, scope);
     let assertSideLoads = (included: readonly unknown[] | undefined) => {
@@ -12753,6 +12917,7 @@ export class Realm {
             name: 'read',
             ...this.#callerOf(request, requestContext),
             ...coarseDeclined,
+            route: cardJsonRoute('HEAD'),
           },
           // No budget flag: a headers-only read assembles no closure, so there
           // is nothing for it to bound.
@@ -13206,6 +13371,7 @@ export class Realm {
           clientRequestId: caller.clientRequestId,
           ...(caller.coarseDeclined ? { coarseDeclined: true } : {}),
           ...(caller.seal ? { seal: caller.seal } : {}),
+          route: cardJsonRoute('GET'),
         },
         { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
       );
@@ -15860,7 +16026,27 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { info: realmInfo } = await this.parseRealmInfo();
+    let { info } = await this.parseRealmInfo();
+    // A caller the realm ACL declined reaches this route only when the
+    // realm's policy is the one to judge them, and is answered whether or not
+    // it grants them anything (see `CONSUMES_COARSE_OUTCOME`). They are shown
+    // how the realm presents itself, its name, icon and background, which a
+    // view of a card a grant admits them to shows, and nothing about how the
+    // realm is run: who serves it, whom its ACL names, or whether and when it
+    // is published. Its visibility is given as `private`, which is what the
+    // realm is to a caller its ACL names nowhere.
+    let realmInfo: RealmInfo =
+      requestContext.coarseAllowed === false
+        ? {
+            name: info.name,
+            backgroundURL: info.backgroundURL,
+            iconURL: info.iconURL,
+            showAsCatalog: null,
+            visibility: 'private',
+            publishable: null,
+            lastPublishedAt: null,
+          }
+        : info;
 
     let doc = {
       data: {

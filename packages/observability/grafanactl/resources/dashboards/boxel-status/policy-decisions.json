@@ -1,0 +1,1471 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxel-policy-decisions"
+  },
+  "spec": {
+    "annotations": {
+      "list": []
+    },
+    "description": "Operations-permission policy decisions, search-lane scoping, snapshot reads, compiles and their costs, from the boxel:operations channel. See the policy-telemetry skill for how to read it.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [],
+    "panels": [
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "panels": [],
+        "title": "Overview",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Policy decisions in the last 5 minutes of the range: allow, deny and error, decided at the gate or under the write lock. Explain decisions (hypothetical) and capability checks are not counted.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 1
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=~\"allow|deny|error\" | hypothetical=\"false\" [5m])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Decisions (5m)",
+        "type": "stat",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Denied decisions in the last 5 minutes, any reason. A card the index has no row for (reason target-missing) counts too.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 1
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=\"deny\" | hypothetical=\"false\" [5m])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Denials (5m)",
+        "type": "stat",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Decisions where a predicate threw (reason predicate-threw), whatever the caller was told: a caller who may not read the realm gets a 404 for it, so a 500 count misses these.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 1
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | reason=\"predicate-threw\" | hypothetical=\"false\" [5m])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Predicate errors (5m)",
+        "type": "stat",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Compiles in the last 5 minutes that produced a policy that did not compile as a whole. Every caller such a realm reaches only through its policy is refused with a 500.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 1
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-compile\" | realmURL=~\".*${realm}.*\" | uncompilable=\"true\" [5m])) or vector(0)",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Uncompilable policies (5m)",
+        "type": "stat",
+        "interval": "1m"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 5
+        },
+        "id": 6,
+        "panels": [],
+        "title": "Decisions",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Every real policy decision, by outcome. Gate: one record per decision \u2014 a read at the gate; a write the gate admits or refuses outright at the gate; a write left to the write lock under the lock (its gate record says pending and is left out here). Search: one record per realm a search consulted through its policy \u2014 scoped (some grant admits rows), none, or failed. Explain decisions are hypothetical and left out.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 60,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 6
+        },
+        "id": 7,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=~\"allow|deny|error\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "gate {{outcome}}",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "search {{outcome}}",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Decisions by outcome",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "How often callers the realm ACL declined reach the policy gate, by realm and by what the ACL declined (all, or writes only). A caller the ACL allows never reaches the gate and records nothing, so a realm whose callers are all realm-authorized should sit at zero; traffic here for such a realm means the ordering guarantee broke. Capability checks are excluded: they are their own kind. A write the gate leaves to the lock counts here once, as its gate-time pending record; a pending record with no lock record after it is a write whose request ended before the lock (a failed batch, an aborted request, an explain), not a backlog.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 6
+        },
+        "id": 8,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL, coarseDeclined) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | decidedAt=\"gate\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{realmURL}} gate ({{coarseDeclined}})",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{realmURL}} search",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Gate reach by realm",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Denials over the selected range, by realm, the reason, the rules matched on the target's type and the grants in them for the operation. A `predicate` reason means every listed grant's predicate was evaluated and none held; an empty grant list means no grant names the operation. Query B adds searches a realm's policy scoped to nothing (search-lane outcome none), by realm and the query they ran.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto"
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 14,
+          "x": 0,
+          "y": 14
+        },
+        "id": 9,
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Value"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(25, sum by (realmURL, operation, reason, rules, grants) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=\"deny\" | hypothetical=\"false\" [$__range])))",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant",
+            "instant": true
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(25, sum by (realmURL, operation, transport) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | outcome=\"none\" | hypothetical=\"false\" [$__range])))",
+            "legendFormat": "",
+            "refId": "B",
+            "queryType": "instant",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              }
+            }
+          }
+        ],
+        "title": "Denials by rule and grant",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Real decisions by the surface that reached the gate: envelope (_operations), card-json (GET/HEAD/POST/PATCH/DELETE), byte-route (source/module), internal.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 10,
+          "x": 14,
+          "y": 14
+        },
+        "id": 10,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (transport, route) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | outcome=~\"allow|deny|error\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{transport}} {{route}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Decisions by transport",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 23
+        },
+        "id": 11,
+        "panels": [],
+        "title": "Faults",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "A: decisions where a predicate threw, from the decision records. B: the realm:policy fault warning, which logs at most one line per predicate per minute, so B undercounts and is the place to read the error itself. B also counts throws under an explain or a capability check, which A leaves out, so B can rise while A stays flat.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        },
+        "id": 12,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | reason=\"predicate-threw\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{realmURL}} (records)",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"a predicate in the policy of realm\" |= \"${realm}\" [$__interval]))",
+            "legendFormat": "realm:policy fault lines",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Predicate error rate",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Compiles (and revalidations) of a realm's policy that left it uncompilable, by realm. Also counts decisions refused because the policy could not be loaded.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        },
+        "id": 13,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-compile\" | realmURL=~\".*${realm}.*\" | uncompilable=\"true\" [$__interval]))",
+            "legendFormat": "{{realmURL}} compiles",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | reason=\"policy-unavailable\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{realmURL}} refusals",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Policies failing to compile, per realm",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        },
+        "id": 14,
+        "panels": [],
+        "title": "Search lane",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "One record per realm a search consulted through its policy: scoped (some grant contributed a filter), none, or failed (the policy could not be judged; the realm counts as not answering). By transport: search, federated-search, envelope (an entry's query target).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 60,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 33
+        },
+        "id": 15,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (outcome, transport) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{outcome}} {{transport}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Search-lane outcomes",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Which grants contributed filters to scoped searches over the selected range.",
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto"
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 33
+        },
+        "id": 16,
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Value"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(25, sum by (realmURL, operation, grants) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | outcome=\"scoped\" | hypothetical=\"false\" [$__range])))",
+            "legendFormat": "",
+            "refId": "A",
+            "queryType": "instant",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              }
+            }
+          }
+        ],
+        "title": "Contributing grants",
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 41
+        },
+        "id": 17,
+        "panels": [],
+        "title": "Snapshot reads (Tier 1/2)",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Each evaluation of a predicate annotated snapshot: true, at the gate or under the write lock: a window, measured in index latency, during which a card that no longer satisfies the predicate is still admitted.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 42
+        },
+        "id": 18,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL, grant, decidedAt) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-snapshot-read\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{realmURL}} {{grant}} @{{decidedAt}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Snapshot reads by grant",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Whether the predicate held, did not hold, or threw against the snapshot; indexed=false means the target had no index row and so was not admitted.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 60,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 42
+        },
+        "id": 19,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (outcome, indexed) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-snapshot-read\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" [$__interval]))",
+            "legendFormat": "{{outcome}} indexed={{indexed}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Snapshot reads by outcome",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 50
+        },
+        "id": 20,
+        "panels": [],
+        "title": "Performance",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "evaluationMs: from the gate's entry to its answer \u2014 typing the target, loading the (cached) policy, matching rules, and evaluating predicates. Under the lock, the lock's own re-judgment.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 51
+        },
+        "id": 21,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "mean",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
+            "legendFormat": "p50",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
+            "legendFormat": "p95",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Decision evaluation duration p50/p95",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "predicateMs: time spent evaluating predicates within one decision (only decisions that evaluated any). The rest of evaluationMs is matching and reading the target.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 51
+        },
+        "id": 22,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "mean",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | predicates > 0 | hypothetical=\"false\" | unwrap predicateMs [$__interval]) by ()",
+            "legendFormat": "p50",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-decision\" | realmURL=~\".*${realm}.*\" | predicates > 0 | hypothetical=\"false\" | unwrap predicateMs [$__interval]) by ()",
+            "legendFormat": "p95",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Predicate time p50/p95",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "evaluationMs of judging one realm's policy for one search: matching query grants and lowering their filters.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 51
+        },
+        "id": 23,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "mean",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.5, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
+            "legendFormat": "p50",
+            "refId": "A",
+            "queryType": "range"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-search-scope\" | realmURL=~\".*${realm}.*\" | hypothetical=\"false\" | unwrap evaluationMs [$__interval]) by ()",
+            "legendFormat": "p95",
+            "refId": "B",
+            "queryType": "range"
+          }
+        ],
+        "title": "Search-lane duration p50/p95",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Policy cache reads of the policy card by realm: compiled (rules rebuilt) or revalidated (still current). A high compile rate means the cache keeps being invalidated.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 59
+        },
+        "id": 24,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "sum"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "sum by (realmURL, outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-compile\" | realmURL=~\".*${realm}.*\" [$__interval]))",
+            "legendFormat": "{{realmURL}} {{outcome}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Policy compiles",
+        "type": "timeseries",
+        "interval": "1m"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "durationMs of one compile or revalidation, which a caller waiting on a cold or stale cache pays.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "mode": "none",
+                "group": "A"
+              }
+            },
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 59
+        },
+        "id": 25,
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "mean",
+              "max"
+            ]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"policy-compile\" | realmURL=~\".*${realm}.*\" | unwrap durationMs [$__interval]) by (outcome)",
+            "legendFormat": "{{outcome}}",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "title": "Compile duration p95",
+        "type": "timeseries",
+        "interval": "1m"
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 41,
+    "tags": [
+      "policy",
+      "permissions",
+      "boxel"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Substring of a realm URL. Empty matches every realm.",
+          "hide": 0,
+          "label": "Realm",
+          "name": "realm",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "utc",
+    "title": "Policy Decisions",
+    "weekStart": ""
+  }
+}

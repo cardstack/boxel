@@ -16,16 +16,19 @@ function makeDBAdapter(
   rows: Record<string, unknown>[],
   loaderEpoch?: string,
 ): DBAdapter {
-  // `readRealmLoaderEpoch` reads `realm_generations`; every other query the
-  // task runs (permission fetches) wants the permission `rows`. Branch on the
-  // SQL so the epoch read doesn't get handed a permission row (whose
-  // `loader_epoch` would be undefined → the '0' sentinel).
+  // `readRealmLoaderEpoch` reads `realm_generations`, and the lookup of the
+  // realms that name a policy reads `realm.json` rows, of which there are
+  // none here; every other query the task runs (permission fetches) wants the
+  // permission `rows`. Branch on the SQL so neither is handed a permission row
+  // (whose `loader_epoch` would be undefined → the '0' sentinel).
   let execute = async (sql: string, _opts?: ExecuteOptions) =>
     (/realm_generations/i.test(sql)
       ? loaderEpoch !== undefined
         ? [{ loader_epoch: loaderEpoch }]
         : []
-      : rows) as any;
+      : /realm\.json/i.test(sql)
+        ? []
+        : rows) as any;
   return {
     kind: 'pg',
     notify: async () => {},
