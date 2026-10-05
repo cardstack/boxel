@@ -37,7 +37,7 @@ APP_BASE=./ APP_LOCATION=hash pnpm --filter test-app build
 
 For a Boxel host, upload the built application and its supporting assets to a realm you control. Use relative asset paths, publish the realm through your configured environment, and open the published entry document to verify it. Keep account names, realm identifiers, credentials, and private demo URLs out of reusable source and documentation.
 
-Cards in a Boxel realm import `glimmer-motion` and `@cardstack/choreo` from the host, which supplies both packages. A site deployment also needs the application's static files and media; the packages alone do not publish the gallery.
+The built application carries its own copies of `glimmer-motion` and `@cardstack/choreo`, so a site deployment uploads its static files and media together. Cards written directly in a realm instead import both packages by name from the Boxel host.
 
 ## Checking Navigation
 
