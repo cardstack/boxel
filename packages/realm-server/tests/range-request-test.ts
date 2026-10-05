@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
+import type { FileRef, RealmAdapter } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   withRealmPath,
@@ -18,6 +19,7 @@ module(basename(import.meta.filename), function () {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let request: RealmRequest;
     let serverRequest: SuperTest<Test>;
+    let adapter: RealmAdapter;
 
     setupPermissionedRealmCached(hooks, {
       fixture: 'simple',
@@ -28,6 +30,7 @@ module(basename(import.meta.filename), function () {
       },
       onRealmSetup: (args) => {
         serverRequest = args.request;
+        adapter = args.testRealmAdapter;
         request = withRealmPath(args.request, realmURL);
       },
     });
@@ -82,6 +85,67 @@ module(basename(import.meta.filename), function () {
         new Uint8Array(response.body),
         bytes,
         'full body round-trips',
+      );
+    });
+
+    // A path stat on a network filesystem can describe a version of the file
+    // that another host has since replaced, so the size a file ref was opened
+    // with can be larger than the bytes its stream delivers. Declaring that
+    // size leaves the client waiting for bytes that never come.
+    async function withStaleStatSize<T>(
+      extraBytes: number,
+      run: () => Promise<T>,
+    ): Promise<T> {
+      let openFile = adapter.openFile.bind(adapter);
+      adapter.openFile = async (path) => {
+        let ref: FileRef | undefined = await openFile(path);
+        if (ref?.size != null) {
+          Object.defineProperty(ref, 'size', { value: ref.size + extraBytes });
+        }
+        return ref;
+      };
+      try {
+        return await run();
+      } finally {
+        adapter.openFile = openFile;
+      }
+    }
+
+    test('a full GET declares the length of the bytes it sends, not a stale stat', async function (assert) {
+      await uploadSample('/stale-stat.png');
+      let response = await withStaleStatSize(5, () =>
+        getSample('/stale-stat.png').timeout(5000),
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['content-length'],
+        String(bytes.length),
+        'Content-Length is the length of the body that is sent',
+      );
+      assert.deepEqual(
+        new Uint8Array(response.body),
+        bytes,
+        'the whole body arrives',
+      );
+    });
+
+    test('the card+source read declares the length of the bytes it sends, not a stale stat', async function (assert) {
+      await uploadSample('/stale-stat-source.png');
+      let response = await withStaleStatSize(5, () =>
+        getSource('/stale-stat-source.png').timeout(5000),
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['content-length'],
+        String(bytes.length),
+        'Content-Length is the length of the body that is sent',
+      );
+      assert.deepEqual(
+        new Uint8Array(response.body),
+        bytes,
+        'the whole body arrives',
       );
     });
 

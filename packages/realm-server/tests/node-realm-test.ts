@@ -235,3 +235,79 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
     }
   });
 });
+
+module(
+  `${basename(import.meta.filename)} | file content and length`,
+  function () {
+    async function readAll(stream: NodeJS.ReadableStream): Promise<string> {
+      let chunks: Buffer[] = [];
+      for await (let chunk of stream) {
+        chunks.push(Buffer.from(chunk as Buffer));
+      }
+      return Buffer.concat(chunks).toString('utf8');
+    }
+
+    test('openContent reports the length of the bytes it streams, not the earlier stat', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello world</p>');
+        let adapter = new NodeAdapter(dir);
+        let ref = await adapter.openFile('page.html');
+
+        // The file changes between the stat the ref was opened with and the
+        // read, as when another host rewrites it.
+        fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello</p>');
+        let opened = ref!.openContent!();
+
+        assert.strictEqual(
+          opened.size,
+          Buffer.byteLength('<p>hello</p>'),
+          'the length describes the content that is streamed',
+        );
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          '<p>hello</p>',
+          'the stream delivers the content the length describes',
+        );
+        assert.strictEqual(
+          ref!.content,
+          opened.content,
+          'content and openContent share one stream',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('write replaces a file whole, so a read already open keeps the content it opened', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        let adapter = new NodeAdapter(dir);
+        let original = 'a'.repeat(64 * 1024);
+        await adapter.write('page.html', original);
+        let opened = (await adapter.openFile('page.html'))!.openContent!();
+
+        await adapter.write('page.html', 'b');
+
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          original,
+          'the open read sees the whole file it opened, not a truncated rewrite',
+        );
+        assert.strictEqual(opened.size, original.length);
+        assert.strictEqual(
+          fsExtra.readFileSync(join(dir, 'page.html'), 'utf8'),
+          'b',
+          'the new content is in place',
+        );
+        assert.deepEqual(
+          fsExtra.readdirSync(dir),
+          ['page.html'],
+          'no staging file is left beside it',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+  },
+);

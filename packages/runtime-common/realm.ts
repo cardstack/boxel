@@ -864,6 +864,16 @@ export interface FileRef {
     start: number,
     end: number,
   ) => ReadableStream<Uint8Array> | Readable;
+  // Open `content` and report the byte length of exactly what it delivers,
+  // for an adapter whose `size` can disagree with the bytes it streams (a
+  // path stat on a network filesystem can describe a version of the file
+  // another host has since replaced). The returned content is the same stream
+  // `content` yields. `size` is absent when the adapter could not measure the
+  // opened content.
+  openContent?: () => {
+    content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
+    size?: number;
+  };
 
   [key: symbol]: object;
 }
@@ -9978,6 +9988,19 @@ export class Realm {
       ...(handle.createRangeStream
         ? { createRangeStream: handle.createRangeStream }
         : {}),
+      // The length a whole-body response declares comes with the bytes, from
+      // the operation that opens them, rather than from either stat.
+      ...(source.openBody
+        ? {
+            openContent: () => {
+              let opened = source.openBody!();
+              return {
+                content: opened.body as FileRef['content'],
+                ...(opened.size != null ? { size: opened.size } : {}),
+              };
+            },
+          }
+        : {}),
     };
     // A shimmed module is not stored content at all, and the response says so
     // in a header of its own; the marker rides on the handle.
@@ -10071,11 +10094,22 @@ export class Realm {
     // response must never pay for (and then strand) a full-file stream.
     // String bodies are left to the HTTP layer, which measures and sets
     // Content-Length for them itself.
+    //
+    // A `GET` that asks for no byte range is answered with the whole file, so
+    // the stream is opened first and the length taken from what it will send.
+    // A declared length larger than the body leaves the client waiting for
+    // bytes that never arrive; one that is smaller cuts the body short.
+    let openedContent =
+      request.method === 'GET' && !request.headers.get('range')
+        ? ref.openContent?.()
+        : undefined;
     let sliceableBytes =
-      ref.size == null && ref.content instanceof Uint8Array
+      !openedContent && ref.size == null && ref.content instanceof Uint8Array
         ? ref.content
         : undefined;
-    let totalSize = ref.size ?? sliceableBytes?.byteLength;
+    let totalSize = openedContent
+      ? openedContent.size
+      : (ref.size ?? sliceableBytes?.byteLength);
     if (totalSize != null) {
       headers['content-length'] = String(totalSize);
     }
@@ -10167,13 +10201,14 @@ export class Realm {
       });
     }
 
+    let content = openedContent?.content ?? ref.content;
     if (
-      ref.content instanceof ReadableStream ||
-      ref.content instanceof Uint8Array ||
-      typeof ref.content === 'string'
+      content instanceof ReadableStream ||
+      content instanceof Uint8Array ||
+      typeof content === 'string'
     ) {
       return createResponse({
-        body: ref.content as BodyInit,
+        body: content as BodyInit,
         init: { headers },
         requestContext,
       });
@@ -10190,7 +10225,7 @@ export class Realm {
       requestContext,
     }) as ResponseWithNodeStream;
 
-    response.nodeStream = ref.content;
+    response.nodeStream = content;
     return response;
   }
 

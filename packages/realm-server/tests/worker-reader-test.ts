@@ -7,6 +7,7 @@ import fsExtra from 'fs-extra';
 const { createReadStream } = fsExtra;
 import {
   getReader,
+  ReaderStallError,
   type ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 
@@ -21,6 +22,35 @@ function okResponseWithNodeStream(
   }) as ResponseWithNodeStream;
   response.nodeStream = stream as ResponseWithNodeStream['nodeStream'];
   return response;
+}
+
+const lastModifiedHeaders = {
+  'last-modified': 'Tue, 05 Nov 2024 01:02:03 GMT',
+};
+
+// A response whose body sends `sent` and then neither ends nor sends anything
+// more, declaring the length of `declared` — the shape of a body that stops
+// short of its Content-Length.
+function stalledBodyResponse(sent: string, declared: string): Response {
+  let encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(sent));
+      },
+    }),
+    {
+      status: 200,
+      headers: {
+        ...lastModifiedHeaders,
+        'content-length': String(encoder.encode(declared).byteLength),
+      },
+    },
+  );
+}
+
+function completeResponse(content: string): Response {
+  return new Response(content, { status: 200, headers: lastModifiedHeaders });
 }
 
 module(basename(import.meta.filename), function () {
@@ -74,5 +104,102 @@ module(basename(import.meta.filename), function () {
     let result = await reader.readFile(new URL(`${realmURL}missing.txt`));
 
     assert.strictEqual(result, undefined, 'a 404 reads as not found');
+  });
+
+  test('readFile abandons a body that stops arriving and reads it again', async function (assert) {
+    let requests = 0;
+    let reader = getReader(
+      async () => {
+        requests++;
+        return requests === 1
+          ? stalledBodyResponse('<p>hel', '<p>hello</p>')
+          : completeResponse('<p>hello</p>');
+      },
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    let result = await reader.readFile(new URL(`${realmURL}page.html`));
+
+    assert.strictEqual(requests, 2, 'the stalled read is retried once');
+    assert.strictEqual(result?.content, '<p>hello</p>', 'the retry is used');
+  });
+
+  test('readFile reports a stall it cannot get past', async function (assert) {
+    let requests = 0;
+    let reader = getReader(
+      async () => {
+        requests++;
+        return stalledBodyResponse('<p>hel', '<p>hello</p>');
+      },
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    await assert.rejects(
+      reader.readFile(new URL(`${realmURL}page.html`)),
+      (error: unknown) =>
+        error instanceof ReaderStallError && error.phase === 'body',
+      'the read fails with a stall in the body',
+    );
+    assert.strictEqual(requests, 2, 'it was tried twice');
+  });
+
+  test('readFile abandons a response that never arrives, even from a fetch that ignores its signal', async function (assert) {
+    let requests = 0;
+    let reader = getReader(
+      async () => {
+        requests++;
+        if (requests === 1) {
+          return new Promise<Response>(() => undefined);
+        }
+        return completeResponse('hello');
+      },
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    let result = await reader.readFile(new URL(`${realmURL}page.txt`));
+
+    assert.strictEqual(requests, 2, 'the stalled request is retried once');
+    assert.strictEqual(result?.content, 'hello');
+  });
+
+  test('readFile does not retry a failure a fresh request cannot fix', async function (assert) {
+    let requests = 0;
+    let reader = getReader(
+      async () => {
+        requests++;
+        return new Response('hello', { status: 200 });
+      },
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    await assert.rejects(
+      reader.readFile(new URL(`${realmURL}page.txt`)),
+      /has no 'last-modified' header/,
+    );
+    assert.strictEqual(requests, 1, 'tried once');
+  });
+
+  test('readStream abandons a response that never arrives', async function (assert) {
+    let requests = 0;
+    let reader = getReader(
+      async () => {
+        requests++;
+        if (requests === 1) {
+          return new Promise<Response>(() => undefined);
+        }
+        return completeResponse('hello');
+      },
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    let result = await reader.readStream(new URL(`${realmURL}page.txt`));
+
+    assert.strictEqual(requests, 2, 'the stalled request is retried once');
+    assert.ok(result?.stream, 'the retry is used');
   });
 });

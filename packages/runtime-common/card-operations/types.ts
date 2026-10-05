@@ -835,6 +835,17 @@ export interface OperationSourceResult {
   // from it afterwards. A write landing in between pairs one with the other,
   // the same way it does for a byte route reading the same handle.
   body?: OperationSourceBody;
+  // Opens `body` and reports the byte length of exactly what it delivers,
+  // where the adapter can measure the bytes it opened. `size` above comes
+  // from the stat the handle opened with, and on a network filesystem that
+  // stat can describe a version of the file another host has since replaced;
+  // a response that declares it as `Content-Length` while streaming the
+  // current bytes declares a length its body does not have. A facade sending
+  // the whole body takes the length from here. The content returned is the
+  // same stream `body` yields, so reading both opens one stream. Absent in
+  // the headers-only mode and for an adapter that cannot measure what it
+  // opens.
+  openBody?: () => { body: OperationSourceBody; size?: number };
 }
 
 export type OperationSourceBody =

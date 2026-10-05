@@ -37,6 +37,9 @@ const {
   createWriteStream,
   renameSync,
   removeSync,
+  openSync,
+  fstatSync,
+  closeSync,
 } = fsExtra;
 import { join } from 'path';
 import { Duplex } from 'node:stream';
@@ -204,18 +207,43 @@ export class NodeAdapter implements RealmAdapter {
     if (!stat || stat.isDirectory()) {
       return undefined;
     }
-    let lazyStream: ReadStream;
+    // Opening is lazy because a consumer that only checks for the path, or
+    // reads its metadata, must not be left holding an unconsumed stream.
+    //
+    // `size` above comes from a path stat, and on a network filesystem a path
+    // stat can be answered from the client's attribute cache: when another
+    // host has just rewritten the file, it reports the length the file had
+    // before. Opening the file revalidates its attributes (close-to-open
+    // consistency), so the length is taken from the open descriptor and the
+    // stream reads from that same descriptor. That is the length a response
+    // can declare for this body: it describes the bytes the stream delivers,
+    // where the path stat's length may not.
+    let opened: { content: ReadStream; size?: number } | undefined;
+    let open = () => {
+      if (!opened) {
+        let fd: number | undefined;
+        try {
+          fd = openSync(absolutePath, 'r');
+          let size = fstatSync(fd).size;
+          opened = { content: createReadStream(absolutePath, { fd }), size };
+        } catch (_err) {
+          if (fd !== undefined) {
+            closeSync(fd);
+          }
+          // A file deleted since the stat above surfaces as the stream's own
+          // error when it is read, which is where consumers already handle a
+          // vanished file. No length is claimed for it.
+          opened = { content: createReadStream(absolutePath) };
+        }
+      }
+      return opened;
+    };
     return {
       path,
       get content() {
-        // making this lazy is important because it means that consumers who are
-        // only interested in checking for the existence of the path and never
-        // consume the content don't leave an unconsumed stream.
-        if (!lazyStream) {
-          lazyStream = createReadStream(absolutePath);
-        }
-        return lazyStream;
+        return open().content;
       },
+      openContent: open,
       lastModified: unixTime(stat.mtime.getTime()),
       lastModifiedMs: stat.mtimeMs,
       size: stat.size,
@@ -228,9 +256,21 @@ export class NodeAdapter implements RealmAdapter {
     path: string,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult> {
+    // Written beside the file and renamed onto it, which is atomic, so a
+    // concurrent reader holds either the old file or the new one and never a
+    // file truncated mid-write — a read that saw part of a rewrite would come
+    // up shorter than the length its response declared. The staging name is
+    // one the realm treats as no part of itself, and the per-file write locks
+    // the realm takes keep two writers of one path from sharing it.
     let absolutePath = join(this.realmDir, path);
-    ensureFileSync(absolutePath);
-    writeFileSync(absolutePath, contents);
+    let stagedPath = join(this.realmDir, partialWritePath(path as LocalPath));
+    try {
+      ensureFileSync(stagedPath);
+      writeFileSync(stagedPath, contents);
+      renameSync(stagedPath, absolutePath);
+    } finally {
+      removeSync(stagedPath);
+    }
     let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
