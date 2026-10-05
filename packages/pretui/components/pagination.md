@@ -32,12 +32,11 @@ Where it is behind Web Awesome, and it is a fair distance: no summary ("11–20 
 
 No APG pattern; governed by WCAG **2.4.8 Location** (AAA — this is the criterion pagination exists to satisfy), **2.4.4 Link Purpose**, **4.1.2** and **2.5.8 Target Size**.
 
-What is right: the root is a `<nav aria-label="Pagination">`, so it is discoverable by landmark navigation and distinguishable from other navs. The active page carries `aria-current="page"` (alongside the visual `data-state="active"`), which is the one required property of the pattern. Previous/Next carry `aria-label`. All controls are ordinary tab stops, which is correct — pagination is not a roving-tabindex widget.
+What is right: the root is a `<nav aria-label="Pagination">`, so it is discoverable by landmark navigation and distinguishable from other navs. The active page carries `aria-current="page"` (alongside the visual `data-state="active"`), which is the one required property of the pattern. Previous/Next carry `aria-label`. All controls are ordinary tab stops, which is correct — pagination is not a roving-tabindex widget. At either end the edge arrow is marked `aria-disabled="true"` rather than natively `disabled`, so it stays in the tab order — a keyboard user tabbing backward into the strip at page 1 still lands on Previous and hears that it is unavailable — and a press on it does nothing and reports nothing. This is the choice Web Awesome makes.
 
 Gaps, in order:
 
 - **Page buttons have no accessible context.** "3" is announced bare; `aria-label="Page 3"` (or `aria-label="Go to page 3"`) is the convention. Previous/Next are labelled; the numbers are not.
-- **Edge buttons use the native `disabled` attribute**, so at page 1 the Previous button leaves the tab order entirely and a keyboard user tabbing backward into the strip lands on a page number instead. Web Awesome deliberately uses `aria-disabled` here so the control stays discoverable — the better choice, and one line.
 - **Page changes are not announced.** After clicking "3" the table content changes and nothing says so; focus stays on the button, which is right, but a polite live region ("Page 3 of 12") is what Web Awesome adds.
 - **Target size**: the buttons are `min-width: 26px; height: 26px` with a 2px gap — **below WCAG 2.5.8's 24×24 minimum once you account for the fact that 26px is the outer box and the gap is only 2px**, so adjacent targets effectively touch. Technically 26 ≥ 24 so the criterion passes, but only just, and this is the most-tapped small control in the kit.
 - The `‹` and `›` glyphs are the visible content of buttons that also carry `aria-label`, so the label wins — correct.

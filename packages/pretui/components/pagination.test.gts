@@ -35,17 +35,29 @@ module('Pretui | components/pagination', function (hooks) {
     await render(<template><Pagination @pages={{3}} /></template>);
     let prev = q('[aria-label="Previous"]') as HTMLButtonElement;
     let next = q('[aria-label="Next"]') as HTMLButtonElement;
-    // Pinned as shipped (KNOWN GAP): native `disabled` drops Previous out of
-    // the tab order at page 1. pagination.md names `aria-disabled` as the
-    // one-line fix; when it lands, flip this to aria-disabled="true".
-    assert.true(prev.disabled, 'nothing before page 1 — KNOWN GAP: native disabled, not aria-disabled');
-    assert.false(next.disabled);
+    assert.strictEqual(prev.getAttribute('aria-disabled'), 'true', 'nothing before page 1');
+    assert.false(prev.disabled, 'Previous stays in the tab order at page 1');
+    assert.strictEqual(next.getAttribute('aria-disabled'), null);
 
     await click(next);
     await click(next);
     assert.strictEqual(q('[aria-current="page"]').textContent?.trim(), '3');
-    assert.true((q('[aria-label="Next"]') as HTMLButtonElement).disabled, 'nothing after the last page');
-    assert.false((q('[aria-label="Previous"]') as HTMLButtonElement).disabled);
+    assert.strictEqual(q('[aria-label="Next"]').getAttribute('aria-disabled'), 'true', 'nothing after the last page');
+    assert.false((q('[aria-label="Next"]') as HTMLButtonElement).disabled, 'Next stays in the tab order at the last page');
+    assert.strictEqual(q('[aria-label="Previous"]').getAttribute('aria-disabled'), null);
+  });
+
+  test('Pagination ignores a press on a disabled edge arrow', async function (assert) {
+    let seen: number[] = [];
+    const record = (n: number) => seen.push(n);
+    await render(<template><Pagination @pages={{3}} @onPageChange={{record}} /></template>);
+    await click('[aria-label="Previous"]');
+    assert.strictEqual(q('[aria-current="page"]').textContent?.trim(), '1');
+    assert.deepEqual(seen, [], 'Previous at page 1 reports nothing');
+
+    await render(<template><Pagination @pages={{3}} @page={{3}} @onPageChange={{record}} /></template>);
+    await click('[aria-label="Next"]');
+    assert.deepEqual(seen, [], 'Next at the last page reports nothing');
   });
 
   test('Pagination elides the middle, keeping the ends and the neighbours of the current page', async function (assert) {

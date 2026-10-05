@@ -33,9 +33,10 @@ Governing pattern: APG **Breadcrumb**. Two of three bullets are met.
 - **Keyboard: nothing to do**, and correctly nothing is done — links are ordinary tab stops.
 - **`aria-current="page"`: missing.** The current item is a `<b>`, which conveys emphasis visually and nothing semantically. This is the one property the pattern requires and it is absent. Web Awesome applies it automatically; React Aria defaults it. One attribute on the last branch closes it.
 
+The separators are hidden from assistive tech: each `/` is `aria-hidden="true"`, so a three-level trail is read as its three crumbs, not as "Realm slash Projects slash Q3 Report" — the treatment shadcn and Web Awesome use.
+
 Further gaps:
 
-- **The separators are real text content.** `<span class='sep'>/</span>` is announced by screen readers, so a three-level trail reads "Realm slash Projects slash Q3 Report". Every reference implementation marks separators `aria-hidden="true"` (shadcn, Web Awesome) or renders them as CSS `::before` content. This is the second-clearest fix.
 - **No list semantics.** APG does not require `<ol>`, so this is not a failure — but a list would let a screen reader announce "3 items", which is useful context in a deep hierarchy. Every reference implementation uses one.
 - **The `<b>` element carries no heading or landmark role**, so the current location is not reachable except by reading the nav.
 - **Links have `text-decoration: none` at rest** and underline only on hover. Since they sit in `--muted-foreground` against the page and the current item is `--foreground`, **colour and weight are the only resting distinction between a link and non-link item** — a WCAG **1.4.1 Use of Colour** concern for the link/non-link distinction specifically. Underlining at rest, or accepting that breadcrumbs are a known convention, are the two defensible answers.

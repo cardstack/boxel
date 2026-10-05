@@ -40,10 +40,13 @@ module('Pretui | components/breadcrumb', function (hooks) {
       ],
     );
     assert.strictEqual(nav.querySelector('b')?.textContent?.trim(), 'Wuyi Origins', 'the leaf is not a link');
-    // Pinned as shipped (KNOWN GAP): the separators are real text spans with
-    // no aria-hidden, so they are announced. breadcrumb.md names
-    // aria-hidden="true" (or a CSS ::before) as the fix.
-    assert.strictEqual(nav.querySelectorAll('.sep').length, 2, 'separators sit between, not before the first — KNOWN GAP: announced, not aria-hidden');
+    let seps = Array.from(nav.querySelectorAll('.sep'));
+    assert.strictEqual(seps.length, 2, 'separators sit between, not before the first');
+    assert.deepEqual(
+      seps.map((s) => s.getAttribute('aria-hidden')),
+      ['true', 'true'],
+      'the separators are decoration, so a screen reader does not read "slash" between crumbs',
+    );
   });
 
   test('Breadcrumb renders an hrefless middle crumb as plain text, not a dead link', async function (assert) {
