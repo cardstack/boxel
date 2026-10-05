@@ -35,8 +35,13 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   // 0, so `aria-valuenow` always sits between `aria-valuemin` and
   // `aria-valuemax`. It is also what a sighted user sees: a continuous bar's
   // fill paints the exact value, and a stepped bar lights a partly reached step
-  // whole, so there the value rounds up to the number of lit steps (2.5 of 6
-  // lights and announces 3), as Meter does with a fractional level.
+  // whole, so with a whole-number `@max` the value there rounds up to the
+  // number of lit steps (2.5 of 6 lights and announces 3), as Meter does with a
+  // fractional level. Stepped mode is for small discrete totals, so a
+  // fractional `@max` isn't meant to be used there: it draws `Math.ceil(max)`
+  // steps against the raw max, and the outer `Math.min` (a no-op for a
+  // whole-number `@max`) keeps the value within `aria-valuemax` rather than
+  // matching the lit steps.
   get valueNow() {
     let value = Number.isFinite(this.args.value) ? this.args.value : 0;
     let clamped = Math.max(0, Math.min(value, this.max));
