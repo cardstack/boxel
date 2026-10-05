@@ -3,7 +3,6 @@ import { click, waitUntil } from '@ember/test-helpers';
 import * as hostChoreo from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
-import * as hostGlimmerMotion from 'glimmer-motion';
 import { animationsSettled, whatIsBusy } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -156,18 +155,95 @@ module('Integration | glimmer-motion and Choreo in cards', function (hooks) {
   });
 
   test('cards get the host’s own module objects', async function (assert) {
-    for (let [specifier, hostModule] of [
-      ['glimmer-motion', hostGlimmerMotion],
-      ['@cardstack/choreo', hostChoreo],
-    ] as const) {
+    // One row per glimmer-motion and Choreo id `shimExternals` registers,
+    // sync and async alike, each paired with the host's own import of it.
+    let shims: [string, () => Promise<object>][] = [
+      ['glimmer-motion', () => import('glimmer-motion')],
+      [
+        'glimmer-motion/layout-group',
+        () => import('glimmer-motion/layout-group'),
+      ],
+      [
+        'glimmer-motion/motion-config',
+        () => import('glimmer-motion/motion-config'),
+      ],
+      ['glimmer-motion/presence', () => import('glimmer-motion/presence')],
+      [
+        'glimmer-motion/reorder/group',
+        () => import('glimmer-motion/reorder/group'),
+      ],
+      [
+        'glimmer-motion/reorder/item',
+        () => import('glimmer-motion/reorder/item'),
+      ],
+      [
+        'glimmer-motion/test-support',
+        () => import('glimmer-motion/test-support'),
+      ],
+      ['@cardstack/choreo', () => import('@cardstack/choreo')],
+      ['@cardstack/choreo/choreo', () => import('@cardstack/choreo/choreo')],
+      ['@cardstack/choreo/steps', () => import('@cardstack/choreo/steps')],
+      [
+        '@cardstack/choreo/test-support',
+        () => import('@cardstack/choreo/test-support'),
+      ],
+      ['@cardstack/choreo/film', () => import('@cardstack/choreo/film')],
+      [
+        '@cardstack/choreo/film/clip',
+        () => import('@cardstack/choreo/film/clip'),
+      ],
+      [
+        '@cardstack/choreo/film/film',
+        () => import('@cardstack/choreo/film/film'),
+      ],
+      [
+        '@cardstack/choreo/film/graph/adjust',
+        () => import('@cardstack/choreo/film/graph/adjust'),
+      ],
+      [
+        '@cardstack/choreo/film/graph/host',
+        () => import('@cardstack/choreo/film/graph/host'),
+      ],
+      [
+        '@cardstack/choreo/film/graph/nodes',
+        () => import('@cardstack/choreo/film/graph/nodes'),
+      ],
+      [
+        '@cardstack/choreo/film/joins',
+        () => import('@cardstack/choreo/film/joins'),
+      ],
+      [
+        '@cardstack/choreo/film/overlays',
+        () => import('@cardstack/choreo/film/overlays'),
+      ],
+      [
+        '@cardstack/choreo/film/picture',
+        () => import('@cardstack/choreo/film/picture'),
+      ],
+      [
+        '@cardstack/choreo/film/plate',
+        () => import('@cardstack/choreo/film/plate'),
+      ],
+      [
+        '@cardstack/choreo/film/player',
+        () => import('@cardstack/choreo/film/player'),
+      ],
+      [
+        '@cardstack/choreo/film/rail',
+        () => import('@cardstack/choreo/film/rail'),
+      ],
+      [
+        '@cardstack/choreo/film/titles',
+        () => import('@cardstack/choreo/film/titles'),
+      ],
+    ];
+    for (let [specifier, importFromHost] of shims) {
       let cardModule: Record<string, unknown> = await loader.import(specifier);
+      let hostModule = (await importFromHost()) as Record<string, unknown>;
       let exportNames = Object.keys(hostModule);
       assert.ok(exportNames.length > 0, `${specifier} has exports`);
       assert.deepEqual(
-        exportNames.filter(
-          (name) =>
-            cardModule[name] !== (hostModule as Record<string, unknown>)[name],
-        ),
+        exportNames.filter((name) => cardModule[name] !== hostModule[name]),
         [],
         `every ${specifier} export a card sees is the host's own`,
       );
