@@ -1,3 +1,4 @@
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -14,7 +15,7 @@ import {
 import { factor } from 'choreo-gallery/lib/tempo';
 import { theme } from 'choreo-gallery/lib/theme';
 import { modifier } from 'ember-modifier';
-import { Choreo, type ChoreoContext, MotionConfig } from 'glimmer-motion';
+import { MotionConfig } from 'glimmer-motion';
 
 /**
  * The page is a <Choreo @route> region: a route swap inside it is one

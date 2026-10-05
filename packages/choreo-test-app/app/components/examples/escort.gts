@@ -1,15 +1,16 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import type {
   DeriveContext,
   SpringSpec,
   StepArgs,
   TimelineNode,
-} from 'glimmer-motion';
-import { at, Choreo, motion, StepComponent, toMs } from 'glimmer-motion';
+} from '@cardstack/choreo';
+import { at, Choreo, StepComponent, toMs } from '@cardstack/choreo';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { motion } from 'glimmer-motion';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 /**

@@ -1,10 +1,11 @@
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { array } from '@ember/helper';
 import { clearRender, find, render } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion } from 'glimmer-motion';
 import { module, test } from 'qunit';
 
 import { nextFrame } from '../../helpers/motion';

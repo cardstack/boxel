@@ -36,7 +36,8 @@
  * regions agree on — a region-relative measurement means nothing to a region
  * somewhere else on the page.
  */
-import { registerBusyProbe } from '../activity.ts';
+import { registerBusyProbe } from 'glimmer-motion';
+
 import type { ChoreoNode, Sprite } from './types.ts';
 
 /** one region's measured pass, waiting for the others before it runs */

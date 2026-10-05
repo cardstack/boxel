@@ -33,7 +33,7 @@ Test direct seeks to moments after several commands, then seek backward and forw
 
 ## API Coverage
 
-**glimmer-motion**: `PerformCommand`.
+**@cardstack/choreo**: `PerformCommand`.
 
 **ChoreoContext**: `c.Perform`.
 

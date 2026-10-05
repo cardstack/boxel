@@ -1,63 +1,12 @@
 /**
  * glimmer-motion — Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.
  * Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, …) are the same modules.
+ *
+ * `registerBusyProbe` and the participant-host API are the seams a layer built
+ * on top (such as `@cardstack/choreo`) uses to take part in settling and in
+ * motion elements' lifecycles.
  */
-export { beacon } from './beacon.ts';
-export type { ChoreoContext } from './choreo.gts';
-export { Choreo } from './choreo.gts';
-export type { AnchorRef } from './choreo/anchors.ts';
-export { after, at } from './choreo/anchors.ts';
-export type { Arming, ArmingOptions, ArmingRegion } from './choreo/arming.ts';
-export { createArming } from './choreo/arming.ts';
-export type { BeaconRef } from './choreo/beacons.ts';
-export type { Changeset } from './choreo/changeset.ts';
-export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
-export type { GestureRef } from './choreo/gesture.ts';
-export {
-  type ChoreoHost,
-  choreoHostAt,
-  choreoHostById,
-  type ChoreoProvider,
-  closestChoreo,
-} from './choreo/registry.ts';
-export type { ChoreoRun } from './choreo/run.ts';
-export type { PlanePoint } from './choreo/space.ts';
-export { appliedCamera, toLocal, toPage } from './choreo/space.ts';
-export type { StepArgs, StepArgsBase } from './choreo/steps.gts';
-export { StepComponent, toMs } from './choreo/steps.gts';
-export type {
-  Block,
-  Bounds,
-  Camera3DState,
-  Camera3DWaypoint,
-  CameraState,
-  DeliveryBy,
-  DeliveryOrder,
-  DeriveContext,
-  Easing,
-  FollowSource,
-  GateNode,
-  PerformCommand,
-  PropSource,
-  PropValue,
-  Query,
-  Rect,
-  SpringSpec,
-  Sprite,
-  Step,
-  TimelineNode,
-} from './choreo/types.ts';
-export { Film } from './film.ts';
-export type {
-  Beat as FilmBeat,
-  Cam as FilmCam,
-  Chapter as FilmChapter,
-  FilmClock,
-  FilmGrade,
-  FilmHandle,
-  Join as FilmJoin,
-  Picture as FilmPicture,
-} from './film/types.ts';
+export { type BusyProbe, registerBusyProbe } from './activity.ts';
 export { createDragControls, DragControls } from './gestures/drag-controls.ts';
 export {
   correctParentTransform,

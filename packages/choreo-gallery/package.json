@@ -52,6 +52,7 @@
     "lint:js:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@cardstack/choreo": "workspace:*",
     "@chenglou/pretext": "^0.0.8",
     "choreo-player": "workspace:*",
     "decorator-transforms": "catalog:",

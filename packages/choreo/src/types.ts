@@ -2,7 +2,8 @@
  * The vocabulary of a choreography — boxel-motion's Sprite / Changeset /
  * AnimationDefinition, as this binding keeps them. See docs/choreography.md.
  */
-import type { MotionParticipant } from '../participant.ts';
+import type { MotionParticipant } from 'glimmer-motion';
+
 import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
 import type { GestureRef } from './gesture.ts';

@@ -1,10 +1,10 @@
 # glimmer-motion
 
-The npm package of [Choreo](https://github.com/cardstack/choreo) — Cardstack.
+The [Motion](https://motion.dev) engine for Ember. `{{motion}}`, `<Presence>`, `<LayoutGroup>`,
+Reorder and drag, verified by ports of Motion's own test suites.
 
-**Motion, Choreo-graphed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
-the scene. `{{motion}}`, `<Presence>`, `<LayoutGroup>`, Reorder, drag, and `<Choreo>`. Verified by
-ports of Motion's own test suites.
+`<Choreo>`, a changeset and a timeline over a whole render pass, is a separate package built on this
+one: [`@cardstack/choreo`](../choreo).
 
 ```gts
 import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
@@ -58,16 +58,11 @@ from a Glimmer card rather than from a React translation table.
 - **Gestures** — `whileHover` / `whileTap` / `whileFocus` / `whileInView` and their handlers,
   `<MotionConfig>` tree defaults, `scrollProgress()` / `InView` over Motion's `scroll()` / `inView()`
 - **Reorder** — `<ReorderGroup>` / `<ReorderItem>`, axis `x` / `y` / `xy` (detected), auto-scroll
-- **Choreography** — `<Choreo>`: a changeset and a timeline over a whole render pass, which Motion's
-  per-element model does not have. Sequence/parallel blocks of `Tween` / `Spring` / `Move` (FLIP) /
-  `Hold` / `Wait`; removed participants stay on screen for as long as the timeline names them;
-  `{{beacon}}` points; and far matching, so one identity can cross between two regions
 - **Glimmer** — `.gts`, Glint signatures, named exports, plain-function template helpers
   (`to` / `spring` / `tween` / `styles` / `start`), and `prefers-reduced-motion` honoured by default
 - **Testing** — `glimmer-motion/test-support`: `animationsSettled()`, `bounds()`, `shape()`,
   `setupMotion(hooks)`, and `registerMotionReset()` for a layer that keeps document-wide state of
-  its own; `glimmer-motion/choreo/test-support`: `setupChoreo(hooks)`, `live()`, `orphanCount()`,
-  `strandedTransforms()`. No `sleep()` in a motion test
+  its own. No `sleep()` in a motion test
 - **Re-hostable** — host hooks are ~40 lines plus the components; everything above that line is
   framework-free
 
@@ -84,6 +79,7 @@ from a Glimmer card rather than from a React translation table.
 | `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                           | `transformPagePoint` helpers                                                                                     |
 | `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                              | for re-hosting on another Glimmer runtime                                                                        |
 | `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant` | the participant-host extension point (below)                                                                     |
+| `registerBusyProbe`, `BusyProbe`                                                                               | count a host's own in-flight work as motion (below)                                                              |
 | `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                              | the engine's imperative surface (below)                                                                          |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
@@ -159,6 +155,13 @@ const stage = new Stage();
     /* … */
   });
   ```
+
+- **Busy probes.** A host whose work outlasts the engine's own animations (a timeline between steps, a
+  barrier waiting on another region) registers a `BusyProbe` with `registerBusyProbe(probe)`. The probe
+  answers `false` at rest or a short reason while busy, and `animationsSettled()` / `whatIsBusy()` from
+  `glimmer-motion/test-support` consult it alongside the frame loop and the projection tree. It returns a
+  remover: a probe over one host instance's state is removed in that instance's destructor, and a probe over
+  module-global state may stay registered for the life of the page.
 
 ### The engine's imperative surface
 

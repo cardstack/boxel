@@ -27,7 +27,7 @@ Start audible playback from a person's Play action. Test this with the actual de
 
 Decide which clock owns advancement. If narration drives a guided tour, do not let an independent visual timer advance to the next exhibit while the clip is still loading. Keep pause, resume, completion, and retry behavior connected to that same transport.
 
-The gallery's narration helper is application-level orchestration. It complements the reusable Film and Choreo contracts; it is not an exported audio API of `glimmer-motion`.
+The gallery's narration helper is application-level orchestration. It complements the reusable Film and Choreo contracts; it is not an exported audio API of `@cardstack/choreo`.
 
 ## Placing Text
 

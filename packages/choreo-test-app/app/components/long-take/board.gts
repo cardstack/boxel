@@ -1,9 +1,10 @@
+import type { ChoreoContext, ChoreoRun } from '@cardstack/choreo';
+import { Choreo } from '@cardstack/choreo';
 import { array } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
-import type { ChoreoContext, ChoreoRun } from 'glimmer-motion';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import type { SHOTS } from 'test-app/components/long-take/shots';
 import { GLIDE, tunedShots } from 'test-app/components/long-take/shots';
 

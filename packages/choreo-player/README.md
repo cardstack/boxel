@@ -1,7 +1,7 @@
 # choreo-player
 
 A dependency-free, headless transport for externally clocking public Choreo
-runs. It builds around `glimmer-motion`; it does not patch Choreo, emulate a
+runs. It builds around `@cardstack/choreo`; it does not patch Choreo, emulate a
 GSAP timeline, or bundle a renderer.
 
 ## Install
@@ -10,9 +10,9 @@ GSAP timeline, or bundle a renderer.
 pnpm add choreo-player
 ```
 
-Your application supplies the `glimmer-motion` version that yields the runs.
+Your application supplies the `@cardstack/choreo` version that yields the runs.
 The player uses a structural five-member run contract and has no runtime
-dependency on either `glimmer-motion` or HyperFrames.
+dependency on either `@cardstack/choreo` or HyperFrames.
 
 ## Own and control runs explicitly
 

@@ -20,30 +20,32 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
 import { modifier } from 'ember-modifier';
+import {
+  flushPendingMounts,
+  motionSpeed,
+  postRender,
+  registerBusyProbe,
+  snapshotOnRender,
+} from 'glimmer-motion';
 
-import { registerBusyProbe } from './activity.ts';
-import { type BeaconRef, measureBeacons } from './choreo/beacons.ts';
-import Changeset from './choreo/changeset.ts';
-import compile, { continuation, sameScore } from './choreo/compile.ts';
+import { type BeaconRef, measureBeacons } from './beacons.ts';
+import Changeset from './changeset.ts';
+import compile, { continuation, sameScore } from './compile.ts';
 import {
   join as joinPass,
   leave as leavePass,
   type Pass,
   setBeforeMeasure,
   setPassScheduler,
-} from './choreo/far.ts';
-import { GESTURE, type GestureRef, trackGestures } from './choreo/gesture.ts';
-import {
-  boundsOf as bounds,
-  measure,
-  type Snapshot,
-} from './choreo/measure.ts';
+} from './far.ts';
+import { GESTURE, type GestureRef, trackGestures } from './gesture.ts';
+import { boundsOf as bounds, measure, type Snapshot } from './measure.ts';
 import {
   type ChoreoHost,
   type ChoreoProvider,
   setChoreoHost,
-} from './choreo/registry.ts';
-import { type ChoreoRun, execute } from './choreo/run.ts';
+} from './registry.ts';
+import { type ChoreoRun, execute } from './run.ts';
 import {
   Aim,
   Attach,
@@ -67,7 +69,7 @@ import {
   Tether,
   Tween,
   Wait,
-} from './choreo/steps.gts';
+} from './steps.gts';
 import type {
   Bounds,
   Camera3DState,
@@ -79,11 +81,7 @@ import type {
   Sprite,
   SpriteType,
   TimelineNode,
-} from './choreo/types.ts';
-import { snapshotOnRender } from './layout-group.gts';
-import { flushPendingMounts } from './node.ts';
-import { postRender } from './scheduler.ts';
-import { motionSpeed } from './speed.ts';
+} from './types.ts';
 
 /** `{{c.kept 'card'}}` narrows by role; bare `{{c.kept}}` is handed over uncalled, so the function is a Query too */
 type Selector = ((role?: string) => Query) & Query;

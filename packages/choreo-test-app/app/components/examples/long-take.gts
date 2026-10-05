@@ -1,16 +1,16 @@
+import {
+  type Camera3DState,
+  Choreo,
+  type ChoreoContext,
+  type ChoreoRun,
+} from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import {
-  type Camera3DState,
-  Choreo,
-  type ChoreoContext,
-  type ChoreoRun,
-  motion,
-} from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { Board } from 'test-app/components/long-take/board';
 import type { SHOTS } from 'test-app/components/long-take/shots';
 import { BOARD, GLIDE, tunedShots } from 'test-app/components/long-take/shots';
