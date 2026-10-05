@@ -681,11 +681,23 @@ export function getReader(
     return new URL(response.url).pathname === url.pathname;
   };
 
+  // Release the body of a response the reader won't read, so a native fetch
+  // gives its connection back instead of holding it until the body is
+  // consumed.
+  let releaseBody = async (response: ResponseWithNodeStream): Promise<void> => {
+    if (response.nodeStream) {
+      response.nodeStream.destroy();
+      return;
+    }
+    await response.body?.cancel().catch(() => undefined);
+  };
+
   return {
     readFile: (url: URL) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
         if (!servesFileAt(url, response)) {
+          await releaseBody(response);
           return undefined;
         }
         let content: string;
@@ -754,6 +766,7 @@ export function getReader(
         let response = await fetchSource(url, watchdog, progress);
         watchdog.stop();
         if (!servesFileAt(url, response)) {
+          await releaseBody(response);
           return undefined;
         }
 

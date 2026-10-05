@@ -136,6 +136,34 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('a source read redirected to another path releases the body it does not read', async function (assert) {
+    let cancelled = 0;
+    let reader = getReader(async () => {
+      let response = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"data":{}}'));
+          },
+          cancel() {
+            cancelled++;
+          },
+        }),
+        { status: 200, headers: lastModifiedHeaders },
+      );
+      Object.defineProperty(response, 'redirected', { value: true });
+      Object.defineProperty(response, 'url', {
+        value: `${realmURL}person-1.json`,
+      });
+      return response;
+    }, realmURL);
+    let cardId = new URL(`${realmURL}person-1`);
+
+    await reader.readFile(cardId);
+    await reader.readStream(cardId);
+
+    assert.strictEqual(cancelled, 2, 'each dropped body is cancelled');
+  });
+
   test('a source read redirected to the same path reads the file', async function (assert) {
     let reader = getReader(
       async () =>
