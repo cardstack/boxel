@@ -49,14 +49,13 @@ module('Unit | routes', function () {
   test('nothing in public/ shadows a route', function (assert) {
     const shadowed = ROUTE_PATHS.filter(
       (path) =>
-        PUBLIC_ENTRIES.includes(path) ||
-        PUBLIC_ENTRIES.includes(`${path}.html`),
+        PUBLIC_ENTRIES.includes(path) || PUBLIC_ENTRIES.includes(`${path}.html`)
     );
 
     assert.deepEqual(
       shadowed,
       [],
-      'a route path that matches a file or folder at the site root is served by the host, not the app',
+      'a route path that matches a file or folder at the site root is served by the host, not the app'
     );
   });
 });

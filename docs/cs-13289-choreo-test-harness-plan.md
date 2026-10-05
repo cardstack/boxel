@@ -13,7 +13,7 @@ Moves into `packages/choreo/tests`:
 - `integration/choreo/**`, except the tests that render gallery demos
 - `integration/film/` `clip-look`, `join-presentation`, `render-at`
 - `unit/` `compile`, `film-clips`, `film-seam`, `film-seam-shape`,
-  `route-collision`, `motion-reset`
+  `motion-reset`
 - `public/test-picture.html` (the iframe page `render-at` loads)
 
 Stays in test-app, because each renders a gallery demo component or film
@@ -25,6 +25,8 @@ score from test-app (they move to the host with the gallery):
 - `integration/film/` `film-boot`, `graph`
 - `unit/film-schedule` and `fixtures/film/*.json` (compared against the
   demo films' schedules)
+- `unit/route-collision`, which checks the gallery app's routes against its
+  `public/` entries
 
 ## Approach
 
