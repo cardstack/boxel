@@ -74,7 +74,9 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   // The fetched text carries the URL it came from, so a preview whose URL
   // changes in place never shows one file's markup under another's `<base>`.
   @tracked loadedSource: { url: string; text: string } | undefined;
-  @tracked loadError = '';
+  // A failed load carries its URL for the same reason, so one file's error
+  // never stands in front of another file's preview.
+  @tracked failedLoad: { url: string; message: string } | undefined;
   @tracked copyState: 'idle' | 'copied' | 'failed' = 'idle';
   copyFeedbackTimer?: ReturnType<typeof setTimeout>;
 
@@ -137,15 +139,23 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
         return;
       }
       this.loadedSource = { url: sourceUrl, text };
-      this.loadError = '';
+      this.failedLoad = undefined;
     } catch (error) {
       if (signal.aborted || this.isDestroyed || this.isDestroying) {
         return;
       }
-      this.loadError =
-        error instanceof Error ? error.message : 'HTML preview unavailable';
+      this.failedLoad = {
+        url: sourceUrl,
+        message:
+          error instanceof Error ? error.message : 'HTML preview unavailable',
+      };
     }
   };
+
+  get loadError() {
+    let failed = this.failedLoad;
+    return failed?.url === this.sourceUrl ? failed.message : '';
+  }
 
   get sourceText() {
     let loaded = this.loadedSource;
