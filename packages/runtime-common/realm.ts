@@ -738,10 +738,12 @@ export type RealmInfo = {
   policy?: RealmPolicyReference;
   // How the realm's `realm.json` limits and blocks callers its policy admits
   // without a session, as written. Assigned by the file overlay and handed
-  // back apart from the served info, as `policy` is: it is the realm's own
-  // defence, and a blocklist names the addresses it keeps out, neither of
-  // which is any reader's business. `getAnonymousAccess()` is where the realm
-  // reads it, resolved against the platform default.
+  // back apart from the served info, as `policy` is. The realm stamps its info
+  // on every card response, including those it serves to callers a policy
+  // admits, who can't read `realm.json` and have no business learning which
+  // addresses it keeps out. Readers of the realm see both settings on the
+  // `realm.json` card itself. `getAnonymousAccess()` is where the realm reads
+  // it, resolved against the platform default.
   anonymousAccess?: { rateLimit?: JsonValue; blocklist?: JsonValue };
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When

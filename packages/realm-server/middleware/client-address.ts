@@ -32,7 +32,11 @@ import {
 // `infraAddresses` are where the platform's own services reach the realm
 // server from (the NAT gateway they leave the network through). A caller at
 // one of them is marked as infrastructure, which a realm counts and records
-// but never limits or blocks.
+// but never limits or blocks. The mark admits nothing: such a caller still
+// needs a grant, as any anonymous caller does. Card code a prerender server
+// runs leaves through the same gateway, so it too goes unlimited, but it gains
+// nothing a signed-in caller doesn't already have, since rate limits apply to
+// no signed-in caller and anyone can sign in.
 export function clientAddress({
   trustedProxyHops,
   infraAddresses,

@@ -136,14 +136,20 @@ function parseIPv6(text: string): bigint | undefined {
   if (halves.length > 2) {
     return undefined;
   }
-  let groupsOf = (half: string): bigint[] | undefined => {
+  // An embedded IPv4 address can only be the address's last 32 bits, so it is
+  // read only at the end of the last half: `::ffff:192.0.2.1` and
+  // `64:ff9b::192.0.2.1`, never `192.0.2.1::`.
+  let groupsOf = (
+    half: string,
+    mayEndInIPv4: boolean,
+  ): bigint[] | undefined => {
     if (half === '') {
       return [];
     }
     let groups: bigint[] = [];
     let parts = half.split(':');
     for (let [index, part] of parts.entries()) {
-      if (index === parts.length - 1 && part.includes('.')) {
+      if (mayEndInIPv4 && index === parts.length - 1 && part.includes('.')) {
         let v4 = parseIPv4(part);
         if (v4 === undefined) {
           return undefined;
@@ -158,8 +164,8 @@ function parseIPv6(text: string): bigint | undefined {
     }
     return groups;
   };
-  let head = groupsOf(halves[0]);
-  let tail = halves.length === 2 ? groupsOf(halves[1]) : [];
+  let head = groupsOf(halves[0], halves.length === 1);
+  let tail = halves.length === 2 ? groupsOf(halves[1], true) : [];
   if (!head || !tail) {
     return undefined;
   }
@@ -210,6 +216,18 @@ export function formatIP(address: IPAddress): string {
   return `${hex(groups.slice(0, bestStart))}::${hex(
     groups.slice(bestStart + bestLength),
   )}`;
+}
+
+// The key a caller's invocations are counted under. An IPv4 caller is counted
+// by their address. An IPv6 caller is counted by the /64 their address is in,
+// since a single network is routinely handed a whole /64 and could otherwise
+// spread its invocations over as many budgets as it has addresses.
+export function rateLimitKey(address: IPAddress): string {
+  if (address.family === 4) {
+    return formatIP(address);
+  }
+  let prefix = (address.value >> 64n) << 64n;
+  return `${formatIP({ family: 6, value: prefix })}/64`;
 }
 
 // The canonical text of an address given as text, or undefined when it is not
