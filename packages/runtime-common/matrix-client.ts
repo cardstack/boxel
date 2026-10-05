@@ -5,7 +5,31 @@ import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
 
+async function isUnknownToken(response: Response) {
+  try {
+    let json = (await response.clone().json()) as { errcode?: string };
+    return json.errcode === 'M_UNKNOWN_TOKEN';
+  } catch {
+    return false;
+  }
+}
+
 const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
+
+// Every login from this client reuses one device per matrix user. A login
+// without a device_id makes synapse mint a new device, and each new device
+// writes a device-list change row for every room the user has joined, rows
+// synapse never prunes. Server users join a session room per user they
+// authenticate, so fresh devices grow that table with logins × rooms. Logging
+// in to an existing device writes no change rows, and each login still gets
+// its own access token, so concurrent processes sharing the device don't
+// invalidate each other. Logging out, or deleting the device through the
+// admin API, deletes the device and so revokes every process's token at once;
+// nothing logs out with this client's token.
+//
+// Synapse dedupes sends by user, device and transaction id, so processes
+// sharing the device must never reuse a transaction id; see nextTxnId.
+export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -20,6 +44,7 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loginPromise: Promise<void> | undefined;
+  private readonly txnPrefix = globalThis.crypto.randomUUID();
   private lastTxnTimestamp = 0;
   private txnSequence = 0;
 
@@ -49,6 +74,10 @@ export class MatrixClient {
     return this.access?.userId;
   }
 
+  getDeviceId() {
+    return this.access?.deviceId;
+  }
+
   isLoggedIn() {
     return this.access !== undefined;
   }
@@ -60,18 +89,44 @@ export class MatrixClient {
     includeAuth = true,
   ) {
     options.method = method;
-
-    if (includeAuth) {
-      if (!this.access) {
-        throw new Error(`Missing matrix access token`);
+    let url = `${this.matrixURL.href}${path}`;
+    if (!includeAuth) {
+      return fetch(url, options);
+    }
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let accessToken = this.access.accessToken;
+    let response = await fetch(url, this.withAuth(options, accessToken));
+    if (response.status === 401 && (await isUnknownToken(response))) {
+      // Every process shares one device, so deleting it revokes all of
+      // their tokens at once. Logging in again recreates the device.
+      // A concurrent request may already have logged in again; reuse that.
+      // Otherwise drop the settled login, which login() would return as is.
+      if (this.access?.accessToken === accessToken) {
+        this.access = undefined;
+        this.loginPromise = undefined;
       }
-      options.headers = {
+      if (!this.access) {
+        await this.login();
+      }
+      response = await fetch(
+        url,
+        this.withAuth(options, this.access!.accessToken),
+      );
+    }
+    return response;
+  }
+
+  private withAuth(options: RequestInit, accessToken: string): RequestInit {
+    return {
+      ...options,
+      headers: {
         ...options.headers,
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.access.accessToken}`,
-      };
-    }
-    return fetch(`${this.matrixURL.href}${path}`, options);
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
   }
 
   async login() {
@@ -122,6 +177,7 @@ export class MatrixClient {
           },
           password,
           type: 'm.login.password',
+          device_id: SERVER_MATRIX_DEVICE_ID,
         }),
       },
       false,
@@ -475,7 +531,10 @@ export class MatrixClient {
   }
 
   private nextTxnId() {
-    // Ensure unique txn ids even when multiple events are sent in the same millisecond
+    // Unique per client instance, and within it even when several events are
+    // sent in the same millisecond. Every process logs in to the same device,
+    // and synapse answers a repeated (device, transaction id) send with the
+    // earlier event instead of storing the new one.
     let now = Date.now();
     if (now === this.lastTxnTimestamp) {
       this.txnSequence++;
@@ -483,7 +542,7 @@ export class MatrixClient {
       this.lastTxnTimestamp = now;
       this.txnSequence = 0;
     }
-    return `${now}-${this.txnSequence}`;
+    return `${this.txnPrefix}-${now}-${this.txnSequence}`;
   }
 }
 
