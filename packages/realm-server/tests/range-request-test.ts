@@ -202,6 +202,84 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('an open-ended range against a stale stat fails at once instead of hanging', async function (assert) {
+      await uploadSample('/stale-stat-open-range.png');
+      let started = Date.now();
+      let failure: (Error & { timeout?: number }) | undefined;
+      try {
+        await withStaleStatSize(5, () =>
+          getSample('/stale-stat-open-range.png')
+            .set('Range', 'bytes=2-')
+            .timeout(5000),
+        );
+      } catch (error) {
+        failure = error as Error & { timeout?: number };
+      }
+
+      // A range is judged against the stat, so a stat that outruns the file
+      // declares a slice longer than the bytes there are; the response is torn
+      // down rather than left for the client to wait out.
+      assert.ok(failure, 'the request fails');
+      assert.notStrictEqual(
+        failure?.timeout,
+        5000,
+        `the response was torn down rather than left for the client to time out (${failure?.message})`,
+      );
+      assert.true(
+        Date.now() - started < 4000,
+        'it fails well before the client would have given up',
+      );
+    });
+
+    test('a whole-body GET whose stat describes an older version sends no validators', async function (assert) {
+      await uploadSample('/stale-stat-validators.png');
+      let fresh = await getSample('/stale-stat-validators.png');
+      assert.ok(fresh.headers['etag'], 'a current stat yields an ETag');
+      assert.ok(
+        fresh.headers['last-modified'],
+        'a current stat yields a Last-Modified',
+      );
+
+      // The stat the validators are built from names a modification time
+      // the opened file does not have.
+      let openFile = adapter.openFile.bind(adapter);
+      adapter.openFile = async (path) => {
+        let ref: FileRef | undefined = await openFile(path);
+        if (ref?.lastModifiedMs != null) {
+          Object.defineProperty(ref, 'lastModifiedMs', {
+            value: ref.lastModifiedMs - 60_000,
+          });
+          Object.defineProperty(ref, 'lastModified', {
+            value: ref.lastModified - 60,
+          });
+        }
+        return ref;
+      };
+      let response;
+      try {
+        response = await getSample('/stale-stat-validators.png').timeout(5000);
+      } finally {
+        adapter.openFile = openFile;
+      }
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.headers['etag'],
+        undefined,
+        'no ETag describing another version',
+      );
+      assert.strictEqual(
+        response.headers['last-modified'],
+        undefined,
+        'no Last-Modified describing another version',
+      );
+      assert.deepEqual(
+        new Uint8Array(response.body),
+        bytes,
+        'the whole body still arrives',
+      );
+    });
+
     test('a bounded range returns a 206 with just those bytes', async function (assert) {
       await uploadSample('/bounded.png');
       let response = await getSample('/bounded.png').set('Range', 'bytes=2-5');

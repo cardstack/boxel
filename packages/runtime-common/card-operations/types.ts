@@ -845,7 +845,14 @@ export interface OperationSourceResult {
   // same stream `body` yields, so reading both opens one stream. Absent in
   // the headers-only mode and for an adapter that cannot measure what it
   // opens.
-  openBody?: () => { body: OperationSourceBody; size?: number };
+  // `lastModifiedMs` is the opened content's modification time, which tells a
+  // facade whether the validators it built from the handle's stat describe
+  // these bytes.
+  openBody?: () => {
+    body: OperationSourceBody;
+    size?: number;
+    lastModifiedMs?: number;
+  };
 }
 
 export type OperationSourceBody =

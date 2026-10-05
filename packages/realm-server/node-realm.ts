@@ -220,16 +220,18 @@ export class NodeAdapter implements RealmAdapter {
     // where the path stat's length may not. The stream stops at that length,
     // so content an append adds while it is being read is left for the next
     // read rather than sent past the length this one declared.
-    let opened: { content: Readable; size?: number } | undefined;
+    let opened:
+      | { content: Readable; size?: number; lastModifiedMs?: number }
+      | undefined;
     let open = () => {
       if (!opened) {
         let fd: number | undefined;
         try {
           fd = openSync(absolutePath, 'r');
-          let size = fstatSync(fd).size;
+          let { size, mtimeMs: lastModifiedMs } = fstatSync(fd);
           if (size === 0) {
             closeSync(fd);
-            opened = { content: Readable.from([]), size };
+            opened = { content: Readable.from([]), size, lastModifiedMs };
           } else {
             opened = {
               content: createReadStream(absolutePath, {
@@ -238,6 +240,7 @@ export class NodeAdapter implements RealmAdapter {
                 end: size - 1,
               }),
               size,
+              lastModifiedMs,
             };
           }
         } catch (_err) {

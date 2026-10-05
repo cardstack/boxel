@@ -228,7 +228,12 @@ export interface OperationStoredFile {
   // the handle opened with, which a write elsewhere can leave describing a
   // version of the file the stream does not read. The content returned is
   // the stream `content` yields.
-  openContent?: () => { content: OperationSourceBody; size?: number };
+  openContent?: () => {
+    content: OperationSourceBody;
+    size?: number;
+    // The opened content's modification time, in milliseconds.
+    lastModifiedMs?: number;
+  };
 }
 
 export interface OperationStoredFileMeta {

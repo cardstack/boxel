@@ -174,6 +174,9 @@ export async function readSourceOperation(
             return {
               body: opened.content,
               ...(opened.size != null ? { size: opened.size } : {}),
+              ...(opened.lastModifiedMs != null
+                ? { lastModifiedMs: opened.lastModifiedMs }
+                : {}),
             };
           },
         }

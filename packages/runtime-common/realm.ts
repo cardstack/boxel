@@ -869,10 +869,13 @@ export interface FileRef {
   // path stat on a network filesystem can describe a version of the file
   // another host has since replaced). The returned content is the same stream
   // `content` yields. `size` is absent when the adapter could not measure the
-  // opened content.
+  // opened content. `lastModifiedMs` is the opened content's modification
+  // time, at the same precision as the ref's own `lastModifiedMs`, so the two
+  // can be compared to tell whether the ref's stat described these bytes.
   openContent?: () => {
     content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
     size?: number;
+    lastModifiedMs?: number;
   };
 
   [key: symbol]: object;
@@ -9997,6 +10000,9 @@ export class Realm {
               return {
                 content: opened.body as FileRef['content'],
                 ...(opened.size != null ? { size: opened.size } : {}),
+                ...(opened.lastModifiedMs != null
+                  ? { lastModifiedMs: opened.lastModifiedMs }
+                  : {}),
               };
             },
           }
@@ -10204,6 +10210,19 @@ export class Realm {
         headers['content-length'] = String(openedContent.size);
       } else {
         delete headers['content-length'];
+      }
+      // The validators were built from the same stat, so when the opened
+      // content has a different modification time they describe another
+      // version of the file. Sending them would let a client store these bytes
+      // under that version's validator; the response carries none instead,
+      // and the next request is answered from whatever the file is then.
+      if (
+        openedContent.lastModifiedMs != null &&
+        ref.lastModifiedMs != null &&
+        openedContent.lastModifiedMs !== ref.lastModifiedMs
+      ) {
+        delete headers['etag'];
+        delete headers['last-modified'];
       }
     }
     let content = openedContent?.content ?? ref.content;
