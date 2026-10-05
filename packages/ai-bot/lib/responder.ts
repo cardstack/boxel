@@ -20,6 +20,7 @@ import MatrixResponsePublisher, {
   toCommandRequest,
 } from './matrix/response-publisher.ts';
 import ResponseState from './response-state.ts';
+import type { BotToolTurn } from './bot-tools/index.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
@@ -94,6 +95,12 @@ export class Responder {
   >[] = [];
 
   responseState = new ResponseState();
+
+  // This turn's state for each offered bot tool, used to label calls and
+  // hold those that wait for the user's approval.
+  setBotToolTurns(turns: ReadonlyMap<string, BotToolTurn>) {
+    this.matrixResponsePublisher.botToolTurns = turns;
+  }
 
   needsMessageSend = false;
 
@@ -185,6 +192,7 @@ export class Responder {
         .map((toolCall) =>
           toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall, {
             argumentsText: true,
+            botToolTurns: this.matrixResponsePublisher.botToolTurns,
           }),
         ),
     };

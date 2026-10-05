@@ -232,6 +232,10 @@ export interface BoxelContext {
     activeSpecId?: string;
   };
   debug?: boolean;
+  // Set by the chat composer on a message the user typed. Messages the app
+  // composes and posts as the user (an error report, a prompt a tool sends)
+  // never carry it, so readers can tell what the user actually wrote.
+  typedByUser?: boolean;
   requireToolCall?: boolean;
   functions?: Tool['function'][];
 }
@@ -365,7 +369,10 @@ export interface ToolDefinitionSchema {
   tool: Tool;
 }
 
-export type ToolResultStatus = 'applied' | 'failed' | 'invalid';
+// 'approved' is not an outcome: the user approved a call ai-bot holds for
+// approval (see ToolRequest.approvalRequired), and ai-bot answers it with the
+// call's real result.
+export type ToolResultStatus = 'applied' | 'failed' | 'invalid' | 'approved';
 
 // One tool definition the bot discovered by reading a skill markdown file
 // (readRealmFile): the entry from the skill's indexed frontmatter, tagged

@@ -1046,6 +1046,64 @@ export default class ToolService extends Service {
     return undefined;
   }
 
+  // Answers a call ai-bot holds for the user's approval (see
+  // MessageTool.awaitsApproval). Approving sends an 'approved' result, which
+  // releases the call: ai-bot runs it and publishes its real result.
+  // Declining sends an 'invalid' result saying so, which settles the call;
+  // the model reads the reason on its next turn. A call already answered is
+  // left alone.
+  // The held calls this client has answered. A call stops awaiting approval
+  // the moment it is answered, before the answer's event comes back, so a
+  // second click can't send a second answer; a send that fails offers the
+  // choice again.
+  answeredApprovalIds = new TrackedSet<string>();
+
+  answerApproval = task(
+    async (command: MessageTool, answer: 'approve' | 'decline') => {
+      let callId = command.toolRequest.id;
+      if (!command.awaitsApproval || !callId) {
+        return;
+      }
+      this.answeredApprovalIds.add(callId);
+      try {
+        await this.sendApprovalAnswer(command, callId, answer);
+      } catch (e) {
+        // The answer never reached the room: offer the choice again.
+        this.answeredApprovalIds.delete(callId);
+        console.error(
+          `could not send the answer to held tool call ${callId}`,
+          e,
+        );
+      }
+    },
+  );
+
+  private async sendApprovalAnswer(
+    command: MessageTool,
+    callId: string,
+    answer: 'approve' | 'decline',
+  ) {
+    let invokedToolFromEventId =
+      this.getCurrentEventIdForCommandRequest(
+        command.message.roomId,
+        command.toolRequest.id,
+      ) ?? command.eventId;
+    await this.matrixService.sendToolResultEvent({
+      roomId: command.message.roomId,
+      invokedToolFromEventId,
+      toolCallId: callId,
+      ...(answer === 'approve'
+        ? { status: 'approved' as const }
+        : {
+            status: 'invalid' as const,
+            failureReason: `The user declined this call (${
+              command.description ?? command.name ?? 'a tool call'
+            }). Do not request it again unless the user asks you to.`,
+          }),
+      context: await this.operatorModeStateService.getSummaryForAIBot(),
+    });
+  }
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageTool) => {
     // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to

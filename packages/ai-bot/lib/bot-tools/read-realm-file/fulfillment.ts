@@ -1,8 +1,5 @@
-import { createHash } from 'crypto';
 import { logger } from '@cardstack/runtime-common';
-import { sendMatrixEvent } from '@cardstack/runtime-common/ai';
 import {
-  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -15,9 +12,10 @@ import {
   READ_REALM_FILE_MAX_URLS,
   selectReadRealmFileUrls,
   type ReadRealmFileTool,
-} from './read-realm-file.ts';
+} from './read.ts';
+import { publishToolResult, uploadToMatrix } from '../results.ts';
 import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
-import type { DelegatedUserRealmSessionManager } from './user-delegated-realm-server-session.ts';
+import type { DelegatedUserRealmSessionManager } from '../../user-delegated-realm-server-session.ts';
 
 let log = logger('ai-bot:read-realm-file');
 
@@ -25,14 +23,6 @@ let log = logger('ai-bot:read-realm-file');
 // the prompt builder downloads and inlines the content (rather than treating it
 // as opaque media); 'text/plain' satisfies that for any source we read.
 const READ_FILE_CONTENT_TYPE = 'text/plain';
-
-// Maps a fetched file's content hash to the Matrix media URL it was uploaded
-// under, so identical bytes (the same skill read across rooms or turns) are
-// uploaded once and re-referenced. Keyed on a SHA-256 of the content, so a
-// changed file misses the cache and re-uploads — dedup without staleness.
-// Matrix media is not content-addressable (each upload gets a fresh id), so
-// this app-level cache is what keeps us from re-storing the same bytes.
-const uploadedContentUrlByHash = new Map<string, string>();
 
 export interface ReadRealmFileFulfillmentDeps {
   client: MatrixClient;
@@ -60,35 +50,8 @@ export interface ReadRealmFileFulfillmentOutcome {
   // still attached.
   ok: boolean;
   error?: string;
-}
-
-// Upload bytes to the Matrix media repo and return an http download URL that
-// both the bot and the host can fetch. Dedupes identical content by hash.
-async function uploadTextToMatrix(
-  client: MatrixClient,
-  content: string,
-  contentType: string,
-): Promise<string> {
-  let hash = createHash('sha256').update(content).digest('hex');
-  let cached = uploadedContentUrlByHash.get(hash);
-  if (cached) {
-    return cached;
-  }
-  let uploaded = await client.uploadContent(content, { type: contentType });
-  let url = client.mxcUrlToHttp(
-    uploaded.content_uri,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    true,
-  );
-  if (!url) {
-    throw new Error('could not derive a download URL for the uploaded file');
-  }
-  uploadedContentUrlByHash.set(hash, url);
-  return url;
+  // Whether the call's result reached the room.
+  published: boolean;
 }
 
 // Runs each readRealmFile tool call ai-bot owns and publishes its outcome as a
@@ -114,7 +77,7 @@ export async function fulfillReadRealmFileCalls(
   let upload =
     deps.uploadText ??
     ((content: string, contentType: string) =>
-      uploadTextToMatrix(deps.client, content, contentType));
+      uploadToMatrix(deps.client, content, contentType));
   // One call at a time, on purpose. Every published result re-triggers the
   // bot, and that handler decides whether the turn is complete by fetching
   // the room history from the server and splicing in the one result it was
@@ -289,7 +252,7 @@ async function fulfillOne(
     return await publishFailure(call.id, failureReason!, deps);
   }
 
-  await publish(deps, {
+  let published = await publish(deps, {
     msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     commandRequestId: call.id,
     'm.relates_to': {
@@ -309,6 +272,7 @@ async function fulfillOne(
     commandRequestId: call.id,
     ok: errors.length === 0,
     ...(errors.length ? { error: errors.join('\n') } : {}),
+    published,
   };
 }
 
@@ -317,7 +281,7 @@ async function publishFailure(
   error: string,
   deps: ReadRealmFileFulfillmentDeps,
 ): Promise<ReadRealmFileFulfillmentOutcome> {
-  await publish(deps, {
+  let published = await publish(deps, {
     msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     commandRequestId,
     failureReason: error,
@@ -328,29 +292,17 @@ async function publishFailure(
     },
     data: { context: { agentId: deps.agentId } },
   });
-  return { commandRequestId, ok: false, error };
+  return { commandRequestId, ok: false, error, published };
 }
 
 async function publish(
   deps: ReadRealmFileFulfillmentDeps,
   content: Record<string, any>,
-): Promise<void> {
-  try {
-    // eventIdToReplace must stay undefined: sendMatrixEvent overwrites
-    // m.relates_to with an m.replace relation when it's set, which would clobber
-    // the command-result relation we build here.
-    await sendMatrixEvent(
-      deps.client,
-      deps.roomId,
-      APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
-      content,
-      undefined,
-    );
-  } catch (e: any) {
-    log.error(
-      `readRealmFile: failed to publish result for ${content.commandRequestId}: ${
-        e?.message ?? e
-      }`,
-    );
-  }
+): Promise<boolean> {
+  return await publishToolResult(
+    deps.client,
+    deps.roomId,
+    content,
+    'readRealmFile',
+  );
 }

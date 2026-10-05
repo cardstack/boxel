@@ -892,6 +892,9 @@ importers:
       debug:
         specifier: ^4.4.3
         version: 4.4.3(supports-color@8.1.1)
+      htmlparser2:
+        specifier: ^10.1.0
+        version: 10.1.0
       lodash-es:
         specifier: 'catalog:'
         version: 4.18.1
@@ -913,6 +916,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      undici:
+        specifier: 'catalog:'
+        version: 7.30.0
     devDependencies:
       '@cardstack/local-types':
         specifier: workspace:*
