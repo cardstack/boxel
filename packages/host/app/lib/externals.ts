@@ -45,6 +45,12 @@ import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consum
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
+import * as glimmerMotion from 'glimmer-motion';
+import * as glimmerMotionLayoutGroup from 'glimmer-motion/layout-group';
+import * as glimmerMotionMotionConfig from 'glimmer-motion/motion-config';
+import * as glimmerMotionPresence from 'glimmer-motion/presence';
+import * as glimmerMotionReorderGroup from 'glimmer-motion/reorder/group';
+import * as glimmerMotionReorderItem from 'glimmer-motion/reorder/item';
 import * as lodash from 'lodash-es';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';
@@ -211,6 +217,108 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
       await bxl.loadAllFormulaExtensions();
       return bxl;
     },
+  });
+  // glimmer-motion and Choreo hand cards the host's own module objects, so
+  // cards and host share one copy of each library's module-global state (the
+  // drag lock, the layout scheduler, the Choreo registry). Every entry the
+  // packages' `exports` name explicitly is shimmed; the `./*` wildcard
+  // internals are not card-facing. Neither is motion-dom: cards reach it
+  // through glimmer-motion's curated re-exports.
+  //
+  // glimmer-motion's entry points are sync shims because host UI imports it,
+  // so it is in the initial bundle regardless. No host UI imports Choreo, so its shims are
+  // async and keep it out of the initial bundle until a card imports it.
+  // Switch them to sync if host UI starts importing Choreo.
+  virtualNetwork.shimModule('glimmer-motion', glimmerMotion);
+  virtualNetwork.shimModule(
+    'glimmer-motion/layout-group',
+    glimmerMotionLayoutGroup,
+  );
+  virtualNetwork.shimModule(
+    'glimmer-motion/motion-config',
+    glimmerMotionMotionConfig,
+  );
+  virtualNetwork.shimModule('glimmer-motion/presence', glimmerMotionPresence);
+  virtualNetwork.shimModule(
+    'glimmer-motion/reorder/group',
+    glimmerMotionReorderGroup,
+  );
+  virtualNetwork.shimModule(
+    'glimmer-motion/reorder/item',
+    glimmerMotionReorderItem,
+  );
+  // Card tests are its only consumers, so it loads on demand like Choreo.
+  virtualNetwork.shimAsyncModule({
+    id: 'glimmer-motion/test-support',
+    resolve: () => import('glimmer-motion/test-support'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo',
+    resolve: () => import('@cardstack/choreo'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/choreo',
+    resolve: () => import('@cardstack/choreo/choreo'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/steps',
+    resolve: () => import('@cardstack/choreo/steps'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/test-support',
+    resolve: () => import('@cardstack/choreo/test-support'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film',
+    resolve: () => import('@cardstack/choreo/film'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/clip',
+    resolve: () => import('@cardstack/choreo/film/clip'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/film',
+    resolve: () => import('@cardstack/choreo/film/film'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/graph/adjust',
+    resolve: () => import('@cardstack/choreo/film/graph/adjust'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/graph/host',
+    resolve: () => import('@cardstack/choreo/film/graph/host'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/graph/nodes',
+    resolve: () => import('@cardstack/choreo/film/graph/nodes'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/joins',
+    resolve: () => import('@cardstack/choreo/film/joins'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/overlays',
+    resolve: () => import('@cardstack/choreo/film/overlays'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/picture',
+    resolve: () => import('@cardstack/choreo/film/picture'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/plate',
+    resolve: () => import('@cardstack/choreo/film/plate'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/player',
+    resolve: () => import('@cardstack/choreo/film/player'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/rail',
+    resolve: () => import('@cardstack/choreo/film/rail'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo/film/titles',
+    resolve: () => import('@cardstack/choreo/film/titles'),
   });
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
