@@ -4,8 +4,8 @@
  * schedule is computed from, and what `scripts/film-fixtures.mjs` reads
  * headless to write the golden fixtures. The component imports it.
  */
-import type { Beat, FilmGrade, LookFx, Pt3 } from 'glimmer-motion/film';
-import { hex, RAD } from 'glimmer-motion/film/math';
+import type { Beat, FilmGrade, LookFx, Pt3 } from '@cardstack/choreo/film';
+import { hex, RAD } from '@cardstack/choreo/film/math';
 
 /**
  * TOWERS — a film, at `/towers`.

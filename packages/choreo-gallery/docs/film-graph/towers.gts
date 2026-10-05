@@ -13,7 +13,7 @@
  * group under `hikaku` said it once for them.
  */
 import Component from '@glimmer/component';
-import { Film, Insert, Gate, EndCard, Player } from 'glimmer-motion/film';
+import { Film, Insert, Gate, EndCard, Player } from '@cardstack/choreo/film';
 import { TowersPage } from './towers-page';
 
 // Unchanged from tower-film.gts: the traces sampled off the keep, the

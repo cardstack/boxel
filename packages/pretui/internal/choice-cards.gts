@@ -5,11 +5,6 @@
 // not a heavier border, and the small mark in the corner echoes Checkbox and
 // RadioGroup so the three read as one family.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the choice-cards group)
-
 // Pretui — the card cloth and grid shared by RadioCard and CheckboxCard.
 import { on } from '@ember/modifier';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';

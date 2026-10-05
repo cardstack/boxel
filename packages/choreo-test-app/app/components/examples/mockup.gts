@@ -1,18 +1,18 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { modifier } from 'ember-modifier';
 import {
   beacon,
   type Camera3DState,
   Choreo,
   type ChoreoContext,
   type ChoreoRun,
-  motion,
   type PerformCommand,
-} from 'glimmer-motion';
+} from '@cardstack/choreo';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
+import { motion } from 'glimmer-motion';
 import { ClockApp } from 'test-app/components/mockup/clock';
 import { MailApp } from 'test-app/components/mockup/mail';
 import { MapsApp } from 'test-app/components/mockup/maps';

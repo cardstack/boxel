@@ -43,8 +43,6 @@
 // styles ARE the end state, so `animation: none` under
 // `prefers-reduced-motion` is the complete kill switch.
 //
-// (the reading-format group)
-
 // Pretui — the value formatters' shared Intl plumbing: memoised formatters that never throw, the number and date coercions, and formatClock.
 import { fromIso } from './reading-extras';
 import { formatDuration } from '@cardstack/boxel-ui/helpers';

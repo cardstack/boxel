@@ -97,10 +97,10 @@ export function grade(result: RunResult): { grade: Grade; misses: string[] } {
   if (result.durationSeconds > maxSeconds) {
     misses.push(`${result.durationSeconds}s (target ≤ ${maxSeconds}s)`);
   }
-  let failures = a.patchResults.failed + a.failedToolCalls.length;
+  let failures = a.failedToolCalls.length;
   if (failures > BENCHMARKS.maxFailedToolCalls) {
     misses.push(
-      `${failures} patches or tool calls failed along the way (target ≤ ${BENCHMARKS.maxFailedToolCalls})`,
+      `${failures} tool calls failed along the way (target ≤ ${BENCHMARKS.maxFailedToolCalls})`,
     );
   }
   if (a.cacheMisses > 0) {

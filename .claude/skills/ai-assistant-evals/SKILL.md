@@ -108,7 +108,7 @@ may share accounts.
 
 Every 15 seconds (`EVAL_PROGRESS_SECONDS`) the run prints a `[progress …]` block: each model's current step, whether the bot is generating or a tool is running, its bot-message count, and ⚠ when nothing has changed for two minutes; a finished model shows its grade. Do not start a run and look away. While it runs, watch the assistant panel (or
 the runner's console) for anything irregular: a tool pill that goes red or
-"invalid", an error alert, a block written with `<<<<<<< SEARCH` markers, the
+"invalid", an error alert, the
 model asking the user for permission or for file names, the same file read
 twice, a second `switch-submode` in a row, a placeholder tool call, a pill
 spinning for more than two minutes, a tab that jumps to another realm. Any of
@@ -120,7 +120,7 @@ When one appears:
 1. **Stop the generation, but only when it has clearly gone sideways.** The
    runner does this itself when four separate turns carry a failed or invalid
    pill or an error alert (a normal repair takes two or three rounds, each of
-   which can fail once more before it lands), git-style markers, the
+   which can fail once more before it lands), the
    same tool call repeated three times, a pill stuck past the host's two-minute
    tool timeout, a turn that streams nothing for three minutes, and the
    15-minute safety clock (verdict notes start with "stopped early"). It never stops a run for being
@@ -128,7 +128,7 @@ When one appears:
    hides what the model would have done next. For anything the runner does
    not catch, click Stop in the panel only when you can name what went wrong.
 2. **Pull the room** with `inspect-ai-room` and read it turn by turn: the
-   reasoning, the tool arguments, the results, the patch markers.
+   reasoning, the tool arguments, the results.
 3. **Say what went wrong and where the fix belongs**, in this order of
    likelihood: skill text the model followed too literally or did not read;
    the prompt the ai-bot builds; the host (a stuck pill, a tool that moved the
@@ -143,8 +143,7 @@ When one appears:
 is also printed at the end of the run.
 
 Columns: result grade, model id used, effort the room carried, verdict, turns,
-tool calls by name with counts, SEARCH/REPLACE blocks (with a `+N git-style`
-note when the model used the wrong markers), cost, wall time, whether a card
+tool calls by name with counts, run-realm-code writes, cost, wall time, whether a card
 rendered and where (`stack` or `preview`), notes with the reasons, the missed
 benchmarks, and the room id.
 
@@ -165,9 +164,9 @@ When you report a run to the user, render the summary as a markdown table
 (not inside a code fence) and lead with the grade. A finished report looks like
 this, from a real run on 2026-09-07:
 
-| Result  | Model                       | Effort | Verdict | Turns | Tool calls                                        | Blocks | Cost   | Cache | Time | Card               |
-| ------- | --------------------------- | ------ | ------- | ----- | ------------------------------------------------- | ------ | ------ | ----- | ---- | ------------------ |
-| ✅ GOOD | anthropic/claude-sonnet-4.6 | –      | pass    | 5     | readRealmFile ×1, switch-submode ×1, show-card ×1 | 2      | $0.090 | 95%   | 63 s | yes, preview panel |
+| Result  | Model                       | Effort | Verdict | Turns | Tool calls                                        | Realm writes | Cost   | Cache | Time | Card               |
+| ------- | --------------------------- | ------ | ------- | ----- | ------------------------------------------------- | ------------ | ------ | ----- | ---- | ------------------ |
+| ✅ GOOD | anthropic/claude-sonnet-4.6 | –      | pass    | 5     | readRealmFile ×1, switch-submode ×1, show-card ×1 | 2            | $0.090 | 95%   | 63 s | yes, preview panel |
 
 Room `!ELKEdZReSeJdwgUnRV:localhost`. Every benchmark inside its target, turns
 and mode switches both exactly at the limit.
@@ -200,9 +199,8 @@ After every run, two checks on the money, whatever the grade:
 Verdicts:
 
 - `pass` — a card from the new workspace rendered with no error boundary, and at
-  least one block was written.
-- `model-failure` — the model did not get there: no blocks, git-style markers,
-  a failed patch, or no card. Reasons are listed.
+  least one run-realm-code write was applied.
+- `model-failure` — the model did not get there: no write, or no card. Reasons are listed.
 - `host-failure` — a tool pill stayed in "applying" past the host's own
   two-minute tool timeout, or a tool call never got a result. The model may be
   fine; the tab froze. Keep the room id, this is a repro for a host bug.
@@ -233,10 +231,9 @@ Claude Sonnet 4.6 without thinking, the model the workflow was tuned for:
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | verdict                      | card rendered, no error                                                                                                                                                                                                                                                                                                                  | `pass`                                                                                                                                                                                                                                                      |
 | turns                        | bot messages that carried usage                                                                                                                                                                                                                                                                                                          | up to 10 (a clean run is 3 to 5: one or two reads, one write, one show; a repair round adds two or three)                                                                                                                                                   |
-| turns before the first block | count in the room timeline                                                                                                                                                                                                                                                                                                               | 1 to 2                                                                                                                                                                                                                                                      |
+| turns before the first write | count in the room timeline                                                                                                                                                                                                                                                                                                               | 1 to 2                                                                                                                                                                                                                                                      |
 | `switch-submode` calls       | tool-calls column                                                                                                                                                                                                                                                                                                                        | 0 or 1; more means the model treats a mode switch as a step of writing                                                                                                                                                                                      |
 | placeholder / confirm calls  | tool calls whose arguments do nothing (show-card on a `.gts`, switch to the current mode, empty patch-fields)                                                                                                                                                                                                                            | 0                                                                                                                                                                                                                                                           |
-| patch markers                | `Blocks` column                                                                                                                                                                                                                                                                                                                          | box markers only; any `git-style` count is a hard fail — the host applies nothing and tells the model nothing                                                                                                                                               |
 | files written in one reply   | `filesWritten` in the JSON                                                                                                                                                                                                                                                                                                               | definition and instance in the same reply                                                                                                                                                                                                                   |
 | cost                         | Cost column, not part of the grade                                                                                                                                                                                                                                                                                                       | judge it against the model's price class: Sonnet 4.6 lands at $0.05 to $0.10, so $0.20 for it already means extra turns; an Opus-class model costs two to three times that for the same work. A run over $1 is a fragmentation problem, not a price problem |
 | prompt cache                 | Cache column: share of input tokens served from the cache, counted only after the initial skill load. Turn one has one tool; the first skill read adds the host tools, and tools lead the cached prefix, so the turn right after the read is always billed cold. That structural miss is excluded; the window opens on the turn after it | 90% or more, 0 misses inside the window. A miss there means history was rewritten, the cache expired between turns, or the provider changed                                                                                                                 |
@@ -265,10 +262,7 @@ How the failures group, so a new run can be placed quickly:
   Mistral Medium 3.5. A clarifying or confirmation question in Act mode.
 - **Announce the write, then stop**: Grok 4.5, Grok 4.3, Qwen3.7 Max (first
   run), GLM 4.7 Flash, Haiku 4.5 (one run). "Creating the card now" and the
-  turn ends with no block.
-- **Dropped closing marker**: DeepSeek V4 Flash, Grok 4.3, Haiku 4.5, Fable 5
-  (one run). SEARCH, divider, content, fence, no `╚═══ REPLACE ═══╝`; the host
-  applies nothing.
+  turn ends with no write.
 - **Instance JSON that is not a card document**: Haiku 4.5, MiniMax M3, Mistral
   Medium 3.5, Qwen3.6 Flash, Llama 4 Maverick. No `data` wrapper, `type` set to
   the card's name instead of `card`, or no `meta.adoptsFrom`. The correctness
@@ -292,20 +286,13 @@ Check these before blaming the model. Status as of 2026-09-08.
   generation. Fixed by locking only the credit check and the debit.
 - **Several `readRealmFile` calls in one turn stall the continuation.** Results
   now publish one after another.
-- **Patch result indexes do not line up** when a message has example code
-  fences before its patches; the bot now counts results instead of matching
-  positions.
-- **A patch cut across continuation events** is never applied; the cut now
-  moves back to the opening fence.
 - **`set-active-llm` accepted any mode** and dropped the room into Ask; now
   rejects anything but `act` or `ask`.
 - **Correctness check passed JSON that is not a card document**; now reports
   what is missing.
 - **Open**: no output cap and no stall abort in the bot (a reasoning turn can
   run to the provider's 65k cap with nothing streamed); prerender timeout
-  under five concurrent workspaces reported as a code error; a fence glued to
-  prose is not a code block for the host but a patch for the bot; the dropped
-  closing marker could be accepted by the host as the end of a REPLACE block.
+  under five concurrent workspaces reported as a code error.
 
 ## What the runner cannot tell you
 

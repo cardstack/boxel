@@ -112,7 +112,7 @@ module('Pretui | React-dialect aliases — overlay', function (hooks) {
       sink.last,
       false,
       '@onOpenChange(false) fired on a backdrop dismiss — no @onClose passed, ' +
-        'which used to be a hard TypeError',
+        'rather than a hard TypeError',
     );
   });
 

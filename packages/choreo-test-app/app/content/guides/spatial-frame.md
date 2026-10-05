@@ -31,7 +31,7 @@ Measure the subject in its real expanded layout. A card that fits when collapsed
 
 ## API Coverage
 
-**glimmer-motion**: `CameraState`.
+**@cardstack/choreo**: `CameraState`.
 
 **ChoreoContext**: `c.Aim`, `c.Camera`, `c.Frame`, `c.camera`.
 

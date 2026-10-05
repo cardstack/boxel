@@ -2,7 +2,7 @@
 name: motion-testing
 description: >-
   Testing animated UI with glimmer-motion/test-support (setupMotion,
-  animationsSettled, bounds, shape) and glimmer-motion/choreo/test-support
+  animationsSettled, bounds, shape) and @cardstack/choreo/test-support
   (setupChoreo, orphanCount, strandedTransforms). Use
   when writing or debugging any test that renders motion elements, Presence,
   layout animation, or Choreo — and to avoid sleep()-based flake.
@@ -14,7 +14,7 @@ description: >-
 change a spring and every sleep becomes flaky or slow.
 
 ```ts
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import {
   animationsSettled,
   bounds,
@@ -40,7 +40,7 @@ module('the inbox', function (hooks) {
 - **`setupMotion(hooks)`** — resets what outlives an owner: the projection
   root, the layout-loop guard, motion speed. Always pair with
   `setupRenderingTest`.
-- **`setupChoreo(hooks)`** (`glimmer-motion/choreo/test-support`) — the
+- **`setupChoreo(hooks)`** (`@cardstack/choreo/test-support`) — the
   setup for a suite that renders `<Choreo>`, in place of `setupMotion`. It
   is `setupMotion` plus Choreo's own resets: the beacon registry, the
   far-match barrier, gesture samples.
@@ -57,7 +57,7 @@ module('the inbox', function (hooks) {
 - **`shape(el)`** — the cumulative 2×2 transform. The way to assert a label
   was not smeared by its parent's scale; reading `x` will never tell you.
 - **`orphanCount()` / `strandedTransforms()`**
-  (`glimmer-motion/choreo/test-support`) — the two invariants to assert
+  (`@cardstack/choreo/test-support`) — the two invariants to assert
   after any interruption test: nothing parked in a Choreo orphan
   layer, nothing wearing a transform nobody is animating.
 

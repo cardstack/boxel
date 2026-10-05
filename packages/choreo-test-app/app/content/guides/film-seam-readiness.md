@@ -7,7 +7,7 @@ A transition can be timed correctly and still show its images in the wrong order
 The `Seam` helper gates a cut until the outgoing still has decoded. Its hold method accepts the still, the cut operation, and an optional maximum wait. When there is no still to decode, the cut can run synchronously rather than acquiring an unnecessary frame of latency.
 
 ```ts title="Component logic excerpt"
-import { Seam } from 'glimmer-motion/film';
+import { Seam } from '@cardstack/choreo/film';
 
 const seam = new Seam();
 seam.hold(outgoingStill, () => {
@@ -32,6 +32,6 @@ Inspect a cold capture at the first transition and a repeated capture after asse
 
 ## API Coverage
 
-**glimmer-motion/film**: `Seam`.
+**@cardstack/choreo/film**: `Seam`.
 
 Read the implementation: [`seam.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/seam.ts).

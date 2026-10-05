@@ -71,14 +71,14 @@ export interface ToggleGroupSignature {
      * "one of these must be true" is a radio group.
      */
     deselectable?: boolean;
-    /** hue for every member (Appendix E), default `neutral` */
+    /** hue for every member, default `neutral` */
     tone?: PretuiTone;
     /** recipe worn at rest, default `outlined` */
     appearance?: PretuiAppearance;
     /** recipe worn while pressed, default `accent`. The pressed state is an
      * appearance swap rather than a tint, so it reads in greyscale. */
     pressedAppearance?: PretuiAppearance;
-    /** size scale (Appendix E.2), default `m` */
+    /** size scale, default `m` */
     size?: PretuiSize;
     /** icons only; every label becomes its item's `sr-only` name and its
      * `title`. For formatting bars, where a word would not fit. */
@@ -104,7 +104,7 @@ export interface ToggleGroupSignature {
 // name and no relationship. Both were also every-item-a-tab-stop with no
 // arrow keys. `tag-filter-group`'s active chip painted `--boxel-dark`, a
 // fixed-polarity token that inverts wrongly the moment a dark theme loads;
-// here the pressed face is an Appendix-E appearance recipe over the tone
+// here the pressed face is an appearance recipe over the tone
 // channel, so it re-tints with a season it has never seen. Zero options used
 // to render as silence — it now says so, and yields `:empty` for a caller who
 // wants an `EmptyState` in that space. `:deep(.atom-format)` reaching into a

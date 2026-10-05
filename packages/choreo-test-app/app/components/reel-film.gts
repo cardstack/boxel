@@ -1,5 +1,5 @@
+import { Film, IframePicture } from '@cardstack/choreo/film';
 import Component from '@glimmer/component';
-import { Film, IframePicture } from 'glimmer-motion/film';
 import config from 'test-app/config/environment';
 
 /**

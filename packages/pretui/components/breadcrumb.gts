@@ -16,9 +16,9 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
   <template>
     <nav class='pretui-breadcrumb' aria-label='Breadcrumb' data-test-pretui-breadcrumb ...attributes>
       {{#each @items as |item index|}}
-        {{#if index}}<span class='sep'>/</span>{{/if}}
+        {{#if index}}<span class='sep' aria-hidden='true'>/</span>{{/if}}
         {{#if (this.isLast index)}}
-          <b>{{item.label}}</b>
+          <b aria-current='page'>{{item.label}}</b>
         {{else if item.href}}
           <a href={{item.href}}>{{item.label}}</a>
         {{else}}

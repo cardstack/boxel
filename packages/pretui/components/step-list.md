@@ -23,7 +23,7 @@ It is the progress primitive the rest of the kit composes: **Wizard**, **Session
 
 **State is derived from `@current` for steps that do not declare their own**, so the common case is one index rather than a state per step.
 
-**`@announce` defaults to on**, and the reason is stated in the source: a rail whose stage flips from running to blocked while nobody is looking at it has told a sighted reader something and told everyone else nothing. Live regions do not announce their initial content, so it is silent on mount.
+**`@announce` defaults to on**, and the reason is stated in the source: a rail whose stage flips from running to blocked while nobody is looking at it has told a sighted reader something and told everyone else nothing. Live regions do not announce their initial content, so it is silent on mount. The region is rendered from the first render, empty while no step is active, so a stage change is written into a region that already exists and is announced. `@announce={{false}}` omits the region entirely.
 
 ## Prior art
 
@@ -36,7 +36,7 @@ Where it is thinner: no branching, no per-step actions, and no vertical variant 
 ## Accessibility
 
 - **It is an ordered list**, so position and count come from the markup rather than from a rendered "3 of 5".
-- **`@announce` is the component's most considered decision.** A progress rail is the definitional case of a state change happening away from the reader's attention, and defaulting the live region on — while staying silent on mount — is the right trade.
+- **`@announce` is the component's most considered decision.** A progress rail is the definitional case of a state change happening away from the reader's attention, and defaulting the live region on — while staying silent on mount — is the right trade. The polite `role="status"` region is persistent and starts empty, the pattern React Aria and Web Awesome use, because a region mounted together with its text is often not announced at all.
 - **State is text, not colour.** Complete, current and upcoming are announced as such.
 - **`@summary` is wired to the list**, so "3 of 5 complete" is associated rather than floating above it.
 - **`@summaryFormat` exists for localisation**, since the default sentence is English word order.

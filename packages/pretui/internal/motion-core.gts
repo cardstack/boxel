@@ -23,8 +23,6 @@
 // these keeps working when the main thread is busy, which the RAF originals
 // do not.
 //
-// (the motion-core group)
-
 // Pretui — the shared motion vocabulary for Presence and InView.
 
 // ── Shared motion vocabulary ─────────────────────────────────────────────

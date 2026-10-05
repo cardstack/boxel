@@ -41,11 +41,6 @@ interface Probe {
 const readProbes: Probe[] = [
   // Routes that do not consume the ACL's outcome.
   {
-    label: 'GET /_info',
-    consumes: false,
-    send: (r) => r.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
-  },
-  {
     label: 'GET /_mtimes',
     consumes: false,
     send: (r) => r.get('/_mtimes').set('Accept', SupportedMimeType.Mtimes),
@@ -61,6 +56,11 @@ const readProbes: Probe[] = [
     send: (r) => r.get('/').set('Accept', SupportedMimeType.DirectoryListing),
   },
   // Routes that consume it.
+  {
+    label: 'GET /_info',
+    consumes: true,
+    send: (r) => r.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
+  },
   {
     label: 'QUERY /_search',
     consumes: true,
@@ -102,6 +102,13 @@ const readProbes: Probe[] = [
     consumes: true,
     send: (r) =>
       r.get('/person-1.json').set('Accept', SupportedMimeType.CardSource),
+  },
+  // A hash this realm never interned, so the serve's own answer is a 404.
+  {
+    label: 'GET a hashed scoped stylesheet',
+    consumes: true,
+    send: (r) =>
+      r.get(`/_scoped-css/person.gts.md5-${'0'.repeat(32)}.glimmer-scoped.css`),
   },
   {
     label: 'GET raw file',
@@ -481,8 +488,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          `GET ${SupportedMimeType.RealmInfo} /_info`,
+          `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          'GET * /_scoped-css/*',
         ].sort(),
-        'the consumer set is the card+json read and writes, the search, the operations envelope and the capability check',
+        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -498,6 +508,76 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           .sort(),
         ['DELETE', 'GET', 'HEAD', 'PATCH', 'POST', 'QUERY'],
         'the fallback file and module serve does not consume it for any method',
+      );
+    });
+
+    test('exactly the routes left to the ACL by decision say so, and every route declares what it does with the outcome', async function (assert) {
+      let describe = (route: {
+        method: string;
+        mimeType: string;
+        path: string;
+      }) => `${route.method} ${route.mimeType} ${route.path}`;
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.aclOnly)
+          .map(describe)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardHtml} /.*`,
+          `GET ${SupportedMimeType.FileMetaHtml} /.*`,
+          `GET ${SupportedMimeType.Markdown} /.*`,
+          `GET ${SupportedMimeType.FileMeta} /.*`,
+          `GET ${SupportedMimeType.CardTypeSummary} /_types`,
+          `GET ${SupportedMimeType.Mtimes} /_mtimes`,
+          `GET ${SupportedMimeType.JSONAPI} /_dependencies`,
+          `GET ${SupportedMimeType.CardDependencies} /_card-dependencies`,
+          `GET ${SupportedMimeType.JSONAPI} /_publishability`,
+          `GET ${SupportedMimeType.JSONAPI} /_indexing-errors`,
+          `QUERY ${SupportedMimeType.JSON} /_lint`,
+          `QUERY ${SupportedMimeType.JSON} /_sign-capture-urls`,
+          `POST ${SupportedMimeType.CardSource} /.*`,
+          `POST ${SupportedMimeType.OctetStream} /.*`,
+          `DELETE ${SupportedMimeType.CardSource} /.+`,
+          `POST ${SupportedMimeType.JSONAPI} /_atomic`,
+          `GET ${SupportedMimeType.Permissions} /_permissions`,
+          `PATCH ${SupportedMimeType.Permissions} /_permissions`,
+          `POST ${SupportedMimeType.JSON} /_cancel-indexing-job`,
+          `POST ${SupportedMimeType.JSON} /_reindex`,
+          `POST ${SupportedMimeType.JSON} /_full-reindex`,
+          `POST ${SupportedMimeType.JSONAPI} /_invalidate`,
+        ].sort(),
+        'the index-backed reads, the verbatim writes, and the administration routes',
+      );
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.aclOnly &&
+              (route.consumesCoarseOutcome || route.coarseReadOnly),
+          )
+          .map(describe),
+        [],
+        'none of them also consumes the outcome or serves code',
+      );
+      // The ACL lets every `HEAD` through, so a `HEAD` route has no refusal
+      // to decide about.
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.path !== '*' &&
+              route.method !== 'HEAD' &&
+              !route.consumesCoarseOutcome &&
+              !route.coarseReadOnly &&
+              !route.operationalEndpoint &&
+              !route.aclOnly,
+          )
+          .map(describe),
+        [],
+        'every other route consumes the outcome, serves code, or is an operational endpoint',
       );
     });
 
@@ -520,8 +600,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_capabilities`,
           `QUERY ${SupportedMimeType.BoxelOperations} /_operations`,
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
+          `GET ${SupportedMimeType.RealmInfo} /_info`,
+          `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          'GET * /_scoped-css/*',
         ].sort(),
-        'the card+json read and writes, the search, the operations envelope and the capability check',
+        'the card+json read and writes, the search, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
       );
       assert.deepEqual(
         testRealm
@@ -795,17 +878,22 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('every consuming route hands an admitted caller to the policy gate', async function (assert) {
-      // Two consumers answer an admitted caller with something other than a
+      // Four consumers answer an admitted caller with something other than a
       // refusal, and each is pinned on its own. The search hands them to the
       // policy's query lane, which answers with rows (below). The capability
       // check answers a decision per pair, a 200 with denials in it (its own
-      // module).
+      // module). The realm info resolves no operation, and answers them with
+      // the info (below). The hashed stylesheet serve hands them nothing to
+      // judge and serves the stylesheet (the capture-authority module).
       let consumers = testRealm
         .routeDescriptions()
         .filter((route) => route.consumesCoarseOutcome)
         .filter(
           (route) =>
-            route.path !== '/_search' && route.path !== '/_capabilities',
+            route.path !== '/_search' &&
+            route.path !== '/_capabilities' &&
+            route.path !== '/_info' &&
+            route.path !== '/_scoped-css/*',
         )
         .map((route) => `${route.method} ${route.mimeType}`)
         .filter((route) => route !== `HEAD ${SupportedMimeType.CardJson}`)
@@ -840,6 +928,37 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `Bearer ${createJWT(testRealm, 'owner', ['read', 'write', 'realm-owner'])}`,
         );
       assert.strictEqual(person.status, 200, 'and nothing was deleted');
+    });
+
+    test('the realm info answers an admitted caller without asking the policy gate', async function (assert) {
+      testRealm.__testOnlySetCoarseAdmission(() => true);
+      try {
+        for (let send of [
+          () =>
+            request.get('/_info').set('Accept', SupportedMimeType.RealmInfo),
+          () =>
+            request
+              .post('/_info')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .set('Accept', SupportedMimeType.RealmInfo),
+        ]) {
+          let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
+          let response = await send();
+          assert.strictEqual(response.status, 200, 'admitting: answered');
+          assert.strictEqual(
+            response.body.data.id,
+            testRealm.url,
+            'admitting: with the realm’s info',
+          );
+          assert.strictEqual(
+            testRealm.__testOnlyPolicyGateStats().policyLoads,
+            before,
+            'admitting: and nothing asked the gate',
+          );
+        }
+      } finally {
+        testRealm.__testOnlySetCoarseAdmission(undefined);
+      }
     });
 
     test('the search hands an admitted caller to the query lane, which a realm with no policy answers with no rows', async function (assert) {

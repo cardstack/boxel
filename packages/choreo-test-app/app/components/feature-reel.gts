@@ -1,9 +1,10 @@
+import type { ChoreoRun } from '@cardstack/choreo';
+import { Choreo } from '@cardstack/choreo';
 import { array } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { ChoreoRun } from 'glimmer-motion';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Inbox } from 'test-app/components/examples/inbox';
 import { Lightbox } from 'test-app/components/examples/lightbox';

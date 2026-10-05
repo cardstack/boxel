@@ -139,6 +139,7 @@ module(basename(import.meta.filename), function () {
       let neverSettles = new Promise<never>(() => {});
       let result = withTimeout(
         stubPage,
+        'http://localhost:4201/test/stub-card',
         () => neverSettles,
         30_000,
         undefined,
@@ -175,6 +176,7 @@ module(basename(import.meta.filename), function () {
       try {
         await withTimeout(
           stubPage,
+          'http://localhost:4201/test/stub-card',
           async () => {
             started = true;
           },
@@ -194,6 +196,7 @@ module(basename(import.meta.filename), function () {
       let ac = new AbortController();
       let result = await withTimeout(
         stubPage,
+        'http://localhost:4201/test/stub-card',
         () => new Promise<never>(() => {}),
         50,
         undefined,
@@ -211,6 +214,7 @@ module(basename(import.meta.filename), function () {
       let ac = new AbortController();
       let value = await withTimeout(
         stubPage,
+        'http://localhost:4201/test/stub-card',
         async () => 'rendered',
         1_000,
         undefined,

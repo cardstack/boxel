@@ -18,7 +18,7 @@ function isBp(mode: string) {
 }
 
 // ── Viewport — the artboard ──────────────────────────────────────────────
-// Built against the artboard contract (Appendix H): true widths that pan
+// Built against the artboard contract: true widths that pan
 // rather than clamp, a neutral stage with explicit surface/gutter settings,
 // named breakpoints + a 3-up mode, honest live captions, a drag handle
 // (pointer capture, no document listeners), and reflected data-* state.

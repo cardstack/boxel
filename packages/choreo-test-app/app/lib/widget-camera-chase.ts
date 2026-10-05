@@ -1,5 +1,5 @@
-import type { Camera3DState, Camera3DWaypoint } from 'glimmer-motion';
-import { sampleThrough } from 'glimmer-motion/choreo/path';
+import type { Camera3DState, Camera3DWaypoint } from '@cardstack/choreo';
+import { sampleThrough } from '@cardstack/choreo/path';
 
 /** Sylva's two-stage chase, baked once so film seeks never depend on history. */
 export function bakeCameraChase(

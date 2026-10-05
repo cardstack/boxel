@@ -16,6 +16,24 @@
  * There is no `sleep()` used as "it is probably done by now" — where a sleep
  * appears it is deliberately mid-flight, and says so.
  */
+import {
+  after,
+  at,
+  beacon,
+  Choreo,
+  type ChoreoContext,
+  type DeriveContext,
+  type SpringSpec,
+  type StepArgs,
+  StepComponent,
+  type TimelineNode,
+  toMs,
+} from '@cardstack/choreo';
+import {
+  orphanCount,
+  setupChoreo,
+  strandedTransforms,
+} from '@cardstack/choreo/test-support';
 import { array } from '@ember/helper';
 import {
   find,
@@ -27,25 +45,7 @@ import {
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import {
-  after,
-  at,
-  beacon,
-  Choreo,
-  type ChoreoContext,
-  type DeriveContext,
-  motion,
-  type SpringSpec,
-  type StepArgs,
-  StepComponent,
-  type TimelineNode,
-  toMs,
-} from 'glimmer-motion';
-import {
-  orphanCount,
-  setupChoreo,
-  strandedTransforms,
-} from 'glimmer-motion/choreo/test-support';
+import { motion } from 'glimmer-motion';
 import { animationsSettled, bounds } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

@@ -9,11 +9,11 @@
  * schedule is an absolute setting that re-derives correctly by accident, so a
  * test that only checked `gas` would pass against a broken host.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Fold } from 'test-app/components/examples/fold';
