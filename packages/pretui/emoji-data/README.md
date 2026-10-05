@@ -11,7 +11,7 @@ needs the number, not the conclusion.
 | ------------ | --------------------------------------------------------------------------------------------- |
 | Upstream     | [emoji-picker-element][epe] by Nolan Lawson                                                   |
 | Version      | **1.29.1**                                                                                    |
-| Source       | **local checkout** at `~/Projects/emoji-picker-element`, not npm                              |
+| Source       | a git checkout of [emoji-picker-element][epe], not npm                                        |
 | Commit       | **`5d1c8bfc21e737c03a3cb14e06b4e472e2275ff1`** (`git describe --tags` → `v1.29.1-4-g5d1c8bf`) |
 | Working tree | clean at build time                                                                           |
 | Licence      | **Apache-2.0** — `SPDX-License-Identifier: Apache-2.0`                                        |

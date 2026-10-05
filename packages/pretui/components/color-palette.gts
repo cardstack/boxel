@@ -11,7 +11,7 @@ import { Swatch } from './swatch';
 /**
  * A grid of swatches with one selection.
  *
- * Assessed against the brief: the existing implementation was sound in
+ * Assessed against the field: the existing implementation was sound in
  * structure (roving ring, case-insensitive match) but had two real defects
  * and one gap. Both defects are fixed here rather than the component being
  * replaced — the grid itself did not need rebuilding.
