@@ -22,8 +22,9 @@ import { setupTestRealmServiceWorker } from '../../helpers/test-realm-service-wo
 // stays mounted while the store reloads the FileDef after a write, then writes
 // new bytes to the same path and asserts the preview shows them. The fixtures
 // differ in something the browser itself reports (an image's intrinsic width,
-// an audio track's duration) or in the bytes the preview hands its element, so
-// a preview that keeps showing the first load fails.
+// an audio track's duration) or in what the preview loads (the bytes behind a
+// blob URL or a fetch, the face URL it hands the browser), so a preview that
+// keeps showing the first load fails.
 
 const encoder = new TextEncoder();
 
@@ -88,9 +89,7 @@ function pdfTitled(title: string): string {
   );
 }
 
-// A one-facet ASCII STL whose triangle spans `width` × `height` in its XY
-// plane. The viewer stands an STL upright (Z up), so its dimensions readout
-// reports the triangle as `width × 0 × height`.
+// A one-facet ASCII STL whose triangle spans `width` × `height`.
 function stlTriangle(width: number, height: number): string {
   return [
     'solid tri',
@@ -286,28 +285,58 @@ module(
       );
     });
 
-    test('3D viewer loads the new geometry after its file is written', async function (assert) {
-      await openInInteractStack('part.stl');
+    module('3D viewer', function (hooks) {
+      // The bodies the viewer fetched for the model. The viewer fetches the
+      // bytes before it creates a WebGL context, so this watches the reload
+      // in a browser that has no WebGL.
+      let fetchedModels: Promise<string>[];
+      let nativeFetch: typeof fetch;
 
-      let dimensions = () =>
-        document.querySelector('.model-viewer__dims')?.textContent?.trim() ??
-        '';
-      await waitUntil(() => dimensions() === '2 × 0 × 4', {
-        timeout: 15000,
-        timeoutMessage: 'the first model did not load',
+      hooks.beforeEach(function () {
+        fetchedModels = [];
+        nativeFetch = globalThis.fetch;
+        globalThis.fetch = async (input, init) => {
+          let response = await nativeFetch(input, init);
+          let url = input instanceof Request ? input.url : String(input);
+          if (url.includes('part.stl')) {
+            fetchedModels.push(response.clone().text());
+          }
+          return response;
+        };
       });
 
-      await realm.write('part.stl', stlTriangle(6, 8));
-
-      await waitUntil(() => dimensions() === '6 × 0 × 8', {
-        timeout: 15000,
-        timeoutMessage: 'the 3D viewer kept the first model',
+      hooks.afterEach(function () {
+        globalThis.fetch = nativeFetch;
       });
-      assert.strictEqual(
-        dimensions(),
-        '6 × 0 × 8',
-        'the viewer reports the rewritten geometry',
-      );
+
+      async function lastFetchedModel() {
+        return await fetchedModels[fetchedModels.length - 1];
+      }
+
+      test('3D viewer fetches the new geometry after its file is written', async function (assert) {
+        await openInInteractStack('part.stl');
+
+        await waitUntil(() => fetchedModels.length > 0, {
+          timeout: 15000,
+          timeoutMessage: 'the viewer did not fetch the first model',
+        });
+        assert.true(
+          (await lastFetchedModel()).includes('vertex 2 0 0'),
+          'the viewer starts with the first model',
+        );
+        let firstCount = fetchedModels.length;
+
+        await realm.write('part.stl', stlTriangle(6, 8));
+
+        await waitUntil(() => fetchedModels.length > firstCount, {
+          timeout: 15000,
+          timeoutMessage: 'the 3D viewer did not refetch the model',
+        });
+        assert.true(
+          (await lastFetchedModel()).includes('vertex 6 0 0'),
+          'the viewer fetched the rewritten model',
+        );
+      });
     });
 
     module('font specimen', function (hooks) {
