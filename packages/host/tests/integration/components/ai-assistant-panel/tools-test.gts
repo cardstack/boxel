@@ -922,6 +922,26 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       },
     });
     await waitFor('[data-test-tool-result-header]');
+
+    // The header and the embedded result body read as one seamless card: the
+    // body's own card container shares the header's light background, so the
+    // dark panel does not show through the seam (or the rounded corners) between
+    // them. Before the fix the body container inherited the panel's dark
+    // --background and that contrast was the visible gap.
+    let header = find(
+      '[data-test-tool-result-container] [data-test-tool-result-header]',
+    )!;
+    let resultCard = find(
+      '[data-test-tool-result-container] .field-component-card.embedded-format',
+    )!;
+    let headerBg = window.getComputedStyle(header).backgroundColor;
+    let cardBg = window.getComputedStyle(resultCard).backgroundColor;
+    assert.strictEqual(
+      cardBg,
+      headerBg,
+      'result body container shares the header background (no dark seam)',
+    );
+
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')

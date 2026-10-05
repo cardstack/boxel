@@ -404,6 +404,13 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-result-card-preview {
         margin-top: var(--boxel-sp);
+        /* The result renders as a header card container stacked over the
+           embedded result's own card container. Both inherit the assistant
+           panel's dark --background, so the dark shows through the seam (and the
+           rounded corners) between the white header and the white body. Pin the
+           chrome to the light surface so the header and body read as one
+           seamless card. */
+        --background: var(--boxel-light);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);
