@@ -433,6 +433,14 @@ export interface CardContext<T extends CardDef = CardDef> {
   // operator-mode; absent in contexts with no chooser modal (prerender,
   // freestyle), so consumers guard on it.
   markdownEmbedChooser?: MarkdownEmbedChooser;
+  // Resolves room media (an image a tool uploaded to the assistant's room)
+  // to a URL an `<img>` can load. Room media is served only to the Matrix
+  // session, which a browser request for an `<img>` does not carry, so the
+  // host downloads it and answers with an object URL the caller revokes when
+  // it is done with it; any other URL comes back unchanged. Provided where
+  // tool results render in the assistant's chat, and absent everywhere else,
+  // so consumers guard on it.
+  loadRoomMedia?: (url: string) => Promise<string>;
   // Optional runtime mode/submode hints used by cards that render differently per context.
   mode?: 'host' | 'operator';
   submode?: 'interact' | 'code' | 'host';

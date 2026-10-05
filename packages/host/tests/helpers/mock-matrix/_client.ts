@@ -210,8 +210,12 @@ export class MockClient implements ExtendedClient {
     return this.clientOpts.baseUrl;
   }
 
-  downloadContentAsBlob(_file: FileDef): Promise<Blob> {
-    throw new Error('Method not implemented.');
+  async downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob> {
+    let content = this.serverState.getContent(serializedFile.url);
+    if (!content) {
+      throw new Error(`content not found for ${serializedFile.url}`);
+    }
+    return new Blob([content], { type: serializedFile.contentType });
   }
 
   hashMessageWithSecret(_message: string): Promise<string> {

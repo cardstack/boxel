@@ -1828,6 +1828,31 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
+  // A URL the browser can display for room media. Room media is served only
+  // to the Matrix session, which an `<img>` request does not carry, so its
+  // bytes are downloaded with the session and handed back as an object URL
+  // that the caller revokes when done. Any other URL comes back unchanged.
+  // The session token goes only to the homeserver's own origin: card code
+  // can call this with any URL.
+  loadRoomMedia = async (url: string): Promise<string> => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return url;
+    }
+    if (
+      parsed.origin !== new URL(this.client.baseUrl).origin ||
+      !parsed.pathname.startsWith('/_matrix/')
+    ) {
+      return url;
+    }
+    let blob = await this.client.downloadContentAsBlob({
+      url,
+    } as FileAPI.SerializedFile);
+    return URL.createObjectURL(blob);
+  };
+
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.
   async updateSkillsAndToolsIfNeeded(roomId: string) {
