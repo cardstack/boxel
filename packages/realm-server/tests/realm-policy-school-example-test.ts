@@ -1,11 +1,13 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import sinon from 'sinon';
 import supertest from 'supertest';
 import type { Test, SuperTest, Response } from 'supertest';
 import { readdirSync, readFileSync } from 'fs';
 import { basename, join, relative } from 'path';
 import { dirSync } from 'tmp';
 import { SupportedMimeType } from '@cardstack/runtime-common';
+import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type {
   PolicyExplanation,
   QueuePublisher,
@@ -136,7 +138,7 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(CODE),
           fileSystem: shippedRealm('school-code'),
           permissions: {
-            '*': ['read'],
+            users: ['read'],
             [IT_ADMIN]: ['read', 'write', 'realm-owner'],
           },
         },
@@ -362,9 +364,10 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(compiled, 'the Education realm has a policy');
     // The one remark is the compiler's caution about rendered pages: a
     // schedule links to its provider's roster card, and the compiler cannot
-    // tell which of a type's formats draw a linked card, so it cannot rule out
-    // a listing row's page showing it. The schedule's templates draw only its
-    // own fields.
+    // tell which of a type's formats draw a linked card, so it remarks on any
+    // format the listing leaves shareable. The formats a listing row shows draw
+    // only the schedule's own fields, and the listing declares the isolated
+    // and head formats, which can draw more, unshareable.
     assert.deepEqual(
       compiled?.issues.map(({ code, path, severity }) => ({
         code,
@@ -470,7 +473,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a member of staff who reads the realm is told the read is not permitted', async function (assert) {
+    test('a member of staff who reads the realm is told appending is not permitted', async function (assert) {
       let response = await operations(
         EDUCATION,
         onEducation(OFFICE),
@@ -540,13 +543,15 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(errorOf(response)?.code, 'target-not-found');
     });
 
-    test('the teacher cannot write the ids the grant reads, through a raw update', async function (assert) {
+    test('the teacher cannot write the ids her own grant reads, through a raw update', async function (assert) {
+      // Room 204 is Alice's, so her grants hold there; only the absence of an
+      // `update` grant refuses this.
       let response = await operations(
         EDUCATION,
         onEducation(ALICE),
         'post',
         invoke('update', {
-          href: ROOM_206,
+          href: ROOM_204,
           data: {
             type: 'card',
             attributes: { teacherIds: [BEN, ALICE] },
@@ -559,8 +564,8 @@ module(basename(import.meta.filename), function (hooks) {
         404,
         'the policy grants no update, so it is refused',
       );
-      let classroom = await getCard(ROOM_206, onEducation(IT_ADMIN));
-      assert.deepEqual(classroom.body.data.attributes.teacherIds, [BEN]);
+      let classroom = await getCard(ROOM_204, onEducation(IT_ADMIN));
+      assert.deepEqual(classroom.body.data.attributes.teacherIds, [ALICE]);
     });
   });
 
@@ -620,12 +625,32 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('the definitions every staff member renders with are in the Code realm, which anyone reads', async function (assert) {
-      let response = await request
-        .get(path(`${CODE}classroom.gts`))
-        .set('Accept', SupportedMimeType.CardSource)
-        .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
-      assert.strictEqual(response.status, 200);
+    test('the definitions every staff member renders with are in the Code realm, which every signed-in user reads', async function (assert) {
+      // The `users` row admits a caller the homeserver has a profile for. The
+      // staff ids here name no test homeserver, so the lookup answers as a
+      // homeserver that knows them would.
+      let profile = sinon
+        .stub(MatrixClient.prototype, 'getProfile')
+        .resolves({ displayname: 'Alice Rivera' });
+      try {
+        let response = await request
+          .get(path(`${CODE}classroom.gts`))
+          .set('Accept', SupportedMimeType.CardSource)
+          .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
+        assert.strictEqual(response.status, 200);
+        profile.resolves(undefined);
+        let unknown = await request
+          .get(path(`${CODE}classroom.gts`))
+          .set('Accept', SupportedMimeType.CardSource)
+          .set('Authorization', `Bearer ${createJWT(code, ALICE, ['read'])}`);
+        assert.notStrictEqual(
+          unknown.status,
+          200,
+          'and refuses a caller the homeserver does not know',
+        );
+      } finally {
+        profile.restore();
+      }
     });
   });
 
@@ -655,7 +680,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(alice.body.data, [], 'a teacher who provides nothing');
     });
 
-    test('pages are full, because the grant is part of the query rather than a filter over its rows', async function (assert) {
+    test('the listing pages through the caller’s schedules', async function (assert) {
       let first = await listMySchedules(CARMEN, { number: 0, size: 1 });
       let second = await listMySchedules(CARMEN, { number: 1, size: 1 });
       assert.deepEqual(
@@ -683,8 +708,53 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.true(
         scoped.some(({ bind }) => JSON.stringify(bind).includes(CARMEN)),
-        'and the scoped one carries the grant’s filter, bound to the caller',
+        'and the scoped one is bound to the caller',
       );
+    });
+
+    // The declared filter and the grant's predicate compare the same field
+    // with the caller, so a listing alone cannot show the grant at work. These
+    // two can: without a grant naming the search, a provider finds nothing,
+    // and the grant naming `listMySchedules` compiles to the fragment the
+    // realm composes into it.
+    test('a provider finds no schedules by a search no grant names', async function (assert) {
+      let adHoc = { filter: { 'item.on': SCHEDULE }, realms: [EDUCATION] };
+      let carmen = await federatedSearch(adHoc, CARMEN);
+      assert.strictEqual(carmen.status, 200, carmen.text);
+      assert.deepEqual(carmen.body.data, [], 'no `query` grant, no rows');
+      assert.deepEqual(carmen.body.meta.policyScopedRealms, [EDUCATION]);
+      let admin = await federatedSearch(adHoc, IT_ADMIN);
+      assert.strictEqual(
+        (admin.body.data as unknown[]).length,
+        3,
+        'where the IT admin, who reads the realm, finds every schedule',
+      );
+    });
+
+    test('the listMySchedules grant compiles to a fragment over the provider id, bound to the caller', async function (assert) {
+      let response = await operations(
+        ORG,
+        onOrg(IT_ADMIN),
+        'query',
+        invoke('explain', {
+          href: POLICY_CARD,
+          data: {
+            actor: CARMEN,
+            target: EDUCATION,
+            operation: 'listMySchedules',
+            search: { on: SCHEDULE },
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      let explanation = (
+        response.body as { 'atomic:results': PolicyExplanation[] }
+      )['atomic:results'][0];
+      assert.strictEqual(explanation.decision, 'allowed');
+      assert.strictEqual(explanation.reason, 'granted');
+      let fragment = JSON.stringify(explanation.search?.fragment);
+      assert.true(fragment.includes('providerId'), fragment);
+      assert.true(fragment.includes(JSON.stringify(CARMEN)), fragment);
     });
 
     test('a provider reads a schedule they provide and not another', async function (assert) {

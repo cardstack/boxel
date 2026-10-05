@@ -140,12 +140,12 @@ module.exports = {
       // package uses today; the clock guard is not, because a renderer that
       // reads the wall clock directly drifts wherever it lives.
       files: ['**/*.js', '**/*.gjs'],
-      excludedFiles: ['./.template-lintrc.js', './scripts/**'],
+      excludedFiles: ['./.template-lintrc.js'],
       rules: { 'no-restricted-syntax': ['error', ...AMBIENT_CLOCK_SELECTORS] },
     },
     {
       // Node-run tooling at the package root, not card code.
-      files: ['./.eslintrc.cjs', './.template-lintrc.js', './scripts/**/*.mjs'],
+      files: ['./.eslintrc.cjs', './.template-lintrc.js'],
       env: {
         browser: false,
         node: true,

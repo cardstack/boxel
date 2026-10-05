@@ -3,11 +3,11 @@
 A small, invented school, split across three realms so that a policy, not the
 realm permissions, decides what each member of staff can reach:
 
-| Realm              | Holds                                                       | Who can read it      |
-| ------------------ | ----------------------------------------------------------- | -------------------- |
-| `school-code`      | the card definitions, and the staff portal                  | everyone (`*: read`) |
-| `school-org`       | the staff roster, and the Education realm's `RealmPolicy`   | the IT admin         |
-| `school-education` | classrooms, service-plan schedules and sessions, activities | the IT admin         |
+| Realm              | Holds                                                       | Who can read it                      |
+| ------------------ | ----------------------------------------------------------- | ------------------------------------ |
+| `school-code`      | the card definitions, and the staff portal                  | every signed-in user (`users: read`) |
+| `school-org`       | the staff roster, and the Education realm's `RealmPolicy`   | the IT admin                         |
+| `school-education` | classrooms, service-plan schedules and sessions, activities | the IT admin                         |
 
 Teachers and service providers hold **no** permission on `school-org` or
 `school-education`. Everything they can do there, they can do because the
@@ -133,15 +133,17 @@ a realm reader gets where a teacher gets a 404.
    pushes, so push from a copy rather than from this package:
 
    ```sh
+   mkdir -p /tmp/school
    cp -r packages/school-example-realm/school-* /tmp/school/
    boxel realm push /tmp/school/school-code <realm-server>/<owner>/school-code/
    boxel realm push /tmp/school/school-org <realm-server>/<owner>/school-org/
    boxel realm push /tmp/school/school-education <realm-server>/<owner>/school-education/
    ```
 
-3. **Let everyone read `school-code`.** The realm's permissions take a `*`
-   entry for every signed-in user. From the browser's console while signed in
-   as the IT admin, with `realm` set to the `school-code` URL:
+3. **Let every signed-in user read `school-code`.** A realm's permissions take
+   a `users` entry for every signed-in user (`*` would open it to anonymous
+   visitors too, which the example doesn't need). From the browser's console
+   while signed in as the IT admin, with `realm` set to the `school-code` URL:
 
    ```js
    let token = JSON.parse(localStorage.getItem('boxel-session'))[realm];
@@ -155,7 +157,7 @@ a realm reader gets where a teacher gets a 404.
        data: {
          type: 'permissions',
          id: realm,
-         attributes: { permissions: { '*': ['read'] } },
+         attributes: { permissions: { users: ['read'] } },
        },
      }),
    });

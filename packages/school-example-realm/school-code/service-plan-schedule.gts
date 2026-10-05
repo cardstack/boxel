@@ -210,9 +210,14 @@ export class ServicePlanSchedule extends CardDef {
   // Education realm's policy adds its own grant's filter on top, in the same
   // SQL query. The realm runs this declaration as it stores it, whatever filter
   // a caller sends under this name.
+  // A listing row is drawn from its fitted and embedded formats, which show
+  // only the schedule's own fields. The isolated format can show an IT admin
+  // the linked roster card, and the head format is the page's metadata, so the
+  // listing serves neither as a shared render.
   @operation static listMySchedules = {
     base: 'query',
     links: 'ids',
+    html: { isolated: 'unshareable', head: 'unshareable' },
     query: {
       filter: {
         on: () => ServicePlanSchedule,

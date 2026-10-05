@@ -61,8 +61,10 @@ class PortalIsolated extends Component<typeof SchoolPortal> {
             {{/each}}
           </ul>
         </@context.searchResultsComponent>
-      {{else}}
+      {{else if this.educationRealm}}
         <p class='subtle'>Sign in to see the schedules you provide.</p>
+      {{else}}
+        <p class='subtle'>This portal names no Education realm.</p>
       {{/if}}
     </section>
 
