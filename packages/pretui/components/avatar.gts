@@ -91,13 +91,9 @@ export class Avatar extends Component<AvatarSignature> {
           justify-content: center;
           width: var(--pretui-avatar-size, 1.5rem);
           height: var(--pretui-avatar-size, 1.5rem);
-          /* 0.42 of the diameter, to the whole pixel; the plain calc() is
-             for engines without round(), which drop that declaration */
+          /* 0.42 of the diameter; rounded to the whole pixel below where
+             round() is supported */
           font-size: calc(var(--pretui-avatar-size, 1.5rem) * 0.42);
-          font-size: round(
-            calc(var(--pretui-avatar-size, 1.5rem) * 0.42),
-            1px
-          );
           border-radius: 50%;
           font-family: var(--font-mono);
           font-weight: 600;
@@ -106,6 +102,18 @@ export class Avatar extends Component<AvatarSignature> {
           box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 28%, var(--border));
           overflow: hidden;
           flex: none;
+        }
+        /* Gated rather than declared after the calc() fallback: a value
+           containing var() is accepted at parse time, so an engine without
+           round() would keep it, fail at computed-value time, and inherit
+           the parent's font size instead of using the fallback. */
+        @supports (font-size: round(1px, 1px)) {
+          .pretui-avatar {
+            font-size: round(
+              calc(var(--pretui-avatar-size, 1.5rem) * 0.42),
+              1px
+            );
+          }
         }
         .pretui-avatar img {
           width: 100%;
