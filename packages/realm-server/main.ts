@@ -637,6 +637,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
+    bootstrapOrder: hrefs.map(([url]) => url),
     prepareRealmFromRow: (row: RealmRegistryRow) => {
       // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
       // to decide whether to mount it, so the file it reads is the one the
@@ -969,10 +970,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
   log.info(`Realm server listening on port ${actualPort} is serving realms:`);
-  // Phase 3: realms[] is populated by the reconciler in realm_registry
-  // row order, not in CLI --path order, so hrefs[index] / paths[index]
-  // no longer correspond. Log just the realm URLs; URL mappings are
-  // logged separately below.
+  // realms[] is populated by the reconciler from realm_registry rows, so
+  // hrefs[index] / paths[index] do not correspond. Log just the realm URLs;
+  // URL mappings are logged separately below.
   for (let { url } of realms) {
     log.info(`    ${url}`);
   }
