@@ -27,13 +27,15 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMINGS = join(root, 'scripts', 'test-timings.json');
 const BOOT_PERCENTILE = 0.02;
 
-function testFiles(dir = root) {
+// Paths come back relative to `base`, so a copy of the package lists its
+// files under the same names as the package itself.
+function testFiles(base = root, dir = base) {
   let out = [];
   for (let entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue;
     let path = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...testFiles(path));
-    else if (entry.name.endsWith('.test.gts')) out.push(relative(root, path));
+    if (entry.isDirectory()) out.push(...testFiles(base, path));
+    else if (entry.name.endsWith('.test.gts')) out.push(relative(base, path));
   }
   return out.sort();
 }
