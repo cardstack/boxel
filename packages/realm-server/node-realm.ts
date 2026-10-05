@@ -24,7 +24,7 @@ import {
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
-import type { Dirent, ReadStream, Stats } from 'fs-extra';
+import type { Dirent, Stats } from 'fs-extra';
 import fsExtra from 'fs-extra';
 const {
   existsSync,
@@ -42,7 +42,7 @@ const {
   closeSync,
 } = fsExtra;
 import { join } from 'path';
-import { Duplex } from 'node:stream';
+import { Duplex, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type {
   RequestContext,
@@ -217,15 +217,29 @@ export class NodeAdapter implements RealmAdapter {
     // consistency), so the length is taken from the open descriptor and the
     // stream reads from that same descriptor. That is the length a response
     // can declare for this body: it describes the bytes the stream delivers,
-    // where the path stat's length may not.
-    let opened: { content: ReadStream; size?: number } | undefined;
+    // where the path stat's length may not. The stream stops at that length,
+    // so content an append adds while it is being read is left for the next
+    // read rather than sent past the length this one declared.
+    let opened: { content: Readable; size?: number } | undefined;
     let open = () => {
       if (!opened) {
         let fd: number | undefined;
         try {
           fd = openSync(absolutePath, 'r');
           let size = fstatSync(fd).size;
-          opened = { content: createReadStream(absolutePath, { fd }), size };
+          if (size === 0) {
+            closeSync(fd);
+            opened = { content: Readable.from([]), size };
+          } else {
+            opened = {
+              content: createReadStream(absolutePath, {
+                fd,
+                start: 0,
+                end: size - 1,
+              }),
+              size,
+            };
+          }
         } catch (_err) {
           if (fd !== undefined) {
             closeSync(fd);
@@ -256,12 +270,16 @@ export class NodeAdapter implements RealmAdapter {
     path: string,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult> {
-    // Written beside the file and renamed onto it, which is atomic, so a
-    // concurrent reader holds either the old file or the new one and never a
-    // file truncated mid-write — a read that saw part of a rewrite would come
-    // up shorter than the length its response declared. The staging name is
-    // one the realm treats as no part of itself, and the per-file write locks
-    // the realm takes keep two writers of one path from sharing it.
+    // Written beside the file and renamed onto it, which is atomic, so the
+    // file never holds a half-written version: a read that saw part of a
+    // rewrite would come up shorter than the length its response declared. A
+    // reader on this host that already has the file open keeps reading the
+    // version it opened. A reader on another host of a network filesystem may
+    // instead see its read fail once the file is replaced; that read errors
+    // rather than coming up short, and the response it was feeding is torn
+    // down so the client can ask again. The staging name is one the realm
+    // treats as no part of itself, and the per-file write locks the realm
+    // takes keep two writers of one path from sharing it.
     let absolutePath = join(this.realmDir, path);
     let stagedPath = join(this.realmDir, partialWritePath(path as LocalPath));
     try {

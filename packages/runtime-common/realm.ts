@@ -10094,22 +10094,11 @@ export class Realm {
     // response must never pay for (and then strand) a full-file stream.
     // String bodies are left to the HTTP layer, which measures and sets
     // Content-Length for them itself.
-    //
-    // A `GET` that asks for no byte range is answered with the whole file, so
-    // the stream is opened first and the length taken from what it will send.
-    // A declared length larger than the body leaves the client waiting for
-    // bytes that never arrive; one that is smaller cuts the body short.
-    let openedContent =
-      request.method === 'GET' && !request.headers.get('range')
-        ? ref.openContent?.()
-        : undefined;
     let sliceableBytes =
-      !openedContent && ref.size == null && ref.content instanceof Uint8Array
+      ref.size == null && ref.content instanceof Uint8Array
         ? ref.content
         : undefined;
-    let totalSize = openedContent
-      ? openedContent.size
-      : (ref.size ?? sliceableBytes?.byteLength);
+    let totalSize = ref.size ?? sliceableBytes?.byteLength;
     if (totalSize != null) {
       headers['content-length'] = String(totalSize);
     }
@@ -10201,6 +10190,22 @@ export class Realm {
       });
     }
 
+    // Everything that reaches here sends the whole file, including a `GET`
+    // whose `Range` was set aside. Where the adapter can measure what it
+    // opens, the declared length is taken from the opened content rather than
+    // from the size the ranges were judged against: that size can describe a
+    // version of the file the stream does not read, and a declared length
+    // larger than the body leaves the client waiting for bytes that never
+    // arrive, one that is smaller cuts the body short.
+    let openedContent =
+      request.method === 'GET' ? ref.openContent?.() : undefined;
+    if (openedContent) {
+      if (openedContent.size != null) {
+        headers['content-length'] = String(openedContent.size);
+      } else {
+        delete headers['content-length'];
+      }
+    }
     let content = openedContent?.content ?? ref.content;
     if (
       content instanceof ReadableStream ||

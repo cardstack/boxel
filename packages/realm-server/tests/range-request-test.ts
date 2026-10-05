@@ -149,6 +149,59 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a GET whose Range is set aside declares the length of the bytes it sends, not a stale stat', async function (assert) {
+      await uploadSample('/stale-stat-if-range.png');
+      let response = await withStaleStatSize(5, () =>
+        getSample('/stale-stat-if-range.png')
+          .set('Range', 'bytes=2-5')
+          .set('If-Range', '"a-validator-that-does-not-match"')
+          .timeout(5000),
+      );
+
+      assert.strictEqual(response.status, 200, 'the whole file is sent');
+      assert.strictEqual(
+        response.headers['content-length'],
+        String(bytes.length),
+        'Content-Length is the length of the body that is sent',
+      );
+      assert.deepEqual(new Uint8Array(response.body), bytes);
+    });
+
+    test('a streamed body that falls short of its declared length fails at once instead of hanging', async function (assert) {
+      await uploadSample('/stale-stat-unmeasured.png');
+      // An adapter that cannot measure what it opens, reporting a stale size:
+      // the declared length outruns the body, and the response is torn down.
+      let openFile = adapter.openFile.bind(adapter);
+      adapter.openFile = async (path) => {
+        let ref: FileRef | undefined = await openFile(path);
+        if (ref?.size != null) {
+          Object.defineProperty(ref, 'size', { value: ref.size + 5 });
+          Object.defineProperty(ref, 'openContent', { value: undefined });
+        }
+        return ref;
+      };
+      let started = Date.now();
+      let failure: (Error & { timeout?: number }) | undefined;
+      try {
+        await getSample('/stale-stat-unmeasured.png').timeout(5000);
+      } catch (error) {
+        failure = error as Error & { timeout?: number };
+      } finally {
+        adapter.openFile = openFile;
+      }
+
+      assert.ok(failure, 'the request fails');
+      assert.notStrictEqual(
+        failure?.timeout,
+        5000,
+        `the response was torn down rather than left for the client to time out (${failure?.message})`,
+      );
+      assert.true(
+        Date.now() - started < 4000,
+        'it fails well before the client would have given up',
+      );
+    });
+
     test('a bounded range returns a 206 with just those bytes', async function (assert) {
       await uploadSample('/bounded.png');
       let response = await getSample('/bounded.png').set('Range', 'bytes=2-5');

@@ -1,7 +1,4 @@
 import { pipeline, Transform, type Readable } from 'node:stream';
-import { logger } from '@cardstack/runtime-common';
-
-const log = logger('realm:requests');
 
 // The parts of a response this guard acts on: an HTTP/1 response is destroyed
 // itself (which closes its socket), an HTTP/2 one through its stream (which
@@ -23,8 +20,13 @@ export interface AbortableResponse {
 // past it — or the body's source fails part-way, it destroys the response so
 // the client sees a failed request at once and can retry. Koa cannot do this
 // itself: once the headers are out, its error handler only reports the error.
-// A mismatch is reported here, once, and ends the guarded stream without an
-// error so that Koa does not report it a second time.
+//
+// Reporting is Koa's. A response destroyed with an error reaches the app's
+// error handler, which logs it and sends it to error tracking, so a mismatch
+// is handed over that way and named in the error's message. A source that
+// fails has already been reported through the guarded stream's own error, so
+// its response is destroyed without one. (On HTTP/2 Koa also reports the reset
+// stream, so a failing source there is reported twice.)
 export function guardDeclaredLength({
   body,
   declaredLength,
@@ -37,27 +39,28 @@ export function guardDeclaredLength({
   response: AbortableResponse;
 }): Readable {
   let sent = 0;
-  let failed = false;
-  let fail = (reason: string) => {
-    if (failed) {
+  let aborted = false;
+  let abort = (error?: Error) => {
+    if (aborted) {
       return;
     }
-    failed = true;
-    let error = new Error(reason);
-    log.warn(`aborting response: ${reason}`);
+    aborted = true;
     if (response.stream) {
       response.stream.destroy(error);
     } else {
       response.destroy?.(error);
     }
+  };
+  let mismatch = (reason: string) => {
+    abort(new Error(reason));
     guard.destroy();
   };
   let guard = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       sent += chunk.length;
       if (sent > declaredLength) {
-        fail(
-          `body of ${url} ran past its declared Content-Length ${declaredLength} (at least ${sent} bytes)`,
+        mismatch(
+          `aborted the response: body of ${url} ran past its declared Content-Length ${declaredLength} (at least ${sent} bytes)`,
         );
         callback();
         return;
@@ -66,8 +69,8 @@ export function guardDeclaredLength({
     },
     flush(callback) {
       if (sent !== declaredLength) {
-        fail(
-          `body of ${url} ended at ${sent} bytes, short of its declared Content-Length ${declaredLength}`,
+        mismatch(
+          `aborted the response: body of ${url} ended at ${sent} bytes, short of its declared Content-Length ${declaredLength}`,
         );
       }
       callback();
@@ -83,9 +86,7 @@ export function guardDeclaredLength({
     ) {
       return;
     }
-    fail(
-      `body of ${url} failed after ${sent} of ${declaredLength} declared bytes: ${error.message}`,
-    );
+    abort();
   });
   return guard;
 }

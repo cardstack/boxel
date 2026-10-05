@@ -81,7 +81,7 @@ module(basename(import.meta.filename), function () {
     );
   });
 
-  test('a body whose source fails part-way destroys the response', async function (assert) {
+  test('a body whose source fails part-way destroys the response, leaving the report to the stream error', async function (assert) {
     let response = fakeResponse();
     let source = new PassThrough();
     let guarded = guardDeclaredLength({
@@ -90,14 +90,23 @@ module(basename(import.meta.filename), function () {
       url: 'http://example.test/page.html',
       response,
     });
+    let streamError = new Promise<Error>((resolve) =>
+      guarded.once('error', resolve),
+    );
     source.write('hello');
     setImmediate(() => source.destroy(new Error('read failed')));
 
     await drain(guarded);
     assert.strictEqual(response.destroyedWith.length, 1, 'destroyed once');
-    assert.true(
-      /read failed/.test(response.destroyedWith[0].message),
-      'carries the source failure',
+    assert.strictEqual(
+      response.destroyedWith[0].message,
+      'destroyed',
+      'the response is destroyed without an error of its own',
+    );
+    assert.strictEqual(
+      (await streamError).message,
+      'read failed',
+      'the guarded stream carries the source failure',
     );
   });
 

@@ -11,6 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { NodeAdapter } from '../node-realm.ts';
 import { insertUser, setupDB } from './helpers/index.ts';
 
@@ -304,6 +305,43 @@ module(
           fsExtra.readdirSync(dir),
           ['page.html'],
           'no staging file is left beside it',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('openContent stops at the length it measured when the file grows during the read', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        let adapter = new NodeAdapter(dir);
+        await adapter.write('log.txt', 'a'.repeat(100));
+        let opened = (await adapter.openFile('log.txt'))!.openContent!();
+
+        await adapter.append('log.txt' as LocalPath, 'b'.repeat(50));
+
+        assert.strictEqual(opened.size, 100);
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          'a'.repeat(100),
+          'the stream delivers exactly the measured length',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('openContent of an empty file reports no bytes and streams none', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'empty.txt'), '');
+        let adapter = new NodeAdapter(dir);
+        let opened = (await adapter.openFile('empty.txt'))!.openContent!();
+
+        assert.strictEqual(opened.size, 0);
+        assert.strictEqual(
+          await readAll(opened.content as NodeJS.ReadableStream),
+          '',
         );
       } finally {
         fsExtra.removeSync(dir);

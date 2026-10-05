@@ -202,4 +202,40 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(requests, 2, 'the stalled request is retried once');
     assert.ok(result?.stream, 'the retry is used');
   });
+
+  test('readFile reads again when the connection under a body fails', async function (assert) {
+    let requests = 0;
+    let encoder = new TextEncoder();
+    let reader = getReader(
+      async () => {
+        requests++;
+        if (requests > 1) {
+          return completeResponse('<p>hello</p>');
+        }
+        // The body a server tears down part-way: some bytes, then the error
+        // the fetch implementation reports for a dropped connection.
+        let sent = false;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!sent) {
+                sent = true;
+                controller.enqueue(encoder.encode('<p>hel'));
+                return;
+              }
+              controller.error(new TypeError('terminated'));
+            },
+          }),
+          { status: 200, headers: lastModifiedHeaders },
+        );
+      },
+      realmURL,
+      { stallTimeoutMs: 1000 },
+    );
+
+    let result = await reader.readFile(new URL(`${realmURL}page.html`));
+
+    assert.strictEqual(requests, 2, 'the dropped transfer is retried once');
+    assert.strictEqual(result?.content, '<p>hello</p>', 'the retry is used');
+  });
 });
