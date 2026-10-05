@@ -75,10 +75,21 @@ export const keepStyle = modifier(
     }
     let read = (property: string) =>
       el.style.getPropertyValue(property).trim() || undefined;
-    let callerValues = new Map<string, string | undefined>();
+    // Each caller value keeps its priority, so a caller's `!important` comes
+    // back with it.
+    let callerValues = new Map<
+      string,
+      { value: string; priority: string } | undefined
+    >();
     let readCaller = () => {
       for (let { property } of kept) {
-        callerValues.set(property, read(property));
+        let value = read(property);
+        callerValues.set(
+          property,
+          value === undefined
+            ? undefined
+            : { value, priority: el.style.getPropertyPriority(property) },
+        );
       }
     };
     let isCallerRewrite = (records: MutationRecord[]) => {
@@ -143,7 +154,11 @@ export const keepStyle = modifier(
         }
         let callerValue = callerValues.get(property);
         if (callerValue) {
-          el.style.setProperty(property, callerValue);
+          el.style.setProperty(
+            property,
+            callerValue.value,
+            callerValue.priority,
+          );
         } else {
           el.style.removeProperty(property);
         }

@@ -4,7 +4,8 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { StepList } from './step-list';
 import type { StepItem } from './step-list';
@@ -105,12 +106,7 @@ module('Pretui | components/step-list', function (hooks) {
     assert.strictEqual(q('[data-test-pretui-step-list-items]').getAttribute('aria-describedby'), null);
   });
 
-  test('StepList renders the most urgent stage as live text, not merely the running one (KNOWN GAP: unreliably announced)', async function (assert) {
-    // KNOWN GAP, pinned rather than patched: the region is `{{#if
-    // this.liveText}}<span role="status">`, so it is created together with its
-    // content. A live region has to exist before its text changes to be
-    // reliably announced (alert.md states the rule; FilterList has the same
-    // defect). What is asserted is the ranking and the wording.
+  test('StepList renders the most urgent stage as live text, not merely the running one', async function (assert) {
     const TROUBLE: StepItem[] = [
       { label: 'Draft', state: 'complete' },
       { label: 'Cupping', state: 'in-progress' },
@@ -134,13 +130,38 @@ module('Pretui | components/step-list', function (hooks) {
     );
   });
 
-  test('StepList says nothing when nothing is active, and can be silenced', async function (assert) {
+  test('StepList keeps an empty live region while nothing is active, and can be silenced', async function (assert) {
     const DONE: StepItem[] = [{ label: 'Draft', state: 'complete' }];
     await render(<template><StepList @steps={{DONE}} /></template>);
-    assert.notOk(q('[data-test-pretui-step-list-live]'), 'no live region with nothing to say');
+    let live = q('[data-test-pretui-step-list-live]');
+    assert.ok(live, 'the region exists before there is anything to say');
+    assert.strictEqual(live.getAttribute('role'), 'status');
+    assert.strictEqual(live.textContent?.trim(), '', 'and says nothing yet');
 
     await render(<template><StepList @steps={{STEPS}} @current={{1}} @announce={{false}} /></template>);
-    assert.notOk(q('[data-test-pretui-step-list-live]'));
+    assert.notOk(q('[data-test-pretui-step-list-live]'), 'silenced, there is no region at all');
+  });
+
+  test('StepList writes a stage change into the live region that was already there', async function (assert) {
+    class State {
+      @tracked steps: StepItem[] = [
+        { label: 'Draft', state: 'complete' },
+        { label: 'Publish', state: 'upcoming' },
+      ];
+    }
+    let state = new State();
+    await render(<template><StepList @steps={{state.steps}} /></template>);
+    let before = q('[data-test-pretui-step-list-live]');
+    assert.strictEqual(before.textContent?.trim(), '');
+
+    state.steps = [
+      { label: 'Draft', state: 'complete' },
+      { label: 'Publish', state: 'blocked', detail: 'Waiting on the panel' },
+    ];
+    await settled();
+    let after = q('[data-test-pretui-step-list-live]');
+    assert.strictEqual(after, before, 'the same region, not one mounted with its content');
+    assert.strictEqual(after.textContent?.trim(), 'Publish: Blocked. Waiting on the panel');
   });
 
   test('StepList track variant drops the connectors and grows a bar per stage', async function (assert) {

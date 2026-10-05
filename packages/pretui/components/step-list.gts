@@ -106,6 +106,8 @@ export interface StepListSignature {
      * from running to blocked while nobody is looking at it has told a
      * sighted reader something and told everyone else nothing. Live regions
      * do not announce their initial content, so this is silent on mount.
+     * The region renders whenever this is on, empty while no step is active;
+     * `false` omits it entirely.
      */
     announce?: boolean;
   };
@@ -301,7 +303,9 @@ export class StepList extends Component<StepListSignature> {
           </li>
         {{/each}}
       </ol>
-      {{#if this.liveText}}
+      {{! The region is in the DOM from the first render, empty while nothing is
+          active, so a later change to its text is announced. }}
+      {{#if this.announce}}
         <span
           class='pretui-vh'
           role='status'
