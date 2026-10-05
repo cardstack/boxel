@@ -1,8 +1,9 @@
 /**
  * The <Choreo> contract.
  *
- * The interruption suite next door is a soak: it hammers the real gallery and
- * asserts that nothing was left behind. It catches "the gallery leaked". It
+ * The interruption suite (choreo-test-app's
+ * `tests/integration/choreo/interruption-test.gts`) is a soak: it hammers the
+ * real gallery and asserts that nothing was left behind. It catches "the gallery leaked". It
  * cannot tell you *which rule* broke, because it does not state any.
  *
  * This file states them. Every test here is a scar Ember Animated already has —
