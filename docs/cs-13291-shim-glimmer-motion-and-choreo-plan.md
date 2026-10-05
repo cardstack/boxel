@@ -8,16 +8,19 @@ gets the host's own module objects, and so shares one copy of the module-global
 state (drag lock, layout scheduler, Choreo registry). `boxel parse` type-checks
 that card. Host integration tests prove a card animates with each library.
 
-## Stacking and merge order
+## Merge order
 
-- This branch is stacked on PR 6524 (CS-13389,
-  `cs-13389-let-host-build-glimmer-motion-and-choreo-from-source-through`). That
-  PR gives host `workspace:*` dependencies on both packages and has host build
-  them from source through the `developing:choreo` export condition. The PR for
-  this ticket targets that branch until 6524 merges, then retargets `main`.
+- Builds on PR 6524 (CS-13389), which gives host `workspace:*` dependencies on
+  both packages and has host build them from source through the
+  `developing:choreo` export condition.
 - PR title: `feat: …`, because it touches `packages/boxel-cli`.
-- Don't merge until glimmer-motion and choreo are on npm (CS-13295). Otherwise the
-  CLI that publishes on merge would declare dependencies that don't resolve.
+- boxel-cli publishes on merge, and `workspace:*` publishes as the exact
+  version in the repo. Merge only once `packages/glimmer-motion/package.json`
+  and `packages/choreo/package.json` both carry a version that is a real
+  published release (CS-13295). Before then, Boxel CLI Tests' packed-install
+  step fails, because npm has no `glimmer-motion` at the repo's version.
+  `@cardstack/choreo@0.0.0` is a name-reserving placeholder, so a CLI
+  published against it would install but fail to resolve choreo's types.
 
 ## What exists today
 
@@ -87,7 +90,9 @@ from the boxel-cli test.
   (`motionValue`, `MotionValue`, `animate`, `transformValue`, `styleEffect`,
   `frame`).
 - A short comment block says why glimmer-motion is sync and choreo is async,
-  and that choreo should switch to sync once host UI imports it.
+  and that choreo should switch to sync once host UI imports it. No host UI
+  imports glimmer-motion yet, so its sync shims are what put it in the initial
+  bundle (an esbuild estimate puts the six entries at about 60 KB gzipped).
 
 ### 1a. choreo's film sources under host's type-check
 
@@ -141,10 +146,9 @@ transition=(hash duration=0.05)}}`. Render it, `animationsSettled()`, and
 3. **A card importing a curated motion-dom re-export works.** A card that
    builds a `motionValue`, subscribes with `styleEffect` (or `.on('change')`),
    and sets the value. Assert the element's style follows.
-4. **Shared module state.** For each shimmed specifier, `loader.import(spec)`
-   in the card loader is the same module object as the host's own import
-   (`import * as gm from 'glimmer-motion'` in the test; for choreo, the
-   resolved `import('@cardstack/choreo')`). Then check that state is
+4. **Shared module state.** For every one of the 24 shimmed ids, each export
+   `loader.import(spec)` gives a card is the same object as the host's own
+   `import(spec)` gives. Then check that state is
    observable across the boundary: a Choreo run started from a card is visible
    to host-side choreo (for example, `activeRuns`, or whatever choreo's
    test-support reset reads). The identity assertion alone would pass even if
