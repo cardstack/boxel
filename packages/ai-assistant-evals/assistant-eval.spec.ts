@@ -85,8 +85,8 @@ function progress(model: string, fields: Record<string, unknown>) {
 // not slow: it never saw the message. The usual cause is an invite the ai-bot
 // missed, so it never joined the room.
 const NO_REPLY_MS = 120_000;
-// The bot starts its next message within a second or two of a tool result or
-// a patch landing; the correctness check takes a few seconds more. Idle has
+// The bot starts its next message within a second or two of a tool result
+// landing; the correctness check takes a few seconds more. Idle has
 // to hold this long before it counts.
 const QUIET_WINDOW_MS = 10_000;
 
@@ -295,7 +295,7 @@ async function selectModel(page: Page, requested: string) {
 }
 
 // Put the room in Act mode right after the model is picked. In Ask mode every
-// tool and patch waits for a click nobody makes. The toggle renders only once
+// tool call waits for a click nobody makes. The toggle renders only once
 // the room knows its model, a moment after the pick, so wait for it rather
 // than reading "not there yet" as "not needed"; then confirm the click took.
 async function ensureActMode(page: Page, requestedModel: string) {
@@ -397,13 +397,13 @@ interface Activity {
   // stays flat for minutes is a stalled provider or ai-bot, not a slow model.
   botTextLength: number;
   // Signs that the run has already gone wrong and every further turn is
-  // wasted money: a failed or invalid tool pill, an error alert, or a
-  // SEARCH/REPLACE block in git-conflict syntax (the host cannot apply it).
+  // wasted money: a failed or invalid tool pill, an error alert, or the same
+  // tool call repeated.
   irregularities: string[];
 }
 
 // The host reloads the page whenever a write changes a module the page holds,
-// which is what a `.gts` patch does. A poll that lands in that moment loses its
+// which is what a `.gts` write does. A poll that lands in that moment loses its
 // execution context. That is the app working, not the run failing, so wait for
 // the page to come back and read again.
 const LOST_CONTEXT =
@@ -435,9 +435,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
     let preparing = q('[data-test-apply-state="preparing"]');
-    let loading =
-      q('[data-test-code-patch-loading]') +
-      q('[data-test-session-preparation]');
+    let loading = q('[data-test-session-preparation]');
     let pending = q('[data-test-ai-assistant-message-pending="true"]');
     let generating = q('[data-test-stop-generating]') > 0;
     let irregularities: string[] = [];
@@ -449,7 +447,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     // rounds, each of which can fail once more before it lands. Only a fourth
     // failing turn reads as a run going sideways; stopping at two cut off a
     // Haiku run two seconds before its card appeared. Count turns, not pills:
-    // one fix reply can carry several blocks that all fail together.
+    // one fix reply can carry several calls that all fail together.
     let messagesWithFailures = Array.from(
       document.querySelectorAll('[data-test-message-idx]'),
     ).filter(
@@ -460,16 +458,9 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     ).length;
     if (messagesWithFailures >= 4) {
       irregularities.push(
-        `${messagesWithFailures} turns had a failed or rejected tool call or patch (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+        `${messagesWithFailures} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
       );
     }
-    let gitStyle = Array.from(
-      document.querySelectorAll('[data-test-ai-message-content]'),
-    ).filter((el) => (el.textContent ?? '').includes('<<<<<<< SEARCH')).length;
-    if (gitStyle)
-      irregularities.push(
-        'a block uses git-conflict markers, which the host cannot apply',
-      );
     // A loop: the same tool call, with the same arguments, three times. The
     // bot's own checkCorrectness is left out: it repeats with the same
     // arguments on every repair round by design.
@@ -533,7 +524,7 @@ async function stopGeneration(page: Page) {
 
 // Waits for the bot to finish on its own. A run is cut short only when it has
 // clearly gone sideways: a failed or invalid tool call, an error alert, a
-// block the host cannot apply, a repeated identical tool call, a pill stuck
+// repeated identical tool call, a pill stuck
 // past the host's own tool timeout, or the safety wall clock. Long, slow, or
 // expensive runs are not stopped; they are graded afterwards.
 // `botMessagesBefore` is how many finished bot turns the room already had
@@ -754,18 +745,8 @@ function classify(
     );
     return { verdict: 'host-failure', reasons };
   }
-  if (analysis.gitStyleBlocks > 0) {
-    reasons.push(
-      `${analysis.gitStyleBlocks} block(s) used git-style markers instead of the box markers`,
-    );
-  }
-  if (analysis.patchBlocks === 0 && analysis.realmCodeWrites === 0) {
-    reasons.push(
-      'no file was written (no SEARCH/REPLACE block, no applied run-realm-code write)',
-    );
-  }
-  if (analysis.patchResults.failed > 0) {
-    reasons.push(`${analysis.patchResults.failed} patch(es) failed to apply`);
+  if (analysis.realmCodeWrites === 0) {
+    reasons.push('no file was written (no applied run-realm-code write)');
   }
   if (!cardId) {
     reasons.push(...cardReasons);
@@ -780,7 +761,7 @@ function classify(
   if (
     cardId &&
     cardReasons.length === 0 &&
-    analysis.patchBlocks + analysis.realmCodeWrites > 0 &&
+    analysis.realmCodeWrites > 0 &&
     promptsSent === promptsTotal
   ) {
     return { verdict: 'pass', reasons };
@@ -1115,7 +1096,7 @@ test.afterAll(async () => {
   }
   rows.sort((a, b) => a.requestedModel.localeCompare(b.requestedModel));
   let header =
-    '| Result | Model | Effort | Verdict | Turns | Tool calls | Blocks | Cost | Cache | Time | Card | Notes |\n' +
+    '| Result | Model | Effort | Verdict | Turns | Tool calls | Realm writes | Cost | Cache | Time | Card | Notes |\n' +
     '|---|---|---|---|---|---|---|---|---|---|---|---|\n';
   let body = rows
     .map((r) => {
@@ -1129,14 +1110,10 @@ test.afterAll(async () => {
             )
             .join(', ')
         : '';
-      let blocks = a
-        ? `${a.patchBlocks}${a.gitStyleBlocks ? ` (+${a.gitStyleBlocks} git-style)` : ''}${
-            a.realmCodeWrites ? ` · ${a.realmCodeWrites} realm writes` : ''
-          }`
-        : '';
+      let writes = a ? `${a.realmCodeWrites}` : '';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
-      } | ${tools} | ${blocks} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
+      } | ${tools} | ${writes} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
         a && a.cacheWindowInputTokens > 0
           ? `${Math.round((100 * a.cacheWindowCachedTokens) / a.cacheWindowInputTokens)}%${
               a.cacheMisses ? ` (${a.cacheMisses} miss)` : ''
