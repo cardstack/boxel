@@ -48,7 +48,7 @@
   ],
   "publishConfig": {
     "access": "public"
-  }
+  },
   "scripts": {
     "build": "rollup --config && node scripts/fix-declarations.mjs",
     "format": "prettier . --cache --write",
