@@ -36,7 +36,7 @@ Wrap the region in `Choreo`. Give each participating motion element an `id` for 
 </Choreo>
 ```
 
-Import `Choreo` and `motion` from `glimmer-motion` in the component containing this excerpt. The parent supplies messages with stable IDs. When the list changes, the kept messages move from their previous bounds to their new positions.
+Import `Choreo` from `@cardstack/choreo` and `motion` from `glimmer-motion` in the component containing this excerpt. The parent supplies messages with stable IDs. When the list changes, the kept messages move from their previous bounds to their new positions.
 
 ## Reading the Changeset
 
@@ -56,6 +56,6 @@ The [sequence demo](/sequence) makes that ordering visible. Continue with [Writi
 
 ## API Coverage
 
-**glimmer-motion**: `ChoreoContext`, `Choreo`.
+**@cardstack/choreo**: `ChoreoContext`, `Choreo`.
 
 Read the implementation: [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).

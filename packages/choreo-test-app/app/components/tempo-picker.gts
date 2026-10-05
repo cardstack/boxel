@@ -1,6 +1,6 @@
+import { beacon } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { beacon } from 'glimmer-motion';
 import { setTempo, settings, type Tempo, toggleCode } from 'test-app/lib/tempo';
 
 function is(value: Tempo) {

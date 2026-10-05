@@ -1,10 +1,11 @@
+import type { ChoreoRun } from '@cardstack/choreo';
+import { beacon, Choreo } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { ChoreoRun } from 'glimmer-motion';
-import { beacon, Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const quick = { damping: 24, stiffness: 300 };

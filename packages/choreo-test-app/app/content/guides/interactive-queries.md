@@ -30,7 +30,7 @@ Give each logical subject a stable identity and use roles for choreography categ
 
 ## API Coverage
 
-**glimmer-motion**: `Changeset`, `Bounds`, `Query`, `Sprite`.
+**@cardstack/choreo**: `Changeset`, `Bounds`, `Query`, `Sprite`.
 
 **ChoreoContext**: `c.all`, `c.counterpart`, `c.id`, `c.inserted`, `c.kept`, `c.moved`, `c.onstage`, `c.received`, `c.removed`, `c.role`, `c.still`.
 

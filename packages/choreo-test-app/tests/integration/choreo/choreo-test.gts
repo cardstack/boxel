@@ -2,20 +2,14 @@
  * <Choreo>: boxel-motion's region-scoped choreography on the motion-dom engine.
  * docs/choreography.md is the spec these pin.
  */
+import { beacon, type Changeset, Choreo, type Sprite } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { array, hash } from '@ember/helper';
 import { find, render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import {
-  beacon,
-  type Changeset,
-  Choreo,
-  motion,
-  Presence,
-  type Sprite,
-} from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion, Presence } from 'glimmer-motion';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';

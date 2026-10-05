@@ -7,8 +7,8 @@ A clip is media laid over the main picture for a defined interval. It can be a v
 `ClipSpec` describes the media kind, source, start offset, duration or out point, playback rate, and end policy. Source time is the in point plus elapsed film-window time multiplied by the rate. `clipWindow()` calculates the corresponding film duration.
 
 ```ts title="Component logic excerpt"
-import { clipWindow } from 'glimmer-motion/film';
-import type { ClipSpec } from 'glimmer-motion/film';
+import { clipWindow } from '@cardstack/choreo/film';
+import type { ClipSpec } from '@cardstack/choreo/film';
 
 const clip: ClipSpec = {
   kind: 'video',
@@ -39,6 +39,6 @@ Test a clip that starts late, a clip that spans the next beat, and a held clip r
 
 ## API Coverage
 
-**glimmer-motion/film**: `Clip`, `ClipEnd`, `ClipKind`, `clipLanes`, `ClipSpec`, `ClipState`, `clipWindow`, `resolveClip`, `resolveClips`, `ResolvedClip`.
+**@cardstack/choreo/film**: `Clip`, `ClipEnd`, `ClipKind`, `clipLanes`, `ClipSpec`, `ClipState`, `clipWindow`, `resolveClip`, `resolveClips`, `ResolvedClip`.
 
 Read the implementation: [`clip.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/clip.gts), [`clips.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/clips.ts).

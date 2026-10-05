@@ -4,9 +4,9 @@
  * arithmetic as the film construct uses it — the window, the source time,
  * the three end policies, and a clip that outlives its beat.
  */
-import type { FilmBeat } from 'glimmer-motion';
-import type { ClipSpec } from 'glimmer-motion/film';
-import { clipWindow, resolveClip, resolveClips } from 'glimmer-motion/film';
+import type { Beat as FilmBeat } from '@cardstack/choreo/film';
+import type { ClipSpec } from '@cardstack/choreo/film';
+import { clipWindow, resolveClip, resolveClips } from '@cardstack/choreo/film';
 import { module, test } from 'qunit';
 
 const cam = { dolly: 1, lookY: 0, pitch: 10, yaw: 30 };

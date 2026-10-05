@@ -11,7 +11,7 @@ The library is taught in four sections:
 3. **Spatial & 3D Choreo:** cameras, live DOM projection, interaction, and gallery design.
 4. **Recorded & Film Choreo:** explicit clock ownership, Film graphs, narration, frame capture, and deployment.
 
-These are learning paths, not four npm packages. Imports retain their real names: `glimmer-motion`, `glimmer-motion/film`, and `choreo-player`.
+These are learning paths, not four npm packages. Imports retain their real names: `glimmer-motion`, `@cardstack/choreo/film`, and `choreo-player`.
 
 ## Writing a Guide
 

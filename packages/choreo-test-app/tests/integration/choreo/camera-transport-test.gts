@@ -10,12 +10,13 @@
  * computed inline transform, exactly as a frame-by-frame recorder would
  * capture it.
  */
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { find, render } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

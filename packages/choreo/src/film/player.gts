@@ -1,9 +1,9 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { motion } from 'glimmer-motion';
 
 import { Choreo } from '../choreo.gts';
-import motion from '../motion.ts';
 import type { Chapter, ElementModifier } from './types.ts';
 
 /** one chapter as a segment of the scrub bar */

@@ -4,13 +4,14 @@
  * near the settle, and live content never freezes, because nothing is
  * snapshotted.
  */
+import { Choreo } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { array } from '@ember/helper';
 import { find, render, settled, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, motion } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion } from 'glimmer-motion';
 import { animationsSettled, bounds } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

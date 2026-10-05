@@ -9,17 +9,18 @@
  * the wrong element. The failure reads as "the button stopped working", which
  * is the most expensive way to learn where the orphan layer sits.
  */
-import { render, settled } from '@ember/test-helpers';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import {
   live,
   liveAll,
   orphanCount,
   setupChoreo,
-} from 'glimmer-motion/choreo/test-support';
+} from '@cardstack/choreo/test-support';
+import { render, settled } from '@ember/test-helpers';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { setupRenderingTest } from 'ember-qunit';
+import { motion } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
