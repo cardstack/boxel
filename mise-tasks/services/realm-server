@@ -97,6 +97,8 @@ else
   WORKER_MANAGER_ARG="$1"
 fi
 
+# Realms boot and index in --path order. pretui, the largest, goes last so
+# the realms test stacks wait on are not queued behind its index.
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -133,11 +135,6 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
-  --path='../pretui' \
-  --username='pretui_realm' \
-  --fromUrl='@cardstack/pretui/' \
-  --toUrl="${REALM_BASE_URL}/pretui/" \
-  \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
   ${START_SUBMISSION:+--username='submission_realm'} \
   ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
@@ -162,4 +159,9 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
   ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  --path='../pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl="${REALM_BASE_URL}/pretui/" \
   2>&1 | "$LOG_TEE" realm-server

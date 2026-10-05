@@ -6,7 +6,7 @@ allowed-tools: Read, Grep, Glob, Bash
 
 # Policy performance
 
-A realm's policy is consulted only for a caller its ACL declined. For those callers every invocation passes the gate (`card-operations/gate.ts`), every search composes the policy's query filters (`card-operations/policy-query.ts`), and the realm keeps a compiled copy of the policy card (`RealmPolicyCache` in `card-operations/policy.ts`). Each of those writes one JSON record per event on the `boxel:operations` channel (`card-operations/telemetry.ts`). These records are how the cost is measured.
+A realm's policy is consulted only for a caller its ACL declined. For those callers every invocation passes the gate (`card-operations/gate.ts`), every search composes the policy's query filters (`card-operations/policy-query.ts`), and the realm keeps a compiled copy of the policy card (`RealmPolicyCache` in `card-operations/policy.ts`). Each of those writes one JSON record per event on the `boxel:operations` channel (`card-operations/telemetry.ts`). These records are how the cost is measured. For what they say about correctness rather than cost — why a caller was refused, which policy won't compile, which grant admits too much — read `operations-diagnosis`.
 
 ## The records
 
@@ -43,19 +43,19 @@ The "Policy Decisions" dashboard (`packages/observability/grafanactl/resources/d
 
 ## Pulling raw records
 
-`tail-logs.sh` (see the `tail-logs` and `aws-access` skills) fetches raw lines. Narrow on the channel and the kind with the line filter, then let `jq` do the arithmetic:
+`tail-logs.sh` (see the `tail-logs` and `aws-access` skills) fetches raw lines. Narrow with a quote-free line filter (`tail-logs.sh` drops it unescaped into `|= "…"`, and on firelens-wrapped lines the record's quotes are stored escaped), select on `kind` in `jq`, then let `jq` do the arithmetic:
 
 ```sh
 cd packages/observability
 AWS_PROFILE=claude-staging ./scripts/tail-logs.sh --env staging --service realm-server \
-  --since 1h --filter '"kind":"policy-decision"' --no-follow --limit 5000 > /tmp/decisions.log
+  --since 1h --filter 'policy-decision' --no-follow --limit 5000 > /tmp/decisions.log
 ```
 
-`--no-follow` returns a single batch of at most `--limit` lines, so a busy window needs a larger limit or a shorter `--since`; check the count you got against the limit. Production needs `--confirm`. Deployed lines arrive wrapped by the log router, so unwrap `.log` when it is there:
+`--no-follow` returns a single batch of at most `--limit` lines, and 5000 is the most the deployed Loki accepts (a larger limit is refused with HTTP 400), so a busy window needs a shorter `--since`, or several consecutive windows; check the count you got against the limit. Production needs `AWS_PROFILE=claude-prod`, `--env production` and `--confirm`. Deployed lines arrive wrapped by the log router, so unwrap `.log` when it is there:
 
 ```sh
 grep -o '{.*}' /tmp/decisions.log \
-  | jq -c 'if .log then (.log | fromjson) else . end
+  | jq -c 'if .log then (.log | fromjson? // empty) else . end
            | select(.channel == "boxel:operations" and .kind == "policy-decision"
                     and .hypothetical == false)' > /tmp/decisions.jsonl
 

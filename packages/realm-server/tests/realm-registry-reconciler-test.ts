@@ -125,6 +125,48 @@ module(basename(import.meta.filename), function () {
       assert.ok(reconciler.mounted.get('@cardstack/base/'));
     });
 
+    test('reconcile starts pinned rows in bootstrap order, not row order', async function (assert) {
+      for (let url of [
+        '@cardstack/pretui/',
+        '@cardstack/base/',
+        '@cardstack/skills/',
+      ]) {
+        await seedRow(dbAdapter, {
+          url,
+          kind: 'bootstrap',
+          disk_id: `/abs/${url}`,
+          owner_username: 'system',
+          pinned: true,
+        });
+      }
+      let started: string[] = [];
+      let ordered = new RealmRegistryReconciler({
+        dbAdapter,
+        bootstrapOrder: [
+          '@cardstack/base/',
+          '@cardstack/skills/',
+          '@cardstack/pretui/',
+        ],
+        prepareRealmFromRow: (row) =>
+          ({
+            ...makeFakeRealm(row.url),
+            start: async () => {
+              started.push(row.url);
+            },
+          }) as unknown as Realm,
+        unmount: async () => {},
+        pollIntervalMs: 1000,
+      });
+
+      await ordered.reconcile();
+
+      assert.deepEqual(started, [
+        '@cardstack/base/',
+        '@cardstack/skills/',
+        '@cardstack/pretui/',
+      ]);
+    });
+
     test('reconcile does NOT eagerly mount unpinned rows', async function (assert) {
       // Phase 3: source/published realms wait for first-request mount.
       await seedRow(dbAdapter, {
