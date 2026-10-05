@@ -478,7 +478,7 @@ module('Pretui | controls-money | usage pages', function (hooks) {
     for (let name of DEMOS_CONTROLS_MONEY_NAMES) {
       /* eslint-disable-next-line @typescript-eslint/no-explicit-any -- the
          DEMOS registries are Record<string, unknown> by contract; mounting
-         one requires the cast, exactly as forms-render.test.gts does. */
+         one requires the cast, as usage-pages.test.gts does. */
       let Page = PAGES[name] as any;
       await render(<template><Page /></template>);
       assert.true(

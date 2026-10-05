@@ -55,7 +55,7 @@
 //  4. **Severity picks the live-region politeness**, rather than announcing
 //     every toast the same way: `role='alert'` for warning/danger,
 //     `role='status'` for the rest.
-//  5. **The remaining time is a non-colour channel** (Appendix O.14) — the
+// 5. **The remaining time is a non-colour channel** — the
 //     life bar is the only "how long have I got" signal in any of the three.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -737,7 +737,7 @@ export class Toaster extends Component<ToasterSignature> {
           }
         }
 
-        /* Tone. One recipe, seven hue tokens (Appendix E.1) — the stripe is the
+        /* Tone. One recipe, seven hue tokens — the stripe is the
            only place a tone paints, so a neutral toast is genuinely neutral. */
         .pretui-toast-item[data-tone='info'] {
           --pretui-toast-tone: var(--pretui-info, var(--boxel-blue));

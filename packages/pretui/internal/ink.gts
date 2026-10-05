@@ -4,8 +4,6 @@
 // as jewelry), 4 (discrete beats continuous — Meter always ships a label).
 // Consumes the SS26 theme tokens; fallbacks declared once per component root.
 //
-// (the ink group)
-
 // Pretui — shared helpers for the ink components (Chip, StatusChip, Token, Meter, Avatar).
 import { cssStyle } from '../pretui-css';
 

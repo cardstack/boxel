@@ -65,8 +65,8 @@ export interface HoverActionsSignature {
      * `overlay` (default) floats the cluster inside the host's own bounds;
      * `reserve` gives it a real grid column so it can never cover content.
      *
-     * The ruling: **both modes are layout-stable** — that is Appendix O.7's
-     * actual requirement, and an overlay satisfies it for free because it is
+     * The ruling: **both modes are layout-stable**, which is the actual
+     * requirement, and an overlay satisfies it for free because it is
      * out of flow. Overlay is the default because a permanently empty gutter
      * fails Law 8's still-frame test: at rest it is dead space that earns
      * nothing. Choose `reserve` for dense text rows, where an overlay would

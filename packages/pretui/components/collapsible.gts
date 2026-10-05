@@ -27,8 +27,7 @@ import type { SizeAlias } from '../internal/structure-layout';
 //      (`originalStylesRef.current = originalStylesRef.current || {…}`). The
 //      published value is a pixel count, so it is stale the moment the
 //      content reflows. This uses the kit's expand grammar
-//      (`grid-template-rows: 0fr → 1fr`, Appendix O.1 rule 1, reference
-//      implementation at `controls-choice.gts:751-763`): the browser animates
+//      (`grid-template-rows: 0fr → 1fr`): the browser animates
 //      the real height with no JS at all, and content that grows
 //      mid-transition just works. Never `max-height`, never `scrollHeight`.
 //   2. **Neither of Radix's two content modes is right.** The default path
@@ -66,7 +65,7 @@ export interface CollapsibleSignature {
     label?: string;
     /** Announced and styled as disabled; stays focusable (`aria-disabled`). */
     disabled?: boolean;
-    /** Appendix E size. */
+    /** Size. */
     size?: SizeAlias;
     /** Hide the rotating caret — for a trigger that is its own affordance. */
     hideCaret?: boolean;
