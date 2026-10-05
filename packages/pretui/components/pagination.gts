@@ -25,23 +25,21 @@ export class Pagination extends Component<PaginationSignature> {
     }
     return out;
   }
+  // A request for the page already showing reports nothing. That covers a
+  // press on the current page and a press on an edge arrow, which is
+  // aria-disabled rather than natively disabled so it stays in the tab order
+  // and still receives clicks.
   go = (v: number) => {
     let n = Math.max(1, Math.min(this.args.pages, v));
+    if (n === this.page) return;
     if (this.args.page === undefined) {
       this.internal = n;
     }
     this.args.onPageChange?.(n);
   };
   isGap = (n: number | '…'): n is '…' => n === '…';
-  // The edge arrows are aria-disabled rather than natively disabled, so they
-  // stay in the tab order and still receive clicks; the guard keeps a press at
-  // an edge from re-reporting the page the reader is already on.
-  prev = () => {
-    if (!this.atStart) this.go(this.page - 1);
-  };
-  next = () => {
-    if (!this.atEnd) this.go(this.page + 1);
-  };
+  prev = () => this.go(this.page - 1);
+  next = () => this.go(this.page + 1);
   get atStart() {
     return this.page === 1;
   }
@@ -98,8 +96,12 @@ export class Pagination extends Component<PaginationSignature> {
           font-weight: 600;
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
+        .pretui-page:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
         .pretui-page[aria-disabled='true'] {
-          opacity: 0.45;
+          color: var(--subtle-foreground);
           cursor: default;
         }
         .pretui-gap {

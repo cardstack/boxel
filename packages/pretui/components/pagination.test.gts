@@ -60,6 +60,19 @@ module('Pretui | components/pagination', function (hooks) {
     assert.deepEqual(seen, [], 'Next at the last page reports nothing');
   });
 
+  test('Pagination ignores a press on the current page', async function (assert) {
+    let seen: number[] = [];
+    const record = (n: number) => seen.push(n);
+    await render(<template><Pagination @pages={{5}} @defaultPage={{3}} @onPageChange={{record}} /></template>);
+    await click('[aria-current="page"]');
+    assert.strictEqual(q('[aria-current="page"]').textContent?.trim(), '3');
+    assert.deepEqual(seen, [], 'the page already showing is not reported again');
+
+    await render(<template><Pagination @pages={{5}} @page={{2}} @onPageChange={{record}} /></template>);
+    await click('[aria-current="page"]');
+    assert.deepEqual(seen, [], 'nor to the owner of a controlled page');
+  });
+
   test('Pagination elides the middle, keeping the ends and the neighbours of the current page', async function (assert) {
     await render(<template><Pagination @pages={{20}} @defaultPage={{10}} /></template>);
     assert.deepEqual(

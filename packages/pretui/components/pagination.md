@@ -14,7 +14,7 @@ Hybrid controlled/uncontrolled, the kit-wide idiom: `@page ?? @internal`, with `
 
 **The window rule is fixed and not configurable:** always show page 1, always show the last page, always show the current page ±1, and collapse everything else to a single `…`. So the strip is at most seven items wide and never changes width as you move through the middle of a long list — which is the property that stops the buttons from sliding under the pointer between clicks. Web Awesome makes the equivalent two knobs (`sibling-count`, `boundary-count`); Pretui hard-codes the pair that produces a stable strip.
 
-`go()` clamps to `[1, @pages]`, so a caller cannot drive it out of range.
+`go()` clamps to `[1, @pages]`, so a caller cannot drive it out of range, and ignores a request for the page already showing, so `@onPageChange` fires only when the page would change. A press on the current page, or on an edge arrow at its end, reports nothing.
 
 The gap is a `<span>`, not a button — clicking `…` does nothing.
 
@@ -32,7 +32,7 @@ Where it is behind Web Awesome, and it is a fair distance: no summary ("11–20 
 
 No APG pattern; governed by WCAG **2.4.8 Location** (AAA — this is the criterion pagination exists to satisfy), **2.4.4 Link Purpose**, **4.1.2** and **2.5.8 Target Size**.
 
-What is right: the root is a `<nav aria-label="Pagination">`, so it is discoverable by landmark navigation and distinguishable from other navs. The active page carries `aria-current="page"` (alongside the visual `data-state="active"`), which is the one required property of the pattern. Previous/Next carry `aria-label`. All controls are ordinary tab stops, which is correct — pagination is not a roving-tabindex widget. At either end the edge arrow is marked `aria-disabled="true"` rather than natively `disabled`, so it stays in the tab order — a keyboard user tabbing backward into the strip at page 1 still lands on Previous and hears that it is unavailable — and a press on it does nothing and reports nothing. This is the choice Web Awesome makes.
+What is right: the root is a `<nav aria-label="Pagination">`, so it is discoverable by landmark navigation and distinguishable from other navs. The active page carries `aria-current="page"` (alongside the visual `data-state="active"`), which is the one required property of the pattern. Previous/Next carry `aria-label`. All controls are ordinary tab stops, which is correct — pagination is not a roving-tabindex widget. At either end the edge arrow is marked `aria-disabled="true"` rather than natively `disabled`, so it stays in the tab order — a keyboard user tabbing backward into the strip at page 1 still lands on Previous and hears that it is unavailable — and a press on it does nothing and reports nothing. This is the choice Web Awesome makes. The disabled arrow dims its glyph to `--subtle-foreground` rather than fading the whole button, so its `--ring` focus outline stays at full strength.
 
 Gaps, in order:
 
@@ -44,7 +44,7 @@ Gaps, in order:
 
 ## Theming
 
-`--muted-foreground` (resting ink), `--foreground` (hover ink), `--hover` (hover fill), `--pretui-selected` (active fill), `--pretui-primary-ink` falling back to `--primary` (active ink), `--pretui-shadow-hairline` (active edge), `--ink-3` (the ellipsis), `--text-ui-md`.
+`--muted-foreground` (resting ink), `--foreground` (hover ink), `--hover` (hover fill), `--pretui-selected` (active fill), `--pretui-primary-ink` falling back to `--primary` (active ink), `--pretui-shadow-hairline` (active edge), `--subtle-foreground` (a disabled edge arrow), `--ring` (focus outline), `--ink-3` (the ellipsis), `--text-ui-md`.
 
 `--pretui-selected` is the notable one: it is the kit's "this row is the chosen one" fill, shared with selection states elsewhere, and a season that leaves it at the default light blue while retuning `--primary` to a warm hue will produce an active page whose fill and ink disagree. Define the pair together, and check `--pretui-primary-ink` for contrast against `--pretui-selected` rather than against `--card`.
 
