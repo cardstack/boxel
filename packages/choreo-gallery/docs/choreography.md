@@ -187,7 +187,7 @@ timeline the legacy could only print as a matrix.
 
 ## Tests
 
-`test-app/tests/integration/choreo/`:
+`packages/choreo/tests/integration/choreo/`:
 
 - **changeset** — inserted / removed / kept classification; `role` and `id`
   queries; `still` / `moved`; no run on the region's first render; no run on a
