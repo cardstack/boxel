@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { rri } from '@cardstack/runtime-common';
+import { logger, rri } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import runRealmCode from '../lib/realm-runner/runner';
@@ -16,6 +16,8 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
+
+const log = logger('tools:run-realm-code');
 
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
@@ -48,6 +50,8 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
+  // Calls and saves refused because the run had already ended.
+  refusedAfterClose = 0;
   private queue: Promise<unknown> = Promise.resolve();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
@@ -67,6 +71,7 @@ class RealmFsSession {
   call(method: RealmRunnerCallMethod, args: unknown[]): Promise<unknown> {
     let result = this.queue.then(() => {
       if (this.closed) {
+        this.refusedAfterClose += 1;
         throw new Error('The run has ended; this realm call was not made');
       }
       return this.dispatch(method, args);
@@ -216,6 +221,7 @@ class RealmFsSession {
       throw new Error(`File is too large after editing: ${url}`);
     }
     if (this.closed) {
+      this.refusedAfterClose += 1;
       throw new Error(`The run has ended; ${url} was not saved`);
     }
     let saved = await this.writeFile(url, content, expected);
@@ -310,6 +316,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       // files already. Name them, so the model knows what state it left.
       let message = error instanceof Error ? error.message : String(error);
       let saved = [...session.saved];
+      // A call the script did not await either finished before the session
+      // closed, and is named as saved, or was refused after it closed. Which
+      // one happened depends on timing, so record it.
+      log.debug(
+        `run failed: saved=${saved.length} refusedAfterClose=${session.refusedAfterClose}: ${message}`,
+      );
       throw new Error(
         saved.length > 0
           ? `${message}. Files already saved by this run: ${saved.join(', ')}`

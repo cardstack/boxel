@@ -503,19 +503,37 @@ module(basename(import.meta.filename), function () {
         { shape: 'plain', links: 'ids', unshareableFormats: [] },
         'a narrowed read is still plain, and says how far it reaches',
       );
+      // Lowering refuses `none` on a read, so a stored one only ever comes
+      // from an entry that got around it. It is served as `ids`, which still
+      // tells the host what the card links to, so an edit never replaces
+      // links the host was not shown.
+      for (let links of ['none', 'some']) {
+        assert.deepEqual(
+          await readPlan(
+            // What a stored entry holds is JSON, so it is only as good as
+            // whatever wrote it.
+            stub({
+              read: { base: 'read', deterministic: true, links },
+            } as unknown as Definition['operations']),
+            new URL(CARD),
+          ),
+          { shape: 'plain', links: 'ids', unshareableFormats: [] },
+          `a stored read declaring "${links}" names its links`,
+        );
+      }
       assert.deepEqual(
         await readPlan(
           stub({
             read: {
               base: 'read',
               deterministic: true,
-              links: 'none',
+              links: 'ids',
               output: { source: '{title:.title}', syntax: 'solidified' },
             },
           }),
           new URL(CARD),
         ),
-        { shape: 'staged', links: 'none', unshareableFormats: [] },
+        { shape: 'staged', links: 'ids', unshareableFormats: [] },
         'the two answers are independent',
       );
     });

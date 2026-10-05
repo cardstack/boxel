@@ -51,7 +51,6 @@ const NPM_SURFACE_PATTERNS: RegExp[] = [
 const PLUGIN_SURFACE_PATTERNS: RegExp[] = [
   /^packages\/boxel-cli\/plugin\//,
   /^packages\/boxel-cli\/scripts\/build-plugin\.ts$/,
-  /^packages\/boxel-cli\/scripts\/build-skills\.ts$/,
 ];
 
 const PACKAGE_JSON_PATH = 'packages/boxel-cli/package.json';

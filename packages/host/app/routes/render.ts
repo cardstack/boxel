@@ -51,6 +51,7 @@ import {
 import {
   windowErrorHandler,
   errorJsonApiToErrorEntry,
+  isBenignResizeObserverError,
 } from '../lib/window-error-handler';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import {
@@ -200,6 +201,9 @@ export default class RenderRoute extends Route<Model> {
 
   errorHandler = (event: Event) => {
     if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    if (isBenignResizeObserverError(event)) {
       return;
     }
     let elements = this.#ensurePrerenderElements();

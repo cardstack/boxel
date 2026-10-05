@@ -10,7 +10,7 @@ import type {
   SearchEntryWireQuery,
 } from '../search-entry.ts';
 import { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
-import type { OperationDiagnostics } from './telemetry.ts';
+import type { OperationDiagnostics, PolicyRoute } from './telemetry.ts';
 import {
   PRERENDERED_HTML_FORMATS,
   type PrerenderedHtmlFormat,
@@ -20,6 +20,7 @@ import type {
   HtmlDeclaration,
   HtmlSharing,
   LinkStrategy,
+  ReadLinkStrategy,
 } from '@cardstack/base/operations';
 
 // ============================================================================
@@ -122,7 +123,8 @@ export function isLinkStrategy(value: unknown): value is LinkStrategy {
 }
 
 // What a stored definition's `links` means. Absent is `full`, the whole
-// closure, which is the default for every read.
+// closure, which is the default for every read. A `read` definition's is read
+// through `readLinkStrategyOf`, which never answers `none`.
 //
 // Anything else is JSON the realm reads back, so it is only as good as what
 // wrote it. Lowering records an unrecognized value rather than storing one,
@@ -135,6 +137,19 @@ export function linkStrategyOf(value: unknown): LinkStrategy {
     return 'full';
   }
   return isLinkStrategy(value) ? value : 'none';
+}
+
+// What a stored `read` definition's `links` means. `none` is a query's
+// strategy: a read's governs the card's plain GET, which the host loads a card
+// with to render and edit it, and a card loaded without its links has them
+// replaced by the first edit to a link field. Lowering refuses `none` on a
+// read, so a stored one predates that rule or got around it, and an
+// unrecognized value has the same origin. Both read as `ids`, the narrowest
+// strategy a read serves: it still withholds the closure, and it still tells
+// the host what the card links to.
+export function readLinkStrategyOf(value: unknown): ReadLinkStrategy {
+  let links = linkStrategyOf(value);
+  return links === 'none' ? 'ids' : links;
 }
 
 // Whichever of the two withholds more.
@@ -385,8 +400,9 @@ export type OperationLoweringIssueCode =
   // assemble, and no other base assembles one: a write answers without
   // assembling the card's closure, and a `readSource` serves stored bytes.
   | 'links-without-assembly'
-  // A `links` value that is not one of the strategies a read or a query can
-  // apply.
+  // A `links` value that is not one of the strategies its base can apply,
+  // including `none` on a `read`: `none` is a query's strategy, since a card
+  // the host loads without its links would have them replaced by an edit.
   | 'invalid-link-strategy'
   // An `html` declaration on a base other than `read` or `query`. It withholds
   // prerendered HTML a read of the target or a query's rows are served with,
@@ -676,6 +692,9 @@ export interface OperationRequest {
   // running. One the gate refuses is refused as it is in an active realm, so
   // a caller no grant admits is not told the realm is archived.
   seal?: Error;
+  // The request surface and route the invocation arrived on, which a policy
+  // decision record names. Absent for a dispatch the realm makes itself.
+  route?: PolicyRoute;
 }
 
 // A read's answer: the assembled JSON:API document, exactly as the card+json
