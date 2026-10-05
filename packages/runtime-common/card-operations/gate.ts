@@ -14,8 +14,19 @@ import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
-import type { GateTrace, GateTraceOutcome } from './gate-trace.ts';
-import { emitPolicySnapshotRead } from './telemetry.ts';
+import type {
+  GateTrace,
+  GateTraceOutcome,
+  GateTraceRefusal,
+} from './gate-trace.ts';
+import {
+  elapsedMs,
+  emitPolicyDecision,
+  recordSafely,
+  emitPolicySnapshotRead,
+  type PolicyDecisionEvent,
+  type PolicyDecisionReason,
+} from './telemetry.ts';
 import type {
   CompiledOperationGrant,
   CompiledPolicyPredicate,
@@ -202,7 +213,7 @@ export type GateSubject =
 // trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
-  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace' | 'advisory'
+  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace' | 'advisory' | 'route'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -230,10 +241,12 @@ export type GateRefusal =
 // admits it, or why none does.
 type Admission = MatchedGrant | typeof GATE_REFUSED | typeof GATE_FAULTED;
 
-// One grant the gate matched, with the rule it came from.
+// One grant the gate matched, with the rule and the compiled policy it came
+// from.
 export interface MatchedGrant {
   rule: CompiledPolicyRule;
   grant: CompiledOperationGrant;
+  policy: CompiledRealmPolicy;
 }
 
 // What the gate decided about one invocation.
@@ -254,6 +267,8 @@ export type GateDecision =
 export interface GrantedDecision {
   kind: 'granted';
   grant: MatchedGrant;
+  // What the gate matched, for the write lock's decision record.
+  matchedOn?: MatchedOn;
   // For a write to a stored card, what the write lock judges that card by
   // before the write goes ahead.
   stored?: StoredCardCheck;
@@ -262,6 +277,8 @@ export interface GrantedDecision {
 export interface PendingDecision {
   kind: 'pending';
   grants: MatchedGrant[];
+  // What the gate matched, for the write lock's decision record.
+  matchedOn?: MatchedOn;
   // The target type's definition-cache entry, which describes the source a
   // predicate reads.
   typeDefinition: Definition | undefined;
@@ -402,6 +419,9 @@ export function gateRefusal(
 // no policy, or a core that cannot read one.
 export interface LoadedPolicy {
   policy: CompiledRealmPolicy | undefined;
+  // When the caller started loading it, a `performance.now()` reading, so the
+  // gate's decision record counts the load as part of the decision.
+  started?: number;
 }
 
 // Load the realm's compiled policy for a caller the realm ACL declined, and
@@ -450,18 +470,66 @@ export async function gateOperation(
   scope: GateScope,
   loaded?: LoadedPolicy,
 ): Promise<GateDecision | GateRefusal> {
-  let { base } = definition;
-  let { trace } = scope;
-  if (!declines(scope, base)) {
+  if (!declines(scope, definition.base)) {
     return { kind: 'coarse' };
   }
+  let notes = decisionNotes(scope);
+  let started = loaded?.started ?? performance.now();
+  let decision: GateDecision | GateRefusal;
+  try {
+    decision = await decide(
+      core,
+      subject,
+      name,
+      definition,
+      typeDefinition,
+      scope,
+      loaded,
+      notes,
+    );
+  } catch (e: unknown) {
+    if (notes) {
+      recordDecision(core, scope, name, definition.base, notes, started, {
+        decidedAt: 'gate',
+        failed: e,
+      });
+    }
+    throw e;
+  }
+  if (notes) {
+    recordDecision(core, scope, name, definition.base, notes, started, {
+      decidedAt: 'gate',
+      decision,
+    });
+  }
+  return decision;
+}
+
+// The gate's decision for a caller the realm ACL declined, with what it
+// matched and evaluated on the way noted in `notes`.
+async function decide(
+  core: OperationCore,
+  subject: GateSubject,
+  name: string,
+  definition: OperationDefinition,
+  typeDefinition: Definition | undefined,
+  scope: GateScope,
+  loaded: LoadedPolicy | undefined,
+  notes: DecisionNotes | undefined,
+): Promise<GateDecision | GateRefusal> {
+  let { base } = definition;
+  let { trace } = scope;
+  let refuse = (refusal: GateTraceRefusal): typeof GATE_REFUSED => {
+    trace?.refused(refusal);
+    notes?.refused(refusal);
+    return GATE_REFUSED;
+  };
   // An operation kept out of every policy's reach. This and the two checks
   // for authorization infrastructure below refuse before any rule is matched,
   // so a grant for it that a compiled policy holds is never consulted,
   // however that grant came to be there.
   if (definition.nonGrantable) {
-    trace?.refused('non-grantable');
-    return GATE_REFUSED;
+    return refuse('non-grantable');
   }
   // A query is planned and run on the search engine rather than against one
   // target, so nothing here can grant one. Its grants are judged by the search
@@ -472,38 +540,34 @@ export async function gateOperation(
   // Only a traced decision asks, since the refusal is the same either way.
   if (base === 'query') {
     if (trace) {
-      trace.refused(
+      return refuse(
         (await queryKeptOutOfReach(core, scope, subject, name, typeDefinition))
           ? 'non-grantable'
           : 'query-lane',
       );
     }
-    return GATE_REFUSED;
+    return refuse('query-lane');
   }
   // An explain and a validate are granted nowhere: an explain answers what a
   // refusal withholds, and a validate reads a policy card, or the one the
   // realm's pointer names. So each is refused here even where its declaration
   // left the flag off.
   if (base === 'explain' || base === 'validate') {
-    trace?.refused('non-grantable');
-    return GATE_REFUSED;
+    return refuse('non-grantable');
   }
   if (subject.kind === 'unmatched' || !core.policy) {
-    trace?.refused('unmatchable-target');
-    return GATE_REFUSED;
+    return refuse('unmatchable-target');
   }
   // A type is only what a create mints from. Every other behavior runs
   // against a stored target, and is judged by it or not at all.
   if (subject.kind === 'type' && base !== 'create') {
-    trace?.refused('unmatchable-target');
-    return GATE_REFUSED;
+    return refuse('unmatchable-target');
   }
   // The gate grants a file one behavior, the read of its stored bytes. What a
   // file def carries besides — its metadata `read`, its writes — is granted on
   // nothing.
   if (subject.kind === 'file' && base !== 'readSource') {
-    trace?.refused('unmatchable-target');
-    return GATE_REFUSED;
+    return refuse('unmatchable-target');
   }
   // The realm's config card and the card its policy key names together
   // decide every grant, so no grant reaches either, whatever their types
@@ -519,8 +583,7 @@ export async function gateOperation(
     (namesRealmConfigCard(core, subject.url) ||
       (await namesPolicyCard(core.policy, subject.url)))
   ) {
-    trace?.refused('authorization-infrastructure');
-    return GATE_REFUSED;
+    return refuse('authorization-infrastructure');
   }
   // Every other behavior is matched on its card's index row, which is peeked
   // before the policy loads. A stored-bytes read is typed from the bytes it
@@ -530,8 +593,7 @@ export async function gateOperation(
   if (base !== 'readSource') {
     let indexed = await indexedSubject(scope, subject);
     if (!indexed) {
-      trace?.refused('unmatchable-target');
-      return GATE_REFUSED;
+      return refuse('unmatchable-target');
     }
     if (indexed.kind === GATE_MISSING.kind) {
       return GATE_MISSING;
@@ -540,8 +602,7 @@ export async function gateOperation(
   }
   let { policy } = loaded ?? (await loadPolicy(core));
   if (!policy) {
-    trace?.refused('no-grant');
-    return GATE_REFUSED;
+    return refuse('no-grant');
   }
   let matchOn =
     rowMatched ??
@@ -549,14 +610,19 @@ export async function gateOperation(
       ? undefined
       : await storedBytesSubject(core, subject.url));
   if (!matchOn) {
-    trace?.refused('unmatchable-target');
-    return GATE_REFUSED;
+    return refuse('unmatchable-target');
   }
   let { types } = matchOn;
-  let matched = await matchingGrants(policy, types, name, core.policy, trace);
+  notes?.typed(types[0]);
+  let matched = await matchingGrants(
+    policy,
+    types,
+    name,
+    core.policy,
+    notes ? notes.alongside(trace) : trace,
+  );
   if (matched.length === 0) {
-    trace?.refused('no-grant');
-    return GATE_REFUSED;
+    return refuse('no-grant');
   }
   // Once a grant would admit the invocation, and not before, so an
   // invocation that nothing grants pays no definition reads for a refusal it
@@ -574,12 +640,10 @@ export async function gateOperation(
     !isDefinitionFreeBaseOperation(name) &&
     (await nonGrantableInChain(core, types, name, typeDefinition ? 1 : 0))
   ) {
-    trace?.refused('non-grantable');
-    return GATE_REFUSED;
+    return refuse('non-grantable');
   }
   if (await reachesPolicyCard(core, core.policy, types, definition)) {
-    trace?.refused('authorization-infrastructure');
-    return GATE_REFUSED;
+    return refuse('authorization-infrastructure');
   }
   // A write to a stored card was matched on its row, and the write lock
   // judges the card again from its bytes.
@@ -599,27 +663,224 @@ export async function gateOperation(
   if (subject.kind === 'type') {
     matched = matched.filter(({ grant }) => !grant.where?.snapshot);
     if (matched.length === 0) {
-      trace?.refused('no-grant');
-      return GATE_REFUSED;
+      return refuse('no-grant');
     }
   }
+  let matchedOn: MatchedOn = { base, targetType: types[0] };
   let unconditional = matched.find(({ grant }) => !grant.where);
   if (unconditional) {
-    return { kind: 'granted', grant: unconditional, ...lockCheck };
+    return { kind: 'granted', grant: unconditional, matchedOn, ...lockCheck };
   }
   if (isWrite(base)) {
-    return { kind: 'pending', grants: matched, typeDefinition, ...lockCheck };
+    return {
+      kind: 'pending',
+      grants: matched,
+      typeDefinition,
+      matchedOn,
+      ...lockCheck,
+    };
   }
   // A read has one state to judge, and nothing to wait for, so its predicate
   // is evaluated here, against the target as it is stored now, or, for one
   // judged against the snapshot, as its index row holds it now.
   let stored = await readSubject(core, matchOn, typeDefinition, scope);
-  let admission = stored
-    ? await firstHolding(core, matched, stored, scope, 'gate')
-    : GATE_REFUSED;
+  if (!stored) {
+    notes?.refused('unmatchable-target');
+    return GATE_REFUSED;
+  }
+  let admission = await firstHolding(
+    core,
+    matched,
+    stored,
+    scope,
+    'gate',
+    notes,
+  );
   return 'grant' in admission
     ? { kind: 'granted', grant: admission }
     : admission;
+}
+
+// What a decision left to the write lock was matched on, so the lock's record
+// names it as the gate's did.
+export interface MatchedOn {
+  base: BaseOperation;
+  targetType: string | undefined;
+}
+
+// What the gate did on the way to one decision, for its decision record. Kept
+// apart from `GateTrace`, which an explain and a capability check read back,
+// so recording a decision changes nothing either of those reports.
+class DecisionNotes {
+  refusal: GateTraceRefusal | 'stored-card-refused' | undefined;
+  targetType: string | undefined;
+  rules: string[] = [];
+  grants: string[] = [];
+  predicates = 0;
+  predicateMs = 0;
+  tier: PolicyDecisionEvent['tier'] = 'none';
+
+  refused(refusal: GateTraceRefusal) {
+    this.refusal ??= refusal;
+  }
+
+  // The write lock found the card gone, stored as a type other than the one
+  // the grants were matched on, or stored as a policy card.
+  storedCardRefused() {
+    this.refusal ??= 'stored-card-refused';
+  }
+
+  typed(type: string | undefined) {
+    this.targetType ??= type;
+  }
+
+  ruleMatched(rule: CompiledPolicyRule, grants: CompiledOperationGrant[]) {
+    this.rules.push(rule.path);
+    for (let grant of grants) {
+      this.grants.push(grant.path);
+    }
+  }
+
+  evaluated(where: CompiledPolicyPredicate, ms: number) {
+    this.predicates++;
+    this.predicateMs += ms;
+    this.tier =
+      where.snapshot || this.tier === 'snapshot' ? 'snapshot' : 'stored';
+  }
+
+  // These notes and `trace` both hearing which rules matched.
+  alongside(trace: GateTrace | undefined): RuleMatchRecorder {
+    return trace
+      ? {
+          ruleMatched: (rule, grants) => {
+            trace.ruleMatched(rule, grants);
+            this.ruleMatched(rule, grants);
+          },
+        }
+      : this;
+  }
+}
+
+// What hears which rules `matchingGrants` matched.
+type RuleMatchRecorder = Pick<GateTrace, 'ruleMatched'>;
+
+// Notes for a decision this scope records, or undefined for one it does not:
+// a capability check's, which decides nothing and is counted on its own line.
+function decisionNotes(scope: GateScope): DecisionNotes | undefined {
+  return scope.advisory ? undefined : new DecisionNotes();
+}
+
+// Emit the record of one decision: the gate's, or the write lock's for a write
+// the gate left to it.
+function recordDecision(
+  core: OperationCore,
+  scope: GateScope,
+  name: string,
+  // Null where the operation had not resolved when the decision was made.
+  base: BaseOperation | null,
+  notes: DecisionNotes,
+  started: number,
+  how: {
+    decidedAt: 'gate' | 'lock';
+    decision?: GateDecision | GateRefusal | Admission;
+    failed?: unknown;
+  },
+): void {
+  recordSafely('policy-decision', () => {
+    let decision = how.decision;
+    let outcome: PolicyDecisionEvent['outcome'];
+    let reason: PolicyDecisionReason;
+    let admitted: MatchedGrant | undefined;
+    if (how.failed !== undefined || !decision) {
+      outcome = 'error';
+      reason = isPolicyUnavailable(how.failed)
+        ? 'policy-unavailable'
+        : 'gate-failed';
+    } else if ('grant' in decision && !('kind' in decision)) {
+      // An admission under the lock.
+      outcome = 'allow';
+      reason = 'granted';
+      admitted = decision;
+    } else if (
+      decision.kind === 'pending' ||
+      (decision.kind === 'granted' && leavesToLock(decision))
+    ) {
+      outcome = 'pending';
+      reason = 'pending';
+    } else if (decision.kind === 'granted') {
+      outcome = 'allow';
+      reason = 'granted';
+      admitted = decision.grant;
+    } else if (decision.kind === GATE_MISSING.kind) {
+      outcome = 'deny';
+      reason = 'target-missing';
+    } else if (decision.kind === GATE_FAULTED.kind) {
+      outcome = 'error';
+      reason = 'predicate-threw';
+    } else if (decision.kind === GATE_REFUSED.kind) {
+      outcome = 'deny';
+      reason = notes.refusal ?? 'predicate';
+    } else {
+      // A caller the ACL allowed, which records nothing.
+      return;
+    }
+    let caller = scope.caller;
+    emitPolicyDecision({
+      kind: 'policy-decision',
+      realmURL: core.realmURL,
+      actor: caller.kind === 'user' ? caller.actor : null,
+      operation: name,
+      base,
+      targetType: notes.targetType ?? null,
+      transport: scope.route.transport,
+      route: scope.route.route,
+      coarseDeclined: scope.coarseDeclined === 'all' ? 'all' : 'writes',
+      decidedAt: how.decidedAt,
+      outcome,
+      reason,
+      rule: admitted?.rule.path ?? null,
+      grant: admitted?.grant.path ?? null,
+      rules: notes.rules.join(','),
+      grants: notes.grants.join(','),
+      tier: notes.tier,
+      predicates: notes.predicates,
+      predicateMs: Math.round(notes.predicateMs * 100) / 100,
+      evaluationMs: elapsedMs(started),
+      // An explain carries a trace and is not advisory. A capability check
+      // carries one too, and records nothing.
+      hypothetical: scope.trace !== undefined,
+    });
+  });
+}
+
+function isPolicyUnavailable(e: unknown): boolean {
+  if (!(e instanceof OperationFailure)) {
+    return false;
+  }
+  let unavailable = policyUnavailable().error;
+  return (
+    e.error.status === unavailable.status && e.error.title === unavailable.title
+  );
+}
+
+// Record a policy the realm could not load, where a caller's resolution loads
+// it before the gate is reached (see `resolveGatedOperation`), so a policy
+// that did not compile is counted for every caller it refuses.
+export function recordPolicyLoadFailure(
+  core: OperationCore,
+  scope: GateScope,
+  name: string,
+  started: number,
+  failure: unknown,
+): void {
+  let notes = decisionNotes(scope);
+  if (!notes) {
+    return;
+  }
+  recordDecision(core, scope, name, null, notes, started, {
+    decidedAt: 'gate',
+    failed: failure,
+  });
 }
 
 // What the gate matches rules against, and what a predicate reads if one has
@@ -914,10 +1175,51 @@ export async function dischargePendingDecision(
   if (pending.decision.kind === 'pending') {
     policyGateStats(core).pendingDischarges++;
   }
-  let admission = await admits(core, pending, judged, 'lock');
+  let { scope } = pending;
+  let notes = decisionNotes(scope);
+  let started = performance.now();
+  let admission: Admission;
+  try {
+    admission = await admits(core, pending, judged, 'lock', notes);
+  } catch (e: unknown) {
+    if (notes) {
+      recordLockDecision(core, pending, notes, started, { failed: e });
+    }
+    throw e;
+  }
+  if (notes) {
+    recordLockDecision(core, pending, notes, started, { decision: admission });
+  }
   if (!('grant' in admission)) {
     throw gateRefusal(core, admission, pending.target, pending.name);
   }
+}
+
+// The write lock's decision record, naming what the gate matched the write on.
+function recordLockDecision(
+  core: OperationCore,
+  { name, decision, scope }: PendingWrite,
+  notes: DecisionNotes,
+  started: number,
+  how: { decision?: Admission; failed?: unknown },
+): void {
+  recordSafely('policy-decision', () => {
+    let matchedOn = decision.matchedOn;
+    notes.typed(matchedOn?.targetType ?? decision.stored?.matchedType);
+    if (decision.kind === 'pending') {
+      for (let { grant } of decision.grants) {
+        notes.grants.push(grant.path);
+      }
+      notes.rules = [...new Set(decision.grants.map(({ rule }) => rule.path))];
+    } else {
+      notes.rules = [decision.grant.rule.path];
+      notes.grants = [decision.grant.grant.path];
+    }
+    recordDecision(core, scope, name, matchedOn?.base ?? null, notes, started, {
+      decidedAt: 'lock',
+      ...how,
+    });
+  });
 }
 
 // The refusal `dischargePendingDecision` would throw for a pending write
@@ -984,6 +1286,7 @@ async function admits(
   { target, decision, scope }: PendingWrite,
   judged: AdmissionSubject | undefined,
   lane: Lane,
+  notes?: DecisionNotes,
 ): Promise<Admission> {
   if (target.kind !== 'instance') {
     // A create against a type, which only a decision resting on predicates
@@ -993,9 +1296,18 @@ async function admits(
       return GATE_REFUSED;
     }
     let minted = await mintedSubject(core, judged);
-    return minted
-      ? await firstHolding(core, decision.grants, minted, scope, lane)
-      : GATE_REFUSED;
+    if (!minted) {
+      notes?.refused('unmatchable-target');
+      return GATE_REFUSED;
+    }
+    return await firstHolding(
+      core,
+      decision.grants,
+      minted,
+      scope,
+      lane,
+      notes,
+    );
   }
   let card = await lockedCard(
     core,
@@ -1004,6 +1316,7 @@ async function admits(
     judged?.source,
   );
   if (!card) {
+    notes?.storedCardRefused();
     return GATE_REFUSED;
   }
   if (decision.kind === 'granted') {
@@ -1012,6 +1325,7 @@ async function admits(
   // A predicate reads the card's fields, and bytes from beneath an append
   // the batch staged do not say what those will hold.
   if (judged?.beneathAppend) {
+    notes?.refused('unmatchable-target');
     return GATE_REFUSED;
   }
   let url = card.url;
@@ -1022,9 +1336,11 @@ async function admits(
     card.resource,
     () => core.indexQueryEngine.instance(url, { includeErrors: true }),
   );
-  return subject
-    ? await firstHolding(core, decision.grants, subject, scope, lane)
-    : GATE_REFUSED;
+  if (!subject) {
+    notes?.refused('unmatchable-target');
+    return GATE_REFUSED;
+  }
+  return await firstHolding(core, decision.grants, subject, scope, lane, notes);
 }
 
 // Where a predicate is being judged: at the gate, which decides a read; under
@@ -1040,6 +1356,7 @@ async function firstHolding(
   subject: PredicateSubject,
   scope: GateScope,
   lane: Lane,
+  notes?: DecisionNotes,
 ): Promise<Admission> {
   let stats = policyGateStats(core);
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
@@ -1053,13 +1370,15 @@ async function firstHolding(
       return candidate;
     }
     stats.predicateEvaluations++;
+    let started = performance.now();
     // A predicate judged against the snapshot does not hold for a target with
     // no index row to read: nothing says what its computed or linked values
     // are.
     let judged = where.snapshot ? await subject.snapshot?.() : subject;
     let outcome = judged
-      ? await evaluate(core, candidate.grant.operation, where, judged, actor)
+      ? await evaluate(core, candidate, where, judged, actor)
       : 'fails';
+    notes?.evaluated(where, performance.now() - started);
     let said: GateTraceOutcome =
       outcome === 'holds'
         ? 'held'
@@ -1283,41 +1602,84 @@ export async function matchingGrants(
   types: string[],
   name: string,
   access: OperationPolicyAccess,
-  // Where an explain records the rules matched. Absent everywhere else.
-  trace?: GateTrace,
+  // What hears the rules matched: an explain's trace, or a decision record.
+  trace?: RuleMatchRecorder,
 ): Promise<MatchedGrant[]> {
-  let chain = new Set(types);
-  let matched: MatchedGrant[] = [];
-  for (let rule of policy.rules) {
-    let keys = await ruleTypeKeys(rule, access);
-    if (!keys.some((key) => chain.has(key))) {
-      continue;
+  let byType = await rulesByTypeKey(policy, access);
+  let positions = new Set<number>();
+  for (let type of types) {
+    for (let position of byType.get(type) ?? []) {
+      positions.add(position);
     }
+  }
+  let matched: MatchedGrant[] = [];
+  // In policy order, which is the order an explain reports rules in.
+  for (let position of [...positions].sort((a, b) => a - b)) {
+    let rule = policy.rules[position];
     let grants = rule.grants.filter((grant) => grant.operation === name);
     trace?.ruleMatched(rule, grants);
     for (let grant of grants) {
-      matched.push({ rule, grant });
+      matched.push({ rule, grant, policy });
     }
   }
   return matched;
 }
 
+// Each rule's position in its policy, under every key its type is recorded
+// under, so matching a target walks its adoption chain rather than every rule
+// in the policy: the gate matches once for every invocation it decides, and a
+// search once for every realm it scopes.
+//
 // A compiled policy is held until something it was compiled from moves,
-// including the definition of every type its rules name, so one rule's type
-// keys do not change while it is held. A lookup that fails is not remembered:
-// the rule matches nothing for this invocation, and the next one asks again.
+// including the definition of every type its rules name, so its index does not
+// change while it is held. A rule whose keys could not be looked up matches
+// nothing for this invocation, and an index missing one is not kept, so the
+// next invocation asks again.
+const typeIndexes = new WeakMap<CompiledRealmPolicy, Map<string, number[]>>();
+
+async function rulesByTypeKey(
+  policy: CompiledRealmPolicy,
+  access: OperationPolicyAccess,
+): Promise<Map<string, number[]>> {
+  let index = typeIndexes.get(policy);
+  if (index) {
+    return index;
+  }
+  let keys = await Promise.all(
+    policy.rules.map((rule) => ruleTypeKeys(rule, access)),
+  );
+  index = new Map();
+  for (let [position, ruleKeys] of keys.entries()) {
+    for (let key of ruleKeys ?? []) {
+      let positions = index.get(key);
+      if (positions) {
+        positions.push(position);
+      } else {
+        index.set(key, [position]);
+      }
+    }
+  }
+  if (!keys.includes(undefined)) {
+    typeIndexes.set(policy, index);
+  }
+  return index;
+}
+
+// The keys a rule's type is recorded under, or undefined where they could not
+// be looked up. Kept per rule, so an index rebuilt because one rule's lookup
+// failed asks again for that rule alone.
 const typeKeys = new WeakMap<CompiledPolicyRule, string[]>();
 
 async function ruleTypeKeys(
   rule: CompiledPolicyRule,
   access: OperationPolicyAccess,
-): Promise<string[]> {
+): Promise<string[] | undefined> {
   let keys = typeKeys.get(rule);
   if (!keys) {
     try {
       keys = await access.typeKeys(rule.targetType);
     } catch {
-      return [];
+      return undefined;
     }
     typeKeys.set(rule, keys);
   }
@@ -1778,7 +2140,7 @@ async function projector(
 // when the card's pass lands.
 async function evaluate(
   core: OperationCore,
-  operation: string,
+  matched: MatchedGrant,
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
@@ -1806,7 +2168,7 @@ async function evaluate(
     let judged = subject.instance?.id;
     logThrow(
       core,
-      operation,
+      matched,
       where,
       typeof judged === 'string' ? judged : 'its target',
       actor,
@@ -1823,36 +2185,55 @@ async function evaluate(
 // evaluates a predicate once for each card it is asked about, and a view asks
 // again as it re-renders, so a line for every throw would put the whole view
 // into the log at the rate it renders. One line says what the author needs:
-// that the predicate throws, on what, and why, and an explain answers which
-// card it throws on. The error is cut short because BXL's quotes the value it
-// failed on, which can be a whole stored field.
+// that the predicate throws, on what, and where in the policy card it is. An
+// explain answers which card it throws on.
+//
+// The line carries no card content and no predicate source. BXL's message
+// quotes the value it failed on, which can be a whole stored field of the
+// governed card, so only the error's kind is logged. The grant's path in the
+// card the policy was compiled from names the predicate without quoting it.
+//
+// A draft's throw is not logged. The draft is in force nowhere, so it is no
+// fault in the realm's policy, and the explain that judged it answers
+// `predicate-threw` to the one caller who asked.
 function logThrow(
   core: OperationCore,
-  operation: string,
+  { grant, policy }: MatchedGrant,
   where: CompiledPolicyPredicate,
   judged: string,
   actor: string | undefined,
   e: unknown,
 ): void {
+  if (policy.draft) {
+    return;
+  }
   let at = now();
   let last = lastLoggedThrow.get(where);
   if (last !== undefined && at - last < THROW_LOG_INTERVAL_MS) {
     return;
   }
   lastLoggedThrow.set(where, at);
-  let error = e instanceof Error ? e.message : String(e);
-  if (error.length > THROW_ERROR_LENGTH) {
-    error = `${error.slice(0, THROW_ERROR_LENGTH)}…`;
-  }
   policyLog.warn(
     `a predicate in the policy of realm ${core.realmURL} threw while ` +
       `deciding whether ${actor ?? 'an anonymous caller'} may invoke ` +
-      `"${operation}" on ${judged}: ${where.source}: ${error}`,
+      `"${grant.operation}" on ${judged}: the grant at ${grant.path} of ` +
+      `${policy.card} threw ${errorKind(e)}`,
   );
 }
 
+// What kind of error a predicate threw, without its message. A transform's
+// error carries the phase it failed in, which separates a predicate that
+// cannot run at all from one that failed on the values it was handed.
+function errorKind(e: unknown): string {
+  if (!(e instanceof Error)) {
+    return typeof e;
+  }
+  let name = e.name !== 'Error' ? e.name : e.constructor.name;
+  let phase = (e as { phase?: unknown }).phase;
+  return typeof phase === 'string' ? `${name} (${phase})` : name;
+}
+
 const THROW_LOG_INTERVAL_MS = 60_000;
-const THROW_ERROR_LENGTH = 200;
 
 // When each compiled predicate last logged a throw. Keyed on the compiled
 // predicate, so a policy compiled again starts over.

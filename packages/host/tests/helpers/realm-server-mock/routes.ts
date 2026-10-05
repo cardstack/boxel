@@ -345,7 +345,7 @@ function registerSearchRoutes() {
 function registerInfoRoutes() {
   registerRealmServerRoute({
     path: '/_federated-info',
-    handler: async (req) => {
+    handler: async (req, _url, state) => {
       let payload;
       try {
         payload = await parseSearchRequestPayload(req.clone());
@@ -364,6 +364,23 @@ function registerInfoRoutes() {
           return buildSearchErrorResponse(e.message);
         }
         throw e;
+      }
+
+      // As the realm server's `_federated-info` does, a request naming a
+      // realm the caller does not read is refused whole: one that
+      // authenticated nobody is told to, and a signed-in caller is forbidden.
+      // A realm's policy admits no one here.
+      let unreadable = realmList.filter(
+        (realmURL) => !callerReads(state, realmURL),
+      );
+      if (unreadable.length > 0) {
+        let authenticated = authenticatedUser(req) !== undefined;
+        return new Response(
+          authenticated
+            ? `Insufficient permissions to read realms: ${unreadable.join(', ')}`
+            : `Authorization required for realms: ${unreadable.join(', ')}`,
+          { status: authenticated ? 403 : 401 },
+        );
       }
 
       let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =

@@ -24,6 +24,8 @@ export default defineConfig({
   expect: { timeout: 30_000 },
   reporter: [
     ['list'],
+    // A status block for every model every EVAL_PROGRESS_SECONDS (default 15).
+    [join(import.meta.dirname, 'progress-reporter.ts')],
     [
       'json',
       {

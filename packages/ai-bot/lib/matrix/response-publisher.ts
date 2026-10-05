@@ -25,10 +25,17 @@ import ResponseEventData from './response-event-data.ts';
 import { logger } from '@cardstack/runtime-common';
 import type { MatrixClient } from 'matrix-js-sdk';
 
+import { parseLenientJson } from '../lenient-json.ts';
+
 let log = logger('ai-bot');
 
+// With `argumentsText`, arguments that are still streaming also go out as the
+// raw text received so far, so a preview can show them growing. Only the
+// ephemeral stream preview asks for that; `arguments` stays empty until the
+// JSON is complete on every channel, so nothing can run a half-written call.
 export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
+  opts?: { argumentsText?: boolean; finished?: boolean },
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<ToolRequest>;
@@ -40,12 +47,34 @@ export function toCommandRequest(
   }
   if (f.arguments) {
     try {
-      result['arguments'] = JSON.parse(f.arguments);
+      result['arguments'] = parseLenientJson(
+        f.arguments,
+      ) as ToolRequest['arguments'];
     } catch (error) {
       // If the arguments are not valid JSON, we'll just return an empty object
       // This will happen during streaming, when the tool call is not yet complete
       // and the arguments are not yet available
       result['arguments'] = {};
+      if (opts?.argumentsText) {
+        result['argumentsText'] = f.arguments;
+      }
+      if (opts?.finished) {
+        // The turn is over, so these arguments will never complete. Say so,
+        // rather than letting the call fail on the empty arguments with a
+        // schema error that does not point at the cause.
+        let message = error instanceof Error ? error.message : String(error);
+        result['argumentsError'] = message;
+        // The arguments can be a whole script with the user's card source;
+        // log only its ends, which is where a cut or a bad escape shows.
+        let raw = f.arguments;
+        let excerpt =
+          raw.length <= 1000
+            ? raw
+            : `${raw.slice(0, 500)} … ${raw.slice(-500)}`;
+        log.warn(
+          `tool call ${id ?? '(no id)'} (${f.name ?? 'unnamed'}) finished with arguments that are not valid JSON: ${message}. Raw arguments (${raw.length} chars): ${excerpt}`,
+        );
+      }
     }
   }
   // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
@@ -249,7 +278,10 @@ export default class MatrixResponsePublisher {
         responseStateSnapshot.toolCalls
           .filter(Boolean) // Elide empty tool calls, which can be produced by gpt-5 at the time of this writing
           .map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+            toCommandRequest(
+              toolCall as ChatCompletionMessageFunctionToolCall,
+              { finished: responseStateSnapshot.isStreamingFinished },
+            ),
           ),
         contentAndReasoning.reasoning,
       );
