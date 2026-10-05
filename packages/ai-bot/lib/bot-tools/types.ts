@@ -22,7 +22,7 @@ export interface BotTool {
   // the raw arguments carry no description of their own.
   label(argumentsJson: string): string;
   // The tool's state for one handler run: whatever it needs to know about
-  // the room to describe, hold or run this turn's calls.
+  // the room to hold or run this turn's calls.
   startTurn(room: BotToolRoom): Promise<BotToolTurn>;
   // Whether a call cut off mid-arguments still names enough to run, so the
   // bot carries on by itself rather than asking the user to.
@@ -31,11 +31,9 @@ export interface BotTool {
 
 export interface BotToolTurn {
   // Whether a call waits for the user's approval before it runs (see
-  // approval.ts).
+  // approval.ts). A call that doesn't runs right after the response; one
+  // that does runs once the user approves it.
   needsApproval(argumentsJson: string): boolean;
-  // Whether a call made this turn runs now; a call held for approval runs
-  // once the user approves it.
-  runsNow(call: ChatCompletionMessageToolCall): boolean;
   // Runs calls and publishes each one's result, one at a time, in order.
   fulfill(
     calls: ChatCompletionMessageToolCall[],

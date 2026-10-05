@@ -45,17 +45,10 @@ export const readUrlBotTool: BotTool = {
       READ_REALM_FILE_TOOL_NAME,
     );
     return {
+      // A call without a url runs, so its failure is published.
       needsApproval(argumentsJson) {
         let url = urlFromReadUrlArguments(argumentsJson);
         return url !== undefined && needsApproval(url);
-      },
-      // A call without a url runs now, so its failure is published.
-      runsNow(call) {
-        if (call.type !== 'function') {
-          return false;
-        }
-        let url = urlFromReadUrlArguments(call.function.arguments);
-        return url === undefined || !needsApproval(url);
       },
       async fulfill(calls, target) {
         return await fulfillReadUrlCalls(calls, {

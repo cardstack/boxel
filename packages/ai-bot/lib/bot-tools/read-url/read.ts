@@ -539,14 +539,6 @@ export async function collectPreapprovedUrls(
   return approved;
 }
 
-// The readUrl calls the user's approvals release: every call the bot held
-// for approval that a human has answered with an 'approved' result and that
-// has no outcome yet. Worked out from the whole history, so an approval is
-// honored whichever event the handler runs for — one whose own handler was
-// stood down for a newer event is picked up by the next — and a call already
-// read or declined is never released again. A human's approval of anything
-// else (a call not held, a host tool) releases nothing, and the bot's own
-// events never approve. Returns each call with the bot message carrying it.
 // A run of encoded-looking data in a URL the model composed: a path segment,
 // query key or value, or fragment holding 32 or more base64 or hex
 // characters in a row, mixing letters and digits. Each part is checked on its

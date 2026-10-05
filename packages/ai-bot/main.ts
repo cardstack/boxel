@@ -380,7 +380,7 @@ Common issues are:
           resolveGenerationCompletion = resolve;
         });
 
-        // readRealmFile reads are fulfilled after the room lock is released
+        // Bot-tool calls are fulfilled after the room lock is released
         // (see the finally below). Fulfilling posts a command-result event that
         // re-triggers the bot for the continuation turn, and that re-trigger
         // has to acquire the room lock this handler holds — so fulfillment must
@@ -426,8 +426,8 @@ Common issues are:
             return;
           }
 
-          // The bot drives its own continuation by posting a readRealmFile
-          // result event, and the handler runs on that event's *local echo* —
+          // The bot drives its own continuation by posting a bot-tool result
+          // event, and the handler runs on that event's *local echo* —
           // before the homeserver has indexed it into /messages. getRoomEvents
           // is a server fetch, so it misses the just-posted result, which would
           // leave the read looking unresolved (shouldRespond=false) and stall
@@ -469,8 +469,14 @@ Common issues are:
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
 
-          if (botTools.length > 0) {
-            botToolTurns = await startBotToolTurns(botTools, {
+          // The offered tools' turns are started only when a run needs them
+          // (starting one can mean downloading what earlier calls read), and
+          // once per handler run.
+          let botToolTurnsStarted:
+            | Promise<Map<string, BotToolTurn>>
+            | undefined;
+          let startTurns = () =>
+            (botToolTurnsStarted ??= startBotToolTurns(botTools, {
               humanMemberCount: humanRoomMemberCount,
               realmDelegation: assistant.delegatedUserRealmSessions.enabled,
               history: eventList,
@@ -478,8 +484,7 @@ Common issues are:
               client,
               onBehalfOf: senderMatrixUserId,
               delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
-            });
-          }
+            }));
           // Run every held bot-tool call the user has approved and the bot
           // hasn't run yet, whatever event this handler runs for: an approval
           // whose own handler was stood down for a newer event is picked up
@@ -492,10 +497,13 @@ Common issues are:
             releasedToolCalls(
               eventList,
               aiBotUserId,
-              new Set(botToolTurns.keys()),
+              new Set(botTools.map((tool) => tool.name)),
             ),
           );
           pendingReleasedAgentId = agentId;
+          if (pendingReleasedCalls.length > 0) {
+            botToolTurns = await startTurns();
+          }
           // An approval is not a turn of its own (getShouldRespond ignores
           // it), so its handler stops here.
           if (isApprovalResult({ content: event.getContent() })) {
@@ -563,7 +571,6 @@ Common issues are:
               // out.
               ...botTools.map((tool) => tool.name),
             ]);
-            responder.setBotToolTurns(botToolTurns);
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -579,6 +586,10 @@ Common issues are:
               sendPromptAsDebugMessage(client, room.roomId, promptParts);
             }
             await responder.ensureThinkingMessageSent();
+            // Started before generation: the publisher asks each turn
+            // whether a streamed call waits for the user's approval.
+            botToolTurns = await startTurns();
+            responder.setBotToolTurns(botToolTurns);
           } catch (e) {
             log.error(e);
             Sentry.captureException(e, {
@@ -735,10 +746,11 @@ Common issues are:
             );
             log.info(`[${eventId}] Response finalized`);
 
-            // readRealmFile is a tool ai-bot fulfills itself. The answer has
-            // already streamed (with the reads surfaced as executedBy:
-            // 'ai-bot' command requests); now fetch each file, attach it to
-            // a command-result event, and let the normal command-result path
+            // Bot tools are fulfilled by ai-bot itself. The answer has
+            // already streamed (with their calls surfaced as executedBy:
+            // 'ai-bot' command requests); now each tool runs its calls and
+            // publishes their command-result events, and the normal
+            // command-result path
             // drive the continuation on a later turn — exactly as a host
             // command result would. Because reads now resolve next-turn like
             // host commands, an answer may freely mix the two; the host
@@ -753,7 +765,9 @@ Common issues are:
             botToolCalls = botToolCalls.filter(
               (call) =>
                 call.type === 'function' &&
-                (botToolTurns.get(call.function.name)?.runsNow(call) ?? false),
+                botToolTurns
+                  .get(call.function.name)
+                  ?.needsApproval(call.function.arguments) === false,
             );
             if (botToolCalls.length > 0 && responder.responseEventId) {
               // Defer fulfillment until after the room lock is released

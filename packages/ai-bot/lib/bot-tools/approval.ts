@@ -5,7 +5,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 // The approval flow every bot tool shares. A tool's turn may mark a call
-// `approvalRequired` (see BotToolTurn.describe); the bot then holds it, and
+// `approvalRequired` (see BotToolTurn.needsApproval); the bot then holds it, and
 // the host shows it with Approve / Decline. Approve sends a result with the
 // 'approved' key, which is not the call's outcome; the bot finds the
 // approved calls here and runs them through the tool's turn, and their real

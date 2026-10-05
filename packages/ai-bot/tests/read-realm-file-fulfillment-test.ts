@@ -137,7 +137,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     let data = dataOf(sent[0]);
     assert.strictEqual(
       data.attachedFiles.length,
@@ -172,7 +174,7 @@ module('fulfillReadRealmFileCalls', () => {
 
     assert.deepEqual(
       outcomes,
-      [{ commandRequestId: 'c1', ok: true }],
+      [{ commandRequestId: 'c1', ok: true, published: true }],
       'a degraded skill read is still a successful file read',
     );
     let { content } = sent[0];
@@ -253,7 +255,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1, 'one command-result event posted');
     let { eventType, content } = sent[0];
     assert.strictEqual(eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
@@ -297,7 +301,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1, 'all files ride one result event');
     let { content } = sent[0];
     assert.strictEqual(
@@ -444,7 +450,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(
       fetched.filter((url) => url === rawUrl).length,
       1,

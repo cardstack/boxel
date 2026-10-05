@@ -28,9 +28,6 @@ export const readRealmFileBotTool: BotTool = {
       needsApproval() {
         return false;
       },
-      runsNow() {
-        return true;
-      },
       async fulfill(calls, target) {
         let outcomes = await fulfillReadRealmFileCalls(calls, {
           client: target.client,
@@ -40,9 +37,9 @@ export const readRealmFileBotTool: BotTool = {
           onBehalfOf: room.onBehalfOf,
           delegatedUserRealmSessions: room.delegatedUserRealmSessions,
         });
-        return outcomes.map((outcome) => ({
-          commandRequestId: outcome.commandRequestId,
-          published: true,
+        return outcomes.map(({ commandRequestId, published }) => ({
+          commandRequestId,
+          published,
         }));
       },
     };

@@ -50,6 +50,8 @@ export interface ReadRealmFileFulfillmentOutcome {
   // still attached.
   ok: boolean;
   error?: string;
+  // Whether the call's result reached the room.
+  published: boolean;
 }
 
 // Runs each readRealmFile tool call ai-bot owns and publishes its outcome as a
@@ -250,7 +252,7 @@ async function fulfillOne(
     return await publishFailure(call.id, failureReason!, deps);
   }
 
-  await publish(deps, {
+  let published = await publish(deps, {
     msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
     commandRequestId: call.id,
     'm.relates_to': {
@@ -270,6 +272,7 @@ async function fulfillOne(
     commandRequestId: call.id,
     ok: errors.length === 0,
     ...(errors.length ? { error: errors.join('\n') } : {}),
+    published,
   };
 }
 
@@ -278,7 +281,7 @@ async function publishFailure(
   error: string,
   deps: ReadRealmFileFulfillmentDeps,
 ): Promise<ReadRealmFileFulfillmentOutcome> {
-  await publish(deps, {
+  let published = await publish(deps, {
     msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
     commandRequestId,
     failureReason: error,
@@ -289,12 +292,17 @@ async function publishFailure(
     },
     data: { context: { agentId: deps.agentId } },
   });
-  return { commandRequestId, ok: false, error };
+  return { commandRequestId, ok: false, error, published };
 }
 
 async function publish(
   deps: ReadRealmFileFulfillmentDeps,
   content: Record<string, any>,
-): Promise<void> {
-  await publishToolResult(deps.client, deps.roomId, content, 'readRealmFile');
+): Promise<boolean> {
+  return await publishToolResult(
+    deps.client,
+    deps.roomId,
+    content,
+    'readRealmFile',
+  );
 }
