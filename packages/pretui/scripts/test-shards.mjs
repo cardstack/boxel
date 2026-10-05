@@ -8,7 +8,8 @@
 // the lightest shard so far (lowest index on a tie), so it is deterministic
 // for a given file list and timings file. A file with no recorded time
 // weighs the mean of the recorded ones, so new tests still spread evenly
-// until the next --record.
+// until the next --record; the script warns about such files, and about
+// recorded files that no longer exist.
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
@@ -38,8 +39,27 @@ function testFiles(dir = root) {
 }
 
 function plan(total) {
-  let timings = JSON.parse(readFileSync(TIMINGS, 'utf8'));
   let files = testFiles();
+  let all = JSON.parse(readFileSync(TIMINGS, 'utf8'));
+  let timings = Object.fromEntries(
+    Object.entries(all).filter(([file]) => files.includes(file)),
+  );
+  let unrecorded = files.filter((f) => !(f in timings));
+  let stale = Object.keys(all).filter((f) => !files.includes(f));
+  if (unrecorded.length || stale.length) {
+    // In GitHub Actions the prefix turns the line into a run annotation.
+    let prefix = process.env.GITHUB_ACTIONS ? '::warning::' : 'warning: ';
+    console.warn(
+      `${prefix}scripts/test-timings.json is out of date, so the shards may be uneven; run \`node scripts/test-shards.mjs --record\`. ` +
+        [
+          unrecorded.length &&
+            `No recorded time (weighed as the mean): ${unrecorded.join(', ')}.`,
+          stale.length && `No such test file: ${stale.join(', ')}.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+    );
+  }
   // Every recording includes the harness boot, which a shard pays once, not
   // once per file. A low percentile of the recordings estimates that boot
   // (the very fastest few files load less than the boot itself), and it
@@ -50,7 +70,7 @@ function plan(total) {
     ? recorded[Math.floor(BOOT_PERCENTILE * (recorded.length - 1))]
     : 0;
   let weight = (file) => Math.max(timings[file] - boot, 0);
-  let known = files.filter((f) => f in timings).map(weight);
+  let known = Object.keys(timings).map(weight);
   let fallback = known.length
     ? Math.round(known.reduce((a, b) => a + b, 0) / known.length)
     : 1;
