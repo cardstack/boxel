@@ -8856,20 +8856,24 @@ export class Realm {
     };
   }
 
-  // Record one real compile, from the start of the transpile through the
-  // dependency scan of its output, or to the point where the transpile
-  // threw. Both run on the calling thread, so this is
-  // how long the compile kept the process from answering anything else.
-  // Logged at info when it is long enough to be felt by other requests.
+  // Record one real compile: the wall time from the start of the transpile
+  // through the dependency scan of its output, or to the point where the
+  // transpile threw. The transform's parse and generate run on the calling
+  // thread, so for a large module this is about how long the compile kept the
+  // process from answering anything else. It is wall time, though: the
+  // transpile awaits babel, so if babel yields, other work, including a second
+  // compile, can run inside the span. Logged at info when it is long enough to
+  // be felt by other requests. `sourceChars` is the decoded source's length in
+  // UTF-16 code units, not its size on disk.
   #recordCompile(
     canonicalPath: string,
-    sourceLength: number,
+    sourceChars: number,
     start: number,
     opts: { failed?: boolean } = {},
   ) {
     let durationMs = performance.now() - start;
     recordModuleCompile(durationMs);
-    let line = `${opts.failed ? 'compile failed' : 'compiled'} ${canonicalPath} sourceBytes=${sourceLength} ms=${Math.round(durationMs)}`;
+    let line = `${opts.failed ? 'compile failed' : 'compiled'} ${canonicalPath} sourceChars=${sourceChars} ms=${Math.round(durationMs)}`;
     if (durationMs >= SLOW_MODULE_COMPILE_MS) {
       this.#compileLog.info(line);
     } else {

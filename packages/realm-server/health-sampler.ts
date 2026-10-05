@@ -86,9 +86,12 @@ export function startHealthSampler(
     // on the used/limit ratio, which survives a task resize or a Node bump.
     let heap = heapTelemetry();
     let connections = opts.connectionStats?.();
-    // Module compiles finished in this window. A compile holds the event loop
-    // for its whole duration, so lag that matches `transpileMs` was spent
-    // compiling, not waiting on searches or the database.
+    // Module compiles finished in this window, with their wall times. A large
+    // compile's transform runs on this thread, so lag that matches
+    // `transpileMs` was most likely spent compiling, not waiting on searches or
+    // the database. The times are wall time, not time the thread was held:
+    // overlapping compiles each count their whole span, so `total` can exceed
+    // the window. Read it beside `eventLoopLagMs`, not instead of it.
     let compiles = takeModuleCompileStats();
     log.info(
       `eventLoopLagMs(mean/p99/max)=${meanLagMs.toFixed(0)}/${p99LagMs.toFixed(0)}/${maxLagMs.toFixed(0)} ` +

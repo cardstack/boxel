@@ -1,8 +1,10 @@
 // How much module compiling this process has done since the stats were last
-// taken. A compile runs on the calling thread and holds it for its whole
-// duration, so a process that compiled for many seconds in a window spent
-// those seconds unable to answer anything else. The realm server's health
-// line reports these beside its event-loop lag, so a stall names its cause.
+// taken, in wall time. A large compile's transform runs on the calling thread,
+// so a process that compiled for many seconds in a window most likely spent
+// those seconds unable to answer anything else. The times are wall time, not
+// time the thread was held: overlapping compiles each count their whole span.
+// The realm server's health line reports these beside its event-loop lag, so
+// a stall names its likely cause.
 //
 // Only real compiles are recorded. A module answered from either transpile
 // cache did no compiling and is not counted.
