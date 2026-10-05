@@ -375,9 +375,15 @@ export default class RoomMessageTool extends Component<Signature> {
           </Alert>
         {{/if}}
         {{#if this.shouldDisplayResultCard}}
+          {{! The result card is a light surface inside the dark assistant panel.
+              A light theme boundary (as user messages use) sets --background and
+              --foreground together, so the header and body read as one seamless
+              light card and any embedded result keeps readable dark text —
+              overriding only --background would leave light text on white. }}
           <CardContainer
             @displayBoundaries={{false}}
             class='tool-result-card-preview'
+            data-theme='light'
             data-test-tool-result-container
           >
             <CardHeader
@@ -404,13 +410,6 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-result-card-preview {
         margin-top: var(--boxel-sp);
-        /* The result renders as a header card container stacked over the
-           embedded result's own card container. Both inherit the assistant
-           panel's dark --background, so the dark shows through the seam (and the
-           rounded corners) between the white header and the white body. Pin the
-           chrome to the light surface so the header and body read as one
-           seamless card. */
-        --background: var(--boxel-light);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);

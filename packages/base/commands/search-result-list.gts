@@ -81,7 +81,7 @@ export class SearchResultList<T> extends GlimmerComponent<
         {{#if this.hasMore}}
           <Button
             @size='small'
-            @kind='text-only'
+            @kind='secondary'
             class='toggle-show'
             {{on 'click' this.toggle}}
             data-test-toggle-show-button
@@ -113,21 +113,11 @@ export class SearchResultList<T> extends GlimmerComponent<
         text-overflow: ellipsis;
       }
       .toggle-show {
-        --icon-color: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
         --boxel-button-min-height: 1.875rem;
         --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        --boxel-button-font: var(--boxel-font-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
         --icon-stroke-width: 2.5;
-        font-weight: 600;
-        color: var(--boxel-highlight);
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
         gap: var(--boxel-sp-xxxs);
-        /* Pull the text-only button back so its label aligns with the list,
-           cancelling its own horizontal padding. */
-        margin-left: calc(-1 * var(--boxel-sp-xs));
       }
       .toggle-show:focus:not(:disabled) {
         outline-offset: 2px;
