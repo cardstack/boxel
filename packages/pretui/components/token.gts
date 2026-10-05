@@ -63,7 +63,15 @@ const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
     return;
   }
   let read = () => el.style.getPropertyValue(HUE_PROPERTY).trim() || undefined;
-  let callerHue = read();
+  // The caller's hue keeps its priority, so a caller's `!important` comes back
+  // with it.
+  let callerHue: string | undefined;
+  let callerPriority = '';
+  let readCaller = () => {
+    callerHue = read();
+    callerPriority = el.style.getPropertyPriority(HUE_PROPERTY);
+  };
+  readCaller();
   let isCallerRewrite = (records: MutationRecord[]) => {
     if (records.length === 0) {
       return false;
@@ -83,7 +91,7 @@ const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   write();
   let observer = new MutationObserver((records, self) => {
     if (isCallerRewrite(records)) {
-      callerHue = read();
+      readCaller();
     }
     write(self);
   });
@@ -103,7 +111,7 @@ const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
     observer.disconnect();
     if (!rewritten && read() === value) {
       if (callerHue) {
-        el.style.setProperty(HUE_PROPERTY, callerHue);
+        el.style.setProperty(HUE_PROPERTY, callerHue, callerPriority);
       } else {
         el.style.removeProperty(HUE_PROPERTY);
       }

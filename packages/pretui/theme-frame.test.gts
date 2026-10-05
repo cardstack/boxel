@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { ThemeFrame } from './components/theme-frame';
+import { realmURL } from 'https://cardstack.com/base/card-api';
 
 const THEME = {
   id: 'https://test.example/theme/probe',
@@ -25,10 +26,9 @@ function probeColor(): string {
   return getComputedStyle(probe).backgroundColor;
 }
 
-// The mode picker is a SegmentedControl, which became a radiogroup over
-// native <input type='radio'> on 2026-08-13 (it used to be role='tablist'
-// over <button>s — invalid ARIA). Accept either shape so the helper survives
-// the theme bar being re-cut again.
+// The mode picker is a SegmentedControl: a radiogroup over native
+// <input type='radio'>. The helper accepts a tab shape too, so it survives
+// the theme bar being re-cut.
 async function clickMode(label: string) {
   let candidates = Array.from(
     document.querySelectorAll('[data-test-pretui-theme-bar] button, [data-test-pretui-theme-bar] label'),
@@ -273,6 +273,27 @@ module('Pretui | ThemeFrame · season selector', function (hooks) {
       /SS27/.test(bar.textContent ?? ''),
       `the active season names itself (${bar.textContent?.trim()})`,
     );
+  });
+
+  test("themes are searched in the linked theme's realm, whatever form its id takes", async function (assert) {
+    let searchedIn: string[] = [];
+    let context = {
+      getCards: (_parent: unknown, _query: unknown, realms: () => string[] | undefined) => {
+        searchedIn.push(...(realms() ?? []));
+        return { instances: SEASONS };
+      },
+    };
+    let theme = {
+      ...T_SS26,
+      id: '@cardstack/catalog/Theme/ss26',
+      [realmURL]: new URL('https://example.test/some-catalog/'),
+    };
+    await render(<template>
+      <ThemeFrame @theme={{theme}} @context={{context}}>
+        <div>probe</div>
+      </ThemeFrame>
+    </template>);
+    assert.deepEqual(searchedIn, ['https://example.test/some-catalog/']);
   });
 
   test('no context degrades to the linked theme only — no selector, no throw', async function (assert) {

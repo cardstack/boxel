@@ -47,14 +47,14 @@ export interface ToggleSignature {
     label?: string;
     /** draw the glyph only; `@label` becomes the sr-only name and the title */
     iconOnly?: boolean;
-    /** Appendix E hue, default `neutral`. Accepts `destructive`/`brand`/… */
+    /** Hue, default `neutral`. Accepts `destructive`/`brand`/… */
     tone?: PretuiToneArg;
     /** recipe worn at rest, default `outlined` */
     appearance?: PretuiAppearance;
     /** recipe worn while pressed, default `accent`. The pressed state is an
      * APPEARANCE SWAP rather than a tint, so it survives greyscale (Law 6). */
     pressedAppearance?: PretuiAppearance;
-    /** Appendix E.2 scale, default `m`. Accepts `sm`/`md`/`lg`/`default`. */
+    /** Scale, default `m`. Accepts `sm`/`md`/`lg`/`default`. */
     size?: PretuiSizeArg;
     /** dims and inerts, but stays focusable and announced (`aria-disabled`) */
     disabled?: boolean;
@@ -68,7 +68,7 @@ export interface ToggleSignature {
   };
   Blocks: {
     /** yields the resolved state, so a caller can swap the glyph in place
-     * (Appendix O.11) rather than render two of them and hide one */
+     * rather than render two of them and hide one */
     default: [{ pressed: boolean }];
   };
   Element: HTMLButtonElement;
@@ -88,7 +88,7 @@ export interface ToggleSignature {
  * `ToggleGroup` could adopt it unchanged. Radix also has no visual opinion at
  * all, so every consumer re-derives "what does pressed look like" and almost
  * every one of them reaches for a tint — colour-only signalling. Here pressed
- * is an Appendix-E appearance recipe swap over the tone channel, so it reads
+ * is an appearance recipe swap over the tone channel, so it reads
  * in greyscale AND re-tints with a season it has never seen. Radix has no
  * pending state; `@busy` here is React Aria's *pending* semantics (`aria-busy`
  * + retained focus) rather than a disable. And Radix's `data-state` is the

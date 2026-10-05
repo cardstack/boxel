@@ -326,24 +326,45 @@ module('Integration | tools | search-entries', function (hooks) {
   });
 
   test('a filter carrying several operators is rejected, naming them', async function (assert) {
-    // The shape a schema-literal model produces: every declared operator
-    // present and empty beside the type anchor.
     let specRef = { module: rri('@cardstack/base/spec'), name: 'Spec' };
     await assert.rejects(
       runSearch({
         query: {
           filter: {
-            eq: {},
-            any: [],
-            not: {},
-            every: [],
             on: specRef,
-            type: specRef,
+            eq: { specType: 'card' },
+            contains: { cardTitle: 'Author' },
           } as unknown as Query['filter'],
         },
       }),
-      /a filter may use only one operator, but found "any", "every", "not", "eq"/,
+      /a filter may use only one operator, but found "eq", "contains"/,
     );
+  });
+
+  test('empty operators beside the type anchor are dropped, not rejected', async function (assert) {
+    // The shape a schema-literal model produces: every declared operator
+    // present and empty beside the type anchor. Empty operators are never a
+    // real condition, so the tool drops them and runs a type filter.
+    let specRef = { module: rri('@cardstack/base/spec'), name: 'Spec' };
+    let result = await runSearch({
+      query: {
+        filter: {
+          eq: {},
+          any: [],
+          not: {},
+          every: [],
+          on: specRef,
+          type: specRef,
+        } as unknown as Query['filter'],
+      },
+      realms: [testRealmURL],
+    });
+    assert.deepEqual(
+      result.results.map((r: { url: string }) => r.url),
+      [`${testRealmURL}Spec/author`],
+      'the type filter runs and finds exactly the spec',
+    );
+    assert.strictEqual(result.total, 1, 'only the spec matches');
   });
 
   test('limit defaults to 5, is honored, and clamps at 10', async function (assert) {

@@ -19,17 +19,12 @@
 // `rovingTabindex` / `focusWhen` / `listen` — the kit's shared foundation, so
 // there is no fourth private copy of this logic.
 //
-// **2. State never travels by colour alone** (Law 6 / Appendix O.14). A
+// **2. State never travels by colour alone** (Law 6). A
 // pressed ToggleGroup item swaps its whole appearance recipe (solid face vs.
 // hairline), a live matrix cell carries a drawn check, and the matrix's
 // current column is marked with `aria-current` and a caret rather than a tint.
 // All three survive the greyscale screenshot test.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the toggle-controls group)
-
 // Pretui — primitives shared by ToggleGroup, ToggleMatrix and HoverActions.
 import { modifier } from 'ember-modifier';
 

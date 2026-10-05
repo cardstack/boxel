@@ -4,7 +4,7 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render, click, triggerEvent } from '@ember/test-helpers';
+import { render, click, triggerEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { CopyButton } from './copy-button';
 
@@ -92,6 +92,27 @@ module('Pretui | components/copy-button', function (hooks) {
       assert.strictEqual(written.length, 1, 'nothing to copy is not an empty clipboard write');
     } finally {
       restore();
+    }
+  });
+
+  test('CopyButton says so when there is no clipboard to write to', async function (assert) {
+    let original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    try {
+      await render(<template><CopyButton @text='SKU-8812' /></template>);
+      await click('[data-test-pretui-copy-button]');
+      let btn = q('[data-test-pretui-copy-button]');
+      await waitUntil(() => btn.dataset['state'] === 'failed');
+      assert.strictEqual(btn.getAttribute('aria-label'), 'Copy failed', 'the name reports the failure');
+      assert.strictEqual(btn.querySelectorAll('.pretui-copy-check').length, 0, 'and no checkmark claims success');
+      await triggerEvent(btn, 'blur');
+      assert.strictEqual(btn.getAttribute('aria-label'), 'Copy to clipboard', 'the same reset clears it');
+    } finally {
+      if (original) {
+        Object.defineProperty(navigator, 'clipboard', original);
+      } else {
+        delete (navigator as { clipboard?: unknown }).clipboard;
+      }
     }
   });
 });

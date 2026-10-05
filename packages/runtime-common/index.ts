@@ -2095,14 +2095,18 @@ export interface CardChooser {
   ): Promise<undefined | string | string[]>;
 }
 
+export interface FileChooserOpts {
+  fileType?: CodeRef;
+  fileTypeName?: string;
+  // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
+  // narrowing the chooser beyond the file type.
+  fileFieldFilter?: Record<string, unknown>;
+}
+
 export interface FileChooser {
-  chooseFile<T>(opts?: {
-    fileType?: CodeRef;
-    fileTypeName?: string;
-    // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
-    // narrowing the chooser beyond the file type.
-    fileFieldFilter?: Record<string, unknown>;
-  }): Promise<undefined | T>;
+  chooseFile<T>(
+    opts?: FileChooserOpts & { multiSelect?: boolean },
+  ): Promise<undefined | T | T[]>;
 }
 
 export async function chooseCard(
@@ -2137,11 +2141,15 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FileDef>(opts?: {
-  fileType?: CodeRef;
-  fileTypeName?: string;
-  fileFieldFilter?: Record<string, unknown>;
-}): Promise<undefined | T> {
+export async function chooseFile<T extends FileDef>(
+  opts: FileChooserOpts & { multiSelect: true },
+): Promise<undefined | T[]>;
+export async function chooseFile<T extends FileDef>(
+  opts?: FileChooserOpts & { multiSelect?: false },
+): Promise<undefined | T>;
+export async function chooseFile<T extends FileDef>(
+  opts?: FileChooserOpts & { multiSelect?: boolean },
+): Promise<undefined | T | T[]> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(

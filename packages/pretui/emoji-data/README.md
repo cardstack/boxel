@@ -11,7 +11,7 @@ needs the number, not the conclusion.
 | ------------ | --------------------------------------------------------------------------------------------- |
 | Upstream     | [emoji-picker-element][epe] by Nolan Lawson                                                   |
 | Version      | **1.29.1**                                                                                    |
-| Source       | **local checkout** at `~/Projects/emoji-picker-element`, not npm                              |
+| Source       | a git checkout of [emoji-picker-element][epe], not npm                                        |
 | Commit       | **`5d1c8bfc21e737c03a3cb14e06b4e472e2275ff1`** (`git describe --tags` → `v1.29.1-4-g5d1c8bf`) |
 | Working tree | clean at build time                                                                           |
 | Licence      | **Apache-2.0** — `SPDX-License-Identifier: Apache-2.0`                                        |
@@ -93,7 +93,7 @@ path in this directory or in `emoji-picker.gts` performs a network request.**
 Even had all three resolved, the picker's controls arrive inside its own shadow
 root with **27 documented CSS custom properties and zero slots**. Reachable:
 colours, focus outline, emoji size, column count, a few radii. Not reachable:
-any font-family for the UI text (so Appendix J's type spec cannot land), any
+any font-family for the UI text (so the kit's type scale cannot land), any
 shadow (so Law 1's hairline-plus-shadow cannot land — upstream separates with
 `--border-color`, which Law 1 forbids), per-control radii, spacing, the nav
 treatment, or any structural substitution (Law 7 wants slots, and there are
