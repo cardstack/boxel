@@ -70,6 +70,10 @@ class AlertUsage extends GlimmerComponent {
           @value={{this.title}}
           @onInput={{this.setTitle}}
         />
+        <Args.String
+          @name='toneLabel'
+          @description='The visually hidden tone word a screen reader hears before the title, in place of the hidden glyph. Defaults by @tone: Info for info, Success for success, Warning for warning, Error for danger.'
+        />
         <Args.Yield
           @name='default'
           @description="Alert messages — Pretui takes prose in the default block in place of boxel-ui's messages array."

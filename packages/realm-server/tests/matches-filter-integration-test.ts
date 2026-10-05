@@ -7,6 +7,7 @@ import {
   IndexQueryEngine,
   param,
   query,
+  rri,
   VirtualNetwork,
   type DefinitionLookup,
 } from '@cardstack/runtime-common';
@@ -150,6 +151,24 @@ module(basename(import.meta.filename), function () {
       });
       assert.strictEqual(meta.page.total, 1, 'one row matched');
       assert.strictEqual(cards.length, 1, 'one card returned');
+    });
+
+    test('rejects a multi-operator filter at the engine, not just the wire', async function (assert) {
+      // The wire surfaces reject this through `assertQuery`, but a query-backed
+      // field is indexed straight through `searchCards` with no `assertQuery` in
+      // the path. Without the engine's own backstop it would silently compile on
+      // whichever operator `filterCondition` reaches first, diverging from the
+      // host's live refresh, which rejects the same query.
+      await assert.rejects(
+        engine.searchCards(new URL(testRealmURL), {
+          filter: {
+            on: { module: `${testRealmURL}pet`, name: 'Pet' },
+            eq: {},
+            contains: {},
+          } as unknown as Parameters<typeof engine.searchCards>[1]['filter'],
+        }),
+        /a filter may use only one operator, but found "eq", "contains"/,
+      );
     });
 
     test('matches via stemming (plays / playing)', async function (assert) {
@@ -403,6 +422,47 @@ module(basename(import.meta.filename), function () {
         }),
         [`${testRealmURL}zebra-sparse.json`, `${testRealmURL}zebra-dense.json`],
         'asc reverses the ranking',
+      );
+    });
+
+    test('a relevance sort carrying a type anchor ranks the same as one without', async function (assert) {
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-dense.json`,
+        markdown: 'zebra zebra zebra — a whole herd of zebra on the plain.',
+      });
+      await seedRow(dbAdapter, {
+        url: `${testRealmURL}zebra-sparse.json`,
+        markdown: 'a single zebra grazing quietly.',
+      });
+
+      let petRef = { module: rri(`${testRealmURL}pet`), name: 'Pet' };
+      // The stub definition lookup throws if consulted, so this also pins
+      // that the anchor is never resolved as a field's owning type.
+      assert.deepEqual(
+        await relevanceUrls({
+          filter: { matches: 'zebra' },
+          sort: [
+            {
+              by: '_matchRelevance',
+              on: petRef,
+            },
+          ],
+        }),
+        [`${testRealmURL}zebra-dense.json`, `${testRealmURL}zebra-sparse.json`],
+        'the denser row ranks first, and the default direction is still desc',
+      );
+      await assert.rejects(
+        engine.searchCards(new URL(testRealmURL), {
+          filter: { not: { matches: 'zebra' } },
+          sort: [
+            {
+              by: '_matchRelevance',
+              on: petRef,
+            },
+          ],
+        }),
+        /requires at least one positive `matches` filter/,
+        'the anchor does not exempt it from the engine backstop',
       );
     });
 
