@@ -71,7 +71,9 @@ const loadSourceOnChange = modifier(
 
 export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   @tracked view: 'rendered' | 'source' = 'rendered';
-  @tracked sourceText: string | undefined;
+  // The fetched text carries the URL it came from, so a preview whose URL
+  // changes in place never shows one file's markup under another's `<base>`.
+  @tracked loadedSource: { url: string; text: string } | undefined;
   @tracked loadError = '';
   @tracked copyState: 'idle' | 'copied' | 'failed' = 'idle';
   copyFeedbackTimer?: ReturnType<typeof setTimeout>;
@@ -119,8 +121,8 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   // request rejects; the auth service worker carries the session instead.
   // The realm serves file bytes with `max-age=0` and an ETag, so a refetch
   // after a write revalidates rather than reading a stale cached copy. The
-  // previous source stays on screen until the new one arrives, so a reload
-  // doesn't blank the frame.
+  // previous source of the same file stays on screen until the new one
+  // arrives, so a reload doesn't blank the frame.
   loadSource = async (sourceUrl: string, signal: AbortSignal) => {
     try {
       let response = await fetch(sourceUrl, {
@@ -134,7 +136,7 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
       if (signal.aborted || this.isDestroyed || this.isDestroying) {
         return;
       }
-      this.sourceText = text;
+      this.loadedSource = { url: sourceUrl, text };
       this.loadError = '';
     } catch (error) {
       if (signal.aborted || this.isDestroyed || this.isDestroying) {
@@ -144,6 +146,11 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
         error instanceof Error ? error.message : 'HTML preview unavailable';
     }
   };
+
+  get sourceText() {
+    let loaded = this.loadedSource;
+    return loaded?.url === this.sourceUrl ? loaded.text : undefined;
+  }
 
   get framedSource() {
     if (this.sourceText == null) {
