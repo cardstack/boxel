@@ -9,12 +9,12 @@ description: >-
 
 # Choosing the animation pattern
 
-This library is one package (`glimmer-motion`) with two layers:
+The library is two layers, one package each:
 
-- **The binding** — Motion's engine (`motion-dom`, untouched) driven through
+- **The binding** (`glimmer-motion`) — Motion's engine (`motion-dom`, untouched) driven through
   Glimmer: the `{{motion}}` modifier plus `<Presence>`, `<LayoutGroup>`,
   `<MotionConfig>`, `<ReorderGroup>`/`<ReorderItem>`.
-- **Choreo** — a region-scoped model on top: `<Choreo>` watches a render pass,
+- **Choreo** (`@cardstack/choreo`) — a region-scoped model on top: `<Choreo>` watches a render pass,
   hands you its **changeset** (inserted / removed / kept, with bounds before
   and after), and plays a declared timeline over it.
 

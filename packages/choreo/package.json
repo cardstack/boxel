@@ -1,0 +1,120 @@
+{
+  "name": "@cardstack/choreo",
+  "version": "0.0.0",
+  "description": "Motion, Choreographed. A changeset and a timeline over a whole render pass, on glimmer-motion.",
+  "keywords": [
+    "ember-addon",
+    "animation",
+    "choreography",
+    "motion",
+    "glimmer",
+    "transition",
+    "timeline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/choreo"
+  },
+  "license": "MIT",
+  "author": "Cardstack",
+  "exports": {
+    ".": {
+      "types": "./declarations/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./test-support": {
+      "types": "./declarations/test-support/index.d.ts",
+      "default": "./dist/test-support/index.js"
+    },
+    "./*": {
+      "types": "./declarations/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./addon-main.js": "./addon-main.cjs"
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "declarations/*",
+        "declarations/*/index"
+      ]
+    }
+  },
+  "files": [
+    "addon-main.cjs",
+    "declarations",
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+  "scripts": {
+    "build": "rollup --config && node scripts/fix-declarations.mjs",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:types": "ember-tsc --noEmit",
+    "prepack": "rollup --config && node scripts/fix-declarations.mjs",
+    "start": "rollup --config --watch",
+    "test": "echo 'A v2 addon does not have tests, run tests in test-app'"
+  },
+  "dependencies": {
+    "@embroider/addon-shim": "^1.8.9",
+    "decorator-transforms": "catalog:"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "@babel/plugin-transform-typescript": "catalog:",
+    "@babel/runtime": "catalog:",
+    "@cardstack/choreo-eslint-config": "workspace:*",
+    "@ember/library-tsconfig": "^1.1.3",
+    "@ember/test-helpers": "^4.0.5",
+    "@embroider/addon-dev": "^8.0.0",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.1.2",
+    "@glimmer/validator": "^0.95.0",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@rollup/plugin-babel": "catalog:",
+    "babel-plugin-ember-template-compilation": "catalog:",
+    "concurrently": "catalog:",
+    "ember-modifier": "^4.3.0",
+    "ember-source": "catalog:",
+    "ember-template-lint": "catalog:",
+    "eslint": "^9.39.4",
+    "glimmer-motion": "workspace:*",
+    "motion-dom": "catalog:",
+    "motion-utils": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "rollup": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@ember/test-helpers": {
+      "optional": true
+    }
+  },
+  "ember-addon": {
+    "version": 2,
+    "type": "addon",
+    "main": "addon-main.cjs",
+    "app-js": {}
+  },
+  "peerDependencies": {
+    "@ember/test-helpers": ">=3.0.0",
+    "@glimmer/component": "^2.0.0",
+    "@glimmer/tracking": "^1.1.2",
+    "ember-modifier": "^4.3.0",
+    "ember-source": ">=5.4.0",
+    "glimmer-motion": "workspace:*",
+    "motion-dom": "^13.4.5",
+    "motion-utils": "^13.3.0"
+  }
+}

@@ -1,4 +1,4 @@
-import type { Camera3DState } from 'glimmer-motion';
+import type { Camera3DState } from '@cardstack/choreo';
 
 import score from './widget-quick-score.json';
 

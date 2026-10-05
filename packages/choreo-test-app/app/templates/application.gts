@@ -1,9 +1,10 @@
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
-import { Choreo, type ChoreoContext, MotionConfig } from 'glimmer-motion';
+import { MotionConfig } from 'glimmer-motion';
 import { ChoreoMark } from 'test-app/components/choreo-mark';
 import { HowPanel } from 'test-app/components/how-panel';
 import { TempoPicker } from 'test-app/components/tempo-picker';

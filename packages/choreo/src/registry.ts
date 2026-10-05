@@ -5,14 +5,15 @@
  * elements inside join it. The lookups below are Choreo's own, for code that
  * already speaks in regions.
  */
-import { type ParticipantHost, setParticipantHost } from '../participant.ts';
+import { type ParticipantHost, setParticipantHost } from 'glimmer-motion';
+
 import type { ChoreoRun } from './run.ts';
 import type { ChoreoNode, TimelineNode } from './types.ts';
 
 // The `{{motion}}` args a region adds, typed here because the package's root
 // declarations re-export this module; measure.ts, which applies `pack`, is
 // reached only at runtime, so an augmentation there would not ship.
-declare module '../participant.ts' {
+declare module 'glimmer-motion/participant' {
   interface ParticipantArgs {
     /**
      * How Choreo measures this element for a shape-matched flight.

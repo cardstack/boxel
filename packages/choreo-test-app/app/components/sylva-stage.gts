@@ -1,3 +1,4 @@
+import { at, Choreo, type PerformCommand } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type RouterService from '@ember/routing/router-service';
@@ -5,13 +6,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import {
-  at,
-  Choreo,
-  motion,
-  type PerformCommand,
-  viewTransition,
-} from 'glimmer-motion';
+import { motion, viewTransition } from 'glimmer-motion';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import { tuneNumber } from 'test-app/lib/demo-tuning';

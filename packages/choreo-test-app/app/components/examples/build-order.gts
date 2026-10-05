@@ -1,11 +1,12 @@
+import type { ChoreoRun, Query } from '@cardstack/choreo';
+import { after, at, Choreo } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { ChoreoRun, Query } from 'glimmer-motion';
-import { after, at, Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { motionValue } from 'motion-dom';
 import { BEAD, HEAD, ORBIT, TAIL, TIP } from 'test-app/components/choreo-mark';
 import {

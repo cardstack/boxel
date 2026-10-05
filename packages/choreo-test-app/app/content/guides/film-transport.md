@@ -7,7 +7,7 @@ The Film handle exposes the operations a poster, chapter menu, or rendering tool
 `FilmHandle` reports the current beat, chapter, ready state, and formatted runtime. `begin(withSound)` opens playback with the selected audio policy. `cutTo(index)` navigates to a beat, `restart()` starts again, `toc()` opens chapter navigation, and `preview(join)` demonstrates a seam over the current picture.
 
 ```ts title="Component logic excerpt"
-import type { FilmHandle } from 'glimmer-motion/film';
+import type { FilmHandle } from '@cardstack/choreo/film';
 
 async function capture(handle: FilmHandle, frame: number) {
   await handle.renderAt(frame / 60);
@@ -31,8 +31,6 @@ Test a cold request in the middle of the film, repeated requests for the same ti
 
 ## API Coverage
 
-**glimmer-motion**: `FilmHandle`.
-
-**glimmer-motion/film**: `FilmHandle`.
+**@cardstack/choreo/film**: `FilmHandle`.
 
 Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts).

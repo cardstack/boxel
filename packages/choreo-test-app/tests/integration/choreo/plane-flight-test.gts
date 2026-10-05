@@ -9,16 +9,17 @@
  * the receiving plane's zoom), and the landing must be clean (no stranded
  * transform, no orphan, the element resting in its natural box).
  */
-import { find, render } from '@ember/test-helpers';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import {
   orphanCount,
   setupChoreo,
   strandedTransforms,
-} from 'glimmer-motion/choreo/test-support';
+} from '@cardstack/choreo/test-support';
+import { find, render } from '@ember/test-helpers';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { setupRenderingTest } from 'ember-qunit';
+import { motion } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 

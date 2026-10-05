@@ -5,7 +5,7 @@
  * to these two functions, so they are proven here as arithmetic, not as
  * pixels.
  */
-import { appliedCamera, toLocal, toPage } from 'glimmer-motion';
+import { appliedCamera, toLocal, toPage } from '@cardstack/choreo';
 import { module, test } from 'qunit';
 
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;

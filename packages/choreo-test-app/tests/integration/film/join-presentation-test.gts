@@ -8,9 +8,6 @@
  * constructs doc asked for (docs/film-graph/CONSTRUCTS.md, "the join is
  * not an engine construct").
  */
-import { render, waitUntil } from '@ember/test-helpers';
-import Component from '@glimmer/component';
-import { setupRenderingTest } from 'ember-qunit';
 import {
   type CompiledGraph,
   FilmGraph,
@@ -19,7 +16,10 @@ import {
   PRESENTATIONS,
   type PresentationSignature,
   retire,
-} from 'glimmer-motion/film';
+} from '@cardstack/choreo/film';
+import { render, waitUntil } from '@ember/test-helpers';
+import Component from '@glimmer/component';
+import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
 /** a curtain: the still drops out of frame */

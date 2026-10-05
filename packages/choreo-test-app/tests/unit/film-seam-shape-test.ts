@@ -5,7 +5,7 @@
  * what is left over, `1 - max(mix, veil)` — so these two numbers ARE the
  * seam, and both halves of it agree by construction.
  */
-import { inGlass, seamShape } from 'glimmer-motion/film';
+import { inGlass, seamShape } from '@cardstack/choreo/film';
 import { module, test } from 'qunit';
 
 /** what the furniture wears at this progress */

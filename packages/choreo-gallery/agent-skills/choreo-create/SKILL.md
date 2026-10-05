@@ -8,7 +8,7 @@ description: Recreate or combine this repository's Choreo demos into Glimmer int
 Use `test-app/app/lib/catalog.ts` to resolve demo IDs to components, source samples
 and notes. IDs are not always filenames: `far` is `far-match`, `pointer` is
 `follow-pointer`, and `presence` is `presence-modes`. Read the selected example
-before adapting it. Imports use `glimmer-motion`, `glimmer-motion/film`, or the
+before adapting it. Imports use `glimmer-motion`, `@cardstack/choreo`, `@cardstack/choreo/film`, or the
 separate `choreo-player` package; verify unfamiliar APIs against exported source.
 
 ## Choose only the guidance needed

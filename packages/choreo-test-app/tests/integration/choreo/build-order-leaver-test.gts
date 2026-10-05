@@ -8,11 +8,11 @@
  * dying card through its full opening and stall the whole exiting batch.
  * BuildOrder selects kept sprites only, and this pins that contract.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { on } from '@ember/modifier';
 import { click, render } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { motion, Presence } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { setupRenderingTest } from 'test-app/tests/helpers';

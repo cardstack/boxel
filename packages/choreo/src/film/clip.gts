@@ -1,8 +1,8 @@
 import { array } from '@ember/helper';
 import Component from '@glimmer/component';
+import { motion } from 'glimmer-motion';
 
 import { Choreo } from '../choreo.gts';
-import motion from '../motion.ts';
 import type { ClipSpec, ClipState } from './clips.ts';
 import type { ElementModifier } from './types.ts';
 

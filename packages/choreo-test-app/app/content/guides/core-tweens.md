@@ -38,6 +38,8 @@ For recorded output, a timed keyframe path is particularly useful because its st
 
 ## API Coverage
 
-**glimmer-motion**: `easeIn`, `easeInAndOut`, `easeOut`, `Easing`, `TweenArgs`, `ease`, `tween`.
+**@cardstack/choreo**: `easeIn`, `easeInAndOut`, `easeOut`, `Easing`.
+
+**glimmer-motion**: `TweenArgs`, `ease`, `tween`.
 
 Read the implementation: [`easings.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts), [`helpers.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts).
