@@ -72,8 +72,7 @@ class AlertUsage extends GlimmerComponent {
         />
         <Args.String
           @name='toneLabel'
-          @description='The visually hidden tone word a screen reader hears before the title, in place of the hidden glyph.'
-          @defaultValue='Info · Success · Warning · Error'
+          @description='The visually hidden tone word a screen reader hears before the title, in place of the hidden glyph. Defaults by @tone: Info for info, Success for success, Warning for warning, Error for danger.'
         />
         <Args.Yield
           @name='default'
