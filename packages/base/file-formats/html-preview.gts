@@ -12,9 +12,9 @@
 // `allow-same-origin`) lets authored behavior run inside that isolation;
 // powerful features are denied outright.
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -47,19 +47,34 @@ export function sourceWithBaseURL(source: string, sourceURL: string): string {
 
 const COPY_FEEDBACK_MS = 2000;
 
+// Reruns whenever the source URL or the file's content revision changes, so a
+// write to the file — from the editor, the AI assistant, or another client —
+// reaches the frame once the store reloads the FileDef with its new content
+// hash. Teardown aborts a fetch the next run has superseded.
+const loadSourceOnChange = modifier(
+  (
+    _element: HTMLElement,
+    [load, sourceUrl, _revision]: [
+      (sourceUrl: string, signal: AbortSignal) => Promise<void>,
+      string,
+      string | undefined,
+    ],
+  ) => {
+    if (!sourceUrl) {
+      return;
+    }
+    let controller = new AbortController();
+    void load(sourceUrl, controller.signal);
+    return () => controller.abort();
+  },
+);
+
 export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   @tracked view: 'rendered' | 'source' = 'rendered';
   @tracked sourceText: string | undefined;
   @tracked loadError = '';
   @tracked copyState: 'idle' | 'copied' | 'failed' = 'idle';
   copyFeedbackTimer?: ReturnType<typeof setTimeout>;
-
-  constructor(owner: Owner, args: FilePreviewSignature['Args']) {
-    super(owner, args);
-    if (!this.isFitted && this.sourceUrl) {
-      void this.loadSource();
-    }
-  }
 
   willDestroy() {
     super.willDestroy();
@@ -76,6 +91,17 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
     return String(this.args.model?.resourceUrl ?? this.args.model?.url ?? '');
   }
 
+  // A fitted cell never fetches the document; see the module comment.
+  get frameSourceUrl() {
+    return this.isFitted ? '' : this.sourceUrl;
+  }
+
+  // The FileDef's content hash names the bytes the index last saw; it changes
+  // with every write to the file, while the URL stays put.
+  get sourceRevision() {
+    return this.args.model?.contentHash;
+  }
+
   get frameTitle() {
     return `${
       this.args.model?.baseName ?? this.args.model?.name ?? 'HTML document'
@@ -86,27 +112,33 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   // view. `same-origin` rather than `include`: the realm answers with
   // `Access-Control-Allow-Origin: *`, which a credentialed cross-origin
   // request rejects; the auth service worker carries the session instead.
-  async loadSource() {
+  // The realm serves file bytes with `max-age=0` and an ETag, so a refetch
+  // after a write revalidates rather than reading a stale cached copy. The
+  // previous source stays on screen until the new one arrives, so a reload
+  // doesn't blank the frame.
+  loadSource = async (sourceUrl: string, signal: AbortSignal) => {
     try {
-      let response = await fetch(this.sourceUrl, {
+      let response = await fetch(sourceUrl, {
         credentials: 'same-origin',
+        signal,
       });
       if (!response.ok) {
         throw new Error(`HTML fetch failed with HTTP ${response.status}`);
       }
       let text = await response.text();
-      if (this.isDestroyed || this.isDestroying) {
+      if (signal.aborted || this.isDestroyed || this.isDestroying) {
         return;
       }
       this.sourceText = text;
+      this.loadError = '';
     } catch (error) {
-      if (this.isDestroyed || this.isDestroying) {
+      if (signal.aborted || this.isDestroyed || this.isDestroying) {
         return;
       }
       this.loadError =
         error instanceof Error ? error.message : 'HTML preview unavailable';
     }
-  }
+  };
 
   get framedSource() {
     if (this.sourceText == null) {
@@ -170,7 +202,16 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   };
 
   <template>
-    <div class='html-preview' data-mode={{@format}} data-test-html-preview>
+    <div
+      class='html-preview'
+      data-mode={{@format}}
+      data-test-html-preview
+      {{loadSourceOnChange
+        this.loadSource
+        this.frameSourceUrl
+        this.sourceRevision
+      }}
+    >
       {{#if this.isFitted}}
         <div class='summary' data-test-html-summary>
           {{#if this.summaryTitle}}
