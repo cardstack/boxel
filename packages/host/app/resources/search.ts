@@ -240,6 +240,17 @@ export class SearchResource<
   // re-derives when the filter/sort changes (the server result set also
   // changes, but reading this keeps the derivation self-contained).
   @tracked private activeQuery: Query | undefined;
+  // `modify()` re-runs lazily, on the first read of the resource after anything
+  // it consumed has changed — which can be partway through a render that has
+  // already read `realmsToSearch`, `activeQuery` or `canonicalizedFilter`.
+  // Writing any of them again in that render trips Ember's backtracking
+  // assertion, so `modify()` writes each one only when its value actually
+  // changes, and a re-run that changes nothing writes nothing. These untracked
+  // mirrors hold what was last written, so deciding whether to write doesn't
+  // itself consume the tracked field.
+  #realmsToSearchMirror: RealmIdentifier[] | undefined;
+  #activeQuerySignature: string | undefined;
+  #holdsCanonicalizedFilter = false;
   #isLive = false;
   #cardInitiated = false;
   #throttled = false;
@@ -383,7 +394,10 @@ export class SearchResource<
   // search a server-only passthrough.
   private loadCanonicalizedFilter(filter: Filter | undefined): void {
     if (!filter) {
-      this.canonicalizedFilter = undefined;
+      if (this.#holdsCanonicalizedFilter) {
+        this.canonicalizedFilter = undefined;
+        this.#holdsCanonicalizedFilter = false;
+      }
       return;
     }
     if (this.canonicalizedFilter?.source === filter) {
@@ -426,6 +440,7 @@ export class SearchResource<
           filter: canonical,
           incomplete,
         };
+        this.#holdsCanonicalizedFilter = true;
       })
       .finally(() => {
         waiter.endAsync(token);
@@ -551,25 +566,36 @@ export class SearchResource<
       `modify: query present; isLive=${isLive}; realms=${realms?.join(',') ?? '(default)'}`,
     );
     this.#isLive = isLive;
+    let queryString = this.querySignature(query);
+    // A query with the same signature as the active one leaves the active one
+    // in place, so the canonicalized filter below stays tied to the filter
+    // object the client filtering step reads.
+    if (queryString !== this.#activeQuerySignature) {
+      this.activeQuery = query;
+      this.#activeQuerySignature = queryString;
+    }
     if (isLive) {
       // The client-side filtering step only runs for live searches; load its
       // matcher dependencies eagerly so the first eligible result set can be
       // reconciled without waiting on a Store mutation to trigger it.
       this.loadMatchAPI();
-      this.loadCanonicalizedFilter(query.filter);
+      this.loadCanonicalizedFilter(this.activeQuery?.filter);
     }
-    this.activeQuery = query;
     this.#doWhileRefreshing = doWhileRefreshing;
     this.#dependencyTracking = named.dependencyTracking;
     // A no-realm card search targets the current realm (the realm the
     // `@context` was provided with), never every visible realm. A host-internal
     // search (not card-initiated) keeps the all-realms default.
-    this.realmsToSearch =
+    let realmsToSearch =
       realms !== undefined && realms.length > 0
         ? realms.map(ri)
         : this.#cardInitiated
           ? this.#currentRealmList()
           : this.realmServer.availableRealmIdentifiers;
+    if (!isEqual(realmsToSearch, this.#realmsToSearchMirror)) {
+      this.realmsToSearch = realmsToSearch;
+      this.#realmsToSearchMirror = realmsToSearch;
+    }
     this.#log.info(
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
@@ -712,7 +738,6 @@ export class SearchResource<
       });
     }
 
-    let queryString = this.querySignature(query);
     if (
       isEqual(queryString, this.#previousQueryString) &&
       isEqual(realms, this.#previousRealms)
