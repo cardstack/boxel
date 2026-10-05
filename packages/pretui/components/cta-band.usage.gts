@@ -78,7 +78,7 @@ class CtaBandUsage extends Component {
   <template>
     <FreestyleUsage
       @name='CtaBand'
-      @description='The closing call-to-action band. Ladder note, stated plainly: this is the one of the four that is NOT really a block — it composes no kit component, and its whole value is a surface treatment plus slots, which is component work. Its honest tier is Surfaces. What it does do is wear the full Appendix E grid: tone picks the hue and sets two custom properties, appearance picks the recipe, the recipes are written once and read those properties, and the resolved axes are reflected as data-tone and data-appearance. Thirty-five dresses, no hand-authored pairs, and the dark band the source nailed to a hex is just neutral plus accent.'
+      @description='The closing call-to-action band. Ladder note, stated plainly: this is the one of the four that is NOT really a block — it composes no kit component, and its whole value is a surface treatment plus slots, which is component work. Its honest tier is Surfaces. What it does do is wear the full the tone × appearance grid: tone picks the hue and sets two custom properties, appearance picks the recipe, the recipes are written once and read those properties, and the resolved axes are reflected as data-tone and data-appearance. Thirty-five dresses, no hand-authored pairs, and the dark band the source nailed to a hex is just neutral plus accent.'
       @source={{this.usage}}
     >
       <:example>
@@ -137,7 +137,7 @@ class CtaBandUsage extends Component {
           @value={{this.tone}}
           @defaultValue='primary'
           @options={{this.toneOptions}}
-          @description='Semantic hue, per Appendix E. It sets two custom properties and nothing else in the stylesheet knows a hue.'
+          @description='Semantic hue. It sets two custom properties and nothing else in the stylesheet knows a hue.'
           @onInput={{this.setTone}}
         />
         <Args.String
@@ -145,7 +145,7 @@ class CtaBandUsage extends Component {
           @value={{this.appearance}}
           @defaultValue='accent'
           @options={{this.appearanceOptions}}
-          @description='Visual weight, per Appendix E. Each recipe also sets the ink pair the eyebrow and lead read, so the type follows the recipe without a second set of rules.'
+          @description='Visual weight. Each recipe also sets the ink pair the eyebrow and lead read, so the type follows the recipe without a second set of rules.'
           @onInput={{this.setAppearance}}
         />
         <Args.String

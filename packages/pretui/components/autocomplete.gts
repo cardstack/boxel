@@ -300,7 +300,7 @@ export interface AutocompleteSignature {
  *   position pointing at nothing. The row is split into an `aria-hidden` face
  *   (any markup) and a bare option overlay (the computed name), so the block
  *   is free.
- * · **Empty is deliberate** (Appendix O.13) and yields `<:empty>`, rather
+ * · **Empty is deliberate** and yields `<:empty>`, rather
  *   than an open popup containing nothing.
  */
 export class Autocomplete extends Component<AutocompleteSignature> {
@@ -976,7 +976,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           border-top-color: var(--pretui-tone, currentColor);
           animation: pretui-ac-spin 0.7s linear infinite;
         }
-        /* The layer renders IN PLACE (Appendix F.3): a portaled surface cannot
+        /* The layer renders IN PLACE: a portaled surface cannot
            inherit the season's tokens, which is the whole theming contract. */
         .pretui-ac-list {
           position: absolute;
@@ -1037,7 +1037,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           opacity: 0.45;
           cursor: default;
         }
-        /* the truncation triple, never min-width alone (Appendix O.3 C2) */
+        /* the truncation triple, never min-width alone */
         .pretui-ac-label {
           flex: 1 1 auto;
           min-width: 0;
@@ -1056,7 +1056,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
-        /* A deliberate empty state (Appendix O.13): a mark, the reason, and the
+        /* A deliberate empty state: a mark, the reason, and the
            next action — never a bare "no results". */
         .pretui-ac-none {
           display: grid;

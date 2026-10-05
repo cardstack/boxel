@@ -23,7 +23,7 @@ export interface PropertyRowSignature {
     labelWidth?: string;
     /** true when the selection holds more than one value for this property.
      * Rendered as the WORD "Mixed" beside the label, never as colour or a
-     * bare dash — Appendix L's "state is never colour alone". */
+     * bare dash: state is never colour alone. */
     mixed?: boolean;
     /** true when the value differs from its default: reveals the reset
      * control. Without `@onReset` the dot is informational only. */
