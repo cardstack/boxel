@@ -498,7 +498,7 @@ Upstream: [${from}…${to}](${repo}/compare/v${from}...v${to}), [CHANGELOG](${re
 
 \`packages/glimmer-motion/VENDORED.md\` has the procedure. In short:
 
-- **CI.** The Choreo Tests and Choreo Test App Tests jobs run the fidelity suites; Lint runs \`ember-tsc\` over the choreo packages. glimmer-motion's build fails if an inlined module starts importing React or another framer-motion path.
+- **CI.** The Glimmer Motion Tests job runs the fidelity suites, and the Choreo Tests and Choreo Test App Tests jobs run the choreo suites; Lint runs \`ember-tsc\` over the choreo packages. glimmer-motion's build fails if an inlined module starts importing React or another framer-motion path.
 - **Declarations.** \`src/framer-motion-internals.ts\` declares the surface of the inlined entry modules by hand, and the subclasses in \`src/gestures/drag-gesture.ts\` override their methods. A signature change in an entry module below compiles silently against the old declaration, so read those diffs against both files.
 - **Adapted code.** Carry a change in an adapted source into the file it names by hand.
 - **Ported code.** The Glimmer re-implementations port React modules by hand. Read each diff below against the file it names, and port what applies to Glimmer.

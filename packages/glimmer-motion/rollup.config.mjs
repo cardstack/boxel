@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
@@ -173,11 +174,14 @@ export default {
     // It exists only to provide development niceties for you, like automatic
     // template colocation.
     //
-    // By default, this will load the actual babel config from the file
-    // babel.config.json.
+    // It loads babel.publish.config.json; babel.config.mjs is the vite
+    // test harness's config.
     babel({
       extensions: ['.js', '.gjs', '.ts', '.gts'],
       babelHelpers: 'bundled',
+      configFile: fileURLToPath(
+        new URL('./babel.publish.config.json', import.meta.url),
+      ),
     }),
 
     // Ensure that standalone .hbs files are properly integrated as Javascript.
@@ -187,7 +191,10 @@ export default {
     addon.gjs(),
 
     // Emit .d.ts declaration files
-    addon.declarations('declarations', 'pnpm ember-tsc --declaration'),
+    addon.declarations(
+      'declarations',
+      'pnpm ember-tsc --declaration --project tsconfig.declarations.json',
+    ),
 
     // addons are allowed to contain imports of .css files, which we want rollup
     // to leave alone and keep in the published output.
