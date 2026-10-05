@@ -90,10 +90,23 @@ function plan(total) {
 }
 
 // Runs each file alone so its time is its own; plan() takes the shared
-// harness boot back out.
+// harness boot back out. The timings file is rewritten after every file, and
+// a file that fails or hasn't run yet keeps its previous time, so neither a
+// failure nor an interrupted run costs the readings already taken.
 function record() {
+  let files = testFiles();
+  let previous = JSON.parse(readFileSync(TIMINGS, 'utf8'));
   let timings = {};
-  for (let file of testFiles()) {
+  let failed = [];
+  let write = () => {
+    let out = {};
+    for (let f of files) {
+      if (f in timings) out[f] = timings[f];
+      else if (f in previous) out[f] = previous[f];
+    }
+    writeFileSync(TIMINGS, JSON.stringify(out, null, 2) + '\n');
+  };
+  for (let file of files) {
     let dir = mkdtempSync(join(tmpdir(), 'pretui-timing-'));
     try {
       cpSync(root, dir, {
@@ -111,21 +124,38 @@ function record() {
           stdio: ['ignore', 'pipe', 'ignore'],
         });
       } catch (e) {
+        if (e.code === 'ENOENT') {
+          throw new Error(
+            '`boxel` is not on PATH; install the boxel-cli version the pretui-test CI job pins',
+          );
+        }
         result = e.stdout;
       }
-      let { status, durationMs } = JSON.parse(result);
-      if (status !== 'passed') {
-        throw new Error(
-          `${file} did not pass (${status}); fix it before recording`,
-        );
+      let status;
+      let durationMs;
+      try {
+        ({ status, durationMs } = JSON.parse(result));
+      } catch {
+        status = 'no JSON result';
       }
-      timings[file] = durationMs;
-      console.log(`${file}\t${durationMs} ms`);
+      if (status === 'passed') {
+        timings[file] = durationMs;
+        console.log(`${file}\t${durationMs} ms`);
+      } else {
+        failed.push(file);
+        console.error(`${file}\t${status}; keeping its previous time`);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+    write();
   }
-  writeFileSync(TIMINGS, JSON.stringify(timings, null, 2) + '\n');
+  if (failed.length) {
+    console.error(
+      `${failed.length} file(s) did not pass, so their times were not re-recorded: ${failed.join(', ')}`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 let [first, second] = process.argv.slice(2);
