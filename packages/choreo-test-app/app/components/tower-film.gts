@@ -1,7 +1,7 @@
+import { Film, IframePicture } from '@cardstack/choreo/film';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { Film, IframePicture } from 'glimmer-motion/film';
 import { TowersScore } from 'test-app/components/films/towers-score';
 import config from 'test-app/config/environment';
 import { tuneNumber } from 'test-app/lib/demo-tuning';

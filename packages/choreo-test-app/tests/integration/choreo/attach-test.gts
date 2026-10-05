@@ -8,12 +8,13 @@
  * contract: driven equals seeked, the window is arithmetic, a detour lands
  * on the same frame, and an exact parent refuses a child that integrates.
  */
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
+import { motion } from 'glimmer-motion';
 import { module, test } from 'qunit';
 
 const frames = (n: number) =>

@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, spring } from 'glimmer-motion';
+import { motion, spring } from 'glimmer-motion';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const stations = [0, 1, 2, 3];

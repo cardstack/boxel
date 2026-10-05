@@ -1,8 +1,9 @@
+import { Choreo, type Sprite } from '@cardstack/choreo';
 import { array, concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, type Sprite } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 
 type ClockTab = 'alarm' | 'timer' | 'world';
 

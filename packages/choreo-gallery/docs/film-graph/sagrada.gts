@@ -14,7 +14,7 @@
  * on its head rather than a named block the engine owns?
  */
 import Component from '@glimmer/component';
-import { Film, Insert, Freeze, Gate, EndCard, Player } from 'glimmer-motion/film';
+import { Film, Insert, Freeze, Gate, EndCard, Player } from '@cardstack/choreo/film';
 import { SagradaPage } from './sagrada-page';
 
 // Unchanged from sagrada-film.gts: the geometry sampled off the model

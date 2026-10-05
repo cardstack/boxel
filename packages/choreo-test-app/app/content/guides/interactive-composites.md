@@ -7,8 +7,8 @@ A reusable animation pattern can become a component without becoming a new runti
 Extend `StepComponent` with typed arguments and implement `node()`. Use `StepArgs` when the component requires a subject query, or `StepArgsBase` for common timing arguments. The method returns a `TimelineNode`: a step, block, or supported gate node.
 
 ```ts title="Component logic excerpt"
-import { StepComponent, toMs } from 'glimmer-motion';
-import type { StepArgs, TimelineNode } from 'glimmer-motion';
+import { StepComponent, toMs } from '@cardstack/choreo';
+import type { StepArgs, TimelineNode } from '@cardstack/choreo';
 
 export class Reveal extends StepComponent<StepArgs & { duration?: number }> {
   node(): TimelineNode {
@@ -41,6 +41,6 @@ Test the composite from outside the library: render two instances, anchor a late
 
 ## API Coverage
 
-**glimmer-motion**: `StepArgs`, `StepArgsBase`, `StepComponent`, `toMs`, `Step`, `TimelineNode`.
+**@cardstack/choreo**: `StepArgs`, `StepArgsBase`, `StepComponent`, `toMs`, `Step`, `TimelineNode`.
 
 Read the implementation: [`steps.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts).

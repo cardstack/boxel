@@ -1,7 +1,8 @@
 # Publishing Choreo to a Boxel realm
 
-The realm build packages the public `glimmer-motion` API and its Motion engine
-dependencies into a single Ember-compatible module. It leaves only the Ember
+The realm build packages the public `glimmer-motion` and `@cardstack/choreo`
+APIs (plus `Film`) and their Motion engine dependencies into a single
+Ember-compatible module. It leaves only the Ember
 and Glimmer modules supplied by the Boxel host as external imports.
 
 ## Configure a target
@@ -22,9 +23,13 @@ as `boxelCliDir`.
 
 ## Build and publish
 
-Run these commands from the repository root:
+Build glimmer-motion, then choreo, then run one of these commands from
+`packages/glimmer-motion`:
 
 ```sh
+(cd packages/glimmer-motion && pnpm build)
+(cd packages/choreo && pnpm build)
+cd packages/glimmer-motion
 pnpm realm:stage
 pnpm realm:local
 pnpm realm
@@ -36,7 +41,8 @@ pnpm realm
   workspace without contacting the realm.
 - `pnpm realm` stages, mirrors, and publishes to the configured realm.
 
-All three commands build the addon first. The publisher requires an
+All three commands bundle the existing build output and stop with an error
+when either package's `dist/` is missing. The publisher requires an
 authenticated `boxel` CLI and writes two files, in this order:
 
 ```text

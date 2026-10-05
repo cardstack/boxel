@@ -8,9 +8,9 @@
  * and, in `tests/integration/film/graph-test.gts`, inside a bare
  * `<FilmGraph>` that proves it compiles to the same rows.
  */
+import type { FilmVocabulary } from '@cardstack/choreo/film';
 import type { TOC } from '@ember/component/template-only';
 import { array, get } from '@ember/helper';
-import type { FilmVocabulary } from 'glimmer-motion/film';
 import {
   APSE_WALL,
   APSE_Z,

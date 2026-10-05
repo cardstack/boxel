@@ -23,10 +23,13 @@
       "test-app/tests/*": ["./tests/*"],
       "test-app/*": ["./app/*"],
       /**
-        glimmer-motion and choreo-player resolve to their source, so
-        type-checking needs neither package built. Their package.json#exports
-        point types at the build output that npm consumers get.
+        glimmer-motion, @cardstack/choreo and choreo-player resolve to their
+        source, so type-checking needs none of them built. Their
+        package.json#exports point types at the build output that npm
+        consumers get.
       */
+      "@cardstack/choreo": ["../choreo/src/index.ts"],
+      "@cardstack/choreo/*": ["../choreo/src/*"],
       "glimmer-motion": ["../glimmer-motion/src/index.ts"],
       "glimmer-motion/*": ["../glimmer-motion/src/*"],
       "choreo-player": ["../choreo-player/src/index.ts"],

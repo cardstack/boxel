@@ -1,9 +1,10 @@
+import { Choreo, type Rect } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { Choreo, motion, type Rect, spring } from 'glimmer-motion';
+import { motion, spring } from 'glimmer-motion';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const GLIDE = spring({ damping: 28, stiffness: 240 });

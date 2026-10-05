@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { tuneSpring } from 'test-app/lib/demo-tuning';
 
 const quick = { damping: 26, stiffness: 320 };

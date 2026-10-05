@@ -11,8 +11,8 @@ import type {
   LookFx,
   Picture,
   Pt3,
-} from 'glimmer-motion/film';
-import { hex, RAD } from 'glimmer-motion/film/math';
+} from '@cardstack/choreo/film';
+import { hex, RAD } from '@cardstack/choreo/film/math';
 
 /**
  * SAGRADA — a film, at `/sagrada`.

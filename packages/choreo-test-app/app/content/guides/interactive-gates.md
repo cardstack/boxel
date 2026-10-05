@@ -31,7 +31,7 @@ Test parked states with `animationsSettled()` and use `advanceGate()` where a te
 
 ## API Coverage
 
-**glimmer-motion**: `GateNode`.
+**@cardstack/choreo**: `GateNode`.
 
 **ChoreoContext**: `c.Gate`, `c.advance`.
 

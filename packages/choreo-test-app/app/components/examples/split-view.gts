@@ -1,7 +1,8 @@
+import { type Changeset, Choreo, type Sprite } from '@cardstack/choreo';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { type Changeset, Choreo, motion, type Sprite } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { tuneSpring } from 'test-app/lib/demo-tuning';
 
 const firm = { damping: 34, stiffness: 420 };

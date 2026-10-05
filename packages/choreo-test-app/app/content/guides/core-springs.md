@@ -29,6 +29,8 @@ Finally, distinguish an analytically sampled animation from a live simulation. A
 
 ## API Coverage
 
-**glimmer-motion**: `SpringSpec`, `SpringArgs`, `spring`.
+**@cardstack/choreo**: `SpringSpec`.
+
+**glimmer-motion**: `SpringArgs`, `spring`.
 
 Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts), [`helpers.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts).

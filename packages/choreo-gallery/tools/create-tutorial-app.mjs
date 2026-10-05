@@ -120,7 +120,10 @@ write(
         'lint:types': 'ember-tsc --noEmit',
       },
       dependencies: {
+        // choreo's prepack builds its declarations against glimmer-motion's
+        // build output, so glimmer-motion packs first.
         'glimmer-motion': pack('glimmer-motion'),
+        '@cardstack/choreo': pack('choreo'),
         'choreo-player': pack('choreo-player'),
         ...dependencies,
       },
