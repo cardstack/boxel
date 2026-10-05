@@ -124,9 +124,10 @@ are the same set.
   entries stay.
 - **CI:** the test-app job builds only choreo-player now. The Choreo Tests job
   keeps its build of all three, because the gallery's realm bundle reads
-  `dist/`, and it adds the packed-exports check for both packages. Host
-  compiles glimmer-motion's and choreo's source, so the `boxel` change-check
-  filter includes both packages, as it already does for pretui.
+  `dist/`, and it adds the packed-exports check for both packages. Host's
+  tests compile glimmer-motion's and choreo's source, so `ci-host.yaml`'s
+  `paths` include both packages. `ci.yaml`'s `boxel` filter doesn't, because
+  it gates the staging deploy and host's production bundle carries neither.
 - **boxel-cli:** doesn't depend on either package yet. CS-13291 adds them, and
   that's where its type resolution for realm cards gets decided. Not touched
   here.
