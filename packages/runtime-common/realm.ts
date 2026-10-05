@@ -1,10 +1,21 @@
 import { Deferred } from './deferred.ts';
 import {
+  CLIENT_CLASS_HEADER,
+  CLIENT_IP_HEADER,
+  INFRA_CLIENT_CLASS,
+  formatIP,
   isUnsetLimit,
+  parseIP,
+  rangesContain,
+  rateLimitKey,
   resolveAnonymousAccess,
   type AnonymousAccessSettings,
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
+import {
+  DBAnonymousRateLimiter,
+  type AnonymousRateLimiter,
+} from './anonymous-rate-limiter.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
@@ -281,7 +292,10 @@ import {
   type CapabilityCaller,
 } from './card-operations/capabilities.ts';
 import {
+  emitAnonymousRequest,
   emitCapabilityCheck,
+  recordSafely,
+  type AnonymousRequestEvent,
   type CapabilityCheckEvent,
   type PolicyRoute,
 } from './card-operations/telemetry.ts';
@@ -2286,6 +2300,12 @@ export type RequestContext = {
   // all of which take the conservative bounded hold. Identity, not
   // authority, like `authenticatedUser`.
   anonymous?: true;
+  // Set when the realm's policy admitted a request that authenticated nobody
+  // (see `#admitsAnonymous`): the operation it was admitted to, and the
+  // caller's address as the realm server worked it out. Such a caller is
+  // counted against the realm's anonymous rate limit once what it asked for
+  // succeeds, and is told to authenticate wherever no grant admits it.
+  anonymousCaller?: AnonymousCaller;
   // The user this request's session vouches for as themselves, not just as
   // an identity: a token `checkPermission` verified end to end, whose session
   // is not revoked, which is not delegated to one realm, and which stands for
@@ -2348,8 +2368,59 @@ interface RequestDispatch {
   // passes the seal as an operational endpoint, but meets the realm ACL like
   // any other read.
   answersWithoutCredentials?: boolean;
+  // What the dispatch would run for a caller who isn't signed in, where a
+  // grant could admit one: the operations, any one of which the realm's
+  // policy has to open to such callers for it to admit them here (empty
+  // means any at all), and whether a successful answer counts against the
+  // realm's anonymous rate limit. A dispatch without it never admits a
+  // caller who isn't signed in.
+  anonymous?: AnonymousDispatch;
   handle: () => Promise<ResponseWithNodeStream>;
 }
+
+interface AnonymousDispatch {
+  operations: readonly string[];
+  charged: boolean;
+}
+
+// A request the realm's policy admitted though it authenticated nobody.
+interface AnonymousCaller {
+  operation: string;
+  // The caller's address in canonical form, or null where the realm server
+  // could not work one out (only a caller of ours can be admitted then).
+  clientIP: string | null;
+  // What the caller is counted under (see `rateLimitKey`).
+  rateLimitKey: string | undefined;
+  // The caller is one of the platform's own services: counted in telemetry,
+  // never limited or blocked.
+  infra: boolean;
+  charged: boolean;
+}
+
+// The card+json read: what an anonymous grant on `read` opens.
+const ANONYMOUS_CARD_READ: AnonymousDispatch = {
+  operations: ['read'],
+  charged: true,
+};
+// A data file's or a card's stored bytes: what a `readSource` grant opens.
+const ANONYMOUS_BYTES_READ: AnonymousDispatch = {
+  operations: ['readSource'],
+  charged: true,
+};
+// A stylesheet goes with the markup that references it, so it is served to an
+// anonymous caller a policy would serve any card's markup to, and counts for
+// nothing on its own: the read or search that drew the markup was counted.
+const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
+  operations: ['read', 'query'],
+  charged: false,
+};
+// A capability check asks what the caller could invoke and invokes nothing, so
+// it answers an anonymous caller in any realm whose policy opens anything to
+// one, and is never counted.
+const ANONYMOUS_CAPABILITY_CHECK: AnonymousDispatch = {
+  operations: [],
+  charged: false,
+};
 
 // A route as `Realm.routeDescriptions` lists it: a router route, the hashed
 // stylesheet serve under its path prefix, or the fallback file and module
@@ -2576,6 +2647,7 @@ export class Realm {
   // `#cachedRealmConfig`, like the policy pointer.
   #cachedAnonymousAccess: AnonymousAccessSettings | undefined;
   #platformAnonymousRateLimit: AnonymousRateLimit | undefined;
+  #anonymousRateLimiter: AnonymousRateLimiter;
   // Bumped by every invalidation, and captured by a parse before it starts.
   // A parse that reads the realm's state and then has an index swap land
   // underneath it is holding values the realm has already moved past, so it
@@ -2724,6 +2796,7 @@ export class Realm {
       mediaCacheAdapter,
       cardDocumentCache,
       realmFor,
+      anonymousRateLimiter,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -2759,6 +2832,10 @@ export class Realm {
       // that realm only for a caller who may read it. Without it, an explain
       // reaches only this realm's own targets.
       realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
+      // Where the realm counts the invocations of callers its policy admits
+      // without a session. Unset, the realm's database, which every process
+      // serving the realm shares.
+      anonymousRateLimiter?: AnonymousRateLimiter;
     },
     opts?: Options,
   ) {
@@ -2798,6 +2875,8 @@ export class Realm {
     this.#readIndexDrainBudgetMs =
       opts?.readIndexDrainBudgetMs ?? READ_INDEX_DRAIN_BUDGET_MS;
     this.#platformAnonymousRateLimit = opts?.anonymousRateLimit;
+    this.#anonymousRateLimiter =
+      anonymousRateLimiter ?? new DBAnonymousRateLimiter(dbAdapter);
     let owner: string | undefined;
     let _fetch = fetcher(
       virtualNetwork.fetch,
@@ -3006,7 +3085,7 @@ export class Realm {
         '/_capabilities',
         SupportedMimeType.JSON,
         this.handleCapabilities.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CAPABILITY_CHECK },
       )
       .post(
         '/_cancel-indexing-job',
@@ -3038,12 +3117,10 @@ export class Realm {
         this.createCard.bind(this),
         APPLIES_ARCHIVED_SEAL,
       )
-      .get(
-        '/.*',
-        SupportedMimeType.CardJson,
-        this.getCard.bind(this),
-        APPLIES_ARCHIVED_SEAL,
-      )
+      .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this), {
+        ...APPLIES_ARCHIVED_SEAL,
+        anonymous: ANONYMOUS_CARD_READ,
+      })
       // The card+html, file-meta+html and markdown reads serve what the index
       // holds for a path without running an operation, so they are answered
       // on the realm ACL alone, as the file-meta read below is: a caller a
@@ -7586,7 +7663,11 @@ export class Realm {
         if (
           !dispatch.consumesCoarseOutcome ||
           requiredPermission === 'realm-owner' ||
-          !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
+          !(await this.#admitsDespiteCoarseRefusal(
+            request,
+            requestContext,
+            dispatch.anonymous,
+          ))
         ) {
           let answer = await this.#refusalUnderPolicy(
             request,
@@ -7634,7 +7715,11 @@ export class Realm {
           message: 'search index is not available',
         });
       }
-      return await dispatch.handle();
+      return await this.#chargeAnonymous(
+        request,
+        requestContext,
+        await dispatch.handle(),
+      );
     } catch (e) {
       if (e instanceof AuthenticationError) {
         return createResponse({
@@ -7748,6 +7833,7 @@ export class Realm {
     ) {
       return {
         ...APPLIES_ARCHIVED_SEAL,
+        anonymous: ANONYMOUS_STYLESHEET,
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }
@@ -7792,6 +7878,7 @@ export class Realm {
         appliesArchivedSeal: matched.appliesArchivedSeal,
         operationalEndpoint: matched.operationalEndpoint,
         answersWithoutCredentials: matched.operationalEndpoint,
+        ...(matched.anonymous ? { anonymous: matched.anonymous } : {}),
         handle: serve,
       };
     }
@@ -7858,6 +7945,7 @@ export class Realm {
   ): RequestDispatch {
     return {
       consumesCoarseOutcome: true,
+      anonymous: ANONYMOUS_BYTES_READ,
       handle: async () => {
         if (request.method === 'HEAD' && requestContext.coarseAllowed) {
           let probe = await this.#readProbe(request, requestContext);
@@ -7869,7 +7957,11 @@ export class Realm {
             requestContext.coarseAllowed = false;
             requestContext.coarseRefusal = refusal;
             if (
-              !(await this.#admitsDespiteCoarseRefusal(request, requestContext))
+              !(await this.#admitsDespiteCoarseRefusal(
+                request,
+                requestContext,
+                ANONYMOUS_BYTES_READ,
+              ))
             ) {
               return this.realmIdentityResponse(requestContext);
             }
@@ -7955,13 +8047,190 @@ export class Realm {
   async #admitsDespiteCoarseRefusal(
     request: Request,
     requestContext: RequestContext,
+    anonymous?: AnonymousDispatch,
   ): Promise<boolean> {
     if (this.#testOnlyCoarseAdmission) {
       return await this.#testOnlyCoarseAdmission(request, requestContext);
     }
-    return await this.#policyJudges(
-      requestContext.coarseRefusal,
+    if (
+      await this.#policyJudges(requestContext.coarseRefusal, requestContext)
+    ) {
+      return true;
+    }
+    return anonymous
+      ? await this.#admitsAnonymous(request, requestContext, anonymous)
+      : false;
+  }
+
+  // Whether the realm's policy admits a request that authenticated nobody to
+  // what its route would run. Only where the policy opens one of the route's
+  // operations to callers who aren't signed in, and only from an address the
+  // realm doesn't refuse. Everything else gets the answer an unauthenticated
+  // request has always had, before anything about its path is resolved: the
+  // question reads the compiled policy's summary and the realm's own
+  // `realm.json`, and loads no target and evaluates no predicate. A realm
+  // whose policy opens nothing to such callers records nothing.
+  //
+  // The address is read only from the headers the realm server sets (see
+  // `CLIENT_IP_HEADER`). A request without one, which is a request whose
+  // address the server could not work out, is refused as a blocked one,
+  // unless it is from the platform's own infrastructure, which is never
+  // blocked.
+  async #admitsAnonymous(
+    request: Request,
+    requestContext: RequestContext,
+    anonymous: AnonymousDispatch,
+  ): Promise<boolean> {
+    if (
+      !(requestContext.coarseRefusal instanceof CoarseAuthenticationRequired) ||
+      requestContext.authenticatedUser ||
+      request.headers.has('Authorization') ||
+      (await this.getRealmPolicy()) === undefined
+    ) {
+      return false;
+    }
+    let opened = await this.getAnonymousAdmission();
+    let operation =
+      anonymous.operations.length === 0
+        ? [...opened][0]
+        : anonymous.operations.find((name) => opened.has(name));
+    if (operation === undefined) {
+      return false;
+    }
+    let ipText = request.headers.get(CLIENT_IP_HEADER);
+    let address = ipText ? parseIP(ipText) : undefined;
+    let caller: AnonymousCaller = {
+      operation,
+      clientIP: address ? formatIP(address) : null,
+      rateLimitKey: address ? rateLimitKey(address) : undefined,
+      infra: request.headers.get(CLIENT_CLASS_HEADER) === INFRA_CLIENT_CLASS,
+      charged: anonymous.charged,
+    };
+    if (!caller.infra) {
+      let access = await this.getAnonymousAccess();
+      let blockReason: AnonymousRequestEvent['blockReason'] =
+        access.invalidBlocklistEntries.length > 0
+          ? 'blocklist-invalid'
+          : !address
+            ? 'ip-undetermined'
+            : rangesContain(access.blocklist, address)
+              ? 'blocklist'
+              : undefined;
+      if (blockReason) {
+        this.#recordAnonymous(request, caller, {
+          outcome: 'blocked',
+          blockReason,
+        });
+        return false;
+      }
+    }
+    requestContext.anonymousCaller = caller;
+    return true;
+  }
+
+  // Counts a request the realm's policy admitted though it authenticated
+  // nobody, once what it asked for has succeeded, and answers in its place
+  // when the caller's address has used up the realm's limit. Only once it has
+  // succeeded, so a request no grant admits costs the caller nothing. A read
+  // is answered before it is counted, but has done nothing a refusal would
+  // have to undo. A caller of ours is recorded and never counted.
+  async #chargeAnonymous(
+    request: Request,
+    requestContext: RequestContext,
+    response: ResponseWithNodeStream,
+  ): Promise<ResponseWithNodeStream> {
+    let caller = requestContext.anonymousCaller;
+    if (!caller) {
+      return response;
+    }
+    if (response.status === 401) {
+      this.#recordAnonymous(request, caller, { outcome: 'refused' });
+      return response;
+    }
+    if (!caller.charged || response.status >= 400) {
+      return response;
+    }
+    if (caller.infra) {
+      this.#recordAnonymous(request, caller, { outcome: 'infra' });
+      return response;
+    }
+    let { limit, limitFrom } = await this.getAnonymousAccess();
+    let outcome = await this.#anonymousRateLimiter.charge({
+      realmURL: this.url,
+      clientIP: caller.rateLimitKey!,
+      limit,
+      cost: 1,
+    });
+    let recordedLimit = { ...limit, from: limitFrom };
+    if (outcome.admitted) {
+      this.#recordAnonymous(request, caller, {
+        outcome: 'admitted',
+        limit: recordedLimit,
+        count: outcome.count,
+      });
+      return response;
+    }
+    this.#recordAnonymous(request, caller, {
+      outcome: 'rate-limited',
+      limit: recordedLimit,
+      retryAfterSeconds: outcome.retryAfterSeconds,
+    });
+    response.nodeStream?.destroy();
+    await response.body?.cancel().catch(() => {});
+    return this.#rateLimitedResponse(requestContext, outcome.retryAfterSeconds);
+  }
+
+  // The answer to a request whose caller's address has used up the realm's
+  // anonymous rate limit: nothing was done, and when to try again.
+  #rateLimitedResponse(
+    requestContext: RequestContext,
+    retryAfterSeconds: number,
+  ): ResponseWithNodeStream {
+    return createResponse({
+      body: JSON.stringify(
+        errorsDocument({
+          status: 429,
+          code: 'rate-limited',
+          title: 'Too many requests',
+          detail: `This address has made as many requests to this realm without signing in as it allows for now. Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`,
+          meta: { retryAfterSeconds },
+        }),
+        null,
+        2,
+      ),
+      init: {
+        status: 429,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'Retry-After': String(retryAfterSeconds),
+          'X-Boxel-Realm-Url': requestContext.realm.url,
+        },
+      },
       requestContext,
+    });
+  }
+
+  #recordAnonymous(
+    request: Request,
+    caller: AnonymousCaller,
+    detail: Pick<
+      AnonymousRequestEvent,
+      'outcome' | 'blockReason' | 'limit' | 'count' | 'retryAfterSeconds'
+    >,
+  ): void {
+    recordSafely('anonymous-request', () =>
+      emitAnonymousRequest({
+        kind: 'anonymous-request',
+        realmURL: this.url,
+        operation: caller.operation,
+        route: `${request.method} ${new URL(request.url).pathname}`,
+        clientIP: caller.clientIP,
+        ...(caller.rateLimitKey ? { rateLimitKey: caller.rateLimitKey } : {}),
+        correlationId: request.headers.get(
+          X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+        ),
+        ...detail,
+      }),
     );
   }
 
@@ -8019,6 +8288,16 @@ export class Realm {
     if (!unauthenticated) {
       return notFound(request, requestContext);
     }
+    return this.#authenticationRequired(requestContext);
+  }
+
+  // What a realm with a policy tells a request that authenticated nobody and
+  // that nothing admitted: to authenticate. A caller the policy admitted
+  // without a session is told the same wherever no grant admits what it asked
+  // for, including a target that isn't there, so the answer is the same for a
+  // path that names a card and one that names nothing, and the same as for a
+  // caller no grant admitted at all.
+  #authenticationRequired(requestContext: RequestContext): Response {
     return createResponse({
       body: JSON.stringify(
         errorsDocument({
@@ -8070,8 +8349,11 @@ export class Realm {
   // this once, ahead of the checks that could each find nothing, rather than
   // at whichever check did. Built at each, the stack would name the check.
   #bytesNotThere(request: Request, requestContext: RequestContext): Response {
-    return request.method === 'HEAD'
-      ? this.realmIdentityResponse(requestContext)
+    if (request.method === 'HEAD') {
+      return this.realmIdentityResponse(requestContext);
+    }
+    return requestContext.anonymousCaller
+      ? this.#authenticationRequired(requestContext)
       : notFound(request, requestContext);
   }
 
@@ -13366,6 +13648,9 @@ export class Realm {
       let cacheOutcomeHeader: Record<string, string> = cacheOutcome
         ? { [CARD_DOCUMENT_CACHE_HEADER]: cacheOutcome }
         : {};
+      if (assembly.kind === 'not-found' && requestContext.anonymousCaller) {
+        return this.#authenticationRequired(requestContext);
+      }
       if (assembly.kind !== 'document') {
         let response = await this.#respondToCardJsonOutcome(
           assembly,

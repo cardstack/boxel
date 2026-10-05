@@ -628,6 +628,19 @@ async function listedCards(
   };
 }
 
+// Whether the realm's policy opens `operation` to callers who aren't signed in,
+// as the realm reads it to admit one.
+async function opensToAnonymous(
+  core: OperationCore,
+  operation: string,
+): Promise<boolean> {
+  let policy = await core.policy?.compiledPolicy();
+  return (
+    !policy?.uncompilable &&
+    (policy?.anonymous?.operations.includes(operation) ?? false)
+  );
+}
+
 // What an explain's gate decisions are recorded as having arrived on.
 const EXPLAIN_ROUTE: PolicyRoute = Object.freeze({
   transport: 'explain' as const,
@@ -660,8 +673,14 @@ async function explain(
   );
   // A realm that names a policy answers a caller who presented no credentials
   // with a 401 before the request is routed, for every request its ACL
-  // declines them, so nothing about the target is read.
-  if (actor.kind !== 'user' && coarseDeclined !== 'none') {
+  // declines them that its policy opens nothing to, so nothing about the
+  // target is read. One its policy opens the operation to is judged by the
+  // gate as such a caller, against the grants that opt in to them.
+  if (
+    actor.kind !== 'user' &&
+    coarseDeclined !== 'none' &&
+    !(await opensToAnonymous(core, question.operation))
+  ) {
     return refused(base, 'actor-required', {
       status: 401,
       code: 'actor-required',

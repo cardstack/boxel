@@ -1429,6 +1429,10 @@ export type OperationErrorCode =
   // of them could land. Serial order is how a batch says that two entries
   // touch the same target.
   | 'conflicting-targets'
+  // A caller who isn't signed in, admitted by a grant, has used up the
+  // invocations the realm allows their address in the current window. Nothing
+  // was done. Carries a 429 with `Retry-After`, and `meta.retryAfterSeconds`.
+  | 'rate-limited'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

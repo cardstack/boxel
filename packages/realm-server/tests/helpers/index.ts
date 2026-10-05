@@ -1733,6 +1733,7 @@ export async function runTestRealmServerWithRealms({
   liveSearchCache,
   linkShapePolicy,
   mediaCacheAdapter,
+  clientAddress,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1762,6 +1763,11 @@ export async function runTestRealmServerWithRealms({
   // The store every capture surface persists to: the worker's capture task,
   // each realm's `_screenshot/` route, and the server's `_screenshot-card`.
   mediaCacheAdapter?: MediaCacheAdapter;
+  // How the server works out a caller's address. Omit for none in front of
+  // it, which makes every supertest request the same loopback caller; a test
+  // that tells callers apart trusts one hop and names each in
+  // `X-Forwarded-For`.
+  clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1867,6 +1873,7 @@ export async function runTestRealmServerWithRealms({
     liveSearchCache,
     linkShapePolicy,
     mediaCacheAdapter,
+    ...(clientAddress ? { clientAddress } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),

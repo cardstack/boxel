@@ -501,6 +501,69 @@ export function emitPolicyCompile(event: PolicyCompileEvent): void {
   );
 }
 
+// ============================================================================
+// Per-request telemetry for callers a realm's policy admits without a session.
+//
+// One line for each such request the realm judges against its anonymous
+// controls: one its policy opens the operation to, from a caller who isn't
+// signed in. A realm whose policy opens nothing to such callers writes none,
+// and answers them as a realm with no anonymous grants always has. The client
+// address is recorded as the realm server worked it out, so an operator can
+// find the addresses to block and follow one visitor's requests through
+// `realm:requests` by the correlation id.
+// ============================================================================
+
+export interface AnonymousRequestEvent {
+  kind: 'anonymous-request';
+  realmURL: string;
+  operation: string;
+  route: string;
+  // - `admitted`: a grant admitted it and it was counted against the limit.
+  // - `infra`: a grant admitted it, from one of the platform's own egress
+  //   addresses, which is counted here but never limited or blocked.
+  // - `refused`: no grant admitted it, and it was answered as an
+  //   unauthenticated request is.
+  // - `blocked`: the realm refused the caller's address before any grant was
+  //   asked (see `blockReason`).
+  // - `rate-limited`: a grant admitted it, but the address had used up its
+  //   limit, so nothing was done.
+  outcome: 'admitted' | 'infra' | 'refused' | 'blocked' | 'rate-limited';
+  blockReason?: 'blocklist' | 'ip-undetermined' | 'blocklist-invalid';
+  clientIP: string | null;
+  // What the caller is counted under: the address, or the /64 an IPv6
+  // address is in.
+  rateLimitKey?: string;
+  limit?: {
+    requests: number;
+    windowSeconds: number;
+    from: 'realm' | 'platform';
+  };
+  // The window's count once this request was counted.
+  count?: number;
+  retryAfterSeconds?: number;
+  correlationId: string | null;
+}
+
+let anonymousRequestSink: ((event: AnonymousRequestEvent) => void) | undefined;
+
+export function setAnonymousRequestSink(
+  sink: ((event: AnonymousRequestEvent) => void) | undefined,
+): void {
+  anonymousRequestSink = sink;
+}
+
+let anonymousRequestLog: ReturnType<typeof logger> | undefined;
+
+export function emitAnonymousRequest(event: AnonymousRequestEvent): void {
+  if (anonymousRequestSink) {
+    anonymousRequestSink(event);
+    return;
+  }
+  (anonymousRequestLog ??= logger(OPERATIONS_CHANNEL)).info(
+    JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event }),
+  );
+}
+
 // Build and write one record, logging and swallowing anything that throws on
 // the way. A record describes a decision and never changes one: a sink or a
 // log transport that throws must not turn an admitted invocation into a 500,
