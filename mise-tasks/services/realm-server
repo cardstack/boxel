@@ -97,8 +97,16 @@ else
   WORKER_MANAGER_ARG="$1"
 fi
 
-# Realms boot and index in --path order. pretui, the largest, goes last so
-# the realms test stacks wait on are not queued behind its index.
+# The realms start one after another, in the order the reconciler's unordered
+# read of realm_registry returns them: on a fresh database, the order of the
+# --path arguments below; on an existing one, not guaranteed. A realm with no
+# index yet waits for its boot index before the next realm starts, so on a
+# fresh database (CI without the index cache) the boot indexes run in this
+# order. Each also spawns a prerender-html job that a worker runs to
+# completion, and a later realm's boot index waits whenever every worker
+# (WORKER_ALL_PRIORITY_COUNT, 1 by default) is inside such a pass, so a large
+# realm delays the realms after it. pretui, the largest, goes last so the
+# realms test stacks wait on are not queued behind its index or its HTML pass.
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
