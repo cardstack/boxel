@@ -17,10 +17,12 @@ of them. Remove that delivery path and the local config file it reads.
   only this script used.
 - `dist-realm/` in `packages/glimmer-motion/.gitignore` (the script's staging
   directory).
-- The `.choreo-realm-sync.json` convention: its entry in the root `.gitignore`,
-  and the `--mirror` option of `packages/choreo-gallery/scripts/build-boxel-realm.mjs`,
-  which is that file's other reader. The gallery README already publishes
-  `dist-realm/` with the boxel CLI's own configuration.
+- The `.choreo-realm-sync.json` convention: the `--mirror` option of
+  `packages/choreo-gallery/scripts/build-boxel-realm.mjs`, which is that
+  file's other reader. The gallery README already publishes `dist-realm/` with
+  the boxel CLI's own configuration. The root `.gitignore` keeps ignoring the
+  file, because checkouts that used the flow still hold one with a
+  machine-specific workspace path and realm URL.
 - `packages/choreo-gallery/docs/realm-publishing.md`, the guide for the deleted
   script, plus the links and README section that point at it.
 
