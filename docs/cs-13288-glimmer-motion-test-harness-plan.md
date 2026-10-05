@@ -101,9 +101,12 @@ hbs`, colocation). Following boxel-ui, add a vite-side `babel.config.mjs`
   tracked state and LayoutGroup's `VOLATILE_TAG` render detector would never
   invalidate ember-source's templates and no layout animation would start.
   `vite.config.mjs` aliases both to ember-source's copies.
-- **`@ember/test-helpers`:** the devDependency moves from `^4.0.5` to the
-  catalog's 5.x, as boxel-ui uses. 4.x reads a global `EmberENV` that only a
-  classic app defines.
+- **`@ember/test-helpers`:** the devDependency stays at `^4.0.5`, the
+  version choreo and choreo-test-app use. glimmer-motion's `test-support`
+  imports `settled` from it, so a different version here would put two copies
+  in choreo-test-app's bundle, and only one of them would track pending
+  transitions and requests. 4.x reads the optional features from a global
+  `EmberENV` that a classic app defines, so `tests/index.html` defines it.
 - **TypeScript / lint:** the tsconfig that emits `declarations/` must not pick
   up `tests/`. Add `tests/**` to the type-checked set through a separate
   `tsconfig.declarations.json` for the build (as `packages/choreo` already
