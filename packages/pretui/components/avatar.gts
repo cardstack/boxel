@@ -91,7 +91,9 @@ export class Avatar extends Component<AvatarSignature> {
           justify-content: center;
           width: var(--pretui-avatar-size, 1.5rem);
           height: var(--pretui-avatar-size, 1.5rem);
-          /* 0.42 of the diameter, to the whole pixel */
+          /* 0.42 of the diameter, to the whole pixel; the plain calc() is
+             for engines without round(), which drop that declaration */
+          font-size: calc(var(--pretui-avatar-size, 1.5rem) * 0.42);
           font-size: round(
             calc(var(--pretui-avatar-size, 1.5rem) * 0.42),
             1px

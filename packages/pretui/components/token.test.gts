@@ -141,6 +141,22 @@ module('Pretui | components/token', function (hooks) {
     assert.strictEqual(hue(el), 'var(--muted-foreground)', "the caller's hue is back");
   });
 
+  test("a caller's !important hue comes back !important when @hue is cleared", async function (assert) {
+    class State {
+      @tracked hue: string | undefined = 'var(--chart-2)';
+    }
+    let state = new State();
+    let importantHueStyle = htmlSafe('--pretui-token-hue: var(--muted-foreground) !important');
+    await render(<template><Token @value='LOT-9' @hue={{state.hue}} style={{importantHueStyle}} /></template>);
+    let el = q('[data-test-pretui-token]');
+    assert.strictEqual(hue(el), 'var(--chart-2)', '@hue wins');
+
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(hue(el), 'var(--muted-foreground)', "the caller's hue is back");
+    assert.strictEqual(el.style.getPropertyPriority('--pretui-token-hue'), 'important', 'with its !important');
+  });
+
   test("a caller's hue that matches @hue stays when @hue is cleared", async function (assert) {
     class State {
       @tracked hue: string | undefined = 'var(--chart-2)';

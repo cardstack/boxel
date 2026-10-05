@@ -25,6 +25,9 @@ function hue(el: HTMLElement): string {
 const RING_STYLE = htmlSafe('--status-ring: var(--chart-2); margin: 2px');
 const CALLER_HUE_STYLE = htmlSafe('--pretui-chip-hue: var(--muted-foreground)');
 const CALLER_SIZE_STYLE = htmlSafe('--pretui-avatar-size: 3rem');
+const CALLER_IMPORTANT_STYLE = htmlSafe(
+  '--pretui-avatar-size: 3rem !important; --pretui-chip-hue: var(--muted-foreground) !important',
+);
 
 module('Pretui | components/avatar', function (hooks) {
   setupCardTest(hooks);
@@ -343,6 +346,26 @@ module('Pretui | components/avatar', function (hooks) {
     await settled();
     assert.strictEqual(hue(el), 'var(--muted-foreground)', 'a hue the caller adds later wins over the name hash');
     assert.strictEqual(size(el), '2.25rem');
+  });
+
+  test("a caller's !important size and hue come back !important when @size and @hue are cleared", async function (assert) {
+    class State {
+      @tracked size: number | undefined = 40;
+      @tracked hue: string | undefined = 'var(--chart-1)';
+    }
+    let state = new State();
+    await render(<template><Avatar @name='Ada' @size={{state.size}} @hue={{state.hue}} style={{CALLER_IMPORTANT_STYLE}} /></template>);
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(size(el), '2.5rem', '@size wins');
+    assert.strictEqual(hue(el), 'var(--chart-1)', '@hue wins');
+
+    state.size = undefined;
+    state.hue = undefined;
+    await settled();
+    assert.strictEqual(size(el), '3rem', "the caller's size is back");
+    assert.strictEqual(el.style.getPropertyPriority('--pretui-avatar-size'), 'important', 'with its !important');
+    assert.strictEqual(hue(el), 'var(--muted-foreground)', "the caller's hue is back");
+    assert.strictEqual(el.style.getPropertyPriority('--pretui-chip-hue'), 'important', 'with its !important');
   });
 
   test("with no caller style, @size and @hue change and clear through Avatar's own style", async function (assert) {
