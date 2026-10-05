@@ -23,3 +23,18 @@ export function isLiveRender(element?: Element): boolean {
   }
   return !element.closest(`#${scope}`);
 }
+
+// Whether a component that cannot place itself yet may be rendering for
+// someone looking at a card. In a tab whose render context names the element
+// the indexer's render mounts into, most of what renders is live, so only a
+// page that is the indexer's render throughout answers no.
+export function mayBeLiveRender(): boolean {
+  let context = globalThis as {
+    __boxelRenderContext?: unknown;
+    __boxelRenderContextScope?: unknown;
+  };
+  return (
+    !context.__boxelRenderContext ||
+    typeof context.__boxelRenderContextScope === 'string'
+  );
+}

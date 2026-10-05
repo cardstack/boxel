@@ -947,8 +947,6 @@ interface StandingAnswer {
 // policy card, or to a type its rules name, lands.
 class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   @tracked private answer: StandingAnswer | undefined;
-  // Read once, as the card renders: a render for the indexer asks nothing,
-  // however long the card stays up afterwards.
   #subscriptions = new Map<string, () => void>();
 
   constructor(owner: Owner, args: PolicyStandingSignature['Args']) {

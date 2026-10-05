@@ -1,6 +1,7 @@
 import {
   click,
   rerender,
+  settled,
   waitFor,
   type RenderingTestContext,
 } from '@ember/test-helpers';
@@ -18,6 +19,7 @@ import {
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { ISOLATED_RENDER_ELEMENT_ID } from '@cardstack/host/services/render-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -107,6 +109,7 @@ module('Integration | realm config policy standing', function (hooks) {
   async function renderConfig(
     pointer: string | undefined,
     format: 'isolated' | 'edit' = 'isolated',
+    { awaitStanding = true }: { awaitStanding?: boolean } = {},
   ): Promise<{ realm: Realm; config: RealmConfig }> {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -136,9 +139,11 @@ module('Integration | realm config policy standing', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${CONFIG}"]`);
-    await waitFor('[data-test-realm-policy-standing="answered"]', {
-      timeout: 10_000,
-    });
+    if (awaitStanding) {
+      await waitFor('[data-test-realm-policy-standing="answered"]', {
+        timeout: 10_000,
+      });
+    }
     let store = getService('store') as StoreService;
     let config = (await store.get(CONFIG)) as RealmConfig;
     return { realm, config };
@@ -181,7 +186,7 @@ module('Integration | realm config policy standing', function (hooks) {
       __boxelRenderContextScope?: unknown;
     };
     context.__boxelRenderContext = true;
-    context.__boxelRenderContextScope = 'isolated-render';
+    context.__boxelRenderContextScope = ISOLATED_RENDER_ELEMENT_ID;
     try {
       await renderConfig(POLICY);
       assert
@@ -191,6 +196,32 @@ module('Integration | realm config policy standing', function (hooks) {
       assert
         .dom('[data-test-realm-config-policy-card-fitted]')
         .containsText('Education', 'and the policy card it names loaded');
+    } finally {
+      delete context.__boxelRenderContext;
+      delete context.__boxelRenderContextScope;
+    }
+  });
+
+  test('a view inside the element the indexer renders into asks nothing', async function (assert) {
+    // The same render context, naming the element this test renders into, so
+    // the config card is the indexer's render.
+    let context = globalThis as {
+      __boxelRenderContext?: unknown;
+      __boxelRenderContextScope?: unknown;
+    };
+    context.__boxelRenderContext = true;
+    context.__boxelRenderContextScope = 'ember-testing';
+    try {
+      await renderConfig(POLICY, 'isolated', { awaitStanding: false });
+      await settled();
+      assert.dom('.policy-standing').exists('the standing view rendered');
+      assert
+        .dom('[data-test-realm-policy-standing="answered"]')
+        .doesNotExist('but did not ask the realm');
+      assert.dom('[data-test-realm-policy-status]').doesNotExist();
+      assert
+        .dom('[data-test-realm-config-policy-card="shown"]')
+        .doesNotExist('and the policy card it names was not loaded');
     } finally {
       delete context.__boxelRenderContext;
       delete context.__boxelRenderContextScope;
