@@ -2899,6 +2899,9 @@ importers:
       '@cardstack/bxl':
         specifier: workspace:*
         version: link:../bxl
+      '@cardstack/choreo':
+        specifier: workspace:*
+        version: link:../choreo
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
@@ -3244,6 +3247,9 @@ importers:
       flat:
         specifier: 'catalog:'
         version: 5.0.2
+      glimmer-motion:
+        specifier: workspace:*
+        version: link:../glimmer-motion
       glimmer-scoped-css:
         specifier: 'catalog:'
         version: 0.8.1(supports-color@8.1.1)
@@ -3274,6 +3280,12 @@ importers:
       monaco-editor:
         specifier: 'catalog:'
         version: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
+      motion-dom:
+        specifier: 13.4.5
+        version: 13.4.5
+      motion-utils:
+        specifier: 13.3.0
+        version: 13.3.0
       ms:
         specifier: 'catalog:'
         version: 2.1.3

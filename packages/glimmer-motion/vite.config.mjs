@@ -1,79 +1,8 @@
-import { existsSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
-import { defineConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
 
-const srcDir = fileURLToPath(new URL('./src', import.meta.url));
-
-const framerMotionDir = dirname(
-  createRequire(import.meta.url).resolve('framer-motion/package.json'),
-);
-
-/**
- * The suite imports glimmer-motion by its public specifiers
- * (`glimmer-motion/motion`, `glimmer-motion/test-support`…). They resolve to
- * the source, so the harness runs with no rollup build first.
- */
-function glimmerMotionFromSource() {
-  const candidates = (base) => [
-    base,
-    `${base}.ts`,
-    `${base}.gts`,
-    join(base, 'index.ts'),
-    join(base, 'index.gts'),
-  ];
-  return {
-    name: 'glimmer-motion-from-source',
-    enforce: 'pre',
-    resolveId(id) {
-      if (id !== 'glimmer-motion' && !id.startsWith('glimmer-motion/')) {
-        return null;
-      }
-      const base = join(srcDir, id.slice('glimmer-motion'.length));
-      return (
-        candidates(base).find((f) => existsSync(f) && statSync(f).isFile()) ??
-        null
-      );
-    },
-  };
-}
-
-/**
- * src/framer-motion-internals.ts imports modules from framer-motion's
- * `dist/es` that its exports map doesn't expose; rollup.config.mjs inlines
- * them into the published build. Here they're served from framer-motion on
- * disk. One of them imports React's `useRef` for a hook glimmer-motion never
- * calls, so React resolves to a stub that throws if it ever is.
- */
-function framerMotionInternals() {
-  const internal = 'framer-motion/dist/es/';
-  const reactStub = '\0glimmer-motion-react-stub';
-  return {
-    name: 'framer-motion-internals',
-    enforce: 'pre',
-    resolveId(id, importer) {
-      if (id.startsWith(internal)) {
-        return join(framerMotionDir, id.slice('framer-motion/'.length));
-      }
-      if (id === 'react' && importer?.startsWith(framerMotionDir + sep)) {
-        return reactStub;
-      }
-      return null;
-    },
-    load(id) {
-      if (id === reactStub) {
-        return `export function useRef() {
-  throw new Error('glimmer-motion reached a React hook in framer-motion');
-}`;
-      }
-      return null;
-    },
-  };
-}
+import { glimmerMotionSource } from './scripts/source-resolution.mjs';
 
 // This vite pipeline serves and builds the test suite (see tests/index.html
 // and the `test` script). Publishing is a separate rollup build; see
@@ -88,6 +17,16 @@ export default defineConfig(({ mode }) => ({
     'process.env.NODE_ENV': JSON.stringify(mode),
   },
   resolve: {
+    // The suite imports glimmer-motion by its public specifiers
+    // (`glimmer-motion/motion`, `glimmer-motion/test-support`…), which the
+    // `developing:choreo` export condition resolves to the source, so the
+    // harness runs with no rollup build first. CHOREO_LIBS=dist leaves the
+    // condition out and runs the suite against the built output instead, the
+    // code npm consumers get; the package must be built.
+    conditions:
+      process.env.CHOREO_LIBS === 'dist'
+        ? defaultClientConditions
+        : ['developing:choreo', ...defaultClientConditions],
     alias: [
       // glimmer-motion declares the npm `@glimmer/tracking` and
       // `@glimmer/validator` for their types, and those real packages would
@@ -106,8 +45,7 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   plugins: [
-    glimmerMotionFromSource(),
-    framerMotionInternals(),
+    glimmerMotionSource(),
     ember(),
     babel({
       babelHelpers: 'runtime',

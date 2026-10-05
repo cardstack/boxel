@@ -527,6 +527,13 @@ jobs:
           (cd packages/glimmer-motion && pnpm run build)
           (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
+      # npm consumers resolve every subpath to the built output, without the
+      # `developing:choreo` condition the workspace builds from source with.
+      - name: Check the packed glimmer-motion and Choreo exports
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run check:packed-exports)
+          (cd packages/choreo && pnpm run check:packed-exports)
       - name: Choreo Player unit tests
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run test:unit
@@ -580,17 +587,53 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
-      # The test app resolves these packages through their built output
-      # (package.json#exports maps into dist/ and declarations/). glimmer-motion
-      # builds first: choreo's declarations build resolves it the same way.
+      # The test app compiles glimmer-motion and Choreo from source through the
+      # `developing:choreo` export condition, but resolves choreo-player
+      # through its built output.
+      - name: Build Choreo Player
+        run: pnpm run build
+        working-directory: packages/choreo-player
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo-test-app
+
+  # glimmer-motion's suite and the Choreo test app's suite against the
+  # packages' built output, the code npm consumers get. Only the rollup build
+  # inlines and tree-shakes framer-motion's internals, so these are the runs
+  # that exercise it. CHOREO_LIBS=dist leaves the `developing:choreo`
+  # condition out of each suite's Vite config.
+  choreo-dist-test:
+    name: Glimmer Motion and Choreo Tests (built output)
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-dist-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # glimmer-motion builds first: choreo's declarations build resolves it
+      # through its built output.
       - name: Build Glimmer Motion, Choreo and Choreo Player
+        id: build-libs
         run: |
           (cd packages/glimmer-motion && pnpm run build)
           (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
-      - name: Run test suite
+      - name: Glimmer Motion test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/glimmer-motion
+        env:
+          CHOREO_LIBS: dist
+      - name: Choreo Test App test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm test
         working-directory: packages/choreo-test-app
+        env:
+          CHOREO_LIBS: dist
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only

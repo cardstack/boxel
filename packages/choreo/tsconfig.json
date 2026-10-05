@@ -4,15 +4,13 @@
   "compilerOptions": {
     "allowJs": true,
     /**
-      glimmer-motion resolves to its source, so type-checking needs it unbuilt.
-      The declarations build (tsconfig.declarations.json) resolves it through
-      its package.json#exports instead, the way npm consumers do, so the
-      emitted declarations import `glimmer-motion` rather than its source.
+      glimmer-motion resolves to its source through the `developing:choreo`
+      export condition, so type-checking needs it unbuilt. The declarations
+      build (tsconfig.declarations.json) leaves the condition out and resolves
+      it the way npm consumers do, so the emitted declarations import
+      `glimmer-motion` rather than its source.
     */
-    "paths": {
-      "glimmer-motion": ["../glimmer-motion/src/index.ts"],
-      "glimmer-motion/*": ["../glimmer-motion/src/*"]
-    },
+    "customConditions": ["developing:choreo"],
     "types": ["ember-source/types"]
   }
 }
