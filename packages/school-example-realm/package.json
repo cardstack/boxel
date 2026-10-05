@@ -1,0 +1,40 @@
+{
+  "name": "@cardstack/school-example-realm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The school example for operation permission policies: a Code, an Org and an Education realm, pushed side by side into one account.",
+  "license": "MIT",
+  "scripts": {
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:types": "ember-tsc --noEmit"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-decorators": "catalog:",
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.0.4",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "concurrently": "catalog:",
+    "ember-eslint-parser": "catalog:",
+    "ember-source": "catalog:",
+    "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "typescript": "catalog:"
+  }
+}
