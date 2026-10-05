@@ -13,8 +13,6 @@
 // custom-property channel on a wrapper div (their internal debounce is
 // boxel-ui's own runtime, not authored here).
 //
-// (the extras group)
-
 // Pretui — style shared by the typed inputs (Number, Password, Url).
 import { htmlSafe } from '@ember/template';
 

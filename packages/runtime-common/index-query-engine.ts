@@ -55,6 +55,7 @@ import {
   RANGE_OPERATORS,
   InvalidQueryError,
   collectPositiveMatchTerms,
+  filterOperators,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -401,6 +402,14 @@ export const generalSortFields: Record<string, string> = {
 // flows through `generalFieldSortColumn` (it has no static column). Sorting by
 // it defaults to `desc` (best match first).
 export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
+
+// A relevance sort is recognized by its key alone. The score belongs to the
+// query, not to any card type, so an `on` beside it anchors nothing and is
+// ignored rather than sending the key down the card-field path, where it
+// would resolve as a nonexistent field.
+export function isMatchRelevanceSort(sort: { by: string }): boolean {
+  return sort.by === MATCH_RELEVANCE_SORT_KEY;
+}
 
 export { isValidPrerenderedHtmlFormat };
 
@@ -1161,9 +1170,7 @@ export class IndexQueryEngine {
       // `_matchRelevance`, so every existing `matches` caller pays nothing. When
       // present it rides the projection as an aggregated, aliased column that the
       // ORDER BY (below) references — see `matchRelevanceExpression`.
-      let sortsByMatchRelevance = (sort ?? []).some(
-        (s) => !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
-      );
+      let sortsByMatchRelevance = (sort ?? []).some(isMatchRelevanceSort);
       let relevanceColumn: CardExpression = [];
       if (sortsByMatchRelevance) {
         // `assertQuery` already rejects this on the wire surfaces (as an
@@ -1419,7 +1426,7 @@ export class IndexQueryEngine {
           // `_matchRelevance` is the aggregated relevance column projected by
           // the SELECT (see `_search`); reference the alias directly and default
           // to `desc` (best match first). Everything else sorts on a column.
-          !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
+          isMatchRelevanceSort(s)
             ? [
                 `"${MATCH_RELEVANCE_SORT_KEY}"`,
                 sortDirection(s.direction ?? 'desc'),
@@ -1469,7 +1476,7 @@ export class IndexQueryEngine {
       // `_matchRelevance` is already projected by the inner SELECT (see
       // `_search`), so it rides through `sub.*` — reference it in the outer
       // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
-      if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
+      if (isMatchRelevanceSort(s)) {
         outerKeys.push([
           `"${MATCH_RELEVANCE_SORT_KEY}"`,
           sortDirection(s.direction ?? 'desc'),
@@ -1535,6 +1542,23 @@ export class IndexQueryEngine {
 
     if (typeRef && Object.keys(filter).length === 1) {
       return this.typeCondition(typeRef);
+    }
+
+    // The validator rejects a multi-operator node on the wire, but a
+    // query-backed field is indexed through here with no `assertQuery` in the
+    // path. Each branch below picks a single operator, so without this backstop
+    // such a node would compile on whichever one comes first and silently drop
+    // the rest — diverging from the host, which rejects the same query. Reject
+    // here too so every path agrees. `type`/`on` are not operators.
+    let operators = filterOperators(filter);
+    if (operators.length > 1) {
+      throw new InvalidQueryError(
+        `a filter may use only one operator, but found ${operators
+          .map((key) => `"${key}"`)
+          .join(
+            ', ',
+          )}; combine operators by nesting them under "every" or "any"`,
+      );
     }
 
     if ('eq' in filter) {

@@ -33,5 +33,13 @@ module(basename(import.meta.filename), function () {
     test('assertQuery accepts the multi-entry shapes the grammar allows', async function (assert) {
       await runSharedTest(assertQueryValidationTests, assert, {});
     });
+
+    test('assertQuery rejects a filter that combines more than one operator', async function (assert) {
+      await runSharedTest(assertQueryValidationTests, assert, {});
+    });
+
+    test('assertQuery treats a relevance sort the same with or without on', async function (assert) {
+      await runSharedTest(assertQueryValidationTests, assert, {});
+    });
   });
 });

@@ -41,10 +41,8 @@ export interface SegmentedControlSignature {
 // reads the same data-state='active' the styling already used, so nothing
 // here had to hand over its DOM or thread an active index through.
 //
-// **Semantics rebuilt 2026-08-13.** This used to be `role='tablist'` over
-// plain `<button>`s — invalid ARIA (a tablist's children must be tabs) and
-// the wrong pattern anyway, because a segmented control swaps a *value*, not
-// a panel. Tabs, three components down this file, is the one that swaps a
+// **A radiogroup, not a tablist.** A segmented control swaps a *value*, not
+// a panel, so it is radios; a tablist's children must be tabs. Tabs, three components down this file, is the one that swaps a
 // panel. It is now what it always was: a single-choice value picker, built on
 // the same native `<input type='radio'>` foundation `RadioGroup` uses, which
 // hands over the entire APG radio contract — one tab stop for the group,

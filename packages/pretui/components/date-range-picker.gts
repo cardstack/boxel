@@ -10,8 +10,7 @@ import type { DateRangeValue } from './calendar';
 import { DISPLAY_FMT, fromIso } from '../internal/reading-extras';
 
 // ── DateRangePicker ──────────────────────────────────────────────────────
-// FRESH (rebuilt 2026-08-12; previously wrapped boxel-ui's ember-power-
-// calendar DateRangePicker): a readonly Pretui Input trigger + Popover
+// A readonly Pretui Input trigger + Popover
 // around a range-mode Calendar — the same month grid DatePicker uses. Two
 // months side by side by default; the calendar collapses to one month in a
 // narrow container. First click sets the start, second completes the range

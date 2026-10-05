@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
 import { resolveTone } from '../pretui-primitives';
 import type { PretuiToneArg } from '../pretui-primitives';
+import { VisuallyHidden } from './visually-hidden';
 
 type AlertTone = 'info' | 'success' | 'warning' | 'danger';
 const ALERT_TONES: readonly AlertTone[] = [
@@ -29,6 +30,15 @@ const ALERT_GLYPHS: Record<AlertTone, string> = {
   warning: '!',
   danger: '✕',
 };
+// The glyph is hidden from assistive technology, so the tone is spoken as a
+// word instead. Without it, `info`, `success` and `warning` all share
+// `role="status"` and are announced identically.
+const ALERT_TONE_LABELS: Record<AlertTone, string> = {
+  info: 'Info',
+  success: 'Success',
+  warning: 'Warning',
+  danger: 'Error',
+};
 
 export interface AlertSignature {
   Args: {
@@ -40,6 +50,9 @@ export interface AlertSignature {
     title?: string;
     /** alias — shadcn's one-enum Alert API (`default` | `destructive`) */
     variant?: 'default' | 'destructive';
+    /** the tone word a screen reader hears before the title, in place of the
+     * hidden glyph. Defaults by tone: Info, Success, Warning, Error. */
+    toneLabel?: string;
   };
   Blocks: { default: []; action: [] };
   Element: HTMLDivElement;
@@ -61,9 +74,13 @@ export class Alert extends Component<AlertSignature> {
   get glyph() {
     return ALERT_GLYPHS[this.tone];
   }
+  get spokenTone(): string {
+    return `${this.args.toneLabel ?? ALERT_TONE_LABELS[this.tone]}:`;
+  }
   <template>
     <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} data-test-pretui-alert ...attributes>
-      <span class='pretui-alert-glyph'>{{this.glyph}}</span>
+      <span class='pretui-alert-glyph' aria-hidden='true'>{{this.glyph}}</span>
+      <VisuallyHidden>{{this.spokenTone}}</VisuallyHidden>
       <div class='pretui-alert-body'>
         {{#if @title}}<div class='pretui-alert-title'>{{@title}}</div>{{/if}}
         {{#if (has-block)}}<div>{{yield}}</div>{{/if}}

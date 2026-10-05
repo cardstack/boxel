@@ -71,14 +71,14 @@ export interface ToggleGroupSignature {
      * "one of these must be true" is a radio group.
      */
     deselectable?: boolean;
-    /** hue for every member (Appendix E), default `neutral` */
+    /** hue for every member, default `neutral` */
     tone?: PretuiTone;
     /** recipe worn at rest, default `outlined` */
     appearance?: PretuiAppearance;
     /** recipe worn while pressed, default `accent`. The pressed state is an
      * appearance swap rather than a tint, so it reads in greyscale. */
     pressedAppearance?: PretuiAppearance;
-    /** size scale (Appendix E.2), default `m` */
+    /** size scale, default `m` */
     size?: PretuiSize;
     /** icons only; every label becomes its item's `sr-only` name and its
      * `title`. For formatting bars, where a word would not fit. */

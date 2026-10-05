@@ -679,7 +679,7 @@ export class Sidebar extends Component<SidebarSignature> {
           grid-column: 1;
         }
         /* The handle straddles the seam. 44px of hit area on a coarse pointer
-           (Appendix L), a 2px painted line, and a resize-style cursor so the
+           , a 2px painted line, and a resize-style cursor so the
            affordance reads before it is pressed. */
         .pretui-sidebar-handle {
           position: absolute;

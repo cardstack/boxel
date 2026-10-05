@@ -1,12 +1,11 @@
-// Pretui — artboard contract proof (Appendix H).
+// Pretui — artboard contract proof.
 import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Viewport } from './components/viewport';
 
-// SegmentedControl is a radiogroup over native <input type='radio'> as of
-// 2026-08-13 (it used to be role='tablist' over <button>s, which was invalid
-// ARIA). Click the input: a synthetic click on the label would rely on label
+// SegmentedControl is a radiogroup over native <input type='radio'>. Click
+// the input: a synthetic click on the label would rely on label
 // activation forwarding, and the input is the thing that actually changes.
 function segButton(label: string): HTMLElement {
   let labels = Array.from(

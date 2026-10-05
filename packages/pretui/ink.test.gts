@@ -1,5 +1,5 @@
-// Pretui — semantics proof for Chip, StatusChip, Token, Delta, Meter, Avatar
-// and AvatarGroup.
+// Pretui — semantics proof for Chip, StatusChip, Delta, Meter, Avatar and
+// AvatarGroup. Token's tests live in components/token.test.gts.
 //
 // Nothing here asserts a computed style: the components' own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
@@ -15,7 +15,6 @@ import { Chip } from './components/chip';
 import { Delta } from './components/delta';
 import { Meter } from './components/meter';
 import { StatusChip } from './components/status-chip';
-import { Token } from './components/token';
 import { statusHue } from './internal/ink';
 
 function q(sel: string): HTMLElement {
@@ -94,20 +93,6 @@ module('Pretui | ink', function (hooks) {
       q('[data-test-pretui-status-chip]').getAttribute('style')?.includes('var(--chart-1)'),
       'the caller hue wins',
     );
-  });
-
-  // ── Token ───────────────────────────────────────────────────────────────
-  test('Token renders as <code>, prefers @value, and carries an allowed hue', async function (assert) {
-    await render(<template><Token @value='SKU-8812' @hue='var(--chart-2)'>ignored</Token></template>);
-    let el = q('[data-test-pretui-token]');
-    assert.strictEqual(el.tagName, 'CODE', 'a machine value is marked up as code');
-    assert.strictEqual(el.textContent?.trim(), 'SKU-8812');
-    assert.true(el.getAttribute('style')?.includes('--pretui-token-hue: var(--chart-2)'));
-  });
-
-  test('Token falls back to its block', async function (assert) {
-    await render(<template><Token>0x41</Token></template>);
-    assert.strictEqual(q('[data-test-pretui-token]').textContent?.trim(), '0x41');
   });
 
   // ── Delta ───────────────────────────────────────────────────────────────
@@ -203,19 +188,21 @@ module('Pretui | ink', function (hooks) {
     assert.strictEqual(el.textContent?.trim(), 'ML', 'first two words only, uppercased');
     assert.strictEqual(el.getAttribute('aria-label'), 'Mei Ling Chen');
     assert.strictEqual(el.getAttribute('title'), 'Mei Ling Chen');
-    assert.true(el.getAttribute('style')?.includes('width: 24px'), 'defaults to 24px');
+    assert.strictEqual(
+      el.style.getPropertyValue('--pretui-avatar-size'),
+      '',
+      "defaults to the stylesheet's 1.5rem (24px at a 16px root)",
+    );
     assert.true(
       el.getAttribute('style')?.includes(statusHue('Mei Ling Chen')),
       'the hue is derived from the name, so the same person keeps the same colour',
     );
   });
 
-  test('Avatar scales its type with @size', async function (assert) {
+  test('Avatar writes @size as rem, which the stylesheet sizes the disc and its type from', async function (assert) {
     await render(<template><Avatar @name='Ada' @size={{40}} /></template>);
-    let style = q('[data-test-pretui-avatar]').getAttribute('style') ?? '';
-    assert.true(style.includes('width: 40px'));
-    assert.true(style.includes('height: 40px'));
-    assert.true(style.includes('font-size: 17px'), '0.42 of the box, rounded');
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(el.style.getPropertyValue('--pretui-avatar-size').trim(), '2.5rem');
   });
 
   test('Avatar shows the image when given one and falls back to initials once it fails', async function (assert) {

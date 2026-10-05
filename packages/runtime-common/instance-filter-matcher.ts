@@ -2,6 +2,7 @@ import { isEqual } from 'lodash-es';
 
 import { canonicalModuleKey, getField, identifyCard } from './code-ref.ts';
 import {
+  filterOperators,
   isAnyFilter,
   isCardTypeFilter,
   isEveryFilter,
@@ -15,6 +16,7 @@ import {
   type RangeOperator,
   type Sort,
 } from './query.ts';
+import { isMatchRelevanceSort } from './index-query-engine.ts';
 
 import {
   CARD_INSTANCE_FILE_KEY,
@@ -80,6 +82,13 @@ const GENERAL_SORT_FIELDS = new Set(['lastModified', 'createdAt', 'cardURL']);
 // operator not in this set force the caller to fall back to server-only
 // evaluation.
 export function isClientEvaluable(filter: Filter): boolean {
+  // A node carrying more than one operator is invalid (`assertFilter` rejects
+  // it), but live local queries don't pass through `assertQuery`. Declining
+  // the node defers to the server, so the caller gets the server's rejection
+  // instead of results from a silently-picked operator.
+  if (filterOperators(filter).length > 1) {
+    return false;
+  }
   if (isMatchesFilter(filter)) {
     return false;
   }
@@ -694,6 +703,17 @@ function sortValue(
   expression: Sort[number],
   api: CardAPIForMatching,
 ): any {
+  // `_matchRelevance` is computed per query, never a card field, so — as in
+  // the engine's ORDER BY builders — the key wins over any `on` beside it
+  // rather than being resolved as a field path. It has no client-side value
+  // (null → URL-order), which is safe only because a relevance sort requires
+  // a `matches` filter and `matches` fails `isClientEvaluable`, so those
+  // queries never reach this comparator (server results pass through
+  // unsorted). If `matches` ever becomes client-evaluable, this needs a
+  // relevance shim.
+  if (isMatchRelevanceSort(expression)) {
+    return null;
+  }
   if ('on' in expression && expression.on) {
     let { values } = resolvePath(instance, expression.by, api);
     return values.find((v) => v != null) ?? null;
@@ -706,11 +726,8 @@ function sortValue(
     case 'cardURL':
       return instance.id ?? null;
     default:
-      // `_matchRelevance` also lands here (null → URL-order), which is safe
-      // only because a relevance sort requires a `matches` filter and `matches`
-      // fails `isClientEvaluable`, so those queries never reach this comparator
-      // (server results pass through unsorted). If `matches` ever becomes
-      // client-evaluable, this needs a relevance shim.
+      // An unshimmed synthetic key lands here (null → URL-order); real card
+      // fields arrive with `on` and take the branch above.
       return null;
   }
 }

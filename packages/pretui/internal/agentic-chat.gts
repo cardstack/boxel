@@ -36,11 +36,6 @@
 // one event listener that exists (`scrollEdge`) lives in an `ember-modifier`
 // and removes itself in the destructor.
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the agentic-chat group)
-
 // Pretui — Collapse: the kit's inline 0fr → 1fr collapse, shared by the agentic components (not a catalog component).
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
