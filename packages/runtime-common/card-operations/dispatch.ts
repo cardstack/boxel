@@ -19,6 +19,7 @@ import {
   gateRefusal,
   leavesToLock,
   loadPolicy,
+  recordPolicyLoadFailure,
   type GateSubject,
   notPermitted,
   type GateDecision,
@@ -26,6 +27,7 @@ import {
   type OperationPolicyAccess,
 } from './gate.ts';
 import type { GateTrace } from './gate-trace.ts';
+import { INTERNAL_ROUTE, type PolicyRoute } from './telemetry.ts';
 import { explainOperation, type TargetRealm } from './explain.ts';
 import type { CompiledPolicyCard } from './policy.ts';
 import { validateOperation } from './validate.ts';
@@ -33,7 +35,7 @@ import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
-  linkStrategyOf,
+  readLinkStrategyOf,
   isOperationFailure,
   unshareableFormatsOf,
   isHeadResult,
@@ -271,6 +273,13 @@ export interface OperationIndexQueryEngine {
 }
 
 export interface RunOperationOptions {
+  // The gate's decision about this very invocation, where the caller already
+  // resolved it in the same request: the operations envelope resolves every
+  // entry before it runs any. The read then runs on that decision rather than
+  // asking the gate again, so its predicates are evaluated, and the decision
+  // recorded, once. It is judged as `resolveOperation` judges one, so a write
+  // left to the lock and an archived realm's seal are refused here as there.
+  gated?: GatedOperation;
   // The metadata a response's headers are computed from, and no body: for a
   // `read` the four values the card+json headers rest on and no document, for
   // a `readSource` everything but the bytes. What a `HEAD`, or a conditional
@@ -351,6 +360,9 @@ export interface OperationScope {
   // Set for a capability check, which asks what the gate would decide and
   // invokes nothing, so nothing it evaluates is recorded as a decision.
   readonly advisory: boolean;
+  // The request surface and route this invocation arrived on, which the
+  // gate's decision record names (see `PolicyDecisionEvent`).
+  readonly route: PolicyRoute;
   // The archived realm's refusal, where the realm holds one for this caller
   // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
   // gate grants.
@@ -358,8 +370,9 @@ export interface OperationScope {
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
   // between them. The caller, the ACL's verdict, the seal and whether the
-  // request is advisory carry over unless named; a proposed document belongs
-  // to one invocation and never does, and neither does a trace.
+  // request is advisory carry over unless named, and so does its route; a
+  // proposed document belongs to one invocation and never does, and neither
+  // does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -387,6 +400,7 @@ export interface ScopeInvocation {
   trace?: GateTrace;
   seal?: Error;
   advisory?: boolean;
+  route?: PolicyRoute;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -428,6 +442,7 @@ export function newOperationScope(
     trace: GateTrace | undefined,
     seal: Error | undefined,
     advisory: boolean,
+    route: PolicyRoute,
   ): OperationScope => ({
     peekInstance,
     caller,
@@ -436,6 +451,7 @@ export function newOperationScope(
     trace,
     seal,
     advisory,
+    route,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
@@ -444,6 +460,7 @@ export function newOperationScope(
         next.trace,
         next.seal ?? seal,
         next.advisory ?? advisory,
+        next.route ?? route,
       ),
   });
   return scopeFor(
@@ -453,6 +470,7 @@ export function newOperationScope(
     invocation.trace,
     invocation.seal,
     invocation.advisory ?? false,
+    invocation.route ?? INTERNAL_ROUTE,
   );
 }
 
@@ -690,12 +708,29 @@ export async function resolveOperation(
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDefinition> {
-  let { definition, decision } = await resolveGatedOperation(
-    core,
+  return admittedDefinition(
+    await resolveGatedOperation(core, target, name, scope),
     target,
     name,
     scope,
   );
+}
+
+function sameTarget(a: OperationTarget, b: OperationTarget): boolean {
+  return a.kind === 'instance'
+    ? b.kind === 'instance' && a.url === b.url
+    : b.kind === 'type' &&
+        JSON.stringify(a.codeRef) === JSON.stringify(b.codeRef);
+}
+
+// The definition a gated operation runs, where the gate's decision lets it run
+// with no write lock to decide anything more (see `resolveOperation`).
+function admittedDefinition(
+  { definition, decision }: GatedOperation,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): OperationDefinition {
   if (leavesToLock(decision)) {
     throw notPermitted(target, name);
   }
@@ -799,7 +834,13 @@ async function resolveAndGate(
     } catch (e: unknown) {
       throw refusal(e);
     }
-    loaded = await loadPolicy(core);
+    let started = performance.now();
+    try {
+      loaded = { ...(await loadPolicy(core)), started };
+    } catch (e: unknown) {
+      recordPolicyLoadFailure(core, scope, name, started, e);
+      throw e;
+    }
   }
   let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
@@ -1111,7 +1152,7 @@ async function resolveReadPlan(
       shape: hasTransforms(definition) ? 'staged' : 'plain',
       // Read the same way the executor reads it, so the validator this answer
       // is folded into names the shape the body will actually take.
-      links: linkStrategyOf(definition.links),
+      links: readLinkStrategyOf(definition.links),
       unshareableFormats: html.unshareableFormats,
     },
     rememberable: html.rememberable,
@@ -1241,8 +1282,16 @@ export async function runOperation(
     caller: scopeCallerFor(canonical.actor),
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
     ...(canonical.seal ? { seal: canonical.seal } : {}),
+    ...(canonical.route ? { route: canonical.route } : {}),
   });
-  let definition = await resolveOperation(core, target, canonical.name, scope);
+  // A decision made in the same request is reused only for the target it was
+  // made about. The envelope canonicalizes the realm root to its index card for
+  // every name, and a stored-bytes read here keeps the root, so the two can
+  // differ.
+  let definition =
+    opts.gated && sameTarget(target, request.target)
+      ? admittedDefinition(opts.gated, target, canonical.name, scope)
+      : await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
   // transform over the payload, the `params` check against what it produced,
   // the behavior, and the `output` transform over its result. The check runs

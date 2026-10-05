@@ -438,7 +438,18 @@ async function lowerOperation(
         'links',
         `"${String(links)}" does not name how much of the link graph ${
           base === 'query' ? "a query's results carry" : 'a read carries'
-        } — one of "full", "ids", "none"`,
+        } — one of ${base === 'query' ? '"full", "ids", "none"' : '"full", "ids"'}`,
+      );
+    } else if (base === 'read' && links === 'none') {
+      // A query-only strategy. A read's strategy governs the card's plain
+      // `GET`, which is what the host loads a card with to render and edit it
+      // live; under `none` its link fields come up empty, and an edit to one
+      // saves what the editor showed over the stored links. Not stored, so the
+      // read is refused rather than served without the links.
+      sink.add(
+        'invalid-link-strategy',
+        'links',
+        `"none" is a query's strategy, not a read's: a read's strategy governs the card's plain GET, which the host loads the card with to render and edit it, so an edit to a link field would replace the stored links the editor was never shown — declare "ids" to narrow a read without hiding its links`,
       );
     } else {
       operation.links = links;

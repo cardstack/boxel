@@ -10,6 +10,7 @@ import {
 } from './dispatch.ts';
 import {
   effectiveLinkStrategy,
+  readLinkStrategyOf,
   OperationFailure,
   type OperationDefinition,
   type OperationDocumentResult,
@@ -88,7 +89,10 @@ export async function readOperation(
   let url = instanceTargetURL({ ...request, target });
   refuseUnservedStages(request, definition);
   let localPath = localPathFor(core, url);
-  let links = effectiveLinkStrategy(definition.links, opts.resolveLinksOnly);
+  let links = effectiveLinkStrategy(
+    readLinkStrategyOf(definition.links),
+    opts.resolveLinksOnly,
+  );
   if (opts.headersOnly) {
     return await readHeaders(core, url, localPath, links, scope);
   }
