@@ -12,10 +12,7 @@
 import { Film } from '@cardstack/choreo/film';
 ```
 
-Everything in this document lives at `@cardstack/choreo/film`. A subset is
-re-exported from the package root under prefixed names (`Film`,
-`FilmBeat`, `FilmChapter`, `FilmGrade`, `FilmHandle`, `FilmJoin`,
-`FilmPicture`, `FilmCam`, `FilmClock`), but neither reference film uses
+Everything in this document lives at `@cardstack/choreo/film`.
 that door and it does not carry `TICK`, `LookFx`, the sub-components or
 the clip API. Import from the subpath.
 
