@@ -406,7 +406,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert
       .dom(`${tool} [data-test-tool-call-approval]`)
       .containsText(
-        'The assistant wants to read this page and says: “To check the setup steps for the library you asked about.”',
+        'The assistant asks for your approval and says: “To check the setup steps for the library you asked about.”',
         "the assistant's reason is shown",
       );
     assert
@@ -496,7 +496,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
     assert.strictEqual(decline.content['m.relates_to'].key, 'invalid');
     assert.ok(
       decline.content.failureReason.includes(
-        'The user declined to let you read https://docs.example.com/guide?section=setup',
+        'The user declined this call (Read web page: https://docs.example.com/guide?section=setup)',
       ),
     );
   });

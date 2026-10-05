@@ -158,8 +158,8 @@ export default class MessageTool {
     );
   }
 
-  // ai-bot runs this call itself, but only once the user approves it (a
-  // readUrl of a URL nobody in the room gave). Until an answer lands the call
+  // ai-bot runs this call itself, but only once the user approves it (the
+  // bot tool marked it `approvalRequired`). Until an answer lands the call
   // shows the full request with Approve / Decline rather than a status
   // indicator.
   get awaitsApproval() {

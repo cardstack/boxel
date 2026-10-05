@@ -279,7 +279,8 @@ export default class RoomMessageTool extends Component<Signature> {
     );
   }
 
-  // Why the assistant wants a call it holds for approval, in its own words.
+  // Why the assistant wants a call held for approval, in its own words: a
+  // bot tool that asks for approval takes a `reason` argument.
   private get approvalReason() {
     let reason = this.args.messageTool.toolRequest.arguments?.reason;
     return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
@@ -366,11 +367,11 @@ export default class RoomMessageTool extends Component<Signature> {
         {{#if @messageTool.awaitsApproval}}
           <p class='approval-note' data-test-tool-call-approval>
             {{#if this.approvalReason}}
-              The assistant wants to read this page and says: “{{this.approvalReason}}”
+              The assistant asks for your approval and says: “{{this.approvalReason}}”
               Approve if that's OK with you.
             {{else}}
-              The assistant wants to read a page nobody in this conversation
-              linked to. Approve if that's OK with you.
+              The assistant asks for your approval to do this. Approve if that's
+              OK with you.
             {{/if}}
           </p>
         {{/if}}

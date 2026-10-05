@@ -12,11 +12,8 @@ import {
   urlFromReadUrlArguments,
   type ReadUrlOptions,
   type ReadUrlResult,
-} from './read-url.ts';
-import {
-  publishToolResult,
-  uploadToMatrix,
-} from './read-realm-file-fulfillment.ts';
+} from './read.ts';
+import { publishToolResult, uploadToMatrix } from '../results.ts';
 
 let log = logger('ai-bot:read-url');
 

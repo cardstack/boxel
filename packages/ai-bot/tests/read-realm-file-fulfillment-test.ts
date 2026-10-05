@@ -1,11 +1,11 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadRealmFileCalls } from '../lib/read-realm-file-fulfillment.ts';
+import { fulfillReadRealmFileCalls } from '../lib/bot-tools/read-realm-file/fulfillment.ts';
 import {
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
-} from '../lib/read-realm-file.ts';
+} from '../lib/bot-tools/read-realm-file/read.ts';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,

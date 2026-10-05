@@ -1,12 +1,12 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadUrlCalls } from '../lib/read-url-fulfillment.ts';
+import { fulfillReadUrlCalls } from '../lib/bot-tools/read-url/fulfillment.ts';
 import {
   READ_URL_MAX_CALLS_PER_RESPONSE,
   READ_URL_TOOL_NAME,
   type ReadUrlResult,
-} from '../lib/read-url.ts';
+} from '../lib/bot-tools/read-url/read.ts';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,

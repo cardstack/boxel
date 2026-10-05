@@ -39,22 +39,18 @@ import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
   classifyToolCalls,
-  READ_REALM_FILE_TOOL_NAME,
-} from './lib/read-realm-file.ts';
-import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
+  offeredBotTools,
+  startBotToolTurns,
+  type BotToolTurn,
+  type ClassifiedToolCalls,
+} from './lib/bot-tools/index.ts';
 import {
-  carriesEncodedData,
-  collectPreapprovedUrls,
-  encodedDataRefusal,
-  knownRealmOrigins,
-  READ_URL_TOOL_NAME,
-  readUrlCallsReleasedByApprovals,
-  settledToolCallIds,
-  urlFromReadUrlArguments,
-} from './lib/read-url.ts';
-import { downloadFile, isApprovalResult } from '@cardstack/runtime-common/ai';
-import type { SerializedFileDef } from '@cardstack/base/file-api';
-import { fulfillReadUrlCalls } from './lib/read-url-fulfillment.ts';
+  ApprovalClaims,
+  releasedToolCalls,
+  type ReleasedToolCall,
+} from './lib/bot-tools/approval.ts';
+import { isApprovalResult } from '@cardstack/runtime-common/ai';
+import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
@@ -87,10 +83,9 @@ import {
 
 let log = logger('ai-bot');
 
-// Held readUrl calls this process has taken on reading after the user
-// approved them, so a call is read once however many events show its
-// approval before the read's result lands.
-const claimedReadUrlCallIds = new Set<string>();
+// The approved bot-tool calls this process has taken on running (see
+// ApprovalClaims).
+const approvalClaims = new ApprovalClaims();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -134,16 +129,10 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    offerRealmFileRead = false,
-    offerUrlRead = false,
+    botTools: Tool[] = [],
   ) {
     return this.openai.chat.completions.stream(
-      buildChatCompletionRequest(
-        prompt,
-        senderMatrixUserId,
-        offerRealmFileRead,
-        offerUrlRead,
-      ),
+      buildChatCompletionRequest(prompt, senderMatrixUserId, botTools),
     );
   }
 
@@ -271,14 +260,12 @@ Common issues are:
           .getJoinedMembers()
           .filter((member) => member.userId !== aiBotUserId);
         let humanRoomMemberCount = humanRoomMembers.length;
-        let realmFileReadingAllowed =
-          assistant.delegatedUserRealmSessions.enabled &&
-          humanRoomMemberCount === 1;
-        // readUrl reads the public web and acts on no one's behalf, so it
-        // needs no delegation. It does need a single-human room: the bot
-        // starts the continuation turn from its own result event only when
-        // it can attribute that event to the room's one human (see below).
-        let urlReadingAllowed = humanRoomMemberCount === 1;
+        // The tools the bot runs itself that this room is offered; each
+        // tool decides from these facts (see lib/bot-tools).
+        let botTools = offeredBotTools({
+          humanMemberCount: humanRoomMemberCount,
+          realmDelegation: assistant.delegatedUserRealmSessions.enabled,
+        });
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -288,7 +275,7 @@ Common issues are:
         }
 
         // A continuation the bot triggered with the result event of a tool it
-        // runs itself (readRealmFile, readUrl) arrives with sender = the bot.
+        // runs itself (see lib/bot-tools) arrives with sender = the bot.
         // Re-attribute it to the single human in the room so the guard below
         // lets it through and all per-user logic (billing, the delegated
         // read's onBehalfOf, request.user) acts on the user's behalf rather
@@ -398,21 +385,15 @@ Common issues are:
         // re-triggers the bot for the continuation turn, and that re-trigger
         // has to acquire the room lock this handler holds — so fulfillment must
         // wait until the lock is free.
-        let pendingFulfillBotToolCalls: ReturnType<
-          typeof classifyToolCalls
-        >['botToolCalls'] = [];
+        let pendingFulfillBotToolCalls: ClassifiedToolCalls['botToolCalls'] =
+          [];
         let pendingFulfillRequestEventId: string | undefined;
         let pendingFulfillAgentId: string | undefined;
-        let pendingRealmOrigins: Set<string> = new Set();
-        let pendingReleasedReadUrls: ReturnType<
-          typeof readUrlCallsReleasedByApprovals
-        > = [];
+        let pendingReleasedCalls: ReleasedToolCall[] = [];
         let pendingReleasedAgentId: string | undefined;
-        // Whether a readUrl of a URL waits for the user's approval; known
-        // once the room's preapproved URLs are collected.
-        let readUrlNeedsApproval: (url: string) => boolean = () => true;
-        let readUrlRefusal: (url: string) => string | undefined = () =>
-          undefined;
+        // Each offered bot tool's state for this handler run, started once
+        // the room history is in hand.
+        let botToolTurns: Map<string, BotToolTurn> = new Map();
 
         try {
           log.info(
@@ -460,7 +441,7 @@ Common issues are:
             triggerCommandRequestId &&
             // Matched by event id, not by call: a call can already have
             // another result in the fetch (the user's approval of a held
-            // readUrl) while this one is still missing.
+            // bot-tool call) while this one is still missing.
             !eventList.some((e: any) => e.event_id === event.getId())
           ) {
             eventList.push({
@@ -488,35 +469,33 @@ Common issues are:
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
 
-          // Read every held readUrl call the user has approved and the bot
-          // hasn't read yet, whatever event this handler runs for: an
-          // approval whose own handler was stood down for a newer event is
-          // picked up here. Claimed in-process so an approval that lands while
-          // an earlier read of the same call is in flight doesn't read it
-          // again. The reads run after the room lock is released; each
-          // result starts the continuation as any bot tool result does.
-          if (urlReadingAllowed) {
-            // A claim lasts until the call's outcome is in the room.
-            let settled = settledToolCallIds(eventList);
-            for (let id of claimedReadUrlCallIds) {
-              if (settled.has(id)) {
-                claimedReadUrlCallIds.delete(id);
-              }
-            }
-            pendingReleasedReadUrls = readUrlCallsReleasedByApprovals(
+          if (botTools.length > 0) {
+            botToolTurns = await startBotToolTurns(botTools, {
+              humanMemberCount: humanRoomMemberCount,
+              realmDelegation: assistant.delegatedUserRealmSessions.enabled,
+              history: eventList,
+              aiBotUserId,
+              client,
+              onBehalfOf: senderMatrixUserId,
+              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
+            });
+          }
+          // Run every held bot-tool call the user has approved and the bot
+          // hasn't run yet, whatever event this handler runs for: an approval
+          // whose own handler was stood down for a newer event is picked up
+          // here. Claimed in-process so an approval that lands while an
+          // earlier run of the same call is in flight doesn't run it again.
+          // The runs happen after the room lock is released; each result
+          // starts the continuation as any bot tool result does.
+          pendingReleasedCalls = approvalClaims.claim(
+            eventList,
+            releasedToolCalls(
               eventList,
               aiBotUserId,
-            ).filter(
-              (released) => !claimedReadUrlCallIds.has(released.call.id),
-            );
-            for (let released of pendingReleasedReadUrls) {
-              claimedReadUrlCallIds.add(released.call.id);
-            }
-            if (pendingReleasedReadUrls.length > 0) {
-              pendingReleasedAgentId = agentId;
-              pendingRealmOrigins = knownRealmOrigins(eventList, aiBotUserId);
-            }
-          }
+              new Set(botToolTurns.keys()),
+            ),
+          );
+          pendingReleasedAgentId = agentId;
           // An approval is not a turn of its own (getShouldRespond ignores
           // it), so its handler stops here.
           if (isApprovalResult({ content: event.getContent() })) {
@@ -578,29 +557,13 @@ Common issues are:
             );
             responder.responseState.setAllowedToolNames([
               ...(promptParts.tools?.map((tool) => tool.function.name) ?? []),
-              // readRealmFile is offered separately (in getResponse), not via
-              // promptParts.tools, so allow it explicitly when this room may use
-              // it — otherwise the surfaced tool call would be filtered out.
-              ...(realmFileReadingAllowed ? [READ_REALM_FILE_TOOL_NAME] : []),
-              ...(urlReadingAllowed ? [READ_URL_TOOL_NAME] : []),
+              // Bot tools are offered separately (in getResponse), not via
+              // promptParts.tools, so allow the ones this room is offered
+              // explicitly — otherwise their surfaced calls would be filtered
+              // out.
+              ...botTools.map((tool) => tool.name),
             ]);
-            if (urlReadingAllowed) {
-              let preapproved = await collectPreapprovedUrls(
-                eventList,
-                aiBotUserId,
-                (file) => downloadFile(client, file as SerializedFileDef),
-              );
-              // A URL the room gave is read; a composed one carrying
-              // encoded data is refused outright; any other composed URL
-              // waits for the user.
-              readUrlNeedsApproval = (url) =>
-                !preapproved.has(url) && !carriesEncodedData(url);
-              readUrlRefusal = (url) =>
-                !preapproved.has(url) && carriesEncodedData(url)
-                  ? encodedDataRefusal(url)
-                  : undefined;
-              responder.setReadUrlApproval(readUrlNeedsApproval);
-            }
+            responder.setBotToolTurns(botToolTurns);
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -705,8 +668,7 @@ Common issues are:
               .getResponse(
                 promptParts,
                 senderMatrixUserId,
-                realmFileReadingAllowed,
-                urlReadingAllowed,
+                botTools.map((tool) => tool.definition),
               )
               .on('chunk', async (chunk, snapshot) => {
                 log.info(`[${eventId}] Received chunk %s`, chunk.id);
@@ -786,22 +748,13 @@ Common issues are:
             let { botToolCalls } = message
               ? classifyToolCalls(message)
               : { botToolCalls: [] };
-            // Only the bot tools this room was offered are run, and a readUrl
-            // held for approval waits for it.
-            botToolCalls = botToolCalls.filter((call) => {
-              if (
+            // Only the bot tools this room was offered are run, and a call
+            // held for the user's approval waits for it.
+            botToolCalls = botToolCalls.filter(
+              (call) =>
                 call.type === 'function' &&
-                call.function.name === READ_URL_TOOL_NAME
-              ) {
-                let url = urlFromReadUrlArguments(call.function.arguments);
-                return (
-                  urlReadingAllowed &&
-                  url !== undefined &&
-                  !readUrlNeedsApproval(url)
-                );
-              }
-              return realmFileReadingAllowed;
-            });
+                (botToolTurns.get(call.function.name)?.runsNow(call) ?? false),
+            );
             if (botToolCalls.length > 0 && responder.responseEventId) {
               // Defer fulfillment until after the room lock is released
               // (see the finally below): fulfilling posts a result event
@@ -810,7 +763,6 @@ Common issues are:
               pendingFulfillBotToolCalls = botToolCalls;
               pendingFulfillRequestEventId = responder.responseEventId;
               pendingFulfillAgentId = agentId;
-              pendingRealmOrigins = knownRealmOrigins(eventList, aiBotUserId);
             }
           } catch (error) {
             // Aborting the runner always surfaces as APIUserAbortError, but
@@ -939,59 +891,40 @@ Common issues are:
           // continuation turn; that re-trigger acquires the room lock this
           // handler just released. Fulfilling here (rather than inside the
           // lock) is what lets the continuation proceed.
-          for (let released of pendingReleasedReadUrls) {
-            let [outcome] = await fulfillReadUrlCalls([released.call as any], {
-              client,
-              roomId: room.roomId,
-              requestEventId: released.requestEventId,
-              agentId: pendingReleasedAgentId,
-              readOptions: {
-                realmOrigins: pendingRealmOrigins,
-                realmFileReadingAllowed,
-              },
-            });
+          for (let released of pendingReleasedCalls) {
+            let [outcome] =
+              (await botToolTurns
+                .get(released.toolName)
+                ?.fulfill([released.call], {
+                  client,
+                  roomId: room.roomId,
+                  requestEventId: released.requestEventId,
+                  agentId: pendingReleasedAgentId,
+                })) ?? [];
             // A result that never reached the room leaves the call to be
-            // read on a later run.
+            // run on a later handler run.
             if (!outcome?.published) {
-              claimedReadUrlCallIds.delete(released.call.id);
+              approvalClaims.release(released.call.id);
             }
           }
           if (
             pendingFulfillRequestEventId &&
             pendingFulfillBotToolCalls.length > 0
           ) {
-            let isUrlRead = (
-              call: (typeof pendingFulfillBotToolCalls)[number],
-            ) =>
-              call.type === 'function' &&
-              call.function.name === READ_URL_TOOL_NAME;
-            let realmFileReads = pendingFulfillBotToolCalls.filter(
-              (call) => !isUrlRead(call),
-            );
-            let urlReads = pendingFulfillBotToolCalls.filter(isUrlRead);
-            if (realmFileReads.length > 0) {
-              await fulfillReadRealmFileCalls(realmFileReads, {
-                client,
-                roomId: room.roomId,
-                requestEventId: pendingFulfillRequestEventId,
-                agentId: pendingFulfillAgentId,
-                onBehalfOf: senderMatrixUserId,
-                delegatedUserRealmSessions:
-                  assistant.delegatedUserRealmSessions,
-              });
-            }
-            if (urlReads.length > 0) {
-              await fulfillReadUrlCalls(urlReads, {
-                client,
-                roomId: room.roomId,
-                requestEventId: pendingFulfillRequestEventId,
-                agentId: pendingFulfillAgentId,
-                refusal: readUrlRefusal,
-                readOptions: {
-                  realmOrigins: pendingRealmOrigins,
-                  realmFileReadingAllowed,
-                },
-              });
+            // Each tool runs its own calls, in the registry's order.
+            for (let [toolName, turn] of botToolTurns) {
+              let calls = pendingFulfillBotToolCalls.filter(
+                (call) =>
+                  call.type === 'function' && call.function.name === toolName,
+              );
+              if (calls.length > 0) {
+                await turn.fulfill(calls, {
+                  client,
+                  roomId: room.roomId,
+                  requestEventId: pendingFulfillRequestEventId,
+                  agentId: pendingFulfillAgentId,
+                });
+              }
             }
           }
         }

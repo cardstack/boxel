@@ -1083,10 +1083,6 @@ export default class ToolService extends Service {
         command.message.roomId,
         command.toolRequest.id,
       ) ?? command.eventId;
-    // The request's own arguments: `command.arguments` nests top-level
-    // fields under `attributes` for host tools, which a bot call has none
-    // of.
-    let url = command.toolRequest.arguments?.url;
     await this.matrixService.sendToolResultEvent({
       roomId: command.message.roomId,
       invokedToolFromEventId,
@@ -1095,9 +1091,9 @@ export default class ToolService extends Service {
         ? { status: 'approved' as const }
         : {
             status: 'invalid' as const,
-            failureReason: `The user declined to let you read ${
-              typeof url === 'string' ? url : 'this URL'
-            }. Do not request it again unless the user asks you to.`,
+            failureReason: `The user declined this call (${
+              command.description ?? command.name ?? 'a tool call'
+            }). Do not request it again unless the user asks you to.`,
           }),
       context: await this.operatorModeStateService.getSummaryForAIBot(),
     });

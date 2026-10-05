@@ -15,12 +15,19 @@ import {
   carriesEncodedData,
   collectPreapprovedUrls,
   readUrlTool,
-  readUrlCallsReleasedByApprovals,
   urlsInText,
   READ_URL_TOOL_NAME,
-} from '../lib/read-url.ts';
+} from '../lib/bot-tools/read-url/read.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
+import { releasedToolCalls } from '../lib/bot-tools/approval.ts';
+import type { BotToolTurn } from '../lib/bot-tools/index.ts';
+
+const BOT_TOOL_NAMES = new Set([READ_URL_TOOL_NAME]);
+const readUrlCallsReleasedByApprovals = (
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+) => releasedToolCalls(history, aiBotUserId, BOT_TOOL_NAMES);
 
 const BOT = '@aibot:localhost';
 const USER = '@user:localhost';
@@ -216,10 +223,14 @@ module('readUrl approval', () => {
     ];
     let released = readUrlCallsReleasedByApprovals(history, BOT);
     assert.deepEqual(
-      released.map((entry) => [entry.call.id, entry.requestEventId]),
+      released.map((entry) => [
+        entry.toolName,
+        entry.call.id,
+        entry.requestEventId,
+      ]),
       [
-        ['held-a', '$bot'],
-        ['held-b', '$bot'],
+        [READ_URL_TOOL_NAME, 'held-a', '$bot'],
+        [READ_URL_TOOL_NAME, 'held-b', '$bot'],
       ],
       'an approval stood down for a newer event is still honored',
     );
@@ -305,10 +316,16 @@ module('readUrl approval', () => {
           arguments: JSON.stringify({ url }),
         },
       }) as ChatCompletionMessageFunctionToolCall;
-    let needsApproval = (url: string) => url !== 'https://given.example/';
+    let turn: BotToolTurn = {
+      needsApproval: (argumentsJson) =>
+        !argumentsJson.includes('https://given.example/'),
+      runsNow: () => false,
+      fulfill: async () => [],
+    };
+    let botToolTurns = new Map([[READ_URL_TOOL_NAME, turn]]);
 
     let held = toCommandRequest(call('https://other.example/?q=1'), {
-      readUrlNeedsApproval: needsApproval,
+      botToolTurns,
     });
     assert.true(held.approvalRequired);
     assert.strictEqual(held.executedBy, 'ai-bot');
@@ -318,7 +335,7 @@ module('readUrl approval', () => {
     );
 
     let given = toCommandRequest(call('https://given.example/'), {
-      readUrlNeedsApproval: needsApproval,
+      botToolTurns,
     });
     assert.strictEqual(given.approvalRequired, undefined);
   });

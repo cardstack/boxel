@@ -14,7 +14,7 @@ import {
   READ_URL_MAX_REDIRECTS,
   READ_URL_MAX_TEXT_BYTES,
   type ReadUrlRequestInit,
-} from '../lib/read-url.ts';
+} from '../lib/bot-tools/read-url/read.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';

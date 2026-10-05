@@ -10,7 +10,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
 } from '@cardstack/base/matrix-event';
-import { parseLenientJson } from './lenient-json.ts';
+import { parseLenientJson } from '../../lenient-json.ts';
 import {
   getToolRequests,
   isToolResultEventType,
@@ -547,99 +547,6 @@ export async function collectPreapprovedUrls(
 // read or declined is never released again. A human's approval of anything
 // else (a call not held, a host tool) releases nothing, and the bot's own
 // events never approve. Returns each call with the bot message carrying it.
-// The tool calls in `history` that have an outcome: a result other than a
-// user's approval.
-export function settledToolCallIds(
-  history: DiscreteMatrixEvent[],
-): Set<string> {
-  let settled = new Set<string>();
-  for (let event of history) {
-    let content = event.content as Record<string, any>;
-    if (
-      isToolResultEventType(event.type) &&
-      typeof content?.commandRequestId === 'string' &&
-      content?.['m.relates_to']?.key !== 'approved'
-    ) {
-      settled.add(content.commandRequestId);
-    }
-  }
-  return settled;
-}
-
-export function readUrlCallsReleasedByApprovals(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): {
-  call: {
-    id: string;
-    type: 'function';
-    function: { name: string; arguments: string };
-  };
-  requestEventId: string;
-}[] {
-  let approved = new Set<string>();
-  let settled = new Set<string>();
-  for (let event of history) {
-    if (!isToolResultEventType(event.type)) {
-      continue;
-    }
-    let content = event.content as Record<string, any>;
-    let callId = content?.commandRequestId;
-    if (typeof callId !== 'string') {
-      continue;
-    }
-    if (content?.['m.relates_to']?.key === 'approved') {
-      if (event.sender && event.sender !== aiBotUserId) {
-        approved.add(callId);
-      }
-    } else {
-      settled.add(callId);
-    }
-  }
-  let released: ReturnType<typeof readUrlCallsReleasedByApprovals> = [];
-  for (let event of history) {
-    if (
-      event.type !== 'm.room.message' ||
-      event.sender !== aiBotUserId ||
-      !event.event_id
-    ) {
-      continue;
-    }
-    for (let request of getToolRequests<{
-      id?: string;
-      name?: string;
-      arguments?: unknown;
-      approvalRequired?: boolean;
-    }>(event.content as Record<string, any>) ?? []) {
-      if (
-        !request?.id ||
-        request.name !== READ_URL_TOOL_NAME ||
-        request.approvalRequired !== true ||
-        !approved.has(request.id) ||
-        settled.has(request.id) ||
-        released.some((entry) => entry.call.id === request.id)
-      ) {
-        continue;
-      }
-      released.push({
-        call: {
-          id: request.id,
-          type: 'function',
-          function: {
-            name: READ_URL_TOOL_NAME,
-            arguments:
-              typeof request.arguments === 'string'
-                ? request.arguments
-                : JSON.stringify(request.arguments ?? {}),
-          },
-        },
-        requestEventId: event.event_id,
-      });
-    }
-  }
-  return released;
-}
-
 // A run of encoded-looking data in a URL the model composed: a path segment,
 // query key or value, or fragment holding 32 or more base64 or hex
 // characters in a row, mixing letters and digits. Each part is checked on its
