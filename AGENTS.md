@@ -144,7 +144,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 ### packages/realm-server
 
-- A test module that brings up realms indexes them once per module, into a template database each test starts from, not from scratch before every test. Load the `realm-server-test-setup` skill before writing or copying a module that brings up realms: it says which helper to use.
+- Unless a test module is testing the boot index itself (indexing from an empty database, `fullIndexOnStartup`, or a missing index), it indexes its realms once per module, into a template database each test starts from, not from scratch before every test. Load the `realm-server-test-setup` skill before writing or copying a module that brings up realms: it says which helper to use, and when to stay uncached.
 - Tests require the realm-server to be running:
   `pnpm start:all`
 - Run full test suite:
