@@ -48,6 +48,7 @@ jobs:
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       pretui: ${{ steps.filter.outputs.pretui }}
       choreo: ${{ steps.filter.outputs.choreo }}
+      choreo-addon: ${{ steps.filter.outputs.choreo-addon }}
       glimmer-motion: ${{ steps.filter.outputs.glimmer-motion }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
@@ -137,6 +138,12 @@ jobs:
               - 'packages/choreo-gallery/**'
               - 'packages/choreo-player/**'
               - 'packages/choreo-test-app/**'
+              - 'packages/glimmer-motion/**'
+            # choreo builds on glimmer-motion's extension point, so a
+            # glimmer-motion change runs choreo's suite too.
+            choreo-addon:
+              - *shared
+              - 'packages/choreo/**'
               - 'packages/glimmer-motion/**'
             glimmer-motion:
               - *shared
@@ -573,8 +580,25 @@ jobs:
         run: pnpm test
         working-directory: packages/glimmer-motion
 
-  # The QUnit suite for Choreo, film and the gallery demos, which lives in
-  # choreo-test-app.
+  # choreo's own QUnit suite (Choreo and film), which compiles choreo and
+  # glimmer-motion from source.
+  choreo-addon-test:
+    name: Choreo Addon Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo-addon == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-addon-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo
+
+  # The QUnit suite for the gallery demos, which lives in choreo-test-app.
   choreo-test-app-test:
     name: Choreo Test App Tests
     needs: [change-check]

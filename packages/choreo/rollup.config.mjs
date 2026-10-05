@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
@@ -43,10 +44,14 @@ export default {
     },
 
     // Development niceties only (template colocation, decorators); it does
-    // not compile away ES modules. The config is babel.config.json.
+    // not compile away ES modules. It loads babel.publish.config.json;
+    // babel.config.mjs is the vite test harness's config.
     babel({
       extensions: ['.js', '.gjs', '.ts', '.gts'],
       babelHelpers: 'bundled',
+      configFile: fileURLToPath(
+        new URL('./babel.publish.config.json', import.meta.url),
+      ),
     }),
 
     // Ensure that .gjs/.gts files are properly integrated as Javascript

@@ -15,4 +15,17 @@ module.exports = {
     // would break the gesture.
     'no-pointer-down-event-binding': false,
   },
+  overrides: [
+    {
+      // Test fixtures bind gestures to plain elements, start drags on
+      // pointer down as the engine does, and set exact geometry with computed
+      // inline styles so measurements are deterministic. The leading ** also
+      // matches the absolute paths the pre-commit autofix passes.
+      files: ['**/tests/**'],
+      rules: {
+        'no-invalid-interactive': false,
+        'style-concatenation': false,
+      },
+    },
+  ],
 };
