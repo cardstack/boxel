@@ -41,6 +41,7 @@ module('Pretui | components/table', function (hooks) {
     let table = q('[data-test-pretui-table] table');
     assert.notOk(table.querySelector('caption'), 'no caption element');
     assert.notOk(table.hasAttribute('aria-label'), 'and no aria-label');
+    assert.notOk(table.hasAttribute('aria-labelledby'), 'and no aria-labelledby');
   });
 
   test('@caption renders a real caption as the first child of the table', async function (assert) {
@@ -125,5 +126,64 @@ module('Pretui | components/table', function (hooks) {
       assert.ok(table.querySelector('caption'), `${which}: the caption renders`);
       assert.notOk(table.hasAttribute('aria-label'), `${which}: and @label does not override it`);
     }
+  });
+
+  test('@labelledBy points the table at the on-screen element that names it', async function (assert) {
+    await render(
+      <template>
+        <h2 id='sla-targets-heading'>SLA targets</h2>
+        <Table @labelledBy='sla-targets-heading'>
+          <:head><tr><th scope='col'>Priority</th></tr></:head>
+          <:body><tr><th scope='row'>Urgent</th></tr></:body>
+        </Table>
+      </template>,
+    );
+    let table = q('[data-test-pretui-table] table');
+    assert.strictEqual(table.getAttribute('aria-labelledby'), 'sla-targets-heading', 'aria-labelledby lands on the table');
+    assert.strictEqual(
+      document.getElementById(table.getAttribute('aria-labelledby') ?? '')?.textContent?.trim(),
+      'SLA targets',
+      'and resolves to the visible heading',
+    );
+    assert.notOk(table.hasAttribute('aria-label'), 'with no aria-label beside it');
+    assert.notOk(table.querySelector('caption'), 'and no caption');
+    assert.notOk(q('[data-test-pretui-table]').hasAttribute('aria-labelledby'), 'the wrapper stays unnamed');
+  });
+
+  test('a caption wins over @labelledBy', async function (assert) {
+    await render(
+      <template>
+        <h2 id='lots-heading'>Lots</h2>
+        <Table @caption='Visible name' @labelledBy='lots-heading' data-test-arg>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+        <Table @labelledBy='lots-heading' data-test-block>
+          <:caption>Block name</:caption>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    for (let which of ['arg', 'block']) {
+      let table = q(`[data-test-${which}] table`);
+      assert.ok(table.querySelector('caption'), `${which}: the caption renders`);
+      assert.notOk(table.hasAttribute('aria-labelledby'), `${which}: and @labelledBy does not override it`);
+    }
+  });
+
+  test('@labelledBy wins over @label', async function (assert) {
+    await render(
+      <template>
+        <h2 id='lots-heading'>Lots</h2>
+        <Table @labelledBy='lots-heading' @label='Hidden name'>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    let table = q('[data-test-pretui-table] table');
+    assert.strictEqual(table.getAttribute('aria-labelledby'), 'lots-heading', 'the on-screen name is used');
+    assert.notOk(table.hasAttribute('aria-label'), 'and the typed-in name is dropped, so the two cannot disagree');
   });
 });
