@@ -64,7 +64,8 @@ behavior of the upstream modules beside it.
 | `src/reorder/item.gts`  | `components/Reorder/Item.tsx`                                                                                                                                            |
 | `src/scroll.ts`         | `value/use-scroll.ts`, `utils/use-in-view.ts`                                                                                                                            |
 
-The test-app carries the ports of Motion's Jest suites and Cypress fixtures that pin the fidelity.
+glimmer-motion's own suite (`tests/`, run with `pnpm test`) carries the ports of Motion's Jest suites and
+Cypress fixtures that pin the fidelity.
 
 ## Deviations
 
@@ -88,11 +89,12 @@ Run `pnpm install` after it.
 
 Reviewing a bump PR:
 
-1. **CI.** Red CI is the signal. The Choreo Tests and Choreo Test App Tests jobs run the ported fidelity
-   suites, Lint runs `ember-tsc` over the choreo packages, and glimmer-motion's build fails if an inlined
-   module imports React or a framer-motion path other than `framer-motion/dom`. A PR opened with the
-   workflow's `GITHUB_TOKEN` starts no `pull_request` workflows, so the workflow dispatches `ci.yaml` and
-   `ci-lint.yaml` on the branch itself. A push to the branch runs the rest.
+1. **CI.** Red CI is the signal. The Glimmer Motion Tests job runs the ported fidelity suites, the Choreo
+   Tests and Choreo Test App Tests jobs run the choreo suites, Lint runs `ember-tsc` over the choreo
+   packages, and glimmer-motion's build fails if an inlined module imports React or a framer-motion path
+   other than `framer-motion/dom`. A PR opened with the workflow's `GITHUB_TOKEN` starts no
+   `pull_request` workflows, so the workflow dispatches `ci.yaml` and `ci-lint.yaml` on the branch
+   itself. A push to the branch runs the rest.
 2. **The PR body.** It lists every inlined, adapted or ported module whose TypeScript changed between the
    two releases, with diffs, read from the `sourcesContent` of framer-motion's `dist/es/**/*.mjs.map`.
    - For a changed entry module, compare its exports with the declarations in

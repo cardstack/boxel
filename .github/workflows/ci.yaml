@@ -48,6 +48,7 @@ jobs:
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       pretui: ${{ steps.filter.outputs.pretui }}
       choreo: ${{ steps.filter.outputs.choreo }}
+      glimmer-motion: ${{ steps.filter.outputs.glimmer-motion }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
@@ -136,6 +137,9 @@ jobs:
               - 'packages/choreo-gallery/**'
               - 'packages/choreo-player/**'
               - 'packages/choreo-test-app/**'
+              - 'packages/glimmer-motion/**'
+            glimmer-motion:
+              - *shared
               - 'packages/glimmer-motion/**'
             matrix:
               - *shared
@@ -549,7 +553,24 @@ jobs:
         run: pnpm run test:theater-sizing
         working-directory: packages/choreo-gallery
 
-  # The QUnit suite for glimmer-motion, Choreo and film, which lives in
+  # glimmer-motion's own QUnit suite, which compiles the package from source.
+  glimmer-motion-test:
+    name: Glimmer Motion Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.glimmer-motion == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: glimmer-motion-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/glimmer-motion
+
+  # The QUnit suite for Choreo, film and the gallery demos, which lives in
   # choreo-test-app.
   choreo-test-app-test:
     name: Choreo Test App Tests

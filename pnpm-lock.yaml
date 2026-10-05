@@ -2730,6 +2730,9 @@ importers:
       '@babel/core':
         specifier: 'catalog:'
         version: 7.29.7(supports-color@8.1.1)
+      '@babel/plugin-transform-runtime':
+        specifier: ^7.29.0
+        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@babel/plugin-transform-typescript':
         specifier: 'catalog:'
         version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
@@ -2748,6 +2751,18 @@ importers:
       '@embroider/addon-dev':
         specifier: ^8.0.0
         version: 8.3.0(@glint/template@1.7.7)(rollup@4.62.0)(supports-color@8.1.1)
+      '@embroider/config-meta-loader':
+        specifier: ^1.0.0
+        version: 1.0.0
+      '@embroider/core':
+        specifier: ^4.6.3
+        version: 4.6.7(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/macros':
+        specifier: ^1.20.2
+        version: 1.21.1(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)
+      '@embroider/vite':
+        specifier: ^1.7.10
+        version: 1.7.13(@embroider/core@4.6.7(@glint/template@1.7.7)(supports-color@8.1.1))(@glint/template@1.7.7)(supports-color@8.1.1)(vite@6.4.3(@types/node@26.1.2)(lightningcss@1.32.0)(terser@5.49.0)(yaml@2.9.0))
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1(supports-color@8.1.1)
@@ -2766,6 +2781,9 @@ importers:
       '@rollup/plugin-babel':
         specifier: 'catalog:'
         version: 6.1.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/babel__core@7.20.5)(rollup@4.62.0)(supports-color@8.1.1)
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.14
       babel-plugin-ember-template-compilation:
         specifier: 'catalog:'
         version: 2.4.1
@@ -2775,9 +2793,15 @@ importers:
       ember-modifier:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      ember-qunit:
+        specifier: 'catalog:'
+        version: 9.1.0(@ember/test-helpers@4.0.5(@babel/core@7.29.7(supports-color@8.1.1))(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1(supports-color@8.1.1))(rsvp@4.8.5)(supports-color@8.1.1)
+      ember-strict-application-resolver:
+        specifier: ^0.1.0
+        version: 0.1.1(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
@@ -2787,6 +2811,9 @@ importers:
       eslint:
         specifier: ^9.39.4
         version: 9.39.5(supports-color@8.1.1)
+      motion:
+        specifier: 'catalog:'
+        version: 13.4.6
       motion-dom:
         specifier: 13.4.5
         version: 13.4.5
@@ -2799,12 +2826,24 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 2.1.6(prettier@3.8.4)(supports-color@8.1.1)
+      qunit:
+        specifier: 'catalog:'
+        version: 2.26.0
+      qunit-dom:
+        specifier: 'catalog:'
+        version: 3.5.1
       rollup:
         specifier: 'catalog:'
         version: 4.62.0
+      testem:
+        specifier: 'catalog:'
+        version: 3.20.1(@babel/core@7.29.7(supports-color@8.1.1))(debug@4.4.3(supports-color@8.1.1))(ejs@3.1.10)(handlebars@4.7.9)(supports-color@8.1.1)(underscore@1.13.8)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 6.4.3(@types/node@26.1.2)(lightningcss@1.32.0)(terser@5.49.0)(yaml@2.9.0)
 
   packages/host:
     dependencies:
