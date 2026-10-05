@@ -1656,7 +1656,7 @@ export class LayerManager
           gap: 4px;
           /* min-width: 0 with the ellipsis below is the fix for the flex
              overflow that otherwise blows the row out on a long name
-             (Appendix O.8). */
+             . */
           min-width: 0;
           padding-inline-start: calc(
             var(--pretui-lm-indent, 14px) * var(--pretui-lm-level, 0)
@@ -1696,7 +1696,7 @@ export class LayerManager
 
         /* The twisty is a CSS triangle rather than a glyph, so it rotates
            rather than swapping — one element, two states, no reflow
-           (Appendix O.11). */
+           . */
         .pretui-lm-twisty {
           flex: 0 0 auto;
           width: 10px;

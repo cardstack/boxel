@@ -187,7 +187,7 @@ export function barCarry(
  * 4. **A disabled top-level item has no menu** (`ctx.hasMenu` returns false),
  *    so Down/Enter do nothing on it and the carry rule closes rather than
  *    opens. It stays focusable and announced — `aria-disabled`, never the
- *    `disabled` attribute (Appendix N.5).
+ * `disabled` attribute.
  */
 export function menubarKey(
   state: BarState,

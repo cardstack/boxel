@@ -1007,7 +1007,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           display: flex;
           gap: 2px;
         }
-        /* Concentric radii (Appendix O.9): the arrows sit inside the shell at an
+        /* Concentric radii: the arrows sit inside the shell at an
            inset, so their corner resolves against the shell's rather than
            fighting it. */
         .pretui-period-arrow {
@@ -1034,7 +1034,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           background: var(--hover, color-mix(in oklch, var(--foreground) 7%, transparent));
           color: var(--foreground);
         }
-        /* Appendix O.4 — one consistent press across everything pressable. */
+        /* One consistent press across everything pressable. */
         .pretui-period-arrow:active {
           transform: scale(0.96);
         }

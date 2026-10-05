@@ -15,8 +15,7 @@
 // indexer. Media Chrome survived vendoring because it has that shim; this
 // library does not.
 //
-// WHAT UPSTREAM GOT WRONG, AND WHAT IS FIXED HERE (Appendix K's
-// "better than the inspiration" is an acceptance test, so this is specific):
+// WHAT UPSTREAM GOT WRONG, AND WHAT IS FIXED HERE (specifically):
 //
 //  1. THE BROWSE GRID HAS NO KEYBOARD PATH. Upstream renders every emoji in a
 //     category as a bare <button> with no tabindex management, so a category

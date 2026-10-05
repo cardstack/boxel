@@ -32,6 +32,10 @@ const VERBATIM_COPIED_TREES = [
   '/packages/pretui/zxcvbn/index.js',
   '/packages/pretui/sigpad/index.js',
   '/packages/pretui/emoji-data/data.ts',
+  '/packages/pretui/gridstack/index.js',
+  '/packages/pretui/media-chrome/index.js',
+  '/packages/pretui/surfaces/canvas/index.js',
+  '/packages/pretui/surfaces/layout/index.js',
 ];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');

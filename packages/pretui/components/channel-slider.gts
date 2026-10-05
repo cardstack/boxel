@@ -53,7 +53,7 @@ export interface ChannelSliderSignature {
 /**
  * How a slider paints its track.
  *
- * This used to be a raw CSS string, which made `@track` a caller-supplied
+ * It is not a raw CSS string: that would make `@track` a caller-supplied
  * value interpolated straight into an inline style — the sharpest hazard in
  * the whole colour surface, since a slider track is a `background` and a
  * `background` is where `url(…)` wants to live.

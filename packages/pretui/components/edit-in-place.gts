@@ -59,7 +59,7 @@ import { focusInnerOnToken, focusOnToken } from '../internal/structure-flow';
 //     for an empty value, leaving no way in; `@placeholder` renders a muted
 //     prompt that is part of the button's target.
 //
-// Deliberately NOT generic. Appendix L's `DataComponent` note applies: a type
+// Deliberately NOT generic, for the reason DataComponent gives: a type
 // parameter inside `Args` makes Glint infer `{}` at every call site. The
 // draft is a `string`, which is what every native editor produces and what
 // every kit input speaks; a caller with a non-string domain value formats on
@@ -454,7 +454,7 @@ export class EditInPlace extends Component<EditInPlaceSignature> {
           cursor: pointer;
         }
         /* min-width: 0 on every flex child — the fix for the overflow blowout
-           a long value otherwise causes (Appendix O). */
+           a long value otherwise causes. */
         .pretui-eip-display {
           min-width: 0;
           overflow: hidden;
