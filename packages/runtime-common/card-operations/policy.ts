@@ -27,7 +27,9 @@ import {
   type ReadableType,
 } from './policy-reach.ts';
 import {
+  ANONYMOUS_ELIGIBLE_OPERATIONS,
   isDefinitionFreeBaseOperation,
+  isWrite,
   linkStrategyOf,
   readLinkStrategyOf,
   policyIssueSeverity,
@@ -78,6 +80,10 @@ export interface CompiledRealmPolicy {
   // Set on a draft compiled for an explain (see `compileDraftPolicy`), which
   // no realm holds in force.
   draft?: true;
+  // The operations some live grant opens to callers who aren't signed in.
+  // Absent when no grant does, which is what lets a realm answer such a caller
+  // without judging anything: it reads this, and nothing else of the policy.
+  anonymous?: { operations: string[] };
 }
 
 export interface CompiledPolicyRule {
@@ -96,6 +102,11 @@ export interface CompiledOperationGrant {
   path: string;
   // Absent for a grant with no condition.
   where?: CompiledPolicyPredicate;
+  // Set on a grant that also admits callers who aren't signed in. A write
+  // grant names the key, in the governed realm's `realm.json` settings, whose
+  // value is the user its writes are made as. The realm resolves it on every
+  // invocation, so the policy names a setting and never a user.
+  anonymous?: { actingUserKey?: string };
   // For a grant on a query, the search filter the grant admits: the cards of
   // the rule's type that its predicate holds for, as a wire filter template
   // whose `{ $ref: 'actor' }` markers a search fills in with the caller. A
@@ -141,6 +152,10 @@ export interface CompiledPolicyPredicate {
   // reads the stored source alone is judged against the stored source, and
   // pays no index read.
   snapshot: boolean;
+  // Set when the predicate calls `actor()`. A caller who isn't signed in has
+  // no actor, so such a predicate never holds for one, and is not evaluated
+  // for one either.
+  readsActor?: true;
 }
 
 // The type every policy card adopts from. It is defined in the catalog realm,
@@ -816,7 +831,13 @@ async function compileDocument(
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message, severity: policyIssueSeverity(code) });
   let compiled = (): Omit<Compilation, 'row'> => ({
-    compiled: { card, version: undefined, rules, issues },
+    compiled: {
+      card,
+      version: undefined,
+      rules,
+      issues,
+      ...anonymousSummary(rules),
+    },
     definitions,
     inputs,
     subtypes,
@@ -1099,6 +1120,37 @@ async function compileDocument(
         );
         continue;
       }
+      let anonymous: CompiledOperationGrant['anonymous'];
+      if (grant?.anonymous === true) {
+        if (
+          granted.base !== operation ||
+          !ANONYMOUS_ELIGIBLE_OPERATIONS.includes(granted.base)
+        ) {
+          issue(
+            'anonymous-not-base-operation',
+            `${grantPath}.anonymous`,
+            `\`${operation}\` can't be opened to callers who aren't signed in: only ${ANONYMOUS_ELIGIBLE_OPERATIONS.map(
+              (name) => `\`${name}\``,
+            ).join(
+              ', ',
+            )} can, under their own names, and a custom operation or a named query can't`,
+          );
+          continue;
+        }
+        let actingUserKey =
+          typeof grant.actingUser === 'string' && grant.actingUser.trim()
+            ? grant.actingUser.trim()
+            : undefined;
+        if (isWrite(granted.base) && !actingUserKey) {
+          issue(
+            'anonymous-write-without-acting-user',
+            `${grantPath}.actingUser`,
+            `\`${operation}\` writes, so a grant opening it to callers who aren't signed in has to name the setting in the realm's \`realm.json\` whose value is the user those writes are made as, in \`actingUser\``,
+          );
+          continue;
+        }
+        anonymous = actingUserKey ? { actingUserKey } : {};
+      }
       let where = readPredicate(grant?.where);
       if (where === 'malformed') {
         issue(
@@ -1111,7 +1163,7 @@ async function compileDocument(
       if (!where) {
         grants.push(
           await withFilter(
-            { operation, path: grantPath },
+            { operation, path: grantPath, ...(anonymous ? { anonymous } : {}) },
             granted.base,
             undefined,
             resolved,
@@ -1169,7 +1221,9 @@ async function compileDocument(
               source: where.source,
               canonical: outcome.canonical,
               snapshot,
+              ...(outcome.readsActor ? { readsActor: true as const } : {}),
             },
+            ...(anonymous ? { anonymous } : {}),
           },
           granted.base,
           { body: outcome.body, snapshot },
@@ -1491,6 +1545,25 @@ function safeURL(
   return attempt(() => env.toURL(identifier).href);
 }
 
+// The operations the policy's live grants open to callers who aren't signed
+// in, recorded on the compiled policy when there are any. A query grant that
+// has no search filter admits no search, so it opens nothing.
+function anonymousSummary(
+  rules: CompiledPolicyRule[],
+): Pick<CompiledRealmPolicy, 'anonymous'> {
+  let operations = new Set<string>();
+  for (let rule of rules) {
+    for (let grant of rule.grants) {
+      if (grant.anonymous && (grant.operation !== 'query' || grant.filter)) {
+        operations.add(grant.operation);
+      }
+    }
+  }
+  return operations.size > 0
+    ? { anonymous: { operations: [...operations].sort() } }
+    : {};
+}
+
 // What `fn` answers, or undefined when it throws. Compiling records a problem
 // with the policy as an issue rather than throwing it, and a value that cannot
 // be resolved is a problem with the policy, so the step that needed it counts
@@ -1663,7 +1736,9 @@ type PredicateProblem = {
 
 async function compilePredicate(
   source: string,
-): Promise<{ canonical: string; body: unknown } | PredicateProblem> {
+): Promise<
+  { canonical: string; body: unknown; readsActor: boolean } | PredicateProblem
+> {
   let bxl = await loadBxl();
   let program;
   try {
@@ -1712,7 +1787,23 @@ async function compilePredicate(
       problem: `\`where\` matches only part of a value, so it could let in someone the grant doesn't mean to: ${calls}. To check whether a list includes the caller, use \`.list | any(. == actor())\`. To compare text, use \`==\`, or \`startswith\` or \`endswith\` with a fixed prefix or suffix`,
     };
   }
-  return { canonical: program.canonicalSource, body: program.body };
+  return {
+    canonical: program.canonicalSource,
+    body: program.body,
+    readsActor: callsActor(bxl, program.body),
+  };
+}
+
+// Whether a predicate calls `actor()` anywhere in it.
+function callsActor(bxl: BxlPolicyParser, body: unknown): boolean {
+  let found = false;
+  bxl.visitBxlAst(body, (node) => {
+    let { type, name } = node as { type?: unknown; name?: unknown };
+    if (type === 'call' && name === 'actor') {
+      found = true;
+    }
+  });
+  return found;
 }
 
 // BXL, and the shape of what this module asks of it.

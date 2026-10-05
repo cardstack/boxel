@@ -549,7 +549,32 @@ export type PolicyIssueCode =
   // draws the card's links whatever strategy the grant's document is served
   // under, so this is recorded independently of
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
-  | 'render-reaches-ungranted-type';
+  | 'render-reaches-ungranted-type'
+  // A grant that opts in to admitting callers who aren't signed in on an
+  // operation that isn't one of `ANONYMOUS_ELIGIBLE_OPERATIONS` as the type
+  // carries it: a custom operation, a named query, or anything else declared
+  // under its own name. The grant is left out.
+  | 'anonymous-not-base-operation'
+  // A grant that opts in to admitting callers who aren't signed in on a write,
+  // without naming the `realm.json` setting that says which user the write is
+  // made as. The grant is left out.
+  | 'anonymous-write-without-acting-user';
+
+// The operations a grant may open to callers who aren't signed in: the
+// grantable base operations, invoked under their own names. A custom operation
+// or a named query is a contract its author wrote for signed-in callers, and
+// stays one.
+export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
+  'read',
+  'readSource',
+  'query',
+  'create',
+  'update',
+  'delete',
+  'transform',
+  'appendContainsMany',
+  'appendLine',
+];
 
 // The codes that leave the part of the policy they are recorded against live.
 export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
