@@ -44,6 +44,10 @@ interface Signature {
   Args: {};
 }
 
+function fileName(path: LocalPath): string {
+  return path.split('/').pop() ?? path;
+}
+
 export default class FileChooserModal extends Component<Signature> {
   @tracked deferred?: Deferred<FileDef[] | undefined>;
   @tracked multiSelect = false;
@@ -51,6 +55,10 @@ export default class FileChooserModal extends Component<Signature> {
   // The realm `selectedFiles` are paths in, captured when a file is picked so
   // they resolve against that realm even if the dropdown has moved on since.
   private selectionRealm?: FileChooserRealm;
+  // Read out by a polite live region: in multi-select, focus stays on the
+  // tree while a file is toggled, so the toggle is otherwise silent.
+  @tracked private selectionAnnouncement = '';
+  @tracked private pickError?: string;
   @tracked fileTypeFilter?: CodeRef;
   @tracked fileFieldFilter?: Record<string, unknown>;
   @tracked fileTypeName?: string;
@@ -119,6 +127,12 @@ export default class FileChooserModal extends Component<Signature> {
   // `paths` are resolved against `selectedRealm`. `uploaded` holds files
   // already loaded by an upload; they are returned after the picked paths,
   // skipping any the paths already produced.
+  //
+  // A path whose file can't be loaded fails a single-select pick. In
+  // multi-select it is dropped from the selection and named in the footer,
+  // and the chooser stays open so the rest can still be added — unless an
+  // upload is confirming the pick, in which case the files that did load are
+  // returned.
   private pickTask = task(
     async (
       selectedRealm: FileChooserRealm | undefined,
@@ -126,6 +140,7 @@ export default class FileChooserModal extends Component<Signature> {
       uploaded: FileDef[],
     ) => {
       let deferred = this.deferred;
+      let keepOpen = false;
       try {
         let realmPaths = selectedRealm
           ? new RealmPaths(selectedRealm.id)
@@ -140,8 +155,13 @@ export default class FileChooserModal extends Component<Signature> {
             ),
           );
           let picked: FileDef[] = [];
+          let failedPaths: LocalPath[] = [];
           for (let [index, file] of loaded.entries()) {
-            if (isCardErrorJSONAPI(file)) {
+            if (!isCardErrorJSONAPI(file)) {
+              picked.push(file);
+            } else if (this.multiSelect) {
+              failedPaths.push(paths[index]!);
+            } else {
               deferred.reject(
                 new Error(
                   `file-chooser/modal: failed to load file meta for ${fileIds[index]}`,
@@ -149,7 +169,18 @@ export default class FileChooserModal extends Component<Signature> {
               );
               return;
             }
-            picked.push(file);
+          }
+          if (failedPaths.length && !uploaded.length) {
+            keepOpen = true;
+            this.selectedFiles = this.selectedFiles.filter(
+              (p) => !failedPaths.includes(p),
+            );
+            this.pickError = `Couldn't load ${failedPaths
+              .map(fileName)
+              .join(', ')}, so ${
+              failedPaths.length === 1 ? 'it was' : 'they were'
+            } removed from the selection.`;
+            return;
           }
           for (let file of uploaded) {
             if (!picked.some((p) => p.id === file.id)) {
@@ -165,7 +196,9 @@ export default class FileChooserModal extends Component<Signature> {
           deferred?.fulfill(undefined);
         }
       } finally {
-        this.resetState();
+        if (!keepOpen) {
+          this.resetState();
+        }
       }
     },
   );
@@ -173,13 +206,19 @@ export default class FileChooserModal extends Component<Signature> {
   @action
   private handleFileSelected(path: LocalPath, realm: FileChooserRealm) {
     this.selectionRealm = realm;
+    this.pickError = undefined;
     if (!this.multiSelect) {
       this.selectedFiles = [path];
-    } else if (this.selectedFiles.includes(path)) {
-      this.selectedFiles = this.selectedFiles.filter((p) => p !== path);
-    } else {
-      this.selectedFiles = [...this.selectedFiles, path];
+      return;
     }
+    let wasSelected = this.selectedFiles.includes(path);
+    this.selectedFiles = wasSelected
+      ? this.selectedFiles.filter((p) => p !== path)
+      : [...this.selectedFiles, path];
+    let count = this.selectedFiles.length;
+    this.selectionAnnouncement = `${fileName(path)} ${
+      wasSelected ? 'deselected' : 'selected'
+    }, ${count} ${pluralize('file', count)} selected`;
   }
 
   // Enter on a file in the tree. In multi-select it confirms the current
@@ -213,6 +252,8 @@ export default class FileChooserModal extends Component<Signature> {
     // different realm.
     this.selectedFiles = [];
     this.selectionRealm = undefined;
+    this.selectionAnnouncement = '';
+    this.pickError = undefined;
   }
 
   // An upload confirms the chooser. In multi-select the files already
@@ -236,6 +277,8 @@ export default class FileChooserModal extends Component<Signature> {
     this.multiSelect = false;
     this.selectedFiles = [];
     this.selectionRealm = undefined;
+    this.selectionAnnouncement = '';
+    this.pickError = undefined;
     this.fileTypeFilter = undefined;
     this.fileFieldFilter = undefined;
     this.fileTypeName = undefined;
@@ -406,6 +449,12 @@ export default class FileChooserModal extends Component<Signature> {
         flex: 1;
         min-width: 0;
       }
+      .pick-error {
+        margin-bottom: var(--boxel-sp-xs);
+        color: var(--boxel-error-200);
+        font: var(--boxel-font-xs);
+        overflow-wrap: anywhere;
+      }
       .upload-error {
         color: var(--boxel-error-200);
         font: var(--boxel-font-xs);
@@ -476,7 +525,20 @@ export default class FileChooserModal extends Component<Signature> {
           </:content>
           <:footer>
             <div class='footer'>
+              <div
+                class='boxel-sr-only'
+                role='status'
+                aria-live='polite'
+                data-test-choose-file-modal-selection-status
+              >{{this.selectionAnnouncement}}</div>
               <div class='footer-left'>
+                {{#if this.pickError}}
+                  <div
+                    class='pick-error'
+                    role='alert'
+                    data-test-choose-file-modal-pick-error
+                  >{{this.pickError}}</div>
+                {{/if}}
                 {{#if (eq chooser.currentUpload.state 'picking')}}
                   <BoxelButton
                     @size='tall'

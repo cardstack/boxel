@@ -247,6 +247,12 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       .dom('[data-test-file="pet.gts"]')
       .hasAttribute('aria-pressed', 'false', 'clicking again deselects');
     assert
+      .dom('[data-test-choose-file-modal-selection-status]')
+      .hasText(
+        'pet.gts deselected, 1 file selected',
+        'the toggle is announced to screen readers',
+      );
+    assert
       .dom('[data-test-file="person.gts"]')
       .hasAttribute('aria-pressed', 'true', 'other selection is kept');
     assert
@@ -313,6 +319,43 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     assert
       .dom(`[data-test-attached-file="${testRealmURL}realm.json"]`)
       .exists('second Space-selected file is attached');
+  });
+
+  test('a selected file that can no longer be loaded is dropped from a multi-select pick and named', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="pet.gts"]');
+
+    await getTestRealmRegistry().get(testRealmURL)!.realm.delete('pet.gts');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await waitFor('[data-test-choose-file-modal-pick-error]');
+    assert
+      .dom('[data-test-choose-file-modal-pick-error]')
+      .hasText("Couldn't load pet.gts, so it was removed from the selection.");
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('the chooser stays open');
+    assert
+      .dom('[data-test-choose-file-modal-add-button]')
+      .hasText('Add 1 File', 'the file that loaded stays selected');
+
+    await click('[data-test-choose-file-modal-add-button]');
+    await waitFor(`[data-test-attached-file="${testRealmURL}person.gts"]`);
+    assert.dom('[data-test-choose-file-modal]').doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .doesNotExist();
   });
 
   test('an upload in the multi-select file chooser keeps the files already selected', async function (assert) {
