@@ -24,6 +24,17 @@ export interface TokenSignature {
 
 const HUE_PROPERTY = '--pretui-token-hue';
 
+// The declarations of a style as a sorted list of `property:value`, to tell
+// whether a rewrite changed anything regardless of order.
+function declarations(style: CSSStyleDeclaration): string {
+  let list: string[] = [];
+  for (let i = 0; i < style.length; i++) {
+    let property = style.item(i);
+    list.push(`${property}:${style.getPropertyValue(property).trim()}`);
+  }
+  return list.sort().join('\n');
+}
+
 // A caller's `style` replaces Token's own `style` attribute, so `@hue` is also
 // written as a single property on top of whatever style the element ends up
 // with. The observer puts it back when the caller's style changes later and
@@ -31,44 +42,64 @@ const HUE_PROPERTY = '--pretui-token-hue';
 // when `@hue` is cleared.
 //
 // The observer drains the record of each of the modifier's own writes as soon
-// as it makes one. A record it delivers is either a caller rewrite or a
+// as it makes one, so the old value of the first record in a batch it
+// delivers is the attribute as the modifier left it. What changed since is
+// either a caller rewrite, which replaces the whole attribute, or a
 // single-property write by something else on the element (boxel-ui's
-// `setCssVar`, passed through `...attributes`), which leaves our hue in place.
-// So the modifier remembers the hue it wrote, and never adopts that as the
-// caller's. A later caller rewrite that repeats our hue exactly is therefore
-// treated as ours, and clearing `@hue` afterwards removes it.
+// `setCssVar`, passed through `...attributes`), which leaves the hue in place.
+// So a batch is taken as a caller rewrite when it changed the hue, or when it
+// changed no declaration at all, which only a rewrite of the attribute does (a
+// single-property write that changes nothing queues no record). After a
+// caller rewrite, the hue the element now has is the caller's. After any other
+// batch, the caller's hue stays as it was.
+//
+// The cost: a caller rewrite that sets the hue exactly as `@hue` wrote it, and
+// changes some other declaration, looks like another modifier's write. Its hue
+// is not taken as the caller's, so when `@hue` is cleared the caller's earlier
+// hue comes back, or the hue is removed if the caller had none.
 const keepHue = modifier((el: HTMLElement, [hue]: [string | undefined]) => {
   let value = cssValue(hue);
   if (value === undefined) {
     return;
   }
   let read = () => el.style.getPropertyValue(HUE_PROPERTY).trim() || undefined;
-  let ours: string | undefined;
   let callerHue = read();
-  let readCaller = () => {
-    let current = read();
-    if (current === undefined || current !== ours) {
-      callerHue = current;
+  let isCallerRewrite = (records: MutationRecord[]) => {
+    if (records.length === 0) {
+      return false;
     }
+    let before = el.ownerDocument.createElement('span').style;
+    before.cssText = records[0].oldValue ?? '';
+    let changedHue =
+      (before.getPropertyValue(HUE_PROPERTY).trim() || undefined) !== read();
+    return changedHue || declarations(before) === declarations(el.style);
   };
   let write = (observer?: MutationObserver) => {
-    ours = value;
     if (read() !== value) {
       el.style.setProperty(HUE_PROPERTY, value);
       observer?.takeRecords();
     }
   };
   write();
-  let observer = new MutationObserver((_records, self) => {
-    readCaller();
+  let observer = new MutationObserver((records, self) => {
+    if (isCallerRewrite(records)) {
+      callerHue = read();
+    }
     write(self);
   });
-  observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+  observer.observe(el, {
+    attributes: true,
+    attributeFilter: ['style'],
+    attributeOldValue: true,
+  });
   return () => {
-    // A record still queued here is a caller rewrite in the same render as
-    // this teardown, and what it left is the caller's, so nothing is put back
-    // over it.
-    let rewritten = observer.takeRecords().length > 0;
+    // Records still queued here were written in the same render, before this
+    // teardown: Glimmer sets the caller's style and runs the caller's
+    // modifiers ahead of this one. If they make a caller rewrite, the hue the
+    // element has now is the caller's, so nothing is put back over it. If not
+    // (another modifier wrote its own property), the caller's hue is put back
+    // as usual.
+    let rewritten = isCallerRewrite(observer.takeRecords());
     observer.disconnect();
     if (!rewritten && read() === value) {
       if (callerHue) {
