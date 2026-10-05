@@ -2268,6 +2268,39 @@ module(basename(import.meta.filename), function () {
                   },
                 },
               },
+              'resize-observer-loop.gts': `
+              import { CardDef, Component } from '@cardstack/base/card-api';
+              import { modifier } from 'ember-modifier';
+              // each delivery grows the element it observes, so the browser
+              // skips the re-notification for that frame, reports the loop
+              // notice, and delivers it on the next frame, until 100px
+              const growOnResize = modifier((el) => {
+                let observer = new ResizeObserver(() => {
+                  if (el.offsetHeight < 100) {
+                    el.style.height = \`\${el.offsetHeight + 10}px\`;
+                  }
+                });
+                observer.observe(el);
+                return () => observer.disconnect();
+              });
+              export class ResizeObserverLoop extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div class='resize-loop' {{growOnResize}}>resizes itself</div>
+                  </template>
+                }
+              }
+            `,
+              'resize-observer-loop.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./resize-observer-loop'),
+                      name: 'ResizeObserverLoop',
+                    },
+                  },
+                },
+              },
               'rsvp-rejects.gts': `
               import { CardDef, Component } from '@cardstack/base/card-api';
               import * as RSVP from 'rsvp';
@@ -3236,6 +3269,33 @@ module(basename(import.meta.filename), function () {
         assert.true(
           result.pool.evicted,
           'unhandled rejection evicts prerender page to recover clean state',
+        );
+      });
+
+      test('card prerender renders a card whose ResizeObserver resizes what it observes', async function (assert) {
+        let cardURL = `${realmURL}resize-observer-loop.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.notOk(
+          result.response.error,
+          `ResizeObserver loop notice is not a render error, got: ${result.response.error?.error.message}`,
+        );
+        assert.ok(
+          /<div(?=[^>]*class="resize-loop)(?=[^>]*style="height:\s*\d+px)/.test(
+            result.response.isolatedHTML ?? '',
+          ),
+          `the observer resized its element before capture, got: ${result.response.isolatedHTML}`,
+        );
+        assert.false(
+          result.pool.evicted,
+          'the page is not evicted as unusable',
         );
       });
 
@@ -9920,10 +9980,16 @@ module(basename(import.meta.filename), function () {
           fusedRest,
           'file extract matches the fused visit',
         );
+        let indexSet = new Set(indexDeps);
+        let fusedSet = new Set(fusedDeps);
+        // Named on failure, since each set is mostly scoped-CSS module ids
+        // too long to compare by eye.
+        let onlyIndex = [...indexSet].filter((dep) => !fusedSet.has(dep));
+        let onlyFused = [...fusedSet].filter((dep) => !indexSet.has(dep));
         assert.deepEqual(
-          [...new Set(indexDeps)].sort(),
-          [...new Set(fusedDeps)].sort(),
-          'file extract deps match the fused visit as a set',
+          { onlyIndex, onlyFused },
+          { onlyIndex: [], onlyFused: [] },
+          `file extract deps match the fused visit as a set: only in the index visit ${JSON.stringify(onlyIndex)}, only in the fused visit ${JSON.stringify(onlyFused)}`,
         );
       }
       assert.deepEqual(

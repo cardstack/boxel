@@ -12,6 +12,7 @@ import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
 import type { PresenceHandle } from 'glimmer-motion/presence-types';
+import { setupMotion } from 'glimmer-motion/test-support';
 import type { Transition } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -187,6 +188,7 @@ module(
   'Integration | motion | cypress | Shared layout lightbox example, crossfade',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     async function runScriptCrossfade(assert: Assert, instant: boolean) {

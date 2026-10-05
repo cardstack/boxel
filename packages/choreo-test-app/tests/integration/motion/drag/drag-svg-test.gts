@@ -9,6 +9,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { transformViewBoxPoint } from 'glimmer-motion/gestures/transform-page-point';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { captureEl, createRef } from '../../../helpers/capture-el';
@@ -121,6 +122,7 @@ for (const layout of [false, true]) {
     `Integration | motion | cypress | ${layout ? 'Drag SVG & Layout' : 'Drag SVG'}`,
     function (hooks) {
       setupRenderingTest(hooks);
+      setupMotion(hooks);
       setupFixtureViewport(hooks);
 
       test('Drags the element by the defined distance', async function (assert) {
@@ -237,6 +239,7 @@ module(
   'Integration | motion | cypress | Drag SVG with viewBox',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
 
     async function dragIt() {

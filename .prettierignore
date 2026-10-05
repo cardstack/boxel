@@ -12,15 +12,18 @@ pnpm-lock.yaml
 # excludes them from prettier for the same reason.
 packages/observability/grafanactl/resources/
 
-# Plugin content copied verbatim from the pinned boxel-skills tag by
-# `pnpm build:skills` (packages/boxel-cli/scripts/build-skills.ts).
-# Reformatting drifts the copies from the upstream bytes — prettier's
-# markdown parser even mangles underscore emphasis in some upstream files.
-# The CLI-authored skills under plugin/skills/ ride along; they're markdown
-# maintained by hand + build-plugin.ts, not prettier.
+# The boxel-cli plugin's skills: markdown maintained by hand and by
+# build-plugin.ts, which regenerates their command synopses, not by prettier.
 packages/boxel-cli/plugin/skills/
 
 # FileDef regression fixtures: licensed sample files whose bytes must match
 # the integrity manifest in the sibling SOURCES.md. Reformatting a fixture
 # breaks its recorded SHA-256 and drifts it from its documented provenance.
 packages/experiments-realm/filedef-fixtures/samples/
+
+# Vendored third-party bundles and data in Pret UI. Each directory's README.md
+# records the upstream version and build; reformatting drifts the bytes from it.
+packages/pretui/color/index.js
+packages/pretui/zxcvbn/index.js
+packages/pretui/sigpad/index.js
+packages/pretui/emoji-data/data.ts

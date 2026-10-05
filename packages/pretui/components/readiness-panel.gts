@@ -505,229 +505,233 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
     {{/if}}
 
     <style scoped>
-      /* Layout and the Law-2 tint. Every colour below is derived from
-         --pretui-verdict-tone / --pretui-gate-tone, which are written from
-         one TypeScript record — the same record the glyphs and the Chip
-         hues come from. */
-      .pretui-verdict {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--space-3, 8px);
-        padding: var(--space-3, 8px) var(--space-4, 11px);
-        border-radius: var(--radius);
-        background: color-mix(
-          in oklch,
-          var(--pretui-verdict-tone, var(--muted-foreground)) 10%,
-          var(--card)
-        );
-        box-shadow: 0 0 0 1px
-          color-mix(
-            in oklch,
-            var(--pretui-verdict-tone, var(--muted-foreground)) 28%,
-            var(--border)
-          );
-      }
-      .pretui-verdict-glyph {
-        flex: none;
-        width: 20px;
-        height: 20px;
-        margin-top: 1px;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        font-size: 11px;
-        font-weight: 700;
-        line-height: 1;
-        background: color-mix(
-          in oklch,
-          var(--pretui-verdict-tone, var(--muted-foreground)) 22%,
-          var(--card)
-        );
-        color: var(--pretui-verdict-tone, var(--muted-foreground));
-      }
-      .pretui-verdict-head {
-        display: grid;
-        gap: 2px;
-        min-width: 0;
-        flex: 1;
-      }
-      .pretui-verdict-title {
-        margin: 0;
-        font-size: var(--text-body, 15px);
-        font-weight: 600;
-        letter-spacing: var(--track-heading, -0.02em);
-        color: var(--foreground);
-      }
-      .pretui-verdict-state {
-        margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 600;
-        color: color-mix(
-          in oklch,
-          var(--foreground) 30%,
-          var(--pretui-verdict-tone, var(--muted-foreground))
-        );
-      }
-      .pretui-verdict-summary {
-        margin: 0;
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--muted-foreground);
-        max-width: 60ch;
-      }
-      .pretui-verdict-actions {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-      }
-
-      /* Reasons — only present when blocked, which is what makes a blocked
-         panel read structurally differently rather than merely redder. */
-      .pretui-reasons {
-        display: grid;
-        gap: var(--space-2, 6px);
-        margin-bottom: var(--space-4, 11px);
-      }
-      .pretui-reasons-title {
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 500;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-reasons-count {
-        font-variant-numeric: tabular-nums;
-        min-width: 1.4em;
-        height: 1.4em;
-        padding: 0 0.35em;
-        border-radius: 999px;
-        display: inline-grid;
-        place-items: center;
-        letter-spacing: 0;
-        background: color-mix(
-          in oklch,
-          var(--destructive) 16%,
-          var(--card)
-        );
-        color: color-mix(
-          in oklch,
-          var(--foreground) 30%,
-          var(--destructive)
-        );
-      }
-      .pretui-reasons-list {
-        margin: 0;
-        padding: 0 0 0 1.1em;
-        display: grid;
-        gap: 3px;
-        list-style: disc;
-      }
-      .pretui-reasons-item {
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--foreground);
-        overflow-wrap: break-word;
-      }
-
-      /* Gate rows. The tint is generated from the row's own tone token —
-         the technique review-section arrived at independently, which is
-         Law 2. */
-      .pretui-gates {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        display: grid;
-        gap: var(--space-2, 6px);
-      }
-      .pretui-gate {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3, 8px);
-        min-height: 34px;
-        padding: var(--space-2, 6px) var(--space-3, 8px);
-        border-radius: var(--radius-chip, 6px);
-        background: color-mix(
-          in oklch,
-          var(--pretui-gate-tone, var(--muted-foreground)) 10%,
-          var(--card)
-        );
-      }
-      .pretui-gate-glyph {
-        flex: none;
-        width: 16px;
-        text-align: center;
-        font-size: 12px;
-        line-height: 1;
-        color: var(--pretui-gate-tone, var(--muted-foreground));
-      }
-      .pretui-gate-body {
-        display: grid;
-        gap: 1px;
-        min-width: 0;
-        flex: 1;
-      }
-      .pretui-gate-name {
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 500;
-        color: var(--foreground);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-gate-caption {
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        overflow-wrap: break-word;
-      }
-      .pretui-gate-side {
-        flex: none;
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-      }
-      /* A skipped gate is quiet, but it is still there and still named —
-         the one place opacity is used, and it never falls below the 4.5:1
-         floor because the tone is already muted. */
-      .pretui-gate[data-state='skipped'] .pretui-gate-name {
-        color: var(--muted-foreground);
-      }
-
-      /* Narrow containers stack the side column under the name rather than
-         crushing the name. Unnamed query against this block's own box. */
-      .pretui-readiness {
-        container-type: inline-size;
-      }
-      @container (max-width: 26rem) {
-        .pretui-gate {
-          flex-wrap: wrap;
-        }
-        .pretui-gate-side {
-          width: 100%;
-          padding-left: calc(16px + var(--space-3, 8px));
-        }
+      /* above Panel's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        /* Layout and the Law-2 tint. Every colour below is derived from
+           --pretui-verdict-tone / --pretui-gate-tone, which are written from
+           one TypeScript record — the same record the glyphs and the Chip
+           hues come from. */
         .pretui-verdict {
-          flex-wrap: wrap;
+          display: flex;
+          align-items: flex-start;
+          gap: var(--space-3, 8px);
+          padding: var(--space-3, 8px) var(--space-4, 11px);
+          border-radius: var(--radius);
+          background: color-mix(
+            in oklch,
+            var(--pretui-verdict-tone, var(--muted-foreground)) 10%,
+            var(--card)
+          );
+          box-shadow: 0 0 0 1px
+            color-mix(
+              in oklch,
+              var(--pretui-verdict-tone, var(--muted-foreground)) 28%,
+              var(--border)
+            );
+        }
+        .pretui-verdict-glyph {
+          flex: none;
+          width: 20px;
+          height: 20px;
+          margin-top: 1px;
+          border-radius: 50%;
+          display: grid;
+          place-items: center;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          background: color-mix(
+            in oklch,
+            var(--pretui-verdict-tone, var(--muted-foreground)) 22%,
+            var(--card)
+          );
+          color: var(--pretui-verdict-tone, var(--muted-foreground));
+        }
+        .pretui-verdict-head {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+          flex: 1;
+        }
+        .pretui-verdict-title {
+          margin: 0;
+          font-size: var(--text-body, 15px);
+          font-weight: 600;
+          letter-spacing: var(--track-heading, -0.02em);
+          color: var(--foreground);
+        }
+        .pretui-verdict-state {
+          margin: 0;
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 600;
+          color: color-mix(
+            in oklch,
+            var(--foreground) 30%,
+            var(--pretui-verdict-tone, var(--muted-foreground))
+          );
+        }
+        .pretui-verdict-summary {
+          margin: 0;
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--muted-foreground);
+          max-width: 60ch;
         }
         .pretui-verdict-actions {
-          width: 100%;
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
         }
-      }
 
-      .pretui-vh {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
+        /* Reasons — only present when blocked, which is what makes a blocked
+           panel read structurally differently rather than merely redder. */
+        .pretui-reasons {
+          display: grid;
+          gap: var(--space-2, 6px);
+          margin-bottom: var(--space-4, 11px);
+        }
+        .pretui-reasons-title {
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 500;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-reasons-count {
+          font-variant-numeric: tabular-nums;
+          min-width: 1.4em;
+          height: 1.4em;
+          padding: 0 0.35em;
+          border-radius: 999px;
+          display: inline-grid;
+          place-items: center;
+          letter-spacing: 0;
+          background: color-mix(
+            in oklch,
+            var(--destructive) 16%,
+            var(--card)
+          );
+          color: color-mix(
+            in oklch,
+            var(--foreground) 30%,
+            var(--destructive)
+          );
+        }
+        .pretui-reasons-list {
+          margin: 0;
+          padding: 0 0 0 1.1em;
+          display: grid;
+          gap: 3px;
+          list-style: disc;
+        }
+        .pretui-reasons-item {
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--foreground);
+          overflow-wrap: break-word;
+        }
+
+        /* Gate rows. The tint is generated from the row's own tone token —
+           the technique review-section arrived at independently, which is
+           Law 2. */
+        .pretui-gates {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: var(--space-2, 6px);
+        }
+        .pretui-gate {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3, 8px);
+          min-height: 34px;
+          padding: var(--space-2, 6px) var(--space-3, 8px);
+          border-radius: var(--radius-chip, 6px);
+          background: color-mix(
+            in oklch,
+            var(--pretui-gate-tone, var(--muted-foreground)) 10%,
+            var(--card)
+          );
+        }
+        .pretui-gate-glyph {
+          flex: none;
+          width: 16px;
+          text-align: center;
+          font-size: 12px;
+          line-height: 1;
+          color: var(--pretui-gate-tone, var(--muted-foreground));
+        }
+        .pretui-gate-body {
+          display: grid;
+          gap: 1px;
+          min-width: 0;
+          flex: 1;
+        }
+        .pretui-gate-name {
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 500;
+          color: var(--foreground);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-gate-caption {
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          overflow-wrap: break-word;
+        }
+        .pretui-gate-side {
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+        }
+        /* A skipped gate is quiet, but it is still there and still named —
+           the one place opacity is used, and it never falls below the 4.5:1
+           floor because the tone is already muted. */
+        .pretui-gate[data-state='skipped'] .pretui-gate-name {
+          color: var(--muted-foreground);
+        }
+
+        /* Narrow containers stack the side column under the name rather than
+           crushing the name. Unnamed query against this block's own box. */
+        .pretui-readiness {
+          container-type: inline-size;
+        }
+        @container (max-width: 26rem) {
+          .pretui-gate {
+            flex-wrap: wrap;
+          }
+          .pretui-gate-side {
+            width: 100%;
+            padding-left: calc(16px + var(--space-3, 8px));
+          }
+          .pretui-verdict {
+            flex-wrap: wrap;
+          }
+          .pretui-verdict-actions {
+            width: 100%;
+          }
+        }
+
+        .pretui-vh {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
       }
     </style>
   </template>

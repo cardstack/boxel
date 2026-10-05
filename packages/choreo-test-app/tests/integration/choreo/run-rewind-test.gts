@@ -13,6 +13,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -33,6 +34,7 @@ const frames = (n: number) =>
 module('Integration | choreo | run rewind', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a jump back lands on the value at the playhead, not the last origin', async function (assert) {
     class App extends Component {
@@ -124,6 +126,7 @@ module('Integration | choreo | run rewind', function (hooks) {
 module('Integration | choreo | retreat', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   let app2: { take: number } | undefined;
 

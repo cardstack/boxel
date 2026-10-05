@@ -19,26 +19,28 @@ export const KeyValue: TemplateOnlyComponent<KeyValueSignature> = <template>
     {{/each}}
   </dl>
   <style scoped>
-    .pretui-kv {
-      display: grid;
-      grid-template-columns: max-content 1fr;
-      column-gap: var(--space-6, 19px);
-      row-gap: 7px;
-      font-size: var(--text-ui-md, 12.5px);
-      align-content: start;
-      align-items: center;
-      margin: 0;
-    }
-    .pretui-kv dt {
-      color: var(--muted-foreground);
-      font-size: var(--text-ui, 12px);
-      line-height: 18px;
-    }
-    .pretui-kv dd {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    @layer PretComponent {
+      .pretui-kv {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: var(--space-6, 19px);
+        row-gap: 7px;
+        font-size: var(--text-ui-md, 12.5px);
+        align-content: start;
+        align-items: center;
+        margin: 0;
+      }
+      .pretui-kv dt {
+        color: var(--muted-foreground);
+        font-size: var(--text-ui, 12px);
+        line-height: 18px;
+      }
+      .pretui-kv dd {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
     }
   </style>
 </template>;

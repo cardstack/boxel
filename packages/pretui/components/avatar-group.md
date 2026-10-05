@@ -44,3 +44,5 @@ Practical guidance: wrap the group in a labelled `role="group"` or a `<ul>` at t
 `--card` (the 2px separator ring). That is the only token this component consumes directly; everything else belongs to the **Avatar**s inside it.
 
 The `-6px` overlap and the 2px ring width are fixed, so a season cannot make the stack tighter or looser. The ring being `--card` means a group placed on `--canvas` or `--inset` — an **EmptyState**, a table's header band, a striped row — will show rings in the wrong colour. That is the one placement trap: the component assumes it sits on a card surface, and there is no token to tell it otherwise.
+
+The styles sit in `@layer PretComposite`, above Avatar's `PretComponent` layer, so what this component sets on Avatar wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

@@ -97,13 +97,18 @@ describe('detectSurfaces', () => {
     expect(s).toEqual({ npmTouched: false, pluginTouched: true });
   });
 
-  it('plugin-only when scripts/build-plugin.ts or build-skills.ts changed', () => {
+  it('plugin-only when scripts/build-plugin.ts changed', () => {
     expect(
       detectSurfaces(['packages/boxel-cli/scripts/build-plugin.ts']),
     ).toEqual({ npmTouched: false, pluginTouched: true });
+  });
+
+  it('neither surface when only the boxel-skills fetch script changed', () => {
+    // The boxel-skills plugin ships from its own repository; the fetch script
+    // only feeds the monorepo's local copy.
     expect(
-      detectSurfaces(['packages/boxel-cli/scripts/build-skills.ts']),
-    ).toEqual({ npmTouched: false, pluginTouched: true });
+      detectSurfaces(['packages/boxel-cli/scripts/boxel-skills.mts']),
+    ).toEqual({ npmTouched: false, pluginTouched: false });
   });
 
   it('both surfaces when a new command lands (src/ + regen)', () => {

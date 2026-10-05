@@ -106,8 +106,10 @@ export class CopyButton extends Component<CopyButtonSignature> {
       {{/if}}
     </IconButton>
     <style scoped>
-      .pretui-copy-check {
-        color: var(--success, var(--boxel-success));
+      @layer PretComponent {
+        .pretui-copy-check {
+          color: var(--success-ink);
+        }
       }
     </style>
   </template>

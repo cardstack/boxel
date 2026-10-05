@@ -5,6 +5,7 @@
 import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue, stagger, type Variants } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -13,6 +14,7 @@ const NO = { type: false } as const;
 
 module('Integration | motion | delay attr', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('in transition prop', async function (assert) {
     const x = motionValue(0);

@@ -82,63 +82,65 @@ export class Dialog extends Component<DialogSignature> {
       </div>
     </dialog>
     <style scoped>
-      .pretui-dialog {
-        border: 0;
-        padding: 0;
-        background: var(--card);
-        color: var(--foreground);
-        border-radius: var(--radius-surface, 10px);
-        box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 12px 40px rgb(16 24 40 / 0.18));
-        width: min(560px, calc(100vw - 32px));
-        max-height: calc(100dvh - 64px);
-        font-family: var(--font-sans);
-        font-size: var(--text-body, 15px);
-      }
-      .pretui-dialog[data-size='s'] {
-        width: min(400px, calc(100vw - 32px));
-      }
-      .pretui-dialog[data-size='l'] {
-        width: min(760px, calc(100vw - 32px));
-      }
-      .pretui-dialog::backdrop {
-        background: var(--pretui-overlay-scrim, rgb(16 24 40 / 0.4));
-      }
-      .pretui-dialog[open] {
-        opacity: 1;
-        transform: none;
-        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
-          transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      @starting-style {
-        .pretui-dialog[open] {
-          opacity: 0;
-          transform: translateY(6px) scale(0.98);
+      @layer PretComponent {
+        .pretui-dialog {
+          border: 0;
+          padding: 0;
+          background: var(--card);
+          color: var(--foreground);
+          border-radius: var(--radius-surface, 10px);
+          box-shadow: var(--pretui-shadow-overlay, 0 0 0 1px var(--border), 0 12px 40px rgb(16 24 40 / 0.18));
+          width: min(560px, calc(100vw - 32px));
+          max-height: calc(100dvh - 64px);
+          font-family: var(--font-sans);
+          font-size: var(--text-body, 15px);
         }
-      }
-      .pretui-dialog-inner {
-        display: grid;
-        gap: var(--space-4, 11px);
-        padding: var(--space-6, 19px);
-      }
-      .pretui-dialog-title {
-        font-size: var(--text-heading, 19px);
-        font-weight: var(--weight-heading, 700);
-        letter-spacing: var(--track-heading, -0.02em);
-      }
-      .pretui-dialog-body {
-        color: var(--muted-foreground);
-        line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
-      }
-      .pretui-dialog-footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--space-3, 8px);
-        border-top: 1px solid var(--border);
-        padding-top: var(--space-4, 11px);
-      }
-      @media (prefers-reduced-motion: reduce) {
+        .pretui-dialog[data-size='s'] {
+          width: min(400px, calc(100vw - 32px));
+        }
+        .pretui-dialog[data-size='l'] {
+          width: min(760px, calc(100vw - 32px));
+        }
+        .pretui-dialog::backdrop {
+          background: var(--pretui-overlay-scrim, rgb(16 24 40 / 0.4));
+        }
         .pretui-dialog[open] {
-          transition: none;
+          opacity: 1;
+          transform: none;
+          transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+            transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        @starting-style {
+          .pretui-dialog[open] {
+            opacity: 0;
+            transform: translateY(6px) scale(0.98);
+          }
+        }
+        .pretui-dialog-inner {
+          display: grid;
+          gap: var(--space-4, 11px);
+          padding: var(--space-6, 19px);
+        }
+        .pretui-dialog-title {
+          font-size: var(--text-heading, 19px);
+          font-weight: var(--weight-heading, 700);
+          letter-spacing: var(--track-heading, -0.02em);
+        }
+        .pretui-dialog-body {
+          color: var(--muted-foreground);
+          line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
+        }
+        .pretui-dialog-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: var(--space-3, 8px);
+          border-top: 1px solid var(--border);
+          padding-top: var(--space-4, 11px);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-dialog[open] {
+            transition: none;
+          }
         }
       }
     </style>

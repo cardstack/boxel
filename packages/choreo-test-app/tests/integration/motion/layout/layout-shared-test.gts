@@ -15,6 +15,7 @@ import { instantLayoutTransition } from 'glimmer-motion/layout';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { cancelFrame, frame, mix, motionValue } from 'motion-dom';
 import { module, skip, test } from 'qunit';
 
@@ -793,6 +794,7 @@ function and(a: unknown, b: unknown) {
 
 module('Integration | motion | cypress | Shared layout', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
 
   test('Toggle multiple times: Should allow multiple toggles', async function (assert) {

@@ -6,6 +6,7 @@ import { find, render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { visualElementStore } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -13,6 +14,7 @@ const text = (id = '1') => find(`[data-testid="${id}"]`)?.textContent;
 
 module('Integration | motion | LayoutGroup', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test("if it's the first LayoutGroup it sets the group id", async function (assert) {
     await render(

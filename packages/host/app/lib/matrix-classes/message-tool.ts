@@ -93,15 +93,45 @@ export default class MessageTool {
     return this.toolRequest.executedBy;
   }
 
+  get argumentsError() {
+    return this.toolRequest.argumentsError;
+  }
+
+  get argumentsText() {
+    return this.toolRequest.argumentsText;
+  }
+
   // ai-bot fulfilled this tool call itself (e.g. readRealmFile), so the host
   // shows only a status indicator for it — never an Apply button.
   get isBotExecuted() {
     return this.executedBy === AI_BOT_EXECUTOR;
   }
 
-  get arguments() {
-    return this.toolRequest.arguments;
+  // Set by validation when it had to convert a stringified argument to make
+  // the call valid; the run uses these.
+  #coercedArguments: ToolRequest['arguments'] | undefined;
+  setCoercedArguments(args: unknown) {
+    this.#coercedArguments = args as ToolRequest['arguments'];
   }
+
+  // Every host tool takes its input under `attributes`. A model can lose that
+  // nesting and send the fields at the top level; nest them again rather than
+  // fail the call on its shape, since the call is otherwise the one the model
+  // meant. Memoized on the request's arguments so each read returns the same
+  // object.
+  get arguments() {
+    if (this.#coercedArguments) {
+      return this.#coercedArguments;
+    }
+    let raw = this.toolRequest.arguments;
+    if (raw !== this.#rawArguments) {
+      this.#rawArguments = raw;
+      this.#arguments = nestTopLevelAttributes(raw);
+    }
+    return this.#arguments;
+  }
+  #rawArguments: ToolRequest['arguments'] | undefined;
+  #arguments: ToolRequest['arguments'] | undefined;
 
   get description() {
     // The model does not always send the `description` label (it is optional
@@ -176,4 +206,36 @@ export default class MessageTool {
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
     return (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
   }
+}
+
+const TOP_LEVEL_TOOL_ARGUMENT_KEYS = new Set([
+  'attributes',
+  'relationships',
+  'description',
+]);
+
+export function nestTopLevelAttributes(
+  args: ToolRequest['arguments'] | undefined,
+): ToolRequest['arguments'] | undefined {
+  if (
+    !args ||
+    typeof args !== 'object' ||
+    Array.isArray(args) ||
+    'attributes' in args
+  ) {
+    return args;
+  }
+  let attributes: Record<string, unknown> = {};
+  let rest: Record<string, unknown> = {};
+  for (let [key, value] of Object.entries(args)) {
+    if (TOP_LEVEL_TOOL_ARGUMENT_KEYS.has(key)) {
+      rest[key] = value;
+    } else {
+      attributes[key] = value;
+    }
+  }
+  if (Object.keys(attributes).length === 0) {
+    return args;
+  }
+  return { ...rest, attributes };
 }

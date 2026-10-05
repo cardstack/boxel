@@ -15,7 +15,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import type { ChoreoRun } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 
@@ -54,7 +54,7 @@ const frames = (n: number) =>
 
 module('Integration | choreo | build-order neighbours', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a per-frame tracked neighbour does not restart the run', async function (assert) {
     await render(<template><Noise /><BuildOrder /></template>);

@@ -34,4 +34,4 @@ Test short pages, nested scroll containers, a resized viewport, and a target alr
 
 **glimmer-motion**: `scroll`, `scrollInfo`, `ScrollInfo`, `ScrollOffset`, `ScrollOptions`, `InViewOptions`, `inView`, `ScrollValues`, `UseInViewOptions`, `UseScrollOptions`, `InView`, `scrollProgress`, `useInView`, `useScroll`.
 
-Read the implementation: [`index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/index.ts), [`track.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/track.ts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/types.ts), [`viewport.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/viewport.ts), [`scroll.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts).
+Read the implementation: [`scroll.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts). `scroll()`, `scrollInfo()` and `inView()` are Motion's own, re-exported from `framer-motion/dom`; `scroll.ts` adds the modifiers that bind them to elements.

@@ -65,25 +65,126 @@ from a Glimmer card rather than from a React translation table.
 - **Glimmer** — `.gts`, Glint signatures, named exports, plain-function template helpers
   (`to` / `spring` / `tween` / `styles` / `start`), and `prefers-reduced-motion` honoured by default
 - **Testing** — `glimmer-motion/test-support`: `animationsSettled()`, `bounds()`, `shape()`,
-  `setupMotion(hooks)`. No `sleep()` in a motion test
+  `setupMotion(hooks)`, and `registerMotionReset()` for a layer that keeps document-wide state of
+  its own; `glimmer-motion/choreo/test-support`: `setupChoreo(hooks)`, `live()`, `orphanCount()`,
+  `strandedTransforms()`. No `sleep()` in a motion test
 - **Re-hostable** — host hooks are ~40 lines plus the components; everything above that line is
   framework-free
 
 ## API
 
-| export                                                                                                   | what                                                                                                             |
-| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `motion`                                                                                                 | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
-| `Presence`                                                                                               | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
-| `LayoutGroup`                                                                                            | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
-| `ReorderGroup`, `ReorderItem`                                                                            | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
-| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)` | layout pipeline                                                                                                  |
-| `createDragControls()`, `DragControls`                                                                   | `useDragControls`                                                                                                |
-| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                     | `transformPagePoint` helpers                                                                                     |
-| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                        | for re-hosting on another Glimmer runtime                                                                        |
+| export                                                                                                         | what                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `motion`                                                                                                       | the modifier: Motion's props as named arguments, plus `presence` and `transformPagePoint`                        |
+| `Presence`                                                                                                     | `@items @key @mode @initial @custom @onExitComplete @propagate @parent @anchorX @anchorY`, yields `item, handle` |
+| `LayoutGroup`                                                                                                  | `@id @inherit`; hosts the render detector that snapshots layout before the DOM changes                           |
+| `ReorderGroup`, `ReorderItem`                                                                                  | `@values @onReorder @axis` yielding `group`; `@group @value` + forwarded motion args                             |
+| `layoutChange(fn)`, `snapshotAll()`, `requestSettle()`, `afterSettle(fn)`, `instantLayoutTransition(fn)`       | layout pipeline                                                                                                  |
+| `createDragControls()`, `DragControls`                                                                         | `useDragControls`                                                                                                |
+| `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`                                           | `transformPagePoint` helpers                                                                                     |
+| `MotionNode`, `postRender`, `setPostRender`, `flushPendingMounts`                                              | for re-hosting on another Glimmer runtime                                                                        |
+| `setParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `ParticipantHost`, `MotionParticipant` | the participant-host extension point (below)                                                                     |
+| `motionValue`, `MotionValue`, `transformValue`, `styleEffect`, `frame`, `animate`                              | the engine's imperative surface (below)                                                                          |
 
 Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, `glimmer-motion/reorder/group`, …) are the
 same modules.
+
+### Participant hosts
+
+`glimmer-motion/participant` lets a component that coordinates many motion elements (a choreography, a
+shared-element transition) take part in their lifecycles without the elements knowing about it. `<Choreo>`
+is built on it. The interface is public API under semver: a change to it is a breaking change for every
+host package.
+
+A host is an object that implements `ParticipantHost`, installed on an element it renders:
+
+```gts
+import { modifier } from 'ember-modifier';
+import {
+  type MotionParticipant,
+  type ParticipantHost,
+  setParticipantHost,
+} from 'glimmer-motion/participant';
+
+class Stage implements ParticipantHost {
+  register(participant: MotionParticipant) {
+    // on mount; return what to run on its teardown
+    return () => {};
+  }
+  claim(participant: MotionParticipant) {
+    // on teardown: true keeps its VisualElement mounted until participant.release()
+    return false;
+  }
+}
+
+const hosted = modifier((el: Element, [host]: [ParticipantHost]) => {
+  setParticipantHost(el, host);
+  return () => setParticipantHost(el, undefined);
+});
+
+const stage = new Stage();
+
+<template>
+  <div data-motion-host {{hosted stage}}>
+    <div {{motion id='card'}}></div>
+  </div>
+</template>
+```
+
+- **Who joins.** A `{{motion}}` element with an `id` or a `role` joins the nearest `data-motion-host`
+  ancestor when it mounts. `id` is identity across renders, and `role` is a group the host can select by.
+  Elements with neither never join.
+- **Discovery.** The `data-motion-host` attribute belongs in the host's markup, not in its modifier.
+  Modifiers install children-first, so a marked element whose host has not installed yet resolves to no host,
+  never to an outer one.
+- **Lifecycle.** `register` runs on mount. On teardown the node calls the function `register` returned, then
+  asks `claim`. A host that claims a leaving element owns its unmount: it calls `participant.release()` when it
+  is done, and `participant.exitComplete()` to let an enclosing `<Presence>` finish the exit.
+- **What a host sees.** `MotionParticipant` exposes `element`, `visualElement`, `id`, `role`, `isPresent`,
+  `layoutKey`, `ownAnimation` and `presenceManaged`. `visualElement` is motion-dom's `VisualElement`, so a host
+  package and glimmer-motion must resolve the same motion-dom.
+- **Host args.** A host can add named args to `{{motion}}`. It declares each one by augmenting
+  `ParticipantArgs` and registers it with `defineParticipantArg(name, apply)`. The modifier keeps the arg away
+  from the engine and calls `apply(element, value)` on every pass, with `undefined` when the arg is absent.
+  `defineParticipantArg` returns a remover. Put the augmentation in a module that the host package's public
+  declarations import, or it won't reach that package's consumers. `<Choreo>` declares `pack` this way:
+
+  ```ts
+  declare module 'glimmer-motion/participant' {
+    interface ParticipantArgs {
+      pack?: 'box' | 'content';
+    }
+  }
+  defineParticipantArg('pack', (el, pack) => {
+    /* … */
+  });
+  ```
+
+### The engine's imperative surface
+
+A few of the engine's own functions are exported from `glimmer-motion` directly, for code that drives motion
+values by hand rather than through `{{motion}}`. They are the engine's functions, not wrappers, so they run on
+the same frame loop as every `{{motion}}` element.
+
+| export                       | from                | what                                                                       |
+| ---------------------------- | ------------------- | -------------------------------------------------------------------------- |
+| `motionValue`, `MotionValue` | `motion-dom`        | create a motion value, and its type; pass one to `{{motion}}` in `style`   |
+| `transformValue`             | `motion-dom`        | a motion value derived from others, recomputed when they change            |
+| `styleEffect`                | `motion-dom`        | bind motion values to an element's style outside `{{motion}}`              |
+| `frame`                      | `motion-dom`        | schedule `read` / `update` / `render` work on the engine's frame loop      |
+| `animate`                    | `framer-motion/dom` | animate a motion value, an element or a selector; `motion`'s own `animate` |
+
+```ts
+import { animate, motionValue } from 'glimmer-motion';
+
+const x = motionValue(0);
+animate(x, 120, { type: 'spring', visualDuration: 0.4 });
+```
+
+This is the only route by which realm cards reach the engine: `motion-dom` itself is not shimmed into
+realms. The list is deliberately small. The engine's internals (`animateVisualElement`, `visualElementStore`
+and the like) stay unexported, and adding a name to it is an API change to glimmer-motion, reviewed like
+one.
 
 ### React → Glimmer
 
@@ -91,7 +192,7 @@ same modules.
 | -------------------------------- | --------------------------------------------------------- |
 | `<motion.div …>`                 | `<div {{motion …}}>` — any tag, including SVG             |
 | `ref`                            | the element, or a `{current}` object filled by a modifier |
-| `useMotionValue`, `useTransform` | `motionValue`, `transformValue` from `motion-dom`         |
+| `useMotionValue`, `useTransform` | `motionValue`, `transformValue`                           |
 | `<AnimatePresence>`              | `<Presence @items @key>` yielding a handle                |
 | `useIsPresent()`                 | `h.isPresent`                                             |
 | re-render → layout snapshot      | a render pass inside `<LayoutGroup>`, or `layoutChange()` |
@@ -108,8 +209,13 @@ the commit, freeze a leaving element's props. `src/node.ts` (the per-element lif
 (the settle pipeline) and `src/scheduler.ts` (one `postRender` host hook) have no Ember imports;
 `src/motion.ts` and the components are the Ember host adapter.
 
-`VENDORED.md` lists the files copied verbatim from Motion (pan/drag session, Reorder utilities) with the
-upstream commit.
+`scroll()`, `scrollInfo()` and `inView()` are Motion's own, re-exported from `framer-motion/dom`, the
+React-free entry point of Motion's React package. `framer-motion` is a regular dependency; its React peers
+are optional and that entry never imports them.
+
+The pan/drag session, the gesture and animation features and the Reorder utilities are Motion's own
+modules too, inlined at build time from framer-motion's build. `VENDORED.md` lists them and the two places
+glimmer-motion's drag deliberately differs.
 
 The full story — why the engine is untouched, how the binding was built by porting Motion's test suites and
 what that surfaced — is in the

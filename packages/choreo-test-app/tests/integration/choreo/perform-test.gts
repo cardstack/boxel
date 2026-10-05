@@ -21,6 +21,7 @@ import {
   motion,
   type PerformCommand,
 } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -137,6 +138,7 @@ class GatedApp extends Component<{
 module('Integration | choreo | perform', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('forward playback dispatches each command once, in order, with its payload', async function (assert) {
     const app = await mount();

@@ -47,19 +47,12 @@
     "access": "public"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
+    "@cardstack/choreo-eslint-config": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "concurrently": "catalog:",
     "eslint": "^9.39.4",
-    "eslint-config-prettier": "catalog:",
-    "eslint-plugin-ember": "catalog:",
-    "eslint-plugin-n": "catalog:",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-typescript-sort-keys": "catalog:",
-    "globals": "^15.15.0",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "typescript": "catalog:",
-    "typescript-eslint": "catalog:"
+    "typescript": "catalog:"
   }
 }

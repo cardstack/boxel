@@ -93,46 +93,48 @@ export class SearchInput extends Component<SearchInputSignature> {
       {{/if}}
     </div>
     <style scoped>
-      /* EmailInput channel + boxel's search-specific knobs: the dark host
-         pill re-dresses as the Pretui field face, magnifier in quiet ink. */
-      .pretui-boxelwrap {
-        position: relative;
-        width: 100%;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        --background: var(--field, var(--boxel-light));
-        --border: var(--input);
-        --ring: var(--primary);
-        --muted-foreground: var(--ink-3, var(--boxel-400));
-        --boxel-input-search-background-color: var(--field, var(--boxel-light));
-        --boxel-input-search-color: var(--foreground);
-        --boxel-input-search-icon-color: var(--ink-3, var(--boxel-400));
-        --boxel-icon-sm: 14px;
-        --boxel-sp-xxl: 30px;
-        --boxel-form-control-height: var(--control-h, 28px);
-        --boxel-input-height: var(--control-h, 28px);
-        --boxel-form-control-border-radius: var(--radius);
-        --boxel-sp-xs: 5px;
-        --boxel-sp-sm: 9px;
-      }
-      .pretui-searchclear {
-        position: absolute;
-        top: calc((var(--control-h, 28px) - 20px) / 2);
-        right: 5px;
-        display: grid;
-        place-items: center;
-        width: 20px;
-        height: 20px;
-        border: 0;
-        padding: 0;
-        border-radius: 6px;
-        background: none;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-searchclear:hover {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
+      @layer PretComponent {
+        /* EmailInput channel + boxel's search-specific knobs: the dark host
+           pill re-dresses as the Pretui field face, magnifier in quiet ink. */
+        .pretui-boxelwrap {
+          position: relative;
+          width: 100%;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          --background: var(--field, var(--boxel-light));
+          --border: var(--input);
+          --ring: var(--primary);
+          --muted-foreground: var(--ink-3, var(--boxel-400));
+          --boxel-input-search-background-color: var(--field, var(--boxel-light));
+          --boxel-input-search-color: var(--foreground);
+          --boxel-input-search-icon-color: var(--ink-3, var(--boxel-400));
+          --boxel-icon-sm: 14px;
+          --boxel-sp-xxl: 30px;
+          --boxel-form-control-height: var(--control-h, 28px);
+          --boxel-input-height: var(--control-h, 28px);
+          --boxel-form-control-border-radius: var(--radius);
+          --boxel-sp-xs: 5px;
+          --boxel-sp-sm: 9px;
+        }
+        .pretui-searchclear {
+          position: absolute;
+          top: calc((var(--control-h, 28px) - 20px) / 2);
+          right: 5px;
+          display: grid;
+          place-items: center;
+          width: 20px;
+          height: 20px;
+          border: 0;
+          padding: 0;
+          border-radius: 6px;
+          background: none;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-searchclear:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
       }
     </style>
   </template>

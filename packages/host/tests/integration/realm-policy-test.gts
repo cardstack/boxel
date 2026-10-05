@@ -1,7 +1,9 @@
 import {
   click,
   fillIn,
+  settled,
   waitFor,
+  waitUntil,
   type RenderingTestContext,
 } from '@ember/test-helpers';
 
@@ -9,6 +11,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  IndexWriter,
   PermissionsContextName,
   rri,
   type LooseSingleCardDocument,
@@ -21,6 +24,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
+  getDbAdapter,
   testRealmURL,
   provideConsumeContext,
   realmConfigCardJSON,
@@ -35,6 +39,7 @@ import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardDef, FieldDef } from '@cardstack/base/card-api';
+import type * as OperationsModule from '@cardstack/base/operations';
 
 // The policy definitions live in the catalog realm and reach this suite
 // through the catalog test subset, so their shapes are described here rather
@@ -106,12 +111,29 @@ const leadsPredicate = '.leadTeacherIds | any(. == actor())';
 const teachesPredicate = '.teacherIds | any(. == actor())';
 
 const classroomModule = `
-  import { containsMany, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
 
   export class Classroom extends CardDef {
+    @field title = contains(StringField);
     @field teacherIds = containsMany(StringField);
     @field leadTeacherIds = containsMany(StringField);
+  }
+`;
+
+// A roster links to its students, so a grant that serves a roster's document
+// hands over the students it links to.
+const rosterModule = `
+  import { contains, containsMany, field, linksToMany, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+
+  export class Student extends CardDef {
+    @field name = contains(StringField);
+  }
+
+  export class Roster extends CardDef {
+    @field teacherIds = containsMany(StringField);
+    @field students = linksToMany(() => Student);
   }
 `;
 
@@ -547,7 +569,7 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-explanation-decision]').hasText('allowed');
     assert
       .dom('[data-test-explanation-reason]')
-      .hasText('A grant in this policy admits it.');
+      .hasText('A grant in this policy allows it.');
     assert.dom('[data-test-explanation-actor]').hasText(TEACHER);
     assert
       .dom('[data-test-explanation-acl]')
@@ -584,7 +606,7 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-explanation-reason]')
       .hasText(
-        'Grants for this operation match the card, and none of their conditions holds.',
+        'This policy has grants for this operation on this card, but none of their conditions is met.',
       );
     assert
       .dom('[data-test-explanation-refusal]')
@@ -614,5 +636,857 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-explanation]')
       .doesNotExist('and the earlier answer is not left on the page');
+  });
+
+  // Does not parse: the comparison has nothing on its right.
+  const MISTYPED = `${teachesPredicate} and .title ==`;
+  // Parses under the `policy` profile, and the `predicate` profile refuses it,
+  // so a grant on a query with it compiles no search filter.
+  const UNFILTERABLE = '(.title | tonumber) > 0';
+
+  async function renderPolicyNamed(
+    path: string,
+    rules: Record<string, unknown>[],
+    modules: Record<string, string> = {},
+  ) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'classroom.gts': classroomModule,
+        ...modules,
+        [`${path}.json`]: policyDocument(rules),
+      },
+    });
+    // Looking the service up arms the transport the card's own
+    // `operations()` call sends its validate through.
+    getService('operations');
+    let policy = await loadPolicy(path);
+    await renderCard(loader, policy, 'isolated');
+    return realm;
+  }
+
+  // What the card says of each grant once the realm has answered, in order.
+  async function grantStatuses() {
+    await waitFor('[data-test-policy-grant-status]', { timeout: 10_000 });
+    return [
+      ...document.querySelectorAll('[data-test-policy-grant-status]'),
+    ].map((el) => el.getAttribute('data-test-policy-grant-status'));
+  }
+
+  test('a grant that does not compile is marked inactive among the live ones, and its issue names its rule and grant', async function (assert) {
+    await renderPolicyNamed('policies/mistyped', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read' },
+          { operation: 'delete', where: MISTYPED },
+          { operation: 'update' },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'inactive', 'live'],
+      'the grant that does not compile is inactive, and the others are live',
+    );
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .exists({ count: 1 }, 'and it is marked where it is listed');
+    assert
+      .dom(
+        '[data-test-policy-grant-status="inactive"] [data-test-operation-grant-operation]',
+      )
+      .hasText('delete', 'the marked grant is the delete');
+    assert.dom('[data-test-realm-policy-uncompilable]').doesNotExist();
+
+    assert.dom('[data-test-realm-policy-issues]').exists();
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-policy-issue', 'invalid-predicate');
+    assert
+      .dom('[data-test-policy-issue-rule]')
+      .hasText('Classroom', "the issue names its rule's type");
+    assert
+      .dom('[data-test-policy-issue-operation]')
+      .hasText('delete', "and its grant's operation");
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .includesText('has a syntax error', 'and says what is wrong');
+  });
+
+  test('a query grant whose predicate compiles no search filter is inactive, and its issue says why', async function (assert) {
+    await renderPolicyNamed('policies/unfilterable', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read' },
+          { operation: 'query', where: UNFILTERABLE },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'inactive'],
+      'a query is authorized only through a filter, so the grant admits nothing',
+    );
+    assert
+      .dom(
+        '[data-test-policy-grant-status="inactive"] [data-test-operation-grant-operation]',
+      )
+      .hasText('query', 'the marked grant is the query');
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .exists({ count: 1 }, 'and it is marked where it is listed');
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-policy-issue', 'policy-not-filterable');
+    assert.dom('[data-test-policy-issue-operation]').hasText('query');
+  });
+
+  test('a grant whose condition is annotated as reading a snapshot is live', async function (assert) {
+    await renderPolicyNamed('policies/snapshot', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          {
+            operation: 'read',
+            where: { bxl: teachesPredicate, snapshot: true },
+          },
+          { operation: 'update', where: teachesPredicate },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'live'],
+      'the gate evaluates an annotated condition, so the annotation leaves the read in force',
+    );
+    assert
+      .dom('[data-test-realm-policy-issues]')
+      .doesNotExist('compiling recorded no issue');
+  });
+
+  test('a rule whose type does not resolve is marked inactive with its grants', async function (assert) {
+    await renderPolicyNamed('policies/unresolved', [
+      {
+        targetType: { module: '../no-such-module', name: 'Nope' },
+        grants: [{ operation: 'read' }],
+      },
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'read' }],
+      },
+    ]);
+
+    assert.deepEqual(await grantStatuses(), ['inactive', 'live']);
+    assert
+      .dom('[data-test-policy-rule-inactive]')
+      .exists({ count: 1 }, 'the rule is marked, once');
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .doesNotExist('rather than each grant in it');
+    assert
+      .dom('[data-test-policy-issue]')
+      .hasAttribute('data-test-policy-issue', 'unresolved-type');
+    assert.dom('[data-test-policy-issue-rule]').hasText('Nope');
+    assert
+      .dom('[data-test-policy-issue-operation]')
+      .doesNotExist('a rule-level issue names no grant');
+  });
+
+  test('a policy that does not compile at all says so apart from any one grant', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'classroom.gts': classroomModule,
+        'policies/broken.json': classroomPolicy,
+      },
+    });
+    getService('operations');
+    let policy = await loadPolicy('policies/broken');
+
+    // The visit that indexes an edit to the card fails for a reason outside
+    // it. The index keeps such a failure off the row, which still holds the
+    // earlier document, so the card still loads.
+    let batch = await new IndexWriter(await getDbAdapter()).createBatch(
+      new URL(testRealmURL),
+      getService('network').virtualNetwork,
+    );
+    await batch.updateEntry(new URL(`${testRealmURL}policies/broken.json`), {
+      type: 'instance-error',
+      error: { message: 'Bad Gateway', status: 502, additionalErrors: null },
+      diagnostics: { gatewayFailure: ['instance'] },
+    });
+    await batch.done();
+
+    await renderCard(loader, policy, 'isolated');
+    await waitFor('[data-test-realm-policy-uncompilable]', { timeout: 10_000 });
+    assert
+      .dom('[data-test-realm-policy-uncompilable]')
+      .includesText('Not in force', 'the whole policy is out of force')
+      .includesText(
+        "This card couldn't be indexed this time",
+        'and says why of the card itself',
+      );
+    assert
+      .dom('[data-test-policy-rule-inactive]')
+      .doesNotExist('which is said once, not on each rule');
+    assert
+      .dom('[data-test-policy-issue]')
+      .hasAttribute('data-test-policy-issue', 'policy-card-unloadable');
+    assert
+      .dom('[data-test-policy-issue-rule]')
+      .doesNotExist('a card-level issue names no rule');
+  });
+
+  test('fixing a grant clears its issue', async function (assert) {
+    let realm = await renderPolicyNamed('policies/fixable', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'delete', where: MISTYPED }],
+      },
+    ]);
+    assert.deepEqual(await grantStatuses(), ['inactive']);
+
+    await realm.write(
+      'policies/fixable.json',
+      JSON.stringify(
+        policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [{ operation: 'delete', where: teachesPredicate }],
+          },
+        ]),
+      ),
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-policy-grant-status]')
+          ?.getAttribute('data-test-policy-grant-status') === 'live',
+      { timeout: 10_000 },
+    );
+    await settled();
+    assert.deepEqual(await grantStatuses(), ['live'], 'the grant is live');
+    assert
+      .dom('[data-test-realm-policy-issues]')
+      .doesNotExist('and the issue is gone');
+  });
+
+  test('a policy with no issues shows no issue affordance', async function (assert) {
+    await renderPolicyNamed('policies/clean', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read', where: teachesPredicate },
+          { operation: 'update' },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'live'],
+      'the realm has answered',
+    );
+    assert.dom('[data-test-realm-policy-issues]').doesNotExist();
+    assert.dom('[data-test-realm-policy-uncompilable]').doesNotExist();
+    assert.dom('[data-test-policy-grant-inactive]').doesNotExist();
+    assert.dom('[data-test-policy-rule-inactive]').doesNotExist();
+    assert.dom('[data-test-realm-policy-validate-failure]').doesNotExist();
+  });
+
+  // The grant a warning mark is beside, as the card lists it.
+  function grantMarkedWithWarning() {
+    return document
+      .querySelector('[data-test-policy-grant-warning]')
+      ?.closest('[data-test-policy-grant-status]');
+  }
+
+  test('a live grant that hands over cards of a type no rule grants is marked live with its warning beside it', async function (assert) {
+    await renderPolicyNamed(
+      'policies/reaching',
+      [
+        {
+          targetType: { module: '../roster', name: 'Roster' },
+          grants: [
+            { operation: 'read', where: teachesPredicate },
+            { operation: 'update', where: teachesPredicate },
+          ],
+        },
+      ],
+      { 'roster.gts': rosterModule },
+    );
+
+    assert.deepEqual(
+      await grantStatuses(),
+      ['live', 'live'],
+      'a warning leaves its grant live',
+    );
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .doesNotExist('and marks nothing inactive');
+    assert
+      .dom('[data-test-policy-grant-warning]')
+      .exists({ count: 1 }, 'one grant is marked with a warning');
+    let marked = grantMarkedWithWarning();
+    assert.strictEqual(
+      marked?.getAttribute('data-test-policy-grant-status'),
+      'live',
+      'the marked grant is live',
+    );
+    assert
+      .dom('[data-test-operation-grant-operation]', marked ?? undefined)
+      .hasText('read', 'it is the read, whose document carries the students');
+
+    await click('[data-test-policy-grant-warning] summary');
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"]',
+      )
+      .exists({ count: 1 })
+      .isVisible('opening the mark shows the warning')
+      .includesText(
+        'no rule lets anyone read Student cards',
+        'which says what the grant hands over',
+      );
+
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-policy-issue', 'grant-reaches-ungranted-type');
+    assert
+      .dom('[data-test-policy-issue-rule]')
+      .hasText('Roster', 'the warning is listed with its rule');
+    assert
+      .dom('[data-test-policy-issue-operation]')
+      .hasText('read', 'and its grant');
+    assert
+      .dom('[data-test-policy-issue] [data-test-policy-issue-warning]')
+      .exists('and is marked there as a warning');
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .includesText('no rule lets anyone read Student cards');
+  });
+
+  test('a policy whose issues only leave grants inactive marks no warning', async function (assert) {
+    await renderPolicyNamed('policies/inactive-only', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [
+          { operation: 'read' },
+          { operation: 'delete', where: MISTYPED },
+          { operation: 'query', where: UNFILTERABLE },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(await grantStatuses(), ['live', 'inactive', 'inactive']);
+    assert
+      .dom('[data-test-policy-grant-inactive]')
+      .exists(
+        { count: 2 },
+        'each grant an issue leaves out is marked inactive',
+      );
+    assert
+      .dom('[data-test-policy-issue]')
+      .exists({ count: 2 }, 'and each issue is listed');
+    assert
+      .dom('[data-test-policy-grant-warning]')
+      .doesNotExist('no grant is marked with a warning');
+    assert
+      .dom('[data-test-policy-issue-warning]')
+      .doesNotExist('and no listed issue is marked as one');
+  });
+
+  test('a view created in an index render never asks what the policy compiles to', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'classroom.gts': classroomModule,
+        'policies/mistyped.json': policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [
+              { operation: 'read' },
+              { operation: 'delete', where: MISTYPED },
+            ],
+          },
+        ]),
+      },
+    });
+    let { operations } = await loader.import<typeof OperationsModule>(
+      '@cardstack/base/operations',
+    );
+    // Looking the service up arms the transport both the card's validate
+    // and the test's own are sent through.
+    getService('operations');
+    let policy = await loadPolicy('policies/mistyped');
+
+    // Every validate the page sends on to the realm.
+    let validates = 0;
+    let network = getService('network');
+    let spy = async (request: Request) => {
+      if (
+        new URL(request.url).pathname.endsWith('/_operations') &&
+        (await request.clone().text()).includes('"validate"')
+      ) {
+        validates++;
+      }
+      return null;
+    };
+    network.virtualNetwork.mount(spy, { prepend: true });
+    let context = globalThis as Record<string, unknown>;
+    try {
+      // The render context is what marks an index render.
+      context.__boxelRenderContext = true;
+      try {
+        await renderCard(loader, policy, 'isolated');
+      } finally {
+        context.__boxelRenderContext = undefined;
+      }
+      assert
+        .dom('[data-test-policy-rule]')
+        .exists({ count: 1 }, 'the index render lists the rules');
+      assert
+        .dom('[data-test-policy-grant-status]')
+        .doesNotExist('with no grant marked');
+      assert
+        .dom('[data-test-realm-policy-issues]')
+        .doesNotExist('and no issues');
+
+      // The test asks once itself, through the same transport. Once that
+      // answer is back, an ask the view made while it rendered would have
+      // reached the realm too.
+      let validation = await (
+        operations(policy) as unknown as {
+          validate(): Promise<{ issues: { code: string }[] }>;
+        }
+      ).validate();
+      assert.deepEqual(
+        validation.issues.map(({ code }) => code),
+        ['invalid-predicate'],
+        'the realm answers a validate of this card',
+      );
+      assert.strictEqual(
+        validates,
+        1,
+        "the only validate sent is the test's own",
+      );
+    } finally {
+      network.virtualNetwork.unmount(spy);
+    }
+  });
+});
+
+// The explain panel's draft, search and listing forms, asked of a realm that
+// judges the host's requests by its ACL. The signed-in user owns the realm and
+// asks the questions. The teacher they ask about holds no realm permissions,
+// so the policy decides every answer. The classroom definition lives in a
+// realm anyone may read, which a draft naming it needs of whoever asks.
+//
+// The policy lets a teacher read and delete the classrooms they teach, and run
+// `listMine` over them. Its grant on an ad-hoc search has a condition a search
+// can't use.
+const DEFINITIONS = 'http://test-realm/classroom-definitions/';
+const CLASSROOM = { module: `${DEFINITIONS}classroom`, name: 'Classroom' };
+const OWNER = '@testuser:localhost';
+const MISTYPED_PREDICATE = `${teachesPredicate} and .title ==`;
+const UNFILTERABLE_PREDICATE = '(.title | tonumber) > 0';
+
+const classroomQueryModule = `
+  import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation } from "@cardstack/base/operations";
+
+  export class Classroom extends CardDef {
+    @field title = contains(StringField);
+    @field teacherIds = containsMany(StringField);
+
+    @operation static listMine = {
+      base: 'query',
+      query: { filter: { type: () => Classroom } },
+    };
+  }
+`;
+
+const askedPolicyRules = [
+  {
+    targetType: CLASSROOM,
+    grants: [
+      { operation: 'read', where: teachesPredicate },
+      { operation: 'delete', where: teachesPredicate },
+      { operation: 'listMine', where: teachesPredicate },
+      { operation: 'query', where: UNFILTERABLE_PREDICATE },
+    ],
+  },
+];
+
+// Eleven classrooms, one more than a page of a listing. The teacher teaches
+// the first three.
+const ROOMS = Array.from({ length: 11 }, (_, i) => `room-${201 + i}`);
+
+function definedClassroom(teacherIds: string[]) {
+  return {
+    data: {
+      type: 'card',
+      attributes: { teacherIds },
+      meta: { adoptsFrom: CLASSROOM },
+    },
+  };
+}
+
+module('Integration | realm policy explain forms', function (hooks) {
+  setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
+  setupCatalogTestSubset(hooks);
+  setupLocalIndexing(hooks);
+
+  let loader: Loader;
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: OWNER,
+    activeRealms: [DEFINITIONS, testRealmURL],
+    autostart: true,
+  });
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = getService('loader-service').loader;
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import('@cardstack/base/card-api'),
+  );
+
+  async function renderAskedPolicy() {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: DEFINITIONS,
+      permissions: { '*': ['read'] },
+      contents: {
+        'realm.json': realmConfigCardJSON({ name: 'Classroom definitions' }),
+        'classroom.gts': classroomQueryModule,
+      },
+    });
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      enforcePermissions: true,
+      permissions: { [OWNER]: ['read', 'write', 'realm-owner'] },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/classrooms`,
+        }),
+        ...Object.fromEntries(
+          ROOMS.map((room, i) => [
+            `classrooms/${room}.json`,
+            definedClassroom(i < 3 ? [TEACHER] : [COLLEAGUE]),
+          ]),
+        ),
+        'policies/classrooms.json': policyDocument(askedPolicyRules),
+      },
+    });
+    // Looking the service up arms the transport the card's own
+    // `operations()` call sends its explain through.
+    getService('operations');
+    let store = getService('store') as StoreService;
+    let policy = (await store.get(
+      `${testRealmURL}policies/classrooms`,
+    )) as RealmPolicy;
+    await renderCard(loader, policy, 'isolated');
+  }
+
+  async function chooseMode(mode: 'card' | 'search' | 'listing') {
+    await click(`[data-test-explain-mode="${mode}"] input`);
+  }
+
+  async function submitAndWait(answer: string) {
+    await click('[data-test-explain-submit]');
+    await waitFor(`${answer}, [data-test-explain-refusal]`, {
+      timeout: 10_000,
+    });
+  }
+
+  function draftRules(grants: Record<string, unknown>[]) {
+    return JSON.stringify({ rules: [{ targetType: CLASSROOM, grants }] });
+  }
+
+  test('the policy answers a question against a draft, and the policy in force is unchanged', async function (assert) {
+    await renderAskedPolicy();
+    let room205 = `${testRealmURL}classrooms/room-205`;
+
+    await fillIn('[data-test-explain-actor]', TEACHER);
+    await fillIn('[data-test-explain-target]', room205);
+    await fillIn('[data-test-explain-operation]', 'delete');
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText(
+        'denied',
+        'the policy in force lets a teacher delete only their own classrooms',
+      );
+    assert.dom('[data-test-explanation-draft]').doesNotExist();
+
+    await click('[data-test-explain-use-draft]');
+    let started = JSON.parse(
+      (
+        document.querySelector(
+          '[data-test-explain-draft]',
+        ) as HTMLTextAreaElement
+      ).value,
+    ) as { rules: { grants: { operation: string }[] }[] };
+    assert.deepEqual(
+      started.rules.map((rule) => rule.grants.map((g) => g.operation)),
+      [['read', 'delete', 'listMine', 'query']],
+      "the draft starts from this card's rules",
+    );
+
+    await fillIn(
+      '[data-test-explain-draft]',
+      draftRules([{ operation: 'delete' }]),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText('allowed', 'the draft lets the teacher delete any classroom');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText('A grant in this policy allows it.');
+    assert
+      .dom('[data-test-explanation-draft]')
+      .exists('the answer says it was answered against the draft');
+    assert.dom('[data-test-explanation-draft-clean]').exists();
+
+    await fillIn(
+      '[data-test-explain-draft]',
+      draftRules([{ operation: 'delete', where: MISTYPED_PREDICATE }]),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert.dom('[data-test-explanation-decision]').hasText('denied');
+    assert
+      .dom('[data-test-explanation-draft-issue]')
+      .exists({ count: 1 })
+      .hasAttribute('data-test-explanation-draft-issue', 'invalid-predicate')
+      .includesText('rules[0].grants[0].where', 'the issue names where it is');
+
+    // A draft the realm refuses: valid JSON, but not a policy document.
+    await fillIn(
+      '[data-test-explain-draft]',
+      JSON.stringify({ attributes: { rules: [] } }),
+    );
+    await submitAndWait('[data-test-explain-refusal]');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .includesText(
+        'a policy document',
+        "the realm's refusal of the draft is shown in place of an answer",
+      );
+    assert.dom('[data-test-explanation]').doesNotExist();
+
+    await fillIn('[data-test-explain-draft]', '{ "rules": ');
+    await submitAndWait('[data-test-explain-refusal]');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .includesText(
+        "The draft isn't valid JSON",
+        'a draft that does not parse is never sent',
+      );
+
+    await click('[data-test-explain-use-draft]');
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText(
+        'denied',
+        'and without the draft, the policy in force answers as before',
+      );
+    assert.dom('[data-test-explanation-draft]').doesNotExist();
+  });
+
+  test('the policy says what it composes into a search, and how far behind the index is', async function (assert) {
+    await renderAskedPolicy();
+
+    await chooseMode('search');
+    assert
+      .dom('[data-test-explain-realm]')
+      .hasValue(
+        testRealmURL,
+        "a search runs in this card's realm unless another is named",
+      );
+    assert.dom('[data-test-explain-target]').doesNotExist();
+    await fillIn('[data-test-explain-actor]', TEACHER);
+    await fillIn('[data-test-explain-operation]', 'listMine');
+    await fillIn('[data-test-explain-type-module]', CLASSROOM.module);
+    await fillIn('[data-test-explain-type-name]', CLASSROOM.name);
+    await submitAndWait('[data-test-explanation]');
+
+    assert.dom('[data-test-explanation-decision]').hasText('allowed');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText(
+        'Grants in this policy let this search return the cards their conditions match, and no others.',
+      );
+    assert.dom('[data-test-explanation-search-operation]').hasText('listMine');
+    assert.dom('[data-test-explanation-search-types]').hasText('Classroom');
+    assert
+      .dom('[data-test-explanation-search-fragment]')
+      .includesText(TEACHER, 'what the policy composes names the teacher');
+    assert
+      .dom('[data-test-explanation-search-index]')
+      .hasText('Up to date.', 'the index has every write');
+    assert
+      .dom('[data-test-explanation-grant]')
+      .exists({ count: 1 }, 'the one grant on the named query')
+      .hasAttribute('data-test-explanation-grant-filterable', 'true');
+    assert
+      .dom('[data-test-explanation-grant-label]')
+      .hasText('narrows the search');
+    assert
+      .dom('[data-test-explanation-grant] .tier')
+      .doesNotExist(
+        'a search runs the condition over the index, so no copy of one card is named',
+      );
+
+    await fillIn('[data-test-explain-operation]', 'listTheirs');
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .includesText(
+        "This search couldn't be resolved",
+        'a search the type does not declare is said to be one',
+      );
+
+    await fillIn('[data-test-explain-operation]', 'query');
+    assert
+      .dom('[data-test-explain-type-module]')
+      .doesNotExist('an ad-hoc search names its types in its filter');
+    await fillIn(
+      '[data-test-explain-search-filter]',
+      JSON.stringify({ 'item.on': CLASSROOM }),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert.dom('[data-test-explanation-decision]').hasText('denied');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .includesText('No grant in this policy can narrow this search');
+    assert.dom('[data-test-explanation-search-operation]').hasText('query');
+    assert
+      .dom('[data-test-explanation-search-no-fragment]')
+      .exists('the policy composes nothing');
+    assert
+      .dom('[data-test-explanation-grant]')
+      .hasAttribute('data-test-explanation-grant-filterable', 'false');
+    assert
+      .dom('[data-test-explanation-grant-label]')
+      .hasText(
+        "a search can't use its condition, so it adds nothing",
+        'the grant whose condition a search cannot use is shown as adding nothing',
+      );
+
+    await click('[data-test-explain-use-draft]');
+    await fillIn('[data-test-explain-draft]', JSON.stringify({ grants: [] }));
+    await submitAndWait('[data-test-explain-refusal]');
+    assert
+      .dom('[data-test-explain-refusal]')
+      .includesText(
+        'a policy document',
+        'a search asked of a draft the realm refuses shows the refusal',
+      );
+
+    await fillIn(
+      '[data-test-explain-draft]',
+      draftRules([{ operation: 'query', where: teachesPredicate }]),
+    );
+    await submitAndWait('[data-test-explanation]');
+    assert
+      .dom('[data-test-explanation-decision]')
+      .hasText('allowed', 'a draft whose grant a search can use admits it');
+    assert
+      .dom('[data-test-explanation-search-fragment]')
+      .includesText(TEACHER, 'and composes a fragment naming the teacher');
+    assert
+      .dom('[data-test-explanation-grant]')
+      .hasAttribute('data-test-explanation-grant-filterable', 'true');
+    assert.dom('[data-test-explanation-draft-clean]').exists();
+  });
+
+  test('the policy explains a page of the cards in a realm at a time', async function (assert) {
+    await renderAskedPolicy();
+
+    await chooseMode('listing');
+    await fillIn('[data-test-explain-actor]', TEACHER);
+    await fillIn('[data-test-explain-operation]', 'read');
+    await fillIn('[data-test-explain-type-module]', CLASSROOM.module);
+    await fillIn('[data-test-explain-type-name]', CLASSROOM.name);
+    await submitAndWait('[data-test-explanation-listing]');
+
+    let listed = () =>
+      [...document.querySelectorAll('[data-test-explanation-listed]')].map(
+        (el) => [
+          el.getAttribute('data-test-explanation-listed'),
+          el
+            .querySelector('[data-test-explanation-listed-decision]')
+            ?.textContent?.trim(),
+        ],
+      );
+    assert
+      .dom('[data-test-explanation-listing-page]')
+      .hasText('Cards 1 to 10 of 11');
+    assert.deepEqual(
+      listed(),
+      ROOMS.slice(0, 10).map((room, i) => [
+        `${testRealmURL}classrooms/${room}`,
+        i < 3 ? 'allowed' : 'denied',
+      ]),
+      'each card on the page is explained for the teacher',
+    );
+    assert.dom('[data-test-explanation-listing-previous]').isDisabled();
+    assert.dom('[data-test-explanation-listing-next]').isEnabled();
+
+    // Paging asks the question the listing shows, whatever has been typed
+    // since: room-211 is the colleague's, so the teacher is still refused it.
+    await fillIn('[data-test-explain-actor]', COLLEAGUE);
+    await click('[data-test-explanation-listing-next]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-explanation-listing-page]')
+          ?.textContent?.trim() === 'Cards 11 to 11 of 11',
+      { timeout: 10_000 },
+    );
+    assert.deepEqual(listed(), [
+      [`${testRealmURL}classrooms/room-211`, 'denied'],
+    ]);
+    assert
+      .dom('[data-test-explanation-listed] [data-test-explanation-actor]')
+      .hasText(
+        TEACHER,
+        'the next page answers for the teacher it was asked for',
+      );
+    assert.dom('[data-test-explanation-listing-previous]').isEnabled();
+    assert.dom('[data-test-explanation-listing-next]').isDisabled();
+
+    await click('[data-test-explain-use-draft]');
+    await fillIn(
+      '[data-test-explain-draft]',
+      draftRules([{ operation: 'read' }]),
+    );
+    await submitAndWait('[data-test-explanation-listing]');
+    assert
+      .dom('[data-test-explanation-listing-page]')
+      .hasText(
+        'Cards 1 to 10 of 11',
+        'a new question starts at the first page',
+      );
+    assert.deepEqual(
+      listed().map(([, decision]) => decision),
+      Array(10).fill('allowed'),
+      'the draft lets the teacher read every classroom',
+    );
+    assert.dom('[data-test-explanation-draft-clean]').exists();
   });
 });

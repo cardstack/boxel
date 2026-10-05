@@ -44,3 +44,5 @@ Gaps, and the second one is the one to act on:
 The 4px bar width, 2px gap, 2px radius, 14px cluster height and 8px label gap are fixed; bar heights come from `@heights`, an arg rather than a token.
 
 Four tokens, so seasoning is cheap. The one thing to check per season is `--line-strong` against `--pretui-meter-hue`: they are the only distinction between lit and unlit, and a dark season that pushes `--line-strong` toward mid-grey while using a muted hue can make a 1-of-3 meter indistinguishable from a 3-of-3 one.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

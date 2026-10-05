@@ -191,7 +191,7 @@ export async function basicMappings(loader: Loader) {
       filter: {
         type: 'object',
         description:
-          "Filter criteria for the query. Each filter object uses at most one operator — 'eq', 'in', 'contains', 'range', 'matches', 'any', 'every', or 'not' — optionally alongside 'type' (a CodeRef restricting results to that card type) and/or 'on' (a CodeRef giving the card type its field paths belong to). A filter with only 'type' is valid. To combine operators, nest one filter per operator under 'every' (all must hold) or 'any' (at least one must hold). Omit every operator you are not using; a filter carrying more than one operator is rejected.",
+          "Filter criteria for the query. Each filter object uses at most one operator — 'eq', 'in', 'contains', 'range', 'matches', 'any', 'every', or 'not' — optionally alongside 'type' (a CodeRef restricting results to that card type) and/or 'on' (a CodeRef giving the card type its field paths belong to). A filter with only 'type' is valid. Omit every operator you are not using: an empty operator ({}, [] or a CodeRef with empty strings) is not ignored — it changes what the query matches, or is rejected, and a filter carrying more than one operator is rejected. To combine operators, nest one filter per operator under 'every' (all must hold) or 'any' (at least one must hold). Example: { on: <CodeRef>, matches: 'recipe cookbook' }.",
         properties: {
           type: {
             type: 'object',
@@ -263,7 +263,7 @@ export async function basicMappings(loader: Loader) {
             type: 'object',
             properties: {},
             description:
-              'An object where keys are field paths and values are arrays of acceptable values; a field matches when it equals any of them.',
+              'An object where keys are field paths and values are arrays of accepted values (e.g., { status: ["open", "closed"] }); a field matches when it equals any of them.',
           },
           matches: {
             type: 'string',

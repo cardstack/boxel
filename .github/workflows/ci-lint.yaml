@@ -13,6 +13,9 @@ on:
     # silently skipping lint for a new package — is worse).
     paths-ignore:
       - "packages/observability/**"
+  # Motion Bump (motion-bump.yml) dispatches this on the branches it opens,
+  # whose pull requests start no pull_request workflows.
+  workflow_dispatch:
 
 # Pull requests: a new push cancels the run in progress for the same branch.
 # Pushes to main share one group but never cancel a run in progress: GitHub
@@ -150,6 +153,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/bxl
+      - name: Lint Choreo ESLint Config
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-eslint-config
       - name: Lint Glimmer Motion
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -166,112 +173,3 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-gallery
-      - name: Build Glimmer Motion, Choreo Player and Choreo Gallery
-        # Build coverage, not a lint prerequisite: lint type-checks these
-        # packages from source. The builds catch what only rollup sees, such
-        # as the gallery's `?raw` guide imports, fix-declarations and
-        # scope-css.
-        if: ${{ !cancelled() }}
-        run: |
-          (cd packages/glimmer-motion && pnpm run build)
-          (cd packages/choreo-player && pnpm run build)
-          (cd packages/choreo-gallery && pnpm run build)
-
-  catalog:
-    # The catalog (cardstack/boxel-catalog) type-checks and lints its cards
-    # against boxel, so a platform change can break the catalog's lint while
-    # everything here passes. This lints the catalog against this change, the
-    # way the catalog's own CI Lint does, and fails on the errors the change
-    # introduces. See packages/catalog/README.md.
-    name: Lint Catalog
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          # A pull request checks out its merge commit, whose first parent is
-          # the base branch the catalog may also be linted against below.
-          fetch-depth: 2
-
-      # A boxel-catalog branch with the same name as this pull request's
-      # branch is the catalog change this one depends on, so lint that instead
-      # of main and the two validate together before either merges.
-      - name: Pick the catalog ref
-        id: ref
-        env:
-          BRANCH: ${{ github.head_ref }}
-        run: |
-          ref=main
-          # A bare name would also match any ref ending in /<name>.
-          if [ -n "$BRANCH" ] &&
-            git ls-remote --exit-code https://github.com/cardstack/boxel-catalog.git "refs/heads/$BRANCH" >/dev/null; then
-            ref="$BRANCH"
-            echo "::notice title=catalog lint::Linting boxel-catalog branch $ref, which matches this branch's name, in place of main. Merge its catalog pull request before or alongside this one."
-          fi
-          echo "Linting boxel-catalog@$ref"
-          echo "catalog_ref=$ref" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: cardstack/boxel-catalog
-          ref: ${{ steps.ref.outputs.catalog_ref }}
-          path: packages/catalog/contents
-
-      - uses: ./.github/actions/init
-
-      # Restore only: the base-branch step below can rebuild boxel-icons from
-      # the base tree, which must not be saved under this change's key.
-      - name: Restore boxel-icons build cache
-        id: icons-cache
-        uses: ./.github/actions/restore-icons-cache
-        with:
-          save: "false"
-      - name: Build Boxel Icons
-        if: steps.icons-cache.outputs.cache-hit != 'true'
-        run: pnpm run build
-        working-directory: packages/boxel-icons
-      # The catalog's CI Lint builds Boxel UI before linting, so its type check
-      # reads Boxel UI's declarations; build it here to check the same thing.
-      - name: Build Boxel UI
-        run: pnpm run build
-        working-directory: packages/boxel-ui
-
-      - name: Lint the catalog against this change
-        id: head
-        working-directory: packages/catalog
-        run: |
-          node scripts/lint-sweep.ts --record="$RUNNER_TEMP/catalog-lint-head.json"
-          echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-lint-head.json")" >> "$GITHUB_OUTPUT"
-          # The base branch's tree may not have this script.
-          cp scripts/lint-sweep.ts "$RUNNER_TEMP/lint-sweep.ts"
-
-      # Errors the catalog also has against the base branch are not this
-      # change's doing: the catalog may already be broken against boxel main.
-      # So when this change's lint finds errors, lint the same catalog revision
-      # against the base branch, and the report counts only the difference.
-      # A push to main has no base to compare with, so every error counts.
-      - name: Lint the catalog against the base branch
-        id: base
-        if: github.event_name == 'pull_request' && steps.head.outputs.errors != '0'
-        run: |
-          head=$(git rev-parse HEAD)
-          git checkout --detach HEAD^1
-          pnpm install --frozen-lockfile
-          # This change's builds stay in place when the base builds the same.
-          if ! git diff --quiet HEAD "$head" -- packages/boxel-icons packages/boxel-ui pnpm-lock.yaml; then
-            (cd packages/boxel-icons && pnpm run build)
-            (cd packages/boxel-ui && pnpm run build)
-          fi
-          cd packages/catalog
-          node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-lint-base.json"
-
-      - name: Report catalog lint errors
-        if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.base.outcome != 'failure' }}
-        run: |
-          baseline=()
-          if [ -f "$RUNNER_TEMP/catalog-lint-base.json" ]; then
-            baseline=(--baseline="$RUNNER_TEMP/catalog-lint-base.json")
-          fi
-          node "$RUNNER_TEMP/lint-sweep.ts" --report="$RUNNER_TEMP/catalog-lint-head.json" "${baseline[@]}"

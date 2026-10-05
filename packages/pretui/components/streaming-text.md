@@ -51,3 +51,5 @@ Gaps:
 Almost nothing: `currentColor` for the cursor, and the surrounding type styles are inherited. The 420ms duration, the `cubic-bezier(0.22, 0.61, 0.25, 1)` easing, the 4px blur and the 2px × 0.9em cursor are all fixed.
 
 `@rate` and `@startDelay` are args rather than tokens, so a season cannot set a house streaming speed — that is a per-call-site decision. If a season wants slower, calmer motion across the kit it can reach `--pretui-dur-*` elsewhere but not here, which is an inconsistency worth noting.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

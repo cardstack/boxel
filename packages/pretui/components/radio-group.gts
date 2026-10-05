@@ -66,50 +66,52 @@ export class RadioGroup extends Component<RadioGroupSignature> {
       {{/each}}
     </div>
     <style scoped>
-      .pretui-radiogroup {
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-      }
-      .pretui-choice {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: var(--text-ui-md, 12.5px);
-        cursor: pointer;
-      }
-      .pretui-radio {
-        appearance: none;
-        width: 15px;
-        height: 15px;
-        margin: 0;
-        border-radius: 50%;
-        background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
-        box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
-        cursor: pointer;
-        display: inline-grid;
-        place-content: center;
-        flex: none;
-      }
-      .pretui-radio:checked {
-        background: var(--primary);
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
-          var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
-      }
-      .pretui-radio:checked::before {
-        content: '';
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        /* the Switch's white knob, not ink-on-highlight — one selected
-           language across toggles (boxel-ui paints this dark; deliberate
-           delta for consistency with our Switch) */
-        background: var(--card);
-        box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
-      }
-      .pretui-radio:disabled {
-        opacity: 0.45;
-        cursor: default;
+      @layer PretComponent {
+        .pretui-radiogroup {
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+        }
+        .pretui-choice {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: var(--text-ui-md, 12.5px);
+          cursor: pointer;
+        }
+        .pretui-radio {
+          appearance: none;
+          width: 15px;
+          height: 15px;
+          margin: 0;
+          border-radius: 50%;
+          background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
+          box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
+          cursor: pointer;
+          display: inline-grid;
+          place-content: center;
+          flex: none;
+        }
+        .pretui-radio:checked {
+          background: var(--primary);
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
+            var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
+        }
+        .pretui-radio:checked::before {
+          content: '';
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          /* the Switch's white knob, not ink-on-highlight — one selected
+             language across toggles (boxel-ui paints this dark; deliberate
+             delta for consistency with our Switch) */
+          background: var(--card);
+          box-shadow: 0 0 0 1px rgb(0 0 0 / 0.12);
+        }
+        .pretui-radio:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
       }
     </style>
   </template>

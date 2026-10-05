@@ -216,15 +216,15 @@ function syncCodexManifest(): boolean {
       displayName: 'Boxel CLI',
       shortDescription: 'Author and sync Boxel cards, realms, and workspaces',
       longDescription:
-        'Create and edit Boxel cards, fields, and templates, then sync them ' +
-        'between local disk and a Boxel realm — with skills covering card ' +
-        'authoring, theming, catalog listings, federated search, and realm ' +
-        'indexing diagnostics.',
+        'Sync Boxel cards, fields, and templates between local disk and a ' +
+        'Boxel realm, search across realms, and diagnose realm indexing. ' +
+        'Install the boxel-skills plugin alongside it for card authoring, ' +
+        'theming, and catalog listings.',
       developerName: 'Cardstack',
       category: 'Developer Tools',
       capabilities: ['Interactive', 'Read', 'Write'],
       defaultPrompt: [
-        'Create a Boxel card for the data I describe',
+        'Search my Boxel realms for cards that match what I describe',
         'Pull my Boxel workspace down so I can edit it locally',
       ],
       websiteURL: 'https://boxel.ai',

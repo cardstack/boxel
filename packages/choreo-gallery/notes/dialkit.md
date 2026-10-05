@@ -299,7 +299,7 @@ alongside `choreo-player`.
 ## Notes on versions
 
 dialkit's `motion >=11` peer and its `^12` devDependency bind only the UI ports,
-which we would not use. This repo being on `motion ^13.1.1` is irrelevant to
+which we would not use. This repo being on Motion 13 is irrelevant to
 `dialkit/store`, which imports nothing.
 
 No Ember anywhere in dialkit's `peerDependencies`, `exports` map or keywords.

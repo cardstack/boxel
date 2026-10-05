@@ -1675,15 +1675,25 @@ export default class RealmService extends Service {
       return inProgressAuthentication;
     }
     let deferred = new Deferred<string | undefined>();
+    // Every caller that joins this sign-in awaits the deferred and handles
+    // its rejection; this keeps a failure nobody joined from also surfacing
+    // as an unhandled rejection.
+    deferred.promise.catch(() => {});
     this.reauthentications.set(realmURL, deferred.promise);
 
-    let resource = this.getOrCreateRealmResource(realmURL);
-    resource.logout();
-    await resource.login();
-    let result = resource.token;
-    deferred.fulfill(result);
+    // A sign-in that fails is reported to every caller waiting on it, and
+    // clears the in-progress entry as one that succeeds does, so the next
+    // call signs in afresh rather than waiting on this one.
     try {
+      let resource = this.getOrCreateRealmResource(realmURL);
+      resource.logout();
+      await resource.login();
+      let result = resource.token;
+      deferred.fulfill(result);
       return result;
+    } catch (e) {
+      deferred.reject(e);
+      throw e;
     } finally {
       this.reauthentications.delete(realmURL);
     }

@@ -243,12 +243,12 @@ export default class Menu extends Component<Signature> {
 
         .boxel-menu__item--dangerous {
           --icon-color: currentColor;
-          color: var(--destructive);
+          color: var(--destructive-ink);
           fill: currentColor;
         }
         .boxel-menu__item--dangerous:not(:disabled):hover {
           background-color: color-mix(in oklab, currentColor 10%, transparent);
-          color: var(--destructive);
+          color: var(--destructive-ink);
         }
 
         .boxel-menu__item--disabled,

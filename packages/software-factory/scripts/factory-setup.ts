@@ -2,8 +2,9 @@
 import '../src/setup-logger.ts';
 
 // Idempotent bootstrap for `pnpm factory:go` on a fresh checkout.
-// Builds the boxel-cli API bundle, builds the host app in dev mode (so the
-// test harness has its `dist/tests/index.html` entry), and downloads the
+// Builds the boxel-cli API bundle, fetches the pinned boxel-skills release,
+// builds the host app in dev mode (so the test harness has its
+// `dist/tests/index.html` entry), and downloads the
 // Playwright Chromium headless-shell binary — skipping any step whose artifact
 // is already present. Node itself can't be installed for you, so a too-old Node
 // is reported as an error rather than a build step.
@@ -17,6 +18,7 @@ import {
   MIN_NODE_MAJOR,
   PINNED_NODE,
   boxelCliApiJsExists,
+  boxelSkillsPresent,
   hostTestHarnessExists,
   isNodeVersionOk,
   packageRoot,
@@ -65,6 +67,17 @@ function main(): void {
     );
   } else {
     log.info('✓ boxel-cli dist/api.js present — skipping');
+  }
+
+  if (force || !boxelSkillsPresent()) {
+    run(
+      'Fetch the pinned boxel-skills release',
+      'pnpm',
+      ['--filter', '@cardstack/boxel-cli', 'fetch:skills'],
+      root,
+    );
+  } else {
+    log.info('✓ boxel-skills clone present — skipping');
   }
 
   if (force || !hostTestHarnessExists()) {

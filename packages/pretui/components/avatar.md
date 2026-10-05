@@ -52,6 +52,8 @@ Gaps:
 
 The 16% / 20% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenised — so a season cannot make avatars more or less saturated. `@size` is an arg, not a token, so a season cannot set a default size either. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Compose **Badge** / **Indicator** for unread/online. Accept `src` /

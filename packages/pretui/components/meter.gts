@@ -66,30 +66,32 @@ export class Meter extends Component<MeterSignature> {
       {{#if @label}}<span class='pretui-meter-label'>{{@label}}</span>{{/if}}
     </span>
     <style scoped>
-      .pretui-meter {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 8px;
-      }
-      .pretui-meter-bars {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 2px;
-        height: 14px;
-      }
-      .pretui-meter-bar {
-        width: 4px;
-        border-radius: 2px;
-        background: var(--line-strong, var(--boxel-400));
-      }
-      .pretui-meter-bar[data-on] {
-        background: var(--pretui-meter-hue, var(--primary));
-      }
-      .pretui-meter-label {
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 500;
-        color: var(--muted-foreground);
-        line-height: 1;
+      @layer PretComponent {
+        .pretui-meter {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 8px;
+        }
+        .pretui-meter-bars {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 14px;
+        }
+        .pretui-meter-bar {
+          width: 4px;
+          border-radius: 2px;
+          background: var(--line-strong, var(--boxel-400));
+        }
+        .pretui-meter-bar[data-on] {
+          background: var(--pretui-meter-hue, var(--primary));
+        }
+        .pretui-meter-label {
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 500;
+          color: var(--muted-foreground);
+          line-height: 1;
+        }
       }
     </style>
   </template>

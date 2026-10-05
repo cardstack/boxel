@@ -33,12 +33,18 @@ export function normalizeRootMargin(value: unknown): string {
   return tokens.join(' ');
 }
 
+/** `onChange` hears every enter (and, unless `once`, every exit); `enabled`
+ * false leaves the element unobserved. */
 export const inViewport = modifier(
   (
     el: HTMLElement,
     [threshold, rootMargin, once]: [number, string, boolean],
+    {
+      onChange,
+      enabled = true,
+    }: { onChange?: (inView: boolean) => void; enabled?: boolean },
   ) => {
-    if (typeof IntersectionObserver === 'undefined') return;
+    if (!enabled || typeof IntersectionObserver === 'undefined') return;
     el.setAttribute('data-inview', 'false');
     let observer = new IntersectionObserver(
       (entries) => {
@@ -46,8 +52,10 @@ export const inViewport = modifier(
           if (entry.isIntersecting) {
             el.setAttribute('data-inview', 'true');
             if (once) observer.disconnect();
+            onChange?.(true);
           } else if (!once) {
             el.setAttribute('data-inview', 'false');
+            onChange?.(false);
           }
         }
       },
@@ -184,50 +192,52 @@ export class InView extends Component<InViewSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-inview {
-        display: var(--pretui-inview-display, block);
-      }
-      .pretui-inview-item {
-        display: var(--pretui-inview-item-display, block);
-      }
-      /* The revealed state is the plain, unqualified rule — see the polarity
-         note on inViewport. Only the [data-inview='false'] rules hide, and
-         they only exist once the observer is live. */
-      .pretui-inview[data-mode='block'],
-      .pretui-inview-item {
-        transition-property: opacity, transform;
-        transition-duration: var(--pretui-inview-duration, 480ms);
-        transition-timing-function: var(
-          --pretui-ease-out,
-          cubic-bezier(0.16, 1, 0.3, 1)
-        );
-      }
-      .pretui-inview[data-mode='block'] {
-        transition-delay: var(--pretui-inview-delay, 0s);
-      }
-      .pretui-inview-item {
-        transition-delay: calc(
-          var(--pretui-inview-delay, 0s) + var(--pretui-inview-i, 0) *
-            var(--pretui-inview-stagger, 0s)
-        );
-      }
-      .pretui-inview[data-mode='block'][data-inview='false'],
-      .pretui-inview[data-inview='false'] .pretui-inview-item {
-        opacity: 0;
-        transform: var(--pretui-inview-from, none);
-        transition-delay: 0s;
-      }
-      /* Reduced motion neutralises the pre-state itself, not just the
-         transition — the content is there on the first frame. */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-inview[data-mode='block'][data-inview='false'],
-        .pretui-inview[data-inview='false'] .pretui-inview-item {
-          opacity: 1;
-          transform: none;
+      @layer PretComponent {
+        .pretui-inview {
+          display: var(--pretui-inview-display, block);
         }
+        .pretui-inview-item {
+          display: var(--pretui-inview-item-display, block);
+        }
+        /* The revealed state is the plain, unqualified rule — see the polarity
+           note on inViewport. Only the [data-inview='false'] rules hide, and
+           they only exist once the observer is live. */
         .pretui-inview[data-mode='block'],
         .pretui-inview-item {
-          transition-property: none;
+          transition-property: opacity, transform;
+          transition-duration: var(--pretui-inview-duration, 480ms);
+          transition-timing-function: var(
+            --pretui-ease-out,
+            cubic-bezier(0.16, 1, 0.3, 1)
+          );
+        }
+        .pretui-inview[data-mode='block'] {
+          transition-delay: var(--pretui-inview-delay, 0s);
+        }
+        .pretui-inview-item {
+          transition-delay: calc(
+            var(--pretui-inview-delay, 0s) + var(--pretui-inview-i, 0) *
+              var(--pretui-inview-stagger, 0s)
+          );
+        }
+        .pretui-inview[data-mode='block'][data-inview='false'],
+        .pretui-inview[data-inview='false'] .pretui-inview-item {
+          opacity: 0;
+          transform: var(--pretui-inview-from, none);
+          transition-delay: 0s;
+        }
+        /* Reduced motion neutralises the pre-state itself, not just the
+           transition — the content is there on the first frame. */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-inview[data-mode='block'][data-inview='false'],
+          .pretui-inview[data-inview='false'] .pretui-inview-item {
+            opacity: 1;
+            transform: none;
+          }
+          .pretui-inview[data-mode='block'],
+          .pretui-inview-item {
+            transition-property: none;
+          }
         }
       }
     </style>

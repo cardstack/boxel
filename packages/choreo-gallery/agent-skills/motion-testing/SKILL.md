@@ -1,8 +1,9 @@
 ---
 name: motion-testing
 description: >-
-  Testing animated UI with glimmer-motion/test-support: setupMotion,
-  animationsSettled, bounds, shape, orphanCount, strandedTransforms. Use
+  Testing animated UI with glimmer-motion/test-support (setupMotion,
+  animationsSettled, bounds, shape) and glimmer-motion/choreo/test-support
+  (setupChoreo, orphanCount, strandedTransforms). Use
   when writing or debugging any test that renders motion elements, Presence,
   layout animation, or Choreo — and to avoid sleep()-based flake.
 ---
@@ -13,8 +14,8 @@ description: >-
 change a spring and every sleep becomes flaky or slow.
 
 ```ts
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import {
-  setupMotion,
   animationsSettled,
   bounds,
   shape,
@@ -22,7 +23,7 @@ import {
 
 module('the inbox', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a deleted row flies to the bin', async function (assert) {
     await render(<template><Inbox /></template>);
@@ -36,9 +37,13 @@ module('the inbox', function (hooks) {
 });
 ```
 
-- **`setupMotion(hooks)`** — resets what outlives an owner: the beacon
-  registry, the far-match barrier, motion speed. Always pair with
+- **`setupMotion(hooks)`** — resets what outlives an owner: the projection
+  root, the layout-loop guard, motion speed. Always pair with
   `setupRenderingTest`.
+- **`setupChoreo(hooks)`** (`glimmer-motion/choreo/test-support`) — the
+  setup for a suite that renders `<Choreo>`, in place of `setupMotion`. It
+  is `setupMotion` plus Choreo's own resets: the beacon registry, the
+  far-match barrier, gesture samples.
 - **`animationsSettled()`** — resolves when every motion element, layout
   animation and `<Choreo>` timeline in the document has stopped. On timeout
   it names what was still moving. It is deliberately NOT folded into
@@ -51,8 +56,9 @@ module('the inbox', function (hooks) {
   many tests have run).
 - **`shape(el)`** — the cumulative 2×2 transform. The way to assert a label
   was not smeared by its parent's scale; reading `x` will never tell you.
-- **`orphanCount()` / `strandedTransforms()`** — the two invariants to
-  assert after any interruption test: nothing parked in a Choreo orphan
+- **`orphanCount()` / `strandedTransforms()`**
+  (`glimmer-motion/choreo/test-support`) — the two invariants to assert
+  after any interruption test: nothing parked in a Choreo orphan
   layer, nothing wearing a transform nobody is animating.
 
 ## Conventions

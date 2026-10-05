@@ -1,5 +1,4 @@
-// Pretui — Calendar unit tests. Imports from ../reading-extras; when Calendar
-// moves to its own file only the import path changes.
+// Pretui — Calendar unit tests.
 //
 // Dates are ISO yyyy-mm-dd strings at every boundary and compare
 // lexicographically, so nothing here depends on the runner's locale; the

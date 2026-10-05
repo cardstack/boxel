@@ -13,7 +13,7 @@ import { RealmPolicyCache } from '@cardstack/runtime-common/card-operations';
 // The policy card is `${orgURL}policies/education`. It has one rule, for a
 // `Classroom` in `${educationURL}classroom`, with one grant. A test changes
 // what the environment answers through `state`, and reads what the cache did
-// through `state.reads` and `state.lookups`.
+// through `state.reads`, `state.lookups` and `state.revisits`.
 export interface StubPolicyState {
   version: string;
   fields: Record<string, string>;
@@ -26,8 +26,16 @@ export interface StubPolicyState {
   lookupFailure: Error | undefined;
   // Awaited by the next card reads while set.
   readGate: Promise<void> | undefined;
+  // Awaited by the next visits the cache asks for while set, so a test can
+  // act while a visit is still running.
+  revisitGate: Promise<void> | undefined;
+  // What a visit the cache asks for does once it runs, standing in for what
+  // the visit's commit would change. A visit does nothing while unset.
+  onRevisit: (() => void) | undefined;
   reads: number;
   lookups: number;
+  // Every visit the cache asked for, as the file and the realm it named.
+  revisits: { file: string; realmURL: string }[];
 }
 
 export function stubPolicyCache({
@@ -49,8 +57,11 @@ export function stubPolicyCache({
     failureWithheld: false,
     lookupFailure: undefined,
     readGate: undefined,
+    revisitGate: undefined,
+    onRevisit: undefined,
     reads: 0,
     lookups: 0,
+    revisits: [],
   };
   let typeKey = (ref: ResolvedCodeRef) => `${ref.module}/${ref.name}`;
   let policyKey = typeKey(realmPolicyRef);
@@ -60,6 +71,7 @@ export function stubPolicyCache({
       state.reads++;
       await state.readGate;
       return {
+        url: `${card}.json`,
         realmURL: orgURL,
         generation: 1,
         sourceContentHash: state.version,
@@ -107,6 +119,15 @@ export function stubPolicyCache({
     toURL: (identifier) => new URL(identifier),
     isPolicyCard: (types) => types.includes(policyKey),
     typeKey,
+    revisitCard: async (file, realmURL) => {
+      state.revisits.push({ file, realmURL });
+      // Settles on a later turn, as a queued visit does.
+      await (state.revisitGate ?? Promise.resolve());
+      state.onRevisit?.();
+    },
+    realmURL: educationURL,
+    instanceTypesUnder: async () => [],
+    instanceTypeKeys: async () => [],
   });
   return { cache, state, card };
 }

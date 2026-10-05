@@ -74,20 +74,24 @@ export class DatePicker extends Component<DatePickerSignature> {
       </Popover>
     </span>
     <style scoped>
-      .pretui-datepicker {
-        display: inline-block;
-      }
-      .pretui-datepicker-trigger {
-        min-width: 150px;
-        cursor: pointer;
-      }
-      /* the Calendar root is an inline-size container (its width comes from
-         the parent), so the panel takes the one-month width explicitly:
-         7 × 30px cells + 6 × 2px gaps + panel padding. Sized through
-         Popover's own custom-property knobs (they inherit — no :deep()). */
-      .pretui-datepicker {
-        --pretui-popover-width: calc(222px + 2 * var(--space-4, 11px));
-        --pretui-popover-min-width: 0;
+      /* above Input's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-datepicker {
+          display: inline-block;
+        }
+        .pretui-datepicker-trigger {
+          min-width: 150px;
+          cursor: pointer;
+        }
+        /* the Calendar root is an inline-size container (its width comes from
+           the parent), so the panel takes the one-month width explicitly:
+           7 × 30px cells + 6 × 2px gaps + panel padding. Sized through
+           Popover's own custom-property knobs (they inherit — no :deep()). */
+        .pretui-datepicker {
+          --pretui-popover-width: calc(222px + 2 * var(--space-4, 11px));
+          --pretui-popover-min-width: 0;
+        }
       }
     </style>
   </template>

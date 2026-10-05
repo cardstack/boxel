@@ -12,6 +12,7 @@
 import { clearRender, find, render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { frame, visualElementStore } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -35,6 +36,7 @@ module(
   'Integration | motion | motion value lifecycle on unmount (#3315)',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
 
     test('does not synchronously stop animations on VE-owned motion values', async function (assert) {
       const { ve, xValue } = await mountAnimating();

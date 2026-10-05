@@ -20,14 +20,18 @@ const PNPM_OWNED_FILES = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml']);
 // that repo's bytes. `.prettierignore` already covers them, but eslint applies
 // prettier formatting through eslint-plugin-prettier and never consults
 // `.prettierignore` — so without this skip, staging a copied `.gts` reformats
-// it and drifts the copy from its source. Regenerating (`pnpm build:skills`)
-// then reports phantom diffs. Match on a path segment so absolute staged paths
-// work.
+// it and drifts the copy from its source. Match on a path segment so absolute
+// staged paths work.
 const VERBATIM_COPIED_TREES = [
-  '/packages/boxel-cli/plugin/skills/',
   // Licensed FileDef sample files whose bytes must match the integrity
   // manifest in the sibling SOURCES.md.
   '/packages/experiments-realm/filedef-fixtures/samples/',
+  // Vendored third-party bundles and data in Pret UI; each directory's
+  // README.md records the upstream version and how the bytes were built.
+  '/packages/pretui/color/index.js',
+  '/packages/pretui/zxcvbn/index.js',
+  '/packages/pretui/sigpad/index.js',
+  '/packages/pretui/emoji-data/data.ts',
 ];
 const isVerbatimCopy = (file) => {
   const posix = file.replace(/\\/g, '/');

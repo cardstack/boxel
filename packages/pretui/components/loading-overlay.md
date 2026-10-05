@@ -55,6 +55,8 @@ No APG pattern. What matters is the busy state and one clear announcement.
 
 The scrim mixes against `--card`, so a dark season gets a dark scrim without asking. The fade-in is skipped under `prefers-reduced-motion`. Covering the region edge to edge and inheriting its corner radius are fixed.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                              | Give them                              |

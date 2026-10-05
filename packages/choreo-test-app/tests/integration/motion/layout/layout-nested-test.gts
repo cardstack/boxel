@@ -12,6 +12,7 @@ import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -356,6 +357,7 @@ module(
   'Integration | motion | cypress | Relative projection targets: Delay',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Child correctly follows parent', async function (assert) {
       await render(
@@ -406,6 +408,7 @@ module(
   'Integration | motion | cypress | layoutAnchor: centered child stays centered during parent resize',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Child with layoutAnchor={x:0.5,y:0.5} stays centered mid-animation', async function (assert) {
       await render(
@@ -447,6 +450,7 @@ module(
 
 module('Integration | motion | cypress | Resize window', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
   setupFixtureViewport(hooks);
   test('Finishes the animation and blocks animation on immediate layout animations until 250ms', async function (assert) {
     await render(
@@ -526,6 +530,7 @@ module(
   'Integration | motion | cypress | Read initial transform during layout animation',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Should not read a projection transform as the initial transform', async function (assert) {
       await render(
@@ -550,6 +555,7 @@ module(
   'Integration | motion | cypress | Layout animation with percentage x/y parent (#3254)',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('layoutId indicator animates to correct position within parent with percentage x/y', async function (assert) {
       await render(
@@ -575,6 +581,7 @@ module(
   'Integration | motion | cypress | Layout animation: percentage x in flex container',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('Correctly layout-animates when sibling added before keyframes resolve', async function (assert) {
       await render(
@@ -598,6 +605,7 @@ module(
   'Integration | motion | cypress | Layout: nested in motion.div with x/y (#3244)',
   function (hooks) {
     setupRenderingTest(hooks);
+    setupMotion(hooks);
     setupFixtureViewport(hooks);
     test('layoutId element inside motion.div with x/y should not get a projection transform on mount', async function (assert) {
       // the MutationObserver is set up before render so any transient projection transform is caught

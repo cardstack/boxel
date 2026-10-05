@@ -1,5 +1,4 @@
-// Pretui — ScrollProgress unit tests. Imports from ../motion-core; when ScrollProgress moves to its
-// own file only the import path changes.
+// Pretui — ScrollProgress unit tests.
 //
 // No assertion touches a computed style: the
 // component's own `<style scoped>` is inert in this harness (the scoped-css

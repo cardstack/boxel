@@ -42,3 +42,5 @@ Where it is thinner: no split-button behaviour, no overflow, and no per-child ov
 `@tone`, `@appearance` and `@size` resolve through the kit's shared recipe system and reach children through custom properties.
 
 That channel is the component's whole implementation: a season changes what `accent` means once, and every grouped button follows, including ones the group never knew about.
+
+The styles sit in `@layer PretComposite`, above Button's `PretComponent` layer, so what this component sets on Button wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

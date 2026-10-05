@@ -7,8 +7,22 @@ import {
   authorizationCardIds,
   matchingGrants,
   nonGrantableInChain,
+  policyUnavailable,
+  type MatchedGrant,
 } from './gate.ts';
-import { realmPolicyRef, type CompiledRealmPolicy } from './policy.ts';
+import {
+  elapsedMs,
+  emitPolicySearchScope,
+  recordSafely,
+  type PolicySearchScopeEvent,
+} from './telemetry.ts';
+import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
+import {
+  realmPolicyRef,
+  type CompiledOperationGrant,
+  type CompiledRealmPolicy,
+  type MisreadingType,
+} from './policy.ts';
 import { lowerQueryOperation } from './query.ts';
 
 // ============================================================================
@@ -44,6 +58,12 @@ import { lowerQueryOperation } from './query.ts';
 //
 // A caller with nothing to contribute is scoped to nothing rather than to
 // everything: an absent grant is a refusal here, as it is at the gate.
+//
+// A policy that did not compile as a whole grants nothing, and yet is not a
+// refusal. What it would grant is unknown: the realm names a policy and cannot
+// read it as one. So the query is refused with the gate's own 500, rather than
+// answered as though the policy granted nothing, and a federated search counts
+// the realm as one that did not answer.
 //
 // Authorization infrastructure is outside the grant model here as it is at
 // the gate. A query declared `nonGrantable` contributes nothing, however the
@@ -90,9 +110,9 @@ export type PolicyQueryScope =
 
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
-// Who a search runs for. A realm-authority principal is a render: a session a
-// realm renders its own cards under (`TokenClaims.realmAuthority`), or any
-// request a render tab sends. Any other is the user its session names.
+// Who a search runs for. A realm-authority principal is a session a realm
+// renders its own cards under (`TokenClaims.realmAuthority`). Any other is the
+// user its session names, including a render a user asked for.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
   | { kind: 'realm-authority'; user: string };
@@ -113,8 +133,8 @@ export function searchPrincipal(
 
 // Raised when a policy is asked what it grants a realm-authority principal.
 //
-// A render's search runs as a realm-authority principal, and what the render
-// produces is cached and served to every viewer. A policy fragment composed
+// The search a realm's own render sends runs as a realm-authority principal,
+// and what that render produces is cached and served to every viewer. A policy fragment composed
 // into that search would make the render per-actor: rows missing, or rows
 // only one user may see, in HTML everyone receives. Nothing would fail, so
 // this is raised instead of answering, and it is never caught as a denial.
@@ -151,19 +171,84 @@ export class RealmAuthorityPolicyScopeError extends Error {
 // type the several share is anchored on that shared type, and unconfined it
 // would reach, through the type it was matched for, the cards of one whose
 // own judgment refused them — a type the realm cannot resolve, say.
+//
+// Each call is recorded on `boxel:operations` as one `policy-search-scope`
+// line: the realm, the grants that contributed a filter, and how long judging
+// them took (see `SearchScopeRecording`).
 export async function policyQueryScope(
   core: OperationCore,
   invocation: {
     operation: string;
     types: readonly CodeRef[];
     principal: SearchPrincipal;
-  },
+  } & SearchScopeRecording,
 ): Promise<PolicyQueryScope> {
   let { operation, types, principal } = invocation;
   if (principal.kind === 'realm-authority') {
     throw new RealmAuthorityPolicyScopeError(core.realmURL, operation);
   }
-  let actor = principal.user;
+  let started = performance.now();
+  let contributed: MatchedGrant[] = [];
+  let record = (outcome: PolicySearchScopeEvent['outcome']) => {
+    if (invocation.advisory) {
+      return;
+    }
+    recordSafely('policy-search-scope', () =>
+      emitPolicySearchScope({
+        kind: 'policy-search-scope',
+        realmURL: core.realmURL,
+        actor: principal.user,
+        operation,
+        types: types.map(typeLabel).join(','),
+        transport: invocation.transport ?? 'search',
+        outcome,
+        rules: [...new Set(contributed.map(({ rule }) => rule.path))].join(','),
+        grants: contributed.map(({ grant }) => grant.path).join(','),
+        evaluationMs: elapsedMs(started),
+        hypothetical: invocation.hypothetical ?? false,
+      }),
+    );
+  };
+  let scope: PolicyQueryScope;
+  try {
+    scope = await scopeFor(core, operation, types, principal.user, contributed);
+  } catch (e: unknown) {
+    record('failed');
+    throw e;
+  }
+  if (scope.kind !== 'scoped') {
+    contributed.length = 0;
+  }
+  record(scope.kind === 'scoped' ? 'scoped' : 'none');
+  return scope;
+}
+
+// How a search-lane call is recorded. `transport` names the surface the search
+// arrived on, `search` where unsaid. An explain's call is `hypothetical`, and a
+// capability check's is `advisory`, which records nothing: it asks what a
+// search would admit at the rate a view renders, and its own line counts it.
+export interface SearchScopeRecording {
+  transport?: PolicySearchScopeEvent['transport'];
+  hypothetical?: boolean;
+  advisory?: boolean;
+}
+
+// A type as a search-lane record names it.
+function typeLabel(type: CodeRef): string {
+  return 'module' in type && 'name' in type
+    ? `${type.module}/${type.name}`
+    : JSON.stringify(type);
+}
+
+// What `policyQueryScope` answers, with the grants that contributed a filter
+// pushed onto `contributed`, type by type in the order the search names them.
+async function scopeFor(
+  core: OperationCore,
+  operation: string,
+  types: readonly CodeRef[],
+  actor: string,
+  contributed: MatchedGrant[],
+): Promise<PolicyQueryScope> {
   let distinct = [
     ...new Map(types.map((type) => [JSON.stringify(type), type])).values(),
   ];
@@ -173,12 +258,19 @@ export async function policyQueryScope(
   if (distinct.length === 1) {
     return await withoutAuthorization(
       core,
-      await typeScope(core, operation, distinct[0], actor),
+      await typeScope(core, operation, distinct[0], actor, contributed),
     );
   }
+  // Each type's contributions are kept apart while the types are judged at
+  // once, and joined in order after, so a record's grants do not depend on
+  // which lookup finished first.
+  let perType = distinct.map((): MatchedGrant[] => []);
   let scopes = await Promise.all(
-    distinct.map((on) => typeScope(core, operation, on, actor)),
+    distinct.map((on, index) =>
+      typeScope(core, operation, on, actor, perType[index]),
+    ),
   );
+  contributed.push(...perType.flat());
   let filters: Filter[] = [];
   for (let [index, scope] of scopes.entries()) {
     if (scope.kind === 'scoped') {
@@ -226,7 +318,10 @@ function excluding(filter: Filter, excluded: Filter[]): Filter {
 // asked about it.
 export async function principalQueryScope(
   core: OperationCore,
-  invocation: { operation: string; types: readonly CodeRef[] },
+  invocation: {
+    operation: string;
+    types: readonly CodeRef[];
+  } & SearchScopeRecording,
   principal: SearchPrincipal | undefined,
 ): Promise<PolicyQueryScope> {
   return principal?.kind === 'user'
@@ -240,10 +335,16 @@ async function typeScope(
   operation: string,
   on: CodeRef,
   actor: string,
+  contributed: MatchedGrant[],
 ): Promise<PolicyQueryScope> {
   let policy = await core.policy?.compiledPolicy();
   if (!policy) {
     return DENIED;
+  }
+  // Before the type is resolved, as the gate refuses before its target
+  // resolves, so the refusal says nothing about the type.
+  if (policy.uncompilable) {
+    throw policyUnavailable();
   }
   let entry = await targetTypeEntry(core, on);
   if (!entry?.types) {
@@ -253,17 +354,18 @@ async function typeScope(
   if (ownDeclaration(entry.definition, operation)?.nonGrantable) {
     return DENIED;
   }
-  let filters = await grantFilters(policy, entry.types, operation, actor, core);
-  if (filters.length === 0) {
+  let granted = await grantFilters(policy, entry.types, operation, actor, core);
+  if (granted.length === 0) {
     return DENIED;
   }
   // Only once a grant would contribute, as at the gate, so a query nothing
   // grants pays no definition reads for a refusal it was getting anyway. The
   // chain starts at the queried type, whose own declaration was read above.
-  if (await nonGrantableInChain(core, entry.types.slice(1), operation)) {
+  if (await nonGrantableInChain(core, entry.types, operation, 1)) {
     return DENIED;
   }
-  return { kind: 'scoped', filters };
+  contributed.push(...granted.map(({ matched }) => matched));
+  return { kind: 'scoped', filters: granted.map(({ filter }) => filter) };
 }
 
 // The definition-cache entry of the type a query names: its definition, and
@@ -302,7 +404,8 @@ function ownDeclaration(
 }
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
-// engine runs.
+// engine runs, each comparison in it kept from judging a card whose type reads
+// the compared path differently from the rule's type.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query
@@ -317,10 +420,11 @@ async function grantFilters(
   operation: string,
   actor: string,
   core: OperationCore,
-): Promise<Filter[]> {
+): Promise<{ filter: Filter; matched: MatchedGrant }[]> {
   let matched = await matchingGrants(policy, types, operation, core.policy!);
-  let filters: Filter[] = [];
-  for (let { grant } of matched) {
+  let filters: { filter: Filter; matched: MatchedGrant }[] = [];
+  for (let candidate of matched) {
+    let { grant } = candidate;
     if (!grant.filter) {
       continue;
     }
@@ -333,7 +437,74 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
-    filters.push(policyFilterFromWire(bound.filter));
+    filters.push({
+      filter: withoutMisreadings(policyFilterFromWire(bound.filter), grant),
+      matched: candidate,
+    });
   }
   return filters;
+}
+
+// `filter` with each comparison of a path some type reads differently kept
+// from judging that type's cards, which the index holds a reading of that the
+// predicate never makes. Where the comparison would admit a card, it admits
+// none of those. Under a `not`, where it would refuse one, it refuses all of
+// them. So for such a card the filter holds only when it would hold whatever
+// the path read, and the rest of the filter still judges the card: an `or`
+// whose other branch reads a path the type declares alike still admits it. A
+// filter with nothing misread is `filter` itself, untouched.
+export function withoutMisreadings(
+  filter: Filter,
+  grant: Pick<CompiledOperationGrant, 'misreadingTypes'>,
+): Filter {
+  let byPath = new Map(
+    (grant.misreadingTypes ?? []).map(({ path, types }) => [path, types]),
+  );
+  if (byPath.size === 0) {
+    return filter;
+  }
+  let guard = (node: Filter, positive: boolean): Filter => {
+    if ('any' in node) {
+      return {
+        ...node,
+        any: node.any.map((branch) => guard(branch, positive)),
+      };
+    }
+    if ('every' in node) {
+      return {
+        ...node,
+        every: node.every.map((branch) => guard(branch, positive)),
+      };
+    }
+    if ('not' in node) {
+      return { ...node, not: guard(node.not, !positive) };
+    }
+    let compared = node as Partial<
+      Record<(typeof FIELD_KEYED_OPERATORS)[number], object>
+    >;
+    let types = FIELD_KEYED_OPERATORS.flatMap((operator) =>
+      Object.keys(compared[operator] ?? {}),
+    ).flatMap((path) => byPath.get(path) ?? []);
+    if (types.length === 0) {
+      return node;
+    }
+    let misread: Filter = { any: types.map(cardsOf) };
+    return positive
+      ? { every: [node, { not: misread }] }
+      : { any: [node, misread] };
+  };
+  return guard(filter, true);
+}
+
+// The cards whose own type is `type`, or descends from it without having
+// redeclared the path back.
+function cardsOf({ type, except }: MisreadingType): Filter {
+  return except
+    ? {
+        every: [
+          { type },
+          { not: { any: except.map((kept) => ({ type: kept })) } },
+        ],
+      }
+    : { type };
 }

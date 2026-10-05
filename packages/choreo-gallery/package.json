@@ -36,6 +36,7 @@
   "scripts": {
     "build": "node scripts/sync-gallery.mjs && node scripts/scope-css.mjs && rollup --config",
     "build:realm": "node scripts/build-boxel-realm.mjs",
+    "docs:check": "node tools/check-guide-coverage.mjs",
     "lint:types": "node scripts/sync-gallery.mjs && ember-tsc --noEmit",
     "test:boxel": "node scripts/test-boxel-runtime.mjs",
     "test:realm": "node --test tests/realm-output.test.mjs",
@@ -66,10 +67,10 @@
   "devDependencies": {
     "@babel/core": "catalog:",
     "@babel/plugin-transform-typescript": "catalog:",
+    "@cardstack/choreo-eslint-config": "workspace:*",
     "@ember/library-tsconfig": "^1.1.3",
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/addon-shim": "^1.8.9",
-    "@eslint/js": "^9.39.4",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
     "@glint/ember-tsc": "catalog:",
@@ -83,21 +84,15 @@
     "ember-template-lint": "catalog:",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.4",
-    "eslint-config-prettier": "catalog:",
-    "eslint-plugin-ember": "catalog:",
-    "eslint-plugin-n": "catalog:",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-typescript-sort-keys": "catalog:",
     "glimmer-scoped-css": "catalog:",
     "globals": "^15.15.0",
     "playwright": "1.61.0",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.28",
     "postcss-selector-parser": "^7.1.0",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "rollup": "catalog:",
-    "typescript": "catalog:",
-    "typescript-eslint": "catalog:"
+    "typescript": "catalog:"
   },
   "ember-addon": {
     "type": "addon",

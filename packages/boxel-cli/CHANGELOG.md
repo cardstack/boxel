@@ -6,6 +6,26 @@ Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 
+## 2026-10-04 — npm v0.7.0
+
+Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.7.0
+
+## @cardstack/boxel-cli v0.7.0 (npm `latest`)
+
+https://www.npmjs.com/package/@cardstack/boxel-cli/v/0.7.0
+
+## Changes
+
+- chore: release boxel-cli as 0.7.0 rather than 1.0.0 by @habdelra in https://github.com/cardstack/boxel/pull/6511
+- feat: move the card-building skills to a boxel-skills plugin (Codex users: also install boxel-skills) by @habdelra in https://github.com/cardstack/boxel/pull/6506
+- feat!: rename the declared-screenshot feature to "captures" by @lukemelia in https://github.com/cardstack/boxel/pull/6307
+- feat: list every profile in `profile list`, add `--json` and a count by @lukemelia in https://github.com/cardstack/boxel/pull/6299
+- fix(skills): read block-scalar skill descriptions by @FadhlanR in https://github.com/cardstack/boxel/pull/6212
+- test: live-test harness collects import-time test registrations by @richardhjtan in https://github.com/cardstack/boxel/pull/6225
+- fix: resolve realm-prefixed imports in the parse gate by @FadhlanR in https://github.com/cardstack/boxel/pull/6211
+
+**Full Changelog**: https://github.com/cardstack/boxel/compare/boxel-cli-v0.6.0...boxel-cli-v0.7.0
+
 ## 2026-09-23 — npm v0.6.0
 
 Release: https://github.com/cardstack/boxel/releases/tag/boxel-cli-v0.6.0

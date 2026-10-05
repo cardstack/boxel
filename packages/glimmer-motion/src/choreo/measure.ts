@@ -9,7 +9,17 @@
  * offset produce a flight that lands next to its target, which is the kind of
  * bug that looks like a spring problem for a day.
  */
+import { defineParticipantArg } from '../participant.ts';
 import type { Bounds, Rect } from './types.ts';
+
+// `pack`'s type is declared in registry.ts, which the published declarations reach
+defineParticipantArg('pack', (el, pack) => {
+  if (pack === 'content') {
+    el.setAttribute('data-choreo-pack', 'content');
+  } else {
+    el.removeAttribute('data-choreo-pack');
+  }
+});
 
 /** a box in page space */
 export const rect = (r: DOMRect): Rect => ({

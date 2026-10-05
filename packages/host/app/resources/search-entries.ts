@@ -27,6 +27,7 @@ import {
   resourceIdentity,
   ri,
   rri,
+  stringifyErrorForLog,
   wireFilterHasMatches,
   wireFilterTypeAnchors,
   RealmPaths,
@@ -55,6 +56,7 @@ import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type {
@@ -116,6 +118,7 @@ interface Args {
 export class SearchEntriesResource extends Resource<Args> {
   @service declare private loaderService: LoaderService;
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
 
@@ -382,11 +385,15 @@ export class SearchEntriesResource extends Resource<Args> {
           // re-querying the whole realm. Full-text (matches) queries,
           // paginated queries, composite/sparse selections, and a malformed
           // event (no usable generation to judge staleness by) can't refresh
-          // in isolation and fall through to the coarse re-run.
+          // in isolation and fall through to the coarse re-run. So does an
+          // event from a realm the session may not read: the realm answers
+          // the card+html GET on its own permissions alone, so a member a
+          // policy grant let the search return is refused there.
           if (
             event.eventName === 'prerender_html' &&
             typeof event.generation === 'number' &&
-            this.#canSelectivelyRefresh()
+            this.#canSelectivelyRefresh() &&
+            !this.#sessionCannotRead(realm)
           ) {
             this.#log.info(
               `prerender_html event on ${realm}; scheduling selective per-member refresh`,
@@ -714,6 +721,15 @@ export class SearchEntriesResource extends Resource<Args> {
     return this.#fieldsetIsRefreshable(query.fields?.entry);
   }
 
+  // Whether the session is known not to read `realm`: the host holds a
+  // session for it whose permissions leave out `read`. A realm the host holds
+  // no session for, such as a public one it never signed in to, or one whose
+  // info it loaded without signing in, is not known either way, and its
+  // card+html GET is answered as it always is.
+  #sessionCannotRead(realm: string): boolean {
+    return this.realm.token(realm) !== undefined && !this.realm.canRead(realm);
+  }
+
   // Refreshable = the html branch is in play (the default resolution or an
   // explicit `html`) and any other selection is `item`. An item-only fieldset
   // is NOT refreshable even though the GET could spell it: without the html
@@ -823,6 +839,15 @@ export class SearchEntriesResource extends Resource<Args> {
         if (refreshed === undefined) {
           return 'fallback';
         }
+        // The card+html GET serves the formats the card's type withholds
+        // data-only, while this search is governed by its own declaration,
+        // and an ad-hoc one declares nothing. A member the search served with
+        // markup that comes back without any may be one of those formats, and
+        // splicing it in would show it data-only until the next full run
+        // shows it with markup again — so the whole search re-runs instead.
+        if (member.html.length > 0 && refreshed.html.length === 0) {
+          return 'fallback';
+        }
         replacements.set(member.id, refreshed);
       } catch (err) {
         this.#log.warn(
@@ -857,8 +882,8 @@ export class SearchEntriesResource extends Resource<Args> {
     for (let [i, result] of results.entries()) {
       if (result.status === 'rejected') {
         this.#log.warn(
-          `could not load scoped stylesheet ${hrefs[i]}; results render unstyled`,
-          result.reason,
+          `could not load scoped stylesheet ${hrefs[i]}; results render ` +
+            `unstyled: ${stringifyErrorForLog(result.reason)}`,
         );
       }
     }

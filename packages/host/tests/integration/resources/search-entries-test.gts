@@ -963,6 +963,62 @@ module('Integration | search-entries resource', function (hooks) {
       }
     });
 
+    test('a member that comes back without the markup the search served it re-runs the whole search', async function (assert) {
+      // The card+html GET serves the formats a card's type withholds
+      // data-only, while an ad-hoc search declares nothing and serves every
+      // format. A refreshed member that lost its markup is re-read through
+      // the search rather than spliced in, so it keeps the shape the search
+      // gives it.
+      let searchCount = 0;
+      let originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async () => {
+        searchCount++;
+        return entryCollectionDoc([
+          {
+            id: `${testRealmURL}books/1`,
+            indexGen: 1,
+            htmlGen: searchCount,
+            html: `<div>Mango v${searchCount}</div>`,
+          },
+        ]);
+      };
+
+      let getCount = 0;
+      let originalFetchCardEntry =
+        storeService.fetchCardEntry.bind(storeService);
+      storeService.fetchCardEntry = (async () => {
+        getCount++;
+        return {
+          notModified: false,
+          doc: entrySingleDoc({ id: `${testRealmURL}books/1`, indexGen: 1 }),
+        };
+      }) as typeof storeService.fetchCardEntry;
+
+      try {
+        let search = getResourceForTest(storeService, () => ({
+          named: {
+            query: { filter: { 'item.on': bookRef }, realms: [testRealmURL] },
+          },
+        }));
+        await search.loaded;
+        let baseline = searchCount;
+
+        relayPrerenderHtml([`${testRealmURL}books/1.json`], 2);
+        await waitUntil(() => searchCount > baseline, { timeout: 10_000 });
+        await settled();
+
+        assert.strictEqual(getCount, 1, 'the member was asked for first');
+        assert.strictEqual(
+          search.entries[0].html[0]?.html,
+          `<div>Mango v${searchCount}</div>`,
+          'and the search’s own answer, with its markup, is what the member shows',
+        );
+      } finally {
+        storeService.searchEntries = originalSearchEntries;
+        storeService.fetchCardEntry = originalFetchCardEntry;
+      }
+    });
+
     test('a 304 keeps the current rendering and the member identity', async function (assert) {
       let originalSearchEntries = storeService.searchEntries.bind(storeService);
       storeService.searchEntries = async () =>

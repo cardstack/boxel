@@ -27,27 +27,29 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
       {{/each}}
     </nav>
     <style scoped>
-      .pretui-breadcrumb {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-      }
-      .pretui-breadcrumb b {
-        color: var(--foreground);
-        font-weight: 500;
-      }
-      .pretui-breadcrumb a {
-        color: inherit;
-        text-decoration: none;
-      }
-      .pretui-breadcrumb a:hover {
-        text-decoration: underline;
-        text-underline-offset: 2px;
-      }
-      .sep {
-        color: var(--ink-3, var(--boxel-400));
+      @layer PretComponent {
+        .pretui-breadcrumb {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+        }
+        .pretui-breadcrumb b {
+          color: var(--foreground);
+          font-weight: 500;
+        }
+        .pretui-breadcrumb a {
+          color: inherit;
+          text-decoration: none;
+        }
+        .pretui-breadcrumb a:hover {
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .sep {
+          color: var(--ink-3, var(--boxel-400));
+        }
       }
     </style>
   </template>

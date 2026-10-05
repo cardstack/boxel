@@ -3,7 +3,8 @@
 #
 # CI's `cache-index` job (.github/workflows/ci.yaml) indexes every realm and
 # uploads a `pg_dump --data-only` of boxel_index / prerendered_html /
-# realm_generations / realm_meta as the `boxel-index-cache` artifact. Importing
+# realm_generations / realm_meta / scoped_css as the `boxel-index-cache`
+# artifact. Importing
 # it turns the multi-minute prerender indexing into a seconds-long SQL restore.
 #
 # This is the gh-free sibling of scripts/import-cached-index.sh: this cloud
@@ -80,7 +81,7 @@ fi
 
 echo "[index-cache] Restoring index from $CACHE_FILE …"
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html" || { echo "[index-cache] truncate failed" >&2; exit 1; }
+  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html, scoped_css" || { echo "[index-cache] truncate failed" >&2; exit 1; }
 
 # The cache stores https://localhost:4201/... URLs, which is exactly the
 # standard-dev runtime origin — no remapping needed (unlike env mode).
@@ -110,5 +111,5 @@ fi
 
 echo "[index-cache] Import failed; truncating partial data and indexing live." >&2
 docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
-  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html" >/dev/null 2>&1 || true
+  "TRUNCATE boxel_index, realm_generations, realm_meta, prerendered_html, scoped_css" >/dev/null 2>&1 || true
 exit 1

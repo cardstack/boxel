@@ -51,3 +51,5 @@ Gaps, and the first two are the ones that matter for a tool:
 Stage and gutter surfaces (`--canvas` or `--inset`), the frame's `--border` and `--pretui-shadow-card`, `--muted-foreground` for the caption, and **SegmentedControl**'s tokens for the mode picker.
 
 **The stage is deliberately neutral** with explicit surface and gutter settings, because an artboard that shares the page's background makes the framed component's own surface invisible. A season must keep the stage distinguishable from `--card` — otherwise every example appears to float in nothing, which is exactly the illusion an artboard exists to prevent.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

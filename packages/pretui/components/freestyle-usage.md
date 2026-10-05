@@ -47,3 +47,5 @@ Gaps worth knowing, because a documentation surface is read by exactly the peopl
 Composes **Viewport**, **Table**, **Select**, **Input**, **Switch**, **Slider**, **SegmentedControl**, **CopyButton** and **Popover**, so it consumes their token sets rather than defining many of its own. Page structure uses `--card`, `--inset`, `--border`, `--foreground`, `--muted-foreground` and the type scale; the property list and API table pick up **Label**'s eyebrow voice.
 
 The whole page renders inside the theme island, so a season change re-dresses both the documentation chrome _and_ the example — which is the point, and is what **ThemeFrame** exists to drive.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

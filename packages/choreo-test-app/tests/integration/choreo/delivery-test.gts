@@ -8,6 +8,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, motion } from 'glimmer-motion';
+import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -40,6 +41,7 @@ class Fixture extends Component<{ Args: { by: 'character' | 'word' } }> {
 module('Integration | choreo | delivery', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a character delivery reassembles the text exactly and lands the end value', async function (assert) {
     await render(<template><Fixture @by="character" /></template>);

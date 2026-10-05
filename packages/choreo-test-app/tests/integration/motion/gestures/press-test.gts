@@ -9,6 +9,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import motion from 'glimmer-motion/motion';
+import { setupMotion } from 'glimmer-motion/test-support';
 import { motionValue, type Transition } from 'motion-dom';
 import { module, test } from 'qunit';
 
@@ -35,6 +36,7 @@ const PROP_NO_TAP = { tap: false };
 
 module('Integration | motion | press', function (hooks) {
   setupRenderingTest(hooks);
+  setupMotion(hooks);
 
   test('press event listeners fire', async function (assert) {
     const press = spy();
