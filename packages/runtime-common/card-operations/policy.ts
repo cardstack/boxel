@@ -256,6 +256,8 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // commit moves the index of the realm holding the card, which reaches the
 // cache as any move does, and the refresh that follows compiles what the card
 // holds now.
+const NO_OPERATIONS: ReadonlySet<string> = new Set();
+
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -303,6 +305,24 @@ export class RealmPolicyCache {
       return current.compiled;
     }
     return await this.#refresh(card);
+  }
+
+  // The operations the realm's policy opens to callers who aren't signed in,
+  // or none. Read from the compiled policy and nothing else, so answering such
+  // a caller loads no target and evaluates no predicate. A policy that can't
+  // be compiled opens nothing, which leaves that caller with the answer every
+  // other caller who isn't signed in gets, rather than a failure that would
+  // tell them the realm names a policy.
+  async anonymousAdmission(): Promise<ReadonlySet<string>> {
+    let compiled: CompiledRealmPolicy | undefined;
+    try {
+      compiled = await this.get();
+    } catch {
+      return NO_OPERATIONS;
+    }
+    return compiled?.uncompilable || !compiled?.anonymous
+      ? NO_OPERATIONS
+      : new Set(compiled.anonymous.operations);
   }
 
   // The index of the realm at `realmURL` has moved.

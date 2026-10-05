@@ -15685,6 +15685,14 @@ export class Realm {
     return await this.#policyCache.get();
   }
 
+  // The operations the realm's policy opens to callers who aren't signed in,
+  // as `RealmPolicyCache.anonymousAdmission()` reads them: empty for a realm
+  // that names no policy, and for one whose policy opens none or won't
+  // compile.
+  async getAnonymousAdmission(): Promise<ReadonlySet<string>> {
+    return await this.#policyCache.anonymousAdmission();
+  }
+
   __testOnlyPolicyCacheStats(): {
     compiles: number;
     revalidations: number;

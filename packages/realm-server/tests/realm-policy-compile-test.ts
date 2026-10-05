@@ -86,7 +86,12 @@ function classroomModule(rosterField: string) {
   `;
 }
 
-type Grant = { operation: string; where?: unknown };
+type Grant = {
+  operation: string;
+  where?: unknown;
+  anonymous?: boolean;
+  actingUser?: string;
+};
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
@@ -309,6 +314,7 @@ module(basename(import.meta.filename), function (hooks) {
                 source: '.teacherIds | any(. == actor())',
                 canonical: '.teacherIds | any(. == actor())',
                 snapshot: false,
+                readsActor: true,
               },
             },
             {
@@ -318,6 +324,7 @@ module(basename(import.meta.filename), function (hooks) {
                 source: '.headTeacher == actor()',
                 canonical: '.headTeacher == actor()',
                 snapshot: true,
+                readsActor: true,
               },
             },
             {
@@ -812,5 +819,90 @@ module(basename(import.meta.filename), function (hooks) {
       'what is left compiles, at the positions the author wrote it',
     );
     assert.notOk(policy?.uncompilable, 'the policy as a whole compiled');
+  });
+
+  test('a grant opens a base operation to callers who are not signed in, and a write names who it is made as', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        { operation: 'read', anonymous: true },
+        {
+          operation: 'read',
+          anonymous: true,
+          where: '.teacherIds | any(. == actor())',
+        },
+        // A custom operation, built on a base one.
+        { operation: 'appendActivity', anonymous: true },
+        // A write that names nobody to make it as.
+        { operation: 'transform', anonymous: true },
+        {
+          operation: 'transform',
+          anonymous: true,
+          actingUser: 'feedbackWriter',
+        },
+        { operation: 'query', anonymous: true, where: '.status == "open"' },
+        // Opened to signed-in callers only.
+        { operation: 'update' },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [
+        {
+          code: 'anonymous-not-base-operation',
+          path: 'rules[0].grants[2].anonymous',
+        },
+        {
+          code: 'anonymous-write-without-acting-user',
+          path: 'rules[0].grants[3].actingUser',
+        },
+      ],
+      'a custom operation and a write with no acting user are refused, and nothing else',
+    );
+    let grants = policy?.rules[0]?.grants ?? [];
+    assert.deepEqual(
+      grants.map(({ path, anonymous }) => ({ path, anonymous })),
+      [
+        { path: 'rules[0].grants[0]', anonymous: {} },
+        { path: 'rules[0].grants[1]', anonymous: {} },
+        {
+          path: 'rules[0].grants[4]',
+          anonymous: { actingUserKey: 'feedbackWriter' },
+        },
+        { path: 'rules[0].grants[5]', anonymous: {} },
+        { path: 'rules[0].grants[6]', anonymous: undefined },
+      ],
+      'the refused grants are left out, and only the grants that opt in carry the opt-in',
+    );
+    assert.true(
+      grants[1]?.where?.readsActor,
+      'a predicate that reads the caller says so',
+    );
+    assert.notOk(
+      grants[3]?.where?.readsActor,
+      'and one that reads only the card does not',
+    );
+    assert.ok(grants[3]?.filter, 'the anonymous query grant has a filter');
+    assert.deepEqual(
+      policy?.anonymous,
+      { operations: ['query', 'read', 'transform'] },
+      'the policy records which operations it opens to callers who are not signed in',
+    );
+    assert.deepEqual(
+      [...(await education.getAnonymousAdmission())].sort(),
+      ['query', 'read', 'transform'],
+      'and the realm reads them from the compiled policy',
+    );
+
+    await writeTo(org, 'policies/education.json', policyCard(GRANTS));
+    let signedInOnly = await compiled();
+    assert.strictEqual(
+      signedInOnly?.anonymous,
+      undefined,
+      'a policy that opens nothing to callers who are not signed in records nothing',
+    );
+    assert.strictEqual((await education.getAnonymousAdmission()).size, 0);
   });
 });
