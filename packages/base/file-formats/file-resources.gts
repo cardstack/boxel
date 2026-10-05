@@ -28,7 +28,13 @@ interface ResourceArgs {
 }
 
 export interface ResolvedFileResource {
+  // The file's own URL, for links, downloads, and copy-link.
   url: string;
+  // The URL to load the file's bytes from in an element the caller renders
+  // (an SVG `<image href>`, a custom player). Resolved from `@file`, it carries
+  // the file's content revision, so the element reloads when the file is
+  // written; `backgroundImage` and `backgroundStyle` load it too.
+  elementUrl: string;
   hasURL: boolean;
   name: string;
   contentType: string;
@@ -56,9 +62,11 @@ function resourceFrom(args: ResourceArgs): ResolvedFileResource {
   let contentType =
     stringValue(args.contentType) || stringValue(args.file?.contentType);
   let profile = profileForFile({ name, contentType });
-  let backgroundImage = cssURL(url);
+  let elementUrl = fileElementURL(args.file, args.url);
+  let backgroundImage = cssURL(elementUrl);
   return {
     url,
+    elementUrl,
     hasURL: Boolean(url),
     name,
     contentType,

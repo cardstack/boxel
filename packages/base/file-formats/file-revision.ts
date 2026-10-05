@@ -33,8 +33,9 @@ export function fileContentRevision(file?: FileRevisionLike | null): string {
 // when their URL changes, and the browser's image cache serves a repeated URL
 // from memory, so a write has to produce a new URL. The realm resolves a file
 // by its path and ignores the query, and the auth service worker matches realm
-// URLs by prefix. Only the element gets this URL: links, downloads, and
-// copy-link keep the file's own URL. Object and data URLs pass through.
+// URLs by prefix. Only what loads the bytes gets this URL — an element, a CSS
+// background — while links, downloads, and copy-link keep the file's own URL.
+// Object and data URLs pass through.
 export function urlAtRevision(url: string, revision: string): string {
   if (!url || !revision || /^(?:blob|data):/i.test(url)) {
     return url;

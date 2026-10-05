@@ -142,6 +142,8 @@ module('Integration | FileDef resource primitives', function (hooks) {
       precompileTemplate(
         `<div class="probe"><FileImage @file={{file}} /><FileResource @file={{file}} as |resource|>
            <span class="url">{{resource.url}}</span>
+           <span class="element-url">{{resource.elementUrl}}</span>
+           <span class="bg">{{resource.backgroundImage}}</span>
          </FileResource></div>`,
         { strictMode: true, scope: () => ({ FileImage, FileResource, file }) },
       ),
@@ -153,6 +155,14 @@ module('Integration | FileDef resource primitives', function (hooks) {
         'http://example.com/img/hero.png?rev=abc123%3A1700000000',
       );
     assert.dom('.url').hasText('http://example.com/img/hero.png');
+    assert
+      .dom('.element-url')
+      .hasText('http://example.com/img/hero.png?rev=abc123%3A1700000000');
+    assert
+      .dom('.bg')
+      .hasText(
+        'url("http://example.com/img/hero.png?rev=abc123%3A1700000000")',
+      );
   });
 
   test('FileResource yields resolved facts and emits no DOM of its own', async function (assert) {
