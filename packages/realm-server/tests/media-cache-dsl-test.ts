@@ -607,7 +607,12 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         sanitizeCaptureFilename('x'.repeat(500), 'pdf'),
         `${'x'.repeat(120)}.pdf`,
-        'the stem is capped',
+        'the stem is capped in code points',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('報'.repeat(200), 'pdf'),
+        `${'報'.repeat(80)}.pdf`,
+        'and in UTF-8 bytes, so a 3-byte script stops at 240 bytes',
       );
       let halfEmoji = 'Trip \u{1F3D6} notes'.slice(0, 6);
       assert.strictEqual(

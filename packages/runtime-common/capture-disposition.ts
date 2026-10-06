@@ -17,10 +17,13 @@ export const CAPTURE_DISPOSITION_PARAMS: readonly string[] = [
   CAPTURE_FILENAME_PARAM,
 ];
 
-// The longest filename stem (before the extension) a served capture carries.
-// Generous for a human-readable name, and well inside every mainstream
-// filesystem's 255-byte component limit once UTF-8 encoded.
+// The longest filename stem (before the extension) a served capture carries,
+// in code points and in UTF-8 bytes; whichever binds first applies. The byte
+// bound keeps stem plus extension inside the 255-byte path component every
+// mainstream filesystem allows, even for scripts that encode to 3–4 bytes a
+// character.
 export const CAPTURE_FILENAME_MAX_LENGTH = 120;
+export const CAPTURE_FILENAME_MAX_BYTES = 240;
 
 export interface CaptureDisposition {
   attachment: boolean;
@@ -103,7 +106,7 @@ export function wellFormedFilename(value: string): string {
 // A requested filename reduced to one safe path component: control
 // characters (CR/LF included) and path separators gone, whitespace collapsed,
 // leading dots dropped, the stem capped at CAPTURE_FILENAME_MAX_LENGTH code
-// points, and `.extension` ensured. Non-ASCII survives — the header carries it
+// points and CAPTURE_FILENAME_MAX_BYTES UTF-8 bytes, and `.extension` ensured. Non-ASCII survives — the header carries it
 // through `filename*`. Undefined when nothing usable remains.
 export function sanitizeCaptureFilename(
   raw: string,
@@ -121,14 +124,32 @@ export function sanitizeCaptureFilename(
     stem = stem.slice(0, -suffix.length).trimEnd();
   }
   stem = stem.replace(/^[.\s]+/, '');
-  let codePoints = [...stem];
-  if (codePoints.length > CAPTURE_FILENAME_MAX_LENGTH) {
-    stem = codePoints.slice(0, CAPTURE_FILENAME_MAX_LENGTH).join('').trimEnd();
-  }
+  stem = capStem(stem);
   if (!stem) {
     return undefined;
   }
   return `${stem}${suffix}`;
+}
+
+// The longest prefix of `stem`, in whole code points, within both caps.
+function capStem(stem: string): string {
+  let encoder = new TextEncoder();
+  let kept = '';
+  let bytes = 0;
+  let count = 0;
+  for (let codePoint of stem) {
+    let size = encoder.encode(codePoint).length;
+    if (
+      count === CAPTURE_FILENAME_MAX_LENGTH ||
+      bytes + size > CAPTURE_FILENAME_MAX_BYTES
+    ) {
+      break;
+    }
+    kept += codePoint;
+    bytes += size;
+    count++;
+  }
+  return kept.trimEnd();
 }
 
 // The `Content-Disposition` header value for a served capture (RFC 6266).
