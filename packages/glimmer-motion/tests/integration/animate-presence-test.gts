@@ -45,19 +45,28 @@ const waitFor = async (pred: () => boolean, timeout = 1000) => {
  * the exit has already begun, so one slow frame or late timer on a loaded runner
  * lands the read after the animation has finished. The trail also goes into each
  * assertion message, so a failure shows when every value arrived.
+ *
+ * `passedBetweenStartAnd(to)` measures from the value at the moment recording
+ * began, not from where the animation nominally starts. Another animation on the
+ * same value may still be running then (a re-entry that `settled()` does not
+ * wait for), and its in-flight values lie outside that range, so only the exit
+ * itself can satisfy the check.
  */
 const recordValues = (mv: MotionValue<number>) => {
   const t0 = performance.now();
+  const start = mv.get();
   const samples: [ms: number, value: number][] = [];
   const stop = mv.on('change', (v) =>
     samples.push([Math.round(performance.now() - t0), v]),
   );
   return {
     stop,
-    passedBetween: (from: number, to: number) =>
-      samples.some(([, v]) => v > Math.min(from, to) && v < Math.max(from, to)),
+    passedBetweenStartAnd: (to: number) =>
+      samples.some(
+        ([, v]) => v > Math.min(start, to) && v < Math.max(start, to),
+      ),
     describe: () =>
-      `[ms, value] since the exit began: ${JSON.stringify(samples)}`,
+      `[ms, value] since the exit began at ${start}: ${JSON.stringify(samples)}`,
   };
 };
 
@@ -193,7 +202,7 @@ module('Integration | motion | AnimatePresence', function (hooks) {
     await waitFor(() => root().childElementCount === 0).catch(() => {});
     exiting.stop();
     assert.true(
-      exiting.passedBetween(1, 0),
+      exiting.passedBetweenStartAnd(0),
       `opacity animated out rather than snapping: ${exiting.describe()}`,
     );
     assert.strictEqual(opacity.get(), 0, exiting.describe());
@@ -309,7 +318,7 @@ module('Integration | motion | AnimatePresence', function (hooks) {
     await waitFor(() => root().childElementCount === 0).catch(() => {});
     exiting.stop();
     assert.true(
-      exiting.passedBetween(1, 0),
+      exiting.passedBetweenStartAnd(0),
       `opacity animated out rather than snapping: ${exiting.describe()}`,
     );
     assert.strictEqual(opacity.get(), 0, exiting.describe());
@@ -758,7 +767,7 @@ module(
       await waitFor(() => root().childElementCount === 0).catch(() => {});
       exiting.stop();
       assert.true(
-        exiting.passedBetween(1, 0),
+        exiting.passedBetweenStartAnd(0),
         `opacity animated out rather than snapping: ${exiting.describe()}`,
       );
       assert.strictEqual(opacity.get(), 0, exiting.describe());
