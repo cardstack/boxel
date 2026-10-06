@@ -220,7 +220,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   function articles(realm: string) {
-    return { filter: { type: articleType(realm) } };
+    return { filter: { 'item.on': articleType(realm) } };
   }
 
   // A search of one realm's own `_search`, from `from`.
@@ -243,7 +243,9 @@ module(basename(import.meta.filename), function (hooks) {
       .set('X-HTTP-Method-Override', 'QUERY')
       .set('X-Forwarded-For', from)
       .send({
-        filter: { any: realms.map((realm) => ({ type: articleType(realm) })) },
+        filter: {
+          any: realms.map((realm) => ({ 'item.on': articleType(realm) })),
+        },
         realms,
       });
   }
@@ -414,7 +416,7 @@ module(basename(import.meta.filename), function (hooks) {
                   actor: '',
                   target: realm,
                   operation: 'query',
-                  search: { filter: { type: articleType(realm) } },
+                  search: { filter: { 'item.on': articleType(realm) } },
                 },
               },
             ],
