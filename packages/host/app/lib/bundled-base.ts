@@ -430,7 +430,6 @@ export const BUNDLED_BASE_MODULES: Record<
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
   'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
   'text-file-def': () => import('@cardstack/base/text-file-def'),
-  theme: () => import('@cardstack/base/theme'),
   'three-d-model-def': () => import('@cardstack/base/three-d-model-def'),
   'three-mf-meta-extractor': () =>
     import('@cardstack/base/three-mf-meta-extractor'),
