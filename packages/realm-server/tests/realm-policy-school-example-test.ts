@@ -434,6 +434,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'a caller the realm ACL allows pays nothing for the policy',
       );
