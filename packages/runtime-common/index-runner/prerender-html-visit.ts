@@ -1,12 +1,15 @@
 // Isomorphic UUID — matches IndexRunner's batch-id minting.
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { heartbeatJob } from '../queue.ts';
+import { ignore } from '../ignore.ts';
+import { readRealmIgnoreRules } from './discover-invalidations.ts';
 
 import {
   cardSourceForVisit,
   delay,
   flattenPrerenderHtmlVisitMeta,
   hasCardExtension,
+  isIgnored,
   isBrowserTestEnv,
   isCardResource,
   jobIdentity,
@@ -272,8 +275,19 @@ export async function runPrerenderHtmlPass({
     let preWarmStart = Date.now();
     try {
       let filesystemMtimes = await reader.mtimes();
-      let allRealmCardModules =
-        Object.keys(filesystemMtimes).filter(hasCardExtension);
+      let ignoreRules = await readRealmIgnoreRules(
+        realmURL,
+        reader,
+        filesystemMtimes,
+      );
+      let ignoreMap = new Map(
+        ignoreRules ? [[realmURL.href, ignore().add(ignoreRules)]] : [],
+      );
+      let allRealmCardModules = Object.keys(filesystemMtimes).filter(
+        (url) =>
+          hasCardExtension(url) &&
+          !isIgnored(realmURL, ignoreMap, new URL(url)),
+      );
       // Info, not debug: the sweep can hold this worker for minutes on a
       // module-heavy realm, and with few workers everything queued behind it
       // waits that long. CI logs need the sweep's span attributable without a

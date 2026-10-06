@@ -1,6 +1,7 @@
 import { ignore, type Ignore } from '../ignore.ts';
 
 import {
+  isIgnored,
   jobIdentity,
   type Batch,
   type JobInfo,
@@ -59,16 +60,18 @@ export async function discoverInvalidations({
     `${jobIdentity(jobInfo)} time to get file system mtimes ${Date.now() - mtimesStart} ms`,
   );
 
-  let ignoreFile = new URL('.gitignore', url).href;
-  // it costs about 10 sec to try to get the ignore file when it doesn't
-  // exist, so don't get it if it's not there.
-  if (filesystemMtimes[ignoreFile]) {
-    let ignoreStart = Date.now();
-    let ignorePatterns = await reader.readFile(new URL(ignoreFile));
-    perfDebug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
-    if (ignorePatterns && ignorePatterns.content) {
-      ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
-      ignoreData[url.href] = ignorePatterns.content;
+  let ignoreStart = Date.now();
+  let ignoreRules = await readRealmIgnoreRules(url, reader, filesystemMtimes);
+  perfDebug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
+  if (ignoreRules) {
+    ignoreMap.set(url.href, ignore().add(ignoreRules));
+    ignoreData[url.href] = ignoreRules;
+    // An ignored file is not part of the realm: it gets no visit and no
+    // prerender, and a row it left from before it was ignored is tombstoned.
+    for (let mtimeUrl of Object.keys(filesystemMtimes)) {
+      if (isIgnored(url, ignoreMap, new URL(mtimeUrl))) {
+        delete filesystemMtimes[mtimeUrl];
+      }
     }
   } else {
     perfDebug(
@@ -137,4 +140,27 @@ export async function discoverInvalidations({
     `${jobIdentity(jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
   );
   return { urls: batch.invalidations, deletedUrls, filesystemMtimes };
+}
+
+// The realm root's ignore rules: `.gitignore`, plus `.boxelignore` for files
+// that git tracks but that are not part of the realm (a package's tests, its
+// build scripts). Only files present in `filesystemMtimes` are read, since
+// asking for a missing one is slow.
+export async function readRealmIgnoreRules(
+  realmURL: URL,
+  reader: Reader,
+  filesystemMtimes: { [url: string]: number },
+): Promise<string | undefined> {
+  let rules: string[] = [];
+  for (let name of ['.gitignore', '.boxelignore']) {
+    let fileURL = new URL(name, realmURL);
+    if (!filesystemMtimes[fileURL.href]) {
+      continue;
+    }
+    let file = await reader.readFile(fileURL);
+    if (file?.content) {
+      rules.push(file.content);
+    }
+  }
+  return rules.length > 0 ? rules.join('\n') : undefined;
 }

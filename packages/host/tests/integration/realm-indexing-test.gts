@@ -5355,6 +5355,38 @@ posts/please-ignore-me.json
     }
   });
 
+  test('can ignore files listed in .boxelignore alongside .gitignore', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'post.draft.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'scripts/tool.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'git-ignored.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        '.gitignore': `
+git-ignored.json
+      `,
+        '.boxelignore': `
+*.draft.json
+scripts/
+      `,
+      },
+    });
+
+    let indexer = realm.realmIndexQueryEngine;
+    for (let path of ['post.draft', 'scripts/tool', 'git-ignored']) {
+      assert.strictEqual(
+        await indexer.cardDocument(new URL(`${testRealmURL}${path}`)),
+        undefined,
+        `${path} is not indexed because it is ignored`,
+      );
+    }
+    assert.ok(
+      await indexer.cardDocument(new URL(`${testRealmURL}post`)),
+      'instance exists',
+    );
+  });
+
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,

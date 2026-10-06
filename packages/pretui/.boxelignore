@@ -1,0 +1,4 @@
+# Tracked in git but not part of the pretui realm. The deploy rsync reads this
+# list too (setup:pretui-in-deployment).
+*.test.gts
+scripts/
