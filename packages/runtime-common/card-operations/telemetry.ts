@@ -525,9 +525,17 @@ export interface AnonymousRequestEvent {
   //   unauthenticated request is.
   // - `blocked`: the realm refused the caller's address before any grant was
   //   asked (see `blockReason`).
-  // - `rate-limited`: a grant admitted it, but the address had used up its
-  //   limit, so nothing was done.
-  outcome: 'admitted' | 'infra' | 'refused' | 'blocked' | 'rate-limited';
+  // - `rate-limited`: the address had used up its limit, so it was turned
+  //   away before anything ran, whatever it asked for.
+  // - `unavailable`: the realm couldn't read or update the address's count,
+  //   so it was turned away rather than let through uncounted.
+  outcome:
+    | 'admitted'
+    | 'infra'
+    | 'refused'
+    | 'blocked'
+    | 'rate-limited'
+    | 'unavailable';
   blockReason?: 'blocklist' | 'ip-undetermined' | 'blocklist-invalid';
   clientIP: string | null;
   // What the caller is counted under: the address, or the /64 an IPv6

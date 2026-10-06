@@ -300,7 +300,16 @@ export class RealmPolicyCache {
   #revisit: { card: string; settledAt?: number } | undefined;
   // How often compiling, revalidating and asking for a card's visit actually
   // happen, for tests that assert on it rather than on the result alone.
-  readonly stats = { compiles: 0, revalidations: 0, revisits: 0 };
+  readonly stats = { compiles: 0, revalidations: 0, revisits: 0, peeks: 0 };
+  // Whether the policy card, as the index last held it, opts any grant in to
+  // callers who aren't signed in (see `anonymousAdmission`). Kept as long as
+  // a compiled policy is, and dropped when the card's realm is indexed.
+  #anonymousPeek:
+    | { card: string; opensAnything: boolean; readAt: number }
+    | undefined;
+  // Bumped whenever an index moves, so a read that began before then doesn't
+  // keep what it read.
+  #peekGeneration = 0;
 
   constructor(env: RealmPolicyCacheEnvironment) {
     this.#env = env;
@@ -351,11 +360,8 @@ export class RealmPolicyCache {
         current.compiled.card === card &&
         !this.#stale &&
         now() - this.#validatedAt < MAX_UNVALIDATED_MS;
-      if (!warm) {
-        let row = await this.#env.readCard(new URL(card));
-        if (!opensAnythingToAnonymous(row?.instance?.attributes)) {
-          return NO_OPERATIONS;
-        }
+      if (!warm && !(await this.#opensAnythingToAnonymous(card))) {
+        return NO_OPERATIONS;
       }
       compiled = await this.get();
     } catch (e: unknown) {
@@ -371,8 +377,32 @@ export class RealmPolicyCache {
       : new Set(compiled.anonymous.operations);
   }
 
+  async #opensAnythingToAnonymous(card: string): Promise<boolean> {
+    let peek = this.#anonymousPeek;
+    if (
+      peek &&
+      peek.card === card &&
+      now() - peek.readAt < MAX_UNVALIDATED_MS
+    ) {
+      return peek.opensAnything;
+    }
+    this.stats.peeks++;
+    let readAt = now();
+    let generation = this.#peekGeneration;
+    let row = await this.#env.readCard(new URL(card));
+    let opensAnything = opensAnythingToAnonymous(row?.instance?.attributes);
+    if (generation === this.#peekGeneration) {
+      this.#anonymousPeek = { card, opensAnything, readAt };
+    }
+    return opensAnything;
+  }
+
   // The index of the realm at `realmURL` has moved.
   indexMoved(realmURL: string): void {
+    this.#peekGeneration++;
+    if (this.#anonymousPeek?.card.startsWith(realmURL)) {
+      this.#anonymousPeek = undefined;
+    }
     for (let refresh of this.#inFlight) {
       refresh.moved.push(realmURL);
     }
@@ -395,6 +425,8 @@ export class RealmPolicyCache {
   // Drops the cached compilation and zeroes the counts, so a test starts from
   // a cold cache.
   clear(): void {
+    this.#anonymousPeek = undefined;
+    this.#peekGeneration++;
     this.#current = undefined;
     this.#stale = false;
     this.#joinable = undefined;
@@ -402,6 +434,7 @@ export class RealmPolicyCache {
     this.stats.compiles = 0;
     this.stats.revalidations = 0;
     this.stats.revisits = 0;
+    this.stats.peeks = 0;
   }
 
   #refresh(card: string): Promise<CompiledRealmPolicy> {

@@ -15,6 +15,7 @@ import {
 import {
   DBAnonymousRateLimiter,
   type AnonymousRateLimiter,
+  type AnonymousRateOutcome,
 } from './anonymous-rate-limiter.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
@@ -2400,6 +2401,26 @@ interface AnonymousCaller {
   // never limited or blocked.
   infra: boolean;
   charged: boolean;
+  // Set where the request serves what it asked for: a card's document or
+  // headers, or a file's bytes. Only such a request is counted, so a redirect
+  // or a refusal costs the caller nothing whatever its status.
+  served?: true;
+  // What the caller is answered with in place of running the request, when
+  // the realm can't count it: its address has used up the realm's limit, or
+  // the count couldn't be read. Settled at admission, before anything runs.
+  turnedAway?:
+    | { kind: 'rate-limited'; retryAfterSeconds: number }
+    | { kind: 'unavailable' };
+}
+
+// How long a caller the realm couldn't count is told to wait.
+const COUNT_UNAVAILABLE_RETRY_SECONDS = 5;
+
+// Releases a response that is answered in place of, so a file stream it holds
+// is closed rather than left open.
+async function discardBody(response: ResponseWithNodeStream): Promise<void> {
+  response.nodeStream?.destroy();
+  await response.body?.cancel().catch(() => {});
 }
 
 // The card+json read: what an anonymous grant on `read` opens.
@@ -7721,6 +7742,12 @@ export class Realm {
           message: 'search index is not available',
         });
       }
+      // A caller admitted without a session whose address has no budget left
+      // is answered before the request runs (see `#checkAnonymousBudget`).
+      let turnedAway = this.#anonymousTurnedAway(requestContext);
+      if (turnedAway) {
+        return turnedAway;
+      }
       return await this.#chargeAnonymous(
         request,
         requestContext,
@@ -7971,6 +7998,10 @@ export class Realm {
             ) {
               return this.realmIdentityResponse(requestContext);
             }
+            let turnedAway = this.#anonymousTurnedAway(requestContext);
+            if (turnedAway) {
+              return turnedAway;
+            }
           }
         }
         if (
@@ -8047,9 +8078,11 @@ export class Realm {
   //
   // - The realm names a policy. A realm with none answers every refusal
   //   exactly as the ACL gave it.
-  // - The caller is someone. A policy grants by who is asking, and a request
-  //   that authenticated nobody is told to authenticate, whatever its path
-  //   names and whatever the policy holds.
+  // - The caller is someone, or the route runs an operation the policy opens
+  //   to callers who aren't signed in and the realm doesn't refuse the
+  //   caller's address (see `#admitsAnonymous`). Any other request that
+  //   authenticated nobody is told to authenticate, whatever its path names
+  //   and whatever the policy holds.
   async #admitsDespiteCoarseRefusal(
     request: Request,
     requestContext: RequestContext,
@@ -8086,9 +8119,10 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     anonymous: AnonymousDispatch,
+    refusal: unknown = requestContext.coarseRefusal,
   ): Promise<boolean> {
     if (
-      !(requestContext.coarseRefusal instanceof CoarseAuthenticationRequired) ||
+      !(refusal instanceof CoarseAuthenticationRequired) ||
       requestContext.authenticatedUser ||
       request.headers.has('Authorization') ||
       (await this.getRealmPolicy()) === undefined
@@ -8129,31 +8163,113 @@ export class Realm {
         });
         return false;
       }
+      if (caller.charged) {
+        caller.turnedAway = await this.#checkAnonymousBudget(
+          request,
+          caller,
+          access,
+        );
+      }
     }
     requestContext.anonymousCaller = caller;
     return true;
   }
 
+  // Whether the caller's address has budget left for one more invocation,
+  // asked before the invocation runs so that one over the limit costs the
+  // realm nothing more than this question. The answer is the address's, not
+  // the target's, so it says nothing about what the request names. A count
+  // that can't be read turns the caller away rather than letting an
+  // invocation through uncounted.
+  async #checkAnonymousBudget(
+    request: Request,
+    caller: AnonymousCaller,
+    { limit, limitFrom }: AnonymousAccessSettings,
+  ): Promise<AnonymousCaller['turnedAway']> {
+    let outcome: AnonymousRateOutcome;
+    try {
+      outcome = await this.#anonymousRateLimiter.remaining({
+        realmURL: this.url,
+        clientIP: caller.rateLimitKey!,
+        limit,
+      });
+    } catch (e: unknown) {
+      this.#recordAnonymousCountFailure(request, caller, e);
+      return { kind: 'unavailable' };
+    }
+    if (outcome.admitted) {
+      return undefined;
+    }
+    this.#recordAnonymous(request, caller, {
+      outcome: 'rate-limited',
+      limit: { ...limit, from: limitFrom },
+      retryAfterSeconds: outcome.retryAfterSeconds,
+    });
+    return {
+      kind: 'rate-limited',
+      retryAfterSeconds: outcome.retryAfterSeconds,
+    };
+  }
+
+  #recordAnonymousCountFailure(
+    request: Request,
+    caller: AnonymousCaller,
+    e: unknown,
+  ): void {
+    this.#log.warn(
+      `could not count a request to ${this.url} from a caller who isn't signed in, so it was turned away: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    this.#recordAnonymous(request, caller, { outcome: 'unavailable' });
+  }
+
+  // The answer a caller the realm admitted without a session gets in place of
+  // what it asked for, when its admission settled that it is turned away.
+  #anonymousTurnedAway(
+    requestContext: RequestContext,
+  ): ResponseWithNodeStream | undefined {
+    let turnedAway = requestContext.anonymousCaller?.turnedAway;
+    if (!turnedAway) {
+      return undefined;
+    }
+    return turnedAway.kind === 'rate-limited'
+      ? this.#rateLimitedResponse(requestContext, turnedAway.retryAfterSeconds)
+      : this.#countUnavailableResponse(requestContext);
+  }
+
+  // Marks the request as having served what its caller asked for (see
+  // `AnonymousCaller.served`).
+  #servedAnonymous(requestContext: RequestContext): void {
+    if (requestContext.anonymousCaller) {
+      requestContext.anonymousCaller.served = true;
+    }
+  }
+
   // Counts a request the realm's policy admitted though it authenticated
-  // nobody, once what it asked for has succeeded, and answers in its place
-  // when the caller's address has used up the realm's limit. Only once it has
-  // succeeded, so a request no grant admits costs the caller nothing. A read
-  // is answered before it is counted, but has done nothing a refusal would
-  // have to undo. A caller of ours is recorded and never counted.
+  // nobody, once it has served what it asked for (see
+  // `AnonymousCaller.served`), so a request no grant admits, a redirect, and a
+  // target that isn't there cost the caller nothing. An address with no
+  // budget left was turned away at admission, before the request ran; one
+  // that spends its last unit concurrently with another request is answered
+  // here in the served response's place. A caller of ours is recorded and
+  // never counted.
   async #chargeAnonymous(
     request: Request,
     requestContext: RequestContext,
     response: ResponseWithNodeStream,
   ): Promise<ResponseWithNodeStream> {
     let caller = requestContext.anonymousCaller;
-    if (!caller) {
+    if (!caller || caller.turnedAway) {
       return response;
     }
-    if (response.status === 401) {
-      this.#recordAnonymous(request, caller, { outcome: 'refused' });
+    if (!caller.served) {
+      if (response.status === 401 || request.method === 'HEAD') {
+        this.#recordAnonymous(request, caller, { outcome: 'refused' });
+      }
       return response;
     }
-    if (!caller.charged || response.status >= 400) {
+    if (!caller.charged) {
       return response;
     }
     if (caller.infra) {
@@ -8161,12 +8277,19 @@ export class Realm {
       return response;
     }
     let { limit, limitFrom } = await this.getAnonymousAccess();
-    let outcome = await this.#anonymousRateLimiter.charge({
-      realmURL: this.url,
-      clientIP: caller.rateLimitKey!,
-      limit,
-      cost: 1,
-    });
+    let outcome: AnonymousRateOutcome;
+    try {
+      outcome = await this.#anonymousRateLimiter.charge({
+        realmURL: this.url,
+        clientIP: caller.rateLimitKey!,
+        limit,
+        cost: 1,
+      });
+    } catch (e: unknown) {
+      this.#recordAnonymousCountFailure(request, caller, e);
+      await discardBody(response);
+      return this.#countUnavailableResponse(requestContext);
+    }
     let recordedLimit = { ...limit, from: limitFrom };
     if (outcome.admitted) {
       this.#recordAnonymous(request, caller, {
@@ -8181,8 +8304,7 @@ export class Realm {
       limit: recordedLimit,
       retryAfterSeconds: outcome.retryAfterSeconds,
     });
-    response.nodeStream?.destroy();
-    await response.body?.cancel().catch(() => {});
+    await discardBody(response);
     return this.#rateLimitedResponse(requestContext, outcome.retryAfterSeconds);
   }
 
@@ -8209,6 +8331,35 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.JSONAPI,
           'Retry-After': String(retryAfterSeconds),
+          'X-Boxel-Realm-Url': requestContext.realm.url,
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // The answer to a request from a caller who isn't signed in that the realm
+  // couldn't count: nothing was done, and the caller may try again shortly.
+  #countUnavailableResponse(
+    requestContext: RequestContext,
+  ): ResponseWithNodeStream {
+    return createResponse({
+      body: JSON.stringify(
+        errorsDocument({
+          status: 503,
+          code: 'rate-limit-unavailable',
+          title: 'Service unavailable',
+          detail: `This realm couldn't count this request, so it wasn't carried out. Try again in ${COUNT_UNAVAILABLE_RETRY_SECONDS} seconds.`,
+          meta: { retryAfterSeconds: COUNT_UNAVAILABLE_RETRY_SECONDS },
+        }),
+        null,
+        2,
+      ),
+      init: {
+        status: 503,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'Retry-After': String(COUNT_UNAVAILABLE_RETRY_SECONDS),
           'X-Boxel-Realm-Url': requestContext.realm.url,
         },
       },
@@ -10389,6 +10540,7 @@ export class Realm {
       createdAt?: number | null;
     },
   ): Promise<ResponseWithNodeStream> {
+    this.#servedAnonymous(requestContext);
     let contentType = options?.defaultHeaders?.['content-type'];
     // Only advertise `public` caching when the realm is world-readable;
     // otherwise the response is auth-gated and must not be stored by shared
@@ -13277,12 +13429,25 @@ export class Realm {
     // A `HEAD` passes the realm's permission check whoever sends it, so it
     // asks the read question itself. A caller the ACL would not let read is
     // answered by the realm's policy, as their `GET` is, where the policy has
-    // them to judge. Everyone else it refuses gets the discovery answer.
+    // them to judge, including a caller who isn't signed in where the policy
+    // opens `read` to one. Everyone else it refuses gets the discovery answer.
     let probe = await this.#readProbe(request, requestContext);
     let coarseDeclined: { coarseDeclined?: true } = {};
     if (!probe.allowed) {
-      if (!(await this.#policyJudges(probe.refusal, requestContext))) {
+      if (
+        !(await this.#policyJudges(probe.refusal, requestContext)) &&
+        !(await this.#admitsAnonymous(
+          request,
+          requestContext,
+          ANONYMOUS_CARD_READ,
+          probe.refusal,
+        ))
+      ) {
         return this.realmIdentityResponse(requestContext);
+      }
+      let turnedAway = this.#anonymousTurnedAway(requestContext);
+      if (turnedAway) {
+        return turnedAway;
       }
       coarseDeclined = { coarseDeclined: true };
     }
@@ -13359,6 +13524,7 @@ export class Realm {
           `the headers-only read of ${url.href} answered with something other than headers`,
         );
       }
+      this.#servedAnonymous(requestContext);
       if (result.type === 'file-meta') {
         // A `GET` of a path that holds bytes answers with the file's metadata
         // document, which is derived from those bytes and has no index row
@@ -13708,6 +13874,7 @@ export class Realm {
         }
         return response;
       }
+      this.#servedAnonymous(requestContext);
       return createResponse({
         body: assembly.body,
         varyOn: LINK_SHAPE_VARY,
@@ -13887,6 +14054,7 @@ export class Realm {
       // document — valid JSON the caller discriminates via
       // `data.type === 'file-meta'`, instead of raw bytes that crash a
       // downstream `response.json()`.
+      this.#servedAnonymous(requestContext);
       return createResponse({
         body: assembly.body,
         init: { headers: { 'content-type': SupportedMimeType.CardJson } },

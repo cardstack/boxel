@@ -5,9 +5,11 @@ import type { Test, SuperTest, Response } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
+  archiveRealm,
   parseAddressRanges,
   rri,
   SupportedMimeType,
+  unarchiveRealm,
 } from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
@@ -59,12 +61,20 @@ const REALM_POLICY = {
 };
 
 const ARTICLE_MODULE = `
-  import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, containsMany, field, CardDef, Component } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   export class Article extends CardDef {
     @field headline = contains(StringField);
     @field status = contains(StringField);
     @field authorIds = containsMany(StringField);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <h1 class="headline"><@fields.headline /></h1>
+        <style scoped>
+          .headline { margin: 0; }
+        </style>
+      </template>
+    };
   }
 `;
 
@@ -104,6 +114,7 @@ module(basename(import.meta.filename), function (hooks) {
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
+  let db: PgAdapter;
   let records: AnonymousRequestEvent[];
 
   setupCatalogTestSubset(hooks);
@@ -220,6 +231,7 @@ module(basename(import.meta.filename), function (hooks) {
   setupDB(hooks, {
     templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
+      db = dbAdapter;
       await start({ dbAdapter, publisher, runner });
       records = [];
       setAnonymousRequestSink((record) => records.push(record));
@@ -579,5 +591,228 @@ module(basename(import.meta.filename), function (hooks) {
       articleRecords().map((r) => r.outcome),
       ['infra', 'infra', 'infra', 'refused'],
     );
+  });
+  test('an address over its limit is turned away before anything it asks for runs, whatever it names', async function (assert) {
+    await setNewsroomConfig({
+      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+    });
+    assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    let before = newsroom.__testOnlyPolicyGateStats().predicateEvaluations;
+    let published = await readCard(PUBLISHED);
+    let draft = await readCard(DRAFT);
+    let missing = await readCard(MISSING);
+    for (let [label, response] of [
+      ['a published article', published],
+      ['a draft', draft],
+      ['a missing article', missing],
+    ] as const) {
+      assert.strictEqual(response.status, 429, `${label}: 429`);
+      assert.strictEqual(response.body.errors[0].code, 'rate-limited');
+    }
+    assert.strictEqual(published.text, draft.text, 'the same answer for each');
+    assert.strictEqual(published.text, missing.text);
+    assert.strictEqual(
+      newsroom.__testOnlyPolicyGateStats().predicateEvaluations,
+      before,
+      'no grant was evaluated for any of them',
+    );
+  });
+
+  test('a redirect, and a HEAD that finds nothing a grant opens, cost nothing', async function (assert) {
+    await setNewsroomConfig({
+      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+    });
+    let redirect = await readCard(`${PUBLISHED}.json`);
+    assert.strictEqual(redirect.status, 302, 'the .json spelling redirects');
+    for (let [label, url, accept] of [
+      ['a draft', DRAFT, SupportedMimeType.CardJson],
+      ['a missing article', MISSING, SupportedMimeType.CardJson],
+      ["a draft's bytes", `${DRAFT}.json`, SupportedMimeType.CardSource],
+      [
+        "a missing article's bytes",
+        `${MISSING}.json`,
+        SupportedMimeType.CardSource,
+      ],
+    ] as const) {
+      let head = await request
+        .head(new URL(url).pathname)
+        .set('Accept', accept)
+        .set('X-Forwarded-For', VISITOR);
+      assert.notStrictEqual(head.status, 429, `${label}: not counted`);
+      assert.notOk(head.headers['etag'], `${label}: describes no card`);
+    }
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      200,
+      'the budget is untouched',
+    );
+    assert.deepEqual(
+      articleRecords().map((r) => r.outcome),
+      ['refused', 'refused', 'refused', 'refused', 'admitted'],
+      'the HEADs are refusals and the redirect is nothing',
+    );
+  });
+
+  test('a HEAD of a card a grant opens answers as its GET does, and is counted', async function (assert) {
+    await setNewsroomConfig({
+      anonymousRateLimit: { requests: 2, windowSeconds: 600 },
+    });
+    let head = await request
+      .head(new URL(PUBLISHED).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+    assert.strictEqual(head.status, 200, 'the HEAD is answered');
+    assert.true(
+      String(head.headers['content-type']).startsWith(
+        SupportedMimeType.CardJson,
+      ),
+      'with the headers of the card it names',
+    );
+    let get = await readCard(PUBLISHED);
+    assert.strictEqual(get.status, 200);
+    assert.strictEqual(
+      head.headers['etag'],
+      get.headers['etag'],
+      'the same validator as the GET',
+    );
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      429,
+      'the HEAD and the GET each used a unit',
+    );
+  });
+
+  test('a caller cannot name its own address or claim to be one of our services', async function (assert) {
+    await setNewsroomConfig({
+      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+    });
+    let forged = () =>
+      readCard(PUBLISHED)
+        .set('X-Boxel-Client-Class', 'infra')
+        .set('X-Boxel-Client-IP', OTHER_VISITOR);
+    assert.strictEqual((await forged()).status, 200);
+    assert.strictEqual(
+      (await forged()).status,
+      429,
+      'still counted, under its own address',
+    );
+    let recorded = articleRecords();
+    assert.deepEqual(
+      recorded.map((r) => [r.outcome, r.clientIP]),
+      [
+        ['admitted', VISITOR],
+        ['rate-limited', VISITOR],
+      ],
+    );
+  });
+
+  test("a stylesheet that goes with a card's markup is served, and counts for nothing", async function (assert) {
+    await setNewsroomConfig({
+      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+    });
+    let interned = (await db.execute(
+      `SELECT hash FROM scoped_css WHERE realm_url = $1 LIMIT 1`,
+      { bind: [NEWSROOM] },
+    )) as { hash: string }[];
+    assert.strictEqual(
+      interned.length,
+      1,
+      'precondition: indexing interned the article stylesheet',
+    );
+    let path = `${new URL(NEWSROOM).pathname}_scoped-css/article.gts.md5-${interned[0].hash}.glimmer-scoped.css`;
+    for (let i = 0; i < 3; i++) {
+      let response = await request
+        .get(path)
+        .set('Accept', SupportedMimeType.All)
+        .set('X-Forwarded-For', VISITOR);
+      assert.strictEqual(response.status, 200, `stylesheet ${i}`);
+    }
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      200,
+      'the budget is untouched',
+    );
+  });
+
+  test('an archived realm answers a caller a grant admits with its seal, and anyone else as when it was active', async function (assert) {
+    let draftActive = await readCard(DRAFT);
+    await archiveRealm(db, new URL(NEWSROOM));
+    try {
+      let published = await readCard(PUBLISHED);
+      assert.strictEqual(published.status, 403, 'a published article: 403');
+      assert.strictEqual(published.body.errors[0].code, 'archived');
+      let draft = await readCard(DRAFT);
+      unauthenticated(draft, 'a draft', assert);
+      assert.strictEqual(draft.text, draftActive.text, 'as when it was active');
+      unauthenticated(await readCard(MISSING), 'a missing article', assert);
+    } finally {
+      await unarchiveRealm(db, new URL(NEWSROOM));
+    }
+  });
+
+  test('what no anonymous grant can open stays closed to a caller who is not signed in', async function (assert) {
+    let path = new URL(NEWSROOM).pathname;
+    let document = article('Breaking', 'published');
+    let closed: [string, () => Test][] = [
+      ['a card+html read', () => readCard(PUBLISHED, VISITOR, 'text/html')],
+      [
+        'a search',
+        () =>
+          request
+            .post(`${path}_search`)
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('Content-Type', 'application/json')
+            .set('X-Forwarded-For', VISITOR)
+            .send(JSON.stringify({ filter: { type: ARTICLE } })),
+      ],
+      [
+        'an operations batch',
+        () =>
+          request
+            .post(`${path}_operations`)
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Accept', SupportedMimeType.BoxelOperations)
+            .set('Content-Type', SupportedMimeType.BoxelOperations)
+            .set('X-Forwarded-For', VISITOR)
+            .send(
+              JSON.stringify({
+                'boxel:operations': [
+                  { op: 'invoke', 'boxel:name': 'read', href: PUBLISHED },
+                ],
+              }),
+            ),
+      ],
+      [
+        'a card+json create',
+        () =>
+          request
+            .post(path)
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('X-Forwarded-For', VISITOR)
+            .send(document),
+      ],
+      [
+        'a card+json update',
+        () =>
+          request
+            .patch(new URL(PUBLISHED).pathname)
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('X-Forwarded-For', VISITOR)
+            .send(document),
+      ],
+      [
+        'a card+json delete',
+        () =>
+          request
+            .delete(new URL(PUBLISHED).pathname)
+            .set('Accept', SupportedMimeType.CardJson)
+            .set('X-Forwarded-For', VISITOR),
+      ],
+    ];
+    for (let [label, send] of closed) {
+      assert.strictEqual((await send()).status, 401, `${label}: 401`);
+    }
+    assert.deepEqual(articleRecords(), [], 'and none of them is admitted');
   });
 });
