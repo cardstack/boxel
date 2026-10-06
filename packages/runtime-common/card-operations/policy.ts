@@ -450,6 +450,17 @@ export class RealmPolicyCache {
 // minute (see `Realm#revisitPolicyCard`).
 const WITHHELD_REVISIT_COOLDOWN_MS = 60_000;
 
+// A problem a lower layer describes as a clause, written as a sentence of its
+// own: its first letter capitalized, and a full stop where it has no closing
+// punctuation and doesn't end in a list.
+function asSentence(clause: string): string {
+  let sentence = clause.charAt(0).toUpperCase() + clause.slice(1);
+  let lastLine = sentence.slice(sentence.lastIndexOf('\n') + 1);
+  return lastLine.startsWith('- ') || /[.!?]$/.test(sentence)
+    ? sentence
+    : `${sentence}.`;
+}
+
 // One line per compile for the issues that left part of the policy admitting
 // nothing, which is an operator's problem as much as an author's, and a
 // quieter line for the warnings on grants that stay live. A policy with
@@ -742,7 +753,7 @@ async function compilePolicy(
   if (row.failureWithheld) {
     return unreadable(
       'policy-card-unloadable',
-      `the realm's policy card ${card} couldn't be indexed this time, for a reason outside the card itself. The index still has an earlier copy, which may be out of date, so it isn't used. The realm tries again on its own, and editing the card or reindexing the realm tries again right away`,
+      `the realm's policy card ${card} couldn't be indexed this time, for a reason outside the card itself.\n\nThe index still has an earlier copy, which may be out of date, so it isn't used.\n\nThe realm tries again on its own, and editing the card or reindexing the realm tries again right away.`,
     );
   }
   if (!row.instance) {
@@ -813,6 +824,10 @@ async function compileDocument(
   let heldTypes: string | undefined;
   let rules: CompiledPolicyRule[] = [];
   let cardURL = new URL(card);
+  // An issue's message is read on the policy card and in a `validate` answer.
+  // It marks identifiers as code with backticks, separates one idea from the
+  // next with a blank line, and writes a set of alternatives as a list, one
+  // per line beginning `- `; the policy card lays those out.
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message, severity: policyIssueSeverity(code) });
   let compiled = (): Omit<Compilation, 'row'> => ({
@@ -934,7 +949,7 @@ async function compileDocument(
       issue(
         'policy-not-filterable',
         `${grant.path}.where`,
-        `this grant is for a search, so its \`where\` condition has to work as a search filter, and it can't: ${outcome.problem}`,
+        `this grant is for a search, so its \`where\` condition has to work as a search filter, and it can't.\n\n${asSentence(outcome.problem)}`,
       );
       return grant;
     }
@@ -1015,7 +1030,7 @@ async function compileDocument(
       issue(
         'grants-module-source',
         `${rulePath}.targetType`,
-        `${resolved.name} is a code file, which a policy can't share: reading code needs the realm's own read permission`,
+        `${resolved.name} is a code file, which a policy can't share.\n\nReading code needs the realm's own read permission.`,
       );
       continue;
     }
@@ -1059,7 +1074,7 @@ async function compileDocument(
         issue(
           'grants-invalid-operation',
           `${grantPath}.operation`,
-          `${resolved.name}'s \`${operation}\` has a mistake in how it's declared, so nobody can use it and this grant does nothing. ${resolved.name}'s definition says what the mistake is`,
+          `${resolved.name}'s \`${operation}\` has a mistake in how it's declared, so nobody can use it and this grant does nothing.\n\n${resolved.name}'s definition says what the mistake is.`,
         );
         continue;
       }
@@ -1084,7 +1099,7 @@ async function compileDocument(
         issue(
           'unresolved-type',
           `${grantPath}.operation`,
-          `${resolved.name} is based on ${keptOut.unreadable}, whose definition can't be found (a class that its module doesn't export has none). That type might mark \`${operation}\` non-grantable, so \`${operation}\` is refused whatever a policy grants`,
+          `${resolved.name} is based on ${keptOut.unreadable}, whose definition can't be found (a class that its module doesn't export has none).\n\nThat type might mark \`${operation}\` non-grantable, so \`${operation}\` is refused whatever a policy grants.`,
         );
         continue;
       }
@@ -1095,7 +1110,7 @@ async function compileDocument(
         issue(
           'grants-authorization-infrastructure',
           `${grantPath}.operation`,
-          `${resolved.name} is a RealmPolicy, and a rule can't grant anything on a policy card: anyone who could edit one could change what the policy allows, and anyone who could read one could see every rule`,
+          `${resolved.name} is a RealmPolicy, and a rule can't grant anything on a policy card.\n\nAnyone who could edit one could change what the policy allows, and anyone who could read one could see every rule.`,
         );
         continue;
       }
@@ -1136,7 +1151,7 @@ async function compileDocument(
         issue(
           'unsnapshotted-policy-read',
           `${grantPath}.where`,
-          `\`where\` uses \`.${tiers.unheld.path}\` in a way that neither the saved card nor the search index's copy of it can answer, so \`snapshot: true\` can't help: ${tiers.unheld.reason}`,
+          `\`where\` uses \`.${tiers.unheld.path}\` in a way that neither the saved card nor the search index's copy of it can answer, so \`snapshot: true\` can't help.\n\n${asSentence(tiers.unheld.reason)}`,
         );
         continue;
       }
@@ -1144,7 +1159,7 @@ async function compileDocument(
         issue(
           'unsnapshotted-policy-read',
           `${grantPath}.where`,
-          `\`where\` uses \`.${tiers.snapshot.path}\`, and ${tiers.snapshot.reason}, so only the search index's copy of the card has it. A condition checks the saved card unless it's written as \`{ bxl, snapshot: true }\`, which checks the index's copy instead and keeps using that copy's value until the card is indexed again. If the grant has to stop applying as soon as the card changes, use a field the saved card holds`,
+          `\`where\` uses \`.${tiers.snapshot.path}\`, and ${tiers.snapshot.reason}, so only the search index's copy of the card has it.\n\nA condition checks the saved card unless it's written as \`{ bxl, snapshot: true }\`, which checks the index's copy instead and keeps using that copy's value until the card is indexed again.\n\nIf the grant has to stop applying as soon as the card changes, use a field the saved card holds.`,
         );
         continue;
       }
@@ -1156,7 +1171,7 @@ async function compileDocument(
         issue(
           'unsnapshotted-policy-read',
           `${grantPath}.where`,
-          `\`where\` uses \`.${tiers.snapshot.path}\`, which only the search index's copy of a card has, and a card being created isn't in the index until it's saved, so this can't be checked for \`create\``,
+          `\`where\` uses \`.${tiers.snapshot.path}\`, which only the search index's copy of a card has.\n\nA card being created isn't in the index until it's saved, so this can't be checked for \`create\`.`,
         );
         continue;
       }
@@ -1244,7 +1259,7 @@ async function compileDocument(
         issue(
           'policy-not-filterable',
           `${grant.path}.where`,
-          `this grant is for a search, and the realm has cards of ${unnamed.join(', ')}, which are based on ${rule.targetType.name} but can't be named in a search filter. The filter could read their fields wrongly, so this grant finds nothing`,
+          `this grant is for a search, and the realm has cards of ${unnamed.join(', ')}, which are based on ${rule.targetType.name} but can't be named in a search filter.\n\nThe filter could read their fields wrongly, so this grant finds nothing.`,
         );
         let { filter: _filter, ...unfiltered } = grant;
         grants.push(unfiltered);
@@ -1691,25 +1706,25 @@ async function compilePredicate(
     return {
       code: 'invalid-predicate',
       problem:
-        '`where` is empty. For a grant with no condition, leave `where` out',
+        '`where` is empty.\n\nFor a grant with no condition, leave `where` out.',
     };
   }
   if (refusals.length > 0) {
     return {
       code: 'invalid-predicate',
-      problem: `\`where\` uses something a policy condition can't use: ${refusals
-        .map((issue) => `${issue.code}: ${issue.message}`)
-        .join('; ')}`,
+      problem: `\`where\` uses something a policy condition can't use:\n${refusals
+        .map((issue) => `- ${issue.code}: ${issue.message}`)
+        .join('\n')}`,
     };
   }
   let partial = partialMatchCalls(bxl, program.body);
   if (partial.size > 0) {
     let calls = [...partial]
-      .map(([name, reason]) => `\`${name}\` ${reason}`)
-      .join('; ');
+      .map(([name, reason]) => `- \`${name}\` ${reason}`)
+      .join('\n');
     return {
       code: 'partial-match',
-      problem: `\`where\` matches only part of a value, so it could let in someone the grant doesn't mean to: ${calls}. To check whether a list includes the caller, use \`.list | any(. == actor())\`. To compare text, use \`==\`, or \`startswith\` or \`endswith\` with a fixed prefix or suffix`,
+      problem: `\`where\` matches only part of a value, so it could let in someone the grant doesn't mean to:\n${calls}\n\nInstead:\n- to check whether a list includes the caller, use \`.list | any(. == actor())\`\n- to compare text, use \`==\`, or \`startswith\` or \`endswith\` with a fixed prefix or suffix`,
     };
   }
   return { canonical: program.canonicalSource, body: program.body };

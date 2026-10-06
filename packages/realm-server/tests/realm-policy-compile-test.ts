@@ -589,6 +589,15 @@ module(basename(import.meta.filename), function (hooks) {
         message.includes('.list | any(. == actor())'),
         `${where}: and the exact spelling`,
       );
+      assert.true(
+        message.includes(`
+- \`${builtin}\``),
+        `${where}: the calls are a list: ${message}`,
+      );
+      assert.true(
+        message.includes('\n\nInstead:\n- to check whether a list includes'),
+        `${where}: and so are the alternatives: ${message}`,
+      );
     }
     assert.deepEqual(
       policy?.rules[0]?.grants.map((grant) => grant.where?.source),

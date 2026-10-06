@@ -372,6 +372,11 @@ function fieldSignature(name: string, field: FieldDefinition): string {
   return `${name} ${stableStringify(field)}`;
 }
 
+// A reach warning is read on the policy card and in a `validate` answer. Each
+// idea is its own paragraph, separated by a blank line, and the fixes an
+// author can choose between are a list, one per line beginning `- `, which
+// the card lays out.
+
 function documentMessage(
   reach: ReachingGrant,
   reached: Reached,
@@ -383,9 +388,14 @@ function documentMessage(
   let to = reached.codeRef.name;
   let sends =
     reach.governedBy === 'read'
-      ? `\`${operation}\` on ${from} sends each card along with the cards it links to`
-      : `\`${operation}\` on ${from} sends its results along with the cards they link to`;
-  return `${sends}, so everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. To send only the links and not those cards, ${narrowingFix(reach)}${deliberately(to, kind, anyType)}. Changing how ${to} is declared won't help: a card sent along through a link is sent whatever ${to} declares`;
+      ? `\`${operation}\` on ${from} sends each card along with the cards it links to.`
+      : `\`${operation}\` on ${from} sends its results along with the cards they link to.`;
+  return [
+    `${sends} So everyone this grant lets in also gets the ${to} cards linked through \`${reached.via.join('.')}\`, ${ungrantedClause(to, kind, anyType)}.`,
+    fixes('To stop sending them', [narrowingFix(reach)]),
+    `Changing how ${to} is declared won't help: a linked card is sent whatever its own type declares.`,
+    ...deliberately(to, kind, anyType),
+  ].join('\n\n');
 }
 
 function renderingMessage(
@@ -397,13 +407,28 @@ function renderingMessage(
   let { operation } = reach.grant;
   let from = reach.rule.targetType.name;
   let to = reached.codeRef.name;
-  return `the pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, but ${ungrantedClause(to, kind, anyType)}. A card's page displays its linked cards whatever \`links\` is set to, so changing \`links\` won't keep them off the page. To keep them off, ${withholdingFix(reach)}, or change ${from}'s templates so they don't display them${deliberately(to, kind, anyType)}`;
+  return [
+    `The pages \`${operation}\` shows for ${from} cards can display the ${to} cards linked through \`${reached.via.join('.')}\`, ${ungrantedClause(to, kind, anyType)}.`,
+    `Setting \`links\` doesn't help here: a card's page displays its linked cards either way.`,
+    fixes('To keep them off the page', [
+      withholdingFix(reach),
+      `change ${from}'s templates so they don't display them (this warning stays, since the check can't read templates)`,
+    ]),
+    ...deliberately(to, kind, anyType),
+  ].join('\n\n');
+}
+
+// The fixes an author can choose between, introduced by what they achieve.
+function fixes(goal: string, choices: string[]): string {
+  return choices.length === 1
+    ? `${goal}, ${choices[0]}.`
+    : `${goal}, either:\n${choices.map((choice) => `- ${choice}`).join('\n')}`;
 }
 
 function withholdingFix(reach: ReachingGrant): string {
   let { operation } = reach.grant;
   return reach.governedBy === 'named-query'
-    ? `mark every page format \`unshareable\` in the \`${operation}\` query's \`html\` (this check can't tell which formats display them, so any format left shareable keeps this warning)`
+    ? `mark every page format \`unshareable\` in the \`${operation}\` query's \`html\` (the check can't tell which formats display linked cards, so it asks for all of them)`
     : `grant a named query whose \`html\` marks every page format \`unshareable\`, instead of the general \`query\`, which can't be limited this way`;
 }
 
@@ -415,12 +440,12 @@ function ungrantedClause(
   switch (kind) {
     case 'ungranted':
       return anyType
-        ? `no rule lets anyone read ${to} cards, and a link to a ${to} can point to a card of any type`
-        : `no rule lets anyone read ${to} cards`;
+        ? `and no rule lets anyone read ${to} cards; a link to a ${to} can point to a card of any type`
+        : `and no rule lets anyone read ${to} cards`;
     case 'policy card':
-      return `${to} is a policy card, which no rule can share: a policy card holds every one of its rules`;
+      return `but ${to} is a policy card, which no rule can share: a policy card holds every one of its rules`;
     case 'config card':
-      return `${to} is the realm's settings card, which no rule can share`;
+      return `but ${to} is the realm's settings card, which no rule can share`;
   }
 }
 
@@ -431,10 +456,12 @@ function deliberately(
   to: string,
   kind: UngrantedKind,
   anyType: boolean,
-): string {
+): string[] {
   return kind === 'ungranted' && !anyType
-    ? `. To share them on purpose, add a rule that lets people read ${to}`
-    : '';
+    ? [
+        `To share them on purpose instead, add a rule that lets people read ${to}.`,
+      ]
+    : [];
 }
 
 function narrowingFix(reach: ReachingGrant): string {
@@ -442,11 +469,11 @@ function narrowingFix(reach: ReachingGrant): string {
   let { operation } = reach.grant;
   switch (reach.governedBy) {
     case 'read':
-      return `add \`links: 'ids'\` to ${from}'s \`${operation}\``;
+      return `add \`links: 'ids'\` to ${from}'s \`${operation}\`, so the response names each linked card without sending it`;
     case 'named-query':
-      return `add \`links: 'ids'\` to the \`${operation}\` query`;
+      return `add \`links: 'ids'\` to the \`${operation}\` query, so its results name each linked card without sending it`;
     case 'ad-hoc-query':
-      return `grant a named query that sets \`links: 'ids'\` instead of the general \`query\`, which can't be limited this way`;
+      return `grant a named query that sets \`links: 'ids'\` instead of the general \`query\`. The general \`query\` can't be limited this way`;
   }
 }
 
