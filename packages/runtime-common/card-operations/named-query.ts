@@ -9,7 +9,6 @@ import {
 import {
   newOperationScope,
   resolveOperation,
-  scopeCallerFor,
   type OperationCore,
 } from './dispatch.ts';
 import { MAX_REMEMBERED_MS } from './gate.ts';
@@ -214,7 +213,7 @@ export async function resolveNamedQuery(
   }
   let actor =
     context.principal?.kind === 'user' ? context.principal.user : undefined;
-  let definition = await declaredQuery(core, on, operation, actor);
+  let definition = await declaredQuery(core, on, operation);
   let lowered = lowerQueryOperation(definition, {
     ...(actor === undefined ? {} : { actor }),
     ...(params === undefined ? {} : { params }),
@@ -271,20 +270,27 @@ export async function resolveNamedQuery(
 //
 // What is remembered is the declaration, never what it lowers to: the actor
 // and the params differ per request and are substituted when each request
-// lowers it. Resolving runs under a scope the ACL declined nothing in, which
-// the policy gate admits outright, so the declaration it answers is the same
-// whoever asks.
+// lowers it. Resolving names no caller and runs under a scope the ACL declined
+// nothing in, which the policy gate admits outright, so the declaration it
+// answers is the same whoever asks.
+//
+// It is remembered under the type as the realm resolves it, its module and
+// name, and not under the code ref as the request spelled it. Every spelling
+// of one type then shares an entry, and nothing else a request puts in the ref
+// reaches the key.
 async function declaredQuery(
   core: OperationCore,
   on: CodeRef,
   operation: string,
-  actor: string | undefined,
 ): Promise<OperationDefinition> {
   let lookup = core.definitionLookup;
   let generation = lookup.definitionGeneration?.();
-  let key = JSON.stringify([core.realmURL, operation, on]);
+  let type = core.resolveCodeRef(on, new URL(core.realmURL));
+  let key = type
+    ? JSON.stringify([core.realmURL, operation, type.module, type.name])
+    : undefined;
   let remembered =
-    generation === undefined
+    generation === undefined || key === undefined
       ? undefined
       : rememberedDeclarations.get(lookup)?.get(key);
   if (
@@ -300,9 +306,12 @@ async function declaredQuery(
     core,
     { kind: 'type', codeRef: on, realm: core.realmURL },
     operation,
-    newOperationScope(core, { caller: scopeCallerFor(actor ?? '') }),
+    newOperationScope(core, {
+      caller: { kind: 'unattributed' },
+      coarseDeclined: 'none',
+    }),
   );
-  if (generation !== undefined) {
+  if (generation !== undefined && key !== undefined) {
     let remembering = rememberedDeclarations.get(lookup);
     if (!remembering || remembering.size >= MAX_REMEMBERED_DECLARATIONS) {
       remembering = new Map();

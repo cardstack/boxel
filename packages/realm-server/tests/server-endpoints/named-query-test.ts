@@ -883,6 +883,19 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
         [`${SCHOOL}schedules/b-open`],
         'who is answered with their own rows, not the first caller’s',
       );
+
+      // The same type, named with a member the type's code ref doesn't carry.
+      let respelled = await federatedSearch(
+        { ...mine, on: { ...SCHEDULE, note: 'x'.repeat(1_000) } },
+        PROVIDER_A,
+      );
+      assert.strictEqual(respelled.status, 200, 'HTTP 200 status');
+      assert.deepEqual(sortedIds(respelled), sortedIds(first), 'the same rows');
+      assert.strictEqual(
+        stats.declarationReads,
+        readsAfterFirst,
+        'and a request spelling the type differently shares what was remembered',
+      );
     });
 
     test('a declaration edit is served on the next request once its module’s definitions change', async function (assert) {
