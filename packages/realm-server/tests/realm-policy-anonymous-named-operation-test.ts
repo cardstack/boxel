@@ -19,6 +19,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
+  clearOfRateLimitWindowEdge,
   closeServer,
   createJWT,
   createVirtualNetwork,
@@ -340,6 +341,7 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     );
     await civic.indexing();
+    await clearOfRateLimitWindowEdge(fields.anonymousRateLimit);
   }
 
   function unauthenticated(response: Response, label: string, assert: Assert) {
@@ -530,7 +532,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a declared write is counted one unit, and one over the limit gets 429 and writes nothing', async function (assert) {
-    await setCivic({ anonymousRateLimit: { requests: 1, windowSeconds: 60 } });
+    await setCivic({ anonymousRateLimit: { requests: 1, windowSeconds: 600 } });
     assert.strictEqual((await sign(OPEN, 'Ada')).status, 200);
     let over = await sign(OPEN, 'Grace');
     assert.strictEqual(over.status, 429, over.text);
