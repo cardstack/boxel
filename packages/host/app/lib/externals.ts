@@ -220,10 +220,17 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   // glimmer-motion and Choreo hand cards the host's own module objects, so
   // cards and host share one copy of each library's module-global state (the
-  // drag lock, the layout scheduler, the Choreo registry). Every entry the
-  // packages' `exports` name explicitly is shimmed; the `./*` wildcard
-  // internals are not card-facing. Neither is motion-dom: cards reach it
-  // through glimmer-motion's curated re-exports.
+  // drag lock, the layout scheduler, the Choreo registry).
+  //
+  // The shim set is the libraries' curated card-facing API, not their whole
+  // npm surface: each package root and `/test-support`, glimmer-motion's
+  // component entries, Choreo's `/choreo` and `/steps`, and Film (`/film`,
+  // which the packages reach through their `./*` pattern, plus its component
+  // entries). Their other `./*` subpaths stay unshimmed, and `boxel parse`
+  // aliases exactly these ids, so a card importing one of those subpaths
+  // fails to type-check rather than failing to load. motion-dom isn't
+  // shimmed either: cards reach it through glimmer-motion's curated
+  // re-exports.
   //
   // glimmer-motion's entry points are sync shims, which put it in the initial
   // bundle: it is the animation library host UI is moving to, so the bundle
