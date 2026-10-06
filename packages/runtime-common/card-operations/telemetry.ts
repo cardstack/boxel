@@ -516,6 +516,9 @@ export function emitPolicyCompile(event: PolicyCompileEvent): void {
 export interface AnonymousRequestEvent {
   kind: 'anonymous-request';
   realmURL: string;
+  // The operation the route was admitted to, or `*` for a route that runs
+  // whatever its request names: the operations envelope and the capability
+  // check.
   operation: string;
   route: string;
   // - `admitted`: a grant admitted it and it was counted against the limit.

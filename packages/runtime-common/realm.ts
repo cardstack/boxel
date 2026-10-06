@@ -8142,9 +8142,13 @@ export class Realm {
       return false;
     }
     let opened = await this.getAnonymousAdmission();
+    // A route that runs whatever its request names is admitted wherever the
+    // policy opens anything to such callers, and recorded as `*`.
     let operation =
       anonymous.operations.length === 0
-        ? [...opened][0]
+        ? opened.size > 0
+          ? '*'
+          : undefined
         : anonymous.operations.find((name) => opened.has(name));
     if (operation === undefined) {
       return false;
