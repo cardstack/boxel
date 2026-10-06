@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/choreo",
-  "version": "0.0.0",
+  "version": "0.1.0-unstable.0",
   "description": "Motion, Choreographed. A changeset and a timeline over a whole render pass, on glimmer-motion.",
   "keywords": [
     "ember-addon",

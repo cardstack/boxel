@@ -241,6 +241,18 @@ export interface CommitBatchOptions {
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified.
   actor?: string;
+  // Who a batch by a caller who isn't signed in is made as, once its entries
+  // are admitted: the acting user the first admitted write's grant names
+  // (see `ActingUsers`). It is who the batch's index job is initiated by. It
+  // never stands for the caller in a program, where `actor()` refuses for
+  // want of one.
+  actingUser?: () => string | undefined;
+  // Runs once every entry has been admitted and staged, and before anything
+  // is written. A throw refuses the batch whole, with nothing written, and
+  // its status is what the caller answers with. It is where a caller who
+  // isn't signed in is counted against their address's budget: only a batch
+  // that would otherwise commit costs them anything.
+  beforeCommit?: () => Promise<void>;
   // Whether to return only once the batch's index job has landed. Waiting is
   // the default: a caller that reports a version and a generation per entry
   // needs the generation, and a caller reading the cards back needs the rows.
@@ -487,6 +499,7 @@ export async function commitBatch(
       } finally {
         timings?.add('stage', Date.now() - stageStart);
       }
+      await opts.beforeCommit?.();
       // Everything above either produced bytes for every entry or threw, and a
       // throw leaves the realm as it was.
       //
@@ -2391,7 +2404,7 @@ async function commitStaged(
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
-      initiatingUser: opts.actor ?? null,
+      initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,
     },
