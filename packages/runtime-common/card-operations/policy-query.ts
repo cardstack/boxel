@@ -111,11 +111,14 @@ export type PolicyQueryScope =
 const DENIED: PolicyQueryScope = { kind: 'denied' };
 
 // Who a search runs for. A realm-authority principal is a session a realm
-// renders its own cards under (`TokenClaims.realmAuthority`). Any other is the
-// user its session names, including a render a user asked for.
+// renders its own cards under (`TokenClaims.realmAuthority`). An anonymous
+// principal is a request that authenticated nobody, which the realm admitted
+// because its policy opens `query` to such callers. Any other is the user its
+// session names, including a render a user asked for.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
-  | { kind: 'realm-authority'; user: string };
+  | { kind: 'realm-authority'; user: string }
+  | { kind: 'anonymous' };
 
 // The principal a request authenticated as, or none for a request that
 // authenticated nobody.
@@ -156,10 +159,10 @@ export class RealmAuthorityPolicyScopeError extends Error {
 // gate's is: a policy card commonly lives in a realm the caller cannot read.
 //
 // `principal` is required rather than optional. A policy grants by who is
-// asking, so a request that authenticated nobody has no grant to be judged
-// by, whatever the policy holds — the rule the realm already applies before
-// it hands a refused request to the gate at all. A realm-authority principal
-// is not someone asking either, and is refused with
+// asking, so a request that authenticated nobody is judged only as an
+// anonymous principal, which the realm makes of one only where its policy
+// opens `query` to such callers, and only by the grants that opt in to them.
+// A realm-authority principal is not someone asking, and is refused with
 // `RealmAuthorityPolicyScopeError` before any type is judged or the policy is
 // read.
 //
@@ -197,7 +200,7 @@ export async function policyQueryScope(
       emitPolicySearchScope({
         kind: 'policy-search-scope',
         realmURL: core.realmURL,
-        actor: principal.user,
+        actor: principal.kind === 'user' ? principal.user : null,
         operation,
         types: types.map(typeLabel).join(','),
         transport: invocation.transport ?? 'search',
@@ -211,7 +214,13 @@ export async function policyQueryScope(
   };
   let scope: PolicyQueryScope;
   try {
-    scope = await scopeFor(core, operation, types, principal.user, contributed);
+    scope = await scopeFor(
+      core,
+      operation,
+      types,
+      principal.kind === 'user' ? principal.user : undefined,
+      contributed,
+    );
   } catch (e: unknown) {
     record('failed');
     throw e;
@@ -246,7 +255,7 @@ async function scopeFor(
   core: OperationCore,
   operation: string,
   types: readonly CodeRef[],
-  actor: string,
+  actor: string | undefined,
   contributed: MatchedGrant[],
 ): Promise<PolicyQueryScope> {
   let distinct = [
@@ -311,8 +320,10 @@ function excluding(filter: Filter, excluded: Filter[]): Filter {
 }
 
 // What this realm's policy contributes to a search `principal` sends, where
-// the request may have authenticated nobody. Only a user is granted anything.
-// A request that authenticated nobody has no grant to be judged by. A
+// the request may have authenticated nobody. A user is judged by every grant,
+// and an anonymous principal by the grants that opt in to callers who aren't
+// signed in. A request that authenticated nobody and that the realm didn't
+// admit as an anonymous principal has no grant to be judged by. A
 // realm-authority principal is a render, and what a render produces is served
 // to every viewer, so it reads what the ACL grants it and the policy is never
 // asked about it.
@@ -324,7 +335,7 @@ export async function principalQueryScope(
   } & SearchScopeRecording,
   principal: SearchPrincipal | undefined,
 ): Promise<PolicyQueryScope> {
-  return principal?.kind === 'user'
+  return principal?.kind === 'user' || principal?.kind === 'anonymous'
     ? await policyQueryScope(core, { ...invocation, principal })
     : DENIED;
 }
@@ -334,7 +345,7 @@ async function typeScope(
   core: OperationCore,
   operation: string,
   on: CodeRef,
-  actor: string,
+  actor: string | undefined,
   contributed: MatchedGrant[],
 ): Promise<PolicyQueryScope> {
   let policy = await core.policy?.compiledPolicy();
@@ -404,7 +415,11 @@ function ownDeclaration(
 }
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
-// engine runs, each comparison in it kept from judging a card whose type reads
+// engine runs. For a caller with no actor, one who isn't signed in, only a
+// grant that opts in to such callers matches, and never one whose filter reads
+// the caller, which has no one to stand for.
+//
+// Each filter is in the grammar the engine runs, each comparison in it kept from judging a card whose type reads
 // the compared path differently from the rule's type.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
@@ -418,7 +433,7 @@ async function grantFilters(
   policy: CompiledRealmPolicy,
   types: string[],
   operation: string,
-  actor: string,
+  actor: string | undefined,
   core: OperationCore,
 ): Promise<{ filter: Filter; matched: MatchedGrant }[]> {
   let matched = await matchingGrants(policy, types, operation, core.policy!);
@@ -428,9 +443,12 @@ async function grantFilters(
     if (!grant.filter) {
       continue;
     }
+    if (actor === undefined && (!grant.anonymous || grant.where?.readsActor)) {
+      continue;
+    }
     let bound = lowerQueryOperation(
       { base: 'query', query: { filter: grant.filter } },
-      { actor },
+      actor === undefined ? {} : { actor },
     );
     if (!bound.filter) {
       throw new Error(

@@ -2390,7 +2390,7 @@ interface AnonymousDispatch {
 }
 
 // A request the realm's policy admitted though it authenticated nobody.
-interface AnonymousCaller {
+export interface AnonymousCaller {
   operation: string;
   // The caller's address in canonical form, or null where the realm server
   // could not work one out (only a caller of ours can be admitted then).
@@ -2408,10 +2408,16 @@ interface AnonymousCaller {
   // What the caller is answered with in place of running the request, when
   // the realm can't count it: its address has used up the realm's limit, or
   // the count couldn't be read. Settled at admission, before anything runs.
-  turnedAway?:
-    | { kind: 'rate-limited'; retryAfterSeconds: number }
-    | { kind: 'unavailable' };
+  turnedAway?: Exclude<AnonymousCount, { kind: 'counted' }>;
 }
+
+// What came of counting an anonymous caller's invocation against its
+// address's budget: counted, refused for want of budget, or not counted
+// because the count couldn't be read or updated.
+export type AnonymousCount =
+  | { kind: 'counted' }
+  | { kind: 'rate-limited'; retryAfterSeconds: number }
+  | { kind: 'unavailable' };
 
 // How long a caller the realm couldn't count is told to wait.
 const COUNT_UNAVAILABLE_RETRY_SECONDS = 5;
@@ -2426,6 +2432,12 @@ async function discardBody(response: ResponseWithNodeStream): Promise<void> {
 // The card+json read: what an anonymous grant on `read` opens.
 const ANONYMOUS_CARD_READ: AnonymousDispatch = {
   operations: ['read'],
+  charged: true,
+};
+// A search of the realm: what a `query` grant opens. It is counted once its
+// grants have scoped it, whatever rows it finds.
+const ANONYMOUS_SEARCH: AnonymousDispatch = {
+  operations: ['query'],
   charged: true,
 };
 // A data file's or a card's stored bytes: what a `readSource` grant opens.
@@ -2987,13 +2999,19 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_SEARCH,
+        },
       )
       .query(
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_SEARCH,
+        },
       )
       // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
@@ -7253,6 +7271,9 @@ export class Realm {
   #searchPrincipal(
     requestContext: RequestContext,
   ): SearchPrincipal | undefined {
+    if (requestContext.anonymousCaller) {
+      return { kind: 'anonymous' };
+    }
     return searchPrincipal(
       requestContext.authenticatedUser,
       requestContext.realmAuthority,
@@ -8135,11 +8156,33 @@ export class Realm {
   ): Promise<boolean> {
     if (
       !(refusal instanceof CoarseAuthenticationRequired) ||
-      requestContext.authenticatedUser ||
+      requestContext.authenticatedUser
+    ) {
+      return false;
+    }
+    let caller = await this.#anonymousCallerFor(request, anonymous);
+    if (!caller) {
+      return false;
+    }
+    requestContext.anonymousCaller = caller;
+    return true;
+  }
+
+  // The caller a request that authenticated nobody is, where this realm's
+  // policy opens one of `anonymous`'s operations to such callers and the
+  // realm doesn't refuse the caller's address: what it is admitted to, the
+  // address it is counted under, and whether that address has budget left.
+  // Undefined for every other request, which is refused as an unauthenticated
+  // request always has been.
+  async #anonymousCallerFor(
+    request: Request,
+    anonymous: AnonymousDispatch,
+  ): Promise<AnonymousCaller | undefined> {
+    if (
       request.headers.has('Authorization') ||
       (await this.getRealmPolicy()) === undefined
     ) {
-      return false;
+      return undefined;
     }
     let opened = await this.getAnonymousAdmission();
     let operation =
@@ -8147,7 +8190,7 @@ export class Realm {
         ? [...opened][0]
         : anonymous.operations.find((name) => opened.has(name));
     if (operation === undefined) {
-      return false;
+      return undefined;
     }
     let ipText = request.headers.get(CLIENT_IP_HEADER);
     let address = ipText ? parseIP(ipText) : undefined;
@@ -8173,7 +8216,7 @@ export class Realm {
           outcome: 'blocked',
           blockReason,
         });
-        return false;
+        return undefined;
       }
       if (caller.charged) {
         caller.turnedAway = await this.#checkAnonymousBudget(
@@ -8183,8 +8226,35 @@ export class Realm {
         );
       }
     }
-    requestContext.anonymousCaller = caller;
-    return true;
+    return caller;
+  }
+
+  // Whether this realm admits a request that authenticated nobody to a search
+  // that spans several realms, which the realm server answers rather than this
+  // realm's own routes. The same question this realm's own `_search` asks: its
+  // policy opens `query` to such callers, and it doesn't refuse the caller's
+  // address. The caller that comes back is the one its grants are composed
+  // for and its budget is counted under (see `countAnonymousSearch`); one
+  // whose address has no budget left comes back marked as turned away.
+  async admitAnonymousSearch(
+    request: Request,
+  ): Promise<AnonymousCaller | undefined> {
+    return await this.#anonymousCallerFor(request, ANONYMOUS_SEARCH);
+  }
+
+  // Counts one search of this realm by a caller `admitAnonymousSearch`
+  // admitted, once the realm's grants have scoped it, against the caller's
+  // budget here. A search that spans several realms is counted by each one it
+  // reads rows from, and a realm that turns the caller away contributes no
+  // rows to it.
+  async countAnonymousSearch(
+    request: Request,
+    caller: AnonymousCaller,
+  ): Promise<AnonymousCount> {
+    if (caller.turnedAway) {
+      return caller.turnedAway;
+    }
+    return await this.#chargeCaller(request, caller, 1);
   }
 
   // Whether the caller's address has budget left for one more invocation,
@@ -8307,9 +8377,31 @@ export class Realm {
     if (!caller || cost < 1) {
       return undefined;
     }
+    let counted = await this.#chargeCaller(request, caller, cost);
+    switch (counted.kind) {
+      case 'counted':
+        return undefined;
+      case 'rate-limited':
+        return this.#rateLimitedResponse(
+          requestContext,
+          counted.retryAfterSeconds,
+        );
+      case 'unavailable':
+        return this.#countUnavailableResponse(requestContext);
+    }
+  }
+
+  // Counts `cost` invocations by `caller` against its address's budget in
+  // this realm, and records what came of it. A caller of ours is recorded and
+  // never counted.
+  async #chargeCaller(
+    request: Request,
+    caller: AnonymousCaller,
+    cost: number,
+  ): Promise<AnonymousCount> {
     if (caller.infra) {
       this.#recordAnonymous(request, caller, { outcome: 'infra' });
-      return undefined;
+      return { kind: 'counted' };
     }
     let { limit, limitFrom } = await this.getAnonymousAccess();
     let outcome: AnonymousRateOutcome;
@@ -8322,7 +8414,7 @@ export class Realm {
       });
     } catch (e: unknown) {
       this.#recordAnonymousCountFailure(request, caller, e);
-      return this.#countUnavailableResponse(requestContext);
+      return { kind: 'unavailable' };
     }
     let recordedLimit = { ...limit, from: limitFrom };
     let costDetail = cost > 1 ? { cost } : {};
@@ -8333,7 +8425,7 @@ export class Realm {
         count: outcome.count,
         ...costDetail,
       });
-      return undefined;
+      return { kind: 'counted' };
     }
     this.#recordAnonymous(request, caller, {
       outcome: 'rate-limited',
@@ -8341,7 +8433,10 @@ export class Realm {
       retryAfterSeconds: outcome.retryAfterSeconds,
       ...costDetail,
     });
-    return this.#rateLimitedResponse(requestContext, outcome.retryAfterSeconds);
+    return {
+      kind: 'rate-limited',
+      retryAfterSeconds: outcome.retryAfterSeconds,
+    };
   }
 
   // The answer to a request whose caller's address has used up the realm's
@@ -14778,6 +14873,9 @@ export class Realm {
         return noRows();
       }
       if (policyScope) {
+        // A caller admitted without a session is counted for a search its
+        // grants scoped, whatever rows it finds.
+        this.#servedAnonymous(requestContext);
         // Composed before the page is applied below, so the page the engine
         // fills is a page of rows the policy admits rather than a page of the
         // caller's rows with some removed.
