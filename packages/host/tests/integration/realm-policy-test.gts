@@ -363,6 +363,37 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-policy-predicate-snapshot]').exists({ count: 1 });
   });
 
+  test('a grant opened to callers who are not signed in says so, and a write names the setting it acts as', async function (assert) {
+    await setupPolicyRealm({
+      'policies/public.json': policyDocument([
+        {
+          targetType: { module: '../classroom', name: 'Classroom' },
+          grants: [
+            { operation: 'read', anonymous: true },
+            {
+              operation: 'update',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+            },
+            { operation: 'delete' },
+          ],
+        },
+      ]),
+    });
+    let policy = await loadPolicy('policies/public');
+    await renderCard(loader, policy, 'embedded');
+
+    assert.dom('[data-test-operation-grant]').exists({ count: 3 });
+    assert
+      .dom('[data-test-operation-grant-anonymous]')
+      .exists({ count: 2 }, 'only the grants that opt in are marked')
+      .hasText('anyone');
+    assert
+      .dom('[data-test-operation-grant-acting-user]')
+      .exists({ count: 1 }, 'only the write names who it acts as')
+      .hasText('config.feedbackWriter');
+  });
+
   test('a policy with no rules says it grants nothing', async function (assert) {
     await setupPolicyRealm({ 'policies/empty.json': policyDocument([]) });
     let policy = await loadPolicy('policies/empty');

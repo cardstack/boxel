@@ -27,7 +27,9 @@ import {
   type ReadableType,
 } from './policy-reach.ts';
 import {
+  ANONYMOUS_ELIGIBLE_OPERATIONS,
   isDefinitionFreeBaseOperation,
+  isWrite,
   linkStrategyOf,
   readLinkStrategyOf,
   policyIssueSeverity,
@@ -78,6 +80,10 @@ export interface CompiledRealmPolicy {
   // Set on a draft compiled for an explain (see `compileDraftPolicy`), which
   // no realm holds in force.
   draft?: true;
+  // The operations some live grant opens to callers who aren't signed in.
+  // Absent when no grant does, which is what lets a realm answer such a caller
+  // without judging anything: it reads this, and nothing else of the policy.
+  anonymous?: { operations: string[] };
 }
 
 export interface CompiledPolicyRule {
@@ -96,6 +102,12 @@ export interface CompiledOperationGrant {
   path: string;
   // Absent for a grant with no condition.
   where?: CompiledPolicyPredicate;
+  // Set on a grant that also admits callers who aren't signed in. A write
+  // grant names the key, in the governed realm's `realm.json` settings, whose
+  // value is the user its writes are made as, and no other grant carries one.
+  // The realm resolves it on every invocation, so the policy names a setting
+  // and never a user.
+  anonymous?: { actingUserKey?: string };
   // For a grant on a query, the search filter the grant admits: the cards of
   // the rule's type that its predicate holds for, as a wire filter template
   // whose `{ $ref: 'actor' }` markers a search fills in with the caller. A
@@ -141,6 +153,9 @@ export interface CompiledPolicyPredicate {
   // reads the stored source alone is judged against the stored source, and
   // pays no index read.
   snapshot: boolean;
+  // Set when the predicate calls `actor()`. The realm doesn't evaluate such a
+  // predicate for a caller who isn't signed in, so it never admits one.
+  readsActor?: true;
 }
 
 // The type every policy card adopts from. It is defined in the catalog realm,
@@ -241,6 +256,8 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // commit moves the index of the realm holding the card, which reaches the
 // cache as any move does, and the refresh that follows compiles what the card
 // holds now.
+const NO_OPERATIONS: ReadonlySet<string> = new Set();
+
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -288,6 +305,29 @@ export class RealmPolicyCache {
       return current.compiled;
     }
     return await this.#refresh(card);
+  }
+
+  // The operations the realm's policy opens to callers who aren't signed in,
+  // or none. Read from the compiled policy and nothing else, so answering such
+  // a caller loads no target and evaluates no predicate. A policy that can't
+  // be compiled opens nothing, which leaves that caller with the answer every
+  // other caller who isn't signed in gets, rather than a failure that would
+  // tell them the realm names a policy.
+  async anonymousAdmission(): Promise<ReadonlySet<string>> {
+    let compiled: CompiledRealmPolicy | undefined;
+    try {
+      compiled = await this.get();
+    } catch (e: unknown) {
+      log.warn(
+        `could not read the realm's policy to answer a caller who isn't signed in, so it opens nothing to them: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+      return NO_OPERATIONS;
+    }
+    return compiled?.uncompilable || !compiled?.anonymous
+      ? NO_OPERATIONS
+      : new Set(compiled.anonymous.operations);
   }
 
   // The index of the realm at `realmURL` has moved.
@@ -831,7 +871,13 @@ async function compileDocument(
   let issue = (code: PolicyIssueCode, path: string, message: string) =>
     issues.push({ code, path, message, severity: policyIssueSeverity(code) });
   let compiled = (): Omit<Compilation, 'row'> => ({
-    compiled: { card, version: undefined, rules, issues },
+    compiled: {
+      card,
+      version: undefined,
+      rules,
+      issues,
+      ...anonymousSummary(rules),
+    },
     definitions,
     inputs,
     subtypes,
@@ -1114,6 +1160,40 @@ async function compileDocument(
         );
         continue;
       }
+      let anonymous: CompiledOperationGrant['anonymous'];
+      if (grant?.anonymous === true) {
+        if (
+          granted.base !== operation ||
+          !ANONYMOUS_ELIGIBLE_OPERATIONS.includes(granted.base)
+        ) {
+          issue(
+            'anonymous-not-base-operation',
+            `${grantPath}.anonymous`,
+            `\`${operation}\` can't be opened to callers who aren't signed in: only ${ANONYMOUS_ELIGIBLE_OPERATIONS.map(
+              (name) => `\`${name}\``,
+            ).join(
+              ', ',
+            )} can, under their own names, and a custom operation or a named query can't`,
+          );
+          continue;
+        }
+        // Used exactly as written, so the key the policy shows is the key the
+        // realm looks up. One that is blank names nothing.
+        let actingUserKey =
+          typeof grant.actingUser === 'string' && grant.actingUser.trim()
+            ? grant.actingUser
+            : undefined;
+        if (isWrite(granted.base) && !actingUserKey) {
+          issue(
+            'anonymous-write-without-acting-user',
+            `${grantPath}.actingUser`,
+            `\`${operation}\` writes, so a grant opening it to callers who aren't signed in has to name the setting in the realm's \`realm.json\` whose value is the user those writes are made as, in \`actingUser\``,
+          );
+          continue;
+        }
+        anonymous =
+          isWrite(granted.base) && actingUserKey ? { actingUserKey } : {};
+      }
       let where = readPredicate(grant?.where);
       if (where === 'malformed') {
         issue(
@@ -1126,7 +1206,7 @@ async function compileDocument(
       if (!where) {
         grants.push(
           await withFilter(
-            { operation, path: grantPath },
+            { operation, path: grantPath, ...(anonymous ? { anonymous } : {}) },
             granted.base,
             undefined,
             resolved,
@@ -1139,6 +1219,13 @@ async function compileDocument(
       if ('problem' in outcome) {
         issue(outcome.code, `${grantPath}.where`, outcome.problem);
         continue;
+      }
+      if (anonymous && outcome.readsActor) {
+        issue(
+          'anonymous-grant-reads-actor',
+          `${grantPath}.where`,
+          `this grant opens \`${operation}\` to callers who aren't signed in, but its \`where\` uses \`actor()\`, which isn't evaluated for a caller with no actor, so it never admits one. It still applies to signed-in callers. To open it to anyone, give the anonymous grant a \`where\` that reads only the card`,
+        );
       }
       // Which tier the predicate reads is settled here, from the rule's type,
       // and ahead of the search filter: a predicate that reads the index
@@ -1184,7 +1271,9 @@ async function compileDocument(
               source: where.source,
               canonical: outcome.canonical,
               snapshot,
+              ...(outcome.readsActor ? { readsActor: true as const } : {}),
             },
+            ...(anonymous ? { anonymous } : {}),
           },
           granted.base,
           { body: outcome.body, snapshot },
@@ -1506,6 +1595,30 @@ function safeURL(
   return attempt(() => env.toURL(identifier).href);
 }
 
+// The operations the policy's live grants open to callers who aren't signed
+// in, recorded on the compiled policy when there are any. A query grant that
+// has no search filter admits no search, and a grant whose `where` reads the
+// caller admits nobody without one, so neither opens anything.
+function anonymousSummary(
+  rules: CompiledPolicyRule[],
+): Pick<CompiledRealmPolicy, 'anonymous'> {
+  let operations = new Set<string>();
+  for (let rule of rules) {
+    for (let grant of rule.grants) {
+      if (
+        grant.anonymous &&
+        !grant.where?.readsActor &&
+        (grant.operation !== 'query' || grant.filter)
+      ) {
+        operations.add(grant.operation);
+      }
+    }
+  }
+  return operations.size > 0
+    ? { anonymous: { operations: [...operations].sort() } }
+    : {};
+}
+
 // What `fn` answers, or undefined when it throws. Compiling records a problem
 // with the policy as an issue rather than throwing it, and a value that cannot
 // be resolved is a problem with the policy, so the step that needed it counts
@@ -1678,7 +1791,9 @@ type PredicateProblem = {
 
 async function compilePredicate(
   source: string,
-): Promise<{ canonical: string; body: unknown } | PredicateProblem> {
+): Promise<
+  { canonical: string; body: unknown; readsActor: boolean } | PredicateProblem
+> {
   let bxl = await loadBxl();
   let program;
   try {
@@ -1727,7 +1842,23 @@ async function compilePredicate(
       problem: `\`where\` matches only part of a value, so it could let in someone the grant doesn't mean to:\n${calls}\n\nInstead:\n- to check whether a list includes the caller, use \`.list | any(. == actor())\`\n- to compare text, use \`==\`, or \`startswith\` or \`endswith\` with a fixed prefix or suffix`,
     };
   }
-  return { canonical: program.canonicalSource, body: program.body };
+  return {
+    canonical: program.canonicalSource,
+    body: program.body,
+    readsActor: callsActor(bxl, program.body),
+  };
+}
+
+// Whether a predicate calls `actor()` anywhere in it.
+function callsActor(bxl: BxlPolicyParser, body: unknown): boolean {
+  let found = false;
+  bxl.visitBxlAst(body, (node) => {
+    let { type, name } = node as { type?: unknown; name?: unknown };
+    if (type === 'call' && name === 'actor') {
+      found = true;
+    }
+  });
+  return found;
 }
 
 // BXL, and the shape of what this module asks of it.

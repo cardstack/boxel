@@ -1,12 +1,11 @@
-import { array } from '@ember/helper';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
-import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, eq } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
@@ -23,16 +22,9 @@ import {
   wrapLastTextNodeInStreamingTextSpan,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import type { Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
-import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
-
-import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
-
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import Message from './text-content';
-
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -42,8 +34,6 @@ interface Signature {
     eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
-    isLastAssistantMessage: boolean;
-    userMessageThisMessageIsRespondingTo?: MatrixMessage;
     reasoning?: {
       content: string | null;
       isExpanded: boolean;
@@ -113,9 +103,6 @@ export default class FormattedAiBotMessage extends Component<Signature> {
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
             @monacoSDK={{@monacoSDK}}
-            @isLastAssistantMessage={{@isLastAssistantMessage}}
-            @isStreaming={{@isStreaming}}
-            @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             @index={{this.preTagGroupIndex index}}
           />
         {{else}}
@@ -171,81 +158,11 @@ interface HtmlGroupCodeBlockSignature {
   Args: {
     codeData: CodeData;
     monacoSDK: MonacoSDK;
-    isLastAssistantMessage: boolean;
-    isStreaming: boolean;
-    userMessageThisMessageIsRespondingTo?: MatrixMessage;
     index: number;
   };
 }
 
-class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  // The host does not apply search/replace blocks, so a block stays in the
-  // 'ready' state.
-  private codePatchStatus = 'ready' as const;
-
-  @tracked diffEditorStats: {
-    linesRemoved: number;
-    linesAdded: number;
-  } | null = null;
-
-  codeDiffResource = getCodeDiffResultResource(this, () => ({
-    fileUrl: this.args.codeData.fileUrl,
-    searchReplaceBlock: this.args.codeData.searchReplaceBlock,
-    codePatchStatus: this.codePatchStatus as CodePatchStatus,
-  }));
-
-  errorMessage(errorMessage: string) {
-    return 'Code could not be displayed: ' + errorMessage;
-  }
-
-  private extractReplaceCode(searchReplaceBlock: string | null | undefined) {
-    if (!searchReplaceBlock) {
-      return null;
-    }
-    return parseSearchReplace(searchReplaceBlock).replaceContent;
-  }
-
-  private get codeForEditor() {
-    if (this.isAppliedOrIgnoredCodePatch) {
-      return this.extractReplaceCode(this.args.codeData.searchReplaceBlock);
-    } else {
-      return this.args.codeData.code;
-    }
-  }
-
-  private get isAppliedOrIgnoredCodePatch() {
-    // Ignored means the user moved on to the next message
-    return !this.args.isLastAssistantMessage;
-  }
-
-  private updateDiffEditorStats = (stats: {
-    linesAdded: number;
-    linesRemoved: number;
-  }) => {
-    this.diffEditorStats = stats;
-  };
-
-  // A block that opened a SEARCH marker but never resolved into a complete
-  // search/replace block is unapplyable, and without this reads as an ordinary
-  // code block with stray box-drawing characters in it. Wait for streaming to
-  // finish first, since a patch mid-stream is incomplete for a moment.
-  private get showMalformedPatchError() {
-    return !this.args.isStreaming && this.args.codeData.malformedPatch;
-  }
-
-  private get malformedPatchMessage() {
-    return this.errorMessage(
-      'the search/replace markers in this block are malformed, so it cannot be applied automatically.',
-    );
-  }
-
-  private get codePatchErrorMessage() {
-    if (this.codeDiffResource?.errorMessage) {
-      return this.codeDiffResource.errorMessage;
-    }
-    return null;
-  }
-
+const HtmlGroupCodeBlock: TemplateOnlyComponent<HtmlGroupCodeBlockSignature> =
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -253,134 +170,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       data-test-code-block-index={{@index}}
       as |codeBlock|
     >
-      {{#if (bool @codeData.searchReplaceBlock)}}
-        {{#if this.isAppliedOrIgnoredCodePatch}}
-          <div>
-            <codeBlock.diffEditorHeader
-              @codeData={{@codeData}}
-              @diffEditorStats={{null}}
-              @codePatchStatus={{this.codePatchStatus}}
-              @codePatchErrorMessage={{this.codePatchErrorMessage}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-            />
-
-            <codeBlock.editor @code={{this.codeForEditor}} />
-
-            <codeBlock.actions as |actions|>
-              <actions.copyCode
-                @textToCopy={{this.extractReplaceCode
-                  @codeData.searchReplaceBlock
-                }}
-              />
-            </codeBlock.actions>
-
-            {{#if this.codePatchErrorMessage}}
-              <codeBlock.patchFooter>
-                <Alert @type='error' class='code-patch-error' as |Alert|>
-                  <Alert.Messages
-                    @messages={{array this.codePatchErrorMessage}}
-                  />
-                </Alert>
-              </codeBlock.patchFooter>
-            {{/if}}
-          </div>
-        {{else}}
-          {{#if this.codeDiffResource.isDataLoaded}}
-            <codeBlock.diffEditorHeader
-              @codeData={{@codeData}}
-              @diffEditorStats={{this.diffEditorStats}}
-              @codePatchStatus={{this.codePatchStatus}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-              @codePatchErrorMessage={{this.codePatchErrorMessage}}
-            />
-
-            <codeBlock.diffEditor
-              @originalCode={{this.codeDiffResource.originalCode}}
-              @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              @language={{@codeData.language}}
-              @updateDiffEditorStats={{this.updateDiffEditorStats}}
-            />
-
-            <codeBlock.actions as |actions|>
-              <actions.copyCode
-                @textToCopy={{this.codeDiffResource.modifiedCode}}
-              />
-            </codeBlock.actions>
-          {{else if this.codeDiffResource.isLoadingDiff}}
-            {{! Together with the branch above, this makes the states a patch can
-            be rendered in exhaustive: once `modify` returns, the resource holds
-            code, or an error, or a running load. There is no fourth state, and
-            the empty block this branch replaced was it. A load only runs once a
-            file URL is known — `modify` records an error and returns without
-            performing when there isn't one — so the header can always name its
-            file here. A failed patch is not shown in this branch; the footer's
-            alert speaks for it. }}
-            <codeBlock.diffEditorHeader
-              @codeData={{@codeData}}
-              @diffEditorStats={{null}}
-              @codePatchStatus={{this.codePatchStatus}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-              @codePatchErrorMessage={{this.codePatchErrorMessage}}
-            />
-            <div class='code-patch-loading' data-test-code-patch-loading>
-              <LoadingIndicator @color='var(--boxel-light)' />
-              <span>Loading diff…</span>
-            </div>
-          {{/if}}
-
-          {{#if this.codePatchErrorMessage}}
-            <codeBlock.patchFooter>
-              <Alert
-                @type='error'
-                class='code-patch-error'
-                data-test-error-message={{this.codePatchErrorMessage}}
-                as |Alert|
-              >
-                <Alert.Messages
-                  @messages={{array this.codePatchErrorMessage}}
-                />
-              </Alert>
-            </codeBlock.patchFooter>
-          {{/if}}
-        {{/if}}
-      {{else}}
-        {{#if @codeData.fileUrl}}
-          <codeBlock.diffEditorHeader
-            @codeData={{@codeData}}
-            @diffEditorStats={{null}}
-            @codePatchStatus={{this.codePatchStatus}}
-          />
-        {{/if}}
-        <codeBlock.editor @code={{this.codeForEditor}} />
-        <codeBlock.actions as |actions|>
-          <actions.copyCode @textToCopy={{@codeData.code}} />
-        </codeBlock.actions>
-        {{#if this.showMalformedPatchError}}
-          <codeBlock.patchFooter>
-            <Alert
-              @type='error'
-              class='code-patch-error'
-              data-test-malformed-patch-error
-              as |Alert|
-            >
-              <Alert.Messages @messages={{array this.malformedPatchMessage}} />
-            </Alert>
-          </codeBlock.patchFooter>
-        {{/if}}
-      {{/if}}
+      <codeBlock.editor @code={{@codeData.code}} />
+      <codeBlock.actions as |actions|>
+        <actions.copyCode @textToCopy={{@codeData.code}} />
+      </codeBlock.actions>
     </CodeBlock>
-
-    <style scoped>
-      .code-patch-loading {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-      }
-    </style>
-  </template>
-}
+  </template>;
