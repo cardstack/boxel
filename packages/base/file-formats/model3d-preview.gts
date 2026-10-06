@@ -25,6 +25,8 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import CubeIcon from '@cardstack/boxel-icons/cube';
 
+import { isLiveRender } from '../render-context';
+
 import type { FilePreviewSignature } from './file-preview-stage';
 
 // Static preview behind the live viewer and in fitted cells: a plain cube icon.
@@ -75,16 +77,9 @@ function disposeObject(root: any) {
   });
 }
 
-// Base cards read this global to tell a server-side prerender from a live
-// client render (same signal `query-field-support` / `links-to-many` use).
-function isLiveRender(): boolean {
-  return !(globalThis as { __boxelRenderContext?: unknown })
-    .__boxelRenderContext;
-}
-
 const renderModel = modifier(
   (element: HTMLElement, [component, url]: [Model3DPreview, string]) => {
-    if (!url || !isLiveRender()) {
+    if (!url || !isLiveRender(element)) {
       return;
     }
     let cancelled = false;
