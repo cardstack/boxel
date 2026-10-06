@@ -403,7 +403,7 @@ module('Unit | declared captures', function (hooks) {
         computed: {
           format: 'embedded',
           type: 'pdf',
-          filename: (card: cardApi.CardDef) => card.cardTitle,
+          filename: (card: CardAPIModule.CardDef) => card.cardTitle,
         },
       };
     }
