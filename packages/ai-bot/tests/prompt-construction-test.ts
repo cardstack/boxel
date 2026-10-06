@@ -11,9 +11,6 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   DEFAULT_FALLBACK_MODELS,
@@ -43,9 +40,6 @@ import {
   ensureTrailingSlash,
   skillCardRef,
   rri,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import {
   absolutizeSkillLinks,
@@ -1813,13 +1807,10 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    // The edit path is SEARCH/REPLACE blocks parsed out of the assistant's
-    // own text (extractCodePatchBlocks). No tool in the request grants it and
-    // none can withhold it, and SYSTEM_MESSAGE, present in every prompt, says
-    // all code and data changes are applied immediately. A sentence telling
-    // the model it cannot edit was therefore false, not merely stale, so
-    // nothing in the request (attached cards, open cards, absent patch tools)
-    // may produce one.
+    // SYSTEM_MESSAGE, present in every prompt, says all code and data
+    // changes are applied immediately. A sentence telling the model it
+    // cannot edit would contradict it, so nothing in the request (attached
+    // cards, open cards, absent patch tools) may produce one.
     let contextMessage = messageText(messages?.[messages.length - 1]);
     assert.notOk(
       contextMessage.includes('unable to edit'),
@@ -3643,55 +3634,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('Keeps past code blocks verbatim in the prompt', async () => {
-    // Eliding old code blocks rewrote already-sent history (the placeholder
-    // text even changed once the patch result arrived), which broke the
-    // cache prefix — and models imitated the "[Omitting …]" placeholder in
-    // place of a real patch, stalling the session. The blocks stay verbatim.
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-two-results.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    const { messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.deepEqual(
-      messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'user', 'user'],
-      'the failed second block is reported in its own user message before the trailing context',
-    );
-    assert.equal(
-      messageText(messages![2]),
-      'Updating the file...\n' +
-        'http://test.com/spaghetti-recipe.gts\n' +
-        `${SEARCH_MARKER}\n` +
-        'this is the riveting content of the spaghetti-recipe.gts file\n' +
-        `${SEPARATOR_MARKER}\n` +
-        'this is the engaging content of the spaghetti-recipe.gts file\n' +
-        `${REPLACE_MARKER}\n` +
-        '\n' +
-        'I will also create a file for rigatoni:\n' +
-        '\n' +
-        'http://test.com/rigatoni-recipe.gts\n' +
-        `${SEARCH_MARKER}\n` +
-        `${SEPARATOR_MARKER}\n` +
-        'this is the holy content of the rigatoni-recipe.gts file\n' +
-        `${REPLACE_MARKER}\n`,
-    );
-    assert.false(
-      messageText(messages![2]).includes('[Omitting'),
-      'no elision placeholder appears in the prompt',
-    );
-  });
-
   test('Correctly handles server-side aggregations', async () => {
     // This test uses the /messages api with a filter removing
     // m.replace messages, relying on server side aggregation
@@ -3798,510 +3740,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have patchCardInstance tool call',
     );
     assert.true(messageText(messages![6]).includes('Business Card V2'));
-  });
-
-  test('Responds to successful completion of lone code patch', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-success.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes(
-          '(The user has successfully applied code patch',
-        ),
-      ),
-      'Code patch result messages should be omitted',
-    );
-  });
-
-  test('Does not respond to first code patch result when two patches were proposed', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-one-result.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(
-      shouldRespond,
-      false,
-      'AiBot does not solicit a response before all tool calls are made',
-    );
-  });
-
-  test('patch results reported with host-style block indexes still complete the turn', async () => {
-    // The host numbers a patch result by its position among all fenced code
-    // blocks in the message, so a message with example fences before its
-    // patches reports indexes like 4 and 5 for its two patches. The bot must
-    // not wait for indexes 0 and 1 that will never come.
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-offset-indexes.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(
-      shouldRespond,
-      true,
-      'both patches have a result, so the bot should respond',
-    );
-  });
-
-  test('Responds to second code patch result when two patches were proposed', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/two-code-blocks-two-results.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 1, 'Should have user messages');
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes('(The user has successfully'),
-      ),
-      'Applied code patches produce no message',
-    );
-    assert.strictEqual(
-      messageText(userMessages[1]),
-      'Code block 2 was not applied: The patch did not apply cleanly.',
-      'the failed block is recorded with its reason; the applied block is not mentioned',
-    );
-    assert.true(
-      messageText(messages![messages!.length - 1]).includes(
-        'Re-read the file and use the run-realm-code tool with the current contents. Do not repeat a failed edit. Attempt 1 of 3.',
-      ),
-      'the retry instruction rides the trailing message, not history',
-    );
-  });
-
-  test('Does not respond to code patch result when a command is also proposed', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/code-block-and-command-one-result.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(
-      shouldRespond,
-      false,
-      'AiBot does not solicit a response before all tool calls are made',
-    );
-  });
-
-  test('Responds to command result when patch and command proposed and patch already succeeded', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/code-block-and-command-two-results-a.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    mockResponses.set('mxc://mock-server/weather-report-1', {
-      ok: true,
-      text: JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            temperature: '22°C',
-            conditions: 'Cloudy',
-            title: null,
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4201/admin/onnx/commandexample',
-              name: 'WeatherReport',
-            },
-          },
-        },
-      }),
-    });
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    assert.deepEqual(
-      messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'user'],
-    );
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'The question plus the trailing context message',
-    );
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes(
-          '(The user has successfully applied code patch',
-        ),
-      ),
-      'Code patch result messages should be omitted',
-    );
-    const toolResultMessages = messages!.filter(
-      (message) => message.role === 'tool',
-    );
-    assert.strictEqual(
-      toolResultMessages.length,
-      1,
-      'Should have one tool result message',
-    );
-    assert.ok(
-      messageText(toolResultMessages[0]).includes('Cloudy'),
-      'Tool call result should include "Cloudy"',
-    );
-  });
-
-  test('Responds to command result when patch and command proposed and patch already succeeded with command succeeding first', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/code-block-and-command-two-results-b.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    mockResponses.set('mxc://mock-server/weather-report-1', {
-      ok: true,
-      text: JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            temperature: '22°C',
-            conditions: 'Cloudy',
-            title: null,
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4201/admin/onnx/commandexample',
-              name: 'WeatherReport',
-            },
-          },
-        },
-      }),
-    });
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    assert.deepEqual(
-      messages!.map((m) => m.role),
-      ['system', 'user', 'assistant', 'tool', 'user'],
-    );
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.strictEqual(
-      userMessages.length,
-      2,
-      'The question plus the trailing context message',
-    );
-    assert.false(
-      userMessages.some((message) =>
-        messageText(message).includes(
-          '(The user has successfully applied code patch',
-        ),
-      ),
-      'Code patch result messages should be omitted',
-    );
-    const toolResultMessages = messages!.filter(
-      (message) => message.role === 'tool',
-    );
-    assert.strictEqual(
-      toolResultMessages.length,
-      1,
-      'Should have one tool result message',
-    );
-    assert.ok(
-      messageText(toolResultMessages[0]).includes('Cloudy'),
-      'Tool call result should include "Cloudy"',
-    );
-  });
-
-  test('Responds to failure of lone code patch', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-failure.json',
-        ),
-        'utf-8',
-      ),
-    );
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
-    const userMessages = messages!.filter((message) => message.role === 'user');
-    assert.ok(userMessages.length >= 2, 'Should have user messages');
-    assert.strictEqual(
-      messageText(userMessages[1]),
-      'Code block 1 was not applied: The patch did not apply cleanly.',
-      'history records that the block failed and why',
-    );
-    let trailing = messageText(messages![messages!.length - 1]);
-    assert.true(
-      trailing.includes('Re-read the file and use the run-realm-code tool'),
-      'the trailing message tells the model to retry',
-    );
-    assert.true(trailing.includes('Attempt 1 of 3.'), 'the attempt is counted');
-    assert.false(
-      trailing.includes('Do not send another patch'),
-      'the limit is not reached on the first failure',
-    );
-  });
-
-  // Append another bot reply with one patch block per status, and a result
-  // for each, to a fixture history, so retry rounds can be stacked without a
-  // fixture per round.
-  function appendPatchReply(
-    eventList: DiscreteMatrixEvent[],
-    round: number,
-    ...statuses: ('applied' | 'failed')[]
-  ) {
-    let last = eventList[eventList.length - 1];
-    let ts = (last.origin_server_ts ?? 0) + 1000;
-    let replyId = `$retry-${round}-reply`;
-    eventList.push({
-      type: 'm.room.message',
-      sender: '@aibot:localhost',
-      room_id: last.room_id,
-      origin_server_ts: ts,
-      event_id: replyId,
-      content: {
-        msgtype: 'app.boxel.message',
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-        body:
-          `Trying again (${round})...\n` +
-          statuses
-            .map(
-              (_status, index) =>
-                `http://test.com/file-${index}.gts\n` +
-                `${SEARCH_MARKER}\nriveting ${round}\n${SEPARATOR_MARKER}\nengaging ${round}\n${REPLACE_MARKER}\n`,
-            )
-            .join('\n'),
-      },
-    } as unknown as DiscreteMatrixEvent);
-    statuses.forEach((status, index) => {
-      eventList.push({
-        type: 'app.boxel.codePatchResult',
-        sender: '@user:localhost',
-        room_id: last.room_id,
-        origin_server_ts: ts + 500 + index,
-        event_id: `$retry-${round}-result-${index}`,
-        content: {
-          msgtype: 'app.boxel.codePatchResult',
-          'm.relates_to': {
-            event_id: replyId,
-            key: status,
-            rel_type: 'app.boxel.codePatchAnnotation',
-          },
-          codeBlockIndex: index,
-          ...(status === 'failed'
-            ? { failureReason: 'The patch did not apply cleanly.' }
-            : {}),
-          data: { context: { tools: [], functions: [], submode: 'code' } },
-        },
-      } as unknown as DiscreteMatrixEvent);
-    });
-  }
-
-  test('Stops asking for a retry once patches have failed as many times as the correctness cap', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-failure.json',
-        ),
-        'utf-8',
-      ),
-    );
-    appendPatchReply(eventList, 2, 'failed');
-    appendPatchReply(eventList, 3, 'failed');
-
-    const { shouldRespond, messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(shouldRespond, true);
-    let trailing = messageText(messages![messages!.length - 1]);
-    assert.true(
-      trailing.includes(
-        'Code patches have failed to apply 3 times in a row. Do not send another patch.',
-      ),
-      'the third consecutive failure ends the retrying',
-    );
-    assert.false(
-      trailing.includes('Re-read the file and use the run-realm-code tool'),
-      'the retry instruction is gone',
-    );
-    const records = messages!.filter(
-      (m) => m.role === 'user' && messageText(m).includes('was not applied:'),
-    );
-    assert.strictEqual(
-      records.length,
-      3,
-      'each failed reply keeps its record in history',
-    );
-  });
-
-  test('A reply that applied some blocks ends the failure streak', async function () {
-    // Round 1 failed, round 2 landed one block and lost one, rounds 3 and 4
-    // failed. Only the two failures after the partial success count, so the
-    // cap is not reached and the model is still asked to retry.
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-failure.json',
-        ),
-        'utf-8',
-      ),
-    );
-    appendPatchReply(eventList, 2, 'applied', 'failed');
-    appendPatchReply(eventList, 3, 'failed');
-    appendPatchReply(eventList, 4, 'failed');
-
-    const { messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    let trailing = messageText(messages![messages!.length - 1]);
-    assert.true(
-      trailing.includes('Re-read the file and use the run-realm-code tool'),
-      'the retry instruction is still given',
-    );
-    assert.true(
-      trailing.includes('Attempt 2 of 3.'),
-      'the partial success and the failure before it are not counted',
-    );
-  });
-
-  test('A latest reply with a failed block and an applied block counts as one attempt', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-failure.json',
-        ),
-        'utf-8',
-      ),
-    );
-    appendPatchReply(eventList, 2, 'failed');
-    appendPatchReply(eventList, 3, 'applied', 'failed');
-
-    const { messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    let trailing = messageText(messages![messages!.length - 1]);
-    assert.true(
-      trailing.includes('Attempt 1 of 3.'),
-      'progress in the latest reply restarts the count',
-    );
-    assert.false(
-      trailing.includes('Do not send another patch'),
-      'three replies with a failure are not three failures in a row',
-    );
-  });
-
-  test('Drops the retry instruction once a later patch applied, and keeps the record', async function () {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          import.meta.dirname,
-          'resources/chats/one-code-block-one-failure.json',
-        ),
-        'utf-8',
-      ),
-    );
-    appendPatchReply(eventList, 2, 'applied');
-
-    const { messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    let trailing = messageText(messages![messages!.length - 1]);
-    assert.false(
-      trailing.includes('Re-read the file and use the run-realm-code tool'),
-      'no retry instruction after the fix landed',
-    );
-    assert.true(
-      messages!.some(
-        (m) =>
-          m.role === 'user' &&
-          messageText(m) ===
-            'Code block 1 was not applied: The patch did not apply cleanly.',
-      ),
-      'the record of the first failure stays in history',
-    );
   });
 
   test('context trails as its own user message when there is just one user message', async () => {
@@ -4561,47 +3999,7 @@ Attached Cards (each shows its content as of this message; a later attachment of
     );
   });
 
-  test('getPromptParts collects patched files from code patch result attachments', async () => {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(import.meta.dirname, 'resources/chats/patched-gts.json'),
-        'utf-8',
-      ),
-    );
-
-    mockResponses.set('mxc://mock-server/postcard-before-patch.gts', {
-      ok: true,
-      text: `export default Postcard extends CardDef { /* before *}
-      `,
-    });
-    mockResponses.set('mxc://mock-server/postcard-after-patch.gts', {
-      ok: true,
-      text: `export default Postcard extends CardDef { /* after */ }
-      `,
-    });
-
-    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.ok(
-      pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness info',
-    );
-    assert.deepEqual(
-      pendingCodePatchCorrectnessChecks?.files,
-      [
-        {
-          sourceUrl: 'http://test-realm-server/user/test-realm/postcard.gts',
-          displayName: 'user/test-realm/postcard.gts',
-        },
-      ],
-      'Pending checks should include files from attached patch results',
-    );
-  });
-
-  test('getPromptParts surfaces pending code patch correctness summary after patches', async function () {
+  test('getPromptParts surfaces a pending correctness check after source and card edits', async function () {
     const roomId = 'room-checks';
     const aiMessageId = 'ai-message';
     const cardId = 'http://localhost/cards/Profile/1';
@@ -4643,11 +4041,6 @@ Attached Cards (each shows its content as of this message; a later attachment of
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           body: `Updating the file...
 ${patchedFileSource}
-╔═══ SEARCH ════╗
-old content
-╠═══════════════╣
-new content
-╚═══ REPLACE ═══╝
 `,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -4659,6 +4052,14 @@ new content
             },
           },
           [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'edit-file',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Update the file',
+                attributes: { code: 'await realm.fs.replace(...)' },
+              }),
+            },
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4679,19 +4080,19 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result',
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'edit-file-result',
         origin_server_ts: 3,
         room_id: roomId,
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
-          codeBlockIndex: 0,
+          commandRequestId: 'edit-file',
           data: {
             context: {
               tools: [],
@@ -4709,7 +4110,7 @@ new content
         },
         unsigned: {
           age: 0,
-          transaction_id: 'patch-result',
+          transaction_id: 'edit-file-result',
         },
         status: EventStatus.SENT,
       },
@@ -4757,7 +4158,7 @@ new content
 
     assert.ok(
       pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness info',
+      'Should collect a pending correctness check',
     );
     assert.strictEqual(
       pendingCodePatchCorrectnessChecks?.targetEventId,
@@ -4786,7 +4187,7 @@ new content
     );
   });
 
-  test('getPromptParts ignores cancelled patch commands when collecting pending code patch correctness checks', async function () {
+  test('getPromptParts ignores cancelled patch commands when collecting pending correctness checks', async function () {
     const roomId = 'room-checks-cancelled';
     const aiMessageId = 'ai-message';
     const cancelledAiMessageId = 'cancelled-ai-message';
@@ -4866,11 +4267,6 @@ new content
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           body: `Updating the file...
 ${patchedFileSource}
-╔═══ SEARCH ════╗
-old content
-╠═══════════════╣
-new content
-╚═══ REPLACE ═══╝
 `,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -4882,6 +4278,14 @@ new content
             },
           },
           [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'edit-file',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Update the file',
+                attributes: { code: 'await realm.fs.replace(...)' },
+              }),
+            },
             {
               id: 'patch-card',
               name: 'patchCardInstance',
@@ -4902,19 +4306,19 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result',
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'edit-file-result',
         origin_server_ts: 3,
         room_id: roomId,
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
-          codeBlockIndex: 0,
+          commandRequestId: 'edit-file',
           data: {
             context: {
               tools: [],
@@ -4932,7 +4336,7 @@ new content
         },
         unsigned: {
           age: 0,
-          transaction_id: 'patch-result',
+          transaction_id: 'edit-file-result',
         },
         status: EventStatus.SENT,
       },
@@ -4980,7 +4384,7 @@ new content
 
     assert.ok(
       pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness info even after a cancelled command',
+      'Should collect a pending correctness check even after a cancelled command',
     );
     assert.strictEqual(
       pendingCodePatchCorrectnessChecks?.targetEventId,
@@ -4989,7 +4393,7 @@ new content
     );
   });
 
-  test('getPromptParts ignores older unresolved commands when a newer code patch is applied', async function () {
+  test('getPromptParts ignores older unresolved commands when a newer source edit is applied', async function () {
     const roomId = 'room-checks-older-unresolved';
     const aiMessageId = 'ai-message';
     const olderAiMessageId = 'older-ai-message';
@@ -5067,11 +4471,6 @@ new content
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           body: `Updating the file...
 ${patchedFileSource}
-╔═══ SEARCH ════╗
-old content
-╠═══════════════╣
-new content
-╚═══ REPLACE ═══╝
 `,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -5082,6 +4481,16 @@ new content
               functions: [],
             },
           },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'edit-file',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Update the file',
+                attributes: { code: 'await realm.fs.replace(...)' },
+              }),
+            },
+          ],
         },
         unsigned: {
           age: 0,
@@ -5090,19 +4499,19 @@ new content
         status: EventStatus.SENT,
       },
       {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result',
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'edit-file-result',
         origin_server_ts: 4,
         room_id: roomId,
         sender: '@user:localhost',
         content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
           'm.relates_to': {
             event_id: aiMessageId,
             key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
-          codeBlockIndex: 0,
+          commandRequestId: 'edit-file',
           data: {
             context: {
               tools: [],
@@ -5120,7 +4529,7 @@ new content
         },
         unsigned: {
           age: 0,
-          transaction_id: 'patch-result',
+          transaction_id: 'edit-file-result',
         },
         status: EventStatus.SENT,
       },
@@ -5134,7 +4543,7 @@ new content
 
     assert.ok(
       pendingCodePatchCorrectnessChecks,
-      'Should collect pending code patch correctness despite older unresolved commands',
+      'Should collect a pending correctness check despite older unresolved commands',
     );
     assert.strictEqual(
       pendingCodePatchCorrectnessChecks?.targetEventId,
@@ -5150,153 +4559,6 @@ new content
         },
       ],
       'Patched files should be surfaced',
-    );
-  });
-
-  test('a reply with one applied and one failed block is checked for the applied file', async function () {
-    // The failed block has no way to be re-applied, so its reply is settled:
-    // the applied file gets its correctness check now, and the retry that
-    // the failure prompts is a new reply with a check of its own. Without
-    // this the applied file would never be checked at all.
-    const roomId = 'room-mixed';
-    const aiMessageId = 'ai-mixed-message';
-    const appliedFileSource = 'http://localhost/realm/button.gts';
-    const failedFileSource = 'http://localhost/realm/card.gts';
-
-    const eventList: DiscreteMatrixEvent[] = [
-      {
-        type: 'm.room.message',
-        event_id: 'user-message',
-        origin_server_ts: 1,
-        room_id: roomId,
-        sender: '@user:localhost',
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          body: 'Please update both files.',
-          format: 'org.matrix.custom.html',
-          data: {
-            context: {
-              realmUrl: 'http://localhost:4201/test',
-              tools: [],
-              functions: [],
-            },
-          },
-        },
-        unsigned: { age: 0, transaction_id: 'user-message' },
-        status: EventStatus.SENT,
-      },
-      {
-        type: 'm.room.message',
-        event_id: aiMessageId,
-        origin_server_ts: 2,
-        room_id: roomId,
-        sender: '@aibot:localhost',
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          body: `Updating both files...
-${appliedFileSource}
-${SEARCH_MARKER}
-old button
-${SEPARATOR_MARKER}
-new button
-${REPLACE_MARKER}
-
-${failedFileSource}
-${SEARCH_MARKER}
-old card
-${SEPARATOR_MARKER}
-new card
-${REPLACE_MARKER}
-`,
-          format: 'org.matrix.custom.html',
-          isStreamingFinished: true,
-          data: {
-            context: {
-              realmUrl: 'http://localhost:4201/test',
-              tools: [],
-              functions: [],
-            },
-          },
-        },
-        unsigned: { age: 0, transaction_id: aiMessageId },
-        status: EventStatus.SENT,
-      },
-      {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result-applied',
-        origin_server_ts: 3,
-        room_id: roomId,
-        sender: '@user:localhost',
-        content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-          'm.relates_to': {
-            event_id: aiMessageId,
-            key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-          },
-          codeBlockIndex: 0,
-          data: {
-            context: { tools: [], functions: [] },
-            attachedFiles: [
-              {
-                sourceUrl: appliedFileSource,
-                url: appliedFileSource,
-                name: 'button.gts',
-                contentType: 'text/plain',
-              },
-            ],
-          },
-        },
-        unsigned: { age: 0, transaction_id: 'patch-result-applied' },
-        status: EventStatus.SENT,
-      },
-      {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: 'patch-result-failed',
-        origin_server_ts: 4,
-        room_id: roomId,
-        sender: '@user:localhost',
-        content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-          'm.relates_to': {
-            event_id: aiMessageId,
-            key: 'failed',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-          },
-          codeBlockIndex: 1,
-          failureReason: 'The patch did not apply cleanly.',
-          data: {
-            context: { tools: [], functions: [] },
-            attachedFiles: [
-              {
-                sourceUrl: failedFileSource,
-                url: failedFileSource,
-                name: 'card.gts',
-                contentType: 'text/plain',
-              },
-            ],
-          },
-        },
-        unsigned: { age: 0, transaction_id: 'patch-result-failed' },
-        status: EventStatus.SENT,
-      },
-    ];
-
-    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-
-    assert.strictEqual(
-      pendingCodePatchCorrectnessChecks?.targetEventId,
-      aiMessageId,
-      'the reply is settled once every block has a result',
-    );
-    assert.deepEqual(
-      pendingCodePatchCorrectnessChecks?.files,
-      [{ sourceUrl: appliedFileSource, displayName: 'realm/button.gts' }],
-      'only the applied file is checked; the failed one is retried instead',
     );
   });
 
@@ -5445,7 +4707,7 @@ ${REPLACE_MARKER}
     assert.strictEqual(
       retryMessages.length,
       2,
-      'Only the first two failures should request more SEARCH/REPLACE fixes',
+      'Only the first two failures should request more fixes',
     );
 
     let failureLimitMessages = userMessages.filter((message) =>
@@ -5638,7 +4900,7 @@ ${REPLACE_MARKER}
     );
   });
 
-  test('getPromptParts includes correctness summary and omits patch result messages', async function () {
+  test('getPromptParts includes the correctness summary in the trailing message', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5674,14 +4936,7 @@ ${REPLACE_MARKER}
         origin_server_ts: 2,
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          body: `Applying patch...
-http://localhost/example.gts
-╔═══ SEARCH ════╗
-old
-╠═══════════════╣
-new
-╚═══ REPLACE ═══╝
-`,
+          body: `Fixed the file.`,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: {
@@ -5708,35 +4963,6 @@ new
         unsigned: {
           age: 0,
           transaction_id: aiMessageId,
-        },
-        status: EventStatus.SENT,
-      },
-      {
-        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        event_id: '$patch-result',
-        room_id: roomId,
-        sender: '@user:localhost',
-        origin_server_ts: 3,
-        content: {
-          msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-          codeBlockIndex: 0,
-          'm.relates_to': {
-            event_id: aiMessageId,
-            key: 'applied',
-            rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-          },
-          data: {
-            context: {
-              tools: [],
-              functions: [],
-              submode: 'code',
-            },
-            attachedFiles: [],
-          },
-        },
-        unsigned: {
-          age: 0,
-          transaction_id: '$patch-result',
         },
         status: EventStatus.SENT,
       },
@@ -5778,8 +5004,6 @@ new
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    let enabledUserMessages =
-      promptParts.messages?.filter((message) => message.role === 'user') ?? [];
     // The instruction exists for this one request only, so it rides the
     // volatile trailing context message rather than the history — a history
     // entry that vanishes on the next request would defeat the prompt cache.
@@ -5794,14 +5018,6 @@ new
         ?.slice(0, -1)
         .some((message) => messageText(message).includes(summaryMessage)),
       'Summary must not be a history entry — it vanishes on the next request',
-    );
-    assert.false(
-      enabledUserMessages.some((message) =>
-        messageText(message).includes(
-          'The user has successfully applied code patch 1.',
-        ),
-      ),
-      'Code patch result message should be omitted',
     );
   });
 
@@ -6004,7 +5220,7 @@ new
       readFileSync(
         path.join(
           import.meta.dirname,
-          'resources/chats/code-block-and-command-two-results-a.json',
+          'resources/chats/one-command-one-result.json',
         ),
         'utf-8',
       ),

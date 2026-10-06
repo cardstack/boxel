@@ -101,7 +101,7 @@ diff --git a/src/@types/event.ts b/src/@types/event.ts
 index 6e4d0ddff19d8798ee537c36ac9cf14d44ed7bad..07727ab2cbf3243ae32b6b2af457d1abcb658af2 100644
 --- a/src/@types/event.ts
 +++ b/src/@types/event.ts
-@@ -337,6 +337,15 @@ export interface TimelineEvents {
+@@ -337,6 +337,14 @@ export interface TimelineEvents {
      [M_BEACON.name]: MBeaconEventContent;
      [M_POLL_START.name]: PollStartEventContent;
      [M_POLL_END.name]: PollEndEventContent;
@@ -110,7 +110,6 @@ index 6e4d0ddff19d8798ee537c36ac9cf14d44ed7bad..07727ab2cbf3243ae32b6b2af457d1ab
 +    "app.boxel.message": any;
 +    "app.boxel.command": any;
 +    "app.boxel.command_result": any;
-+    "app.boxel.code_patch_result": any;
 +    "app.boxel.stop_generating": any;
 +
 +    [t: string]: any;

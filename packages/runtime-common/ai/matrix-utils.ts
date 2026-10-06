@@ -1,6 +1,5 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
-import { findSearchReplaceBlock } from '../search-replace-markers.ts';
 import { uint8ArrayToBase64 } from '../base64.ts';
 import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
@@ -12,7 +11,6 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   isToolResultEventType,
 } from '../matrix-constants.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
@@ -403,28 +401,12 @@ export async function downloadFileAsBase64DataUrl(
   return `data:${contentType};base64,${base64}`;
 }
 
-export function isToolOrCodePatchResult(
+export function isToolResult(
   event: MatrixEvent | DiscreteMatrixEvent,
 ): boolean {
   let type =
     (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
-  return (
-    isToolResultEventType(type) ||
-    type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
-  );
-}
-
-export function extractCodePatchBlocks(s: string) {
-  let blocks: string[] = [];
-  let from = 0;
-  for (;;) {
-    let block = findSearchReplaceBlock(s, from);
-    if (!block) {
-      return blocks;
-    }
-    blocks.push(s.substring(block.start, block.end));
-    from = block.end;
-  }
+  return isToolResultEventType(type);
 }
 
 // Normalize a Matrix media URL (HTTP download URL or mxc://) into a canonical key.

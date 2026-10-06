@@ -4,7 +4,7 @@ import {
   APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
   type AppBoxelResponseStreamContent,
 } from '@cardstack/runtime-common/matrix-constants';
-import { isToolOrCodePatchResult } from '@cardstack/runtime-common/ai';
+import { isToolResult } from '@cardstack/runtime-common/ai';
 
 import { errorReporter } from './sentry.ts';
 import type { OpenAIError } from 'openai/error';
@@ -42,8 +42,8 @@ export class Responder {
       return true;
     }
 
-    // If it's a command result or a code patch result, we might respond
-    if (isToolOrCodePatchResult(event)) {
+    // If it's a tool result, we might respond
+    if (isToolResult(event)) {
       return true;
     }
 
@@ -52,9 +52,7 @@ export class Responder {
   }
 
   static eventWillDefinitelyTriggerResponse(event: DiscreteMatrixEvent) {
-    return (
-      this.eventMayTriggerResponse(event) && !isToolOrCodePatchResult(event)
-    );
+    return this.eventMayTriggerResponse(event) && !isToolResult(event);
   }
 
   private client: MatrixClient;
