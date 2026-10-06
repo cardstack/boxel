@@ -48,8 +48,10 @@ const RESOLVED_BY_PATH_ALIAS = [
   '@cardstack/boxel-host',
   '@cardstack/boxel-ui',
   '@cardstack/bxl',
+  '@cardstack/choreo',
   '@cardstack/host',
   '@cardstack/runtime-common',
+  'glimmer-motion',
 ];
 
 /**
@@ -262,9 +264,8 @@ describe('card-facing packages the host shims', () => {
     expect(specifiers).toContain('ember-modifier');
     expect(specifiers).toContain('@ember/test-helpers');
     expect(specifiers).toContain('@cardstack/runtime-common');
-    // Workspace packages that publish their own declarations, reached
-    // through their `exports` rather than a path alias.
-    expect(specifiers).toContain('glimmer-motion');
+    // Subpath shims are covered through their package's path alias.
+    expect(specifiers).toContain('glimmer-motion/presence');
     expect(specifiers).toContain('@cardstack/choreo/film');
   });
 

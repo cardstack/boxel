@@ -83,6 +83,10 @@ const CLEAN_FIXTURES: { name: string; covers: string }[] = [
     name: 'bxl-formula',
     covers: '@cardstack/bxl import in a computeVia formula',
   },
+  {
+    name: 'motion-card',
+    covers: 'glimmer-motion and @cardstack/choreo imports, subpaths included',
+  },
 ];
 
 describe('boxel parse (against the installed CLI)', () => {

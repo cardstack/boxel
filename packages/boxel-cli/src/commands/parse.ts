@@ -120,6 +120,16 @@ const RUNTIME_COMMON_PATH = BUNDLED_TYPES_DIR
 const BXL_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'bxl')
   : join(PACKAGES_PATH, 'bxl', 'src');
+// glimmer-motion and `@cardstack/choreo` are card-facing too (the host
+// shims both into realms) and are bundled as source on the same terms:
+// with the `developing:choreo` export condition their `exports` resolve to
+// `src`, so the alias targets it in both layouts.
+const GLIMMER_MOTION_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'glimmer-motion')
+  : join(PACKAGES_PATH, 'glimmer-motion', 'src');
+const CHOREO_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'choreo')
+  : join(PACKAGES_PATH, 'choreo', 'src');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -779,6 +789,10 @@ export async function runGlintCheck(
           '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
           '@cardstack/bxl': [`${BXL_PATH}/index`],
           '@cardstack/bxl/*': [`${BXL_PATH}/*`],
+          'glimmer-motion': [`${GLIMMER_MOTION_PATH}/index`],
+          'glimmer-motion/*': [`${GLIMMER_MOTION_PATH}/*`],
+          '@cardstack/choreo': [`${CHOREO_PATH}/index`],
+          '@cardstack/choreo/*': [`${CHOREO_PATH}/*`],
           '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
           '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
           // The host registers each tool module under both its
