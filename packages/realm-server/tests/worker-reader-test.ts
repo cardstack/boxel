@@ -106,6 +106,79 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(result, undefined, 'a 404 reads as not found');
   });
 
+  // A response that a fetch reached by following a redirect to `finalURL`.
+  // `redirected` and `url` are read-only on a constructed Response, so they
+  // are defined the way a following fetch reports them.
+  function redirectedResponse(content: string, finalURL: string): Response {
+    let response = completeResponse(content);
+    Object.defineProperty(response, 'redirected', { value: true });
+    Object.defineProperty(response, 'url', { value: finalURL });
+    return response;
+  }
+
+  test('a source read redirected to another path reads as not found', async function (assert) {
+    let cardJSON = '{"data":{"type":"card"}}';
+    let reader = getReader(
+      async () => redirectedResponse(cardJSON, `${realmURL}person-1.json`),
+      realmURL,
+    );
+    let cardId = new URL(`${realmURL}person-1`);
+
+    assert.strictEqual(
+      await reader.readFile(cardId),
+      undefined,
+      'readFile finds no file at the path',
+    );
+    assert.strictEqual(
+      await reader.readStream(cardId),
+      undefined,
+      'readStream finds no file at the path',
+    );
+  });
+
+  test('a source read redirected to another path releases the body it does not read', async function (assert) {
+    let cancelled = 0;
+    let reader = getReader(async () => {
+      let response = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"data":{}}'));
+          },
+          cancel() {
+            cancelled++;
+          },
+        }),
+        { status: 200, headers: lastModifiedHeaders },
+      );
+      Object.defineProperty(response, 'redirected', { value: true });
+      Object.defineProperty(response, 'url', {
+        value: `${realmURL}person-1.json`,
+      });
+      return response;
+    }, realmURL);
+    let cardId = new URL(`${realmURL}person-1`);
+
+    await reader.readFile(cardId);
+    await reader.readStream(cardId);
+
+    assert.strictEqual(cancelled, 2, 'each dropped body is cancelled');
+  });
+
+  test('a source read redirected to the same path reads the file', async function (assert) {
+    let reader = getReader(
+      async () =>
+        redirectedResponse(
+          'hello',
+          `${realmURL.replace('http:', 'https:')}notes.txt`,
+        ),
+      realmURL,
+    );
+
+    let result = await reader.readFile(new URL(`${realmURL}notes.txt`));
+
+    assert.strictEqual(result?.content, 'hello', 'the file is read');
+  });
+
   test('readFile abandons a body that stops arriving and reads it again', async function (assert) {
     let requests = 0;
     let reader = getReader(

@@ -102,6 +102,9 @@ const educationPolicy = policyDocument([
   },
 ]);
 
+// The character a policy issue's message marks its code spans with.
+const BACKTICK = '`';
+
 // A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
 // hold ahead of the one that admitted the delete.
@@ -360,6 +363,37 @@ module('Integration | realm policy', function (hooks) {
     assert.dom('[data-test-policy-predicate-snapshot]').exists({ count: 1 });
   });
 
+  test('a grant opened to callers who are not signed in says so, and a write names the setting it acts as', async function (assert) {
+    await setupPolicyRealm({
+      'policies/public.json': policyDocument([
+        {
+          targetType: { module: '../classroom', name: 'Classroom' },
+          grants: [
+            { operation: 'read', anonymous: true },
+            {
+              operation: 'update',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+            },
+            { operation: 'delete' },
+          ],
+        },
+      ]),
+    });
+    let policy = await loadPolicy('policies/public');
+    await renderCard(loader, policy, 'embedded');
+
+    assert.dom('[data-test-operation-grant]').exists({ count: 3 });
+    assert
+      .dom('[data-test-operation-grant-anonymous]')
+      .exists({ count: 2 }, 'only the grants that opt in are marked')
+      .hasText('anyone');
+    assert
+      .dom('[data-test-operation-grant-acting-user]')
+      .exists({ count: 1 }, 'only the write names who it acts as')
+      .hasText('config.feedbackWriter');
+  });
+
   test('a policy with no rules says it grants nothing', async function (assert) {
     await setupPolicyRealm({ 'policies/empty.json': policyDocument([]) });
     let policy = await loadPolicy('policies/empty');
@@ -467,6 +501,172 @@ module('Integration | realm policy', function (hooks) {
         'Always allowed',
         'an unconditional grant reads as always allowed',
       );
+  });
+
+  // The line each grant's editor opens with, as a reader sees it.
+  function grantLinesInEditor() {
+    return [
+      ...document.querySelectorAll(
+        '[data-test-policy-rule-grant] [data-test-operation-grant]',
+      ),
+    ].map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
+  }
+
+  function ruleEditor(index: number) {
+    return `[data-test-contains-many="rules"] [data-test-item="${index}"]`;
+  }
+
+  test('editing a policy shows each grant as its view does, and adds, changes and removes grants', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+    let permissions: Permissions = { canWrite: true, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, policy, 'edit');
+
+    assert.dom('[data-test-policy-rule-edit]').exists({ count: 2 });
+    assert.deepEqual(
+      grantLinesInEditor(),
+      [
+        'read always',
+        `appendActivity where ${teacherPredicate.trim()}`,
+        `read where ${rosterPredicate} snapshot`,
+        `listMySchedules where ${providerPredicate}`,
+      ],
+      'each grant is shown by its operation and condition, in order',
+    );
+    assert
+      .dom('[data-test-contains-many="rules"]')
+      .doesNotIncludeText('Untitled', 'no grant is shown as an untitled field');
+    assert
+      .dom('[data-test-policy-rule-target-type] input')
+      .exists({ count: 2 }, "every rule's target type can be edited");
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-policy-predicate-input]')
+      .exists({ count: 4 }, "every grant's condition can be edited");
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-field="anonymous"]')
+      .exists(
+        { count: 4 },
+        'every grant can be opened to callers who are not signed in',
+      );
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"]')
+      .doesNotExist(
+        'a grant only for signed-in callers asks for no realm.json setting',
+      );
+    assert
+      .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
+      .hasAttribute(
+        'aria-label',
+        'Remove grant 1 (read)',
+        'each remove button names the grant it removes',
+      );
+
+    let studentPredicate = '.studentIds | any(. == actor())';
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="1"] [data-test-policy-predicate-input]`,
+      studentPredicate,
+    );
+    await click(`${ruleEditor(0)} [data-test-policy-rule-add-grant]`);
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="operation"] input`,
+      'update',
+    );
+    await click(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`);
+
+    // The radio group lists false, then true.
+    let [, allowAnonymous] = document.querySelectorAll(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="anonymous"] input[type="radio"]`,
+    );
+    await click(allowAnonymous);
+    assert
+      .dom(
+        `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
+      )
+      .exists(
+        "a grant opened to callers who aren't signed in asks for the realm.json setting its writes are made as",
+      );
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
+      'feedbackWriter',
+    );
+
+    assert.deepEqual(
+      grantLinesInEditor(),
+      [
+        'read always',
+        `appendActivity where ${studentPredicate}`,
+        'update always anyone as config.feedbackWriter',
+        `listMySchedules where ${providerPredicate}`,
+      ],
+      'each grant reads as it now stands',
+    );
+
+    let rules = serializeCard(policy).data.attributes?.rules as {
+      grants: {
+        operation: string;
+        where: unknown;
+        anonymous?: boolean | null;
+        actingUser?: string | null;
+      }[];
+    }[];
+    assert.deepEqual(
+      rules.map((rule) =>
+        rule.grants.map(({ operation, where, anonymous, actingUser }) => ({
+          operation,
+          where,
+          anonymous: anonymous ?? false,
+          actingUser: actingUser ?? null,
+        })),
+      ),
+      [
+        [
+          {
+            operation: 'read',
+            where: null,
+            anonymous: false,
+            actingUser: null,
+          },
+          {
+            operation: 'appendActivity',
+            where: studentPredicate,
+            anonymous: false,
+            actingUser: null,
+          },
+          {
+            operation: 'update',
+            where: null,
+            anonymous: true,
+            actingUser: 'feedbackWriter',
+          },
+        ],
+        [
+          {
+            operation: 'listMySchedules',
+            where: providerPredicate,
+            anonymous: false,
+            actingUser: null,
+          },
+        ],
+      ],
+      'the saved policy holds the added, changed and remaining grants',
+    );
+  });
+
+  test('a policy edited without write permission shows its grants but cannot add or remove them', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+    let permissions: Permissions = { canWrite: false, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, policy, 'edit');
+
+    assert.strictEqual(
+      grantLinesInEditor().length,
+      4,
+      'every grant is still shown',
+    );
+    assert.dom('[data-test-policy-rule-add-grant]').doesNotExist();
+    assert.dom('[data-test-policy-rule-remove-grant]').doesNotExist();
   });
 
   test('a document shape assigned in code is refused rather than read as a predicate', async function (assert) {
@@ -972,6 +1172,37 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-policy-issue-message]')
       .includesText('no rule lets anyone read Student cards');
+
+    // The compiler marks the identifiers in a message as code with backticks,
+    // as markdown does. The card renders each one as code, so no backtick
+    // shows, in the issue list and in the grant's warning alike.
+    assert
+      .dom('[data-test-policy-issue-message] code')
+      .exists('the identifiers in the message render as code')
+      .hasText('read', 'the first is the grant’s operation');
+    assert
+      .dom('[data-test-policy-issue-message] .message-paragraph')
+      .exists(
+        { count: 4 },
+        'the message is laid out one idea per paragraph, as the compiler writes it',
+      );
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .doesNotIncludeText(BACKTICK, 'and no backtick shows')
+      .includesText(
+        'read on Roster sends',
+        'and the text reads on across a span, spaces kept',
+      );
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"] code',
+      )
+      .exists('the grant’s warning renders them as code too');
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"]',
+      )
+      .doesNotIncludeText(BACKTICK);
   });
 
   test('a policy whose issues only leave grants inactive marks no warning', async function (assert) {

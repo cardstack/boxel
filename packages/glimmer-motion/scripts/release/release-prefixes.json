@@ -1,0 +1,12 @@
+{
+  "feat": "minor",
+  "fix": "patch",
+  "perf": "patch",
+  "refactor": "patch",
+  "chore": "none",
+  "docs": "none",
+  "test": "none",
+  "build": "none",
+  "ci": "none",
+  "style": "none"
+}

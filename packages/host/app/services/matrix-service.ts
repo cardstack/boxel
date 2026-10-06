@@ -40,7 +40,6 @@ import {
   logger,
   Deferred,
   ri,
-  containsSearchReplaceMarker,
   isCardErrorJSONAPI,
   stringifyErrorForLog,
 } from '@cardstack/runtime-common';
@@ -49,9 +48,6 @@ import { getPromptParts } from '@cardstack/runtime-common/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -143,8 +139,6 @@ import type {
   BotTriggerContent,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
-  CodePatchResultContent,
-  CodePatchStatus,
   ToolResultWithNoOutputContent,
   ToolResultWithOutputContent,
   RealmEventContent,
@@ -163,6 +157,13 @@ import type {
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
+
+// Where the homeserver serves room media: the authenticated endpoint uploads
+// resolve to, and the legacy one.
+const ROOM_MEDIA_DOWNLOAD_PATHS = [
+  '/_matrix/client/v1/media/download/',
+  '/_matrix/media/v3/download/',
+];
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 // Backoff for retrying trusted servers that were unreachable at boot. Bounded
 // so a persistently-down server doesn't spin forever.
@@ -1806,7 +1807,6 @@ export default class MatrixService extends Service {
     content:
       | BotTriggerContent
       | CardMessageContent
-      | CodePatchResultContent
       | ToolResultWithNoOutputContent
       | ToolResultWithOutputContent,
   ) {
@@ -1827,6 +1827,33 @@ export default class MatrixService extends Service {
   async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
+
+  // A URL the browser can display for room media. Room media is served only
+  // to the Matrix session, which an `<img>` request does not carry, so its
+  // bytes are downloaded with the session and handed back as an object URL
+  // that the caller revokes when done. Any other URL comes back unchanged.
+  // Card code can call this with any URL, so the session is used only for
+  // the homeserver's media download endpoints, never for the rest of its API.
+  loadRoomMedia = async (url: string): Promise<string> => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return url;
+    }
+    if (
+      parsed.origin !== new URL(this.client.baseUrl).origin ||
+      !ROOM_MEDIA_DOWNLOAD_PATHS.some((path) =>
+        parsed.pathname.startsWith(path),
+      )
+    ) {
+      return url;
+    }
+    let blob = await this.client.downloadContentAsBlob({
+      url,
+    } as FileAPI.SerializedFile);
+    return URL.createObjectURL(blob);
+  };
 
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.
@@ -2037,55 +2064,6 @@ export default class MatrixService extends Service {
     }
   }
 
-  async sendCodePatchResultEvent(
-    roomId: string,
-    eventId: string,
-    codeBlockIndex: number,
-    resultKey: CodePatchStatus,
-    attachedCards: CardDef[] = [],
-    attachedFiles: FileDef[] = [],
-    context: BoxelContext,
-    lintIssues?: string[],
-    failureReason?: string | undefined,
-  ) {
-    let contentData = await this.withContextAndAttachments(
-      context,
-      attachedCards,
-      attachedFiles,
-    );
-    let normalizedLintIssues = lintIssues || [];
-    let data: CodePatchResultContent['data'] = {
-      ...contentData,
-      ...(normalizedLintIssues.length
-        ? { lintIssues: normalizedLintIssues }
-        : {}),
-    };
-    let content: CodePatchResultContent = {
-      msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-      codeBlockIndex,
-      failureReason,
-      'm.relates_to': {
-        event_id: eventId,
-        key: resultKey,
-        rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-      },
-      data,
-    };
-    try {
-      return await this.sendEvent(
-        roomId,
-        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        content,
-      );
-    } catch (e) {
-      throw new Error(
-        `Error sending code patch result event: ${
-          'message' in (e as Error) ? (e as Error).message : e
-        }`,
-      );
-    }
-  }
-
   async uploadFiles(files: FileDef[]) {
     return await this.client.uploadFiles(files);
   }
@@ -2275,7 +2253,7 @@ export default class MatrixService extends Service {
           // switch, or schema edit, and tool definitions render ahead of
           // all message history, so each change re-bills the whole
           // conversation at full input price. Skills route card edits
-          // through patch-fields and SEARCH/REPLACE patches; the executor
+          // through patch-fields and run-realm-code; the executor
           // still honors patchCardInstance calls (old rooms carry them in
           // history), and the programmatic SendAiAssistantMessage tool
           // still injects it for callers that require a forced patch call.
@@ -3308,25 +3286,6 @@ export default class MatrixService extends Service {
       event.content?.isStreamingFinished
     ) {
       this.toolService.queueEventForToolProcessing(event);
-    }
-
-    // Queue code patches for processing
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.body &&
-      event.content?.isStreamingFinished
-    ) {
-      // Any marker is enough to queue. An answer too long for one event is
-      // split at a character count that knows nothing about what it is cutting
-      // through, so a SEARCH/REPLACE block routinely straddles the boundary and
-      // no single event holds all three markers — requiring all three here left
-      // exactly those patches unqueued, while the UI, which reads the joined
-      // message, still offered an apply button for them. Whether there is
-      // anything to apply is decided later against the whole answer.
-      let body = event.content.body as string;
-      if (containsSearchReplaceMarker(body)) {
-        this.toolService.queueEventForCodePatchProcessing(event);
-      }
     }
   }
 

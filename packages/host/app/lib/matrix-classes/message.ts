@@ -4,11 +4,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
-import {
-  markdownToHtml,
-  splitCodePatchFencesGluedToProse,
-  widenFencesAroundCodePatches,
-} from '@cardstack/runtime-common/marked-sync';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import {
   parseHtmlContent,
@@ -16,8 +12,6 @@ import {
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import type { RoomMember } from './member';
-
-import type MessageCodePatchResult from './message-code-patch-result';
 
 import type MessageTool from './message-tool';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -62,7 +56,6 @@ export class Message implements RoomMessageInterface {
   @tracked _body: string;
   @tracked _reasoningContent?: string | null;
   @tracked _tools: TrackedArray<MessageTool>;
-  @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
   @tracked _isCanceled?: boolean;
@@ -115,7 +108,6 @@ export class Message implements RoomMessageInterface {
     this.continuationOf = init.continuationOf;
     this._reasoningContent = init.reasoningContent;
     this._tools = new TrackedArray<MessageTool>();
-    this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
     this.isCodePatchCorrectness = false;
   }
@@ -236,17 +228,10 @@ export class Message implements RoomMessageInterface {
     if (!this.body) {
       return this.body;
     }
-    return markdownToHtml(
-      widenFencesAroundCodePatches(
-        splitCodePatchFencesGluedToProse(
-          escapeHtmlOutsideCodeBlocks(this.body)!,
-        ),
-      ),
-      {
-        sanitize: false,
-        escapeHtmlInCodeBlocks: true,
-      },
-    );
+    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body)!, {
+      sanitize: false,
+      escapeHtmlInCodeBlocks: true,
+    });
   }
 
   /*

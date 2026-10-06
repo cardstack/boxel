@@ -406,16 +406,24 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [student, guardian] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /`read` on Classroom .* the Student cards linked through `students`, but no rule lets anyone read Student cards/.test(
+      /`read` on Classroom .* the Student cards linked through `students`, and no rule lets anyone read Student cards/.test(
         student,
       ),
       `the message names the granted type, the reached type and the path: ${student}`,
     );
     assert.true(
-      /the Guardian cards linked through `students\.guardian`, but no rule lets anyone read Guardian cards/.test(
+      /the Guardian cards linked through `students\.guardian`, and no rule lets anyone read Guardian cards/.test(
         guardian,
       ),
       `a type two links away is named with the whole path: ${guardian}`,
+    );
+    // The policy card lays a message out by its blank lines and its `- `
+    // lines: what is shared, the fix, why the reached type can't help, and
+    // sharing on purpose.
+    assert.strictEqual(
+      student.split('\n\n').length,
+      4,
+      `one idea per paragraph: ${student}`,
     );
     assert.true(
       student.includes("add `links: 'ids'` to Classroom's `read`"),
@@ -641,14 +649,20 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let [message] = reachIssues(policy).map((issue) => issue.message);
     assert.true(
-      /the pages `listIds` shows for Classroom cards can display the Student cards linked through `students`/.test(
+      /The pages `listIds` shows for Classroom cards can display the Student cards linked through `students`/.test(
         message,
       ),
       message,
     );
     assert.true(
-      message.includes("changing `links` won't keep them off the page"),
+      message.includes("Setting `links` doesn't help here"),
       `it says why the declared ids is no fix: ${message}`,
+    );
+    assert.true(
+      message.includes(
+        'To keep them off the page, either:\n- mark every page format',
+      ),
+      `its fixes are a list: ${message}`,
     );
 
     policy = await compile([rule(CLASSROOM, 'read')]);

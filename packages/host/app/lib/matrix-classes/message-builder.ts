@@ -26,8 +26,6 @@ import {
   APP_BOXEL_RELOAD_BILLING_DATA_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -44,7 +42,6 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import { Message } from './message';
-import MessageCodePatchResult from './message-code-patch-result';
 import MessageTool from './message-tool';
 
 import type { RoomMember } from './member';
@@ -53,7 +50,6 @@ import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
-  CodePatchResultEvent,
   DebugMessageEvent,
   ToolResultEvent,
   EncodedToolRequest,
@@ -84,7 +80,6 @@ export default class MessageBuilder {
       index: number;
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
-      codePatchResultEvent?: CodePatchResultEvent;
       toolResultEvent?: ToolResultEvent;
     },
   ) {
@@ -202,7 +197,6 @@ export default class MessageBuilder {
       if (getToolRequests(event.content)) {
         message.setTools(await this.buildMessageCommands(message));
       }
-      message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
@@ -327,19 +321,19 @@ export default class MessageBuilder {
         if (messageTool) {
           messageTool.toolCallStatus = event.content['m.relates_to']
             .key as ToolCallStatus;
-          messageTool.toolResultFileDef = isToolResultWithOutputContent(
-            event.content,
-          )
+          let toolResultFileDef = isToolResultWithOutputContent(event.content)
             ? event.content.data.card
             : undefined;
+          // Room processing replays every event on each pass. Assigning the
+          // same result file again would still invalidate the tracked field
+          // and restart the result card's load, so assign only a new file.
+          if (messageTool.toolResultFileDef?.url !== toolResultFileDef?.url) {
+            messageTool.toolResultFileDef = toolResultFileDef;
+          }
           messageTool.failureReason = event.content.failureReason;
         }
       }
     }
-  }
-
-  updateMessageCodePatchResult(message: Message) {
-    message.codePatchResults = this.buildMessageCodePatchResults(message);
   }
 
   // A MessageTool resolves its tool (codeRef, approval, verb) once, when the
@@ -572,56 +566,6 @@ export default class MessageBuilder {
       neverAutoExecutes,
     );
     return messageTool;
-  }
-
-  private buildMessageCodePatchResults(message: Message) {
-    let codePatchResultEvents = this.builderContext.events.filter((e: any) => {
-      let r = e.content['m.relates_to'];
-      if (!r) {
-        return false;
-      }
-      return (
-        e.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
-        r.rel_type === APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
-        r.event_id === message.eventId
-      );
-    }) as CodePatchResultEvent[];
-
-    let codePatchResults = new TrackedArray<MessageCodePatchResult>();
-    for (let codePatchResultEvent of codePatchResultEvents) {
-      let finalFileUrlAfterCodePatching =
-        codePatchResultEvent.content.data.attachedFiles?.[0]?.sourceUrl;
-      let originalUploadedFileUrl =
-        codePatchResultEvent.content.data.attachedFiles?.[0]?.url;
-      if (!finalFileUrlAfterCodePatching) {
-        console.error(
-          'Bug: no final file url found for code patch result event - it should have been set',
-          codePatchResultEvent,
-        );
-        continue;
-      }
-      if (!originalUploadedFileUrl) {
-        console.error(
-          'Bug: no original uploaded file url found for code patch result event - it should have been set',
-          codePatchResultEvent,
-        );
-        continue;
-      }
-
-      codePatchResults.push(
-        new MessageCodePatchResult(
-          message,
-          this.builderContext.effectiveEventId,
-          codePatchResultEvent.content['m.relates_to'].key,
-          codePatchResultEvent.content.codeBlockIndex,
-          finalFileUrlAfterCodePatching,
-          originalUploadedFileUrl,
-          getOwner(this)!,
-          codePatchResultEvent.content.failureReason,
-        ),
-      );
-    }
-    return codePatchResults;
   }
 }
 

@@ -1,13 +1,11 @@
-import { array, fn } from '@ember/helper';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
-import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, eq } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
@@ -24,19 +22,9 @@ import {
   wrapLastTextNodeInStreamingTextSpan,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import type { Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
-import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
-
-import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
-
-import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
-
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-import type ToolService from '@cardstack/host/services/tool-service';
 
 import Message from './text-content';
-
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -46,8 +34,6 @@ interface Signature {
     eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
-    isLastAssistantMessage: boolean;
-    userMessageThisMessageIsRespondingTo?: MatrixMessage;
     reasoning?: {
       content: string | null;
       isExpanded: boolean;
@@ -60,8 +46,6 @@ interface Signature {
 }
 
 export default class FormattedAiBotMessage extends Component<Signature> {
-  @service declare private toolService: ToolService;
-
   @cached
   private get reasoningHtml() {
     // `markdownToHtml()` already sanitizes by default, so this only needs to
@@ -77,10 +61,6 @@ export default class FormattedAiBotMessage extends Component<Signature> {
     return this.args
       .htmlParts!.slice(0, htmlPartIndex)
       .filter(isHtmlPreTagGroup).length;
-  };
-
-  private codePatchStatus = (codeData: CodeData) => {
-    return this.toolService.getCodePatchStatus(codeData);
   };
 
   <template>
@@ -122,21 +102,8 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         {{#if (isHtmlPreTagGroup htmlPart)}}
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
-            @codePatchResult={{this.toolService.getCodePatchResult
-              htmlPart.codeData
-            }}
-            @onPatchCode={{fn
-              this.toolService.patchCode
-              htmlPart.codeData.roomId
-              htmlPart.codeData.fileUrl
-              (array htmlPart.codeData)
-            }}
             @monacoSDK={{@monacoSDK}}
-            @isLastAssistantMessage={{@isLastAssistantMessage}}
-            @isStreaming={{@isStreaming}}
-            @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             @index={{this.preTagGroupIndex index}}
-            @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -190,95 +157,12 @@ interface HtmlGroupCodeBlockSignature {
   Element: HTMLDivElement;
   Args: {
     codeData: CodeData;
-    onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
-    isLastAssistantMessage: boolean;
-    isStreaming: boolean;
-    userMessageThisMessageIsRespondingTo?: MatrixMessage;
     index: number;
-    codePatchStatus: CodePatchStatus | 'applying' | 'ready';
-    codePatchResult: MessageCodePatchResult | undefined;
-    originalUploadedFileUrl?: string | null;
   };
 }
 
-class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  @tracked diffEditorStats: {
-    linesRemoved: number;
-    linesAdded: number;
-  } | null = null;
-
-  codeDiffResource = getCodeDiffResultResource(this, () => ({
-    fileUrl: this.args.codeData.fileUrl,
-    searchReplaceBlock: this.args.codeData.searchReplaceBlock,
-    codePatchStatus: this.args.codePatchStatus as CodePatchStatus,
-  }));
-
-  errorMessage(errorMessage: string) {
-    return 'Code could not be displayed: ' + errorMessage;
-  }
-
-  private extractReplaceCode(searchReplaceBlock: string | null | undefined) {
-    if (!searchReplaceBlock) {
-      return null;
-    }
-    return parseSearchReplace(searchReplaceBlock).replaceContent;
-  }
-
-  private get codeForEditor() {
-    if (this.isAppliedOrIgnoredCodePatch) {
-      return this.extractReplaceCode(this.args.codeData.searchReplaceBlock);
-    } else {
-      return this.args.codeData.code;
-    }
-  }
-
-  private get isAppliedOrIgnoredCodePatch() {
-    // Ignored means the user moved on to the next message
-    return (
-      this.args.codePatchStatus === 'applied' ||
-      !this.args.isLastAssistantMessage
-    );
-  }
-
-  private updateDiffEditorStats = (stats: {
-    linesAdded: number;
-    linesRemoved: number;
-  }) => {
-    this.diffEditorStats = stats;
-  };
-
-  private get codePatchfinalFileUrlAfterCodePatching() {
-    return this.args.codePatchStatus === 'applied'
-      ? this.args.codePatchResult?.finalFileUrlAfterCodePatching
-      : null;
-  }
-
-  // A block that opened a SEARCH marker but never resolved into a complete
-  // search/replace block is unapplyable, and without this reads as an ordinary
-  // code block with stray box-drawing characters in it. Wait for streaming to
-  // finish first, since a patch mid-stream is incomplete for a moment.
-  private get showMalformedPatchError() {
-    return !this.args.isStreaming && this.args.codeData.malformedPatch;
-  }
-
-  private get malformedPatchMessage() {
-    return this.errorMessage(
-      'the search/replace markers in this block are malformed, so it cannot be applied automatically.',
-    );
-  }
-
-  private get codePatchErrorMessage() {
-    if (this.args.codePatchStatus === 'applied') {
-      return null;
-    } else if (this.args.codePatchStatus === 'failed') {
-      return this.args.codePatchResult?.failureReason;
-    } else if (this.codeDiffResource?.errorMessage) {
-      return this.codeDiffResource.errorMessage;
-    }
-    return null;
-  }
-
+const HtmlGroupCodeBlock: TemplateOnlyComponent<HtmlGroupCodeBlockSignature> =
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -286,155 +170,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       data-test-code-block-index={{@index}}
       as |codeBlock|
     >
-      {{#if (bool @codeData.searchReplaceBlock)}}
-        {{#if this.isAppliedOrIgnoredCodePatch}}
-          <div>
-            <codeBlock.diffEditorHeader
-              @codeData={{@codeData}}
-              @diffEditorStats={{null}}
-              @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
-              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-              @codePatchStatus={{@codePatchStatus}}
-              @codePatchErrorMessage={{this.codePatchErrorMessage}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-            />
-
-            <codeBlock.editor @code={{this.codeForEditor}} />
-
-            <codeBlock.actions as |actions|>
-              <actions.copyCode
-                @textToCopy={{this.extractReplaceCode
-                  @codeData.searchReplaceBlock
-                }}
-              />
-              {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
-              <actions.applyCodePatch
-                @codeData={{@codeData}}
-                @patchCodeStatus={{@codePatchStatus}}
-              />
-            </codeBlock.actions>
-
-            {{#if this.codePatchErrorMessage}}
-              <codeBlock.patchFooter>
-                <Alert @type='error' class='code-patch-error' as |Alert|>
-                  <Alert.Messages
-                    @messages={{array this.codePatchErrorMessage}}
-                  />
-                </Alert>
-              </codeBlock.patchFooter>
-            {{/if}}
-          </div>
-        {{else}}
-          {{#if this.codeDiffResource.isDataLoaded}}
-            <codeBlock.diffEditorHeader
-              @codeData={{@codeData}}
-              @diffEditorStats={{this.diffEditorStats}}
-              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-              @codePatchStatus={{@codePatchStatus}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-              @codePatchErrorMessage={{this.codePatchErrorMessage}}
-            />
-
-            <codeBlock.diffEditor
-              @originalCode={{this.codeDiffResource.originalCode}}
-              @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              @language={{@codeData.language}}
-              @updateDiffEditorStats={{this.updateDiffEditorStats}}
-            />
-
-            <codeBlock.actions as |actions|>
-              <actions.copyCode
-                @textToCopy={{this.codeDiffResource.modifiedCode}}
-              />
-
-              <actions.applyCodePatch
-                @codeData={{@codeData}}
-                @performPatch={{fn @onPatchCode @codeData}}
-                @patchCodeStatus={{if
-                  this.codePatchErrorMessage
-                  'failed'
-                  @codePatchStatus
-                }}
-                @originalCode={{this.codeDiffResource.originalCode}}
-                @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              />
-            </codeBlock.actions>
-          {{else if this.codeDiffResource.isLoadingDiff}}
-            {{! Together with the branch above, this makes the states a patch can
-            be rendered in exhaustive: once `modify` returns, the resource holds
-            code, or an error, or a running load. There is no fourth state, and
-            the empty block this branch replaced was it. A load only runs once a
-            file URL is known — `modify` records an error and returns without
-            performing when there isn't one — so the header can always name its
-            file here. A failed patch is not shown in this branch; the footer's
-            alert speaks for it. }}
-            <codeBlock.diffEditorHeader
-              @codeData={{@codeData}}
-              @diffEditorStats={{null}}
-              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-              @codePatchStatus={{@codePatchStatus}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
-              @codePatchErrorMessage={{this.codePatchErrorMessage}}
-            />
-            <div class='code-patch-loading' data-test-code-patch-loading>
-              <LoadingIndicator @color='var(--boxel-light)' />
-              <span>Loading diff…</span>
-            </div>
-          {{/if}}
-
-          {{#if this.codePatchErrorMessage}}
-            <codeBlock.patchFooter>
-              <Alert
-                @type='error'
-                class='code-patch-error'
-                data-test-error-message={{this.codePatchErrorMessage}}
-                as |Alert|
-              >
-                <Alert.Messages
-                  @messages={{array this.codePatchErrorMessage}}
-                />
-              </Alert>
-            </codeBlock.patchFooter>
-          {{/if}}
-        {{/if}}
-      {{else}}
-        {{#if @codeData.fileUrl}}
-          <codeBlock.diffEditorHeader
-            @codeData={{@codeData}}
-            @diffEditorStats={{null}}
-            @codePatchStatus={{@codePatchStatus}}
-          />
-        {{/if}}
-        <codeBlock.editor @code={{this.codeForEditor}} />
-        <codeBlock.actions as |actions|>
-          <actions.copyCode @textToCopy={{@codeData.code}} />
-        </codeBlock.actions>
-        {{#if this.showMalformedPatchError}}
-          <codeBlock.patchFooter>
-            <Alert
-              @type='error'
-              class='code-patch-error'
-              data-test-malformed-patch-error
-              as |Alert|
-            >
-              <Alert.Messages @messages={{array this.malformedPatchMessage}} />
-            </Alert>
-          </codeBlock.patchFooter>
-        {{/if}}
-      {{/if}}
+      <codeBlock.editor @code={{@codeData.code}} />
+      <codeBlock.actions as |actions|>
+        <actions.copyCode @textToCopy={{@codeData.code}} />
+      </codeBlock.actions>
     </CodeBlock>
-
-    <style scoped>
-      .code-patch-loading {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        background-color: var(--boxel-dark);
-        color: var(--boxel-light);
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-      }
-    </style>
-  </template>
-}
+  </template>;

@@ -3,7 +3,6 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 import * as AddFieldToCardDefinitionToolModule from './add-field-to-card-definition';
 import * as UseAiAssistantToolModule from './ai-assistant';
 import * as ApplyMarkdownEditToolModule from './apply-markdown-edit';
-import * as ApplySearchReplaceBlockToolModule from './apply-search-replace-block';
 import * as AuthedFetchToolModule from './authed-fetch';
 import * as CreateListingPRRequestToolModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
@@ -57,7 +56,6 @@ import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceToolModule from './open-workspace';
 import * as PatchCardInstanceToolModule from './patch-card-instance';
-import * as PatchCodeToolModule from './patch-code';
 import * as PatchFieldsToolModule from './patch-fields';
 import * as PatchThemeToolModule from './patch-theme';
 import * as PersistModuleInspectorViewToolModule from './persist-module-inspector-view';
@@ -130,11 +128,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'apply-markdown-edit',
     ApplyMarkdownEditToolModule,
-  );
-  shimHostToolModule(
-    virtualNetwork,
-    'apply-search-replace-block',
-    ApplySearchReplaceBlockToolModule,
   );
   shimHostToolModule(
     virtualNetwork,
@@ -257,7 +250,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'patch-card-instance',
     PatchCardInstanceToolModule,
   );
-  shimHostToolModule(virtualNetwork, 'patch-code', PatchCodeToolModule);
   shimHostToolModule(virtualNetwork, 'run-realm-code', RunRealmCodeToolModule);
   shimHostToolModule(virtualNetwork, 'patch-fields', PatchFieldsToolModule);
   shimHostToolModule(virtualNetwork, 'patch-theme', PatchThemeToolModule);
@@ -488,7 +480,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
 // Note - this is used for the tests
 export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   AddFieldToCardDefinitionToolModule.default,
-  ApplySearchReplaceBlockToolModule.default,
   ApplyMarkdownEditToolModule.default,
   CopyCardAsMarkdownToolModule.default,
   CopyCardToRealmModule.default,
@@ -535,7 +526,6 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   OpenInInteractModeModule.default,
   OpenWorkspaceToolModule.default,
   GenerateThemeExampleToolModule.default,
-  PatchCodeToolModule.default,
   RunRealmCodeToolModule.default,
   PatchFieldsToolModule.default,
   PatchThemeToolModule.default,

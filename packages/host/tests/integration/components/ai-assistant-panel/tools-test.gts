@@ -9,6 +9,7 @@ import { module, skip, test } from 'qunit';
 import {
   buildToolFunctionNameFromResolvedRef,
   isCardInstance,
+  rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
@@ -26,6 +27,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import ENV from '@cardstack/host/config/environment';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -367,6 +369,43 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     );
     let roomId = await openAiAssistant();
     return roomId;
+  }
+
+  // A tool's result card renders at the end of a long asynchronous chain that
+  // `settled()` does not track end to end: the mock homeserver delivers each
+  // event on a bare `setTimeout`, room processing is an ember-concurrency
+  // task, the tool queue drains on a debounce, and the result card is
+  // downloaded and loaded from the store after the result event lands. The
+  // wait therefore needs a budget sized for that whole chain on a loaded CI
+  // runner, not the 1s `waitFor` default. The elapsed time is always logged,
+  // and a timeout logs where the chain stopped, so a slow run and a stalled
+  // one read differently in CI output.
+  const TOOL_RESULT_TIMEOUT_MS = 10_000;
+
+  async function waitForToolResult() {
+    let startedAt = performance.now();
+    try {
+      await waitFor('[data-test-tool-result-header]', {
+        timeout: TOOL_RESULT_TIMEOUT_MS,
+      });
+    } catch (e) {
+      let applyButtons = [
+        ...document.querySelectorAll('[data-test-tool-call-apply]'),
+      ].map((el) => el.getAttribute('data-test-tool-call-apply'));
+      console.error(
+        `[tool-result-wait] no result header after ${Math.round(
+          performance.now() - startedAt,
+        )}ms; messages=${
+          document.querySelectorAll('[data-test-message-idx]').length
+        }; applyStates=${JSON.stringify(applyButtons)} (a tool that reached "applied" points at the result card load; see any [tool-result-card] lines)`,
+      );
+      throw e;
+    }
+    console.log(
+      `[tool-result-wait] result header after ${Math.round(
+        performance.now() - startedAt,
+      )}ms`,
+    );
   }
 
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
@@ -830,7 +869,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
+    await waitForToolResult();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -876,7 +915,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
+    await waitForToolResult();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -921,7 +960,34 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
+
+    // The result header and body share one light surface and foreground, so the
+    // dark panel shows through neither the seam nor an unthemed result's text.
+    let header = find(
+      '[data-test-tool-result-container] [data-test-tool-result-header]',
+    )!;
+    let resultCard = find(
+      '[data-test-tool-result-container] [data-test-boxel-tool-call-result]',
+    )!;
+    let headerStyle = window.getComputedStyle(header);
+    let cardStyle = window.getComputedStyle(resultCard);
+    assert.strictEqual(
+      cardStyle.backgroundColor,
+      headerStyle.backgroundColor,
+      'result body container shares the header background (no dark seam)',
+    );
+    assert.strictEqual(
+      cardStyle.color,
+      headerStyle.color,
+      'result body inherits the dark foreground, so embedded content stays readable',
+    );
+    assert.notStrictEqual(
+      cardStyle.color,
+      cardStyle.backgroundColor,
+      'result body text contrasts with its background',
+    );
+
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
@@ -979,7 +1045,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
@@ -1052,7 +1118,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     await click(
       '[data-test-tool-result-container] [data-test-more-options-button]',
@@ -1092,7 +1158,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     assert
       .dom('[data-test-tool-result-container] [data-test-more-options-button]')
@@ -1134,7 +1200,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
@@ -2593,5 +2659,298 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       isCardInstance(store.peek(deletedId)),
       'the snapshot is not installed in the store under the realm id',
     );
+  });
+
+  // A tool call the bot already ran, and the result card it stored in the
+  // room for it.
+  function simulateToolResult(
+    roomId: string,
+    {
+      requestId,
+      toolName,
+      resultDoc,
+    }: {
+      requestId: string;
+      toolName: string;
+      resultDoc: LooseSingleCardDocument;
+    },
+  ) {
+    let resultUrl = `mxc://mock-server/${requestId}-result`;
+    let matrixService = getService('matrix-service');
+    let originalDownload =
+      matrixService.downloadCardFileDef.bind(matrixService);
+    matrixService.downloadCardFileDef = async (serializedFile) => {
+      if (serializedFile.url !== resultUrl) {
+        return originalDownload(serializedFile);
+      }
+      return resultDoc;
+    };
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: `Running ${toolName}`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: requestId, name: toolName, arguments: '{}' },
+      ],
+    });
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: requestId,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: 'bot-message-event-id',
+        },
+        data: {
+          card: {
+            url: resultUrl,
+            sourceUrl: resultUrl,
+            name: `${toolName} result`,
+            contentType: 'application/vnd.card+json',
+          },
+        },
+      },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+    );
+  }
+
+  function baseCommandResultDoc(
+    name: string,
+    attributes: Record<string, unknown>,
+  ): LooseSingleCardDocument {
+    return {
+      data: {
+        type: 'card',
+        attributes,
+        meta: { adoptsFrom: { module: rri('@cardstack/base/command'), name } },
+      },
+    };
+  }
+
+  test('a result card whose type has no view of its own stays out of the chat', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateToolResult(roomId, {
+      requestId: 'data-only-result',
+      toolName: 'oneShotLLMRequest',
+      resultDoc: baseCommandResultDoc('OneShotLLMRequestResult', {
+        output: 'a reply for the model',
+      }),
+    });
+
+    await waitFor('[data-test-message-idx="0"] [data-test-apply-state]');
+    await settled();
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists('the tool row shows the call as applied');
+    assert
+      .dom('[data-test-tool-result-container]')
+      .doesNotExist('the data-only result card is not rendered');
+  });
+
+  test('a result card whose type has its own embedded view is shown', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateToolResult(roomId, {
+      requestId: 'patch-fields-result',
+      toolName: 'patchFields',
+      resultDoc: baseCommandResultDoc('PatchFieldsOutput', {
+        success: true,
+        updatedFields: ['firstName'],
+        errors: {},
+      }),
+    });
+
+    await waitFor('[data-test-tool-result-container]');
+    assert
+      .dom('[data-test-tool-result-header] [data-test-boxel-card-header-title]')
+      .containsText('Patch Fields Result');
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText('Updated 1 field: firstName.');
+  });
+
+  test('a failed correctness check shows its failed state without a result card', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateToolResult(roomId, {
+      requestId: 'failed-correctness-check',
+      toolName: 'checkCorrectness',
+      resultDoc: baseCommandResultDoc('CorrectnessResultCard', {
+        correct: false,
+        errors: ['The card does not render'],
+        warnings: [],
+      }),
+    });
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied-with-error"]',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] .room-message-tool.is-failed')
+      .exists('the tool row shows the failed check');
+    assert
+      .dom('[data-test-tool-result-container]')
+      .doesNotExist('the correctness result card is not rendered');
+  });
+
+  test('a view-visually result shows the image the assistant looked at', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    // Room media is served from the homeserver to the Matrix session only.
+    let imageUrl = new URL(
+      '/_matrix/client/v1/media/download/localhost/brand-guide-capture',
+      ENV.matrixURL,
+    ).href;
+    let pngBytes = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      ),
+      (c) => c.charCodeAt(0),
+    );
+    mockMatrixUtils
+      .getUploadedContents()
+      .set(imageUrl, pngBytes.buffer as ArrayBuffer);
+
+    simulateToolResult(roomId, {
+      requestId: 'view-visually-result',
+      toolName: 'view-visually',
+      resultDoc: baseCommandResultDoc('ViewVisuallyResult', {
+        sourceUrl: `${testRealmURL}brand-guide.html`,
+        kind: 'file',
+        format: 'isolated',
+        attachedImages: [
+          {
+            name: 'brand-guide.html (isolated).png',
+            url: imageUrl,
+            contentType: 'image/png',
+          },
+        ],
+      }),
+    });
+
+    await waitFor('[data-test-view-visually-image][src^="blob:"]');
+    assert
+      .dom('[data-test-view-visually-title]')
+      .hasText('View of brand-guide.html');
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText(`${testRealmURL}brand-guide.html`);
+    let image = find('[data-test-view-visually-image]') as HTMLImageElement;
+    await image.decode();
+    assert.strictEqual(
+      image.naturalWidth,
+      1,
+      'the image loads from the room media downloaded with the session',
+    );
+  });
+
+  test('room media is loaded with the Matrix session only from the homeserver', async function (assert) {
+    let matrixService = getService('matrix-service');
+    let elsewhere =
+      'https://elsewhere.example/_matrix/client/v1/media/download/x/y';
+    assert.strictEqual(
+      await matrixService.loadRoomMedia(elsewhere),
+      elsewhere,
+      'a URL on another origin comes back unchanged, without a download',
+    );
+    let realmFile = `${testRealmURL}brand-guide.png`;
+    assert.strictEqual(
+      await matrixService.loadRoomMedia(realmFile),
+      realmFile,
+      'a URL that is not room media comes back unchanged',
+    );
+    let homeserverApi = new URL('/_matrix/client/v3/sync', ENV.matrixURL).href;
+    assert.strictEqual(
+      await matrixService.loadRoomMedia(homeserverApi),
+      homeserverApi,
+      'a homeserver URL outside its media downloads comes back unchanged',
+    );
+  });
+
+  test('a run-realm-code result lists the files it saved and the captures it took', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let captureUrl = new URL(
+      '/_matrix/client/v1/media/download/localhost/run-capture',
+      ENV.matrixURL,
+    ).href;
+    let pngBytes = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      ),
+      (c) => c.charCodeAt(0),
+    );
+    mockMatrixUtils
+      .getUploadedContents()
+      .set(captureUrl, pngBytes.buffer as ArrayBuffer);
+    let savedFile = `${testRealmURL}brand-guide.html`;
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-result',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [{ fileUrl: savedFile, status: 'saved' }],
+        scriptResult: 'done',
+        captures: [
+          {
+            name: 'brand-guide.html (isolated).png',
+            url: captureUrl,
+            contentType: 'image/png',
+          },
+        ],
+      }),
+    });
+
+    await waitFor('[data-test-realm-code-capture][src^="blob:"]');
+    assert
+      .dom(`[data-test-realm-code-file="${savedFile}"]`)
+      .containsText('saved', 'the saved file is listed with its status');
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .doesNotContainText(
+        'done',
+        "the script's own result stays out of the chat",
+      );
+  });
+
+  test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    // The chat makes the result card asynchronously; wait for that card, so
+    // the assertion below runs after the chat has decided whether to show it.
+    let store = getService('store');
+    let addWithoutPersisting = store.addWithoutPersisting.bind(store);
+    let resultCardMade = new Promise<void>((resolve) => {
+      store.addWithoutPersisting = (async (
+        ...args: Parameters<typeof addWithoutPersisting>
+      ) => {
+        let card = await addWithoutPersisting(...args);
+        resolve();
+        return card;
+      }) as typeof store.addWithoutPersisting;
+    });
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-read-only',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: 'the file contents',
+        captures: [],
+      }),
+    });
+
+    await resultCardMade;
+    await settled();
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists('the tool row shows the call as applied');
+    assert
+      .dom('[data-test-tool-result-container]')
+      .doesNotExist('the read-only run has no result card');
   });
 });

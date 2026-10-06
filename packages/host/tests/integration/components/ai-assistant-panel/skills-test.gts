@@ -7,9 +7,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
 import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
   buildToolFunctionNameFromResolvedRef,
   rri,
   skillCardRef,
@@ -1016,94 +1013,6 @@ Instructions live in the markdown body.
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-
-    const finalRoomStateSkillsJson = getRoomState(
-      roomId,
-      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-    assert.notDeepEqual(
-      finalRoomStateSkillsJson,
-      initialRoomStateSkillsJson,
-      'room state has changed',
-    );
-    // Don't assert contentHash/url for the unchanged skill card — these
-    // can change due to async linksTo relationship loading producing
-    // different serialization. sourceUrl is the stable identifier.
-    assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === skillsIndexId,
-      ).sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards.find(
-        (c: FileDef) => c.sourceUrl === skillsIndexId,
-      ).sourceUrl,
-      'unchanged skill card is still present',
-    );
-
-    assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).contentHash,
-      'skill card instructions have changed',
-    );
-    assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).url,
-      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).url,
-      'skill card instructions have changed',
-    );
-    assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('example'),
-      ).sourceUrl,
-      'skill card source URL has not changed',
-    );
-  });
-
-  test('updated skill card instructions result in new event and updated room state when code patch is completing', async function (assert) {
-    const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
-
-    await addSkillToAiAssistant(`${testRealmURL}Skill/example`);
-
-    const initialRoomStateSkillsJson = getRoomState(
-      roomId,
-      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-
-    await click('[data-test-edit-button]');
-    await fillIn(
-      '[data-test-field="instructions"] textarea',
-      'Updated instructions',
-    );
-    await click('[data-test-edit-button]');
-    await click('[data-test-close-button]');
-
-    let codeBlock = `\`\`\`
-http://test-realm/test/hello.txt
-${SEARCH_MARKER}
-Hello, world!
-${SEPARATOR_MARKER}
-Hi, world!
-${REPLACE_MARKER}
-\`\`\``;
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: codeBlock,
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
-    await settled();
-    // Click on the apply button, skill card will be updated since it has changed
-    await waitFor('[data-test-apply-code-button]');
-    await click('[data-test-apply-code-button]');
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,

@@ -1,10 +1,12 @@
 import { array, hash } from '@ember/helper';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import { resource, use } from 'ember-resources';
 
@@ -19,9 +21,11 @@ import {
 import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 
 import {
+  CardContextName,
   cardTypeDisplayName,
   cardTypeIcon,
   getMenuItems,
+  hasNothingToShow,
 } from '@cardstack/runtime-common';
 
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
@@ -42,7 +46,20 @@ import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
 
 import type { ApplyButtonState } from '../ai-assistant/apply-button';
-import type { CardDef } from '@cardstack/base/card-api';
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
+
+// Whether a card's class gives it an embedded view of its own. A class that
+// leaves `embedded` alone inherits CardDef's default, which shows only a
+// placeholder thumbnail and the card's title. `isCardDef` is declared on
+// CardDef itself, so the class that declares `embedded` is CardDef exactly
+// when it also declares `isCardDef`.
+function hasOwnEmbeddedView(card: CardDef): boolean {
+  let klass: object | null = card.constructor;
+  while (klass && !Object.hasOwn(klass, 'embedded')) {
+    klass = Object.getPrototypeOf(klass);
+  }
+  return !!klass && !Object.hasOwn(klass, 'isCardDef');
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -67,6 +84,19 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private realm: RealmService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
+
+  @consume(CardContextName) declare private cardContext: CardContext;
+
+  // A tool's result card can show what the tool produced from the room's
+  // media, such as an image it captured.
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): CardContext {
+    return {
+      ...this.cardContext,
+      loadRoomMedia: this.matrixService.loadRoomMedia,
+    };
+  }
 
   // How much of the call's arguments has arrived. On the element as a plain
   // data attribute so anything watching a session (the eval runner, and later
@@ -132,25 +162,46 @@ export default class RoomMessageTool extends Component<Signature> {
   // to realm invalidation; otherwise a sweep could evict it mid-render and the
   // next `store.get` would mint a second instance for the same id.
   @use private toolResultCard = resource(({ on }) => {
-    let initialState = { card: undefined } as { card: CardDef | undefined };
+    let initialState = { card: undefined, isRealmCard: false } as {
+      card: CardDef | undefined;
+      isRealmCard: boolean;
+    };
     let state = new TrackedObject(initialState);
     let referencedId: string | undefined;
     let isTornDown = false;
+    let isLoading = false;
     on.cleanup(() => {
       isTornDown = true;
+      if (isLoading && isTesting()) {
+        // Every re-run of this resource starts the result card's load over,
+        // so a run torn down mid-load delays the card. Logged so a test that
+        // times out waiting for the card shows whether loads kept restarting.
+        console.log(
+          `[tool-result-card] discarded an in-flight result card load for tool call ${this.args.messageTool.toolRequest.id}`,
+        );
+      }
       if (referencedId) {
         this.store.dropReference(referencedId);
       }
     });
     if (this.args.messageTool.toolResultFileDef) {
-      this.args.messageTool.getCommandResultCard().then((card) => {
-        if (isTornDown) {
+      isLoading = true;
+      this.args.messageTool.getCommandResultCard().then((result) => {
+        isLoading = false;
+        if (!result && isTesting()) {
+          console.log(
+            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+          );
+        }
+        if (isTornDown || !result) {
           return;
         }
-        if (card?.id) {
+        let { card, isRealmCard } = result;
+        if (card.id) {
           referencedId = card.id;
           this.store.addReference(card.id);
         }
+        state.isRealmCard = isRealmCard;
         state.card = card;
       });
     }
@@ -197,13 +248,20 @@ export default class RoomMessageTool extends Component<Signature> {
     return '';
   }
 
+  // Most result cards are data a tool hands back to the model, with nothing
+  // in them for the user to look at. The chat shows one only when it is a
+  // realm card the user may want to open, or when its type has a view of its
+  // own and this result has something in it for that view to show; the
+  // tool's status row stands for the rest.
   private get shouldDisplayResultCard() {
-    let commandName = this.args.messageTool.name ?? '';
-    return (
-      !!this.toolResultCard.card &&
-      commandName !== 'checkCorrectness' &&
-      !commandName.startsWith('switch-submode')
-    );
+    let { card, isRealmCard } = this.toolResultCard;
+    if (!card) {
+      return false;
+    }
+    if (isRealmCard) {
+      return true;
+    }
+    return hasOwnEmbeddedView(card) && !card[hasNothingToShow];
   }
 
   private get didFailCorrectnessCheck() {
@@ -400,9 +458,12 @@ export default class RoomMessageTool extends Component<Signature> {
           </Alert>
         {{/if}}
         {{#if this.shouldDisplayResultCard}}
+          {{! Light scheme island in the dark assistant panel: the header and the
+              embedded result share one light surface and foreground. }}
           <CardContainer
             @displayBoundaries={{false}}
             class='tool-result-card-preview'
+            data-theme='light'
             data-test-tool-result-container
           >
             <CardHeader
