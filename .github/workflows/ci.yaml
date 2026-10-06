@@ -179,6 +179,9 @@ jobs:
               # is installable), so a pin-only change has to run that suite.
               - '.claude-plugin/marketplace.json'
               - '.agents/plugins/marketplace.json'
+              # boxel-cli bundles these packages' source for `boxel parse`.
+              - 'packages/glimmer-motion/**'
+              - 'packages/choreo/**'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the

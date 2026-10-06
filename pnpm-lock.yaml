@@ -1238,6 +1238,9 @@ importers:
       flat:
         specifier: 'catalog:'
         version: 5.0.2
+      framer-motion:
+        specifier: 13.4.6
+        version: 13.4.6
       ignore:
         specifier: 'catalog:'
         version: 5.3.2
@@ -1253,6 +1256,12 @@ importers:
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 38.3.0(patch_hash=9916a9e914367042bf4e45522e7ccc4cfafb8893276852608baa57080b654f89)
+      motion-dom:
+        specifier: 13.4.5
+        version: 13.4.5
+      motion-utils:
+        specifier: 13.3.0
+        version: 13.3.0
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0

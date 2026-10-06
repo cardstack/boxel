@@ -4,6 +4,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "customConditions": ["developing:choreo"],
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
