@@ -15,7 +15,10 @@ import type {
   Realm,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import { lowerQueryOperation } from '@cardstack/runtime-common/card-operations';
+import {
+  lowerQueryOperation,
+  namedQueryStats,
+} from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -844,6 +847,69 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
 
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
       assert.strictEqual(response.body.errors[0].code, 'unknown-operation');
+    });
+  });
+
+  module('reading the declaration', function () {
+    test('a repeated named query is answered without reading its declaration again', async function (assert) {
+      let stats = namedQueryStats(school.operationCore);
+      let mine = {
+        operation: 'listMySchedules',
+        on: SCHEDULE,
+        realms: [SCHOOL],
+      };
+
+      let first = await federatedSearch(mine, PROVIDER_A);
+      assert.strictEqual(first.status, 200, 'HTTP 200 status');
+      let readsAfterFirst = stats.declarationReads;
+
+      let again = await federatedSearch(mine, PROVIDER_A);
+      assert.strictEqual(again.status, 200, 'HTTP 200 status');
+      assert.deepEqual(sortedIds(again), sortedIds(first), 'the same rows');
+      assert.strictEqual(
+        stats.declarationReads,
+        readsAfterFirst,
+        'the second request read no declaration',
+      );
+
+      let asB = await federatedSearch(mine, PROVIDER_B);
+      assert.strictEqual(
+        stats.declarationReads,
+        readsAfterFirst,
+        'nor did another caller invoking the same declaration',
+      );
+      assert.deepEqual(
+        sortedIds(asB),
+        [`${SCHOOL}schedules/b-open`],
+        'who is answered with their own rows, not the first caller’s',
+      );
+    });
+
+    test('a declaration edit is served on the next request once its module’s definitions change', async function (assert) {
+      let stats = namedQueryStats(school.operationCore);
+      let current = { operation: 'current', on: DRIFTING, realms: [SCHOOL] };
+
+      await school.write('drifting.gts', driftingModule('open'));
+      await school.indexing();
+      let before = await federatedSearch(current, PROVIDER_A);
+      assert.deepEqual(sortedIds(before), [`${SCHOOL}drifting/open`]);
+      let readsBefore = stats.declarationReads;
+
+      await school.write('drifting.gts', driftingModule('closed'));
+      await school.indexing();
+      let after = await federatedSearch(current, PROVIDER_A);
+
+      assert.strictEqual(after.status, 200, 'HTTP 200 status');
+      assert.deepEqual(
+        sortedIds(after),
+        [`${SCHOOL}drifting/closed`],
+        'the declaration as the module now reads',
+      );
+      assert.strictEqual(
+        stats.declarationReads,
+        readsBefore + 1,
+        'read afresh once, after the module changed',
+      );
     });
   });
 });

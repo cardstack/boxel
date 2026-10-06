@@ -204,11 +204,13 @@ export {
   isNamedQueryPayload,
   namedQueryInvocation,
   namedQueryRendering,
+  namedQueryStats,
   resolveNamedQuery,
   searchInvocation,
 } from './named-query.ts';
 export type {
   NamedQueryContext,
+  NamedQueryStats,
   ResolvedNamedQuery,
   SearchInvocation,
 } from './named-query.ts';
