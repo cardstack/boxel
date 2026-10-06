@@ -61,7 +61,7 @@ Everything comes from the boxel theme contract:
 - **Type:** `--boxel-font-size-xs` (the table), the caption role (`--boxel-caption-font-size`, `-font-weight`, `-line-height`, `-letter-spacing`), the label role for the header band (`--boxel-ui-label-font-size`, `-font-weight`, `-letter-spacing`), and `--font-mono` for its family.
 - **Spacing:** `--boxel-sp-2xs` (block padding of the caption and cells) and `--boxel-sp-xs` (inline padding of the caption, header and cells, so their text shares one start edge).
 
-The header band's height is `--pretui-table-head-height` (1.875rem), declared on `.pretui-table`. The label role and the caption's letter-spacing are published by `CardContainer`, so outside a card the header band falls back to the table's own size and the browser-inherited weight and tracking. `--stripe` must be distinguishable from both `--card` and `--hover`, or zebra and hover collapse into each other.
+The header band's height is `--pretui-table-head-height` (1.875rem), declared on `.pretui-table`. `--stripe` must be distinguishable from both `--card` and `--hover`, or zebra and hover collapse into each other.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
