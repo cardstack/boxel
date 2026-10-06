@@ -117,7 +117,8 @@
   "files": [
     "addon-main.cjs",
     "declarations",
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public"
