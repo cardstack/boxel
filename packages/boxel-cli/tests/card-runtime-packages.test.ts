@@ -3,6 +3,8 @@ import { join, resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 
+import { MOTION_ENTRY_POINTS } from '../src/lib/motion-entry-points.ts';
+
 /**
  * The host makes a fixed set of packages importable from card code by
  * shimming them onto the virtual network (`shimExternals` in
@@ -287,6 +289,19 @@ describe('card-facing packages the host shims', () => {
         `specifier no package can satisfy, bundle it and record the ` +
         `mechanism in the lists at the top of this file.`,
     ).toEqual([]);
+  });
+
+  it('alias exactly the glimmer-motion and Choreo ids the host shims', () => {
+    // parse aliases these entry points one by one rather than with a `/*`
+    // pattern, so that a subpath no shim serves fails to resolve. That only
+    // holds while the list and the shims agree: a shim missing from the list
+    // rejects valid card code, and an extra entry passes code that can't load.
+    let shimmed = readShimmedSpecifiers().filter((specifier) =>
+      ['glimmer-motion', '@cardstack/choreo'].some(
+        (name) => specifier === name || specifier.startsWith(`${name}/`),
+      ),
+    );
+    expect([...MOTION_ENTRY_POINTS].sort()).toEqual(shimmed);
   });
 
   it('do not carry a stale allowance for a package no longer shimmed', () => {

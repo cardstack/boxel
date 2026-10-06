@@ -33,6 +33,7 @@ import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { findBoxelCliRoot } from '../lib/find-package-root.ts';
 import { validateRealmRelativePath } from '../lib/realm-relative-path.ts';
+import { motionEntryPointPaths } from '../lib/motion-entry-points.ts';
 import { search } from './search.ts';
 
 /**
@@ -123,7 +124,7 @@ const BXL_PATH = BUNDLED_TYPES_DIR
 // glimmer-motion and `@cardstack/choreo` are card-facing too (the host
 // shims both into realms) and are bundled as source on the same terms:
 // with the `developing:choreo` export condition their `exports` resolve to
-// `src`, so the alias targets it in both layouts.
+// `src`, so the aliases target it in both layouts.
 const GLIMMER_MOTION_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'glimmer-motion')
   : join(PACKAGES_PATH, 'glimmer-motion', 'src');
@@ -789,10 +790,12 @@ export async function runGlintCheck(
           '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
           '@cardstack/bxl': [`${BXL_PATH}/index`],
           '@cardstack/bxl/*': [`${BXL_PATH}/*`],
-          'glimmer-motion': [`${GLIMMER_MOTION_PATH}/index`],
-          'glimmer-motion/*': [`${GLIMMER_MOTION_PATH}/*`],
-          '@cardstack/choreo': [`${CHOREO_PATH}/index`],
-          '@cardstack/choreo/*': [`${CHOREO_PATH}/*`],
+          // Only the shimmed entry points, not a `/*` pattern: another
+          // subpath must fail to resolve, since no shim would serve it.
+          ...motionEntryPointPaths({
+            glimmerMotion: GLIMMER_MOTION_PATH,
+            choreo: CHOREO_PATH,
+          }),
           '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
           '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
           // The host registers each tool module under both its

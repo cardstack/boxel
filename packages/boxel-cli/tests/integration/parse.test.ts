@@ -136,6 +136,27 @@ describe('boxel parse (against the installed CLI)', () => {
   );
 });
 
+describe('boxel parse — glimmer-motion and Choreo subpaths', () => {
+  it(
+    'rejects a subpath the host does not shim',
+    async () => {
+      // Both packages publish more subpaths than the host shims. parse
+      // resolves only the shimmed ones, so a card importing another fails
+      // here instead of type-checking clean and then failing to load.
+      let result = await parseFixture('motion-unshimmed-subpath');
+      expect(result.status).toBe('failed');
+
+      let messages = result.errors.map((e) => e.message).join('\n');
+      expect(messages).toContain("Cannot find module 'glimmer-motion/scroll'");
+      expect(messages).toContain(
+        "Cannot find module '@cardstack/choreo/easings'",
+      );
+      expect(messages).not.toContain(NOTHING_CHECKED);
+    },
+    { timeout: 180_000 },
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Actionable diagnostics: `@tracked` (or any decorator) on a member of a
 // format-class *expression* (`static isolated = class { … }`) can't
