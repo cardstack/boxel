@@ -6,6 +6,7 @@ import {
   type CaptureSpec,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
+import { SignedCaptureLink } from '@cardstack/boxel-host/lib/signed-capture';
 
 // Pattern example for declared PDFs. One card, both authoring paths for a
 // `type: 'pdf'` declared capture:
@@ -19,6 +20,12 @@ import StringField from '@cardstack/base/string';
 // print media (`@media print`, `@page`, and `break-*` rules). Both PDFs are
 // captured eagerly at index time and served at durable `?name=` URLs, which
 // `@model.captureURLs` exposes.
+//
+// Each PDF is saved under a name the card controls: `statement` computes one
+// from the instance's fields with a `filename` function, and `letter`
+// declares none, so it takes the card's title. `SignedCaptureLink` opens a
+// PDF in a new tab, or with `@download` saves it — under the declared name, or
+// under `@filename` when the link gives one.
 
 // The custom-component path: a capture-only component that renders the full
 // document flow itself. It is referenced only from the `static captures`
@@ -61,7 +68,12 @@ export class StatementPdfDemo extends CardDef {
   // Two declared PDFs, one per authoring path. Both are geometry-free
   // (`type: 'pdf'` refuses width/height) and paginate under print media.
   static captures: Record<string, CaptureSpec> = {
-    statement: { format: 'isolated', type: 'pdf' },
+    statement: {
+      format: 'isolated',
+      type: 'pdf',
+      filename: (card: StatementPdfDemo) =>
+        `Statement ${card.accountName} ${card.period}`,
+    },
     letter: { render: CoverLetterDocument, type: 'pdf' },
   };
 
@@ -71,22 +83,27 @@ export class StatementPdfDemo extends CardDef {
           the `@media print` rule below, so the printed document is clean. }}
       <nav class='downloads'>
         {{#if @model.captureURLs.statement}}
-          <a
-            href={{@model.captureURLs.statement}}
-            target='_blank'
-            rel='noopener noreferrer'
-          >
+          <SignedCaptureLink @url={{@model.captureURLs.statement}}>
             Statement PDF (isolated-template path)
-          </a>
+          </SignedCaptureLink>
+          <SignedCaptureLink
+            @url={{@model.captureURLs.statement}}
+            @download={{true}}
+          >
+            Download statement
+          </SignedCaptureLink>
         {{/if}}
         {{#if @model.captureURLs.letter}}
-          <a
-            href={{@model.captureURLs.letter}}
-            target='_blank'
-            rel='noopener noreferrer'
-          >
+          <SignedCaptureLink @url={{@model.captureURLs.letter}}>
             Cover letter PDF (custom-component path)
-          </a>
+          </SignedCaptureLink>
+          <SignedCaptureLink
+            @url={{@model.captureURLs.letter}}
+            @download={{true}}
+            @filename='Cover letter'
+          >
+            Download cover letter
+          </SignedCaptureLink>
         {{/if}}
       </nav>
 

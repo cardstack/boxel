@@ -33,7 +33,8 @@ declare module '@cardstack/boxel-host/lib/three-loader' {
 declare module '@cardstack/boxel-host/lib/signed-capture' {
   // Matches `packages/host/app/lib/signed-capture.gts`. `SignedCapture`
   // yields [signedUrl, errorMessage]; `SignedCaptureLink` renders an anchor
-  // that opens its capture URL in a new tab with a fresh token.
+  // that opens its capture URL in a new tab with a fresh token, or with
+  // `download` saves it as a file, named `filename` when one is given.
   import type { ComponentLike } from '@glint/template';
   export const SignedCapture: ComponentLike<{
     Args: { url?: string | null };
@@ -42,7 +43,13 @@ declare module '@cardstack/boxel-host/lib/signed-capture' {
   export const SignedCaptureLink: ComponentLike<{
     // `kind`/`size` pass through to the shared Button (typed as string here
     // so programs without boxel-ui in their graph still check).
-    Args: { url?: string | null; kind?: string; size?: string };
+    Args: {
+      url?: string | null;
+      download?: boolean;
+      filename?: string | null;
+      kind?: string;
+      size?: string;
+    };
     Blocks: { default: [] };
     Element: HTMLButtonElement | HTMLAnchorElement;
   }>;

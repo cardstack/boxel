@@ -235,6 +235,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'render-context': () => import('@cardstack/base/render-context'),
   'shared-state': () => import('@cardstack/base/shared-state'),
   'text-input-validator': () => import('@cardstack/base/text-input-validator'),
+  'untitled-card-title': () => import('@cardstack/base/untitled-card-title'),
   'watched-array': () => import('@cardstack/base/watched-array'),
   'date/day': () => import('@cardstack/base/date/day'),
   'date/month': () => import('@cardstack/base/date/month'),

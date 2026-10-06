@@ -1,5 +1,11 @@
 import type { Readable } from 'stream';
 import { toNodeStream } from '#media-cache-stream';
+import {
+  captureContentDisposition,
+  captureFileExtension,
+  sanitizeCaptureFilename,
+  type CaptureDisposition,
+} from './capture-disposition.ts';
 import { createResponse } from './create-response.ts';
 import type { DBAdapter } from './db.ts';
 import { logger } from './log.ts';
@@ -106,6 +112,10 @@ export function mediaCacheMissResponse({
 // drawn as them: the response varies on `Authorization`, so a cache keyed
 // by URL alone (a browser's, across an account switch) never hands one
 // reader's capture to another.
+//
+// `disposition` is the request's `download` / `filename` params and
+// `declaredFilename` the name a declared capture's manifest records; see
+// `contentDispositionFor` for how they combine.
 export async function serveMediaCacheEntry({
   request,
   requestContext,
@@ -113,6 +123,8 @@ export async function serveMediaCacheEntry({
   mediaCacheAdapter,
   dbAdapter,
   variesByReader = false,
+  disposition,
+  declaredFilename,
 }: {
   request: Request;
   requestContext: RequestContext;
@@ -120,6 +132,8 @@ export async function serveMediaCacheEntry({
   mediaCacheAdapter: MediaCacheAdapter;
   dbAdapter: DBAdapter;
   variesByReader?: boolean;
+  disposition?: CaptureDisposition;
+  declaredFilename?: string;
 }): Promise<ResponseWithNodeStream> {
   let varyOn = variesByReader ? ['Authorization'] : undefined;
   let etag = `"${entry.objectKey}"`;
@@ -128,13 +142,13 @@ export async function serveMediaCacheEntry({
     etag,
     'cache-control': hitCacheControl(requestContext, entry),
   };
-  // A PDF opens in the browser's viewer (or downloads), where the filename
-  // shown is otherwise the URL's last segment plus its query string. Name it
-  // after the source card instead; images stay bare — an <img> never reads
-  // the header.
-  if (entry.contentType === 'application/pdf') {
-    headers['content-disposition'] =
-      `inline; filename="${pdfFilenameFor(entry.sourceURL)}"`;
+  let contentDisposition = contentDispositionFor({
+    entry,
+    disposition,
+    declaredFilename,
+  });
+  if (contentDisposition) {
+    headers['content-disposition'] = contentDisposition;
   }
 
   let ifNoneMatch = request.headers.get('if-none-match');
@@ -171,6 +185,58 @@ export async function serveMediaCacheEntry({
   });
   response.nodeStream = toNodeStream(stream) as Readable;
   return response;
+}
+
+// The `Content-Disposition` a served capture carries, or undefined for none.
+// A PDF always carries one: it opens in the browser's viewer or downloads,
+// and either way the name shown is otherwise the URL's last segment plus its
+// query string. An image carries one only when the request asks for it — an
+// <img> never reads the header. The name is the request's `filename`, else the
+// capture's declared filename, else the source URL's last segment; whichever
+// wins is sanitized and given the content type's extension.
+export function contentDispositionFor({
+  entry,
+  disposition,
+  declaredFilename,
+}: {
+  entry: Pick<MediaCacheEntry, 'contentType' | 'sourceURL'>;
+  disposition?: CaptureDisposition;
+  declaredFilename?: string;
+}): string | undefined {
+  let isPdf = entry.contentType === 'application/pdf';
+  let requested =
+    disposition?.attachment || disposition?.filename !== undefined;
+  if (!isPdf && !requested) {
+    return undefined;
+  }
+  let extension = captureFileExtension(entry.contentType);
+  if (!extension) {
+    return undefined;
+  }
+  let filename =
+    [disposition?.filename, declaredFilename]
+      .map((name) =>
+        name !== undefined
+          ? sanitizeCaptureFilename(name, extension)
+          : undefined,
+      )
+      .find((name) => name !== undefined) ??
+    sourceURLFilename(entry.sourceURL, extension);
+  return captureContentDisposition({
+    attachment: disposition?.attachment ?? false,
+    filename,
+  });
+}
+
+function sourceURLFilename(sourceURL: string, extension: string): string {
+  if (extension === 'pdf') {
+    return pdfFilenameFor(sourceURL);
+  }
+  let segments = sourceURL.split('/').filter((s) => s.length > 0);
+  return (
+    sanitizeCaptureFilename(segments[segments.length - 1] ?? '', extension) ??
+    `card.${extension}`
+  );
 }
 
 // The source URL's last path segment, reduced to the quoted-string-safe

@@ -453,6 +453,10 @@ import {
   type CaptureManifestEntry,
 } from './capture-spec.ts';
 import {
+  takeCaptureDispositionParams,
+  type CaptureDisposition,
+} from './capture-disposition.ts';
+import {
   ANONYMOUS_RENDER,
   findMediaCacheEntry,
   putMedia,
@@ -9561,6 +9565,16 @@ export class Realm {
     // the `name=` exclusivity check nor the capture-spec parse (which refuses
     // unknown params by name), and so it can never enter the ledger identity.
     searchParams.delete(CAPTURE_URL_TOKEN_PARAM);
+    // `download` / `filename` steer the response's Content-Disposition, not
+    // which capture it is — taken off here for the same reasons as the token.
+    let dispositionParse = takeCaptureDispositionParams(searchParams);
+    if ('error' in dispositionParse) {
+      return badRequest({
+        message: dispositionParse.error.message,
+        requestContext,
+      });
+    }
+    let { disposition } = dispositionParse;
 
     // `name=` addresses a declared capture through the instance's
     // manifest — a different addressing form from the capture-spec params,
@@ -9673,6 +9687,8 @@ export class Realm {
         entry,
         mediaCacheAdapter: this.#mediaCacheAdapter,
         dbAdapter: this.#dbAdapter,
+        disposition,
+        declaredFilename: manifestEntry.filename,
       });
       this.emitCaptureServePerf(
         {
@@ -9747,6 +9763,7 @@ export class Realm {
         mediaCacheAdapter: this.#mediaCacheAdapter,
         dbAdapter: this.#dbAdapter,
         variesByReader: true,
+        disposition,
       });
       this.emitCaptureServePerf(entryKey, perf, 'hit', {
         lane: entry.lane,
@@ -9761,6 +9778,7 @@ export class Realm {
       reader,
       parsed.spec,
       perf,
+      disposition,
     );
   }
 
@@ -9901,6 +9919,7 @@ export class Realm {
     reader: string,
     spec: CaptureIdentity,
     perf: CaptureServePerf,
+    disposition: CaptureDisposition,
   ): Promise<ResponseWithNodeStream> {
     let gateStart = Date.now();
     let gateOpen = await this.allowsArbitraryCaptures();
@@ -10077,6 +10096,7 @@ export class Realm {
         mediaCacheAdapter: this.#mediaCacheAdapter!,
         dbAdapter: this.#dbAdapter,
         variesByReader: true,
+        disposition,
       });
       this.emitCaptureServePerf(entryKey, perf, 'rendered', {
         ...stagePerf,

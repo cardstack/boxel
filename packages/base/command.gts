@@ -34,6 +34,7 @@ import {
   SearchEntrySummaryField,
 } from './commands/search-entry-result';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
+import { SignedCaptureLink } from '@cardstack/boxel-host/lib/signed-capture';
 
 export type ToolCallStatus = 'applied' | 'ready' | 'applying';
 // Pre-rename spelling; new code imports `ToolCallStatus`.
@@ -276,16 +277,26 @@ export class CaptureInput extends CardDef {
   @field clipY = contains(NumberField);
   @field clipWidth = contains(NumberField);
   @field clipHeight = contains(NumberField);
+  // 'png' (the default) or 'pdf'. A pdf paginates the settled render into a
+  // document and takes none of the raster geometry above.
+  @field type = contains(StringField);
+  // 'screen' (the default) or 'print'. 'print' settles the render under the
+  // card's print CSS (`@page`, `@media print`, `break-*`) — the paper layout a
+  // pdf usually wants.
+  @field media = contains(StringField);
 }
 
-// One captured image. `url` is the durable served MediaCache URL the capture
+// One capture. `url` is the durable served MediaCache URL the capture
 // persisted under — the only reference the tool returns; a re-capture rotates
-// its bytes, never the URL.
+// its bytes, never the URL. An image carries `width`/`height`; a pdf carries
+// `pageCount` instead.
 export class Capture extends FieldDef {
   @field name = contains(StringField);
   @field url = contains(StringField);
+  @field contentType = contains(StringField);
   @field width = contains(NumberField);
   @field height = contains(NumberField);
+  @field pageCount = contains(NumberField);
 }
 
 export class CaptureOutput extends CardDef {
@@ -299,7 +310,19 @@ export class CaptureOutput extends CardDef {
         {{#each @model.captures as |capture|}}
           <figure class='capture'>
             {{#if capture.url}}
-              <img src={{capture.url}} alt={{capture.name}} />
+              {{#if (eq capture.contentType 'application/pdf')}}
+                {{! A pdf can't render in an <img>, and a bare anchor to a
+                    private realm's capture is refused, so the link mints a
+                    signed URL on click. }}
+                <SignedCaptureLink @url={{capture.url}}>
+                  {{capture.name}}
+                  (PDF{{#if capture.pageCount}},
+                    {{capture.pageCount}}
+                    {{if (eq capture.pageCount 1) 'page' 'pages'}}{{/if}})
+                </SignedCaptureLink>
+              {{else}}
+                <img src={{capture.url}} alt={{capture.name}} />
+              {{/if}}
               <figcaption><a
                   href={{capture.url}}
                 >{{capture.url}}</a></figcaption>
