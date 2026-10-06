@@ -25,11 +25,15 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     // The suite imports glimmer-motion by its public specifiers
-    // (`glimmer-motion/motion`, `glimmer-motion/test-support`…), which the
-    // `developing:choreo` export condition resolves to the source, so the
-    // harness runs with no rollup build first. CHOREO_LIBS=dist leaves the
-    // condition out and runs the suite against the built output instead, the
-    // code npm consumers get; the package must be built.
+    // (`glimmer-motion/motion`, `glimmer-motion/test-support`…), and the
+    // harness runs them against the source with no rollup build first.
+    // Embroider answers those self-references from package.json whatever
+    // the conditions, so selfReferenceSource (in `plugins` below) is what
+    // sends them to src/; the `developing:choreo` condition sends any other
+    // workspace package that declares it to its source, as choreo's harness
+    // does. CHOREO_LIBS=dist leaves both out and runs the suite against the
+    // built output instead, the code npm consumers get; the package must be
+    // built.
     conditions: fromSource
       ? ['developing:choreo', ...defaultClientConditions]
       : defaultClientConditions,
