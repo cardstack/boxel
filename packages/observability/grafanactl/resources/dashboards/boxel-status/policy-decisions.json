@@ -1443,7 +1443,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "One record per request from a caller who isn't signed in that reached a realm's anonymous admission (per realm for a federated search): admitted (counted), infra (the platform's own services, never counted), refused (no grant admitted it), blocked (the realm refused the address), rate-limited (the address used up its budget), unavailable (the count couldn't be read). A realm whose policy opens nothing to such callers records nothing.",
+        "description": "Records of requests from callers who aren't signed in that a realm's anonymous admission refused, blocked, rate-limited or counted, by realm (one per realm for a federated search): admitted (counted), infra (the platform's own services, never counted), refused (no grant admitted it), blocked (the realm refused the address), rate-limited (the address used up its budget), unavailable (the count couldn't be read). A realm whose policy opens nothing to such callers records nothing.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1493,8 +1493,8 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"anonymous-request\" | realmURL=~\".*${realm}.*\" [$__interval]))",
-            "legendFormat": "{{outcome}}",
+            "expr": "sum by (realmURL, outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"anonymous-request\" | realmURL=~\".*${realm}.*\" [$__interval]))",
+            "legendFormat": "{{outcome}} {{realmURL}}",
             "refId": "A",
             "queryType": "range"
           }
@@ -1706,7 +1706,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "The addresses behind admissions, refusals and rate limits over the selected range, per realm: who to look at before blocking, and whether many visitors share one address (a hop misconfiguration).",
+        "description": "The addresses behind admissions, refusals and rate limits over the selected range, per realm: who to look at before blocking, and whether many visitors share one address (a hop misconfiguration). rateLimitKey is what the budget is keyed on: the address, or an IPv6 address's /64.",
         "fieldConfig": {
           "defaults": {
             "custom": {
@@ -1739,7 +1739,7 @@
               "uid": "loki"
             },
             "editorMode": "code",
-            "expr": "topk(25, sum by (realmURL, clientIP, outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"anonymous-request\" | realmURL=~\".*${realm}.*\" | outcome=~\"admitted|refused|rate-limited|blocked\" [$__range])))",
+            "expr": "topk(25, sum by (realmURL, rateLimitKey, clientIP, outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:operations\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:operations\" | kind=\"anonymous-request\" | realmURL=~\".*${realm}.*\" | outcome=~\"admitted|refused|rate-limited|blocked\" [$__range])))",
             "legendFormat": "",
             "refId": "A",
             "queryType": "instant",
