@@ -126,7 +126,7 @@ const realmConfigRef: ResolvedCodeRef = {
 
 // The types every card or file descends from. A link typed as one of them can
 // hold a card of any type, so granting the type it names would grant every
-// card, and the message does not offer that.
+// card, or for `BaseDef` nothing at all, and the message offers neither.
 const baseTypeRefs: ResolvedCodeRef[] = [
   cardDefRef,
   { module: rri('@cardstack/base/card-api'), name: 'BaseDef' },

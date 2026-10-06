@@ -193,9 +193,13 @@ export type GateSubject =
   // A type a create mints from, matched on the adoption chain the definition
   // cache records beside the definition the type resolved to: the type and
   // every type it descends from up to the root of its family, `CardDef` for a
-  // card. A card's row goes one step further, to `BaseDef`, so a rule on
-  // `BaseDef` matches every stored card and grants no create. A type the realm
-  // cannot resolve never gets here. Resolution refuses it first, as not found.
+  // card, so a rule on `CardDef` covers every create. A card's row goes one
+  // step further, to `BaseDef`, but a rule on `BaseDef` compiles to no grants:
+  // its entry is recorded as a field def, which carries no built-in operation
+  // and declares none, so the compile drops each grant on it as
+  // `unknown-operation`. A rule on any field def fares the same, but for an
+  // operation that def declares itself. A type the realm cannot resolve never
+  // gets here. Resolution refuses it first, as not found.
   | { kind: 'type'; types: string[] }
   // A stored path that names no card. Only a stored-bytes read is matched
   // against one, and it resolves what the path actually holds for itself:
