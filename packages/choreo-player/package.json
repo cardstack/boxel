@@ -43,6 +43,7 @@
     "test": "pnpm run build && pnpm run test:unit",
     "test:unit": "node --test test/*.test.mjs",
     "test:release": "node --test scripts/release/release.test.ts",
+    "check:packed-exports": "node ../glimmer-motion/scripts/check-exports.mjs --packed",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",

@@ -534,13 +534,17 @@ jobs:
           (cd packages/glimmer-motion && pnpm run build)
           (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
-      # npm consumers resolve every subpath to the built output, without the
-      # `developing:choreo` condition the workspace builds from source with.
-      - name: Check the packed glimmer-motion and Choreo exports
+      # npm consumers resolve every subpath to the built output. For
+      # glimmer-motion and choreo that means without the `developing:choreo`
+      # condition the workspace builds from source with. Each check packs its
+      # package and resolves every module's subpath against the tarball, so a
+      # `files` / `exports` mismatch fails here instead of on install.
+      - name: Check the packed glimmer-motion, Choreo and Choreo Player exports
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: |
           (cd packages/glimmer-motion && pnpm run check:packed-exports)
           (cd packages/choreo && pnpm run check:packed-exports)
+          (cd packages/choreo-player && pnpm run check:packed-exports)
       - name: Choreo Player unit tests
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run test:unit
