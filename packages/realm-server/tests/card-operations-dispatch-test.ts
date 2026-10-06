@@ -24,6 +24,7 @@ import {
   type OperationScope,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
+import { GateTrace } from '@cardstack/runtime-common/card-operations/gate-trace';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
 import { urlNamesFile } from '@cardstack/runtime-common/file-def-code-ref';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -1772,7 +1773,8 @@ module(basename(import.meta.filename), function () {
       let batch = newOperationScope(core, {
         caller: scopeCallerFor('@someone:example.com'),
       });
-      let entry = batch.derive({});
+      let trace = new GateTrace();
+      let entry = batch.derive({ trace });
       await batch.peekInstance(url);
       await entry.peekInstance(url);
       assert.strictEqual(
@@ -1781,12 +1783,18 @@ module(basename(import.meta.filename), function () {
         'the two invocations read the row once between them',
       );
       assert.deepEqual(entry.caller, batch.caller);
+      assert.strictEqual(entry.trace, trace);
+      assert.strictEqual(
+        batch.trace,
+        undefined,
+        'deriving leaves the scope it came from as it was',
+      );
       let unattributed = entry.derive({ caller: { kind: 'unattributed' } });
       assert.deepEqual(unattributed.caller, { kind: 'unattributed' });
-      assert.deepEqual(
-        entry.caller,
-        batch.caller,
-        'deriving leaves the scope it came from as it was',
+      assert.strictEqual(
+        unattributed.trace,
+        undefined,
+        'a trace is one invocation’s and does not carry over',
       );
     });
 

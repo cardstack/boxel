@@ -652,8 +652,7 @@ export interface ResolvedEnvelopeEntry {
   // whose admission still rests on a predicate.
   decision: GateDecision;
   // This entry's own view of the batch's scope: the batch's caller and row
-  // memo, and — once `stageWriteEntry` has run — the document a create would
-  // write.
+  // memo.
   scope: OperationScope;
 }
 
