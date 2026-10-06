@@ -40,6 +40,7 @@ import {
   RealmPaths,
   REDIRECT_STATUS_CODES,
   realmPolicyRef,
+  RENDER_CONTEXT_CLEARED_EVENT,
   rri,
   subscribeToRealm,
   validateRedirectTarget,
@@ -910,6 +911,34 @@ function isLiveRender(): boolean {
     .__boxelRenderContext;
 }
 
+// Whether a component renders for someone looking, read once, as it is
+// constructed: a render for the indexer asks nothing, however long the card
+// stays up afterwards.
+//
+// The host's in-browser indexer renders in the same window as the live cards,
+// and raises the global for as long as its render runs. A live card
+// constructed meanwhile reads it as raised, so it looks again when the
+// indexer lowers it. A prerender never lowers it while the card is up.
+class LiveRender {
+  @tracked live = isLiveRender();
+
+  constructor(owner: object) {
+    if (this.live) {
+      return;
+    }
+    let recheck = () => {
+      if (isLiveRender()) {
+        this.live = true;
+        globalThis.removeEventListener(RENDER_CONTEXT_CLEARED_EVENT, recheck);
+      }
+    };
+    globalThis.addEventListener(RENDER_CONTEXT_CLEARED_EVENT, recheck);
+    registerDestructor(owner, () =>
+      globalThis.removeEventListener(RENDER_CONTEXT_CLEARED_EVENT, recheck),
+    );
+  }
+}
+
 // A pointer written as an absolute http(s) URL, as the realm resolves one.
 function httpURL(pointer: string): string | undefined {
   try {
@@ -953,10 +982,12 @@ interface StandingAnswer {
 // policy card, or to a type its rules name, lands.
 class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   @tracked private answer: StandingAnswer | undefined;
-  // Read once, as the card renders: a render for the indexer asks nothing,
-  // however long the card stays up afterwards.
-  #live = isLiveRender();
+  #render = new LiveRender(this);
   #subscriptions = new Map<string, () => void>();
+
+  private get live(): boolean {
+    return this.#render.live;
+  }
 
   constructor(owner: Owner, args: PolicyStandingSignature['Args']) {
     super(owner, args);
@@ -1050,35 +1081,39 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     return [...realms];
   }
 
-  private ask = modifier((_element, [realm]: [string | undefined]) => {
-    if (realm && this.#live) {
-      this.load.perform();
-    }
-  });
+  private ask = modifier(
+    (_element, [realm, live]: [string | undefined, boolean]) => {
+      if (realm && live) {
+        this.load.perform();
+      }
+    },
+  );
 
   // Subscribes to each realm the answer depends on, and unsubscribes from
   // each one it no longer does. Every answer runs this again, and one that
   // names the realms already watched changes nothing.
-  private listen = modifier((_element, [watched]: [string[]]) => {
-    if (!this.#live) {
-      return;
-    }
-    let wanted = new Set(watched);
-    for (let [realm, unsubscribe] of this.#subscriptions) {
-      if (!wanted.has(realm)) {
-        unsubscribe();
-        this.#subscriptions.delete(realm);
+  private listen = modifier(
+    (_element, [watched, live]: [string[], boolean]) => {
+      if (!live) {
+        return;
       }
-    }
-    for (let realm of wanted) {
-      if (!this.#subscriptions.has(realm)) {
-        this.#subscriptions.set(
-          realm,
-          subscribeToRealm(realm, this.onRealmEvent),
-        );
+      let wanted = new Set(watched);
+      for (let [realm, unsubscribe] of this.#subscriptions) {
+        if (!wanted.has(realm)) {
+          unsubscribe();
+          this.#subscriptions.delete(realm);
+        }
       }
-    }
-  });
+      for (let realm of wanted) {
+        if (!this.#subscriptions.has(realm)) {
+          this.#subscriptions.set(
+            realm,
+            subscribeToRealm(realm, this.onRealmEvent),
+          );
+        }
+      }
+    },
+  );
 
   private onRealmEvent = (event: RealmEventContent) => {
     if (
@@ -1114,8 +1149,8 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     <div
       class='policy-standing'
       data-test-realm-policy-standing={{if this.answer 'answered'}}
-      {{this.ask this.realm}}
-      {{this.listen this.watched}}
+      {{this.ask this.realm this.live}}
+      {{this.listen this.watched this.live}}
     >
       {{#if this.inForce}}
         <div class='standing'>
@@ -1276,10 +1311,14 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions | undefined;
   @tracked private settled: string | undefined;
-  #live = isLiveRender();
+  #render = new LiveRender(this);
+
+  private get live(): boolean {
+    return this.#render.live;
+  }
 
   private get readable(): boolean | undefined {
-    if (this.args.busy || !this.settled || !this.#live) {
+    if (this.args.busy || !this.settled || !this.live) {
       return undefined;
     }
     return this.args.context?.canInvoke?.('read', this.settled);
@@ -1322,8 +1361,8 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
     return this.failed ? 'failed' : undefined;
   }
 
-  private follow = modifier((_element, [pointer]: [string]) => {
-    if (this.#live) {
+  private follow = modifier((_element, [pointer, live]: [string, boolean]) => {
+    if (live) {
       this.settle.perform(pointer);
     }
   });
@@ -1356,7 +1395,7 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
     <div
       class='policy-card'
       data-test-realm-config-policy-card={{this.state}}
-      {{this.follow this.pointer}}
+      {{this.follow this.pointer this.live}}
     >
       {{#if @busy}}
         <div

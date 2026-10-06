@@ -37,6 +37,7 @@ import {
   serializeRenderRouteOptions,
   cleanCapturedHTML,
   snapshotRuntimeDependencies,
+  RENDER_CONTEXT_CLEARED_EVENT,
 } from '@cardstack/runtime-common';
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
@@ -994,6 +995,7 @@ async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
     if (!hadContext) {
       delete (globalThis as any).__boxelRenderContext;
       restoreTimers?.();
+      globalThis.dispatchEvent(new Event(RENDER_CONTEXT_CLEARED_EVENT));
     }
   }
 }

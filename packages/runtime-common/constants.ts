@@ -109,6 +109,12 @@ export const CardURLContextName = 'card-url-context';
 
 export const RealmURLContextName = 'realm-url-context';
 
+// Dispatched on `globalThis` when a render for the indexer lowers
+// `__boxelRenderContext` in a window that also renders live cards, which only
+// the host's in-browser indexer does. A live card constructed while the flag
+// was raised reads itself as an indexer render; this tells it to look again.
+export const RENDER_CONTEXT_CLEARED_EVENT = 'boxel-render-context-cleared';
+
 // The realm a card-initiated, no-realm search defaults to (the realm the
 // `@context` was provided with). Provided alongside the card-facing
 // `searchResultsComponent` so that surface can scope a realm-less query to the
