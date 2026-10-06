@@ -12,6 +12,12 @@
  *
  * The date is an argument rather than read from the clock, so the same inputs
  * always produce the same files.
+ *
+ *   node scripts/release/promote-changelog.ts --notes 0.6.0
+ *
+ * Writes the combined notes of a version the CHANGELOGs already record, for a
+ * release whose close-out commit landed but whose publish has to be resumed.
+ * Edits nothing.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -109,34 +115,86 @@ export function promoteAll(
   });
   return {
     changelogs: promoted.map(({ changelog }) => changelog),
-    notes: promoted
-      .map(({ name, notes }) => `## ${name}\n\n${notes}`)
-      .join('\n\n'),
+    notes: combinedNotes(promoted),
   };
 }
 
-if (import.meta.main) {
-  const [version, date] = process.argv.slice(2);
-  if (!version || !date) {
-    throw new Error(
-      'usage: node scripts/release/promote-changelog.ts <version> <date>',
-    );
+/** The release notes: each package's section under its name, in publish order. */
+function combinedNotes(sections: { name: string; notes: string }[]): string {
+  return sections
+    .map(({ name, notes }) => `## ${name}\n\n${notes}`)
+    .join('\n\n');
+}
+
+/**
+ * The body of the section a changelog records for `version`. Missing or empty
+ * fails: a close-out always writes one, so its absence means the changelog
+ * doesn't belong to this release.
+ */
+export function releasedNotes(changelog: string, version: string): string {
+  const heading = `## [${version}]`;
+  const start = changelog.indexOf(`\n${heading} `);
+  if (start === -1) {
+    throw new Error(`CHANGELOG.md records no "${heading}" section`);
   }
-  const paths = PACKAGES.map((pkg) => join(REPO_ROOT, pkg.dir, 'CHANGELOG.md'));
-  const { changelogs, notes } = promoteAll(
-    PACKAGES.map((pkg, index) => ({
-      changelog: readFileSync(paths[index], 'utf8'),
-      name: pkg.name,
+  const bodyStart = changelog.indexOf('\n', start + 1);
+  const rest = changelog.slice(bodyStart);
+  const nextHeading = rest.search(VERSION_HEADING);
+  const notes = (nextHeading === -1 ? rest : rest.slice(0, nextHeading)).trim();
+  if (notes === '') {
+    throw new Error(`CHANGELOG.md's "${heading}" section is empty`);
+  }
+  return notes;
+}
+
+/** The combined notes every package's changelog records for `version`. */
+export function releasedNotesAll(
+  changelogs: { changelog: string; name: string }[],
+  version: string,
+): string {
+  return combinedNotes(
+    changelogs.map(({ changelog, name }) => ({
+      name,
+      notes: releasedNotes(changelog, version),
     })),
-    version,
-    date,
   );
-  paths.forEach((path, index) =>
-    writeFileSync(path, changelogs[index], 'utf8'),
-  );
+}
+
+function writeNotes(notes: string): void {
   const notesFile = process.env.CHANGELOG_NOTES_FILE;
   if (notesFile) {
     writeFileSync(notesFile, `${notes}\n`, 'utf8');
   }
-  console.log(`CHANGELOG.md × ${paths.length} → [${version}] — ${date}`);
+}
+
+if (import.meta.main) {
+  const usage =
+    'usage: node scripts/release/promote-changelog.ts <version> <date>\n' +
+    '       node scripts/release/promote-changelog.ts --notes <version>';
+  const paths = PACKAGES.map((pkg) => join(REPO_ROOT, pkg.dir, 'CHANGELOG.md'));
+  const read = () =>
+    PACKAGES.map((pkg, index) => ({
+      changelog: readFileSync(paths[index], 'utf8'),
+      name: pkg.name,
+    }));
+  const args = process.argv.slice(2);
+  if (args[0] === '--notes') {
+    const version = args[1];
+    if (!version) {
+      throw new Error(usage);
+    }
+    writeNotes(releasedNotesAll(read(), version));
+    console.log(`release notes ← CHANGELOG.md × ${paths.length} [${version}]`);
+  } else {
+    const [version, date] = args;
+    if (!version || !date) {
+      throw new Error(usage);
+    }
+    const { changelogs, notes } = promoteAll(read(), version, date);
+    paths.forEach((path, index) =>
+      writeFileSync(path, changelogs[index], 'utf8'),
+    );
+    writeNotes(notes);
+    console.log(`CHANGELOG.md × ${paths.length} → [${version}] — ${date}`);
+  }
 }

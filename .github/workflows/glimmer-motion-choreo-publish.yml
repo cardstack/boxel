@@ -33,7 +33,11 @@ name: glimmer-motion + choreo publish
 # Publish order: glimmer-motion, then choreo. choreo's declarations build
 # (its `prepack`) resolves glimmer-motion through the built output
 # glimmer-motion's own `prepack` just produced, and the choreo a consumer
-# installs names a glimmer-motion that must already be on npm.
+# installs names a glimmer-motion that must already be on npm. Both jobs
+# publish with `pnpm -r publish`, which takes that order from the workspace
+# dependency graph and skips a package whose version npm already holds — so a
+# stable run that published glimmer-motion and then failed on choreo can be
+# finished by running `promote` again (see the stable job's resume path).
 #
 # Loop safety (unstable job):
 #   - Bot commits end with [skip ci] so GitHub does not re-trigger workflows.
@@ -269,9 +273,8 @@ jobs:
           # Each package's `prepack` builds dist/ and declarations/.
           # --no-git-checks because the commit and tag above are already
           # pushed; pnpm's git-state check would otherwise object.
-          for dir in packages/glimmer-motion packages/choreo; do
-            (cd "$dir" && pnpm publish --tag unstable --access public --provenance --no-git-checks)
-          done
+          pnpm --filter glimmer-motion --filter @cardstack/choreo -r publish \
+            --tag unstable --access public --provenance --no-git-checks
 
       - name: Create GitHub Release (prerelease)
         if: github.event_name == 'push' && steps.commit.outputs.tag != ''
@@ -328,41 +331,70 @@ jobs:
             console.log(currentLockstepVersion());
           ")
           echo "Current version: $CURRENT"
-          # A version with no prerelease suffix is already stable — refuse
-          # rather than republish identical bits under a new tag.
           if [[ "$CURRENT" != *-unstable.* ]]; then
-            echo "::error::Version $CURRENT is already stable; nothing to promote."
-            exit 1
+            # A stable version whose release tag exists but which npm lacks
+            # for either package is a promotion that pushed its commit and tag
+            # and then failed before both publishes finished. Resume it from
+            # the tagged commit: publish what is missing and create the
+            # release. Anything else stable is refused rather than republished
+            # under a new tag.
+            TAG="glimmer-motion-choreo-v${CURRENT}"
+            MISSING=""
+            if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+              for name in glimmer-motion @cardstack/choreo; do
+                if [ -z "$(npm view "${name}@${CURRENT}" version 2>/dev/null || true)" ]; then
+                  MISSING="$MISSING ${name}@${CURRENT}"
+                fi
+              done
+            fi
+            if [ -z "$MISSING" ]; then
+              echo "::error::Version $CURRENT is already stable; nothing to promote."
+              exit 1
+            fi
+            echo "Resuming the $CURRENT promotion from $TAG; npm lacks:$MISSING"
+            git checkout --detach "refs/tags/$TAG"
+            echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+            echo "resume=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           STABLE="${CURRENT%-unstable.*}"
           echo "Promoting to: $STABLE"
           node scripts/release/set-version.ts "$STABLE"
           echo "version=$STABLE" >> "$GITHUB_OUTPUT"
+          echo "resume=false" >> "$GITHUB_OUTPUT"
 
       - name: Close out the CHANGELOGs
         id: notes
         working-directory: packages/glimmer-motion
         env:
           CHANGELOG_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+          RESUME: ${{ steps.strip.outputs.resume }}
           VERSION: ${{ steps.strip.outputs.version }}
         run: |
           set -euo pipefail
-          # The date is passed in rather than read from the clock inside the
-          # script, so the same inputs always produce the same files.
-          node scripts/release/promote-changelog.ts "$VERSION" "$(date -u +%F)"
+          if [ "$RESUME" = "true" ]; then
+            # The tagged commit already closed the CHANGELOGs out; read the
+            # notes back from it.
+            node scripts/release/promote-changelog.ts --notes "$VERSION"
+          else
+            # The date is passed in rather than read from the clock inside the
+            # script, so the same inputs always produce the same files.
+            node scripts/release/promote-changelog.ts "$VERSION" "$(date -u +%F)"
+          fi
           echo "body_file=$CHANGELOG_NOTES_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Commit and tag stable
+        if: steps.strip.outputs.resume != 'true'
         env:
           VERSION: ${{ steps.strip.outputs.version }}
         run: |
           set -euo pipefail
           TAG="glimmer-motion-choreo-v${VERSION}"
-          # An existing tag means a prior promotion pushed it and then failed
-          # before publishing. Delete the orphan and check npm state for both
-          # packages before re-running.
+          # A stable tag for an unstable manifest version names a commit main
+          # doesn't hold at this version, so something outside this workflow
+          # made it. Stop rather than publish next to it.
           if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
-            echo "::error::Tag $TAG already exists. A prior promotion likely failed mid-flight. Delete the orphan tag and verify npm state for both packages before re-running."
+            echo "::error::Tag $TAG already exists, but main's manifests are still at a prerelease of it. Check where the tag came from and npm state for both packages before re-running."
             exit 1
           fi
           git add \
@@ -390,12 +422,11 @@ jobs:
 
       - name: Publish to npm under latest
         # Authenticated by npm Trusted Publishing, as in the unstable job, and
-        # in the same order.
+        # in the same order. A resumed run publishes only the package npm lacks.
         run: |
           set -euo pipefail
-          for dir in packages/glimmer-motion packages/choreo; do
-            (cd "$dir" && pnpm publish --access public --provenance --no-git-checks)
-          done
+          pnpm --filter glimmer-motion --filter @cardstack/choreo -r publish \
+            --access public --provenance --no-git-checks
 
       - name: Create GitHub Release
         env:

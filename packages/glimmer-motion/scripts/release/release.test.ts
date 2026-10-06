@@ -23,7 +23,12 @@ import {
   touchesPublishedSurface,
   unstableCounters,
 } from './compute-release.ts';
-import { promoteAll, promoteUnreleased } from './promote-changelog.ts';
+import {
+  promoteAll,
+  promoteUnreleased,
+  releasedNotes,
+  releasedNotesAll,
+} from './promote-changelog.ts';
 import { assertPublishableVersion } from './set-version.ts';
 
 const BOTH = ['glimmer-motion', '@cardstack/choreo'];
@@ -542,6 +547,63 @@ describe('closing out the changelogs on a stable cut', () => {
           '2026-08-18',
         ),
       /no "## \[Unreleased\]" heading/,
+    );
+  });
+});
+
+describe('reading back the notes a version records', () => {
+  const recorded = [
+    '# Changelog',
+    '',
+    '## [Unreleased]',
+    '',
+    '- Not yet.',
+    '',
+    '## [0.6.0] — 2026-08-18',
+    '',
+    '### Fixed',
+    '',
+    '- A thing.',
+    '',
+    '## [0.5.1] — 2026-08-02',
+    '',
+    '- An older thing.',
+    '',
+  ].join('\n');
+
+  test("a version's section, bounded by the next heading", () => {
+    strictEqual(releasedNotes(recorded, '0.6.0'), '### Fixed\n\n- A thing.');
+    strictEqual(releasedNotes(recorded, '0.5.1'), '- An older thing.');
+  });
+
+  test('a version is not a prefix of a longer one', () => {
+    throws(() => releasedNotes(recorded, '0.6'), /records no "## \[0\.6\]"/);
+  });
+
+  test('both packages combine as the close-out writes them', () => {
+    const { changelogs, notes } = promoteAll(
+      [
+        {
+          changelog: '# Changelog\n\n## [Unreleased]\n\n- A thing.\n',
+          name: 'glimmer-motion',
+        },
+        {
+          changelog: '# Changelog\n\n## [Unreleased]\n',
+          name: '@cardstack/choreo',
+        },
+      ],
+      '0.6.0',
+      '2026-08-18',
+    );
+    strictEqual(
+      releasedNotesAll(
+        [
+          { changelog: changelogs[0], name: 'glimmer-motion' },
+          { changelog: changelogs[1], name: '@cardstack/choreo' },
+        ],
+        '0.6.0',
+      ),
+      notes,
     );
   });
 });
