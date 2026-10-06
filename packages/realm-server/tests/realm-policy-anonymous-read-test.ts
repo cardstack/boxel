@@ -649,8 +649,23 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(response.status, 429, `${label}: 429`);
       assert.strictEqual(response.body.errors[0].code, 'rate-limited');
     }
-    assert.strictEqual(published.text, draft.text, 'the same answer for each');
-    assert.strictEqual(published.text, missing.text);
+    // The wait an answer names counts down by the second, so answers a moment
+    // apart can name different waits. Everything else is the same.
+    let answer = (response: Response) =>
+      response.text
+        .replace(/Try again in \d+ seconds/, 'Try again in N seconds')
+        .replace(/"retryAfterSeconds": \d+/, '"retryAfterSeconds": N');
+    assert.strictEqual(
+      answer(published),
+      answer(draft),
+      'the same answer for each',
+    );
+    assert.strictEqual(answer(published), answer(missing));
+    assert.notStrictEqual(
+      answer(published),
+      published.text,
+      'the wait was taken out of the comparison',
+    );
     assert.strictEqual(
       newsroom.__testOnlyPolicyGateStats().predicateEvaluations,
       before,
