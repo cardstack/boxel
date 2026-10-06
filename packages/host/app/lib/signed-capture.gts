@@ -6,7 +6,10 @@
 // components hide the whole signing flow (minting, memoization, popup-blocker
 // discipline) so a card template needs no signing JavaScript at all:
 //
-//   <SignedCaptureLink @url={{this.pdfUrl}}>Download PDF</SignedCaptureLink>
+//   <SignedCaptureLink @url={{this.pdfUrl}}>Open PDF</SignedCaptureLink>
+//
+//   <SignedCaptureLink @url={{this.pdfUrl}} @download={{true}}
+//     @filename={{this.pdfName}}>Download PDF</SignedCaptureLink>
 //
 //   <SignedCapture @url={{this.pdfUrl}} as |signedUrl|>
 //     {{#if signedUrl}}<object data={{signedUrl}} ...></object>{{/if}}
@@ -27,7 +30,13 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
+import {
+  captureDispositionURL,
+  filenameFromContentDisposition,
+} from '@cardstack/runtime-common';
+
 import type CaptureUrlSignerService from '../services/capture-url-signer';
+import type NetworkService from '../services/network';
 
 // How long a failed mint is held before the one retry it gets. Long enough to
 // outlast a blip, short enough that a viewer isn't left looking at an error
@@ -170,6 +179,12 @@ interface SignedCaptureLinkSignature {
   Args: {
     // The durable capture URL the link targets.
     url?: string | null;
+    // Save the capture as a file instead of opening it in a new tab.
+    download?: boolean;
+    // The name the capture is served and saved under (its extension is
+    // ensured server-side). Without one, the server's name applies: a
+    // declared capture's `filename`, else one derived from the card.
+    filename?: string | null;
     // Button styling passthroughs; the default is a link-styled anchor.
     kind?: BoxelButtonKind;
     size?: BoxelButtonSize;
@@ -185,8 +200,17 @@ interface SignedCaptureLinkSignature {
 // and the click path follows the popup-blocker discipline: the tab opens
 // synchronously under the user activation, then navigates once the mint
 // resolves.
+//
+// `@download` / `@filename` ride the URL as the capture route's `download` /
+// `filename` params, so the href (and "Save link as") carries them too. A
+// download click fetches the signed URL and saves the body under the
+// response's own `Content-Disposition` name. Fetching rather than navigating
+// keeps a failed response — a capture gone missing, a refused token — on
+// this page as an error beside the link, instead of a navigation to an error
+// body; the bytes are bounded by the capture caps.
 export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignature> {
   @service declare private captureUrlSigner: CaptureUrlSignerService;
+  @service declare private network: NetworkService;
 
   @tracked errorMessage: string | undefined;
   @tracked isPending = false;
@@ -195,13 +219,66 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
     return this.args.kind ?? 'link-primary';
   }
 
-  @action
-  private async openSigned(event: Event) {
+  // The capture URL with this link's disposition params applied.
+  private get targetUrl(): string | undefined {
     let url = this.args.url;
+    if (!url) {
+      return undefined;
+    }
+    if (!this.args.download && !this.args.filename) {
+      return url;
+    }
+    return captureDispositionURL(url, {
+      attachment: Boolean(this.args.download),
+      filename: this.args.filename,
+    });
+  }
+
+  private get target(): string | undefined {
+    return this.args.download ? undefined : '_blank';
+  }
+
+  @action
+  private async handleClick(event: Event) {
+    let url = this.targetUrl;
     if (!url) {
       return;
     }
     event.preventDefault();
+    if (this.args.download) {
+      await this.downloadSigned(url);
+    } else {
+      await this.openSigned(url);
+    }
+  }
+
+  private async downloadSigned(url: string) {
+    this.errorMessage = undefined;
+    this.isPending = true;
+    try {
+      let signedUrl = await this.captureUrlSigner.getSignedUrl(url);
+      let response = await this.network.virtualNetwork.fetch(signedUrl);
+      if (!response.ok) {
+        throw new Error(
+          response.status === 404
+            ? 'This capture is not available yet.'
+            : `Download failed (${response.status}).`,
+        );
+      }
+      let blob = await response.blob();
+      let filename =
+        filenameFromContentDisposition(
+          response.headers.get('content-disposition'),
+        ) ?? fallbackFilename(url);
+      saveBlob(blob, filename);
+    } catch (e) {
+      this.errorMessage = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.isPending = false;
+    }
+  }
+
+  private async openSigned(url: string) {
     this.errorMessage = undefined;
     this.isPending = true;
     let w = window.open('', '_blank');
@@ -221,15 +298,15 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
   <template>
     <Button
       @as='anchor'
-      @href={{@url}}
+      @href={{this.targetUrl}}
       @kind={{this.kind}}
       @size={{@size}}
       @disabled={{not @url}}
-      target='_blank'
+      target={{this.target}}
       rel='noopener noreferrer'
       aria-busy={{if this.isPending 'true'}}
       data-signed-capture-link
-      {{on 'click' this.openSigned}}
+      {{on 'click' this.handleClick}}
       ...attributes
     >{{yield}}</Button>
     {{#if this.errorMessage}}
@@ -244,4 +321,36 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
       }
     </style>
   </template>
+}
+
+// The URL's last path segment, for a response that names no file. The capture
+// route always sends Content-Disposition on a download, so this only covers a
+// response that lost the header on the way.
+function fallbackFilename(url: string): string {
+  let segments = new URL(url).pathname.split('/').filter(Boolean);
+  let last = segments[segments.length - 1] ?? 'capture';
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
+// Saves `blob` as a download named `filename`. An object URL is same-origin,
+// so the browser honors the anchor's `download` name. The URL is released on
+// the next task, once the click has handed the bytes to the download.
+function saveBlob(blob: Blob, filename: string) {
+  let objectUrl = URL.createObjectURL(blob);
+  let anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  try {
+    anchor.click();
+  } finally {
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
 }
