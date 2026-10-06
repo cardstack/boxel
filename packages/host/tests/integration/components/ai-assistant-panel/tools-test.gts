@@ -8,11 +8,13 @@ import { module, skip, test } from 'qunit';
 
 import {
   buildToolFunctionNameFromResolvedRef,
+  Deferred,
   isCardInstance,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -2417,6 +2419,155 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       matrixService.agentId = originalAgentId;
       (matrixService as any).sendToolResultEvent = originalSend;
     }
+  });
+
+  test('a host tool whose build outlasts a room-processing restart still runs', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let matrixService = getService('matrix-service');
+    let store = getService('store');
+    let agentId = matrixService.agentId;
+    // The skill is not enabled in the room: the model learned about its tool
+    // from an earlier readRealmFile result. Building that tool loads the skill
+    // through the store, and nothing else in the room loads it, so holding
+    // that load holds exactly this tool's build.
+    let skillUrl = `${testRealmURL}Skill/boxel-environment`;
+    let hostToolName = buildToolFunctionNameFromResolvedRef({
+      module: '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+      name: 'default',
+    });
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: 'earlier-skill-read',
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: 'earlier-bot-message',
+        },
+        data: {
+          attachedFiles: [],
+          discoveredTools: [
+            {
+              sourceSkillUrl: skillUrl,
+              codeRef: {
+                module:
+                  '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+                name: 'default',
+              },
+              functionName: hostToolName,
+              requiresApproval: false,
+              definition: {
+                type: 'function',
+                function: {
+                  name: hostToolName,
+                  description: 'Read a file',
+                  parameters: { type: 'object', properties: {} },
+                },
+              },
+            },
+          ],
+        },
+      },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+    );
+
+    let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      data: { context: { agentId } },
+    });
+    await settled();
+
+    let skillLoadReached = new Deferred<void>();
+    let releaseSkillLoad = new Deferred<void>();
+    let held = false;
+    let originalGet = store.get;
+    (store as any).get = async (id: string, ...rest: unknown[]) => {
+      if (!held && id === skillUrl) {
+        held = true;
+        skillLoadReached.fulfill();
+        await releaseSkillLoad.promise;
+      }
+      return (originalGet as any).call(store, id, ...rest);
+    };
+    try {
+      // The finished message carries a bot-run tool followed by the host
+      // tool, whose build now waits on the held skill load.
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Reading',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'bot-run-read',
+            name: 'readRealmFile',
+            arguments: JSON.stringify({ path: 'hello.txt' }),
+            executedBy: AI_BOT_EXECUTOR,
+          },
+          {
+            id: 'slow-host-read',
+            name: hostToolName,
+            arguments: JSON.stringify({
+              attributes: { fileIdentifier: `${testRealmURL}hello.txt` },
+            }),
+          },
+        ],
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: streamingEventId,
+        },
+        data: { context: { agentId } },
+      });
+      await skillLoadReached.promise;
+
+      // The bot's own result for its tool lands while the host tool is still
+      // being built, restarting room processing and letting the tool drain
+      // run before the build finishes.
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'bot-run-read',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: streamingEventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+      await settled();
+    } finally {
+      releaseSkillLoad.fulfill();
+      delete (store as any).get;
+    }
+    await settled();
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(
+      hostToolResults.length,
+      1,
+      'the host tool built after the restart is run and its result posted',
+    );
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'applied',
+      'the host tool ran successfully',
+    );
+    assert
+      .dom('[data-test-tool-call-apply="applying"]')
+      .doesNotExist('no tool is left spinning in the applying state');
   });
 
   test('Accept All bar still renders for a command that requires user approval', async function (assert) {
