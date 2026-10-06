@@ -83,7 +83,7 @@ const PoweredSelect = BoxelSelect as unknown as new (
   args: PoweredSelectSignature['Args'],
 ) => Component<PoweredSelectSignature>;
 
-// The trigger is a role='button' div, which a <label> does not name, so a
+// The trigger is a role='combobox' div, which a <label> does not name, so a
 // label pointing at @controlId (or wrapping the Select) is linked through
 // aria-labelledby — label first, then the trigger itself, so the chosen
 // value is still announced after the name.

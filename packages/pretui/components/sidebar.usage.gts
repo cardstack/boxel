@@ -133,7 +133,7 @@ export class SidebarUsage extends Component {
 
             <:footer as |bar|>
               {{#unless bar.collapsed}}
-                <p class='shell-foot'>SS26 · The Host&apos;s Cloth</p>
+                <p class='shell-foot'>Pretui Estates · Catalog</p>
               {{/unless}}
             </:footer>
 
