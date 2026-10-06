@@ -25,7 +25,9 @@ import type { FilePreviewSignature } from './file-preview-stage';
 // One live fetch's outcome, remembered with the URL it belongs to so a
 // model swap can never serve a stale document: the getters below ignore any
 // entry whose `forUrl` no longer matches, which also lets the modifier's
-// cleanup skip tracked writes entirely (a stale blob is simply never read).
+// cleanup skip tracked writes entirely (a stale blob is simply never read). A
+// refetch of the same URL after a write replaces the entry when it settles,
+// so the previous document stays on screen until then.
 interface LoadedDocument {
   forUrl: string;
   blobUrl: string | undefined;
@@ -69,6 +71,24 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
   // Whether the viewer renders for someone looking at the document, decided
   // by the frame's modifier, which knows where the viewer mounted.
   @tracked private live: boolean | undefined;
+
+  // The one place `loaded` changes. The blob it replaces backs the `<object>`
+  // until the new entry renders, so it is released here rather than in the
+  // modifier's cleanup, which runs as soon as a write supersedes the fetch.
+  private settle(next: LoadedDocument) {
+    let previous = this.loaded?.blobUrl;
+    this.loaded = next;
+    if (previous && previous !== next.blobUrl) {
+      URL.revokeObjectURL(previous);
+    }
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    if (this.loaded?.blobUrl) {
+      URL.revokeObjectURL(this.loaded.blobUrl);
+    }
+  }
 
   // Loading = a live fetch for the current URL has not settled yet. The
   // `<object>` is withheld until then so a private realm never flashes the
@@ -120,7 +140,6 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
       () => controller.abort(),
       DOCUMENT_FETCH_TIMEOUT_MS,
     );
-    let createdBlobUrl: string | undefined;
     void (async () => {
       let blobUrl: string | undefined;
       try {
@@ -134,10 +153,9 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
           if (cancelled) {
             return;
           }
-          createdBlobUrl = URL.createObjectURL(
+          blobUrl = URL.createObjectURL(
             new Blob([bytes], { type: 'application/pdf' }),
           );
-          blobUrl = createdBlobUrl;
         }
       } catch {
         // Fall through: `blobUrl` stays undefined and the plain URL serves
@@ -147,18 +165,13 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
         clearTimeout(timeout);
       }
       if (!cancelled) {
-        this.loaded = { forUrl: url, blobUrl };
+        this.settle({ forUrl: url, blobUrl });
       }
     })();
     return () => {
       cancelled = true;
       clearTimeout(timeout);
       controller.abort();
-      if (createdBlobUrl) {
-        // The object element for this URL is going away with us (teardown or
-        // URL change re-rendering it), so its backing blob can be released.
-        URL.revokeObjectURL(createdBlobUrl);
-      }
     };
   });
 

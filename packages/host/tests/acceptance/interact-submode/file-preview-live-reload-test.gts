@@ -124,6 +124,12 @@ async function textAt(url: string): Promise<string> {
   return await response.text();
 }
 
+function pdfObjectData(): string {
+  return (
+    document.querySelector('[data-test-pdf-viewer]')?.getAttribute('data') ?? ''
+  );
+}
+
 module(
   'Acceptance | interact submode | file preview live reload',
   function (hooks) {
@@ -256,33 +262,108 @@ module(
     test('PDF viewer hands its object the new document after its file is written', async function (assert) {
       await openInInteractStack('report.pdf');
 
-      let objectData = () =>
-        document
-          .querySelector('[data-test-pdf-viewer]')
-          ?.getAttribute('data') ?? '';
-      await waitUntil(() => objectData().startsWith('blob:'), {
+      await waitUntil(() => pdfObjectData().startsWith('blob:'), {
         timeout: 5000,
         timeoutMessage: 'the PDF viewer did not receive the first document',
       });
       assert.true(
-        (await textAt(objectData())).includes('First draft'),
+        (await textAt(pdfObjectData())).includes('First draft'),
         'the viewer starts with the first document',
       );
-      let firstData = objectData();
+      let firstData = pdfObjectData();
 
       await realm.write('report.pdf', pdfTitled('Second draft'));
 
       await waitUntil(
-        () => objectData() !== firstData && objectData().startsWith('blob:'),
+        () =>
+          pdfObjectData() !== firstData && pdfObjectData().startsWith('blob:'),
         {
           timeout: 5000,
           timeoutMessage: 'the PDF viewer kept the first document',
         },
       );
       assert.true(
-        (await textAt(objectData())).includes('Second draft'),
+        (await textAt(pdfObjectData())).includes('Second draft'),
         'the viewer holds the rewritten document',
       );
+    });
+
+    module('PDF viewer while it refetches', function (hooks) {
+      // Once `holding` is set, holds every document fetch until the test
+      // releases it, so the test can look at the viewer while a refetch is in
+      // flight.
+      let holding: boolean;
+      let heldFetches: number;
+      let release: () => void;
+      let released: Promise<void>;
+      let nativeFetch: typeof fetch;
+
+      hooks.beforeEach(function () {
+        holding = false;
+        heldFetches = 0;
+        released = new Promise((resolve) => (release = resolve));
+        nativeFetch = globalThis.fetch;
+        globalThis.fetch = async (input, init) => {
+          let url = input instanceof Request ? input.url : String(input);
+          if (holding && url.includes('report.pdf')) {
+            heldFetches++;
+            await released;
+          }
+          return nativeFetch(input, init);
+        };
+      });
+
+      hooks.afterEach(function () {
+        release();
+        globalThis.fetch = nativeFetch;
+      });
+
+      test('PDF viewer keeps the document it shows loadable until the rewritten one arrives', async function (assert) {
+        await openInInteractStack('report.pdf');
+
+        await waitUntil(() => pdfObjectData().startsWith('blob:'), {
+          timeout: 5000,
+          timeoutMessage: 'the PDF viewer did not receive the first document',
+        });
+        let firstData = pdfObjectData();
+
+        holding = true;
+        await realm.write('report.pdf', pdfTitled('Second draft'));
+
+        await waitUntil(() => heldFetches > 0, {
+          timeout: 5000,
+          timeoutMessage: 'the PDF viewer did not refetch the document',
+        });
+        assert.strictEqual(
+          pdfObjectData(),
+          firstData,
+          'the viewer keeps showing the first document while it refetches',
+        );
+        assert.true(
+          (await textAt(firstData)).includes('First draft'),
+          'the document on screen is still loadable during the refetch',
+        );
+
+        release();
+
+        await waitUntil(
+          () =>
+            pdfObjectData() !== firstData &&
+            pdfObjectData().startsWith('blob:'),
+          {
+            timeout: 5000,
+            timeoutMessage: 'the PDF viewer kept the first document',
+          },
+        );
+        assert.true(
+          (await textAt(pdfObjectData())).includes('Second draft'),
+          'the viewer holds the rewritten document',
+        );
+        await assert.rejects(
+          textAt(firstData),
+          'the replaced document is released',
+        );
+      });
     });
 
     module('3D viewer', function (hooks) {
