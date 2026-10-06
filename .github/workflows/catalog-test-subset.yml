@@ -70,8 +70,9 @@ jobs:
           node-version: "24"
 
       # Lint Catalog reports a malformed or one-sided pairing, so a pairing
-      # problem doesn't fail this job; without a resolution, the pin waits on
-      # any open catalog pull request it comes from.
+      # problem doesn't fail this job. It drops the resolution instead, since a
+      # pairing with a problem can't excuse a pin, and without a resolution the
+      # pin waits on any open catalog pull request it comes from.
       - name: Read the catalog pairing
         if: steps.touched.outputs.pin == 'true'
         env:
@@ -85,7 +86,8 @@ jobs:
             --number="$PR_NUMBER" \
             --base="$PR_BASE" \
             --counterpart=cardstack/boxel-catalog \
-            --out="$RUNNER_TEMP/catalog-pairing.json" || true
+            --out="$RUNNER_TEMP/catalog-pairing.json" ||
+            rm -f "$RUNNER_TEMP/catalog-pairing.json"
 
       - name: Pinned subset files match boxel-catalog main
         if: steps.touched.outputs.pin == 'true'

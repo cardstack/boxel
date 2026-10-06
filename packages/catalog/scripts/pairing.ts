@@ -787,9 +787,8 @@ export function pinVerdict(resolution: Resolution, pull: number, pin: string) {
     passes: true,
     message:
       `The pin is the head of ${ref}, which this change merges before and ` +
-      `which is approved. Merge ${ref} right after this change, with a merge ` +
-      `commit, so the pinned commit reaches catalog main and production can ` +
-      `deploy it. If ${ref} gets new commits, re-pin to its head.`,
+      `which is approved. Merge ${ref} right after this change. If ${ref} ` +
+      `gets new commits, re-pin to its head.`,
   };
 }
 

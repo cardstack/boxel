@@ -472,7 +472,7 @@ test('the pin may wait on the head of an approved pair this change merges before
   assert.equal(verdict?.passes, true);
   assert.match(
     verdict!.message,
-    /Merge cardstack\/boxel-catalog#791 right after this change, with a merge commit/,
+    /Merge cardstack\/boxel-catalog#791 right after this change/,
   );
 });
 

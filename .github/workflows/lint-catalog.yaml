@@ -139,10 +139,10 @@ jobs:
 
       # Production deploys this boxel with the catalog at its pin, so the
       # whole catalog at the pin has to work with the change, not only the
-      # subset files boxel's tests load. When the pin is the revision the
-      # first lint step checked out, that step's report already fails on its
-      # errors; when it is the catalog main revision linted above, that
-      # recording is reused, but reported here, where no pairing excuses it.
+      # subset files boxel's tests load. When the pin is a revision a step
+      # above already linted against the change, that recording is reused.
+      # It is still reported again below, as the pin, against the base
+      # branch's pin: the reports above compare a revision only with itself.
       - name: Lint the catalog at this change's pin
         id: pin
         working-directory: packages/catalog
@@ -153,11 +153,8 @@ jobs:
           linted=$(git -C contents rev-parse HEAD)
           echo "revision=$pin" >> "$GITHUB_OUTPUT"
           if [ "$pin" = "$linted" ]; then
-            echo "The pin is the catalog revision linted against this change above."
-            echo "errors=0" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$pin" = "$MAIN_REVISION" ]; then
+            cp "$RUNNER_TEMP/catalog-lint-head.json" "$RUNNER_TEMP/catalog-pin-lint-head.json"
+          elif [ "$pin" = "$MAIN_REVISION" ]; then
             cp "$RUNNER_TEMP/catalog-main-lint-head.json" "$RUNNER_TEMP/catalog-pin-lint-head.json"
           else
             git -C contents fetch --quiet --depth=1 origin "$pin"
@@ -245,10 +242,6 @@ jobs:
       - name: Report what this change does to the catalog at its pin
         if: ${{ !cancelled() && steps.pin.outcome == 'success' && steps.base.outcome != 'failure' }}
         run: |
-          if [ ! -f "$RUNNER_TEMP/catalog-pin-lint-head.json" ]; then
-            echo "The pin is the catalog revision reported above."
-            exit 0
-          fi
           args=(--report="$RUNNER_TEMP/catalog-pin-lint-head.json" --pinned)
           if [ -f "$RUNNER_TEMP/catalog-pin-lint-base.json" ]; then
             args+=(--baseline="$RUNNER_TEMP/catalog-pin-lint-base.json")

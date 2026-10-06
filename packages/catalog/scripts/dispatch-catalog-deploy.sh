@@ -50,6 +50,26 @@ if [ -n "$expiry" ]; then
   fi
 fi
 
+# A boxel change that merges before the catalog pull request fixing what it
+# breaks pins that pull request's head. Merged with a merge commit, the head is
+# on catalog main. Squashed or rebased, it never is, and the catalog deploy
+# refuses a revision off main, so deploy that pull request's merge commit,
+# which carries the same change.
+on_main=$(gh api "repos/$repo/compare/$revision...main" --jq .status 2>/dev/null || true)
+if [ "$on_main" != "ahead" ] && [ "$on_main" != "identical" ]; then
+  # A failed request prints its error body, so only a successful one counts.
+  if ! merged=$(gh api "repos/$repo/commits/$revision/pulls" \
+    --jq "[.[] | select(.merged_at != null and .base.ref == \"main\" and .head.sha == \"$revision\")][0] // empty | \"\(.number) \(.merge_commit_sha)\"" 2>/dev/null); then
+    merged=""
+  fi
+  if [ -n "$merged" ]; then
+    read -r merged_pr merged_sha <<<"$merged"
+    echo "::notice title=catalog deploy::$revision isn't on catalog main. It is the head of $repo#$merged_pr, which merged as $merged_sha, so this deploys $merged_sha."
+    revision=$merged_sha
+    by_hand="Until then, run \"Deploy to production\" with revision $revision by hand: $runs"
+  fi
+fi
+
 # The catalog workflow's run name starts with the reason, so this run's marker
 # finds the run it starts. GitHub cuts a long run name short in the API, so the
 # marker leads.

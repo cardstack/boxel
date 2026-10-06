@@ -82,7 +82,7 @@ The pin covers more than the subset. Production deploys a boxel commit with the 
 
 Never commit a pin that exists only in a local catalog checkout (the check fails with "is not a commit in cardstack/boxel-catalog"), and never commit a pin you haven't run the manifest's `tests` consumers against.
 
-**For merge.** Every subset file at the pin must match catalog `main` byte for byte. `--check-pin` enforces this on every boxel PR that changes the manifest. The one exception is a pin at the head of the catalog PR this boxel PR says `Merges before:`, while that PR is approved and neither side is stacked. That catalog PR merges right after the boxel PR, with a merge commit, and the pin then matches `main`.
+**For merge.** Every subset file at the pin must match catalog `main` byte for byte. `--check-pin` enforces this on every boxel PR that changes the manifest. The one exception is a pin at the head of the catalog PR this boxel PR says `Merges before:`, while that PR is approved and neither side is stacked. That catalog PR merges right after the boxel PR, and the pin then matches `main`. After a squash or rebase merge the pinned head isn't on `main`, so the lockstep deploy deploys the PR's merge commit instead.
 
 - `waiting on cardstack/boxel-catalog#<N> to merge`: the pin is a commit in an open catalog PR. Merge that PR first, then re-run the check. A pin from a catalog PR passes once the PR merges, whether as a merge commit, a squash or a rebase, so the pin doesn't have to move.
 - "main has changed … since": catalog `main` has a newer version of a subset file. Re-pin with `--bump`, run the sync, and re-run the consumers. If the message names a boxel PR that already pins a matching revision, merging boxel `main` after it lands works too.
