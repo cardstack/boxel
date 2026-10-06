@@ -102,6 +102,7 @@ import {
   referenceNamesFile,
   isDeclaredCaptureFormat,
   isValidCaptureName,
+  wellFormedFilename,
   DECLARED_CAPTURE_FORMATS,
   CAPTURE_NAME_MAX_LENGTH,
   CAPTURE_NAME_PATTERN,
@@ -3542,7 +3543,7 @@ function boundedCaptureFilename(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
-  let trimmed = value
+  let trimmed = wellFormedFilename(value)
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]+/g, ' ')
     .trim();

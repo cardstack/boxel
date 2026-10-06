@@ -609,6 +609,20 @@ module(basename(import.meta.filename), function () {
         `${'x'.repeat(120)}.pdf`,
         'the stem is capped',
       );
+      let halfEmoji = 'Trip \u{1F3D6} notes'.slice(0, 6);
+      assert.strictEqual(
+        sanitizeCaptureFilename(halfEmoji, 'pdf'),
+        'Trip \uFFFD.pdf',
+        'a lone surrogate becomes U+FFFD',
+      );
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: false,
+          filename: sanitizeCaptureFilename(halfEmoji, 'pdf')!,
+        }),
+        `inline; filename="Trip _.pdf"; filename*=UTF-8''Trip%20%EF%BF%BD.pdf`,
+        'and the name still encodes',
+      );
       assert.strictEqual(sanitizeCaptureFilename('  \n ', 'pdf'), undefined);
       assert.strictEqual(sanitizeCaptureFilename('.pdf', 'pdf'), undefined);
     });

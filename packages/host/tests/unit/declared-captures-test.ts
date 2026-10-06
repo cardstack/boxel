@@ -589,6 +589,11 @@ module('Unit | declared captures', function (hooks) {
           },
         },
         empty: { format: 'isolated', type: 'pdf', filename: () => '  ' },
+        sliced: {
+          format: 'isolated',
+          type: 'pdf',
+          filename: () => 'Trip \u{1F3D6} notes'.slice(0, 6),
+        },
         titled: { format: 'isolated', type: 'pdf' },
         tile: { format: 'fitted', width: 170, height: 250 },
       };
@@ -610,6 +615,11 @@ module('Unit | declared captures', function (hooks) {
       'an empty result falls back to the title',
     );
     assert.strictEqual(roster.titled.filename, 'Acme Q3');
+    assert.strictEqual(
+      roster.sliced.filename,
+      'Trip \uFFFD',
+      'a lone surrogate from a sliced emoji becomes U+FFFD',
+    );
     assert.false('filename' in roster.tile, 'a raster slot carries none');
 
     let untitled = cardApi.serializeDeclaredCaptures(

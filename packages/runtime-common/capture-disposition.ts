@@ -90,6 +90,16 @@ export function captureFileExtension(contentType: string): string | undefined {
   }
 }
 
+// Lone UTF-16 surrogates — what a `slice` through an emoji leaves behind —
+// replaced with U+FFFD. A string carrying one cannot be percent-encoded
+// (`encodeURIComponent` throws) or stored in a jsonb column.
+const LONE_SURROGATE_RE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+export function wellFormedFilename(value: string): string {
+  return value.replace(LONE_SURROGATE_RE, '\uFFFD');
+}
+
 // A requested filename reduced to one safe path component: control
 // characters (CR/LF included) and path separators gone, whitespace collapsed,
 // leading dots dropped, the stem capped at CAPTURE_FILENAME_MAX_LENGTH code
@@ -100,7 +110,7 @@ export function sanitizeCaptureFilename(
   extension: string,
 ): string | undefined {
   let suffix = `.${extension}`;
-  let stem = raw
+  let stem = wellFormedFilename(raw)
     .normalize('NFC')
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
