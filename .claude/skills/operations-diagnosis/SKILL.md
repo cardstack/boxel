@@ -24,7 +24,7 @@ Two places, and they are read differently.
 | `policy-compile`       | read of a realm's policy card by its cache — a compile or a revalidation                   | `policy.ts`                              |
 | `policy-snapshot-read` | evaluation of a predicate annotated `snapshot: true` (judged against the index row)        | `gate.ts`                                |
 | `capability-check`     | successful `POST <realm>/_capabilities` request                                            | `Realm#handleCapabilities` in `realm.ts` |
-| `anonymous-request`    | request from a caller who isn't signed in that reached a realm's anonymous admission       | `realm.ts` (`#recordAnonymous`)          |
+| `anonymous-request`    | request from a caller who isn't signed in that reached a realm's anonymous admission       | `anonymous-admission.ts`                 |
 
 **`realm:policy`** — plain-text warnings from the policy compiler and the gate, plus one from the search handler on `realm-server:search`. The logger name is **not printed on the line**: the realm server writes the bare message, so `|= "realm:policy"` matches nothing. Filter on the message text instead:
 
