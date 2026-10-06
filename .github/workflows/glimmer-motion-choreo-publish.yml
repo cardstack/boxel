@@ -300,8 +300,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate confirmation
+        # Through the environment, not interpolated into the script: the input
+        # is free text.
+        env:
+          CONFIRM: ${{ inputs.confirm }}
         run: |
-          if [ "${{ inputs.confirm }}" != "promote" ]; then
+          if [ "$CONFIRM" != "promote" ]; then
             echo "::error::Pass 'promote' as the confirm input to proceed."
             exit 1
           fi
