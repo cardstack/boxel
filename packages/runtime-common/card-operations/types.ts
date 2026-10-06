@@ -1584,8 +1584,11 @@ export const AUTHENTICATION_REQUIRED: OperationError = {
 // lets read the realm is told the refusal as it is, a visitor's refused write
 // to a realm anyone may read included.
 //
-// The realm answers its callers with this, and an explain reports it as the
-// refusal its actor would receive, so the two cannot disagree.
+// The operations envelope and the card+json writes answer their callers with
+// this, and an explain reports it as the refusal its actor would receive. The
+// card+json read and HEAD and the byte serves apply `refusalForNonReader`
+// themselves, and give a caller who isn't signed in the same answer by their
+// own route.
 export function refusalSeenBy(
   error: OperationError,
   caller: { readDeclined: boolean; signedIn: boolean },
