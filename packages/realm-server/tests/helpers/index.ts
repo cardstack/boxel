@@ -3447,6 +3447,27 @@ export const cardInfo = {
 // `name` under cardInfo.name (matching the CardDef slot); other fields land
 // on attributes directly. Mirrors the host helper so realm-server tests can
 // build the same shape without depending on host.
+// Waits, where needed, until the current anonymous rate-limit window has
+// enough of itself left for a test's requests to land in it together. The
+// limiter counts in fixed windows aligned to multiples of `windowSeconds`, so
+// two requests either side of a boundary are counted in different windows,
+// and a test that expects the second to be refused would see it admitted.
+export async function clearOfRateLimitWindowEdge(
+  limit: unknown,
+  marginSeconds = 30,
+): Promise<void> {
+  let windowSeconds = (limit as { windowSeconds?: unknown } | undefined)
+    ?.windowSeconds;
+  if (typeof windowSeconds !== 'number' || windowSeconds <= 0) {
+    return;
+  }
+  let margin = Math.min(marginSeconds, windowSeconds / 2);
+  let left = windowSeconds - ((Date.now() / 1000) % windowSeconds);
+  if (left < margin) {
+    await new Promise((resolve) => setTimeout(resolve, left * 1000 + 50));
+  }
+}
+
 export function realmConfigCardJSON(
   config: {
     name?: string;
