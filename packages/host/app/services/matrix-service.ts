@@ -157,6 +157,13 @@ import type {
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
+
+// Where the homeserver serves room media: the authenticated endpoint uploads
+// resolve to, and the legacy one.
+const ROOM_MEDIA_DOWNLOAD_PATHS = [
+  '/_matrix/client/v1/media/download/',
+  '/_matrix/media/v3/download/',
+];
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 // Backoff for retrying trusted servers that were unreachable at boot. Bounded
 // so a persistently-down server doesn't spin forever.
@@ -1820,6 +1827,33 @@ export default class MatrixService extends Service {
   async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
+
+  // A URL the browser can display for room media. Room media is served only
+  // to the Matrix session, which an `<img>` request does not carry, so its
+  // bytes are downloaded with the session and handed back as an object URL
+  // that the caller revokes when done. Any other URL comes back unchanged.
+  // Card code can call this with any URL, so the session is used only for
+  // the homeserver's media download endpoints, never for the rest of its API.
+  loadRoomMedia = async (url: string): Promise<string> => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return url;
+    }
+    if (
+      parsed.origin !== new URL(this.client.baseUrl).origin ||
+      !ROOM_MEDIA_DOWNLOAD_PATHS.some((path) =>
+        parsed.pathname.startsWith(path),
+      )
+    ) {
+      return url;
+    }
+    let blob = await this.client.downloadContentAsBlob({
+      url,
+    } as FileAPI.SerializedFile);
+    return URL.createObjectURL(blob);
+  };
 
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.

@@ -106,6 +106,14 @@ export interface FileDefManager {
    * @returns Promise resolving to the downloaded file in the browser
    */
   downloadAsFileInBrowser(serializedFile: SerializedFile): Promise<void>;
+
+  /**
+   * Downloads a file's content with the Matrix session, which room media
+   * requires: a browser request without it is refused.
+   * @param serializedFile File definition to download from
+   * @returns Promise resolving to the file's content
+   */
+  downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob>;
 }
 
 export interface PrivilegedFileDefManager extends FileDefManager {
