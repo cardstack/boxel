@@ -399,24 +399,6 @@ export class LintAndFixResult extends CardDef {
   @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
-export class PatchCodeResultField extends FieldDef {
-  @field status = contains(StringField); // 'applied', 'failed'
-  @field failureReason = contains(StringField); // only present if status is 'failed'
-}
-
-export class PatchCodeCommandResult extends CardDef {
-  @field patchedContent = contains(StringField);
-  @field finalFileIdentifier = contains(StringField);
-  @field lintIssues = containsMany(StringField);
-  @field results = containsMany(PatchCodeResultField);
-}
-
-export class PatchCodeInput extends CardDef {
-  @field fileIdentifier = contains(StringField);
-  @field codeBlocks = containsMany(StringField);
-  @field roomId = contains(StringField);
-}
-
 // Shows an image a tool uploaded to the room. Room media loads only through
 // the host's `loadRoomMedia`, which answers with an object URL this releases
 // once the image is gone; without it (outside the assistant's chat) the URL

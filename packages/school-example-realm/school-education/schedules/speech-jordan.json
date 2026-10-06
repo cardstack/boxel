@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Speech therapy \u2014 Jordan",
+      "studentName": "Jordan P.",
+      "meets": "Mondays 10:00",
+      "providerId": "@carmen:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/service-plan-schedule",
+        "name": "ServicePlanSchedule"
+      }
+    },
+    "relationships": {
+      "provider": {
+        "links": {
+          "self": "../../school-org/StaffMember/carmen"
+        }
+      }
+    }
+  }
+}

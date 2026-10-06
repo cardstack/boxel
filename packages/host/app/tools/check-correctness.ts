@@ -56,7 +56,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
     let targetType = input.targetType;
     let cardId = targetType === 'card' ? input.targetRef : undefined;
-    // Sometimes AI will patch cards directly as files (with search/replace blocks) so we need to check
+    // Sometimes AI will write cards directly as files so we need to check
     // whether the file is actually a card instance
 
     let nonCardJsonError: string | undefined;

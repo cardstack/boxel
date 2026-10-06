@@ -5,15 +5,9 @@ import { module, test } from 'qunit';
 
 import type { CommandContext } from '@cardstack/runtime-common';
 
-import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-} from '@cardstack/runtime-common';
-
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
-import PatchCodeTool from '@cardstack/host/tools/patch-code';
+import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
   testRealmURL,
@@ -25,6 +19,36 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+function petDocument(name: string, hasError: boolean) {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: { name, hasError },
+        meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+// A run-realm-code script that replaces the whole content of the existing
+// file at `path`.
+function overwriteScript(path: string, content: string) {
+  let p = JSON.stringify(path);
+  return `await realm.fs.replace(${p}, await realm.fs.readText(${p}), ${JSON.stringify(
+    content,
+  )});`;
+}
+
+// A run-realm-code script that creates the file at `path`.
+function writeTextScript(path: string, content: string) {
+  return `await realm.fs.writeText(${JSON.stringify(path)}, ${JSON.stringify(
+    content,
+  )});`;
+}
 
 module('Integration | tools | check-correctness', function (hooks) {
   setupRenderingTest(hooks);
@@ -103,7 +127,7 @@ module('Integration | tools | check-correctness', function (hooks) {
     await store.waitForCardLoad(cardId);
 
     let command = new CheckCorrectnessTool(toolService.toolContext);
-    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+    let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
     let roomId = '!room:example.com';
 
     let firstResult = await command.execute({
@@ -146,26 +170,17 @@ module('Integration | tools | check-correctness', function (hooks) {
     );
 
     // Put the card back to its working state. We can't use PatchCardInstanceTool, because the instance
-    // is broken and patching won't work. Instead, we need to patch the code directly.
-
-    let revertResult = await patchCodeCommand.execute({
-      fileIdentifier: `${cardId}.json`,
-      codeBlocks: [
-        `╔═══ SEARCH ════╗
-      "name": "Bill",
-      "hasError": true,
-╠═══════════════╣
-      "name": "Billy",
-      "hasError": false,
-╚═══ REPLACE ═══╝`,
-      ],
+    // is broken and patching won't work. Instead, we need to write the file directly.
+    let revertResult = await runRealmCodeCommand.execute({
+      realm: testRealmURL,
       roomId,
+      code: overwriteScript('Pet/billy.json', petDocument('Billy', false)),
     });
 
     assert.strictEqual(
-      revertResult.results[0].status,
-      'applied',
-      'revert patch is applied',
+      revertResult.files[0]?.status,
+      'saved',
+      'revert write is saved',
     );
 
     let thirdResult = await command.execute({
@@ -177,16 +192,15 @@ module('Integration | tools | check-correctness', function (hooks) {
     assert.true(thirdResult.correct, 'third run reports no errors');
   });
 
-  test('reports card instance correctness when PatchCodeTool is used', async function (assert) {
+  test('reports card instance correctness when RunRealmCodeTool is used', async function (assert) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;
     };
     let store = getService('store') as any;
 
     let command = new CheckCorrectnessTool(toolService.toolContext);
-    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+    let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
     let cardId = `${testRealmURL}Pet/billy`;
-    let fileUrl = `${cardId}.json`;
     let roomId = '!room:example.com';
 
     store.addReference(cardId);
@@ -199,18 +213,10 @@ module('Integration | tools | check-correctness', function (hooks) {
     });
     assert.true(firstResult.correct, 'initial run reports no errors');
 
-    const patchBlocks = [
-      `╔═══ SEARCH ════╗
-{"data":{"type":"card","attributes":{"name":"Billy","hasError":false},"meta":{"adoptsFrom":{"module":"../pet","name":"Pet"}}}}
-╠═══════════════╣
-{"data":{"type":"card","attributes":{"name":"Bill","hasError":true},"meta":{"adoptsFrom":{"module":"../pet","name":"Pet"}}}}
-╚═══ REPLACE ═══╝`,
-    ];
-
-    await patchCodeCommand.execute({
-      fileIdentifier: fileUrl,
-      codeBlocks: patchBlocks,
+    await runRealmCodeCommand.execute({
+      realm: testRealmURL,
       roomId,
+      code: overwriteScript('Pet/billy.json', petDocument('Bill', true)),
     });
 
     let secondResult = await command.execute({
@@ -227,25 +233,17 @@ module('Integration | tools | check-correctness', function (hooks) {
       'reports the validation error from the card constructor',
     );
 
-    const revertBlocks = [
-      `╔═══ SEARCH ════╗
-{"data":{"type":"card","attributes":{"name":"Bill","hasError":true},"meta":{"adoptsFrom":{"module":"../pet","name":"Pet"}}}}
-╠═══════════════╣
-{"data":{"type":"card","attributes":{"name":"Billy","hasError":false},"meta":{"adoptsFrom":{"module":"../pet","name":"Pet"}}}}
-╚═══ REPLACE ═══╝`,
-    ];
-
     // Put the card back to its working state
-    let revertResult = await patchCodeCommand.execute({
-      fileIdentifier: fileUrl,
-      codeBlocks: revertBlocks,
+    let revertResult = await runRealmCodeCommand.execute({
+      realm: testRealmURL,
       roomId,
+      code: overwriteScript('Pet/billy.json', petDocument('Billy', false)),
     });
 
     assert.strictEqual(
-      revertResult.results[0].status,
-      'applied',
-      'revert patch is applied',
+      revertResult.files[0]?.status,
+      'saved',
+      'revert write is saved',
     );
 
     let thirdResult = await command.execute({
@@ -261,20 +259,16 @@ module('Integration | tools | check-correctness', function (hooks) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;
     };
-    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+    let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
     let command = new CheckCorrectnessTool(toolService.toolContext);
     let roomId = '!room:example.com';
     let emptyFileUrl = `${testRealmURL}empty.gts`;
     let cardService = getService('card-service');
 
-    const codeBlock = `${SEARCH_MARKER}
-${SEPARATOR_MARKER}
-${REPLACE_MARKER}`;
-
-    await patchCodeCommand.execute({
-      fileIdentifier: emptyFileUrl,
-      codeBlocks: [codeBlock],
+    await runRealmCodeCommand.execute({
+      realm: testRealmURL,
       roomId,
+      code: writeTextScript('empty.gts', ''),
     });
 
     await waitUntil(async () => {
@@ -315,27 +309,23 @@ ${REPLACE_MARKER}`;
       toolContext: CommandContext;
     };
     let environmentService = getService('environment-service') as any;
-    let cardService = getService('card-service');
-    let patchCodeCommand = new PatchCodeTool(toolService.toolContext);
+    let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
     let command = new CheckCorrectnessTool(toolService.toolContext);
     let roomId = '!room:example.com';
-    let fileUrl = `${testRealmURL}pet.gts`;
+    let fileUrl = `${testRealmURL}notes.txt`;
 
     let originalMaxSize = environmentService.fileSizeLimitBytes;
     environmentService.fileSizeLimitBytes = 20;
 
     try {
-      let { content } = await cardService.getSource(new URL(fileUrl));
-      const codeBlock = `${SEARCH_MARKER}
-${content}
-${SEPARATOR_MARKER}
-${'x'.repeat(21)}
-${REPLACE_MARKER}`;
-      await patchCodeCommand.execute({
-        fileIdentifier: fileUrl,
-        codeBlocks: [codeBlock],
-        roomId,
-      });
+      await assert.rejects(
+        runRealmCodeCommand.execute({
+          realm: testRealmURL,
+          roomId,
+          code: writeTextScript('notes.txt', 'x'.repeat(21)),
+        }),
+        'the oversized write is refused',
+      );
 
       let result = await command.execute({
         targetType: 'file',

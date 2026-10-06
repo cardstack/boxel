@@ -32,6 +32,10 @@ import {
   proxyAsset,
 } from './middleware/index.ts';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
+import {
+  clientAddress,
+  clientAddressSettingsFromEnv,
+} from './middleware/client-address.ts';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
@@ -715,6 +719,7 @@ export class RealmServer {
   private searchCache: JobScopedSearchCache;
   private liveSearchCache: LiveSearchCache | undefined;
   private linkShapePolicy: LinkShapePolicy | undefined;
+  private clientAddress: ReturnType<typeof clientAddressSettingsFromEnv>;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -744,6 +749,7 @@ export class RealmServer {
     searchCache,
     liveSearchCache,
     linkShapePolicy,
+    clientAddress: clientAddressSettings,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -790,6 +796,9 @@ export class RealmServer {
     // the search fan-out builds its own opts rather than reading them off a
     // realm, and the policy's levels are held per realm.
     linkShapePolicy?: LinkShapePolicy;
+    // How the caller's address is worked out from each request. Unset, read
+    // from the environment (see `clientAddressSettingsFromEnv`).
+    clientAddress?: ReturnType<typeof clientAddressSettingsFromEnv>;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -842,6 +851,8 @@ export class RealmServer {
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
     this.liveSearchCache = liveSearchCache;
     this.linkShapePolicy = linkShapePolicy;
+    this.clientAddress =
+      clientAddressSettings ?? clientAddressSettingsFromEnv(process.env);
   }
 
   get app() {
@@ -874,6 +885,9 @@ export class RealmServer {
     });
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
+      // First, so nothing downstream reads a client-supplied copy of the
+      // headers it sets.
+      .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(ecsMetadata)
       .use(

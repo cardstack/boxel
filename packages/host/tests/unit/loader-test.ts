@@ -59,8 +59,6 @@ module('Unit | loader', function (hooks) {
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    loader = getService('loader-service').loader;
-
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
@@ -180,6 +178,9 @@ module('Unit | loader', function (hooks) {
         },
       }),
     );
+    // Realm setup can replace the service's loader and dispose the old one, so
+    // read it only once setup is done.
+    loader = getService('loader-service').loader;
   });
 
   setupCardLogs(

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Choreo Tests</title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <div id="qunit"></div>
+    <div id="qunit-fixture">
+      <div id="ember-testing-container">
+        <div id="ember-testing"></div>
+      </div>
+    </div>
+
+    <!-- @ember/test-helpers 4.x reads the optional features from this
+         global, which a classic app's build defines from its config. -->
+    <script>
+      window.EmberENV = {
+        _APPLICATION_TEMPLATE_WRAPPER: false,
+        _TEMPLATE_ONLY_GLIMMER_COMPONENTS: true,
+      };
+    </script>
+    <script src="/testem.js" integrity="" data-embroider-ignore></script>
+    <script type="module">
+      import 'ember-testing';
+    </script>
+
+    <script type="module">
+      import { start } from './test-helper.ts';
+      import.meta.glob('./**/*.{js,ts,gjs,gts}', { eager: true });
+      start();
+    </script>
+  </body>
+</html>

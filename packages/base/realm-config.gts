@@ -85,6 +85,7 @@ import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
+import { isLiveRender } from './render-context';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -408,6 +409,34 @@ export class RoutingRuleField extends FieldDef {
 
   static atom = RoutingRuleAtom;
   static edit = RoutingRuleEdit;
+}
+
+class AnonymousRateLimitAtom extends Component<typeof AnonymousRateLimitField> {
+  <template>
+    {{#if @model.requests}}
+      {{@model.requests}}
+      per
+      {{@model.windowSeconds}}s
+    {{/if}}
+  </template>
+}
+
+// How many invocations a caller who is not signed in may make against the
+// realm per window, counted per caller address.
+export class AnonymousRateLimitField extends FieldDef {
+  static displayName = 'Anonymous Rate Limit';
+
+  @field requests = contains(NumberField, {
+    description:
+      'Invocations a caller who is not signed in may make against this realm in one window, counted per caller address',
+  });
+
+  @field windowSeconds = contains(NumberField, {
+    description: 'The length of the window, in seconds',
+  });
+
+  static atom = AnonymousRateLimitAtom;
+  static embedded = AnonymousRateLimitAtom;
 }
 
 // The JSON spelling of one setting's value, which is what the table shows and
@@ -875,13 +904,6 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
-// A render for the indexer rather than for someone looking at the card. Base
-// cards read this global to tell the two apart.
-function isLiveRender(): boolean {
-  return !(globalThis as { __boxelRenderContext?: unknown })
-    .__boxelRenderContext;
-}
-
 // A pointer written as an absolute http(s) URL, as the realm resolves one.
 function httpURL(pointer: string): string | undefined {
   try {
@@ -925,9 +947,6 @@ interface StandingAnswer {
 // policy card, or to a type its rules name, lands.
 class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   @tracked private answer: StandingAnswer | undefined;
-  // Read once, as the card renders: a render for the indexer asks nothing,
-  // however long the card stays up afterwards.
-  #live = isLiveRender();
   #subscriptions = new Map<string, () => void>();
 
   constructor(owner: Owner, args: PolicyStandingSignature['Args']) {
@@ -1022,8 +1041,11 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     return [...realms];
   }
 
-  private ask = modifier((_element, [realm]: [string | undefined]) => {
-    if (realm && this.#live) {
+  // Asked, and subscribed below, only from a live render. Whether this is one
+  // is read from where the element sits, since the host can be rendering a
+  // card for its own index in the same tab at the same moment.
+  private ask = modifier((element, [realm]: [string | undefined]) => {
+    if (realm && isLiveRender(element)) {
       this.load.perform();
     }
   });
@@ -1031,8 +1053,8 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   // Subscribes to each realm the answer depends on, and unsubscribes from
   // each one it no longer does. Every answer runs this again, and one that
   // names the realms already watched changes nothing.
-  private listen = modifier((_element, [watched]: [string[]]) => {
-    if (!this.#live) {
+  private listen = modifier((element, [watched]: [string[]]) => {
+    if (!isLiveRender(element)) {
       return;
     }
     let wanted = new Set(watched);
@@ -1248,10 +1270,9 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions | undefined;
   @tracked private settled: string | undefined;
-  #live = isLiveRender();
 
   private get readable(): boolean | undefined {
-    if (this.args.busy || !this.settled || !this.#live) {
+    if (this.args.busy || !this.settled) {
       return undefined;
     }
     return this.args.context?.canInvoke?.('read', this.settled);
@@ -1294,8 +1315,10 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
     return this.failed ? 'failed' : undefined;
   }
 
-  private follow = modifier((_element, [pointer]: [string]) => {
-    if (this.#live) {
+  // Only a live render settles a pointer, so a render for the indexer never
+  // reads or loads the card.
+  private follow = modifier((element, [pointer]: [string]) => {
+    if (isLiveRender(element)) {
       this.settle.perform(pointer);
     }
   });
@@ -1948,6 +1971,26 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         {{/if}}
         <PolicyStanding @config={{this.config}} />
       </section>
+
+      <section class='section' data-test-realm-config-anonymous>
+        <h2 class='section-title'>Callers who aren't signed in</h2>
+        <p class='anonymous-limit' data-test-realm-config-anonymous-limit>
+          {{#if @model.anonymousRateLimit.requests}}
+            Limited to
+            <@fields.anonymousRateLimit @format='atom' />
+            per address.
+          {{else}}
+            Limited by the platform's default rate.
+          {{/if}}
+        </p>
+        {{#if @model.anonymousBlocklist.length}}
+          <ul class='rules' data-test-realm-config-anonymous-blocklist>
+            {{#each @model.anonymousBlocklist as |entry|}}
+              <li class='rule'>{{entry}}</li>
+            {{/each}}
+          </ul>
+        {{/if}}
+      </section>
     </article>
     <style scoped>
       .realm-config-isolated {
@@ -1986,6 +2029,9 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       }
       .empty {
         color: var(--boxel-450);
+      }
+      .anonymous-limit {
+        margin: 0 0 var(--boxel-sp-xs);
       }
       .policy {
         display: grid;
@@ -2056,6 +2102,21 @@ export class RealmConfig extends CardDef {
   @field policy = contains(StringField, {
     description:
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
+  });
+
+  // How hard callers this realm's policy admits without a session may use it,
+  // and which of them it keeps out. They live here, on the realm, rather than
+  // on the policy, because the policy can live in another realm, and the
+  // writers of that card must not decide how this realm is protected. Writing
+  // this card takes the realm's own write permission, which no policy grants.
+  @field anonymousRateLimit = contains(AnonymousRateLimitField, {
+    description:
+      "Overrides the platform's rate limit for callers this realm's policy admits without signing in. Counted per caller address, for this realm alone. Absent, the platform's limit applies",
+  });
+
+  @field anonymousBlocklist = containsMany(StringField, {
+    description:
+      "IP addresses and CIDR ranges (192.0.2.7, 198.51.100.0/24, 2001:db8::/32) this realm refuses to admit without signing in, whatever its policy grants. An entry that is neither closes the realm to every caller who isn't signed in until it is fixed",
   });
 
   // What the policy this realm names compiles to, as the realm compiles it:
