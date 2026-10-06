@@ -68,7 +68,7 @@ import {
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
-  findFallbackModel,
+  DEFAULT_FALLBACK_MODELS,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT,
@@ -2854,7 +2854,7 @@ export default class MatrixService extends Service {
   //
   //   1. caller overrides (preserves explicit false / explicit values)
   //   2. SystemCard.modelConfigurations match by modelId
-  //   3. curated or retired fallback row match by modelId (findFallbackModel)
+  //   3. DEFAULT_FALLBACK_MODELS match by modelId
   //   4. most-recent valid prior app.boxel.active-llm event in this room
   //      for the same model (skips CS-11249-era broken events)
   //   5. conservative floor: tools off, modalities text-only
@@ -2903,7 +2903,7 @@ export default class MatrixService extends Service {
       }
     }
 
-    let fb = findFallbackModel(model);
+    let fb = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
     if (fb) {
       if (toolsSupported === undefined) {
         toolsSupported = fb.toolsSupported;

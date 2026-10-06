@@ -227,52 +227,6 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
   },
 ] as const;
 
-// Models no longer offered in the picker. Older rooms whose
-// app.boxel.active-llm event names one of these, and predates the capability
-// fields, still need its capabilities, so lookups go through
-// `findFallbackModel` rather than `DEFAULT_FALLBACK_MODELS` alone.
-export const RETIRED_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
-  {
-    modelId: 'anthropic/claude-opus-4.7',
-    displayName: 'Anthropic: Claude Opus 4.7',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file'],
-  },
-  {
-    modelId: 'google/gemini-3-flash-preview',
-    displayName: 'Google: Gemini 3 Flash Preview',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file', 'audio', 'video'],
-  },
-  {
-    modelId: 'google/gemini-3.1-pro-preview',
-    displayName: 'Google: Gemini 3.1 Pro Preview',
-    toolsSupported: true,
-    inputModalities: ['audio', 'file', 'image', 'text', 'video'],
-  },
-  {
-    modelId: 'openai/gpt-5.4',
-    displayName: 'OpenAI: GPT-5.4',
-    toolsSupported: true,
-    inputModalities: ['text', 'image', 'file'],
-  },
-  {
-    modelId: 'openai/gpt-5.5',
-    displayName: 'OpenAI: GPT-5.5',
-    toolsSupported: true,
-    inputModalities: ['file', 'image', 'text'],
-  },
-] as const;
-
-export function findFallbackModel(
-  modelId: string,
-): FallbackModelConfig | undefined {
-  return (
-    DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === modelId) ??
-    RETIRED_FALLBACK_MODELS.find((m) => m.modelId === modelId)
-  );
-}
-
 export const DEFAULT_FALLBACK_MODEL_ID = 'openai/gpt-6-luna';
 
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';

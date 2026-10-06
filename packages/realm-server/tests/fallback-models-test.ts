@@ -18,10 +18,6 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(fallbackModelsTests, assert, {});
     });
 
-    test('findFallbackModel resolves curated and retired rows', async function (assert) {
-      await runSharedTest(fallbackModelsTests, assert, {});
-    });
-
     test('every row has valid typed fields', async function (assert) {
       await runSharedTest(fallbackModelsTests, assert, {});
     });

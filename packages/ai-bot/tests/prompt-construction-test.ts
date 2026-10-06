@@ -18,7 +18,6 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
-  RETIRED_FALLBACK_MODELS,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -8211,24 +8210,6 @@ module('fill missing capability fields from fallback constant', (hooks) => {
       toolsSupported,
       true,
       'toolsSupported filled from DEFAULT_FALLBACK_MODELS row',
-    );
-  });
-
-  test('older room: retired model with no capability fields → caps filled from retired row', async () => {
-    const retiredRow = RETIRED_FALLBACK_MODELS[0];
-    const eventList = buildEventList({ model: retiredRow.modelId });
-
-    const { model, toolsSupported } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-
-    assert.strictEqual(model, retiredRow.modelId, 'event model passes through');
-    assert.strictEqual(
-      toolsSupported,
-      retiredRow.toolsSupported,
-      'toolsSupported filled from RETIRED_FALLBACK_MODELS row',
     );
   });
 

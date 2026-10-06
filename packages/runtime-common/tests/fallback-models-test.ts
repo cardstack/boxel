@@ -1,8 +1,6 @@
 import {
   DEFAULT_FALLBACK_MODEL_ID,
   DEFAULT_FALLBACK_MODELS,
-  RETIRED_FALLBACK_MODELS,
-  findFallbackModel,
   type FallbackModelConfig,
 } from '../matrix-constants.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -16,9 +14,7 @@ const tests: SharedTests<unknown> = Object.freeze({
   },
 
   'has no duplicate modelId': async (assert) => {
-    let ids = [...DEFAULT_FALLBACK_MODELS, ...RETIRED_FALLBACK_MODELS].map(
-      (m) => m.modelId,
-    );
+    let ids = DEFAULT_FALLBACK_MODELS.map((m) => m.modelId);
     let unique = new Set(ids);
     assert.strictEqual(
       unique.size,
@@ -37,23 +33,8 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
-  'findFallbackModel resolves curated and retired rows': async (assert) => {
-    for (let row of [...DEFAULT_FALLBACK_MODELS, ...RETIRED_FALLBACK_MODELS]) {
-      assert.strictEqual(
-        findFallbackModel(row.modelId),
-        row,
-        `${row.modelId}: findFallbackModel did not return its row`,
-      );
-    }
-    assert.strictEqual(
-      findFallbackModel('not/a-model'),
-      undefined,
-      'unknown model id resolves to undefined',
-    );
-  },
-
   'every row has valid typed fields': async (assert) => {
-    for (let row of [...DEFAULT_FALLBACK_MODELS, ...RETIRED_FALLBACK_MODELS]) {
+    for (let row of DEFAULT_FALLBACK_MODELS) {
       let label = row.modelId || '<no modelId>';
       assert.strictEqual(
         typeof row.modelId,
@@ -97,7 +78,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       'toolsSupported',
       'inputModalities',
     ]);
-    for (let row of [...DEFAULT_FALLBACK_MODELS, ...RETIRED_FALLBACK_MODELS]) {
+    for (let row of DEFAULT_FALLBACK_MODELS) {
       let extras = Object.keys(row).filter((k) => !allowed.has(k));
       assert.deepEqual(
         extras,

@@ -57,7 +57,7 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
-  findFallbackModel,
+  DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
 } from '../matrix-constants.ts';
 import {
@@ -2760,15 +2760,15 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   ) as ActiveLLMEvent | undefined;
 
   // Older rooms have APP_BOXEL_ACTIVE_LLM events without `toolsSupported`
-  // / `inputModalities`. Fill them from the curated or retired fallback rows
-  // keyed by model id when missing (strict `undefined` check, so an explicit
+  // / `inputModalities`. Fill them from DEFAULT_FALLBACK_MODELS keyed by
+  // model id when missing (strict `undefined` check, so an explicit
   // `false` is respected). Non-curated models are not in the constant
   // and stay undefined. `reasoningEffort` is a user choice, never
   // auto-filled.
   let model = activeLLMEvent?.content.model ?? DEFAULT_FALLBACK_MODEL_ID;
   let eventToolsSupported = activeLLMEvent?.content.toolsSupported;
   let eventInputModalities = activeLLMEvent?.content.inputModalities;
-  let fallback = findFallbackModel(model);
+  let fallback = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
 
   return {
     model,

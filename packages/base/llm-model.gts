@@ -2,10 +2,7 @@ import { Component } from './card-api';
 import StringField from './string';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
-import {
-  DEFAULT_FALLBACK_MODELS,
-  findFallbackModel,
-} from '@cardstack/runtime-common';
+import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common';
 
 const LLM_MODEL_OPTIONS = DEFAULT_FALLBACK_MODELS.map((m) => ({
   value: m.modelId,
@@ -56,7 +53,7 @@ export default class LLMModelField extends StringField {
       if (value == null || value === '') {
         return '';
       }
-      let match = findFallbackModel(value);
+      let match = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === value);
       // Escape so label metacharacters don't leak into the document.
       return markdownEscape(match?.displayName ?? value);
     }

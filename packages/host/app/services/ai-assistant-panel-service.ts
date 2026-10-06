@@ -15,7 +15,7 @@ import {
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_FALLBACK_MODEL_ID,
-  findFallbackModel,
+  DEFAULT_FALLBACK_MODELS,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -490,7 +490,7 @@ export default class AiAssistantPanelService extends Service {
       systemCard?.defaultModelConfiguration ??
       systemCard?.modelConfigurations?.[0];
     let model = configuration?.modelId ?? DEFAULT_FALLBACK_MODEL_ID;
-    let fallback = findFallbackModel(model);
+    let fallback = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
 
     let roomPromise = this.matrixService.createRoom({
       preset: this.matrixService.privateChatPreset,

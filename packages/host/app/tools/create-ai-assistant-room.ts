@@ -7,7 +7,7 @@ import {
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_FALLBACK_MODEL_ID,
-  findFallbackModel,
+  DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { isSkillCard } from '../lib/file-def-manager';
@@ -46,7 +46,7 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
   private getDefaultLLMDetails() {
     let configuration = this.getDefaultModelConfiguration();
     let model = configuration?.modelId ?? DEFAULT_FALLBACK_MODEL_ID;
-    let fallback = findFallbackModel(model);
+    let fallback = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
     return {
       model,
       toolsSupported:
