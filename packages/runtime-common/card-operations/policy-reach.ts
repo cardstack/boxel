@@ -451,7 +451,8 @@ function ungrantedClause(
 
 // The other way out: granting the reached type on purpose. Not offered for
 // authorization infrastructure, which no rule grants, nor for a type every
-// card descends from, since granting it would grant every card.
+// card descends from, since granting it would grant every card, or for
+// `BaseDef` nothing at all.
 function deliberately(
   to: string,
   kind: UngrantedKind,
