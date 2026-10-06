@@ -23,7 +23,7 @@
       "source": {
         "source": "url",
         "url": "https://github.com/cardstack/boxel-skills.git",
-        "ref": "v0.1.7"
+        "ref": "v0.1.9"
       },
       "description": "Official Boxel card-building skills, from cardstack/boxel-skills. Install alongside boxel-cli.",
       "policy": {

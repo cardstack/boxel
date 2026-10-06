@@ -78,6 +78,9 @@ export class Message implements RoomMessageInterface {
   transactionId?: string | null;
   @tracked private _errorMessage?: string;
   clientGeneratedId?: string;
+  // The chat composer sent this message: the user typed it (see
+  // BoxelContext.typedByUser).
+  typedByUser?: boolean;
   isDebugMessage?: boolean;
   reloadBillingData?: boolean;
   isCodePatchCorrectness?: boolean;

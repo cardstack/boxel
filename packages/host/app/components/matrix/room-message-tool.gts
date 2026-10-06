@@ -51,6 +51,8 @@ interface Signature {
     messageTool: MessageTool;
     roomId: string;
     runCommand: () => void;
+    // Declines a call ai-bot holds for the user's approval.
+    declineCommand?: () => void;
     isError?: boolean;
     isPending?: boolean;
     isCompact?: boolean;
@@ -267,11 +269,21 @@ export default class RoomMessageTool extends Component<Signature> {
     return this.args.messageTool.status === 'failed' && !this.failedToolState;
   }
 
+  // "Try Anyway" re-runs a host tool; a call ai-bot runs has nothing on the
+  // host to retry, so its failure reason shows without the action.
   private get invalidToolCallState() {
     return (
       this.args.messageTool.status === 'invalid' &&
-      !!this.args.messageTool.failureReason
+      !!this.args.messageTool.failureReason &&
+      !this.args.messageTool.isBotExecuted
     );
+  }
+
+  // Why the assistant wants a call held for approval, in its own words: a
+  // bot tool that asks for approval takes a `reason` argument.
+  private get approvalReason() {
+    let reason = this.args.messageTool.toolRequest.arguments?.reason;
+    return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
   private get commandDescription() {
@@ -339,6 +351,8 @@ export default class RoomMessageTool extends Component<Signature> {
           <codeBlock.commandHeader
             @commandDescription={{@messageTool.description}}
             @action={{@runCommand}}
+            @secondaryAction={{if @messageTool.awaitsApproval @declineCommand}}
+            @secondaryActionVerb='Decline'
             @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
             @toolCallState={{this.applyButtonState}}
@@ -350,6 +364,17 @@ export default class RoomMessageTool extends Component<Signature> {
             <codeBlock.editor />
           {{/if}}
         </CodeBlock>
+        {{#if @messageTool.awaitsApproval}}
+          <p class='approval-note' data-test-tool-call-approval>
+            {{#if this.approvalReason}}
+              The assistant asks for your approval and says: “{{this.approvalReason}}”
+              Approve if that's OK with you.
+            {{else}}
+              The assistant asks for your approval to do this. Approve if that's
+              OK with you.
+            {{/if}}
+          </p>
+        {{/if}}
         {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
             <Alert.Messages @messages={{array this.failedToolState.message}} />
@@ -404,6 +429,12 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-result-card-preview {
         margin-top: var(--boxel-sp);
+      }
+      .approval-note {
+        margin: 0;
+        padding: 0 var(--boxel-sp-xxs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-450);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);

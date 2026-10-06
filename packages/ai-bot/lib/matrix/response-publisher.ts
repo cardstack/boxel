@@ -2,10 +2,10 @@ import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/cha
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
-  READ_REALM_FILE_TOOL_NAME,
-  readFilesLabel,
-  urlsFromReadRealmFileArguments,
-} from '../read-realm-file.ts';
+  botToolNamed,
+  hasRecoverableBotToolCall,
+  type BotToolTurn,
+} from '../bot-tools/index.ts';
 import {
   maxOutputTokensDuringFileReadErrorMessage,
   maxOutputTokensErrorMessage,
@@ -35,7 +35,13 @@ let log = logger('ai-bot');
 // JSON is complete on every channel, so nothing can run a half-written call.
 export function toCommandRequest(
   toolCall: ChatCompletionMessageFunctionToolCall,
-  opts?: { argumentsText?: boolean; finished?: boolean },
+  opts?: {
+    argumentsText?: boolean;
+    finished?: boolean;
+    // This turn's state for each offered bot tool, which decides whether a
+    // call waits for the user's approval.
+    botToolTurns?: ReadonlyMap<string, BotToolTurn>;
+  },
 ): Partial<ToolRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<ToolRequest>;
@@ -77,34 +83,22 @@ export function toCommandRequest(
       }
     }
   }
-  // readRealmFile is a tool ai-bot fulfills itself: tag it so the host records
-  // it in the timeline but never runs it, and give it a human label the
-  // timeline indicator can show ("Read files: <names>") since the raw
-  // arguments carry no description of their own.
-  if (result.name === READ_REALM_FILE_TOOL_NAME) {
+  // A tool ai-bot runs itself is tagged so the host records it in the
+  // timeline but never runs it, labeled by the tool, and marked when it waits
+  // for the user's approval.
+  let botTool = botToolNamed(result.name);
+  if (botTool) {
+    let argumentsJson = f.arguments ?? '';
     result.executedBy = AI_BOT_EXECUTOR;
     result.arguments = {
       ...(result.arguments ?? {}),
-      description: readFilesLabel(
-        f.arguments ? urlsFromReadRealmFileArguments(f.arguments) : undefined,
-      ),
+      description: botTool.label(argumentsJson),
     };
+    if (opts?.botToolTurns?.get(botTool.name)?.needsApproval(argumentsJson)) {
+      result.approvalRequired = true;
+    }
   }
   return result;
-}
-
-// True when the turn's tool calls include a readRealmFile call that names at
-// least one complete url — the call fulfillment will read, even if the
-// arguments were cut off before the list closed.
-function hasRecoverableReadRealmFileCall(
-  toolCalls: ReturnType<ResponseState['snapshot']>['toolCalls'],
-): boolean {
-  return toolCalls.some(
-    (toolCall) =>
-      toolCall?.function?.name === READ_REALM_FILE_TOOL_NAME &&
-      urlsFromReadRealmFileArguments(toolCall.function.arguments ?? '').length >
-        0,
-  );
 }
 
 export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
@@ -147,6 +141,10 @@ export default class MatrixResponsePublisher {
   get initialMessageSent() {
     return !!this.originalResponseEventId;
   }
+
+  // This turn's state for each offered bot tool; set before generation
+  // starts.
+  botToolTurns: ReadonlyMap<string, BotToolTurn> | undefined;
 
   constructor(
     client: MatrixClient,
@@ -255,7 +253,7 @@ export default class MatrixResponsePublisher {
         !responseStateSnapshot.isCanceled &&
         responseStateSnapshot.finishReason === 'length'
       ) {
-        extraData.errorMessage = hasRecoverableReadRealmFileCall(
+        extraData.errorMessage = hasRecoverableBotToolCall(
           responseStateSnapshot.toolCalls,
         )
           ? maxOutputTokensDuringFileReadErrorMessage
@@ -280,7 +278,10 @@ export default class MatrixResponsePublisher {
           .map((toolCall) =>
             toCommandRequest(
               toolCall as ChatCompletionMessageFunctionToolCall,
-              { finished: responseStateSnapshot.isStreamingFinished },
+              {
+                finished: responseStateSnapshot.isStreamingFinished,
+                botToolTurns: this.botToolTurns,
+              },
             ),
           ),
         contentAndReasoning.reasoning,

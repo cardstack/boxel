@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Room 204",
+      "gradeLevel": "Grade 3",
+      "teacherIds": ["@alice:school.example"],
+      "leadTeacherIds": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/classroom",
+        "name": "Classroom"
+      }
+    },
+    "relationships": {
+      "teachers.0": {
+        "links": {
+          "self": "../../school-org/StaffMember/alice"
+        }
+      }
+    }
+  }
+}

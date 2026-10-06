@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Carmen Liu",
+      "role": "Speech-language pathologist",
+      "matrixUserId": "@carmen:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/staff-member",
+        "name": "StaffMember"
+      }
+    }
+  }
+}

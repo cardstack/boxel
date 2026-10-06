@@ -80,8 +80,12 @@ import {
 // explain would tell them otherwise. So the caller asking must be able to read
 // both realms: the policy card's, which the gate checks, since no grant ever
 // reaches an explain, and the target's, which this checks. A caller missing
-// either is told what a target that does not exist is told, the same bytes
-// either way. So a caller refused because they may not read the target's
+// read on the target's realm is told what a target that does not exist is
+// told, the same bytes either way. A caller missing read on the policy card's
+// realm is refused by that realm before the explain runs, with the answer it
+// gives any refused request: a missing target where it names a policy of its
+// own, its permissions' 403 where it doesn't, and the same bytes whatever the
+// question names. So a caller refused because they may not read the target's
 // realm cannot ask why, since the answer would say what the refusal did not.
 // A caller who reads both realms can ask about any actor, themselves
 // included. The caller is judged in the target's realm by a session that
