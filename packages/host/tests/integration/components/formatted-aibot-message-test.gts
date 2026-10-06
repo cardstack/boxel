@@ -219,7 +219,6 @@ ${REPLACE_MARKER}
 
     assert.dom('.cdr.line-delete').exists({ count: 2 });
     assert.dom('.cdr.line-insert').exists({ count: 1 });
-    assert.dom('[data-test-apply-code-button]').exists();
   });
 
   test('it will render one diff editor and one standard code block if one search replace block is complete and another is not', async function (assert) {
@@ -267,9 +266,6 @@ let c = 3;
     assert
       .dom('[data-test-code-block-index="0"] [data-test-added-lines]')
       .hasText('+1');
-    assert
-      .dom('[data-test-code-block-index="0"] [data-test-apply-code-button]')
-      .exists();
 
     // The second is a standard code block
     assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
@@ -445,9 +441,6 @@ ${REPLACE_MARKER}
       'unchanged inputs do not send the realm another request',
     );
     assert.dom('.code-block-diff').exists('the diff survives re-rendering');
-    assert
-      .dom('[data-test-apply-code-button]')
-      .exists('the apply button survives re-rendering');
     assert
       .dom('[data-test-code-patch-loading]')
       .doesNotExist('the block is not left in a loading state');
@@ -698,9 +691,6 @@ ${REPLACE_MARKER}
         'the abandoned load does not report its failure over the newer patch',
       );
     assert.dom('.code-block-diff').exists('the newer diff is still on screen');
-    assert
-      .dom('[data-test-apply-code-button]')
-      .exists('and is still the one on offer');
   });
 
   test('a patch whose diff has not arrived says so instead of rendering nothing', async function (assert) {

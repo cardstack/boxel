@@ -2116,13 +2116,6 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  @cached
-  private get readyCodePatches() {
-    let lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || !lastMessage.htmlParts) return [];
-    return this.toolService.getReadyCodePatches(lastMessage.htmlParts);
-  }
-
   private get generatingResults() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage) {
@@ -2154,7 +2147,6 @@ export default class Room extends Component<Signature> {
       this.showUnreadIndicator ||
       this.generatingResults ||
       this.readyTools.length > 0 ||
-      this.readyCodePatches.length > 0 ||
       this.isAcceptingAll
     );
   }
@@ -2167,18 +2159,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  private async executeReadyCodePatches() {
-    let lastMessage = this.messages[this.messages.length - 1];
-    if (!lastMessage || !lastMessage.htmlParts) return;
-
-    await this.toolService.executeReadyCodePatches(
-      this.args.roomId,
-      lastMessage.htmlParts,
-    );
-  }
-
   private executeAllReadyActionsTask = task(async () => {
-    await this.executeReadyCodePatches();
     await this.executeReadyCommands();
   });
 
