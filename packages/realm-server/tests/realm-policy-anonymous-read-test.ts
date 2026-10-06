@@ -192,8 +192,8 @@ module(basename(import.meta.filename), function (hooks) {
                 anonymous: true,
                 where: '.status == "published"',
               },
-              // Opts a write in to such callers, which no route admits them
-              // to, so it never admits one.
+              // Opts a write in to such callers as an acting user the
+              // newsroom's config doesn't name, so it never admits one.
               {
                 operation: 'update',
                 anonymous: true,
@@ -552,9 +552,9 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let update = await explainAnonymous(NEWSROOM_POLICY, PUBLISHED, 'update');
     assert.strictEqual(
-      update.reason,
-      'actor-required',
-      'a write is answered as its route answers it, whatever the policy opens',
+      update.decision,
+      'denied',
+      'a write whose acting user the realm does not name admits nothing',
     );
   });
 
@@ -808,18 +808,21 @@ module(basename(import.meta.filename), function (hooks) {
             .send(JSON.stringify({ filter: { type: ARTICLE } })),
       ],
       [
-        'an operations batch',
+        'an operations batch that creates',
         () =>
           request
             .post(`${path}_operations`)
-            .set('X-HTTP-Method-Override', 'QUERY')
             .set('Accept', SupportedMimeType.BoxelOperations)
             .set('Content-Type', SupportedMimeType.BoxelOperations)
             .set('X-Forwarded-For', VISITOR)
             .send(
               JSON.stringify({
                 'boxel:operations': [
-                  { op: 'invoke', 'boxel:name': 'read', href: PUBLISHED },
+                  {
+                    op: 'invoke',
+                    'boxel:name': 'create',
+                    data: JSON.parse(document).data,
+                  },
                 ],
               }),
             ),

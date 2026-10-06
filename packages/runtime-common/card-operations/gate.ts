@@ -13,6 +13,7 @@ import { routesForField } from '../searchable-routes.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
+import type { ActingUserResolution } from './acting-users.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
 import type {
   GateTrace,
@@ -183,6 +184,11 @@ export interface OperationPolicyAccess {
     card: string,
     document: Record<string, unknown>,
   ): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }>;
+  // Who an acting-user key names in the realm's current `realm.json`
+  // `config`, and whether that user may write the realm (see
+  // `ActingUsers`). A realm without it admits no write by a caller who isn't
+  // signed in.
+  actingUser?(key: string): Promise<ActingUserResolution>;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and
@@ -213,7 +219,13 @@ export type GateSubject =
 // trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
-  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace' | 'advisory' | 'route'
+  | 'caller'
+  | 'coarseDeclined'
+  | 'peekInstance'
+  | 'trace'
+  | 'advisory'
+  | 'route'
+  | 'actingUsers'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -626,6 +638,12 @@ async function decide(
   // anyone at all through one would widen it past what its author wrote.
   if (scope.caller.kind === 'anonymous') {
     matched = matched.filter(({ grant }) => grant.anonymous);
+    // Such a caller's write is made as the user its grant names, so a grant
+    // whose acting user doesn't resolve to one who may write the realm admits
+    // nothing.
+    if (isWrite(base)) {
+      matched = await withActingUsers(scope, matched);
+    }
   }
   if (matched.length === 0) {
     return refuse('no-grant');
@@ -675,6 +693,7 @@ async function decide(
   let matchedOn: MatchedOn = { base, targetType: types[0] };
   let unconditional = matched.find(({ grant }) => !grant.where);
   if (unconditional) {
+    await admittedAs(scope, unconditional);
     return { kind: 'granted', grant: unconditional, matchedOn, ...lockCheck };
   }
   if (isWrite(base)) {
@@ -1198,6 +1217,36 @@ export async function dischargePendingDecision(
   }
   if (!('grant' in admission)) {
     throw gateRefusal(core, admission, pending.target, pending.name);
+  }
+  await admittedAs(scope, admission);
+}
+
+// The grants among `matched` whose acting user resolves to one who may write
+// the realm. A grant that opts a write in to callers who aren't signed in
+// always names a key (`anonymous-write-without-acting-user` otherwise), so one
+// that names none admits nothing here.
+async function withActingUsers(
+  scope: GateScope,
+  matched: MatchedGrant[],
+): Promise<MatchedGrant[]> {
+  let resolved = await Promise.all(
+    matched.map(async (candidate) => {
+      let key = candidate.grant.anonymous?.actingUserKey;
+      return key && 'user' in (await scope.actingUsers.resolve(key));
+    }),
+  );
+  return matched.filter((_candidate, index) => resolved[index]);
+}
+
+// Records the user a write by a caller who isn't signed in is made as, once
+// a grant has admitted it.
+async function admittedAs(
+  scope: GateScope,
+  { grant }: MatchedGrant,
+): Promise<void> {
+  let key = grant.anonymous?.actingUserKey;
+  if (scope.caller.kind === 'anonymous' && key) {
+    await scope.actingUsers.admittedThrough(key);
   }
 }
 

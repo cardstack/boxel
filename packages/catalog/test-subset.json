@@ -23,6 +23,7 @@
       "realm-policy-activation-test",
       "realm-policy-anonymous-read-test",
       "realm-policy-anonymous-search-test",
+      "realm-policy-anonymous-write-test",
       "realm-policy-archived-seal-test",
       "realm-policy-batch-test",
       "realm-policy-capabilities-test",

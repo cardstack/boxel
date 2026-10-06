@@ -384,7 +384,12 @@ import {
 import type {
   BatchCore,
   BatchEntryResult,
+  CommitBatchOptions,
 } from './card-operations/coordinator.ts';
+import {
+  ActingUsers,
+  type ActingUserResolution,
+} from './card-operations/acting-users.ts';
 import type { BatchEntry } from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
@@ -474,6 +479,7 @@ import {
   type MatrixClient,
   ensureFullMatrixUserId,
   getMatrixUsername,
+  isMatrixUserId,
 } from './matrix-client.ts';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler.ts';
 
@@ -2103,9 +2109,10 @@ export interface WriteOptions {
   // (post assume-user) that `checkPermission` records on the request context
   // as `authenticatedUser`. Tags the resulting incremental index job so read
   // endpoints can scope their read-your-writes drain to this user's own
-  // reads. Absent for system-originated writes and for credential-less
-  // writes, whose jobs no reader waits on (anonymous writes are unsupported;
-  // see `drainRequestersOwnIndexing`).
+  // reads. Absent for system-originated writes. A write by a caller who isn't
+  // signed in is initiated by the acting user it is made as (see
+  // `CommitBatchOptions.actingUser`), whose job no reader waits on: such a
+  // caller has no read-your-writes claim (see `drainRequestersOwnIndexing`).
   initiatingUser?: string | null;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
@@ -2297,9 +2304,10 @@ export type RequestContext = {
   // compares, for a caller the ACL already declined.
   authenticatedUser?: string;
   // Set by `checkPermission` when the request presented no Authorization
-  // header at all. Anonymous writes are unsupported (no realm grants `*`
-  // write in practice), so a provably credential-less caller has no
-  // read-your-writes claim and the read gate skips them outright — unlike a
+  // header at all. A provably credential-less caller has no read-your-writes
+  // claim, since a write a policy admits for one is made as an acting user it
+  // holds no session for (see `ActingUsers`), so the read gate skips them
+  // outright — unlike a
   // caller whose identity is merely unknown: a token that failed
   // verification, an assume-user indirection the public path cannot
   // validate, or a realm-internal dispatch that never ran `checkPermission`,
@@ -2312,6 +2320,9 @@ export type RequestContext = {
   // counted against the realm's anonymous rate limit once what it asked for
   // succeeds, and is told to authenticate wherever no grant admits it.
   anonymousCaller?: AnonymousCaller;
+  // Who such a caller's writes are made as (see `ActingUsers`), resolved once
+  // for the request however many of its operations ask.
+  actingUsers?: ActingUsers;
   // The user this request's session vouches for as themselves, not just as
   // an identity: a token `checkPermission` verified end to end, whose session
   // is not revoked, which is not delegated to one realm, and which stands for
@@ -2377,16 +2388,23 @@ interface RequestDispatch {
   // What the dispatch would run for a caller who isn't signed in, where a
   // grant could admit one: the operations, any one of which the realm's
   // policy has to open to such callers for it to admit them here (empty
-  // means any at all), and whether a successful answer counts against the
-  // realm's anonymous rate limit. A dispatch without it never admits a
-  // caller who isn't signed in.
+  // means any at all), and how it counts against the realm's anonymous rate
+  // limit. A dispatch without it never admits a caller who isn't signed in.
   anonymous?: AnonymousDispatch;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
 interface AnonymousDispatch {
   operations: readonly string[];
-  charged: boolean;
+  // - `once-served`: one unit once the request serves what it asked for
+  //   (see `AnonymousCaller.served`).
+  // - `by-handler`: the handler counts what the request costs, before it does
+  //   anything that cost would pay for: a capability check per pair, a write
+  //   per entry once the whole batch is admitted.
+  // - `never`: counts for nothing on its own.
+  // Every request counted at all is turned away at admission once its
+  // address has no budget left.
+  counted: 'once-served' | 'by-handler' | 'never';
 }
 
 // A request the realm's policy admitted though it authenticated nobody.
@@ -2400,7 +2418,10 @@ export interface AnonymousCaller {
   // The caller is one of the platform's own services: counted in telemetry,
   // never limited or blocked.
   infra: boolean;
-  charged: boolean;
+  counted: AnonymousDispatch['counted'];
+  // How long the caller is told to wait, where the request was refused
+  // because it couldn't be counted.
+  retryAfterSeconds?: number;
   // Set where the request serves what it asked for: a card's document or
   // headers, or a file's bytes. Only such a request is counted, so a redirect
   // or a refusal costs the caller nothing whatever its status.
@@ -2419,8 +2440,42 @@ export type AnonymousCount =
   | { kind: 'rate-limited'; retryAfterSeconds: number }
   | { kind: 'unavailable' };
 
+// What a realm with a policy tells a request that authenticated nobody, wherever
+// nothing admits it: to authenticate.
+const AUTHENTICATION_REQUIRED: OperationError = {
+  status: 401,
+  code: 'actor-required',
+  title: 'Authentication required',
+  detail: AuthenticationErrorMessages.MissingAuthHeader,
+};
+
 // How long a caller the realm couldn't count is told to wait.
 const COUNT_UNAVAILABLE_RETRY_SECONDS = 5;
+
+// The refusal a caller who isn't signed in gets where their request wasn't
+// counted: over the realm's limit, or the count couldn't be read. Nothing was
+// done either way, and `meta.retryAfterSeconds` says when to try again.
+function anonymousCountRefusal(
+  count: Exclude<AnonymousCount, { kind: 'counted' }>,
+): OperationError {
+  if (count.kind === 'rate-limited') {
+    let { retryAfterSeconds } = count;
+    return {
+      status: 429,
+      code: 'rate-limited',
+      title: 'Too many requests',
+      detail: `This address has made as many requests to this realm without signing in as it allows for now. Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`,
+      meta: { retryAfterSeconds },
+    };
+  }
+  return {
+    status: 503,
+    code: 'rate-limit-unavailable',
+    title: 'Service unavailable',
+    detail: `This realm couldn't count this request, so it wasn't carried out. Try again in ${COUNT_UNAVAILABLE_RETRY_SECONDS} seconds.`,
+    meta: { retryAfterSeconds: COUNT_UNAVAILABLE_RETRY_SECONDS },
+  };
+}
 
 // Releases a response that is answered in place of, so a file stream it holds
 // is closed rather than left open.
@@ -2432,25 +2487,25 @@ async function discardBody(response: ResponseWithNodeStream): Promise<void> {
 // The card+json read: what an anonymous grant on `read` opens.
 const ANONYMOUS_CARD_READ: AnonymousDispatch = {
   operations: ['read'],
-  charged: true,
+  counted: 'once-served',
 };
 // A search of the realm: what a `query` grant opens. It is counted once its
 // grants have scoped it, whatever rows it finds.
 const ANONYMOUS_SEARCH: AnonymousDispatch = {
   operations: ['query'],
-  charged: true,
+  counted: 'once-served',
 };
 // A data file's or a card's stored bytes: what a `readSource` grant opens.
 const ANONYMOUS_BYTES_READ: AnonymousDispatch = {
   operations: ['readSource'],
-  charged: true,
+  counted: 'once-served',
 };
 // A stylesheet goes with the markup that references it, so it is served to an
 // anonymous caller a policy would serve any card's markup to, and counts for
 // nothing on its own: the read or search that drew the markup was counted.
 const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
   operations: ['read', 'query'],
-  charged: false,
+  counted: 'never',
 };
 // A capability check asks what the caller could invoke and invokes nothing, so
 // it answers an anonymous caller in any realm whose policy opens anything to
@@ -2458,7 +2513,30 @@ const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
 // before any is checked (see `handleCapabilities`).
 const ANONYMOUS_CAPABILITY_CHECK: AnonymousDispatch = {
   operations: [],
-  charged: false,
+  counted: 'by-handler',
+};
+// A card+json write, made as the user the admitting grant names. Counted one
+// unit once the write is admitted and before it is made (see
+// `#anonymousCommit`).
+const ANONYMOUS_CARD_CREATE: AnonymousDispatch = {
+  operations: ['create'],
+  counted: 'by-handler',
+};
+const ANONYMOUS_CARD_UPDATE: AnonymousDispatch = {
+  operations: ['update'],
+  counted: 'by-handler',
+};
+const ANONYMOUS_CARD_DELETE: AnonymousDispatch = {
+  operations: ['delete'],
+  counted: 'by-handler',
+};
+// The operations envelope runs whatever its entries name, each judged by the
+// gate on its own, so it admits a caller wherever the policy opens anything to
+// one. A batch that writes is counted one unit per entry once every entry is
+// admitted, and one that only reads, one unit per entry before it runs.
+const ANONYMOUS_OPERATIONS: AnonymousDispatch = {
+  operations: [],
+  counted: 'by-handler',
 };
 
 // A route as `Realm.routeDescriptions` lists it: a router route, the hashed
@@ -2493,8 +2571,13 @@ interface CardWriteAdmission {
   entry: { admit?: (judged: AdmissionSubject | undefined) => Promise<void> };
   // How the write's batch is committed for this caller (see `#mintPosture`).
   // Every card+json write commits under it, so for a caller who may not read
-  // the realm, the realm mints the ids of any card the write creates.
-  batch: { mintIds?: true };
+  // the realm, the realm mints the ids of any card the write creates, and a
+  // caller who isn't signed in writes as its grant's acting user and is
+  // counted once the write is admitted (see `#anonymousCommit`).
+  batch: { mintIds?: true } & Pick<
+    CommitBatchOptions,
+    'actingUser' | 'beforeCommit'
+  >;
   // Refuses, by throwing, a document whose side-loads a write the gate
   // admitted would stage.
   assertSideLoads(included: readonly unknown[] | undefined): void;
@@ -3102,25 +3185,25 @@ export class Realm {
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
       )
       .query(
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
       )
       .post(
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
       )
       .query(
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
       )
       // What the policy gate would decide, asked ahead of the call, so a view
       // can hide a control its caller may not use rather than render every
@@ -3161,7 +3244,7 @@ export class Realm {
         '(/|/.+/)',
         SupportedMimeType.CardJson,
         this.createCard.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_CREATE },
       )
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this), {
         ...APPLIES_ARCHIVED_SEAL,
@@ -3194,13 +3277,13 @@ export class Realm {
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_UPDATE },
       )
       .delete(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_DELETE },
       )
       // The card+source write, its octet-stream spelling and the card+source
       // removal are answered on the realm ACL alone, as the card+source read
@@ -5997,6 +6080,7 @@ export class Realm {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
       route: ENVELOPE_ROUTE,
+      actingUsers: this.#actingUsersFor(requestContext),
     });
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
@@ -6181,6 +6265,19 @@ export class Realm {
       let writes = resolved.filter(({ definition }) =>
         isWrite(definition.base),
       );
+      // A caller who isn't signed in is counted one unit per entry, once every
+      // entry is admitted: a batch that writes, as its commit begins, and one
+      // that only reads, once its reads have run. A batch that doesn't fit is
+      // refused whole, with nothing written.
+      let anonymousCommit = this.#anonymousCommit(
+        request,
+        requestContext,
+        scope,
+        () => entries.length,
+      );
+      if (writes.length === 0) {
+        await anonymousCommit.beforeCommit?.();
+      }
       if (writes.length > 0) {
         // Each write in request order, as the coordinator stages it, keyed by
         // the position it was sent under (see `#stagedWrite`).
@@ -6226,6 +6323,7 @@ export class Realm {
             // for, and the only front door that produces it.
             reportAuthorship: true,
             ...this.#mintPosture(coarseDeclined),
+            ...anonymousCommit,
           },
         );
         // The coordinator answers in the flat order of the entries it staged,
@@ -6717,7 +6815,13 @@ export class Realm {
       return { coarseDeclined: readAllowed ? 'none' : 'all' };
     }
     let coarseDeclined: CoarseDeclined = readAllowed ? 'writes' : 'all';
-    if (await this.#policyJudges(write.refusal, requestContext)) {
+    // A caller the realm admitted without a session writes as the grant's
+    // acting user, so the gate judges their writes as it judges a reader's:
+    // what a grant opts in to them, made as a user who may write the realm.
+    if (
+      (await this.#policyJudges(write.refusal, requestContext)) ||
+      requestContext.anonymousCaller
+    ) {
       return { coarseDeclined };
     }
     return {
@@ -7031,6 +7135,7 @@ export class Realm {
               document,
               this.#policyCompileEnvironment(),
             ),
+          actingUser: (key) => this.#resolveActingUser(key),
         },
         targetRealm: (href) => this.#targetRealm(href),
         // Compiled as this realm's own policy cache compiles the card its
@@ -7303,9 +7408,48 @@ export class Realm {
     error: OperationError,
     requestContext: RequestContext,
   ): OperationError {
-    return this.#coarseDeclined(requestContext) === 'all'
-      ? refusalForNonReader(error)
-      : error;
+    if (this.#coarseDeclined(requestContext) !== 'all') {
+      return error;
+    }
+    let seen = refusalForNonReader(error);
+    // A caller who isn't signed in is told to authenticate wherever a caller
+    // who may not read the realm is told nothing is there, so the answer is
+    // the one every request that authenticated nobody gets.
+    return requestContext.anonymousCaller && seen.code === 'target-not-found'
+      ? AUTHENTICATION_REQUIRED
+      : seen;
+  }
+
+  // Who `key` names in this realm's current `realm.json` `config`, and
+  // whether that user may write the realm, as the realm's ACL says now.
+  async #resolveActingUser(key: string): Promise<ActingUserResolution> {
+    let config = await this.getRealmConfig();
+    let user = config?.[key];
+    if (typeof user !== 'string' || user === '') {
+      return { failure: 'key-missing' };
+    }
+    if (!isMatrixUserId(user)) {
+      return { failure: 'not-a-matrix-id' };
+    }
+    let checker = new RealmPermissionChecker(
+      await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
+      this.#matrixClient,
+    );
+    return (await checker.can(user, 'write'))
+      ? { user }
+      : { failure: 'no-write' };
+  }
+
+  // The acting users of a request a caller who isn't signed in sent, one set
+  // for the request, which every scope it builds shares.
+  #actingUsersFor(requestContext: RequestContext): ActingUsers | undefined {
+    if (!requestContext.anonymousCaller) {
+      return undefined;
+    }
+    requestContext.actingUsers ??= new ActingUsers((key) =>
+      this.#resolveActingUser(key),
+    );
+    return requestContext.actingUsers;
   }
 
   // Who an operation dispatched from an HTTP request is running for. The actor
@@ -8199,7 +8343,7 @@ export class Realm {
       clientIP: address ? formatIP(address) : null,
       rateLimitKey: address ? rateLimitKey(address) : undefined,
       infra: request.headers.get(CLIENT_CLASS_HEADER) === INFRA_CLIENT_CLASS,
-      charged: anonymous.charged,
+      counted: anonymous.counted,
     };
     if (!caller.infra) {
       let access = await this.getAnonymousAccess();
@@ -8218,7 +8362,7 @@ export class Realm {
         });
         return undefined;
       }
-      if (caller.charged) {
+      if (caller.counted !== 'never') {
         caller.turnedAway = await this.#checkAnonymousBudget(
           request,
           caller,
@@ -8345,13 +8489,26 @@ export class Realm {
     if (!caller || caller.turnedAway) {
       return response;
     }
+    // A refusal raised inside a handler, such as a batch that didn't fit,
+    // carries when to try again in its body; the header says the same.
+    if (
+      caller.retryAfterSeconds !== undefined &&
+      (response.status === 429 || response.status === 503)
+    ) {
+      response.headers.set('Retry-After', String(caller.retryAfterSeconds));
+      return response;
+    }
     if (!caller.served) {
       if (response.status === 401 || request.method === 'HEAD') {
-        this.#recordAnonymous(request, caller, { outcome: 'refused' });
+        let failures = requestContext.actingUsers?.failures ?? [];
+        this.#recordAnonymous(request, caller, {
+          outcome: 'refused',
+          ...(failures.length > 0 ? { actingUserFailures: [...failures] } : {}),
+        });
       }
       return response;
     }
-    if (!caller.charged) {
+    if (caller.counted !== 'once-served') {
       return response;
     }
     let answer = await this.#countAnonymous(request, requestContext, 1);
@@ -8398,9 +8555,10 @@ export class Realm {
     request: Request,
     caller: AnonymousCaller,
     cost: number,
+    detail: Pick<AnonymousRequestEvent, 'actingUsers'> = {},
   ): Promise<AnonymousCount> {
     if (caller.infra) {
-      this.#recordAnonymous(request, caller, { outcome: 'infra' });
+      this.#recordAnonymous(request, caller, { outcome: 'infra', ...detail });
       return { kind: 'counted' };
     }
     let { limit, limitFrom } = await this.getAnonymousAccess();
@@ -8424,6 +8582,7 @@ export class Realm {
         limit: recordedLimit,
         count: outcome.count,
         ...costDetail,
+        ...detail,
       });
       return { kind: 'counted' };
     }
@@ -8445,28 +8604,10 @@ export class Realm {
     requestContext: RequestContext,
     retryAfterSeconds: number,
   ): ResponseWithNodeStream {
-    return createResponse({
-      body: JSON.stringify(
-        errorsDocument({
-          status: 429,
-          code: 'rate-limited',
-          title: 'Too many requests',
-          detail: `This address has made as many requests to this realm without signing in as it allows for now. Try again in ${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}.`,
-          meta: { retryAfterSeconds },
-        }),
-        null,
-        2,
-      ),
-      init: {
-        status: 429,
-        headers: {
-          'content-type': SupportedMimeType.JSONAPI,
-          'Retry-After': String(retryAfterSeconds),
-          'X-Boxel-Realm-Url': requestContext.realm.url,
-        },
-      },
+    return this.#countRefusalResponse(
       requestContext,
-    });
+      anonymousCountRefusal({ kind: 'rate-limited', retryAfterSeconds }),
+    );
   }
 
   // The answer to a request from a caller who isn't signed in that the realm
@@ -8474,28 +8615,58 @@ export class Realm {
   #countUnavailableResponse(
     requestContext: RequestContext,
   ): ResponseWithNodeStream {
+    return this.#countRefusalResponse(
+      requestContext,
+      anonymousCountRefusal({ kind: 'unavailable' }),
+    );
+  }
+
+  #countRefusalResponse(
+    requestContext: RequestContext,
+    error: OperationError,
+  ): ResponseWithNodeStream {
     return createResponse({
-      body: JSON.stringify(
-        errorsDocument({
-          status: 503,
-          code: 'rate-limit-unavailable',
-          title: 'Service unavailable',
-          detail: `This realm couldn't count this request, so it wasn't carried out. Try again in ${COUNT_UNAVAILABLE_RETRY_SECONDS} seconds.`,
-          meta: { retryAfterSeconds: COUNT_UNAVAILABLE_RETRY_SECONDS },
-        }),
-        null,
-        2,
-      ),
+      body: JSON.stringify(errorsDocument(error), null, 2),
       init: {
-        status: 503,
+        status: error.status,
         headers: {
           'content-type': SupportedMimeType.JSONAPI,
-          'Retry-After': String(COUNT_UNAVAILABLE_RETRY_SECONDS),
+          'Retry-After': String(error.meta!.retryAfterSeconds),
           'X-Boxel-Realm-Url': requestContext.realm.url,
         },
       },
       requestContext,
     });
+  }
+
+  // What a batch by a caller the realm admitted without a session commits
+  // with: who it is made as, and its count. `cost` units are counted against
+  // the caller's budget once every entry is admitted and before anything is
+  // written, so a batch the gate refuses costs nothing, and one that doesn't
+  // fit is refused whole. Nothing for any other caller.
+  #anonymousCommit(
+    request: Request,
+    requestContext: RequestContext,
+    scope: OperationScope,
+    cost: () => number,
+  ): Pick<CommitBatchOptions, 'actingUser' | 'beforeCommit'> {
+    let caller = requestContext.anonymousCaller;
+    if (!caller) {
+      return {};
+    }
+    return {
+      actingUser: () => scope.actingUsers.admitted[0],
+      beforeCommit: async () => {
+        let counted = await this.#chargeCaller(request, caller, cost(), {
+          actingUsers: scope.actingUsers.admitted,
+        });
+        if (counted.kind !== 'counted') {
+          let refusal = anonymousCountRefusal(counted);
+          caller.retryAfterSeconds = refusal.meta!.retryAfterSeconds as number;
+          throw new OperationFailure(refusal);
+        }
+      },
+    };
   }
 
   #recordAnonymous(
@@ -8509,6 +8680,8 @@ export class Realm {
       | 'count'
       | 'retryAfterSeconds'
       | 'cost'
+      | 'actingUsers'
+      | 'actingUserFailures'
     >,
   ): void {
     recordSafely('anonymous-request', () =>
@@ -8592,16 +8765,7 @@ export class Realm {
   // caller no grant admitted at all.
   #authenticationRequired(requestContext: RequestContext): Response {
     return createResponse({
-      body: JSON.stringify(
-        errorsDocument({
-          status: 401,
-          code: 'actor-required',
-          title: 'Authentication required',
-          detail: AuthenticationErrorMessages.MissingAuthHeader,
-        }),
-        null,
-        2,
-      ),
+      body: JSON.stringify(errorsDocument(AUTHENTICATION_REQUIRED), null, 2),
       init: {
         status: 401,
         headers: {
@@ -13064,6 +13228,7 @@ export class Realm {
       caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
       coarseDeclined,
       route: cardJsonRoute(request.method),
+      actingUsers: this.#actingUsersFor(requestContext),
     });
     let decision = await resolveFacadeWrite(core, target, base, scope);
     let assertSideLoads = (included: readonly unknown[] | undefined) => {
@@ -13093,7 +13258,10 @@ export class Realm {
     // lands: the realm mints its id, and the card lands beneath the realm's
     // root. That caller is told a refusal as a card that isn't there, so the
     // refusal here says no more than the gate's own.
-    let batch = this.#mintPosture(coarseDeclined);
+    let batch = {
+      ...this.#mintPosture(coarseDeclined),
+      ...this.#anonymousCommit(request, requestContext, scope, () => 1),
+    };
     let assertDestination = (directory: string) => {
       if (batch.mintIds && directory !== '') {
         throw new OperationFailure({
