@@ -246,6 +246,11 @@ export class SignedCaptureLink extends GlimmerComponent<SignedCaptureLinkSignatu
     }
     event.preventDefault();
     if (this.args.download) {
+      // One download per click run: a repeat click while the bytes are still
+      // arriving would save a second copy.
+      if (this.isPending) {
+        return;
+      }
       await this.downloadSigned(url);
     } else {
       await this.openSigned(url);

@@ -96,6 +96,43 @@ module('Integration | Component | SignedCaptureLink', function (hooks) {
     );
   });
 
+  test('a repeat click while a download is in flight saves one copy', async function (assert) {
+    let release!: () => void;
+    let gate = new Promise<void>((resolve) => (release = resolve));
+    // Mounted ahead of the shared handler, so the response waits on the gate.
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        if (!new URL(request.url).pathname.includes('/_capture/')) {
+          return null;
+        }
+        fetched.push(request.url);
+        await gate;
+        return respond(new URL(request.url));
+      },
+      { prepend: true },
+    );
+    await render(
+      <template>
+        <SignedCaptureLink
+          @url={{CAPTURE_URL}}
+          @download={{true}}
+        >Download</SignedCaptureLink>
+      </template>,
+    );
+
+    let link = document.querySelector(
+      '[data-signed-capture-link]',
+    ) as HTMLElement;
+    link.click();
+    await waitUntil(() => fetched.length > 0);
+    link.click();
+    release();
+    await waitUntil(() => saved.length > 0);
+
+    assert.strictEqual(fetched.length, 1, 'the repeat click fetched nothing');
+    assert.strictEqual(saved.length, 1, 'one copy was saved');
+  });
+
   test('a failed download shows an error beside the link and saves nothing', async function (assert) {
     respond = () => new Response('not found', { status: 404 });
     await render(
