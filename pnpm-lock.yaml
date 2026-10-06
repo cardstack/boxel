@@ -2283,12 +2283,12 @@ importers:
       '@cardstack/choreo':
         specifier: workspace:*
         version: link:../choreo
+      '@cardstack/choreo-player':
+        specifier: workspace:*
+        version: link:../choreo-player
       '@chenglou/pretext':
         specifier: ^0.0.8
         version: 0.0.8
-      choreo-player:
-        specifier: workspace:*
-        version: link:../choreo-player
       decorator-transforms:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
@@ -2410,6 +2410,9 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(supports-color@8.1.1)(typescript@5.9.3)
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -2422,6 +2425,9 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 2.1.6(prettier@3.8.4)(supports-color@8.1.1)
+      semver:
+        specifier: ^7.7.0
+        version: 7.8.5
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -2431,12 +2437,12 @@ importers:
       '@cardstack/choreo':
         specifier: workspace:*
         version: link:../choreo
+      '@cardstack/choreo-player':
+        specifier: workspace:*
+        version: link:../choreo-player
       '@chenglou/pretext':
         specifier: ^0.0.8
         version: 0.0.8
-      choreo-player:
-        specifier: workspace:*
-        version: link:../choreo-player
       dialkit:
         specifier: ^2.0.0
         version: 2.0.2(motion@13.4.6)

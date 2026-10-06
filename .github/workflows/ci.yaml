@@ -545,6 +545,12 @@ jobs:
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run test:unit
         working-directory: packages/choreo-player
+      # The release decisions choreo-player-publish.yml runs on, as pure
+      # functions under Node.
+      - name: Choreo Player release script tests
+        if: ${{ !cancelled() }}
+        run: pnpm run test:release
+        working-directory: packages/choreo-player
       # The realm output test reads dist-realm/, and the theater sizing test
       # reads the scoped stylesheet the build generates.
       - name: Build Choreo Gallery and its realm

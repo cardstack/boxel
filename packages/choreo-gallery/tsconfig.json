@@ -15,8 +15,10 @@
         unbuilt. Its package.json#exports point types at the build output
         that npm consumers get.
       */
-      "choreo-player": ["../choreo-player/src/index.ts"],
-      "choreo-player/hyperframes": ["../choreo-player/src/hyperframes.ts"]
+      "@cardstack/choreo-player": ["../choreo-player/src/index.ts"],
+      "@cardstack/choreo-player/hyperframes": [
+        "../choreo-player/src/hyperframes.ts"
+      ]
     },
     /**
       glimmer-motion and @cardstack/choreo resolve to their source through

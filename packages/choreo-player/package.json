@@ -1,6 +1,6 @@
 {
-  "name": "choreo-player",
-  "version": "1.0.0",
+  "name": "@cardstack/choreo-player",
+  "version": "0.0.0",
   "description": "A headless, externally clocked player for Choreo runs.",
   "keywords": [
     "animation",
@@ -10,7 +10,11 @@
     "motion",
     "player"
   ],
-  "repository": "https://github.com/cardstack/choreo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/choreo-player"
+  },
   "license": "MIT",
   "author": "Cardstack",
   "type": "module",
@@ -27,6 +31,7 @@
   },
   "files": [
     "dist",
+    "CHANGELOG.md",
     "LICENSE",
     "README.md"
   ],
@@ -36,6 +41,7 @@
     "prepack": "pnpm run test",
     "test": "pnpm run build && pnpm run test:unit",
     "test:unit": "node --test test/*.test.mjs",
+    "test:release": "node --test scripts/release/release.test.ts",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
@@ -49,10 +55,12 @@
   "devDependencies": {
     "@cardstack/choreo-eslint-config": "workspace:*",
     "@glint/ember-tsc": "catalog:",
+    "@types/semver": "^7.7.0",
     "concurrently": "catalog:",
     "eslint": "^9.39.4",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
+    "semver": "^7.7.0",
     "typescript": "catalog:"
   }
 }
