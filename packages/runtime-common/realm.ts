@@ -13448,6 +13448,17 @@ export class Realm {
     if (status === 404) {
       return notFound(request, requestContext);
     }
+    // A caller who isn't signed in gets the answers every such request gets,
+    // with their codes: told to authenticate, or told when to try again.
+    if (error.code === 'actor-required') {
+      return this.#authenticationRequired(requestContext);
+    }
+    if (
+      error.code === 'rate-limited' ||
+      error.code === 'rate-limit-unavailable'
+    ) {
+      return this.#countRefusalResponse(requestContext, error);
+    }
     if (status === 400) {
       return badRequest({ message: detail, requestContext, ...identity });
     }

@@ -857,6 +857,10 @@ module(basename(import.meta.filename), function (hooks) {
     for (let [label, send] of closed) {
       assert.strictEqual((await send()).status, 401, `${label}: 401`);
     }
-    assert.deepEqual(articleRecords(), [], 'and none of them is admitted');
+    assert.deepEqual(
+      articleRecords().filter((r) => r.outcome !== 'refused'),
+      [],
+      'and none of them is admitted',
+    );
   });
 });
