@@ -348,11 +348,13 @@ export interface RunOperationOptions {
 // snapshot of it. The memo lives for the invocation and no longer: a core is
 // long-lived and must never hold a card's row across requests.
 //
-// A scope also says who the invocation is for, whether the realm ACL declined
-// them, and, for a create, what it would write. Those are the facts the policy
-// gate reads that the target does not carry. They travel here rather than as
+// A scope also says who the invocation is for and whether the realm ACL
+// declined them. Those are the facts the policy gate reads that the target
+// does not carry (see `GateScope`). They travel here rather than as
 // parameters of `resolveOperation` because the scope already reaches every
-// place an operation is resolved.
+// place an operation is resolved. A create's payload is not among them: a
+// create against a type is judged by the card it mints once staged, and a
+// named create anchored on a card by that card.
 export interface OperationScope {
   peekInstance(url: URL): Promise<InstanceOrError | undefined>;
   readonly caller: ScopeCaller;
@@ -360,13 +362,6 @@ export interface OperationScope {
   // Where it declined an invocation, the policy gate decides whether it runs;
   // everywhere else the gate does nothing at all.
   readonly coarseDeclined: CoarseDeclined;
-  // The payload a `create` entry is staged from, as its `input` stage and its
-  // `params` check left it — what the operation would actually write, not the
-  // bytes the caller sent. For a plain create that is the resource the card is
-  // minted from; for a named one, the params its template is filled with.
-  // Absent for every other invocation, and for a create until those two
-  // stages have run.
-  readonly proposed: Record<string, unknown> | undefined;
   // Where the policy gate records how it reached its decision, for an explain
   // to report, or for a capability check to read why the gate refused. Absent
   // on every invocation a caller makes.
@@ -385,8 +380,7 @@ export interface OperationScope {
   // memo so the invocations of one request still cost one read of each row
   // between them. The caller, the ACL's verdict, the seal and whether the
   // request is advisory carry over unless named, and so does its route; a
-  // proposed document belongs to one invocation and never does, and neither
-  // does a trace.
+  // trace belongs to one invocation and never does.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -410,7 +404,6 @@ export type ScopeCaller =
 export interface ScopeInvocation {
   caller?: ScopeCaller;
   coarseDeclined?: CoarseDeclined;
-  proposed?: Record<string, unknown>;
   trace?: GateTrace;
   seal?: Error;
   advisory?: boolean;
@@ -452,7 +445,6 @@ export function newOperationScope(
   let scopeFor = (
     caller: ScopeCaller,
     coarseDeclined: CoarseDeclined,
-    proposed: Record<string, unknown> | undefined,
     trace: GateTrace | undefined,
     seal: Error | undefined,
     advisory: boolean,
@@ -461,7 +453,6 @@ export function newOperationScope(
     peekInstance,
     caller,
     coarseDeclined,
-    proposed,
     trace,
     seal,
     advisory,
@@ -470,7 +461,6 @@ export function newOperationScope(
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
-        next.proposed,
         next.trace,
         next.seal ?? seal,
         next.advisory ?? advisory,
@@ -480,7 +470,6 @@ export function newOperationScope(
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
     invocation.coarseDeclined ?? 'none',
-    invocation.proposed,
     invocation.trace,
     invocation.seal,
     invocation.advisory ?? false,
