@@ -58,12 +58,42 @@ function localFunctionOf(variable) {
   return undefined;
 }
 
-function isImportedOrGlobal(variable) {
-  return (
-    !variable ||
-    variable.defs.length === 0 ||
-    variable.defs.some((def) => def.type === 'ImportBinding')
-  );
+// The realm starter a reference names, if any. An import is matched by the name
+// it imports, so an alias (`import { runTestRealmServer as start }`) and a
+// namespace member (`helpers.runTestRealmServer`) both count. A name with no
+// declaration in the file is matched as spelled. A local binding that shares a
+// starter's name is not a starter.
+function starterNamedBy(reference) {
+  const identifier = reference.identifier;
+  const variable = reference.resolved;
+  if (!variable || variable.defs.length === 0) {
+    return REALM_STARTERS.has(identifier.name) ? identifier.name : undefined;
+  }
+  for (const def of variable.defs) {
+    if (def.type !== 'ImportBinding') {
+      continue;
+    }
+    if (def.node.type === 'ImportSpecifier') {
+      const imported = def.node.imported.name ?? def.node.imported.value;
+      if (REALM_STARTERS.has(imported)) {
+        return imported;
+      }
+    }
+    if (def.node.type === 'ImportNamespaceSpecifier') {
+      const member = identifier.parent;
+      if (
+        member &&
+        member.type === 'MemberExpression' &&
+        member.object === identifier &&
+        !member.computed &&
+        member.property.type === 'Identifier' &&
+        REALM_STARTERS.has(member.property.name)
+      ) {
+        return member.property.name;
+      }
+    }
+  }
+  return undefined;
 }
 
 module.exports = {
@@ -86,7 +116,10 @@ module.exports = {
     const sourceCode = context.sourceCode || context.getSourceCode();
 
     // Every scope inside `fn`, including its own. Their references are every
-    // identifier the function reads or calls, at any depth.
+    // identifier the function reads or calls, at any depth. A starter in a
+    // nested callback counts even though the rule cannot prove the callback
+    // runs: setup usually runs its callbacks (`Promise.all(realms.map(...))`, a
+    // retry wrapper), and a module that does not can disable the rule.
     function scopesWithin(fn) {
       const [start, end] = fn.range;
       return sourceCode.scopeManager.scopes.filter(
@@ -103,12 +136,11 @@ module.exports = {
       visited.add(fn);
       for (const scope of scopesWithin(fn)) {
         for (const reference of scope.references) {
-          const name = reference.identifier.name;
-          const variable = reference.resolved;
-          if (REALM_STARTERS.has(name) && isImportedOrGlobal(variable)) {
-            return name;
+          const starter = starterNamedBy(reference);
+          if (starter) {
+            return starter;
           }
-          const local = localFunctionOf(variable);
+          const local = localFunctionOf(reference.resolved);
           if (local) {
             const found = realmStarterReachedFrom(local, visited);
             if (found) {

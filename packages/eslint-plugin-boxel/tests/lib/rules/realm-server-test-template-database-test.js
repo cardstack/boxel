@@ -100,6 +100,18 @@ ruleTester.run('realm-server-test-template-database', rule, {
         setupDB(hooks, options);
       `,
     },
+    // A namespace member that is not a starter.
+    {
+      code: `
+        import * as helpers from './helpers';
+        helpers.setupDB(hooks, {});
+        setupDB(hooks, {
+          beforeEach: async () => {
+            await helpers.insertUser();
+          },
+        });
+      `,
+    },
     // A local parameter that shares a starter's name is not the starter.
     {
       code: `${IMPORTS}
@@ -196,6 +208,46 @@ ruleTester.run('realm-server-test-template-database', rule, {
         });
       `,
       errors: [perTestIndex('runTestRealmServer')],
+    },
+    // An aliased import is matched by the name it imports.
+    {
+      code: `
+        import { setupDB, runTestRealmServer as startRealm } from './helpers';
+        setupDB(hooks, {
+          beforeEach: async (dbAdapter, publisher, runner) => {
+            await startRealm({ dbAdapter, publisher, runner });
+          },
+        });
+      `,
+      errors: [perTestIndex('runTestRealmServer')],
+    },
+    // A starter reached through a namespace import.
+    {
+      code: `
+        import * as helpers from './helpers';
+        import { setupDB } from './helpers';
+        setupDB(hooks, {
+          beforeEach: async (dbAdapter, publisher, runner) => {
+            await helpers.runTestRealmServerWithRealms({ dbAdapter, publisher, runner });
+          },
+        });
+      `,
+      errors: [perTestIndex('runTestRealmServerWithRealms')],
+    },
+    // A starter in a nested callback counts: setup usually runs its callbacks.
+    {
+      code: `${IMPORTS}
+        setupDB(hooks, {
+          beforeEach: async (dbAdapter, publisher, runner) => {
+            await Promise.all(
+              realms.map((realm) =>
+                runTestRealmServerWithRealms({ realm, dbAdapter, publisher, runner }),
+              ),
+            );
+          },
+        });
+      `,
+      errors: [perTestIndex('runTestRealmServerWithRealms')],
     },
     // A starter passed as a value rather than called.
     {
