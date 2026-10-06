@@ -34,7 +34,13 @@
 // merged counterpart this pull request merges after. Production deploys the
 // catalog at the revision the deployed boxel pins, so a pull request that
 // merges after a catalog change ships without it until the pin moves past that
-// change's merge commit.
+// change's merge commit. While that counterpart is still open, the pin can't
+// contain it yet, so the resolution records the pin and
+//
+//   node scripts/pairing.ts --pin-verdict=<resolution file>
+//
+// fails until the counterpart merges and a push re-pins past it: nothing else
+// re-runs the check when a pull request in the other repository merges.
 //
 // A paired pull request targets main, or is stacked on an open pull request
 // of its own repository: it targets that pull request's branch, and is
@@ -78,6 +84,8 @@ export interface Resolution {
   pairs: Pair[];
   // The open pull request this one is stacked on, when it is.
   stackedOn?: string;
+  // The counterpart revision this pull request pins, when it was checked.
+  pinnedRevision?: string;
 }
 
 // Where a pull request's base leads. `main` is main itself. `stacked` is the
@@ -695,10 +703,35 @@ export async function resolvePairing(
       number: n,
       pairs,
       ...(stackedOn ? { stackedOn } : {}),
+      ...(pinnedRevision ? { pinnedRevision } : {}),
     },
     problems,
     notices,
   };
+}
+
+// Why a pull request with a pin can't pass yet, or nothing when it can. A
+// counterpart it merges after that is still open isn't in the pin, and the
+// push that re-pins after it merges is what runs the check again.
+export function pinVerdict(resolution: Resolution) {
+  if (!resolution.pinnedRevision) {
+    return undefined;
+  }
+  let open = resolution.pairs.find(
+    (p) => p.key === 'merges-after' && !p.merged,
+  );
+  if (!open) {
+    return undefined;
+  }
+  let here = `${resolution.repository}#${resolution.number}`;
+  let there = `${open.repository}#${open.number}`;
+  return (
+    `${here} merges after ${there}, which hasn't merged, so ${here}'s pin ` +
+    `${resolution.pinnedRevision.slice(0, 12)} can't contain it yet. ` +
+    `Production deploys the catalog at the revision boxel pins. Once ` +
+    `${there} merges, run \`pnpm --dir packages/catalog catalog:test-subset ` +
+    `--bump\` and push: that push re-runs this check.`
+  );
 }
 
 // Whether catalog main may fail with the errors the change adds to it. A
@@ -835,6 +868,17 @@ async function main() {
   let args = process.argv.slice(2);
   let option = (name: string) =>
     args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+  let verdictFile = option('pin-verdict');
+  if (verdictFile) {
+    let message = pinVerdict(
+      JSON.parse(readFileSync(resolve(verdictFile), 'utf8')) as Resolution,
+    );
+    if (message) {
+      console.log(`::error title=pairing::${annotation(message)}`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
   let repository = option('repository');
   let n = Number(option('number'));
   let base = option('base');

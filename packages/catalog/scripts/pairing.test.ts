@@ -5,7 +5,12 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, beforeEach, test } from 'node:test';
 
-import { mainVerdict, resolvePairing, type Resolution } from './pairing.ts';
+import {
+  mainVerdict,
+  pinVerdict,
+  resolvePairing,
+  type Resolution,
+} from './pairing.ts';
 
 const BOXEL = 'cardstack/boxel';
 const CATALOG = 'cardstack/boxel-catalog';
@@ -472,10 +477,41 @@ test('the pin must contain the commit a stacked counterpart reached main through
   assert.deepEqual(problems, []);
 });
 
-test('an open pull request this change merges after is not held to the pin yet', async () => {
+test('an open pull request this change merges after resolves, and the pin verdict waits for it to merge and a re-pin', async () => {
   pair({});
-  let { problems } = await resolveBoxel(PIN);
+  let { resolution, problems } = await resolveBoxel(PIN);
   assert.deepEqual(problems, []);
+  assert.equal(
+    pinVerdict(resolution),
+    `cardstack/boxel#6454 merges after cardstack/boxel-catalog#791, which ` +
+      `hasn't merged, so cardstack/boxel#6454's pin ${PIN.slice(0, 12)} ` +
+      `can't contain it yet. Production deploys the catalog at the revision ` +
+      `boxel pins. Once cardstack/boxel-catalog#791 merges, run ` +
+      '`pnpm --dir packages/catalog catalog:test-subset --bump` and push: ' +
+      'that push re-runs this check.',
+  );
+});
+
+test('the pin verdict passes once the pull request this change merges after is merged and in the pin', async () => {
+  pair({}, { state: 'closed', merged: true });
+  comparisons.set(`${mergeCommit(791)}...${PIN}`, 'ahead');
+  let { resolution } = await resolveBoxel(PIN);
+  assert.equal(pinVerdict(resolution), undefined);
+});
+
+test('the pin verdict does not wait on an open pull request this change merges before', async () => {
+  pair(
+    { body: 'Merges before: cardstack/boxel-catalog#791' },
+    { body: 'Merges after: cardstack/boxel#6454' },
+  );
+  let { resolution } = await resolveBoxel(PIN);
+  assert.equal(pinVerdict(resolution), undefined);
+});
+
+test('without a pin, the pin verdict does not wait on an open pull request this change merges after', async () => {
+  pair({});
+  let { resolution } = await resolveBoxel();
+  assert.equal(pinVerdict(resolution), undefined);
 });
 
 test('a merged pull request this change merges before is not held to the pin', async () => {

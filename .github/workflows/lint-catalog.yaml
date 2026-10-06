@@ -197,3 +197,12 @@ jobs:
             args+=(--baseline="$RUNNER_TEMP/catalog-main-lint-base.json")
           fi
           node "$RUNNER_TEMP/lint-sweep.ts" "${args[@]}"
+
+      # A catalog pull request this change merges after has to be in the pin
+      # before this change merges, and nothing re-runs this job when that pull
+      # request merges. So while it is open this fails, after the lint above
+      # has judged its head, and the push that re-pins once it merges is the
+      # run that compares the pin with its merge commit.
+      - name: Wait for the re-pin
+        if: ${{ !cancelled() && steps.pairing.outcome == 'success' }}
+        run: node packages/catalog/scripts/pairing.ts --pin-verdict="$RUNNER_TEMP/catalog-pairing.json"
