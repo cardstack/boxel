@@ -473,7 +473,13 @@ async function explainSearch(
   if (acl.read) {
     return { ...base, decision: 'allowed', reason: 'acl' };
   }
-  if (actor.kind !== 'user') {
+  // A caller who isn't signed in is judged, as the search judges one, by the
+  // grants that opt in to such callers, where the policy opens the operation
+  // to them, and told to authenticate everywhere else.
+  if (
+    actor.kind !== 'user' &&
+    !(await opensToAnonymous(core, invocation.operation))
+  ) {
     return refused(base, 'actor-required', {
       status: 401,
       code: 'actor-required',
@@ -495,7 +501,10 @@ async function explainSearch(
     scope = await policyQueryScope(core, {
       operation: invocation.operation,
       types: invocation.types,
-      principal: { kind: 'user', user: actor.actor },
+      principal:
+        actor.kind === 'user'
+          ? { kind: 'user', user: actor.actor }
+          : { kind: 'anonymous' },
       transport: 'explain',
       hypothetical: true,
     });

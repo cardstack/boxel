@@ -73,14 +73,26 @@ export interface AnonymousCaller {
   // What the caller is answered with in place of running the request, when
   // the realm can't count it: its address has used up the realm's limit, or
   // the count couldn't be read. Settled at admission, before anything runs.
-  turnedAway?:
-    | { kind: 'rate-limited'; retryAfterSeconds: number }
-    | { kind: 'unavailable' };
+  turnedAway?: Exclude<AnonymousCount, { kind: 'counted' }>;
 }
+
+// What came of counting an anonymous caller's invocation against its
+// address's budget: counted, refused for want of budget, or not counted
+// because the count couldn't be read or updated.
+export type AnonymousCount =
+  | { kind: 'counted' }
+  | { kind: 'rate-limited'; retryAfterSeconds: number }
+  | { kind: 'unavailable' };
 
 // The card+json read: what an anonymous grant on `read` opens.
 export const ANONYMOUS_CARD_READ: AnonymousDispatch = {
   operations: ['read'],
+  charged: true,
+};
+// A search of the realm: what a `query` grant opens. It is counted once its
+// grants have scoped it, whatever rows it finds.
+export const ANONYMOUS_SEARCH: AnonymousDispatch = {
+  operations: ['query'],
   charged: true,
 };
 // A data file's or a card's stored bytes: what a `readSource` grant opens.
@@ -258,9 +270,31 @@ export class AnonymousAdmission {
     if (!caller || cost < 1) {
       return undefined;
     }
+    let counted = await this.chargeCaller(request, caller, cost);
+    switch (counted.kind) {
+      case 'counted':
+        return undefined;
+      case 'rate-limited':
+        return this.#rateLimitedResponse(
+          requestContext,
+          counted.retryAfterSeconds,
+        );
+      case 'unavailable':
+        return this.#countUnavailableResponse(requestContext);
+    }
+  }
+
+  // Counts `cost` invocations by `caller` against its address's budget in
+  // this realm, and records what came of it. A caller of ours is recorded and
+  // never counted.
+  async chargeCaller(
+    request: Request,
+    caller: AnonymousCaller,
+    cost: number,
+  ): Promise<AnonymousCount> {
     if (caller.infra) {
       this.#record(request, caller, { outcome: 'infra' });
-      return undefined;
+      return { kind: 'counted' };
     }
     let { limit, limitFrom } = await this.#env.access();
     let outcome: AnonymousRateOutcome;
@@ -273,7 +307,7 @@ export class AnonymousAdmission {
       });
     } catch (e: unknown) {
       this.#recordCountFailure(request, caller, e);
-      return this.#countUnavailableResponse(requestContext);
+      return { kind: 'unavailable' };
     }
     let recordedLimit = { ...limit, from: limitFrom };
     let costDetail = cost > 1 ? { cost } : {};
@@ -284,7 +318,7 @@ export class AnonymousAdmission {
         count: outcome.count,
         ...costDetail,
       });
-      return undefined;
+      return { kind: 'counted' };
     }
     this.#record(request, caller, {
       outcome: 'rate-limited',
@@ -292,7 +326,10 @@ export class AnonymousAdmission {
       retryAfterSeconds: outcome.retryAfterSeconds,
       ...costDetail,
     });
-    return this.#rateLimitedResponse(requestContext, outcome.retryAfterSeconds);
+    return {
+      kind: 'rate-limited',
+      retryAfterSeconds: outcome.retryAfterSeconds,
+    };
   }
 
   // Whether the caller's address has budget left for one more invocation,

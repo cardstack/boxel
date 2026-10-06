@@ -9,10 +9,12 @@ import {
   ANONYMOUS_BYTES_READ,
   ANONYMOUS_CAPABILITY_CHECK,
   ANONYMOUS_CARD_READ,
+  ANONYMOUS_SEARCH,
   ANONYMOUS_STYLESHEET,
   AnonymousAdmission,
   servedAnonymous,
   type AnonymousCaller,
+  type AnonymousCount,
   type AnonymousDispatch,
 } from './anonymous-admission.ts';
 import {
@@ -2929,13 +2931,19 @@ export class Realm {
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_SEARCH,
+        },
       )
       .query(
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_SEARCH,
+        },
       )
       // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
@@ -7195,6 +7203,9 @@ export class Realm {
   #searchPrincipal(
     requestContext: RequestContext,
   ): SearchPrincipal | undefined {
+    if (requestContext.anonymousCaller) {
+      return { kind: 'anonymous' };
+    }
     return searchPrincipal(
       requestContext.authenticatedUser,
       requestContext.realmAuthority,
@@ -8076,6 +8087,34 @@ export class Realm {
     }
     requestContext.anonymousCaller = caller;
     return true;
+  }
+
+  // Whether this realm admits a request that authenticated nobody to a search
+  // that spans several realms, which the realm server answers rather than this
+  // realm's own routes. The same question this realm's own `_search` asks: its
+  // policy opens `query` to such callers, and it doesn't refuse the caller's
+  // address. The caller that comes back is the one its grants are composed
+  // for and its budget is counted under (see `countAnonymousSearch`); one
+  // whose address has no budget left comes back marked as turned away.
+  async admitAnonymousSearch(
+    request: Request,
+  ): Promise<AnonymousCaller | undefined> {
+    return await this.#anonymous.callerFor(request, ANONYMOUS_SEARCH);
+  }
+
+  // Counts one search of this realm by a caller `admitAnonymousSearch`
+  // admitted, once the realm's grants have scoped it, against the caller's
+  // budget here. A search that spans several realms is counted by each one it
+  // reads rows from, and a realm that turns the caller away contributes no
+  // rows to it.
+  async countAnonymousSearch(
+    request: Request,
+    caller: AnonymousCaller,
+  ): Promise<AnonymousCount> {
+    if (caller.turnedAway) {
+      return caller.turnedAway;
+    }
+    return await this.#anonymous.chargeCaller(request, caller, 1);
   }
 
   // Whether the realm's policy is the one to judge a caller the ACL refused
@@ -14334,6 +14373,12 @@ export class Realm {
     let declaredLinks: LinkStrategy | undefined;
     let unshareableFormats: PrerenderedHtmlFormat[] = [];
     if (isNamedQueryPayload(payload)) {
+      // A named query is granted by its own name, which no grant opens to a
+      // caller who isn't signed in, so one is told to authenticate before the
+      // declaration is read.
+      if (requestContext.anonymousCaller) {
+        return this.#authenticationRequired(requestContext);
+      }
       // A named query searches this realm and no other, so this realm is the
       // whole of the scope it may resolve to.
       try {
@@ -14424,6 +14469,9 @@ export class Realm {
         return noRows();
       }
       if (policyScope) {
+        // A caller admitted without a session is counted for a search its
+        // grants scoped, whatever rows it finds.
+        servedAnonymous(requestContext);
         // Composed before the page is applied below, so the page the engine
         // fills is a page of rows the policy admits rather than a page of the
         // caller's rows with some removed.
