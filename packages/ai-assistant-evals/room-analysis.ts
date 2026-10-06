@@ -39,11 +39,14 @@ export interface RoomAnalysis {
 
 const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
-// Every write call counts; the path is recorded only when it is a literal.
 // Tools, other than run-realm-code, whose applied call writes into a realm.
-// Tool names carry a hash suffix (`copy-card_eefc`), so match the prefix.
+// Tool names carry a hash suffix (`copy-card_eefc`), so match the prefix. The
+// list is kept by hand against packages/host/app/tools and the catalog's
+// commands (packages/catalog/contents/commands).
 const WRITE_TOOL =
-  /^(copy-card|copy-card-to-stack|copy-and-edit|copy-source|copy-file-to-realm|patch-card-instance|patch-fields|patch-code|patch-theme|save-card|write-text-file|write-binary-file|apply-markdown-edit|listing-install|listing-remix|listing-use)(_|$)/;
+  /^(copy-card|copy-card-to-stack|copy-and-edit|copy-source|copy-file-to-realm|download-file-to-realm|patch-card-instance|patch-fields|patch-code|patch-theme|save-card|store-add|write-text-file|write-binary-file|apply-markdown-edit|add-field-to-card-definition|execute-atomic-operations|transform-cards|create-specs|generate-readme-spec|generate-example-cards|generate-thumbnail|migrate-skill|listing-create|listing-generate-example|listing-install|listing-remix|listing-use)(_|$)/;
+// realm.fs writes inside run-realm-code. Every write call counts; the path is
+// recorded only when it is a literal.
 const REALM_CODE_WRITE =
   /realm\.fs\.(?:writeText|replace)\(\s*(?:(['"`])([^'"`]+)\1)?/g;
 

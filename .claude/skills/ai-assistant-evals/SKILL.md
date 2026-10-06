@@ -144,8 +144,8 @@ When one appears:
 is also printed at the end of the run.
 
 Columns: result grade, model id used, effort the room carried, verdict, turns,
-tool calls by name with counts, run-realm-code writes, cost, wall time, whether a card
-rendered and where (`stack` or `preview`), notes with the reasons, the missed
+tool calls by name with counts, realm writes (run-realm-code writes plus other
+writing tool calls), cost, wall time, whether a card rendered and where (`stack` or `preview`), notes with the reasons, the missed
 benchmarks, and the room id.
 
 The grade is the one-word answer per model:
@@ -200,7 +200,7 @@ After every run, two checks on the money, whatever the grade:
 Verdicts:
 
 - `pass` — a card from the new workspace rendered with no error boundary, and at
-  least one run-realm-code write was applied.
+  least one applied run-realm-code or other writing tool call.
 - `model-failure` — the model did not get there: no write, or no card. Reasons are listed.
 - `host-failure` — a tool pill stayed in "applying" past the host's own
   two-minute tool timeout, or a tool call never got a result. The model may be
