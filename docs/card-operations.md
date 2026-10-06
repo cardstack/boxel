@@ -1041,7 +1041,15 @@ own permissions let read it:
 - A rule whose `targetType` is module source (`TsFileDef`, `GtsFileDef`, or a
   type descending from one) compiles to nothing and records
   `grants-module-source`. The rest of the policy applies.
-- A rule on `FileDef` reaches every data file and no module.
+- A rule on `FileDef` reaches every data file and no module. That includes a
+  realm's dot-files, such as a `.gitignore`, and any name with no extension,
+  since each of them resolves to `FileDef` itself, so a rule on `FileDef` is a
+  catch-all and is written as one. A narrower file type, such as `ImageDef` or
+  `PdfDef`, never matches a dot-file and keeps it out of reach.
+- A path the realm ignores is never served through a grant. That is anything
+  under `.git/`, a file part-way through being written, and whatever the
+  realm's `.gitignore` files name. The realm neither indexes nor lists such a
+  path.
 - A directory has no type, so no rule can name one.
 
 A caller who reaches the realm only through grants is told of each of these
