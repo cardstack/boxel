@@ -534,13 +534,31 @@ module('Integration | realm policy', function (hooks) {
       ],
       'each grant is shown by its operation and condition, in order',
     );
-    assert.false(
-      document.body.textContent?.includes('Untitled'),
-      'no grant is shown as an untitled field',
-    );
+    assert
+      .dom('[data-test-contains-many="rules"]')
+      .doesNotIncludeText('Untitled', 'no grant is shown as an untitled field');
+    assert
+      .dom('[data-test-policy-rule-target-type] input')
+      .exists({ count: 2 }, "every rule's target type can be edited");
     assert
       .dom('[data-test-policy-rule-grant] [data-test-policy-predicate-input]')
       .exists({ count: 4 }, "every grant's condition can be edited");
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-field="anonymous"]')
+      .exists(
+        { count: 4 },
+        'every grant can be opened to callers who are not signed in',
+      );
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"] input')
+      .exists({ count: 4 }, "every grant's acting user can be edited");
+    assert
+      .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
+      .hasAttribute(
+        'aria-label',
+        'Remove grant 1 (read)',
+        'each remove button names the grant it removes',
+      );
 
     let studentPredicate = '.studentIds | any(. == actor())';
     await fillIn(
