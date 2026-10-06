@@ -1888,6 +1888,7 @@ export * from './tasks/index.ts';
 export * from './worker.ts';
 export * from './stream.ts';
 export * from './realm.ts';
+export type { AnonymousCaller, AnonymousCount } from './anonymous-admission.ts';
 export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';
