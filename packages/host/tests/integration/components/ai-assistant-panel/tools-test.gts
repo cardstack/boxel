@@ -371,6 +371,45 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     return roomId;
   }
 
+  // A tool's result card renders at the end of a long asynchronous chain that
+  // `settled()` does not track end to end: the mock homeserver delivers each
+  // event on a bare `setTimeout`, room processing is an ember-concurrency
+  // task, the tool queue drains on a debounce, and the result card is
+  // downloaded and loaded from the store after the result event lands. The
+  // wait therefore needs a budget sized for that whole chain on a loaded CI
+  // runner, not the 1s `waitFor` default. The elapsed time is always logged,
+  // and a timeout logs where the chain stopped, so a slow run and a stalled
+  // one read differently in CI output.
+  const TOOL_RESULT_TIMEOUT_MS = 10_000;
+
+  async function waitForToolResult() {
+    let startedAt = performance.now();
+    try {
+      await waitFor('[data-test-tool-result-header]', {
+        timeout: TOOL_RESULT_TIMEOUT_MS,
+      });
+    } catch (e) {
+      let applyButtons = [
+        ...document.querySelectorAll('[data-test-tool-call-apply]'),
+      ].map((el) => el.getAttribute('data-test-tool-call-apply'));
+      console.error(
+        `[tool-result-wait] no result header after ${Math.round(
+          performance.now() - startedAt,
+        )}ms; messages=${
+          document.querySelectorAll('[data-test-message-idx]').length
+        }; applyStates=${JSON.stringify(applyButtons)}; resultContainers=${
+          document.querySelectorAll('[data-test-tool-result-container]').length
+        }`,
+      );
+      throw e;
+    }
+    console.log(
+      `[tool-result-wait] result header after ${Math.round(
+        performance.now() - startedAt,
+      )}ms`,
+    );
+  }
+
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
     assert.expect(4);
 
@@ -832,7 +871,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
+    await waitForToolResult();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -878,7 +917,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
+    await waitForToolResult();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -923,7 +962,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     // The result header and body share one light surface and foreground, so the
     // dark panel shows through neither the seam nor an unthemed result's text.
@@ -1008,7 +1047,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
@@ -1081,7 +1120,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     await click(
       '[data-test-tool-result-container] [data-test-more-options-button]',
@@ -1121,7 +1160,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     assert
       .dom('[data-test-tool-result-container] [data-test-more-options-button]')
@@ -1163,7 +1202,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();

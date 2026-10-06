@@ -200,8 +200,14 @@ export default class MessageTool {
         this.toolResultFileDef,
       );
       return cardDoc;
-    } catch {
-      // the command result card fragments might not be loaded yet
+    } catch (e) {
+      // the command result card fragments might not be loaded yet. The
+      // download is retried only when the result file changes, so until then
+      // the result card stays hidden and this warning is the only trace of why.
+      console.warn(
+        `Unable to download the result card for tool call ${this.toolRequest.id} (${this.toolResultFileDef?.url}):`,
+        e,
+      );
       return undefined;
     }
   }
