@@ -2393,10 +2393,10 @@ interface RequestDispatch {
   // any other read.
   answersWithoutCredentials?: boolean;
   // What the dispatch would run for a caller who isn't signed in, where a
-  // grant could admit one: the operations, any one of which the realm's
-  // policy has to open to such callers for it to admit them here (`any`
-  // for any at all, `any-write` for any write), and how it counts against
-  // the realm's anonymous rate limit. A dispatch without it never admits a caller who isn't signed in.
+  // grant could admit one: what the realm's policy has to open to such
+  // callers for it to admit them here, and how it counts against the realm's
+  // anonymous rate limit (see `AnonymousDispatch`). A dispatch without it
+  // never admits a caller who isn't signed in.
   anonymous?: AnonymousDispatch;
   handle: () => Promise<ResponseWithNodeStream>;
 }

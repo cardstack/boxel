@@ -485,7 +485,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       policy?.anonymous,
       { operations: ['register', 'sign'], writes: ['register', 'sign'] },
-      'it opens nothing to such callers',
+      'claim is left out of what it opens to such callers',
     );
     unauthenticated(
       await operations(CIVIC, [invoke('claim', { href: OPEN })]),
@@ -515,10 +515,12 @@ module(basename(import.meta.filename), function (hooks) {
       [true, false],
       "the parent's petition may be signed, and the subtype's may not",
     );
+    let explained = await explain(LOCAL, 'sign');
+    assert.strictEqual(explained.decision, 'denied', 'explain agrees');
     assert.strictEqual(
-      (await explain(LOCAL, 'sign')).decision,
-      'denied',
-      'explain agrees',
+      explained.reason,
+      'actor-required',
+      'and says the caller would have to sign in, rather than that no grant names the operation',
     );
     unauthenticated(await sign(LOCAL, 'Ada'), 'the subtype', assert);
     assert.notOk(

@@ -864,6 +864,8 @@ function refusalReason(
       return 'unmatchable-target';
     case 'no-grant':
       return 'no-grant';
+    case 'reads-actor':
+      return 'actor-required';
     default:
       return trace.rules.some(({ grants }) => grants.length > 0)
         ? 'predicate-false'

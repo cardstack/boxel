@@ -53,10 +53,9 @@ import type { ResponseWithNodeStream } from './virtual-network.ts';
 // grant admits, exactly as it does for a signed-in caller.
 // ============================================================================
 
-// What a route would run for a caller who isn't signed in: the operations, any
-// one of which the realm's policy has to open to such callers for it to admit
-// one there (`any` for any at all, `any-write` for any write), and how it counts against the realm's
-// anonymous rate limit.
+// What a route would run for a caller who isn't signed in: what the realm's
+// policy has to open to such callers for it to admit one there, and how it
+// counts against the realm's anonymous rate limit.
 export interface AnonymousDispatch {
   // The operations the route invokes, any one of which the policy has to open
   // to such callers. `any` is a route that runs whatever its request names,
