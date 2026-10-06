@@ -1,4 +1,5 @@
 import { modifier } from 'ember-modifier';
+import { hasNothingToShow } from '@cardstack/runtime-common';
 import {
   CardDef,
   Component,
@@ -489,6 +490,13 @@ export class RunRealmCodeResult extends CardDef {
   // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
+
+  // A run that saved no files and took no captures, such as one that only
+  // read, has nothing for the chat to show. Its script result goes to the
+  // model only.
+  get [hasNothingToShow](): boolean {
+    return !this.files?.length && !this.captures?.length;
+  }
 
   // What the run changed and what it looked at. The script's own result is
   // for the model and stays out of the chat.

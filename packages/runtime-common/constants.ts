@@ -86,6 +86,7 @@ export const fields = Symbol.for('cardstack-fields');
 export const fieldSerializer = Symbol.for('cardstack-field-serializer');
 export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
 export const getMenuItems = Symbol.for('cardstack-get-menu-items');
+export const hasNothingToShow = Symbol.for('cardstack-has-nothing-to-show');
 export const isBaseInstance = Symbol.for('isBaseInstance');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
