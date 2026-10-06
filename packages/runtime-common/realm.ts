@@ -7040,6 +7040,7 @@ export class Realm {
               this.#policyCompileEnvironment(),
             ),
           actingUser: (key) => this.#anonymous.resolveActingUser(key),
+          anonymousAccess: () => this.getAnonymousAccess(),
         },
         targetRealm: (href) => this.#targetRealm(href),
         // Compiled as this realm's own policy cache compiles the card its

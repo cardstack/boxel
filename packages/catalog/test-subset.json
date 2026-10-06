@@ -21,6 +21,7 @@
     "realmServer": [
       "catalog-test-subset-test",
       "realm-policy-activation-test",
+      "realm-policy-anonymous-explain-test",
       "realm-policy-anonymous-named-operation-test",
       "realm-policy-anonymous-read-test",
       "realm-policy-anonymous-search-test",

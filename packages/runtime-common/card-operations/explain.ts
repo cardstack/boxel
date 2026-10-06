@@ -33,7 +33,8 @@ import {
   type MatchedGrant,
 } from './gate.ts';
 import { resolveNamedQuery, searchInvocation } from './named-query.ts';
-import type { CompiledRealmPolicy } from './policy.ts';
+import { NO_ACTING_USER, type ActingUserResolution } from './acting-users.ts';
+import type { CompiledOperationGrant, CompiledRealmPolicy } from './policy.ts';
 import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
 import type { PolicyRoute } from './telemetry.ts';
 import {
@@ -43,6 +44,7 @@ import {
   isOperationFailure,
   isWrite,
   refusalForNonReader,
+  type ExplainedGrant,
   type ExplainedGrantOutcome,
   type ExplainedIndexLag,
   type ExplainedRule,
@@ -278,11 +280,18 @@ export async function explainOperation(
   let actor = scopeCallerFor(question.actor);
   let acl = await realm.aclFor(actor);
   let draft = 'draft' in governing ? governing.draft : undefined;
-  let answered = (explanation: PolicyExplanation): PolicyExplanation =>
-    draft ? { ...explanation, draft: { issues: draft.issues } } : explanation;
+  let detailed = await detailer(governing.core, actor);
+  let answered = async (
+    explanation: PolicyExplanation,
+  ): Promise<PolicyExplanation> => {
+    let withDetail = await detailed(explanation);
+    return draft
+      ? { ...withDetail, draft: { issues: draft.issues } }
+      : withDetail;
+  };
   if (question.search) {
     return {
-      explanation: answered(
+      explanation: await answered(
         await explainSearch(
           governing.core,
           realm,
@@ -303,12 +312,14 @@ export async function explainOperation(
     for (let url of cards) {
       try {
         explanations.push(
-          await explain(
-            governing.core,
-            { kind: 'instance', url },
-            question,
-            actor,
-            acl,
+          await detailed(
+            await explain(
+              governing.core,
+              { kind: 'instance', url },
+              question,
+              actor,
+              acl,
+            ),
           ),
         );
       } catch (e: unknown) {
@@ -336,7 +347,85 @@ export async function explainOperation(
     actor,
     acl,
   );
-  return { explanation: answered(explanation) };
+  return { explanation: await answered(explanation) };
+}
+
+// What an explanation reports beyond the decision itself, read from the
+// policy and the realm that decided it: for a question about a caller who
+// isn't signed in, how the realm limits and blocks such callers; for each
+// grant listed that opts in to them, the user its writes are made as, or why
+// its key names no one; and for each grant listed, what compiling the policy
+// recorded against it. Each acting-user key is resolved once, however many
+// grants and explanations name it.
+async function detailer(
+  core: OperationCore,
+  actor: ScopeCaller,
+): Promise<(explanation: PolicyExplanation) => Promise<PolicyExplanation>> {
+  let compiled = await core.policy?.compiledPolicy();
+  let grants = new Map<string, CompiledOperationGrant>();
+  for (let rule of compiled?.rules ?? []) {
+    for (let grant of rule.grants) {
+      grants.set(grant.path, grant);
+    }
+  }
+  let issues = compiled?.issues ?? [];
+  let access =
+    actor.kind === 'user' ? undefined : await core.policy?.anonymousAccess?.();
+  let resolutions = new Map<string, Promise<ActingUserResolution>>();
+  let resolve = (key: string) => {
+    let resolution = resolutions.get(key);
+    if (!resolution) {
+      resolution = core.policy?.actingUser?.(key) ?? NO_ACTING_USER();
+      resolutions.set(key, resolution);
+    }
+    return resolution;
+  };
+  let detail = async (explained: ExplainedGrant): Promise<ExplainedGrant> => {
+    let grant = grants.get(explained.path);
+    // Issues are recorded at a grant's path or at a part of it, and
+    // `rules[1]` is a prefix of `rules[10]`, so only the path itself or one
+    // followed by `.` is this grant's.
+    let own = issues.filter(
+      ({ path }) =>
+        path === explained.path || path.startsWith(`${explained.path}.`),
+    );
+    let anonymous: ExplainedGrant['anonymous'];
+    if (grant?.anonymous) {
+      let key = grant.anonymous.actingUserKey;
+      if (key) {
+        let resolution = await resolve(key);
+        anonymous =
+          'user' in resolution
+            ? { actingUserKey: key, actingUser: resolution.user }
+            : { actingUserKey: key, actingUserFailure: resolution.failure };
+      } else {
+        anonymous = {};
+      }
+    }
+    return {
+      ...explained,
+      ...(anonymous ? { anonymous } : {}),
+      ...(own.length > 0 ? { issues: own } : {}),
+    };
+  };
+  return async (explanation) => ({
+    ...explanation,
+    rules: await Promise.all(
+      explanation.rules.map(async (rule) => ({
+        ...rule,
+        grants: await Promise.all(rule.grants.map(detail)),
+      })),
+    ),
+    ...(access
+      ? {
+          anonymous: {
+            limit: { ...access.limit },
+            limitFrom: access.limitFrom,
+            invalidBlocklistEntries: [...access.invalidBlocklistEntries],
+          },
+        }
+      : {}),
+  });
 }
 
 // The core the target's realm would decide with were its policy card to hold

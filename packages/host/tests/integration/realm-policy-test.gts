@@ -586,6 +586,53 @@ module('Integration | realm policy', function (hooks) {
     );
   }
 
+  test('an explanation for someone who is not signed in shows the limit, and who each grant opened to them writes as', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      permissions: {
+        '*': ['read'],
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/classrooms`,
+          config: { submitter: '@testuser:localhost' },
+          anonymousRateLimit: { requests: 7, windowSeconds: 30 },
+        }),
+        'classroom.gts': classroomModule,
+        'classrooms/room-204.json': classroom([TEACHER]),
+        'policies/classrooms.json': policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [
+              { operation: 'update', anonymous: true, actingUser: 'submitter' },
+              { operation: 'update', anonymous: true, actingUser: 'missing' },
+            ],
+          },
+        ]),
+      },
+    });
+    await getService('realm').login(testRealmURL);
+    getService('operations');
+    let policy = await loadPolicy('policies/classrooms');
+    await renderCard(loader, policy, 'isolated');
+
+    await ask('', `${testRealmURL}classrooms/room-204`, 'update');
+    assert.dom('[data-test-explanation-actor]').hasText('not signed in');
+    assert
+      .dom('[data-test-explanation-anonymous-limit]')
+      .hasText('7 requests per 30 seconds from one address, set by this realm');
+    assert.deepEqual(
+      [
+        ...document.querySelectorAll('[data-test-explanation-grant-anonymous]'),
+      ].map((el) => el.textContent?.trim()),
+      [
+        'Open to people who aren\'t signed in, writing as @testuser:localhost (the realm\'s "submitter" setting).',
+        'Open to people who aren\'t signed in, but this realm\'s settings have no "missing", so it admits none of them.',
+      ],
+    );
+  });
+
   test('the policy explains what it decides for one caller, one card and one operation', async function (assert) {
     await renderClassroomPolicy();
 
