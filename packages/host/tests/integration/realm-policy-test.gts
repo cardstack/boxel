@@ -550,8 +550,10 @@ module('Integration | realm policy', function (hooks) {
         'every grant can be opened to callers who are not signed in',
       );
     assert
-      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"] input')
-      .exists({ count: 4 }, "every grant's acting user can be edited");
+      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"]')
+      .doesNotExist(
+        'a grant only for signed-in callers asks for no realm.json setting',
+      );
     assert
       .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
       .hasAttribute(
@@ -572,31 +574,80 @@ module('Integration | realm policy', function (hooks) {
     );
     await click(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`);
 
+    // The radio group lists false, then true.
+    let [, allowAnonymous] = document.querySelectorAll(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="anonymous"] input[type="radio"]`,
+    );
+    await click(allowAnonymous);
+    assert
+      .dom(
+        `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
+      )
+      .exists(
+        "a grant opened to callers who aren't signed in asks for the realm.json setting its writes are made as",
+      );
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
+      'feedbackWriter',
+    );
+
     assert.deepEqual(
       grantLinesInEditor(),
       [
         'read always',
         `appendActivity where ${studentPredicate}`,
-        'update always',
+        'update always anyone as config.feedbackWriter',
         `listMySchedules where ${providerPredicate}`,
       ],
       'each grant reads as it now stands',
     );
 
     let rules = serializeCard(policy).data.attributes?.rules as {
-      grants: { operation: string; where: unknown }[];
+      grants: {
+        operation: string;
+        where: unknown;
+        anonymous?: boolean | null;
+        actingUser?: string | null;
+      }[];
     }[];
     assert.deepEqual(
       rules.map((rule) =>
-        rule.grants.map(({ operation, where }) => ({ operation, where })),
+        rule.grants.map(({ operation, where, anonymous, actingUser }) => ({
+          operation,
+          where,
+          anonymous: anonymous ?? false,
+          actingUser: actingUser ?? null,
+        })),
       ),
       [
         [
-          { operation: 'read', where: null },
-          { operation: 'appendActivity', where: studentPredicate },
-          { operation: 'update', where: null },
+          {
+            operation: 'read',
+            where: null,
+            anonymous: false,
+            actingUser: null,
+          },
+          {
+            operation: 'appendActivity',
+            where: studentPredicate,
+            anonymous: false,
+            actingUser: null,
+          },
+          {
+            operation: 'update',
+            where: null,
+            anonymous: true,
+            actingUser: 'feedbackWriter',
+          },
         ],
-        [{ operation: 'listMySchedules', where: providerPredicate }],
+        [
+          {
+            operation: 'listMySchedules',
+            where: providerPredicate,
+            anonymous: false,
+            actingUser: null,
+          },
+        ],
       ],
       'the saved policy holds the added, changed and remaining grants',
     );
