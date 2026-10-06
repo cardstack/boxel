@@ -37,7 +37,9 @@ name: glimmer-motion + choreo publish
 # publish with `pnpm -r publish`, which takes that order from the workspace
 # dependency graph and skips a package whose version npm already holds — so a
 # stable run that published glimmer-motion and then failed on choreo can be
-# finished by running `promote` again (see the stable job's resume path).
+# finished by running `promote` again (see the stable job's resume path). A
+# skipped package is not packed, so its `prepack` never runs; the resume path
+# builds glimmer-motion itself before publishing choreo.
 #
 # Loop safety (unstable job):
 #   - Bot commits end with [skip ci] so GitHub does not re-trigger workflows.
@@ -423,6 +425,14 @@ jobs:
 
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
+
+      - name: Build glimmer-motion for a resumed choreo publish
+        # pnpm skips an already-published package without running its
+        # prepack, and choreo's declarations build reads glimmer-motion's
+        # built output.
+        if: steps.strip.outputs.resume == 'true'
+        working-directory: packages/glimmer-motion
+        run: pnpm build
 
       - name: Publish to npm under latest
         # Authenticated by npm Trusted Publishing, as in the unstable job, and
