@@ -811,16 +811,6 @@ search and not the freedom to write any filter over `PatientRecord`, and a
 filter that names no type is granted by nothing. For the same reason no saved
 search may be named `query`: the name belongs to the search written by hand.
 
-The caller's filter and the grants run as one query, and when both test the
-same path into a list (the list itself, or the same field of the cards it links
-to), one element of the list must satisfy both. Conditions on different fields
-of a list's items are each met by any element, not necessarily the same one. A
-teacher whose grant reads `.teacherIds | any(. == actor())` finds every
-classroom they teach by searching `teacherIds` for themselves, and no classroom
-at all by searching `teacherIds` for a colleague, not even one that lists them
-both. Write such a search against another field. A saved search's own filter is
-composed the same way.
-
 ## Batches
 
 `operations(card).atomic(build)` sends one all-or-nothing batch in that card's
