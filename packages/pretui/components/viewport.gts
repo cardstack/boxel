@@ -18,7 +18,7 @@ function isBp(mode: string) {
 }
 
 // ── Viewport — the artboard ──────────────────────────────────────────────
-// Built against the artboard contract (Appendix H): true widths that pan
+// Built against the artboard contract: true widths that pan
 // rather than clamp, a neutral stage with explicit surface/gutter settings,
 // named breakpoints + a 3-up mode, honest live captions, a drag handle
 // (pointer capture, no document listeners), and reflected data-* state.
@@ -253,205 +253,207 @@ export class Viewport extends Component<ViewportSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-viewport {
-        display: grid;
-        min-width: 0;
-      }
-      /* While the width handle is being dragged, nothing in the viewport is
-         selectable — otherwise the drag paints a text selection across the
-         artboard and its captions. Set by the resizeHandle modifier and
-         cleared on pointerup, pointercancel, and teardown. */
-      .pretui-viewport[data-resizing='true'] {
-        user-select: none;
-        -webkit-user-select: none;
-        cursor: ew-resize;
-      }
-      .pretui-viewport-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-4, 11px);
-        flex-wrap: wrap;
-        min-height: 36px;
-        padding: 6px var(--space-4, 11px);
-        box-shadow: inset 0 -1px 0 var(--border);
-      }
-      .pretui-viewport-width {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 1;
-        min-width: 160px;
-        max-width: 300px;
-      }
-      .pretui-viewport-width > :first-child {
-        flex: 1;
-      }
-      .pretui-viewport-readout {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-        min-width: 48px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-viewport-settings {
-        display: flex;
-        align-items: center;
-        gap: var(--space-4, 11px);
-      }
-      .pretui-viewport-surface {
-        width: 130px;
-        font-size: var(--text-ui, 12px);
-      }
-      .pretui-viewport-gutter {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-        cursor: pointer;
-      }
-      .pretui-viewport-canvas {
-        /* the canvas floor: dot grid on the inset surface (Figma idiom).
-           R1: true widths — wide artboards pan, they are never clamped */
-        background-color: var(--inset, var(--boxel-100));
-        background-image: radial-gradient(
-          circle,
-          var(
-              --pretui-canvas-dot,
-              color-mix(in oklch, var(--foreground) 13%, transparent)
-            )
-            1px,
-          transparent 1px
-        );
-        background-size: 20px 20px;
-        min-height: 220px;
-        max-height: 60vh;
-        padding: 34px var(--space-6, 19px) var(--space-6, 19px);
-        overflow: auto;
-        min-width: 0;
-      }
-      .pretui-artboard {
-        /* exact width from inline style or data-bp; centered while it fits,
-           panned once it doesn't */
-        position: relative;
-        margin-inline: auto;
-        min-height: 72px;
-      }
-      .pretui-artboard[data-label]::before {
-        content: attr(data-label);
-        position: absolute;
-        top: -21px;
-        left: 0;
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        letter-spacing: 0.02em;
-        /* luminance clamp: a season's accent can be too light for small
-           text on the floor — always mix toward ink */
-        color: color-mix(
-          in oklch,
-          var(--pretui-accent, var(--primary)) 55%,
-          var(--foreground)
-        );
-        white-space: nowrap;
-      }
-      .pretui-artboard:hover {
-        outline: 1px solid
-          color-mix(
-            in oklch,
-            var(--pretui-accent, var(--primary)) 45%,
-            transparent
+      @layer PretComponent {
+        .pretui-viewport {
+          display: grid;
+          min-width: 0;
+        }
+        /* While the width handle is being dragged, nothing in the viewport is
+           selectable — otherwise the drag paints a text selection across the
+           artboard and its captions. Set by the resizeHandle modifier and
+           cleared on pointerup, pointercancel, and teardown. */
+        .pretui-viewport[data-resizing='true'] {
+          user-select: none;
+          -webkit-user-select: none;
+          cursor: ew-resize;
+        }
+        .pretui-viewport-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-4, 11px);
+          flex-wrap: wrap;
+          min-height: 36px;
+          padding: 6px var(--space-4, 11px);
+          box-shadow: inset 0 -1px 0 var(--border);
+        }
+        .pretui-viewport-width {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 1;
+          min-width: 160px;
+          max-width: 300px;
+        }
+        .pretui-viewport-width > :first-child {
+          flex: 1;
+        }
+        .pretui-viewport-readout {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+          min-width: 48px;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-viewport-settings {
+          display: flex;
+          align-items: center;
+          gap: var(--space-4, 11px);
+        }
+        .pretui-viewport-surface {
+          width: 130px;
+          font-size: var(--text-ui, 12px);
+        }
+        .pretui-viewport-gutter {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        .pretui-viewport-canvas {
+          /* the canvas floor: dot grid on the inset surface (Figma idiom).
+             R1: true widths — wide artboards pan, they are never clamped */
+          background-color: var(--inset, var(--boxel-100));
+          background-image: radial-gradient(
+            circle,
+            var(
+                --pretui-canvas-dot,
+                color-mix(in oklch, var(--foreground) 13%, transparent)
+              )
+              1px,
+            transparent 1px
           );
-        outline-offset: 8px;
-      }
-      .pretui-artboard-body {
-        /* R2: a neutral stage — normal block flow, no centering opinion */
-        min-height: 72px;
-        border-radius: 8px;
-        box-shadow: 0 0 0 1px var(--border);
-      }
-      .pretui-artboard-body[data-gutter='true'] {
-        padding: var(--space-5, 14px);
-      }
-      .pretui-artboard-body[data-surface='background'] {
-        /* the specimen sits directly on the dot floor — no extra box */
-        background: transparent;
-        box-shadow: none;
-        border-radius: 0;
-      }
-      .pretui-artboard-body[data-surface='card'] {
-        background: var(--card);
-        box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border), 0 1px 3px var(--shadow-ink-soft, rgb(16 24 40 / 0.06)));
-      }
-      .pretui-artboard-body[data-surface='inset'] {
-        background: var(--inset, var(--boxel-100));
-        box-shadow: inset 0 0 0 1px var(--border);
-      }
-      .pretui-artboard-handle {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        right: -18px;
-        width: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: ew-resize;
-        touch-action: none;
-      }
-      .pretui-artboard-handle::after {
-        content: '';
-        width: 4px;
-        height: 30px;
-        border-radius: 4px;
-        background: var(--line-strong, var(--boxel-400));
-      }
-      .pretui-artboard-handle:hover::after {
-        background: var(--pretui-accent, var(--primary));
-      }
-      .pretui-bp-row {
-        /* R3: the same specimen at every breakpoint, side by side */
-        display: flex;
-        gap: 34px;
-        align-items: flex-start;
-        width: max-content;
-        margin-inline: auto;
-      }
-      .pretui-bp-row .pretui-artboard[data-bp='phone'] {
-        width: 375px;
-      }
-      .pretui-bp-row .pretui-artboard[data-bp='tablet'] {
-        width: 768px;
-      }
-      .pretui-bp-row .pretui-artboard[data-bp='desktop'] {
-        width: 1120px;
-      }
-      .pretui-viewport-prose {
-        margin: 0;
-        max-width: 62ch;
-        font-size: var(--text-body, 15px);
-        line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
-        color: var(--foreground);
-      }
-      .pretui-viewport-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: var(--space-4, 11px);
-      }
-      .pretui-viewport-cell {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: var(--space-3, 8px);
-        flex-wrap: wrap;
-        background: var(--background);
-        border-radius: 8px;
-        box-shadow: 0 0 0 1px var(--border);
-        padding: var(--space-4, 11px);
-        min-height: 64px;
+          background-size: 20px 20px;
+          min-height: 220px;
+          max-height: 60vh;
+          padding: 34px var(--space-6, 19px) var(--space-6, 19px);
+          overflow: auto;
+          min-width: 0;
+        }
+        .pretui-artboard {
+          /* exact width from inline style or data-bp; centered while it fits,
+             panned once it doesn't */
+          position: relative;
+          margin-inline: auto;
+          min-height: 72px;
+        }
+        .pretui-artboard[data-label]::before {
+          content: attr(data-label);
+          position: absolute;
+          top: -21px;
+          left: 0;
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          letter-spacing: 0.02em;
+          /* luminance clamp: a season's accent can be too light for small
+             text on the floor — always mix toward ink */
+          color: color-mix(
+            in oklch,
+            var(--pretui-accent, var(--primary)) 55%,
+            var(--foreground)
+          );
+          white-space: nowrap;
+        }
+        .pretui-artboard:hover {
+          outline: 1px solid
+            color-mix(
+              in oklch,
+              var(--pretui-accent, var(--primary)) 45%,
+              transparent
+            );
+          outline-offset: 8px;
+        }
+        .pretui-artboard-body {
+          /* R2: a neutral stage — normal block flow, no centering opinion */
+          min-height: 72px;
+          border-radius: 8px;
+          box-shadow: 0 0 0 1px var(--border);
+        }
+        .pretui-artboard-body[data-gutter='true'] {
+          padding: var(--space-5, 14px);
+        }
+        .pretui-artboard-body[data-surface='background'] {
+          /* the specimen sits directly on the dot floor — no extra box */
+          background: transparent;
+          box-shadow: none;
+          border-radius: 0;
+        }
+        .pretui-artboard-body[data-surface='card'] {
+          background: var(--card);
+          box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border), 0 1px 3px var(--shadow-ink-soft, rgb(16 24 40 / 0.06)));
+        }
+        .pretui-artboard-body[data-surface='inset'] {
+          background: var(--inset, var(--boxel-100));
+          box-shadow: inset 0 0 0 1px var(--border);
+        }
+        .pretui-artboard-handle {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          right: -18px;
+          width: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: ew-resize;
+          touch-action: none;
+        }
+        .pretui-artboard-handle::after {
+          content: '';
+          width: 4px;
+          height: 30px;
+          border-radius: 4px;
+          background: var(--line-strong, var(--boxel-400));
+        }
+        .pretui-artboard-handle:hover::after {
+          background: var(--pretui-accent, var(--primary));
+        }
+        .pretui-bp-row {
+          /* R3: the same specimen at every breakpoint, side by side */
+          display: flex;
+          gap: 34px;
+          align-items: flex-start;
+          width: max-content;
+          margin-inline: auto;
+        }
+        .pretui-bp-row .pretui-artboard[data-bp='phone'] {
+          width: 375px;
+        }
+        .pretui-bp-row .pretui-artboard[data-bp='tablet'] {
+          width: 768px;
+        }
+        .pretui-bp-row .pretui-artboard[data-bp='desktop'] {
+          width: 1120px;
+        }
+        .pretui-viewport-prose {
+          margin: 0;
+          max-width: 62ch;
+          font-size: var(--text-body, 15px);
+          line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
+          color: var(--foreground);
+        }
+        .pretui-viewport-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: var(--space-4, 11px);
+        }
+        .pretui-viewport-cell {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--space-3, 8px);
+          flex-wrap: wrap;
+          background: var(--background);
+          border-radius: 8px;
+          box-shadow: 0 0 0 1px var(--border);
+          padding: var(--space-4, 11px);
+          min-height: 64px;
+        }
       }
     </style>
   </template>

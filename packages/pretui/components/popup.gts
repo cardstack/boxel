@@ -61,22 +61,24 @@ export class Popup extends Component<PopupSignature> {
       {{/if}}
     </span>
     <style scoped>
-      .pretui-popup-anchor {
-        display: inline-block;
-      }
-      .pretui-popup {
-        /* anchored overlays must escape scroll clipping; measured on open
-           only — never during prerender (lint warns, accepted) */
-        position: fixed;
-        top: 0;
-        left: 0;
-        /* kit stacking scale (pretui-css.gts): `overlay` sits above
-           `dropdown` because a Popup can CONTAIN a Select or Menu, and a
-           containing panel must never paint under its own content.
-           Dialog/Drawer are not on the scale in practice — showModal()
-           promotes them to the top layer, above every z-index here. */
-        z-index: var(--pretui-z-overlay, 70);
-        display: block;
+      @layer PretComponent {
+        .pretui-popup-anchor {
+          display: inline-block;
+        }
+        .pretui-popup {
+          /* anchored overlays must escape scroll clipping; measured on open
+             only — never during prerender (lint warns, accepted) */
+          position: fixed;
+          top: 0;
+          left: 0;
+          /* kit stacking scale (pretui-css.gts): `overlay` sits above
+             `dropdown` because a Popup can CONTAIN a Select or Menu, and a
+             containing panel must never paint under its own content.
+             Dialog/Drawer are not on the scale in practice — showModal()
+             promotes them to the top layer, above every z-index here. */
+          z-index: var(--pretui-z-overlay, 70);
+          display: block;
+        }
       }
     </style>
   </template>

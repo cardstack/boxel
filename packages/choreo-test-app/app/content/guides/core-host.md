@@ -32,8 +32,18 @@ A common trigger is assigning a tracked property unconditionally from a per-fram
 
 Test a new adapter with nested motion elements, shared layout, an exiting child, and interruption. A single successful opacity animation does not validate mount ordering or projection. The existing fidelity and contract suites are the relevant evidence because they exercise the temporal behavior that a host integration can silently change.
 
+## Hosting Participants
+
+A component that coordinates many motion elements at once, such as a choreography region or a shared-element transition, is a participant host. It implements `ParticipantHost`, renders `data-motion-host` (the `PARTICIPANT_HOST_ATTRIBUTE`) on its root element, and installs itself on that element with `setParticipantHost()` from a modifier. `closestParticipantHost()` is the lookup a motion element runs when it mounts. The attribute belongs in the markup rather than in the modifier, because modifiers install children-first: a marked element whose host has not installed yet resolves to no host, never to an outer one.
+
+Only a motion element with an `id` or a `role` joins, and it joins the nearest host. The host sees it as a `MotionParticipant`, with its element, VisualElement, identity, group and presence. `register` runs on mount. On teardown the element unregisters and then asks `claim`. A host that claims a leaving element owns its unmount, and calls `release()` when it is done with it. `<Choreo>` is a participant host.
+
+A host can also add its own named arguments to the modifier. It declares them by augmenting `ParticipantArgs` and registers each one with `defineParticipantArg()`. The modifier keeps those arguments away from the engine and hands each value to the host on every pass.
+
+A host whose work outlasts the engine's own animations, such as a timeline still running between steps, registers a `BusyProbe` with `registerBusyProbe()`. The probe answers `false` at rest or a short reason while busy, and `animationsSettled()` and `whatIsBusy()` consult it alongside the frameloop and the projection tree. Registration returns a remover. A probe over one host instance's state is removed in that instance's destructor, so a torn-down host never holds a test open; a probe over module-global state, such as Choreo's far-match barrier, may stay registered for the life of the page.
+
 ## API Coverage
 
-**glimmer-motion**: `afterSettle`, `instantLayoutTransition`, `layoutLoopDetected`, `requestSettle`, `resetLayoutLoopGuard`, `snapshotAll`, `MotionEl`, `MotionModifier`, `flushPendingMounts`, `MotionNode`, `postRender`, `setPostRender`.
+**glimmer-motion**: `BusyProbe`, `registerBusyProbe`, `afterSettle`, `instantLayoutTransition`, `layoutLoopDetected`, `requestSettle`, `resetLayoutLoopGuard`, `snapshotAll`, `MotionEl`, `MotionModifier`, `flushPendingMounts`, `MotionNode`, `MotionParticipant`, `ParticipantArgs`, `ParticipantHost`, `closestParticipantHost`, `defineParticipantArg`, `PARTICIPANT_HOST_ATTRIBUTE`, `setParticipantHost`, `postRender`, `setPostRender`.
 
-Read the implementation: [`layout.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts), [`motion.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts), [`node.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/node.ts), [`scheduler.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scheduler.ts).
+Read the implementation: [`activity.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts), [`layout.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts), [`motion.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts), [`node.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/node.ts), [`scheduler.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scheduler.ts).

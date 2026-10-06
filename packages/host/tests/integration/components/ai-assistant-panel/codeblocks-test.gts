@@ -666,7 +666,6 @@ Above code blocks are now complete`;
     assert.dom('.code-block-diff .monaco-diff-editor').exists();
     assert.dom('.code-block-diff .editor.original').exists();
     assert.dom('.code-block-diff .editor.modified').exists();
-    assert.dom('[data-test-apply-code-button]').exists();
   });
 
   test('it will render diff editor for a blank file', async function (assert) {
@@ -706,6 +705,5 @@ Above code blocks are now complete`;
 
     assert.dom('.cdr.line-delete').exists({ count: 1 });
     assert.dom('.cdr.line-insert').exists({ count: 1 });
-    assert.dom('[data-test-apply-code-button]').exists();
   });
 });

@@ -35,6 +35,9 @@ function toBytes(content: string | Uint8Array): Uint8Array {
 //     confined to the middle collides only within the time's granularity.
 //   - thumbnail freshness (`file-view-model`): accepts sampled values; a false
 //     match is a cosmetically stale thumbnail.
+//   - HTML preview refetch (`HtmlPreview`): joins the value with the file's
+//     modification time, so an edit confined to the middle of a large file
+//     still refetches the source.
 //
 // md5 is linear in content length and runs synchronously on the main thread,
 // so hashing whole files makes a single large write a multi-hundred-millisecond

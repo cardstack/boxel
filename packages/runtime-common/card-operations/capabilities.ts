@@ -125,6 +125,7 @@ export async function checkCapabilities(
 ): Promise<CapabilityOutcome> {
   let scope = newOperationScope(core, {
     caller: who.caller,
+    advisory: true,
     // A caller who may read the realm and whose writes are refused outright
     // has nothing for the policy to decide: their reads are the ACL's, and
     // their writes are refused below whatever a grant says. So the gate is not
@@ -288,7 +289,7 @@ async function searchDecision(
 ): Promise<PairDecision> {
   let scope = await principalQueryScope(
     core,
-    { operation, types: [on] },
+    { operation, types: [on], advisory: true },
     who.searchPrincipal,
   );
   return {

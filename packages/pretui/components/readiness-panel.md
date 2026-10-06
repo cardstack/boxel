@@ -49,3 +49,5 @@ Where it is thinner: no per-gate remediation actions, no re-run, and no history 
 The verdict and gate states take the kit's semantic hues; the panel takes the shared surface and heading tokens.
 
 Sharing the semantic scale is what lets a "blocked" gate here look like every other blocking state in the product, which matters for a panel whose entire job is to be believed.
+
+The styles sit in `@layer PretComposite`, above Panel's `PretComponent` layer, so what this component sets on Panel wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

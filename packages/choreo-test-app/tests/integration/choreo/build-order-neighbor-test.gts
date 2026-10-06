@@ -10,12 +10,12 @@
  * in-flight run KEEPS that run. Unrelated renders must not restart a
  * region's clock.
  */
+import type { ChoreoRun } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import type { ChoreoRun } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 
@@ -54,7 +54,7 @@ const frames = (n: number) =>
 
 module('Integration | choreo | build-order neighbours', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a per-frame tracked neighbour does not restart the run', async function (assert) {
     await render(<template><Noise /><BuildOrder /></template>);

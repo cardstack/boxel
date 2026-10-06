@@ -1,5 +1,5 @@
-// Pretui — semantics proof for Chip, StatusChip, Token, Delta, Meter, Avatar
-// and AvatarGroup.
+// Pretui — semantics proof for Chip, StatusChip, Delta, Meter, Avatar and
+// AvatarGroup. Token's tests live in components/token.test.gts.
 //
 // Nothing here asserts a computed style: the components' own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
@@ -15,7 +15,6 @@ import { Chip } from './components/chip';
 import { Delta } from './components/delta';
 import { Meter } from './components/meter';
 import { StatusChip } from './components/status-chip';
-import { Token } from './components/token';
 import { statusHue } from './internal/ink';
 
 function q(sel: string): HTMLElement {
@@ -96,20 +95,6 @@ module('Pretui | ink', function (hooks) {
     );
   });
 
-  // ── Token ───────────────────────────────────────────────────────────────
-  test('Token renders as <code>, prefers @value, and carries an allowed hue', async function (assert) {
-    await render(<template><Token @value='SKU-8812' @hue='var(--chart-2)'>ignored</Token></template>);
-    let el = q('[data-test-pretui-token]');
-    assert.strictEqual(el.tagName, 'CODE', 'a machine value is marked up as code');
-    assert.strictEqual(el.textContent?.trim(), 'SKU-8812');
-    assert.true(el.getAttribute('style')?.includes('--pretui-token-hue: var(--chart-2)'));
-  });
-
-  test('Token falls back to its block', async function (assert) {
-    await render(<template><Token>0x41</Token></template>);
-    assert.strictEqual(q('[data-test-pretui-token]').textContent?.trim(), '0x41');
-  });
-
   // ── Delta ───────────────────────────────────────────────────────────────
   test('Delta signs the number and reflects the direction', async function (assert) {
     await render(
@@ -171,17 +156,95 @@ module('Pretui | ink', function (hooks) {
     assert.strictEqual(all('.pretui-meter-bar').length, 5);
   });
 
-  test('Meter has no clamp: a level outside 0..@segments ships as invalid aria-valuenow (KNOWN GAP)', async function (assert) {
-    // KNOWN GAP, pinned rather than patched: `@level` goes straight to
-    // aria-valuenow and the lit count is `i < level`, so 9 of 3 announces 9
-    // against aria-valuemax=3 and lights every bar, and -2 announces -2 below
-    // aria-valuemin=0. Both are invalid ARIA. A fix clamps to [0, segments];
-    // when it lands, these expectations flip to '3' / '0'.
+  test('Meter clamps a level outside 0..@segments, in what it announces and what it lights', async function (assert) {
+    // An aria-valuenow outside aria-valuemin..aria-valuemax is invalid ARIA,
+    // so the announced level is the same clamped count of lit bars.
     await render(<template><Meter @level={{9}} @segments={{3}} @label='Over' /></template>);
-    assert.strictEqual(q('[data-test-pretui-meter]').getAttribute('aria-valuenow'), '9', 'above max, unclamped');
-    assert.deepEqual(all('.pretui-meter-bar').map((b) => b.dataset['on']), ['true', 'true', 'true']);
+    assert.strictEqual(
+      q('[data-test-pretui-meter]').getAttribute('aria-valuenow'),
+      '3',
+      'above max, announced as the max',
+    );
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      ['true', 'true', 'true'],
+      'every bar is lit, and no more',
+    );
     await render(<template><Meter @level={{-2}} @segments={{3}} @label='Under' /></template>);
-    assert.strictEqual(q('[data-test-pretui-meter]').getAttribute('aria-valuenow'), '-2', 'below min, unclamped');
+    assert.strictEqual(
+      q('[data-test-pretui-meter]').getAttribute('aria-valuenow'),
+      '0',
+      'below min, announced as the min',
+    );
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      [undefined, undefined, undefined],
+      'no bar is lit',
+    );
+  });
+
+  test('Meter rounds a fractional level up, so the announced level matches the lit count', async function (assert) {
+    await render(<template><Meter @level={{1.5}} @segments={{3}} @label='Partial' /></template>);
+    assert.strictEqual(
+      q('[data-test-pretui-meter]').getAttribute('aria-valuenow'),
+      '2',
+      'announced as the whole number of lit bars',
+    );
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      ['true', 'true', undefined],
+      'two bars are lit',
+    );
+  });
+
+  test('Meter reads an unset or non-finite level as 0', async function (assert) {
+    // The signature requires a number, but an unset model property or a failed
+    // computation still reaches the component at runtime.
+    const UNSET = undefined as unknown as number;
+    const NOT_A_NUMBER = Number.NaN;
+    await render(
+      <template>
+        <Meter @level={{UNSET}} @label='Unset' data-test-unset />
+        <Meter @level={{NOT_A_NUMBER}} @label='NaN' data-test-nan />
+      </template>,
+    );
+    for (let sel of ['[data-test-unset]', '[data-test-nan]']) {
+      assert.strictEqual(q(sel).getAttribute('aria-valuenow'), '0', `${sel}: announced as the min, not NaN`);
+      assert.deepEqual(
+        Array.from(q(sel).querySelectorAll<HTMLElement>('.pretui-meter-bar')).map((b) => b.dataset['on']),
+        [undefined, undefined, undefined],
+        `${sel}: no bar is lit`,
+      );
+    }
+  });
+
+  test('Meter reads a NaN @segments as no bars, so aria-valuemax is 0, not NaN', async function (assert) {
+    const NOT_A_NUMBER = Number.NaN;
+    await render(<template><Meter @level={{2}} @segments={{NOT_A_NUMBER}} @label='NaN' /></template>);
+    let el = q('[data-test-pretui-meter]');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '0', 'no bars, so the max is 0');
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '0', 'the level is clamped into the empty range');
+    assert.strictEqual(all('.pretui-meter-bar').length, 0, 'no bars are drawn');
+  });
+
+  test('Meter reads a negative @segments as no bars, so aria-valuemax never drops below aria-valuemin', async function (assert) {
+    await render(<template><Meter @level={{2}} @segments={{-2}} @label='Negative' /></template>);
+    let el = q('[data-test-pretui-meter]');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '0', 'no bars, so the max is 0');
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '0', 'the level is clamped into the empty range');
+    assert.strictEqual(all('.pretui-meter-bar').length, 0, 'no bars are drawn');
+  });
+
+  test('Meter rounds a fractional @segments up, so aria-valuemax is the number of bars drawn', async function (assert) {
+    await render(<template><Meter @level={{3}} @segments={{2.5}} @label='Fractional' /></template>);
+    let el = q('[data-test-pretui-meter]');
+    assert.strictEqual(el.getAttribute('aria-valuemax'), '3', 'three bars drawn, so the max is 3');
+    assert.strictEqual(el.getAttribute('aria-valuenow'), '3', 'a full meter announces the whole max');
+    assert.deepEqual(
+      all('.pretui-meter-bar').map((b) => b.dataset['on']),
+      ['true', 'true', 'true'],
+      'all three bars are lit',
+    );
   });
 
   test('Meter reuses the last height when @segments outruns @heights', async function (assert) {
@@ -203,19 +266,21 @@ module('Pretui | ink', function (hooks) {
     assert.strictEqual(el.textContent?.trim(), 'ML', 'first two words only, uppercased');
     assert.strictEqual(el.getAttribute('aria-label'), 'Mei Ling Chen');
     assert.strictEqual(el.getAttribute('title'), 'Mei Ling Chen');
-    assert.true(el.getAttribute('style')?.includes('width: 24px'), 'defaults to 24px');
+    assert.strictEqual(
+      el.style.getPropertyValue('--pretui-avatar-size'),
+      '',
+      "defaults to the stylesheet's 1.5rem (24px at a 16px root)",
+    );
     assert.true(
       el.getAttribute('style')?.includes(statusHue('Mei Ling Chen')),
       'the hue is derived from the name, so the same person keeps the same colour',
     );
   });
 
-  test('Avatar scales its type with @size', async function (assert) {
+  test('Avatar writes @size as rem, which the stylesheet sizes the disc and its type from', async function (assert) {
     await render(<template><Avatar @name='Ada' @size={{40}} /></template>);
-    let style = q('[data-test-pretui-avatar]').getAttribute('style') ?? '';
-    assert.true(style.includes('width: 40px'));
-    assert.true(style.includes('height: 40px'));
-    assert.true(style.includes('font-size: 17px'), '0.42 of the box, rounded');
+    let el = q('[data-test-pretui-avatar]');
+    assert.strictEqual(el.style.getPropertyValue('--pretui-avatar-size').trim(), '2.5rem');
   });
 
   test('Avatar shows the image when given one and falls back to initials once it fails', async function (assert) {

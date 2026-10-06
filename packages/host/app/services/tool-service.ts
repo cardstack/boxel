@@ -1,7 +1,7 @@
 import { getOwner, setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 
-import { debounce, schedule } from '@ember/runloop';
+import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -22,6 +22,7 @@ import {
   identifyCard,
   rri,
   type PatchData,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
@@ -35,8 +36,8 @@ import ENV from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
-import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
+import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
@@ -49,16 +50,14 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
-import type { CodeData } from '../lib/formatted-message/utils';
-import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
 import type { CardDef } from '@cardstack/base/card-api';
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
-// How long drainToolProcessingQueue and drainCodePatchProcessingQueue wait
+// How long drainToolProcessingQueue waits
 // for a room resource that's still processing before giving up on the event.
 // In tests we shorten this so the stuck-timeout invalidation path can be
 // exercised in a single test without holding a real test open for a minute.
@@ -69,26 +68,18 @@ const STUCK_PROCESSING_TIMEOUT_MS = isTesting() ? 1000 : 60_000;
 // result either way). Requeues are ~100ms apart (the drain debounce), so
 // this allows well over the normal sub-second catch-up.
 const MAX_TOOL_FINALIZATION_RETRIES = isTesting() ? 10 : 100;
-// How many times drainToolProcessingQueue requeues a message's tools while
-// that same message still has code patches pending auto-apply. Tools
-// routinely target the very cards those patches create (a show-card for the
-// instance a patch writes), so running them concurrently races the realm
-// write/index. Requeues are ~100ms apart; on exhaustion the tools run
-// anyway and the execute timeout below is the backstop.
-const MAX_TOOL_PATCH_WAIT_RETRIES = isTesting() ? 20 : 600;
-// How many times drainToolProcessingQueue requeues a message's tools while
-// the index invalidations tracked for its patched files are still pending.
-// Applied patches mean the write landed, not that the index has caught up —
-// a tool loading a just-created card would still miss it. Requeues are
-// ~100ms apart, so the production budget approximates the card render
-// timeout; on exhaustion the tools run anyway and the execute timeout is
-// the backstop.
-const MAX_TOOL_INDEX_WAIT_RETRIES = isTesting() ? 20 : 300;
 // Upper bound on a single tool execution. A tool awaiting a card that never
 // becomes loadable would otherwise hang forever, and the result event —
 // which is what un-sticks both the UI spinner and the waiting ai-bot — is
 // only sent once execute settles.
 const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 3_000 : 120_000;
+// Upper bound on validating one tool request in the drain. Validation loads
+// the tool's module and input schema; a load that never settles would hold
+// the drain pass, and with it every later drain pass in the tab.
+const VALIDATE_TIMEOUT_MS = isTesting() ? 3_000 : 60_000;
+// When a validation is still running after this long, log the step it is on
+// and what the loader and store are waiting for.
+const VALIDATE_WATCHDOG_MS = isTesting() ? 1_000 : 20_000;
 
 // Promise.race with a cleared timer: the losing execute keeps running (we
 // cannot cancel it), but the run task settles and reports. That means a
@@ -116,12 +107,76 @@ async function withTimeout<T>(
   }
 }
 
+// Every tool module the host provides is registered under this specifier.
+const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
+
 type GenericCommand = Command<
   typeof CardDef | undefined,
   typeof CardDef | undefined
 >;
 
 const toolProcessingWaiter = buildWaiter('tool-service:command-processing');
+
+// Converts, where the schema asks for an object, an array or a number, a
+// string value that parses to one. Nothing else changes.
+function coerceToSchema(
+  value: unknown,
+  schema: any,
+): { value: unknown; changed: boolean } {
+  if (!schema || typeof schema !== 'object') {
+    return { value, changed: false };
+  }
+  let type = schema.type;
+  if (typeof value === 'string') {
+    if (type === 'object' || type === 'array') {
+      try {
+        let parsed = JSON.parse(value);
+        let fits =
+          type === 'array'
+            ? Array.isArray(parsed)
+            : parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+        if (fits) {
+          return { value: coerceToSchema(parsed, schema).value, changed: true };
+        }
+      } catch {
+        // not JSON; leave it for validation to report
+      }
+    } else if (
+      (type === 'number' || type === 'integer') &&
+      value.trim() !== '' &&
+      !Number.isNaN(Number(value))
+    ) {
+      return { value: Number(value), changed: true };
+    }
+    return { value, changed: false };
+  }
+  if (Array.isArray(value) && schema.items) {
+    let changed = false;
+    let items = value.map((item) => {
+      let result = coerceToSchema(item, schema.items);
+      changed ||= result.changed;
+      return result.value;
+    });
+    return { value: changed ? items : value, changed };
+  }
+  if (value && typeof value === 'object' && schema.properties) {
+    let changed = false;
+    let out: Record<string, unknown> = {
+      ...(value as Record<string, unknown>),
+    };
+    for (let [key, propertySchema] of Object.entries(schema.properties)) {
+      if (key in out) {
+        let result = coerceToSchema(out[key], propertySchema);
+        if (result.changed) {
+          out[key] = result.value;
+          changed = true;
+        }
+      }
+    }
+    return { value: changed ? out : value, changed };
+  }
+  return { value, changed: false };
+}
 
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
@@ -155,34 +210,17 @@ export default class ToolService extends Service {
       roomId: string;
       targetHref: string;
       deferred: Deferred<void>;
-      // Whether the index event arrived. Deferred has no synchronous
-      // inspection, and the tool drain must be able to ask "has this
-      // landed?" without awaiting — see hasPendingPatchInvalidations.
-      settled: boolean;
     }
   >();
   private aiAssistantInvalidationWaiters = new Map<
     string,
     { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
   >();
-  // Where a code patch actually landed when the requested file already
-  // existed and patch-code collision-renamed it: requested key -> final URL.
-  // The invalidation tracker keys on the final URL, so waits that arrive
-  // with the requested URL resolve through this map.
-  private patchedFileRedirects = new Map<string, string>();
   private toolProcessingEventQueue: string[] = [];
   // How many times each queued event has been requeued waiting for the room
   // resource to fold the event's finalized content into its Message.
   private toolFinalizationRetries = new Map<string, number>();
-  // How many times each queued event's tools have been requeued waiting for
-  // that message's own code patches to finish auto-applying.
-  private toolPatchWaitRetries = new Map<string, number>();
-  // How many times each queued event's tools have been requeued waiting for
-  // the index invalidations tracked for that message's patched files.
-  private toolIndexWaitRetries = new Map<string, number>();
-  private codePatchProcessingEventQueue: string[] = [];
   private flushToolProcessingQueue: Promise<void> | undefined;
-  private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -202,14 +240,9 @@ export default class ToolService extends Service {
     for (let key of this.aiAssistantInvalidationWaiters.keys()) {
       this.cleanupInvalidationWaiter(key);
     }
-    this.patchedFileRedirects.clear();
     this.toolProcessingEventQueue = [];
     this.toolFinalizationRetries.clear();
-    this.toolPatchWaitRetries.clear();
-    this.toolIndexWaitRetries.clear();
-    this.codePatchProcessingEventQueue = [];
     this.flushToolProcessingQueue = undefined;
-    this.flushCodePatchProcessingQueue = undefined;
   }
 
   registerAiAssistantClientRequestId(action: string, roomId: string): string {
@@ -269,7 +302,6 @@ export default class ToolService extends Service {
       roomId,
       targetHref: normalizedTarget,
       deferred,
-      settled: false,
     });
 
     let unsubscribe = this.messageService.subscribe(realmURL, (event) => {
@@ -290,19 +322,13 @@ export default class ToolService extends Service {
       }
       this.cleanupInvalidationWaiter(key);
       let current = this.aiAssistantInvalidations.get(key);
-      if (current) {
-        current.settled = true;
-        current.deferred.fulfill();
-      }
+      current?.deferred.fulfill();
     });
     let timeoutId = setTimeout(
       () => {
         this.cleanupInvalidationWaiter(key);
         let current = this.aiAssistantInvalidations.get(key);
-        if (current) {
-          current.settled = true;
-          current.deferred.fulfill();
-        }
+        current?.deferred.fulfill();
         this.aiAssistantInvalidations.delete(key);
       },
       5 * 60 * 1000,
@@ -340,10 +366,6 @@ export default class ToolService extends Service {
       return;
     }
     let key = this.invalidationKey(roomId, targetHref);
-    let redirectedTarget = this.patchedFileRedirects.get(key);
-    if (redirectedTarget) {
-      key = this.invalidationKey(roomId, redirectedTarget);
-    }
     let existing = this.aiAssistantInvalidations.get(key);
     if (!existing) {
       return;
@@ -354,8 +376,7 @@ export default class ToolService extends Service {
       ? await Promise.race([invalidated, delay(timeoutMs).then(() => false)])
       : await invalidated;
     // Only a real invalidation consumes the entry. On timeout the deferred is
-    // still live, and a later caller (e.g. checkCorrectness after the drain's
-    // bounded wait) must still be able to wait on it.
+    // still live, and a later caller must still be able to wait on it.
     if (settled) {
       this.aiAssistantInvalidations.delete(key);
     }
@@ -387,38 +408,12 @@ export default class ToolService extends Service {
     debounce(this, this.drainToolProcessingQueue, 100);
   }
 
-  public queueEventForCodePatchProcessing(event: Partial<IEvent>) {
-    let eventId = event.event_id;
-    if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
-      eventId = event.content?.['m.relates_to']!.event_id;
-    }
-    if (!eventId) {
-      throw new Error(
-        'No event id found for event with code patches, this should not happen',
-      );
-    }
-    let roomId = event.room_id;
-    if (!roomId) {
-      throw new Error(
-        'No room id found for event with code patches, this should not happen',
-      );
-    }
-    let compoundKey = `${roomId}|${eventId}`;
-    if (this.codePatchProcessingEventQueue.includes(compoundKey)) {
-      return;
-    }
-
-    this.codePatchProcessingEventQueue.push(compoundKey);
-
-    debounce(this, this.drainCodePatchProcessingQueue, 100);
-  }
-
   private async drainToolProcessingQueue() {
     let waiterToken = toolProcessingWaiter.beginAsync();
+    let finishedProcessingTools: (() => void) | undefined;
     try {
       await this.flushToolProcessingQueue;
 
-      let finishedProcessingTools: () => void;
       this.flushToolProcessingQueue = new Promise(
         (res) => (finishedProcessingTools = res),
       );
@@ -523,68 +518,6 @@ export default class ToolService extends Service {
           continue;
         }
 
-        // A message can carry both code patches and tool requests, and the
-        // tools routinely target the very cards those patches create (a
-        // show-card for the instance a patch writes). Running them while the
-        // patches are still applying races the realm write/index, so when
-        // this message still has patches the host is going to auto-apply
-        // ('act' mode), requeue the tools until those patches settle.
-        // Bounded: on exhaustion the tools run anyway and the execute
-        // timeout is the backstop.
-        if (
-          roomResource.getActiveLLMModeForMessage(message.eventId) === 'act' &&
-          this.messageHasUnsettledCodePatches(message)
-        ) {
-          let compoundKey = `${roomId}|${eventId}`;
-          let retries = this.toolPatchWaitRetries.get(compoundKey) ?? 0;
-          if (retries < MAX_TOOL_PATCH_WAIT_RETRIES) {
-            this.toolPatchWaitRetries.set(compoundKey, retries + 1);
-            if (!this.toolProcessingEventQueue.includes(compoundKey)) {
-              this.toolProcessingEventQueue.push(compoundKey);
-            }
-            debounce(this, this.drainToolProcessingQueue, 100);
-            continue;
-          }
-          console.error(
-            `Tools on event ${eventId} in room ${roomId} ran before its code patches settled (waited ${MAX_TOOL_PATCH_WAIT_RETRIES} rounds)`,
-          );
-        }
-        this.toolPatchWaitRetries.delete(`${roomId}|${eventId}`);
-
-        // Applied patches mean the write landed, not that the index has
-        // caught up — a tool loading a just-created card would still miss
-        // it. Requeue until the tracked index invalidations of this
-        // message's patched files settle, the same milestone
-        // checkCorrectness waits on. The check is synchronous and the wait
-        // happens through requeues because this loop drains every room's
-        // tools — awaiting here would park unrelated rooms behind one slow
-        // index event. A no-op when nothing was tracked (e.g. the patches
-        // were applied by another session). Bounded: on exhaustion the
-        // tools run anyway with the execute timeout as the backstop, and
-        // the still-pending entry is deliberately left in place so a later
-        // checkCorrectness can wait on it.
-        let patchedFileUrls = this.patchedFileUrls(message);
-        if (
-          patchedFileUrls.length > 0 &&
-          this.messageHasUnresolvedTools(message) &&
-          this.hasPendingPatchInvalidations(roomId!, patchedFileUrls)
-        ) {
-          let compoundKey = `${roomId}|${eventId}`;
-          let retries = this.toolIndexWaitRetries.get(compoundKey) ?? 0;
-          if (retries < MAX_TOOL_INDEX_WAIT_RETRIES) {
-            this.toolIndexWaitRetries.set(compoundKey, retries + 1);
-            if (!this.toolProcessingEventQueue.includes(compoundKey)) {
-              this.toolProcessingEventQueue.push(compoundKey);
-            }
-            debounce(this, this.drainToolProcessingQueue, 100);
-            continue;
-          }
-          console.error(
-            `Tools on event ${eventId} in room ${roomId} ran before the index invalidations of its patched files settled (waited ${MAX_TOOL_INDEX_WAIT_RETRIES} rounds)`,
-          );
-        }
-        this.toolIndexWaitRetries.delete(`${roomId}|${eventId}`);
-
         // Collect all ready commands for this message
         let readyTools: any[] = [];
         for (let messageTool of message.tools) {
@@ -632,9 +565,22 @@ export default class ToolService extends Service {
           // single throw killed the whole drain pass silently: the request
           // stayed claimed forever, its spinner never cleared, and the bot
           // waited forever. Report it as a failed result instead.
+          //
+          // The same holds for a validate() that never settles, and there the
+          // cost is larger: every later drain pass awaits this one, so every
+          // tool in the tab stops. Bound it like execute, and log what it is
+          // waiting on if it is slow, so the stuck step can be named.
           let isValid = false;
+          let watchdog = setTimeout(
+            () => this.logSlowValidation(messageTool),
+            VALIDATE_WATCHDOG_MS,
+          );
           try {
-            isValid = await this.validate(messageTool);
+            isValid = await withTimeout(
+              this.validate(messageTool),
+              VALIDATE_TIMEOUT_MS,
+              `Validating tool "${messageTool.name}"`,
+            );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
             console.error(
@@ -668,6 +614,11 @@ export default class ToolService extends Service {
               }
             }
             continue;
+          } finally {
+            clearTimeout(watchdog);
+            if (messageTool.id) {
+              this.validationSteps.delete(messageTool.id);
+            }
           }
           if (!isValid) {
             continue;
@@ -701,8 +652,13 @@ export default class ToolService extends Service {
           }
         }
       }
-      finishedProcessingTools!();
+    } catch (e) {
+      console.error('A tool processing pass failed', e);
     } finally {
+      // Every pass awaits the one before it, so a pass that throws must
+      // still release the next: otherwise no tool in the tab runs again, and
+      // each one that arrives shows its spinner forever.
+      finishedProcessingTools?.();
       toolProcessingWaiter.endAsync(waiterToken);
     }
   }
@@ -783,123 +739,6 @@ export default class ToolService extends Service {
     }
   }
 
-  private async drainCodePatchProcessingQueue() {
-    let waiterToken = toolProcessingWaiter.beginAsync();
-    try {
-      await this.flushCodePatchProcessingQueue;
-
-      let finishedProcessingCodePatches: () => void;
-      this.flushCodePatchProcessingQueue = new Promise(
-        (res) => (finishedProcessingCodePatches = res),
-      );
-
-      let codePatchSpecs = [...this.codePatchProcessingEventQueue];
-      this.codePatchProcessingEventQueue = [];
-
-      while (codePatchSpecs.length > 0) {
-        let [roomId, eventId] = codePatchSpecs.shift()!.split('|');
-
-        let roomResource = this.matrixService.roomResources.get(roomId!);
-        if (!roomResource) {
-          throw new Error(
-            `Room resource not found for room id ${roomId}, this should not happen`,
-          );
-        }
-        let timeout = Date.now() + STUCK_PROCESSING_TIMEOUT_MS; // reset the timer to avoid a long wait if the room resource is processing
-        let currentRoomProcessingTimestamp =
-          roomResource.processingLastStartedAt;
-        while (
-          roomResource.isProcessing &&
-          currentRoomProcessingTimestamp ===
-            roomResource.processingLastStartedAt &&
-          Date.now() < timeout
-        ) {
-          // wait for the room resource to finish processing
-          await delay(100);
-        }
-        if (
-          roomResource.isProcessing &&
-          currentRoomProcessingTimestamp ===
-            roomResource.processingLastStartedAt
-        ) {
-          // room seems to be stuck processing, so we will log and skip this event
-          console.error(
-            `Room resource for room ${roomId} seems to be stuck processing, skipping code patch event ${eventId}`,
-          );
-          continue;
-        }
-        // Resolve through the continuation chain: a long answer arrives as
-        // several events, and only the head of the chain carries the joined
-        // body every patch was parsed from.
-        let message = roomResource.messageForEventId(eventId);
-        if (!message) {
-          // The event was queued for auto-apply but its message isn't in the
-          // room timeline yet — room processing lagged or dropped it. The event
-          // is consumed here and never retried, so a patch that should
-          // auto-apply silently won't. Log enough to recognize that race.
-          if (isTesting()) {
-            console.log(
-              `[code-patch-autoapply] event ${eventId} queued but no matching message in room ${roomId}; isProcessing=${roomResource.isProcessing}, messageCount=${roomResource.messages.length}`,
-            );
-          }
-          continue;
-        }
-        if (message.agentId !== this.matrixService.agentId) {
-          // This code patch was sent by another agent, so we will not auto-execute it
-          continue;
-        }
-
-        // Get the LLM mode that was active when this message was created
-        let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
-          message.eventId,
-        );
-        // Only auto-apply if in 'act' mode
-        if (activeModeAtMessageTime !== 'act') {
-          let llmModeEvents = roomResource.llmModeEvents;
-          if (
-            isTesting() &&
-            llmModeEvents.some((e) => (e as any).content?.mode === 'act')
-          ) {
-            // The room has used 'act' mode, so a non-'act' resolution here is
-            // worth recording: it pins the message against every mode
-            // transition — the data needed to explain an auto-apply that
-            // didn't fire.
-            console.log(
-              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
-                llmModeEvents.map((e) => ({
-                  ts: e.origin_server_ts,
-                  mode: (e as any).content?.mode,
-                })),
-              )}`,
-            );
-          }
-          continue;
-        }
-
-        // Auto-apply all ready code patches from this message
-        if (message.htmlParts) {
-          let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
-          let uniqueFiles = new Set(
-            readyCodePatches.map((patch) => patch.fileUrl),
-          );
-
-          if (readyCodePatches.length > 0 || uniqueFiles.size > 0) {
-            // This is an "accept all" operation - multiple patches OR patches across multiple files
-            this.acceptingAllRoomIds.add(roomId!);
-            try {
-              await this.executeReadyCodePatches(roomId!, message.htmlParts);
-            } finally {
-              this.acceptingAllRoomIds.delete(roomId!);
-            }
-          }
-        }
-      }
-      finishedProcessingCodePatches!();
-    } finally {
-      toolProcessingWaiter.endAsync(waiterToken);
-    }
-  }
-
   // Pre-rename spelling of `toolContext`: realm content constructs tools with
   // `getService('tool-service').commandContext` (and via the command-service
   // registration alias). Stays until no deployed content references it.
@@ -949,6 +788,64 @@ export default class ToolService extends Service {
     return undefined;
   }
 
+  // Answers a call ai-bot holds for the user's approval (see
+  // MessageTool.awaitsApproval). Approving sends an 'approved' result, which
+  // releases the call: ai-bot runs it and publishes its real result.
+  // Declining sends an 'invalid' result saying so, which settles the call;
+  // the model reads the reason on its next turn. A call already answered is
+  // left alone.
+  // The held calls this client has answered. A call stops awaiting approval
+  // the moment it is answered, before the answer's event comes back, so a
+  // second click can't send a second answer; a send that fails offers the
+  // choice again.
+  answeredApprovalIds = new TrackedSet<string>();
+
+  answerApproval = task(
+    async (command: MessageTool, answer: 'approve' | 'decline') => {
+      let callId = command.toolRequest.id;
+      if (!command.awaitsApproval || !callId) {
+        return;
+      }
+      this.answeredApprovalIds.add(callId);
+      try {
+        await this.sendApprovalAnswer(command, callId, answer);
+      } catch (e) {
+        // The answer never reached the room: offer the choice again.
+        this.answeredApprovalIds.delete(callId);
+        console.error(
+          `could not send the answer to held tool call ${callId}`,
+          e,
+        );
+      }
+    },
+  );
+
+  private async sendApprovalAnswer(
+    command: MessageTool,
+    callId: string,
+    answer: 'approve' | 'decline',
+  ) {
+    let invokedToolFromEventId =
+      this.getCurrentEventIdForCommandRequest(
+        command.message.roomId,
+        command.toolRequest.id,
+      ) ?? command.eventId;
+    await this.matrixService.sendToolResultEvent({
+      roomId: command.message.roomId,
+      invokedToolFromEventId,
+      toolCallId: callId,
+      ...(answer === 'approve'
+        ? { status: 'approved' as const }
+        : {
+            status: 'invalid' as const,
+            failureReason: `The user declined this call (${
+              command.description ?? command.name ?? 'a tool call'
+            }). Do not request it again unless the user asks you to.`,
+          }),
+      context: await this.operatorModeStateService.getSummaryForAIBot(),
+    });
+  }
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageTool) => {
     // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
@@ -970,6 +867,7 @@ export default class ToolService extends Service {
         commandRequestId,
       ) ?? command.eventId;
     let resultCard: CardDef | undefined;
+    let toolToRun: Command<any, any> | undefined;
     // Distinguishes "the tool never ran" from "the tool ran, the aftermath
     // failed" — the catch below must not tell the room a committed write
     // failed.
@@ -992,8 +890,6 @@ export default class ToolService extends Service {
       // that un-sticks the UI and the waiting ai-bot is only sent once this
       // settles.
       let performTool = async (): Promise<CardDef | undefined> => {
-        let toolToRun;
-
         // If we don't find it in the one-offs, start searching for
         // one in the skills we can construct
         let toolCodeRef = command.codeRef;
@@ -1077,6 +973,11 @@ export default class ToolService extends Service {
         toolCallId: commandRequestId!,
         status: 'applied',
         resultCard,
+        attachedFiles: this.attachedFilesForToolResult(
+          command.codeRef,
+          toolToRun,
+          resultCard,
+        ),
         context: userContextForAiBot,
       });
     } catch (e) {
@@ -1108,6 +1009,11 @@ export default class ToolService extends Service {
             toolCallId: commandRequestId!,
             status: 'applied',
             resultCard,
+            attachedFiles: this.attachedFilesForToolResult(
+              command.codeRef,
+              toolToRun,
+              resultCard,
+            ),
           });
         } catch (sendError) {
           console.error(
@@ -1143,6 +1049,50 @@ export default class ToolService extends Service {
     }
   });
 
+  // The files a tool result attaches for the model, as the tool that ran
+  // declares them. Only a tool the host itself provides is asked, so a command
+  // loaded from a realm cannot attach files this way. (A command can still
+  // attach a file through `FileForAttachmentCard`, which is handled
+  // separately.)
+  private attachedFilesForToolResult(
+    codeRef: ResolvedCodeRef | undefined,
+    tool: Command<any, any> | undefined,
+    resultCard: CardDef | undefined,
+  ): FileDef[] {
+    if (
+      !resultCard ||
+      !(tool instanceof HostBaseTool) ||
+      !codeRef?.module.startsWith(HOST_TOOL_MODULE_PREFIX)
+    ) {
+      return [];
+    }
+    return tool
+      .resultAttachments(resultCard)
+      .map((file) => this.matrixService.fileAPI.createFileDef(file));
+  }
+
+  // Which step each in-flight validation is on, for the slow-validation log.
+  private validationSteps = new Map<string, string>();
+
+  private markValidationStep(command: MessageTool, step: string) {
+    if (command.id) {
+      this.validationSteps.set(command.id, step);
+    }
+  }
+
+  private logSlowValidation(command: MessageTool) {
+    let step = command.id ? this.validationSteps.get(command.id) : undefined;
+    let moduleImports = this.loaderService.loader.inFlightModuleImports;
+    let queryLoads = this.store.queryLoadsInFlight();
+    console.warn(
+      `Tool "${command.name}" (${command.id}) is still validating after ${VALIDATE_WATCHDOG_MS}ms, at step: ${
+        step ?? 'before the first load'
+      }. Loader imports in flight: ${JSON.stringify(
+        moduleImports,
+      )}. Store query loads in flight: ${JSON.stringify(queryLoads)}`,
+    );
+  }
+
   async validate(command: MessageTool): Promise<boolean> {
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
@@ -1157,7 +1107,9 @@ export default class ToolService extends Service {
       return false;
     }
 
-    if (command.name === 'patchCardInstance') {
+    if (command.argumentsError) {
+      error = `The arguments of this "${command.name}" call were not valid JSON (${command.argumentsError}), so the call was not run. Send the call again with complete, valid JSON arguments.`;
+    } else if (command.name === 'patchCardInstance') {
       // special case for patchCardInstance command
       return true;
     }
@@ -1165,11 +1117,17 @@ export default class ToolService extends Service {
     let toolCodeRef = command.codeRef;
     let toolInstance: GenericCommand | undefined;
 
-    if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+    if (error) {
+      // Already invalid; there is no tool to resolve.
+    } else if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
       toolInstance = new CheckCorrectnessTool(this.toolContext);
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
+      this.markValidationStep(
+        command,
+        `load tool module ${toolCodeRef.module}`,
+      );
       let ToolConstructor = (await getClass(
         toolCodeRef,
         this.loaderService.loader,
@@ -1187,7 +1145,9 @@ export default class ToolService extends Service {
           'service:loader-service',
         ) as LoaderService
       ).loader;
+      this.markValidationStep(command, 'load basic field mappings');
       let mappings = await basicMappings(loader);
+      this.markValidationStep(command, 'build input JSON schema');
       // `description` is the UI label only (see TOOL_CALL_DESCRIPTION_SCHEMA),
       // so it is not required here even though the tool definition given to
       // the model lists it as required.
@@ -1204,9 +1164,16 @@ export default class ToolService extends Service {
         additionalProperties: false,
       };
       const ajv = new Ajv();
-      const valid = ajv.validate(jsonSchema, command.arguments);
+      let valid = ajv.validate(jsonSchema, command.arguments);
       if (!valid) {
         error = `Command "${command.name}" validation failed: ${ajv.errorsText()}`;
+        // A model sometimes sends an object argument as its JSON text, or a
+        // number as a string. Run the call if converting those makes it valid.
+        let coerced = coerceToSchema(command.arguments, jsonSchema);
+        if (coerced.changed && ajv.validate(jsonSchema, coerced.value)) {
+          command.setCoercedArguments(coerced.value);
+          error = undefined;
+        }
       }
     }
     if (error) {
@@ -1271,285 +1238,6 @@ export default class ToolService extends Service {
     }
     return typedInput;
   }
-
-  patchCode = async (
-    roomId: string,
-    fileUrl: string | null,
-    codeDataItems: {
-      searchReplaceBlock?: string | null;
-      eventId: string;
-      codeBlockIndex: number;
-    }[],
-  ) => {
-    if (!fileUrl) {
-      throw new Error('File URL is required to patch code');
-    }
-    for (const codeData of codeDataItems) {
-      this.currentlyExecutingToolRequestIds.add(
-        `${codeData.eventId}:${codeData.codeBlockIndex}`,
-      );
-    }
-    // Give Glimmer one render turn to reflect the "applying" state before we
-    // start mutating files and emitting result events.
-    await new Promise<void>((resolve) => schedule('afterRender', resolve));
-    let finalFileIdentifier: string | undefined;
-
-    try {
-      let patchCodeCommand = new PatchCodeTool(this.toolContext);
-
-      let patchCodeResult = await patchCodeCommand.execute({
-        fileIdentifier: fileUrl,
-        codeBlocks: codeDataItems.map(
-          (codeData) => codeData.searchReplaceBlock!,
-        ),
-        roomId,
-      });
-      finalFileIdentifier = patchCodeResult.finalFileIdentifier;
-      let requestedKey = this.invalidationKey(roomId, fileUrl);
-      if (finalFileIdentifier && finalFileIdentifier !== fileUrl) {
-        // The invalidation tracker keys on where the write actually landed;
-        // waits keyed on the requested URL resolve through this redirect.
-        this.patchedFileRedirects.set(requestedKey, finalFileIdentifier);
-      } else {
-        // The write landed at the requested URL, so a redirect left by an
-        // earlier collision-rename of this file no longer describes it —
-        // leaving it in place would point this file's index waits at an
-        // entry that was already consumed.
-        this.patchedFileRedirects.delete(requestedKey);
-      }
-
-      for (let i = 0; i < codeDataItems.length; i++) {
-        const codeData = codeDataItems[i];
-        const patchResult = patchCodeResult.results[i];
-        if (patchResult.status === 'applied') {
-          this.executedToolRequestIds.add(
-            `${codeData.eventId}:${codeData.codeBlockIndex}`,
-          );
-        } else if (isTesting() && this.acceptingAllRoomIds.has(roomId)) {
-          // During an auto-apply / accept-all run a non-'applied' result means
-          // the patch never reaches the "applied" UI state a caller may be
-          // waiting on. Record why (e.g. a search block that no longer matches
-          // because a prior chained patch hadn't landed yet).
-          console.log(
-            `[code-patch-autoapply] patch ${codeData.eventId}:${codeData.codeBlockIndex} on ${fileUrl} did not apply (status=${patchResult.status}${
-              patchResult.failureReason
-                ? `, reason=${patchResult.failureReason}`
-                : ''
-            })`,
-          );
-        }
-      }
-
-      await this.matrixService.updateSkillsAndToolsIfNeeded(roomId);
-      let fileDef = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: finalFileIdentifier ?? fileUrl,
-        name: fileUrl.split('/').pop(),
-      });
-
-      let context = await this.operatorModeStateService.getSummaryForAIBot();
-
-      let resultSends: Promise<unknown>[] = [];
-      for (let i = 0; i < codeDataItems.length; i++) {
-        const codeData = codeDataItems[i];
-        const result = patchCodeResult.results[i];
-        resultSends.push(
-          this.matrixService.sendCodePatchResultEvent(
-            roomId,
-            codeData.eventId,
-            codeData.codeBlockIndex,
-            result.status as CodePatchStatus,
-            [],
-            [fileDef],
-            context,
-            patchCodeResult.lintIssues,
-            result.failureReason,
-          ),
-        );
-      }
-      await Promise.all(resultSends);
-    } finally {
-      // remove the code blocks from the currently executing command request ids
-      for (const codeData of codeDataItems) {
-        this.currentlyExecutingToolRequestIds.delete(
-          `${codeData.eventId}:${codeData.codeBlockIndex}`,
-        );
-      }
-    }
-  };
-
-  // Whether any of these files' tracked index invalidations is still
-  // outstanding. Synchronous so the tool drain can requeue instead of
-  // awaiting — the drain serves every room, and blocking it on one
-  // message's index event would stall unrelated rooms.
-  private hasPendingPatchInvalidations(
-    roomId: string,
-    fileUrls: string[],
-  ): boolean {
-    return fileUrls.some((fileUrl) => {
-      let key = this.invalidationKey(roomId, fileUrl);
-      let redirectedTarget = this.patchedFileRedirects.get(key);
-      if (redirectedTarget) {
-        key = this.invalidationKey(roomId, redirectedTarget);
-      }
-      let entry = this.aiAssistantInvalidations.get(key);
-      return !!entry && !entry.settled;
-    });
-  }
-
-  // The distinct file URLs this message's code patches target.
-  private patchedFileUrls(message: {
-    htmlParts?: Array<{ codeData: CodeData | null }> | null;
-  }): string[] {
-    let urls = new Set<string>();
-    for (let part of message.htmlParts ?? []) {
-      let codeData = part.codeData;
-      if (codeData?.searchReplaceBlock && codeData.fileUrl) {
-        urls.add(codeData.fileUrl);
-      }
-    }
-    return [...urls];
-  }
-
-  // Whether any tool on the message could still be run by a drain pass —
-  // the same synchronous guards the ready-tool collection applies. When
-  // nothing is runnable (e.g. a requeued pass whose tools all resolved),
-  // waiting on index invalidations first would be pure latency.
-  private messageHasUnresolvedTools(message: {
-    tools: MessageTool[];
-  }): boolean {
-    return message.tools.some((messageTool) => {
-      if (messageTool.executedBy === AI_BOT_EXECUTOR) {
-        return false;
-      }
-      if (!messageTool.name || !messageTool.id) {
-        return false;
-      }
-      if (
-        this.currentlyExecutingToolRequestIds.has(messageTool.id) ||
-        this.executedToolRequestIds.has(messageTool.id) ||
-        this.claimedToolRequestIds.has(messageTool.id)
-      ) {
-        return false;
-      }
-      return (
-        messageTool.status !== 'applied' &&
-        messageTool.status !== 'invalid' &&
-        messageTool.status !== 'failed'
-      );
-    });
-  }
-
-  // True while any code patch in the message has not reached a terminal
-  // state ('applied' or 'failed') — i.e. it is still 'ready' (queued for
-  // auto-apply) or 'applying'.
-  private messageHasUnsettledCodePatches(message: {
-    htmlParts?: Array<{ codeData: CodeData | null }> | null;
-  }): boolean {
-    if (!message.htmlParts) {
-      return false;
-    }
-    return message.htmlParts.some((part) => {
-      let codeData = part.codeData;
-      // A block with no resolvable file URL is never applied
-      // (executeReadyCodePatches skips it), so its status stays 'ready'
-      // forever — counting it here would stall the message's tools for the
-      // whole retry budget with nothing to wait for.
-      if (!codeData?.searchReplaceBlock || !codeData.fileUrl) {
-        return false;
-      }
-      let status = this.getCodePatchStatus(codeData);
-      return status === 'ready' || status === 'applying';
-    });
-  }
-
-  getReadyCodePatches = (
-    htmlParts: Array<{ codeData: CodeData | null }>,
-  ): CodeData[] => {
-    let result: CodeData[] = [];
-    for (let i = 0; i < htmlParts.length; i++) {
-      let htmlPart = htmlParts[i];
-      let codeData = htmlPart.codeData;
-      if (!codeData || !codeData.searchReplaceBlock) continue;
-      let status = this.getCodePatchStatus(codeData);
-      if (status && status === 'ready') {
-        result.push(codeData);
-      }
-    }
-    return result;
-  };
-
-  executeReadyCodePatches = async (
-    roomId: string,
-    htmlParts: Array<{ codeData: CodeData | null }>,
-  ) => {
-    let readyCodePatches = this.getReadyCodePatches(htmlParts);
-
-    // Group code patches by fileUrl and apply them
-    let grouped: Record<string, CodeData[]> = {};
-    for (let codeData of readyCodePatches) {
-      if (!codeData.fileUrl) continue;
-      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
-      grouped[codeData.fileUrl].push(codeData);
-    }
-
-    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
-      let patchItems = codeDataItems.map((codeData) => ({
-        searchReplaceBlock: codeData.searchReplaceBlock,
-        eventId: codeData.eventId,
-        codeBlockIndex: codeData.codeBlockIndex,
-      }));
-      await this.patchCode(roomId, fileUrl, patchItems);
-    }
-  };
-
-  private isCodeBlockApplying(codeData: {
-    eventId: string;
-    codeBlockIndex: number;
-  }) {
-    return this.currentlyExecutingToolRequestIds.has(
-      `${codeData.eventId}:${codeData.codeBlockIndex}`,
-    );
-  }
-
-  private isCodeBlockRecentlyApplied(codeBlock: {
-    eventId: string;
-    codeBlockIndex: number;
-  }) {
-    return this.executedToolRequestIds.has(
-      `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
-    );
-  }
-
-  getCodePatchStatus = (codeData: {
-    roomId: string;
-    eventId: string;
-    codeBlockIndex: number;
-  }): CodePatchStatus | 'applying' | 'ready' => {
-    if (this.isCodeBlockApplying(codeData)) {
-      return 'applying';
-    }
-    if (this.isCodeBlockRecentlyApplied(codeData)) {
-      return 'applied';
-    }
-    return this.getCodePatchResult(codeData)?.status ?? 'ready';
-  };
-
-  getCodePatchResult = (codeData: {
-    roomId: string;
-    eventId: string;
-    codeBlockIndex: number;
-  }): MessageCodePatchResult | undefined => {
-    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
-    if (!roomResource) {
-      return undefined;
-    }
-    let message = roomResource.messages.find(
-      (m) => m.eventId === codeData.eventId,
-    );
-    return message?.codePatchResults?.find(
-      (c) => c.index === codeData.codeBlockIndex,
-    );
-  };
 
   isPerformingAcceptAllForRoom(roomId: string): boolean {
     return this.acceptingAllRoomIds.has(roomId);

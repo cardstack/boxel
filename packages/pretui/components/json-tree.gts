@@ -324,269 +324,271 @@ export class JsonTree extends JsonRowsBase<JsonTreeSignature> {
     </div>
 
     <style scoped>
-      /* Every value is var(--token, lightFallback); zero dark branches — the
-         season re-resolves the tokens and the whole component re-tints. */
-      .pretui-json {
-        --_indent: var(--pretui-json-indent, 14px);
-        --_row-h: var(--pretui-json-row-height, 24px);
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2, 6px);
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--foreground);
-        container-type: inline-size;
-      }
-
-      .pretui-json-bar {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3, 8px);
-        min-height: var(--control-h, 28px);
-      }
-      .pretui-json-bar-name {
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: 600;
-        letter-spacing: var(--track-eyebrow, 0.06em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-json-count {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-      }
-      .pretui-json-gap {
-        flex: 1 1 auto;
-      }
-
-      /* Notes never signal by colour alone — each carries a glyph and a word. */
-      .pretui-json-notes {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-      .pretui-json-note {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--space-2, 6px);
-        margin: 0;
-        padding: var(--space-2, 6px) var(--space-3, 8px);
-        border-radius: var(--radius-chip, 6px);
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 1.45;
-        background: color-mix(in oklch, var(--muted-foreground) 8%, transparent);
-        color: var(--foreground);
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-      }
-      .pretui-json-note[data-severity='error'] {
-        background: color-mix(in oklch, var(--destructive) 10%, transparent);
-      }
-      .pretui-json-note[data-severity='warning'] {
-        background: color-mix(in oklch, var(--warning, var(--boxel-warning)) 12%, transparent);
-      }
-      .pretui-json-note-mark {
-        flex: 0 0 auto;
-        width: 14px;
-        text-align: center;
-        font-weight: 700;
-      }
-      .pretui-json-note-at {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-      }
-
-      .pretui-json-list {
-        list-style: none;
-        margin: 0;
-        padding: var(--space-2, 6px) 0;
-        border-radius: var(--radius-surface, 10px);
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        overflow: auto;
-        max-height: var(--pretui-json-max-height, 26rem);
-      }
-
-      .pretui-json-row {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        min-height: var(--_row-h);
-        padding-inline-start: calc(var(--space-3, 8px) + (var(--_level, 1) - 1) * var(--_indent));
-        padding-inline-end: var(--space-3, 8px);
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        font-variant-numeric: tabular-nums;
-        cursor: default;
-        outline: none;
-      }
-      .pretui-json-row:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-json-row:focus-visible {
-        box-shadow: inset 0 0 0 2px var(--ring);
-        border-radius: var(--radius-chip, 6px);
-      }
-      /* A search hit is marked by a rule AND a background, never colour alone. */
-      .pretui-json-row[data-matched='true'] {
-        background: color-mix(in oklch, var(--primary) 12%, transparent);
-        box-shadow: inset 3px 0 0 0 var(--primary);
-      }
-
-      .pretui-json-twisty {
-        flex: 0 0 auto;
-        width: 10px;
-        height: 10px;
-        position: relative;
-      }
-      .pretui-json-twisty[data-leaf='true'] {
-        visibility: hidden;
-      }
-      .pretui-json-twisty::before {
-        content: '';
-        position: absolute;
-        inset-block-start: 1px;
-        inset-inline-start: 2px;
-        width: 5px;
-        height: 5px;
-        border-inline-end: 1.5px solid var(--muted-foreground);
-        border-block-end: 1.5px solid var(--muted-foreground);
-        transform: rotate(-45deg);
-        transition: transform var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
-      }
-      .pretui-json-twisty[data-open='true']::before {
-        transform: rotate(45deg);
-      }
-
-      .pretui-json-key {
-        flex: 0 0 auto;
-        color: var(--foreground);
-        font-weight: 600;
-        max-width: 16rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-json-kind {
-        flex: 0 0 auto;
-        padding: 0 4px;
-        border-radius: var(--radius-chip, 6px);
-        font-size: var(--text-ui-xs, 11px);
-        line-height: 1.5;
-        color: var(--muted-foreground);
-        background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
-      }
-      /* Type identity is a WORD in the badge; the tint is redundant emphasis. */
-      .pretui-json-row[data-kind='string'] .pretui-json-value {
-        color: var(--chart-1);
-      }
-      .pretui-json-row[data-kind='number'] .pretui-json-value {
-        color: var(--chart-2);
-      }
-      .pretui-json-row[data-kind='boolean'] .pretui-json-value {
-        color: var(--chart-4);
-      }
-      .pretui-json-row[data-kind='null'] .pretui-json-value {
-        color: var(--muted-foreground);
-        font-style: italic;
-      }
-      .pretui-json-row[data-kind='array'] .pretui-json-value,
-      .pretui-json-row[data-kind='object'] .pretui-json-value {
-        color: var(--muted-foreground);
-      }
-
-      .pretui-json-value {
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-json-n {
-        flex: 0 0 auto;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-      }
-
-      .pretui-json-acts {
-        flex: 0 0 auto;
-        display: flex;
-        gap: 2px;
-        opacity: 0;
-        transition: opacity var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
-      }
-      .pretui-json-row:hover .pretui-json-acts,
-      .pretui-json-row:focus-visible .pretui-json-acts,
-      .pretui-json-acts:focus-within {
-        opacity: 1;
-      }
-      /* Coarse pointers have no hover, so the actions are always present. */
-      @media (any-pointer: coarse) {
-        .pretui-json-acts {
-          opacity: 1;
+      @layer PretComponent {
+        /* Every value is var(--token, lightFallback); zero dark branches — the
+           season re-resolves the tokens and the whole component re-tints. */
+        .pretui-json {
+          --_indent: var(--pretui-json-indent, 14px);
+          --_row-h: var(--pretui-json-row-height, 24px);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2, 6px);
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--foreground);
+          container-type: inline-size;
         }
-      }
-      .pretui-json-act {
-        appearance: none;
-        border: 0;
-        min-height: 18px;
-        padding: 1px 5px;
-        border-radius: var(--radius-chip, 6px);
-        font: inherit;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        background: var(--card);
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        cursor: pointer;
-      }
-      .pretui-json-act:hover {
-        color: var(--foreground);
-      }
-      /* Selection reads as a rule plus a tint, never colour alone. */
-      .pretui-json-row[aria-selected='true'] {
-        background: color-mix(in oklch, var(--primary) 8%, transparent);
-        box-shadow: inset 2px 0 0 0 var(--foreground);
-      }
 
-      .pretui-json-more {
-        flex: 1 1 auto;
-        color: var(--muted-foreground);
-        font-style: italic;
-      }
-      .pretui-json-more-cue {
-        font-size: var(--text-ui-xs, 11px);
-        opacity: 0.8;
-      }
+        .pretui-json-bar {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3, 8px);
+          min-height: var(--control-h, 28px);
+        }
+        .pretui-json-bar-name {
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: 600;
+          letter-spacing: var(--track-eyebrow, 0.06em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-json-count {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+        }
+        .pretui-json-gap {
+          flex: 1 1 auto;
+        }
 
-      /* The live region is announced, never seen. */
-      .pretui-json-live {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
-      }
+        /* Notes never signal by colour alone — each carries a glyph and a word. */
+        .pretui-json-notes {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+        .pretui-json-note {
+          display: flex;
+          align-items: flex-start;
+          gap: var(--space-2, 6px);
+          margin: 0;
+          padding: var(--space-2, 6px) var(--space-3, 8px);
+          border-radius: var(--radius-chip, 6px);
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 1.45;
+          background: color-mix(in oklch, var(--muted-foreground) 8%, transparent);
+          color: var(--foreground);
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+        }
+        .pretui-json-note[data-severity='error'] {
+          background: color-mix(in oklch, var(--destructive) 10%, transparent);
+        }
+        .pretui-json-note[data-severity='warning'] {
+          background: color-mix(in oklch, var(--warning, var(--boxel-warning)) 12%, transparent);
+        }
+        .pretui-json-note-mark {
+          flex: 0 0 auto;
+          width: 14px;
+          text-align: center;
+          font-weight: 700;
+        }
+        .pretui-json-note-at {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+        }
 
-      @container (max-width: 30rem) {
+        .pretui-json-list {
+          list-style: none;
+          margin: 0;
+          padding: var(--space-2, 6px) 0;
+          border-radius: var(--radius-surface, 10px);
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          overflow: auto;
+          max-height: var(--pretui-json-max-height, 26rem);
+        }
+
+        .pretui-json-row {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          min-height: var(--_row-h);
+          padding-inline-start: calc(var(--space-3, 8px) + (var(--_level, 1) - 1) * var(--_indent));
+          padding-inline-end: var(--space-3, 8px);
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          font-variant-numeric: tabular-nums;
+          cursor: default;
+          outline: none;
+        }
+        .pretui-json-row:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-json-row:focus-visible {
+          box-shadow: inset 0 0 0 2px var(--ring);
+          border-radius: var(--radius-chip, 6px);
+        }
+        /* A search hit is marked by a rule AND a background, never colour alone. */
+        .pretui-json-row[data-matched='true'] {
+          background: color-mix(in oklch, var(--primary) 12%, transparent);
+          box-shadow: inset 3px 0 0 0 var(--primary);
+        }
+
+        .pretui-json-twisty {
+          flex: 0 0 auto;
+          width: 10px;
+          height: 10px;
+          position: relative;
+        }
+        .pretui-json-twisty[data-leaf='true'] {
+          visibility: hidden;
+        }
+        .pretui-json-twisty::before {
+          content: '';
+          position: absolute;
+          inset-block-start: 1px;
+          inset-inline-start: 2px;
+          width: 5px;
+          height: 5px;
+          border-inline-end: 1.5px solid var(--muted-foreground);
+          border-block-end: 1.5px solid var(--muted-foreground);
+          transform: rotate(-45deg);
+          transition: transform var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
+        }
+        .pretui-json-twisty[data-open='true']::before {
+          transform: rotate(45deg);
+        }
+
         .pretui-json-key {
-          max-width: 8rem;
+          flex: 0 0 auto;
+          color: var(--foreground);
+          font-weight: 600;
+          max-width: 16rem;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .pretui-json-kind {
-          display: none;
+          flex: 0 0 auto;
+          padding: 0 4px;
+          border-radius: var(--radius-chip, 6px);
+          font-size: var(--text-ui-xs, 11px);
+          line-height: 1.5;
+          color: var(--muted-foreground);
+          background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
         }
-      }
+        /* Type identity is a WORD in the badge; the tint is redundant emphasis. */
+        .pretui-json-row[data-kind='string'] .pretui-json-value {
+          color: var(--chart-1);
+        }
+        .pretui-json-row[data-kind='number'] .pretui-json-value {
+          color: var(--chart-2);
+        }
+        .pretui-json-row[data-kind='boolean'] .pretui-json-value {
+          color: var(--chart-4);
+        }
+        .pretui-json-row[data-kind='null'] .pretui-json-value {
+          color: var(--muted-foreground);
+          font-style: italic;
+        }
+        .pretui-json-row[data-kind='array'] .pretui-json-value,
+        .pretui-json-row[data-kind='object'] .pretui-json-value {
+          color: var(--muted-foreground);
+        }
 
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-json-twisty::before,
+        .pretui-json-value {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-json-n {
+          flex: 0 0 auto;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+        }
+
         .pretui-json-acts {
-          transition: none;
+          flex: 0 0 auto;
+          display: flex;
+          gap: 2px;
+          opacity: 0;
+          transition: opacity var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
+        }
+        .pretui-json-row:hover .pretui-json-acts,
+        .pretui-json-row:focus-visible .pretui-json-acts,
+        .pretui-json-acts:focus-within {
+          opacity: 1;
+        }
+        /* Coarse pointers have no hover, so the actions are always present. */
+        @media (any-pointer: coarse) {
+          .pretui-json-acts {
+            opacity: 1;
+          }
+        }
+        .pretui-json-act {
+          appearance: none;
+          border: 0;
+          min-height: 18px;
+          padding: 1px 5px;
+          border-radius: var(--radius-chip, 6px);
+          font: inherit;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          background: var(--card);
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          cursor: pointer;
+        }
+        .pretui-json-act:hover {
+          color: var(--foreground);
+        }
+        /* Selection reads as a rule plus a tint, never colour alone. */
+        .pretui-json-row[aria-selected='true'] {
+          background: color-mix(in oklch, var(--primary) 8%, transparent);
+          box-shadow: inset 2px 0 0 0 var(--foreground);
+        }
+
+        .pretui-json-more {
+          flex: 1 1 auto;
+          color: var(--muted-foreground);
+          font-style: italic;
+        }
+        .pretui-json-more-cue {
+          font-size: var(--text-ui-xs, 11px);
+          opacity: 0.8;
+        }
+
+        /* The live region is announced, never seen. */
+        .pretui-json-live {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
+
+        @container (max-width: 30rem) {
+          .pretui-json-key {
+            max-width: 8rem;
+          }
+          .pretui-json-kind {
+            display: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-json-twisty::before,
+          .pretui-json-acts {
+            transition: none;
+          }
         }
       }
     </style>

@@ -187,7 +187,7 @@ export function barCarry(
  * 4. **A disabled top-level item has no menu** (`ctx.hasMenu` returns false),
  *    so Down/Enter do nothing on it and the carry rule closes rather than
  *    opens. It stays focusable and announced — `aria-disabled`, never the
- *    `disabled` attribute (Appendix N.5).
+ * `disabled` attribute.
  */
 export function menubarKey(
   state: BarState,
@@ -1092,105 +1092,107 @@ export class Menubar extends Component<MenubarSignature> {
     </div>
 
     <style scoped>
-      .pretui-menubar-wrap {
-        display: block;
-        container-type: inline-size;
-      }
-      .pretui-menubar-watch {
-        display: none;
-      }
-      .pretui-menubar {
-        display: flex;
-        align-items: stretch;
-        gap: var(--pretui-menubar-gap, 1px);
-        margin: 0;
-        padding: var(--pretui-menubar-padding, 3px);
-        list-style: none;
-        background: var(--pretui-menubar-background, var(--card));
-        color: var(--foreground);
-        border-radius: var(--radius-surface, 10px);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
-        font-family: var(--font-sans);
-        font-size: var(--text-ui-md, 12.5px);
-        /* The bar is a single line of titles; when the pane is too narrow it
-           scrolls rather than wrapping — a wrapped menu bar loses the one
-           spatial fact readers rely on, which title sits where. */
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
-        scrollbar-width: thin;
-      }
-      .pretui-menubar-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: var(--pretui-menubar-item-height, 26px);
-        padding-block: 3px;
-        padding-inline: var(--pretui-menubar-item-padding, 9px);
-        border-radius: var(--radius-control, 6px);
-        color: inherit;
-        cursor: default;
-        user-select: none;
-        white-space: nowrap;
-        /* the title's own colour is the only thing that moves, so the bar is
-           still legible in a greyscale screenshot (Law 8) */
-        transition: background-color 90ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .pretui-menubar-item[aria-disabled='true'] {
-        /* dimmed, still focusable, still announced — HIG's "dim, don't
-           remove", which the `disabled` attribute cannot express */
-        opacity: 0.42;
-      }
-      .pretui-menubar-item[data-active='true']:not([aria-disabled='true']) {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-menubar-item[data-open='true'] {
-        background: var(--accent);
-        color: var(--accent-foreground);
-      }
-      .pretui-menubar-item:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: -2px;
-      }
-      .pretui-menubar-label {
-        font-weight: 500;
-      }
-      .pretui-menubar-icon {
-        width: 14px;
-        height: 14px;
-      }
-      .pretui-menubar-kbd {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        font-variant-numeric: tabular-nums;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pretui-menubar-item[data-open='true'] .pretui-menubar-kbd {
-        color: inherit;
-      }
+      @layer PretComponent {
+        .pretui-menubar-wrap {
+          display: block;
+          container-type: inline-size;
+        }
+        .pretui-menubar-watch {
+          display: none;
+        }
+        .pretui-menubar {
+          display: flex;
+          align-items: stretch;
+          gap: var(--pretui-menubar-gap, 1px);
+          margin: 0;
+          padding: var(--pretui-menubar-padding, 3px);
+          list-style: none;
+          background: var(--pretui-menubar-background, var(--card));
+          color: var(--foreground);
+          border-radius: var(--radius-surface, 10px);
+          box-shadow: var(
+            --pretui-shadow-hairline,
+            0 0 0 1px var(--border)
+          );
+          font-family: var(--font-sans);
+          font-size: var(--text-ui-md, 12.5px);
+          /* The bar is a single line of titles; when the pane is too narrow it
+             scrolls rather than wrapping — a wrapped menu bar loses the one
+             spatial fact readers rely on, which title sits where. */
+          overflow-x: auto;
+          overscroll-behavior-x: contain;
+          scrollbar-width: thin;
+        }
+        .pretui-menubar-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          min-height: var(--pretui-menubar-item-height, 26px);
+          padding-block: 3px;
+          padding-inline: var(--pretui-menubar-item-padding, 9px);
+          border-radius: var(--radius-control, 6px);
+          color: inherit;
+          cursor: default;
+          user-select: none;
+          white-space: nowrap;
+          /* the title's own colour is the only thing that moves, so the bar is
+             still legible in a greyscale screenshot (Law 8) */
+          transition: background-color 90ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .pretui-menubar-item[aria-disabled='true'] {
+          /* dimmed, still focusable, still announced — HIG's "dim, don't
+             remove", which the `disabled` attribute cannot express */
+          opacity: 0.42;
+        }
+        .pretui-menubar-item[data-active='true']:not([aria-disabled='true']) {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-menubar-item[data-open='true'] {
+          background: var(--accent);
+          color: var(--accent-foreground);
+        }
+        .pretui-menubar-item:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: -2px;
+        }
+        .pretui-menubar-label {
+          font-weight: 500;
+        }
+        .pretui-menubar-icon {
+          width: 14px;
+          height: 14px;
+        }
+        .pretui-menubar-kbd {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          font-variant-numeric: tabular-nums;
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pretui-menubar-item[data-open='true'] .pretui-menubar-kbd {
+          color: inherit;
+        }
 
-      /* Touch: a 26px title is a miss target on a finger, and a touch reader
-         has no hover at all — every title is reachable by tap, which is why
-         the bar never depends on hover to open. */
-      @media (any-pointer: coarse) {
-        .pretui-menubar-item {
-          min-height: 44px;
-          padding-inline: 12px;
+        /* Touch: a 26px title is a miss target on a finger, and a touch reader
+           has no hover at all — every title is reachable by tap, which is why
+           the bar never depends on hover to open. */
+        @media (any-pointer: coarse) {
+          .pretui-menubar-item {
+            min-height: 44px;
+            padding-inline: 12px;
+          }
         }
-      }
-      /* Unnamed container query only — the named forms silently drop every
-         following rule in the transpiled stylesheet. */
-      @container (max-width: 380px) {
-        .pretui-menubar-item {
-          padding-inline: 7px;
+        /* Unnamed container query only — the named forms silently drop every
+           following rule in the transpiled stylesheet. */
+        @container (max-width: 380px) {
+          .pretui-menubar-item {
+            padding-inline: 7px;
+          }
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-menubar-item {
-          transition: none;
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-menubar-item {
+            transition: none;
+          }
         }
       }
     </style>

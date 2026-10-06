@@ -221,113 +221,117 @@ export class FloatButton extends Component<FloatButtonSignature> {
       </Button>
     </div>
     <style scoped>
-      .pretui-float {
-        position: absolute;
-        z-index: var(--pretui-float-z, 20);
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: var(--space-3, 0.5rem);
-        margin: var(--pretui-float-offset, var(--space-6, 1.25rem));
-      }
-      .pretui-float[data-position='fixed'] {
-        position: fixed;
-      }
-      .pretui-float[data-placement^='bottom'] {
-        inset-block-end: 0;
-      }
-      .pretui-float[data-placement^='top'] {
-        inset-block-start: 0;
-        flex-direction: column-reverse;
-      }
-      .pretui-float[data-placement='bottom-end'],
-      .pretui-float[data-placement='top-end'] {
-        inset-inline-end: 0;
-      }
-      .pretui-float[data-placement='bottom-start'],
-      .pretui-float[data-placement='top-start'] {
-        inset-inline-start: 0;
-        align-items: flex-start;
-      }
-      .pretui-float-main {
-        border-radius: 999px;
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.16));
-        min-inline-size: var(--pretui-float-size, 3rem);
-        min-block-size: var(--pretui-float-size, 3rem);
-        padding: 0;
-        gap: var(--space-2, 0.375rem);
-      }
-      .pretui-float-main[data-extended='true'] {
-        padding-inline: var(--space-5, 1rem);
-      }
-      .pretui-float-icon {
-        display: grid;
-        place-items: center;
-        transition: rotate var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out);
-      }
-      .pretui-float[data-open='true'] .pretui-float-icon {
-        rotate: 45deg;
-      }
-      .pretui-float-text {
-        font-weight: 600;
-      }
-      .pretui-float-dial {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: inherit;
-        gap: var(--space-2, 0.375rem);
-      }
-      .pretui-float-dial[hidden] {
-        display: none;
-      }
-      .pretui-float-dial-item {
-        animation: pretui-float-in var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out) both;
-      }
-      .pretui-float-dial-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2, 0.375rem);
-        min-block-size: 2.25rem;
-        padding-inline: var(--space-3, 0.5rem) var(--space-4, 0.6875rem);
-        border: 0;
-        border-radius: 999px;
-        background: var(--popover);
-        color: var(--popover-foreground);
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 4px 14px rgb(16 24 40 / 0.12));
-        font: inherit;
-        font-size: var(--text-ui-md, 0.78rem);
-        cursor: pointer;
-      }
-      .pretui-float-dial-btn:hover {
-        background: color-mix(in oklch, var(--popover) 88%, var(--foreground));
-      }
-      .pretui-float-dial-btn:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-      .pretui-float-dial-icon {
-        display: grid;
-        place-items: center;
-        color: var(--muted-foreground);
-      }
-      .pretui-float-watch {
-        display: none;
-      }
-      @keyframes pretui-float-in {
-        from {
-          opacity: 0;
-          translate: 0 0.375rem;
+      /* above Button's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-float {
+          position: absolute;
+          z-index: var(--pretui-float-z, 20);
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: var(--space-3, 0.5rem);
+          margin: var(--pretui-float-offset, var(--space-6, 1.25rem));
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-float-dial-item {
-          animation: none;
+        .pretui-float[data-position='fixed'] {
+          position: fixed;
+        }
+        .pretui-float[data-placement^='bottom'] {
+          inset-block-end: 0;
+        }
+        .pretui-float[data-placement^='top'] {
+          inset-block-start: 0;
+          flex-direction: column-reverse;
+        }
+        .pretui-float[data-placement='bottom-end'],
+        .pretui-float[data-placement='top-end'] {
+          inset-inline-end: 0;
+        }
+        .pretui-float[data-placement='bottom-start'],
+        .pretui-float[data-placement='top-start'] {
+          inset-inline-start: 0;
+          align-items: flex-start;
+        }
+        .pretui-float-main {
+          border-radius: 999px;
+          box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 6px 20px rgb(16 24 40 / 0.16));
+          min-inline-size: var(--pretui-float-size, 3rem);
+          min-block-size: var(--pretui-float-size, 3rem);
+          padding: 0;
+          gap: var(--space-2, 0.375rem);
+        }
+        .pretui-float-main[data-extended='true'] {
+          padding-inline: var(--space-5, 1rem);
         }
         .pretui-float-icon {
-          transition: none;
+          display: grid;
+          place-items: center;
+          transition: rotate var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out);
+        }
+        .pretui-float[data-open='true'] .pretui-float-icon {
+          rotate: 45deg;
+        }
+        .pretui-float-text {
+          font-weight: 600;
+        }
+        .pretui-float-dial {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: inherit;
+          gap: var(--space-2, 0.375rem);
+        }
+        .pretui-float-dial[hidden] {
+          display: none;
+        }
+        .pretui-float-dial-item {
+          animation: pretui-float-in var(--pretui-dur-snap, 160ms) var(--pretui-ease-snap, ease-out) both;
+        }
+        .pretui-float-dial-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--space-2, 0.375rem);
+          min-block-size: 2.25rem;
+          padding-inline: var(--space-3, 0.5rem) var(--space-4, 0.6875rem);
+          border: 0;
+          border-radius: 999px;
+          background: var(--popover);
+          color: var(--popover-foreground);
+          box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 4px 14px rgb(16 24 40 / 0.12));
+          font: inherit;
+          font-size: var(--text-ui-md, 0.78rem);
+          cursor: pointer;
+        }
+        .pretui-float-dial-btn:hover {
+          background: color-mix(in oklch, var(--popover) 88%, var(--foreground));
+        }
+        .pretui-float-dial-btn:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-float-dial-icon {
+          display: grid;
+          place-items: center;
+          color: var(--muted-foreground);
+        }
+        .pretui-float-watch {
+          display: none;
+        }
+        @keyframes pretui-float-in {
+          from {
+            opacity: 0;
+            translate: 0 0.375rem;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-float-dial-item {
+            animation: none;
+          }
+          .pretui-float-icon {
+            transition: none;
+          }
         }
       }
     </style>

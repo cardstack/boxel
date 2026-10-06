@@ -1,3 +1,4 @@
+import type { Camera3DState } from '@cardstack/choreo';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
@@ -5,7 +6,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { type Camera3DState, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { BoxelGlyph } from 'test-app/components/boxel-glyph';
 import { ChoreoMark } from 'test-app/components/choreo-mark';
 import config from 'test-app/config/environment';

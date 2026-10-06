@@ -11,6 +11,7 @@
  * The assertions look MID-FLIGHT. At the ends any implementation agrees;
  * the frames in between are the ones a tween would have had to predict.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -61,6 +62,7 @@ const numberVar = (name: string) =>
 
 module('Acceptance | escort', function (hooks) {
   setupApplicationTest(hooks);
+  setupChoreo(hooks);
 
   // The default ember-testing container is half-scaled and content-sized,
   // and this page's layout is container-query driven: inside it the whole

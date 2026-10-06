@@ -23,7 +23,7 @@ range:   @range? / @defaultRange? / @onRangeChange?({ start, end })
 
 **React Aria's `useCalendar`/`useCalendarGrid`** is the most complete implementation in the field, and the comparison is instructive: it renders `role="application"` on the calendar (with the visible range folded into the accessible name), `role="grid"` on the table, `aria-hidden` column headers (day names are already in each cell's label), and announces month changes imperatively via `announce(visibleRangeDescription)` — but **only** when the change came from the Prev/Next buttons, not when it came from arrowing. **Web Awesome** has no calendar. **react-day-picker** is the ecosystem default and is `role="grid"` based.
 
-Where Pretui is better: **lexicographic ISO math** (above) — react-day-picker and Spectrum both carry substantial date-object machinery (Spectrum has an entire `@internationalized/date` package) to avoid the bugs that string comparison simply does not have. And **one calendar for the whole kit**: the source records that `DateRangePicker` previously wrapped boxel-ui's ember-power-calendar and that the wrap was deliberately deleted so both date controls share this grid. Two calendars in one kit is a guaranteed inconsistency.
+Where Pretui is better: **lexicographic ISO math** (above) — react-day-picker and Spectrum both carry substantial date-object machinery (Spectrum has an entire `@internationalized/date` package) to avoid the bugs that string comparison simply does not have. And **one calendar for the whole kit**: DateRangePicker is built on this grid rather than on boxel-ui's ember-power-calendar, so both date controls share it. Two calendars in one kit is a guaranteed inconsistency.
 
 Where it is behind, and it is a real distance: **no locale support.** Every formatter is hard-coded `'en-US'`, so weekday order, month names and day names are American English regardless of the user. For an internationalised product this is disqualifying, and it is the largest gap in the component.
 
@@ -53,3 +53,5 @@ Concrete gaps against the pattern:
 Every day state is a `data-*` attribute, so a season can dress `today`, `in-range`, `range-start` and `range-end` independently — including giving the range endpoints asymmetric radii, which is what makes a range read as one continuous band.
 
 Two things to check per season: `data-today` must be distinguishable from `data-selected` without relying on colour alone, and `data-outside` (adjacent-month days) must be dim enough to recede but still clear **WCAG 1.4.3** — it is the most common contrast failure in any calendar.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

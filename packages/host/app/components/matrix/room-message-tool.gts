@@ -51,6 +51,8 @@ interface Signature {
     messageTool: MessageTool;
     roomId: string;
     runCommand: () => void;
+    // Declines a call ai-bot holds for the user's approval.
+    declineCommand?: () => void;
     isError?: boolean;
     isPending?: boolean;
     isCompact?: boolean;
@@ -66,8 +68,24 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
 
+  // How much of the call's arguments has arrived. On the element as a plain
+  // data attribute so anything watching a session (the eval runner, and later
+  // a deployed monitor) can tell a long tool call that is still streaming
+  // from a stalled one, even while the box is collapsed.
+  private get argumentsLength() {
+    return (
+      this.args.messageTool.argumentsText ??
+      JSON.stringify(this.args.messageTool.arguments ?? {})
+    ).length;
+  }
+
+  // While the arguments are still streaming they are not valid JSON yet, so
+  // show the raw text received so far as it is.
   private get previewCommandCode() {
-    let { name, arguments: payload } = this.args.messageTool;
+    let { name, arguments: payload, argumentsText } = this.args.messageTool;
+    if (argumentsText) {
+      return argumentsText;
+    }
     return JSON.stringify({ name, payload }, null, 2);
   }
 
@@ -251,11 +269,21 @@ export default class RoomMessageTool extends Component<Signature> {
     return this.args.messageTool.status === 'failed' && !this.failedToolState;
   }
 
+  // "Try Anyway" re-runs a host tool; a call ai-bot runs has nothing on the
+  // host to retry, so its failure reason shows without the action.
   private get invalidToolCallState() {
     return (
       this.args.messageTool.status === 'invalid' &&
-      !!this.args.messageTool.failureReason
+      !!this.args.messageTool.failureReason &&
+      !this.args.messageTool.isBotExecuted
     );
+  }
+
+  // Why the assistant wants a call held for approval, in its own words: a
+  // bot tool that asks for approval takes a `reason` argument.
+  private get approvalReason() {
+    let reason = this.args.messageTool.toolRequest.arguments?.reason;
+    return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
   private get commandDescription() {
@@ -280,6 +308,8 @@ export default class RoomMessageTool extends Component<Signature> {
         compact=@isCompact
       }}
       data-test-tool-call-id={{@messageTool.toolRequest.id}}
+      data-tool-name={{@messageTool.name}}
+      data-tool-arguments-length={{this.argumentsLength}}
       ...attributes
     >
       {{#if @isStreaming}}
@@ -299,7 +329,12 @@ export default class RoomMessageTool extends Component<Signature> {
             @code={{this.previewCommandCode}}
             @isCompact={{@isCompact}}
             @toolCallState='preparing'
+            @isDisplayingCode={{this.isDisplayingCode}}
+            @toggleCode={{this.toggleViewCode}}
           />
+          {{#if this.isDisplayingCode}}
+            <codeBlock.editor />
+          {{/if}}
         </CodeBlock>
       {{else}}
         <CodeBlock
@@ -316,6 +351,8 @@ export default class RoomMessageTool extends Component<Signature> {
           <codeBlock.commandHeader
             @commandDescription={{@messageTool.description}}
             @action={{@runCommand}}
+            @secondaryAction={{if @messageTool.awaitsApproval @declineCommand}}
+            @secondaryActionVerb='Decline'
             @actionVerb={{@messageTool.actionVerb}}
             @code={{this.previewCommandCode}}
             @toolCallState={{this.applyButtonState}}
@@ -327,6 +364,17 @@ export default class RoomMessageTool extends Component<Signature> {
             <codeBlock.editor />
           {{/if}}
         </CodeBlock>
+        {{#if @messageTool.awaitsApproval}}
+          <p class='approval-note' data-test-tool-call-approval>
+            {{#if this.approvalReason}}
+              The assistant asks for your approval and says: “{{this.approvalReason}}”
+              Approve if that's OK with you.
+            {{else}}
+              The assistant asks for your approval to do this. Approve if that's
+              OK with you.
+            {{/if}}
+          </p>
+        {{/if}}
         {{#if this.failedToolState}}
           <Alert @type='error' as |Alert|>
             <Alert.Messages @messages={{array this.failedToolState.message}} />
@@ -381,6 +429,12 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .tool-result-card-preview {
         margin-top: var(--boxel-sp);
+      }
+      .approval-note {
+        margin: 0;
+        padding: 0 var(--boxel-sp-xxs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-450);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);

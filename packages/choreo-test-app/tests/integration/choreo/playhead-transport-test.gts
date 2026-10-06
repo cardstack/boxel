@@ -4,10 +4,10 @@
  * the presses behind the playhead. The old private sampler is gone; these
  * pin what replaced it.
  */
+import type { ChoreoRun } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, settled, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import type { ChoreoRun } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Playhead } from 'test-app/components/examples/playhead';
 
@@ -38,7 +38,7 @@ const frames = (n: number) =>
 
 module('Integration | choreo | playhead transport', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('the parked opening, a scrub, and the fold', async function (assert) {
     await render(<template><Playhead /></template>);

@@ -67,12 +67,14 @@ export class UsageObject extends Component<UsageObjectSignature> {
       />
     {{/if}}
     <style scoped>
-      /* JsonTree brings its own surface; the knob channel is all that is
-         needed here. */
-      .jsonviewer {
-        --pretui-json-max-height: 120px;
-        --pretui-json-indent: 12px;
-        --pretui-json-row-height: 20px;
+      @layer PretComponent {
+        /* JsonTree brings its own surface; the knob channel is all that is
+           needed here. */
+        .jsonviewer {
+          --pretui-json-max-height: 120px;
+          --pretui-json-indent: 12px;
+          --pretui-json-row-height: 20px;
+        }
       }
     </style>
   </template>

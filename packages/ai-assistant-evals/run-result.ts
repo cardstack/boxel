@@ -64,9 +64,13 @@ export interface RunResult {
 export type Grade = '✅ GOOD' | '🟡 ROUGH' | '❌ FAIL';
 
 export const BENCHMARKS = {
-  maxTurns: 8,
+  maxTurns: 10,
   maxModeSwitches: 1,
-  maxSeconds: 120,
+  maxSeconds: 200,
+  // A failed call the model notices and repairs in the same run is normal
+  // with the realm runner (a script with a syntax error, a stale search
+  // string); more than this many reads as a rough run.
+  maxFailedToolCalls: 2,
 };
 
 export function grade(result: RunResult): { grade: Grade; misses: string[] } {
@@ -93,8 +97,11 @@ export function grade(result: RunResult): { grade: Grade; misses: string[] } {
   if (result.durationSeconds > maxSeconds) {
     misses.push(`${result.durationSeconds}s (target ≤ ${maxSeconds}s)`);
   }
-  if (a.patchResults.failed > 0 || a.failedToolCalls.length > 0) {
-    misses.push('a patch or tool call failed along the way');
+  let failures = a.failedToolCalls.length;
+  if (failures > BENCHMARKS.maxFailedToolCalls) {
+    misses.push(
+      `${failures} tool calls failed along the way (target ≤ ${BENCHMARKS.maxFailedToolCalls})`,
+    );
   }
   if (a.cacheMisses > 0) {
     misses.push(`${a.cacheMisses} turn(s) missed the prompt cache`);

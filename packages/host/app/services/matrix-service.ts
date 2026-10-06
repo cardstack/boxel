@@ -40,7 +40,6 @@ import {
   logger,
   Deferred,
   ri,
-  containsSearchReplaceMarker,
   isCardErrorJSONAPI,
   stringifyErrorForLog,
 } from '@cardstack/runtime-common';
@@ -49,9 +48,6 @@ import { getPromptParts } from '@cardstack/runtime-common/ai';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -143,8 +139,6 @@ import type {
   BotTriggerContent,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
-  CodePatchResultContent,
-  CodePatchStatus,
   ToolResultWithNoOutputContent,
   ToolResultWithOutputContent,
   RealmEventContent,
@@ -1806,7 +1800,6 @@ export default class MatrixService extends Service {
     content:
       | BotTriggerContent
       | CardMessageContent
-      | CodePatchResultContent
       | ToolResultWithNoOutputContent
       | ToolResultWithOutputContent,
   ) {
@@ -2031,55 +2024,6 @@ export default class MatrixService extends Service {
     } catch (e) {
       throw new Error(
         `Error sending command result event: ${
-          'message' in (e as Error) ? (e as Error).message : e
-        }`,
-      );
-    }
-  }
-
-  async sendCodePatchResultEvent(
-    roomId: string,
-    eventId: string,
-    codeBlockIndex: number,
-    resultKey: CodePatchStatus,
-    attachedCards: CardDef[] = [],
-    attachedFiles: FileDef[] = [],
-    context: BoxelContext,
-    lintIssues?: string[],
-    failureReason?: string | undefined,
-  ) {
-    let contentData = await this.withContextAndAttachments(
-      context,
-      attachedCards,
-      attachedFiles,
-    );
-    let normalizedLintIssues = lintIssues || [];
-    let data: CodePatchResultContent['data'] = {
-      ...contentData,
-      ...(normalizedLintIssues.length
-        ? { lintIssues: normalizedLintIssues }
-        : {}),
-    };
-    let content: CodePatchResultContent = {
-      msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-      codeBlockIndex,
-      failureReason,
-      'm.relates_to': {
-        event_id: eventId,
-        key: resultKey,
-        rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-      },
-      data,
-    };
-    try {
-      return await this.sendEvent(
-        roomId,
-        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-        content,
-      );
-    } catch (e) {
-      throw new Error(
-        `Error sending code patch result event: ${
           'message' in (e as Error) ? (e as Error).message : e
         }`,
       );
@@ -3308,25 +3252,6 @@ export default class MatrixService extends Service {
       event.content?.isStreamingFinished
     ) {
       this.toolService.queueEventForToolProcessing(event);
-    }
-
-    // Queue code patches for processing
-    if (
-      event.type === 'm.room.message' &&
-      event.content?.body &&
-      event.content?.isStreamingFinished
-    ) {
-      // Any marker is enough to queue. An answer too long for one event is
-      // split at a character count that knows nothing about what it is cutting
-      // through, so a SEARCH/REPLACE block routinely straddles the boundary and
-      // no single event holds all three markers — requiring all three here left
-      // exactly those patches unqueued, while the UI, which reads the joined
-      // message, still offered an apply button for them. Whether there is
-      // anything to apply is decided later against the whole answer.
-      let body = event.content.body as string;
-      if (containsSearchReplaceMarker(body)) {
-        this.toolService.queueEventForCodePatchProcessing(event);
-      }
     }
   }
 

@@ -9,6 +9,7 @@
  * schedule is an absolute setting that re-derives correctly by accident, so a
  * test that only checked `gas` would pass against a broken host.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import { render, settled } from '@ember/test-helpers';
@@ -82,6 +83,7 @@ async function fired(honours = true) {
 module('Integration | examples | fold', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a seek to the end leaves the whole schedule applied', async function (assert) {
     const app = await fired();

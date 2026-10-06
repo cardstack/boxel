@@ -30,7 +30,7 @@ Review both selected and unselected participants. A query that accidentally incl
 
 ## API Coverage
 
-**glimmer-motion**: `PropSource`, `PropValue`.
+**@cardstack/choreo**: `PropSource`, `PropValue`.
 
 **ChoreoContext**: `c.Spring`, `c.Tween`.
 

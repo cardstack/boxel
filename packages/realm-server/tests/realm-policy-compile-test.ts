@@ -22,6 +22,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -42,7 +43,8 @@ const REALM_POLICY = {
 };
 
 // `lock` is kept out of every policy's reach. `OpenClassroom` redeclares it
-// without the flag, and inherits the rest.
+// without the flag, and inherits the rest. The head teacher is computed from
+// the roster, so only the index holds it.
 function classroomModule(rosterField: string) {
   return `
     import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
@@ -51,6 +53,11 @@ function classroomModule(rosterField: string) {
     export class Classroom extends CardDef {
       @field ${rosterField} = containsMany(StringField);
       @field status = contains(StringField);
+      @field headTeacher = contains(StringField, {
+        computeVia: function (this: Classroom) {
+          return this.${rosterField}?.[0];
+        },
+      });
 
       @operation static appendActivity = {
         base: 'transform',
@@ -102,7 +109,7 @@ const GRANTS: Grant[] = [
   { operation: 'read', where: '.teacherIds | any(. == actor())' },
   {
     operation: 'appendActivity',
-    where: { bxl: 'actor() in .teacherIds', snapshot: true },
+    where: { bxl: '.headTeacher == actor()', snapshot: true },
   },
   { operation: 'approve', where: '.teacherIds[0] == realmConfig("approver")' },
   { operation: 'rename', where: 'instance().teacherIds | length > 0' },
@@ -184,18 +191,31 @@ module(basename(import.meta.filename), function (hooks) {
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
+  async function stop() {
+    for (let realm of [education, org]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      for (let realm of [education, org]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
-      }
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   async function writeTo(realm: Realm, path: string, contents: string) {
@@ -295,8 +315,8 @@ module(basename(import.meta.filename), function (hooks) {
               operation: 'appendActivity',
               path: 'rules[0].grants[1]',
               where: {
-                source: 'actor() in .teacherIds',
-                canonical: '(actor() | IN(.teacherIds))',
+                source: '.headTeacher == actor()',
+                canonical: '.headTeacher == actor()',
                 snapshot: true,
               },
             },
@@ -405,6 +425,47 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a predicate that reads a computed value without the annotation records `unsnapshotted-policy-read`, and the rest of the policy compiles', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
+        { operation: 'approve', where: '.headTeacher == actor()' },
+        {
+          operation: 'rename',
+          where: { bxl: '.headTeacher == actor()', snapshot: true },
+        },
+        {
+          operation: 'appendActivity',
+          where: { bxl: '.status == "open"', snapshot: true },
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[1].where' }],
+      'the unannotated read of the computed value is recorded against its grant',
+    );
+    assert.true(
+      /`\.headTeacher` is computed/.test(policy?.issues[0]?.message ?? ''),
+      `the issue names the computed value: ${policy?.issues[0]?.message}`,
+    );
+    assert.deepEqual(
+      policy?.rules[0].grants.map(({ operation, where }) => [
+        operation,
+        where?.snapshot,
+      ]),
+      [
+        ['read', false],
+        ['rename', true],
+        ['appendActivity', false],
+      ],
+      'the other grants compile: annotated, the computed read is judged against the snapshot, and an annotated read of the stored source is judged against the stored source',
+    );
+  });
+
   test('a predicate that reads params(), does not parse, or is empty is refused, and the rest of the policy compiles', async function (assert) {
     await writeTo(
       org,
@@ -439,8 +500,8 @@ module(basename(import.meta.filename), function (hooks) {
       `the profile names params(): ${paramsIssue}`,
     );
     assert.true(
-      String(parseIssue).includes('does not parse'),
-      `a predicate that does not parse says so: ${parseIssue}`,
+      String(parseIssue).includes('has a syntax error'),
+      `a predicate with a syntax error says so: ${parseIssue}`,
     );
     assert.true(
       String(emptyIssue).includes('`where` is empty'),

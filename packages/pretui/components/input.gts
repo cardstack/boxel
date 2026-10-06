@@ -22,7 +22,7 @@ export interface InputSignature {
     required?: boolean;
     /** additive — renders boxel-ui's 'Optional' indicator above the control */
     optional?: boolean;
-    /** additive — native readonly (Appendix E boolean set) */
+    /** additive — native readonly */
     readonly?: boolean;
     /** alias — React Aria / Base UI spelling of @invalid */
     isInvalid?: boolean;
@@ -105,34 +105,36 @@ export class Input extends Component<InputSignature> {
       />
     </div>
     <style scoped>
-      /* Pretui control dress fed into BoxelInput via its token channel:
-         semantic vars (--background/--border/--ring read the Pretui field
-         tokens) plus the --boxel-* dimension knobs — h28, r(--radius),
-         0-9px padding, 12.5px type. --muted-foreground narrows to the
-         placeholder ink inside this wrapper only. */
-      .pretui-inputwrap {
-        width: 100%;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        --background: var(--field, var(--boxel-light));
-        --border: var(--input);
-        --ring: var(--primary);
-        --muted-foreground: var(--ink-3, var(--boxel-400));
-        --boxel-form-control-height: var(--control-h, 28px);
-        --boxel-input-height: var(--control-h, 28px);
-        --boxel-form-control-border-radius: var(--radius);
-        --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
-        --boxel-font-size-xs: var(--text-ui-xs, 11px);
-        --boxel-sp-xs: 5px;
-        --boxel-sp-sm: 9px;
-      }
-      /* Input owns @invalid, so the invalid channel must also be applied
-         here. Field's selector below is only an extra convenience for a
-         Field-level error message; relying on it made the standalone Input
-         demo (and any Input without Field) lose the Pretui invalid dress. */
-      .pretui-inputwrap[data-invalid='true'] {
-        --border: var(--destructive);
-        --background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+      @layer PretComponent {
+        /* Pretui control dress fed into BoxelInput via its token channel:
+           semantic vars (--background/--border/--ring read the Pretui field
+           tokens) plus the --boxel-* dimension knobs — h28, r(--radius),
+           0-9px padding, 12.5px type. --muted-foreground narrows to the
+           placeholder ink inside this wrapper only. */
+        .pretui-inputwrap {
+          width: 100%;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          --background: var(--field, var(--boxel-light));
+          --border: var(--input);
+          --ring: var(--primary);
+          --muted-foreground: var(--ink-3, var(--boxel-400));
+          --boxel-form-control-height: var(--control-h, 28px);
+          --boxel-input-height: var(--control-h, 28px);
+          --boxel-form-control-border-radius: var(--radius);
+          --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
+          --boxel-font-size-xs: var(--text-ui-xs, 11px);
+          --boxel-sp-xs: 5px;
+          --boxel-sp-sm: 9px;
+        }
+        /* Input owns @invalid, so the invalid channel must also be applied
+           here. Field's selector below is only an extra convenience for a
+           Field-level error message; relying on it made the standalone Input
+           demo (and any Input without Field) lose the Pretui invalid dress. */
+        .pretui-inputwrap[data-invalid='true'] {
+          --border: var(--destructive);
+          --background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+        }
       }
     </style>
   </template>

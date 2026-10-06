@@ -48,3 +48,5 @@ Consumed: `--field` (control face), `--input` (hairline), `--primary` (focus rin
 Forwarded into boxel-ui through the `--boxel-*` channel: the form-control height, radius, font sizes and spacing knobs, exactly as **Input** does — the two are dressed to be pixel-identical, so an email field and a text field in the same form align.
 
 An inline `style` carries the font inheritance, because the UA font on native controls is one of the two places the custom-property channel cannot reach. The invalid dress arrives through the token channel from an enclosing **Field** (`--border` → `--destructive`), so it works here without the component knowing about it.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

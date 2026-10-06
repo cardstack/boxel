@@ -47,6 +47,9 @@ jobs:
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       pretui: ${{ steps.filter.outputs.pretui }}
+      choreo: ${{ steps.filter.outputs.choreo }}
+      choreo-addon: ${{ steps.filter.outputs.choreo-addon }}
+      glimmer-motion: ${{ steps.filter.outputs.glimmer-motion }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
@@ -129,6 +132,22 @@ jobs:
             pretui:
               - *shared
               - 'packages/pretui/**'
+            choreo:
+              - *shared
+              - 'packages/choreo/**'
+              - 'packages/choreo-gallery/**'
+              - 'packages/choreo-player/**'
+              - 'packages/choreo-test-app/**'
+              - 'packages/glimmer-motion/**'
+            # choreo builds on glimmer-motion's extension point, so a
+            # glimmer-motion change runs choreo's suite too.
+            choreo-addon:
+              - *shared
+              - 'packages/choreo/**'
+              - 'packages/glimmer-motion/**'
+            glimmer-motion:
+              - *shared
+              - 'packages/glimmer-motion/**'
             matrix:
               - *shared
               - 'packages/base/**'
@@ -155,6 +174,11 @@ jobs:
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+              # The boxel-skills pin lives in the marketplaces, and the
+              # boxel-cli suite checks it (both refs agree, the pinned release
+              # is installable), so a pin-only change has to run that suite.
+              - '.claude-plugin/marketplace.json'
+              - '.agents/plugins/marketplace.json'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
@@ -162,9 +186,10 @@ jobs:
               - *shared
               - 'packages/bxl/**'
               # The card-authoring skill's claims are pinned by a BXL suite
-              # that reads the skill file, so an edit to the skill has to run
-              # that suite too.
-              - 'packages/boxel-cli/plugin/skills/bxl-authoring/**'
+              # that reads the skill from the pinned boxel-skills release, so
+              # moving the pin has to run that suite too.
+              - '.claude-plugin/marketplace.json'
+              - 'packages/boxel-cli/scripts/boxel-skills.mts'
               # That suite also asserts the host suites the skill cites still
               # exist. `bxl-test` runs unconditionally on main, so without
               # these a host-only rename would merge green and redden main on
@@ -448,7 +473,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     concurrency:
       group: pretui-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -471,20 +496,175 @@ jobs:
         run: |
           "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
       # `boxel test` caps a whole QUnit run at 300 s, so each job keeps a
-      # deterministic slice of the sorted test-file list. The divisor follows
-      # the matrix length, so resizing the matrix resizes the split.
+      # deterministic slice of the test files, balanced by the per-file run
+      # times in scripts/test-timings.json (refresh them with
+      # `node scripts/test-shards.mjs --record`). The shard count follows the
+      # matrix length, so resizing the matrix resizes the split.
       - name: Select this shard's test files
-        run: |
-          i=0
-          for f in $(find . -name '*.test.gts' | sort); do
-            if [ $((i % ${{ strategy.job-total }} + 1)) -ne ${{ matrix.shard }} ]; then rm "$f"; fi
-            i=$((i + 1))
-          done
-          echo "$(find . -name '*.test.gts' | wc -l) test file(s) in this shard"
+        run: node scripts/test-shards.mjs ${{ matrix.shard }} ${{ strategy.job-total }}
         working-directory: packages/pretui
       - name: Run tests
         run: boxel test .
         working-directory: packages/pretui
+
+  choreo-test:
+    name: Choreo Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: choreo-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # Reads the TypeScript sources and the guides directly, so it needs no
+      # build.
+      - name: Check guide coverage
+        run: pnpm run docs:check
+        working-directory: packages/choreo-gallery
+      # The gallery resolves these packages through their built output
+      # (package.json#exports maps into dist/ and declarations/). glimmer-motion
+      # builds first: choreo's declarations build resolves it the same way.
+      - name: Build Glimmer Motion, Choreo and Choreo Player
+        id: build-libs
+        if: ${{ !cancelled() }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+      # npm consumers resolve every subpath to the built output, without the
+      # `developing:choreo` condition the workspace builds from source with.
+      - name: Check the packed glimmer-motion and Choreo exports
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: |
+          (cd packages/glimmer-motion && pnpm run check:packed-exports)
+          (cd packages/choreo && pnpm run check:packed-exports)
+      - name: Choreo Player unit tests
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm run test:unit
+        working-directory: packages/choreo-player
+      # The realm output test reads dist-realm/, and the theater sizing test
+      # reads the scoped stylesheet the build generates.
+      - name: Build Choreo Gallery and its realm
+        id: build-gallery
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm run build && pnpm run build:realm
+        working-directory: packages/choreo-gallery
+      - name: Choreo Gallery realm output tests
+        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
+        run: pnpm run test:realm
+        working-directory: packages/choreo-gallery
+      # Playwright launches the runner's preinstalled Google Chrome (the
+      # script's default `chrome` channel), so no browser download is needed.
+      - name: Choreo Gallery theater sizing test
+        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
+        run: pnpm run test:theater-sizing
+        working-directory: packages/choreo-gallery
+
+  # glimmer-motion's own QUnit suite, which compiles the package from source.
+  glimmer-motion-test:
+    name: Glimmer Motion Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.glimmer-motion == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: glimmer-motion-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/glimmer-motion
+
+  # choreo's own QUnit suite (Choreo and film), which compiles choreo and
+  # glimmer-motion from source through the `developing:choreo` export
+  # condition.
+  choreo-addon-test:
+    name: Choreo Addon Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo-addon == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-addon-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo
+
+  # The QUnit suite for the gallery demos, which lives in choreo-test-app.
+  choreo-test-app-test:
+    name: Choreo Test App Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-test-app-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # The test app compiles glimmer-motion and Choreo from source through the
+      # `developing:choreo` export condition, but resolves choreo-player
+      # through its built output.
+      - name: Build Choreo Player
+        run: pnpm run build
+        working-directory: packages/choreo-player
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo-test-app
+
+  # glimmer-motion's, choreo's and the Choreo test app's suites against the
+  # packages' built output, the code npm consumers get. Only the rollup build
+  # inlines and tree-shakes framer-motion's internals, so these are the runs
+  # that exercise it. CHOREO_LIBS=dist leaves the `developing:choreo`
+  # condition out of each suite's Vite config.
+  choreo-dist-test:
+    name: Glimmer Motion and Choreo Tests (built output)
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: choreo-dist-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # glimmer-motion builds first: choreo's declarations build resolves it
+      # through its built output.
+      - name: Build Glimmer Motion, Choreo and Choreo Player
+        id: build-libs
+        run: |
+          (cd packages/glimmer-motion && pnpm run build)
+          (cd packages/choreo && pnpm run build)
+          (cd packages/choreo-player && pnpm run build)
+      - name: Glimmer Motion test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/glimmer-motion
+        env:
+          CHOREO_LIBS: dist
+      - name: Choreo test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/choreo
+        env:
+          CHOREO_LIBS: dist
+      - name: Choreo Test App test suite
+        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
+        run: pnpm test
+        working-directory: packages/choreo-test-app
+        env:
+          CHOREO_LIBS: dist
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only

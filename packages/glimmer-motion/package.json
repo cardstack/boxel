@@ -1,7 +1,7 @@
 {
   "name": "glimmer-motion",
   "version": "0.0.0",
-  "description": "Motion, Choreographed. The Motion engine for Ember — and a timeline for the scene.",
+  "description": "The Motion engine for Ember: Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.",
   "keywords": [
     "ember-addon",
     "animation",
@@ -17,14 +17,42 @@
   "author": "Cardstack",
   "exports": {
     ".": {
+      "developing:choreo": "./src/index.ts",
       "types": "./declarations/index.d.ts",
       "default": "./dist/index.js"
     },
     "./test-support": {
+      "developing:choreo": "./src/test-support/index.ts",
       "types": "./declarations/test-support/index.d.ts",
       "default": "./dist/test-support/index.js"
     },
+    "./layout-group": {
+      "developing:choreo": "./src/layout-group.gts",
+      "types": "./declarations/layout-group.d.ts",
+      "default": "./dist/layout-group.js"
+    },
+    "./motion-config": {
+      "developing:choreo": "./src/motion-config.gts",
+      "types": "./declarations/motion-config.d.ts",
+      "default": "./dist/motion-config.js"
+    },
+    "./presence": {
+      "developing:choreo": "./src/presence.gts",
+      "types": "./declarations/presence.d.ts",
+      "default": "./dist/presence.js"
+    },
+    "./reorder/group": {
+      "developing:choreo": "./src/reorder/group.gts",
+      "types": "./declarations/reorder/group.d.ts",
+      "default": "./dist/reorder/group.js"
+    },
+    "./reorder/item": {
+      "developing:choreo": "./src/reorder/item.gts",
+      "types": "./declarations/reorder/item.d.ts",
+      "default": "./dist/reorder/item.js"
+    },
     "./*": {
+      "developing:choreo": "./src/*.ts",
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
     },
@@ -46,6 +74,7 @@
   ],
   "scripts": {
     "build": "rollup --config && node scripts/fix-declarations.mjs",
+    "check:packed-exports": "node scripts/check-exports.mjs --packed",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
@@ -54,54 +83,61 @@
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
+    "lint:exports": "node scripts/check-exports.mjs --source",
     "lint:types": "ember-tsc --noEmit",
     "prepack": "rollup --config && node scripts/fix-declarations.mjs",
     "realm": "node scripts/build-realm-bundle.mjs",
     "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",
     "realm:stage": "node scripts/build-realm-bundle.mjs --no-mirror",
     "start": "rollup --config --watch",
-    "test": "echo 'A v2 addon does not have tests, run tests in test-app'"
+    "test": "vite build --mode=development --out-dir dist-tests && testem --file testem.cjs ci --port 0",
+    "start:test": "vite dev --open /tests/"
   },
   "dependencies": {
     "@embroider/addon-shim": "^1.8.9",
-    "decorator-transforms": "catalog:"
+    "decorator-transforms": "catalog:",
+    "framer-motion": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "catalog:",
-    "@babel/eslint-parser": "^7.25.1",
+    "@babel/plugin-transform-runtime": "^7.29.0",
     "@babel/plugin-transform-typescript": "catalog:",
     "@babel/runtime": "catalog:",
+    "@cardstack/choreo-eslint-config": "workspace:*",
     "@ember/library-tsconfig": "^1.1.3",
     "@ember/test-helpers": "^4.0.5",
     "@embroider/addon-dev": "^8.0.0",
-    "@eslint/js": "^9.39.4",
+    "@embroider/config-meta-loader": "^1.0.0",
+    "@embroider/core": "^4.6.3",
+    "@embroider/macros": "^1.20.2",
+    "@embroider/vite": "^1.7.10",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
     "@glimmer/validator": "^0.95.0",
     "@glint/ember-tsc": "catalog:",
     "@glint/template": "catalog:",
     "@rollup/plugin-babel": "catalog:",
+    "@types/qunit": "catalog:",
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
     "ember-modifier": "^4.3.0",
+    "ember-qunit": "catalog:",
     "ember-source": "catalog:",
+    "ember-strict-application-resolver": "^0.1.0",
     "ember-template-lint": "catalog:",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.4",
-    "eslint-config-prettier": "catalog:",
-    "eslint-plugin-ember": "catalog:",
-    "eslint-plugin-import": "catalog:",
-    "eslint-plugin-n": "catalog:",
-    "eslint-plugin-simple-import-sort": "^12.1.1",
-    "eslint-plugin-typescript-sort-keys": "catalog:",
-    "globals": "^15.15.0",
+    "motion": "catalog:",
     "motion-dom": "catalog:",
     "motion-utils": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
     "rollup": "catalog:",
+    "testem": "catalog:",
     "typescript": "catalog:",
-    "typescript-eslint": "catalog:"
+    "vite": "catalog:"
   },
   "peerDependenciesMeta": {
     "@ember/test-helpers": {
@@ -120,7 +156,7 @@
     "@glimmer/tracking": "^1.1.2",
     "ember-modifier": "^4.3.0",
     "ember-source": ">=5.4.0",
-    "motion-dom": "^13.1.1",
-    "motion-utils": "^13.0.0"
+    "motion-dom": "^13.4.5",
+    "motion-utils": "^13.3.0"
   }
 }

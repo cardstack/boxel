@@ -31,7 +31,7 @@ import {
 } from '../middleware/index.ts';
 import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
-import { resolvePrerenderManagerURL } from './config.ts';
+import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
 import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
@@ -815,7 +815,7 @@ export function buildPrerenderApp(options: {
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
     let formatIsValid = isOnDemandCaptureFormat(rawFormat);
-    // Same strict parse + bounds as the realm-server's POST /_capture-card
+    // Same strict parse + bounds as the realm-server's POST /_capture
     // body: this route is its own HTTP surface, and an unvalidated spec here
     // would reach `page.setViewport` on a pooled page with none of the cost
     // caps applied. The parse also normalizes (defaults elided, empty spec
@@ -1789,7 +1789,7 @@ async function unregisterWithManager(serverURL: string) {
     const managerURL = resolvePrerenderManagerURL();
     let target = new URL(`${managerURL}/prerender-servers`);
     target.searchParams.set('url', serverURL);
-    await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
+    await fetchFromManager(target, { method: 'DELETE' }).catch((e) => {
       log.debug('Prerender manager unregister request failed:', e);
     });
   } catch (e) {
@@ -1912,7 +1912,7 @@ export function createPrerenderHttpServer(options?: {
       log.debug(
         `POST heartbeat to ${managerURL}/prerender-servers with body:\n${JSON.stringify(body, null, 2)}`,
       );
-      let response = await fetch(`${managerURL}/prerender-servers`, {
+      let response = await fetchFromManager(`${managerURL}/prerender-servers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/vnd.api+json',

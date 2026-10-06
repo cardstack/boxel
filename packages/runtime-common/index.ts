@@ -1605,7 +1605,7 @@ export type CaptureRequestEntry = CaptureRequestOverrides & {
 
 // Optional per-capture overrides for a capture render. All fields are
 // JSON-serializable so this rides through the worker queue on
-// `CaptureCardArgs`. Bounds are enforced by the shared strict parse in
+// `CaptureArgs`. Bounds are enforced by the shared strict parse in
 // `capture-spec.ts` before the job is enqueued (both the realm-server POST
 // body and the prerender server's capture route run it); the capture path
 // (`runCapture`) treats these as already-validated but still rejects
@@ -1630,10 +1630,11 @@ export type CapturePrerenderArgs = {
   format: OnDemandCaptureFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: CaptureRequestSpec;
-  // Render-route options for the capture. The capture path always renders a
-  // card (`cardRender`), so only `loaderEpoch` is meaningful here today: it
-  // synchronizes the pooled tab's module graph to the realm's current
-  // timeline, exactly as an indexing visit's `renderOptions` do.
+  // Render-route options for the capture. Three fields are read:
+  // `loaderEpoch` synchronizes the pooled tab's module graph to the realm's
+  // current timeline, exactly as an indexing visit's `renderOptions` do; and
+  // `fileRender` with its `fileDefCodeRef` makes `url` a file, which is
+  // extracted and rendered through that FileDef instead of the card branch.
   renderOptions?: RenderRouteOptions;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
@@ -1691,8 +1692,8 @@ export interface Prerenderer {
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
   // Optional: capture a settled card render to a PNG. Optional so test
   // stubs and older Prerenderer implementations are not forced to
-  // implement it; the capture-card worker task
-  // (`runtime-common/tasks/capture-card.ts`) probes for this method at
+  // implement it; the capture worker task
+  // (`runtime-common/tasks/capture.ts`) probes for this method at
   // runtime and surfaces a useful error if the configured prerenderer
   // doesn't support it.
   prerenderCapture?(
@@ -1860,6 +1861,8 @@ export * from './document.ts';
 export * from './matrix-constants.ts';
 export * from './session-token.ts';
 export * from './matrix-client.ts';
+export * from './anonymous-access.ts';
+export * from './anonymous-rate-limiter.ts';
 export * from './queue.ts';
 export * from './host-shell-generation.ts';
 export * from './job-utils.ts';
@@ -2095,14 +2098,18 @@ export interface CardChooser {
   ): Promise<undefined | string | string[]>;
 }
 
+export interface FileChooserOpts {
+  fileType?: CodeRef;
+  fileTypeName?: string;
+  // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
+  // narrowing the chooser beyond the file type.
+  fileFieldFilter?: Record<string, unknown>;
+}
+
 export interface FileChooser {
-  chooseFile<T>(opts?: {
-    fileType?: CodeRef;
-    fileTypeName?: string;
-    // Equality constraints on indexed file fields (e.g. `{ kind: 'skill' }`),
-    // narrowing the chooser beyond the file type.
-    fileFieldFilter?: Record<string, unknown>;
-  }): Promise<undefined | T>;
+  chooseFile<T>(
+    opts?: FileChooserOpts & { multiSelect?: boolean },
+  ): Promise<undefined | T | T[]>;
 }
 
 export async function chooseCard(
@@ -2137,11 +2144,15 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FileDef>(opts?: {
-  fileType?: CodeRef;
-  fileTypeName?: string;
-  fileFieldFilter?: Record<string, unknown>;
-}): Promise<undefined | T> {
+export async function chooseFile<T extends FileDef>(
+  opts: FileChooserOpts & { multiSelect: true },
+): Promise<undefined | T[]>;
+export async function chooseFile<T extends FileDef>(
+  opts?: FileChooserOpts & { multiSelect?: false },
+): Promise<undefined | T>;
+export async function chooseFile<T extends FileDef>(
+  opts?: FileChooserOpts & { multiSelect?: boolean },
+): Promise<undefined | T | T[]> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(

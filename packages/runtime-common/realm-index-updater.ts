@@ -272,6 +272,25 @@ export class RealmIndexUpdater {
     });
   }
 
+  // How far the index is behind its source by this process's own
+  // bookkeeping: how many passes it is waiting on, and how long it has waited
+  // on the oldest. What `indexLag` reads from the queue, for a realm with no
+  // queue to read, where every pass is this process's.
+  indexLag(): { pending: number; oldestPendingMs?: number } {
+    let passes = [
+      ...this.#incrementalIndexingDeferreds.values(),
+      ...this.#fullIndexingDeferreds.values(),
+    ];
+    if (passes.length === 0) {
+      return { pending: 0 };
+    }
+    let oldest = Math.min(...passes.map(({ registeredAt }) => registeredAt));
+    return {
+      pending: passes.length,
+      oldestPendingMs: Math.max(0, Date.now() - oldest),
+    };
+  }
+
   // Awaits every in-flight incremental and copy job, whatever it touched.
   // From-scratch jobs are excluded because workers read files independently
   // of realm-server writes and each row write is atomic; a from-scratch

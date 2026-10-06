@@ -6,7 +6,6 @@ import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
   archiveRealm,
-  logger,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -32,8 +31,10 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { policyWarningsDuring } from './helpers/policy-log.ts';
 
 // The worked example's topology. The Education realm holds the cards a policy
 // governs, and its policy card lives in an Org realm nobody the Education
@@ -140,6 +141,11 @@ const SCHOOL_MODULE = `
   export { Syllabus } from "./syllabus";
 `;
 
+// A stored title the `Syllabus` predicate throws on, distinctive enough that
+// a log line quoting it is found by a plain substring search.
+const ALGEBRA_TITLE = 'Algebra, stored as 7f3c-quoted-nowhere';
+const SYLLABUS_PREDICATE = '(.title | tonumber) > 0';
+
 const SYLLABUS_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
@@ -148,38 +154,6 @@ const SYLLABUS_MODULE = `
   }
 `;
 
-// Every warning the gate logs on `realm:policy` while `fn` runs. The gate and
-// this suite share the named logger, so a tap on its method factory sees
-// exactly what the gate writes. The level is held at `warn` or louder for the
-// duration, so a quieter LOG_LEVELS setting cannot hide the line a test is
-// looking for.
-async function policyWarningsDuring(
-  fn: () => Promise<void>,
-): Promise<string[]> {
-  let log = logger('realm:policy');
-  let warnings: string[] = [];
-  let originalFactory = log.methodFactory;
-  let originalLevel = log.getLevel();
-  log.methodFactory = (methodName, level, loggerName) => {
-    let raw = originalFactory(methodName, level, loggerName);
-    return (...args: unknown[]) => {
-      if (methodName === 'warn') {
-        warnings.push(args.map(String).join(' '));
-      }
-      raw(...args);
-    };
-  };
-  // Rebinds the logger's methods, which is what puts the tap in place.
-  log.setLevel(originalLevel > log.levels.WARN ? 'warn' : originalLevel);
-  try {
-    await fn();
-  } finally {
-    log.methodFactory = originalFactory;
-    log.setLevel(originalLevel);
-  }
-  return warnings;
-}
-
 type Grant = { operation: string; where?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
@@ -187,8 +161,7 @@ type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 // writes on `Classroom` are the named operations `rename` and
 // `appendActivity`, granted outright, and a `delete` that rests on a
 // predicate. `Bulletin` takes its plain writes outright. A `Syllabus` read
-// rests on a predicate that throws for any title that is not a number, or on
-// one annotated as reading a snapshot tier, which the gate never evaluates.
+// rests on a predicate that throws for any title that is not a number.
 const RULES: Rule[] = [
   {
     targetType: CLASSROOM,
@@ -210,10 +183,7 @@ const RULES: Rule[] = [
   },
   {
     targetType: SYLLABUS,
-    grants: [
-      { operation: 'read', where: '(.title | tonumber) > 0' },
-      { operation: 'read', where: { bxl: 'true', snapshot: true } },
-    ],
+    grants: [{ operation: 'read', where: SYLLABUS_PREDICATE }],
   },
   {
     targetType: { module: `${EDUCATION}school`, name: 'Syllabus' },
@@ -359,7 +329,7 @@ module(basename(import.meta.filename), function (hooks) {
             ),
             'syllabi/algebra.json': card(
               { module: '../syllabus', name: 'Syllabus' },
-              { title: 'Algebra' },
+              { title: ALGEBRA_TITLE },
             ),
             'syllabi/course-42.json': card(
               { module: '../syllabus', name: 'Syllabus' },
@@ -395,18 +365,31 @@ module(basename(import.meta.filename), function (hooks) {
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
+  async function stop() {
+    for (let realm of [education, org]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      for (let realm of [education, org]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
-      }
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   function bearer(
@@ -548,6 +531,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );
@@ -571,6 +555,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 1,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'through one policy load and one predicate',
       );
@@ -968,7 +953,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('fail closed', function () {
-    test('a predicate that throws refuses as a card that is not there is refused, and one that reads a snapshot tier is never evaluated', async function (assert) {
+    test('a predicate that throws refuses as a card that is not there is refused', async function (assert) {
       const ALGEBRA = `${EDUCATION}syllabi/algebra`;
       const GEOMETRY = `${EDUCATION}syllabi/geometry`;
       assert.strictEqual(
@@ -1020,18 +1005,40 @@ module(basename(import.meta.filename), function (hooks) {
         1,
         'the throw is logged once, however many reads it refuses',
       );
+      let fault = faults[0] ?? '';
       assert.true(
-        faults[0]?.includes(`"read" on ${ALGEBRA}`),
-        `the line names the card the predicate threw on: ${faults[0]}`,
+        fault.includes(`the policy of realm ${EDUCATION} `),
+        `the line names the realm: ${fault}`,
       );
       assert.true(
-        faults[0]?.includes('cannot be parsed as number'),
-        'and why it threw',
+        fault.includes(`whether ${TEACHER} may invoke`),
+        'the caller',
       );
+      assert.true(
+        fault.includes(`"read" on ${ALGEBRA}`),
+        'the operation and the card the predicate threw on',
+      );
+      assert.true(
+        fault.includes(`the grant at rules[3].grants[0] of ${POLICY_CARD}`),
+        'and where the predicate is in the policy card',
+      );
+      assert.true(
+        fault.includes('BxlTransformError (evaluate)'),
+        'with the kind of error it threw',
+      );
+      assert.false(
+        fault.includes('7f3c-quoted-nowhere'),
+        'the line quotes none of the stored card',
+      );
+      assert.false(
+        fault.includes(SYLLABUS_PREDICATE),
+        'nor the predicate source',
+      );
+      assert.false(fault.includes('tonumber'), 'nor any part of it');
       assert.strictEqual(
         gateStats().predicateEvaluations,
         3,
-        'the throwing predicate was evaluated each time, and the snapshot one never',
+        'the throwing predicate was evaluated each time',
       );
     });
 
@@ -1097,6 +1104,44 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         compiled?.issues.map((issue) => issue.code),
         ['policy-card-missing'],
+      );
+    });
+
+    test('the compile warning names each issue by where it is and its code, not by its message', async function (assert) {
+      const MARKER = 'e21a-quoted-nowhere';
+      await org.write(
+        'broken-definition.gts',
+        `throw new Error('the definition fails to load: ${MARKER}');`,
+      );
+      await org.write(
+        'policies/broken.json',
+        card({ module: '../broken-definition', name: 'Nothing' }, {}),
+      );
+      await org.indexing();
+      let warnings = await policyWarningsDuring(async () => {
+        await pointAt(`${ORG}policies/broken`);
+        await getCard(ROOM_204, AUTH.teacher());
+      });
+      let issues = (await education.getCompiledPolicy())?.issues ?? [];
+      assert.deepEqual(
+        issues.map((issue) => issue.code),
+        ['policy-card-unloadable'],
+      );
+      assert.true(
+        issues[0]?.message.includes(MARKER),
+        `the issue's message quotes the card's index error: ${issues[0]?.message}`,
+      );
+      let compiledWith = warnings.filter((line) =>
+        line.includes(`the policy ${ORG}policies/broken compiled with issues`),
+      );
+      assert.strictEqual(compiledWith.length, 1, 'the compile is logged');
+      assert.true(
+        compiledWith[0]?.includes('(card): policy-card-unloadable'),
+        `the line names the issue by its place and code: ${compiledWith[0]}`,
+      );
+      assert.false(
+        compiledWith[0]?.includes(MARKER),
+        'and does not quote its message',
       );
     });
 
@@ -1915,6 +1960,7 @@ module(basename(import.meta.filename), function (hooks) {
         predicateEvaluations: 0,
         pendingDischarges: 0,
         definitionLookups: 0,
+        snapshotReads: 0,
       });
     });
 

@@ -6,8 +6,9 @@
  * not laid out by the browser, so the assertions have to check the numbers
  * the demo computed rather than trusting that flow got it right.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, fillIn, find, render } from '@ember/test-helpers';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { InlineEdit } from 'test-app/components/examples/inline-edit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
@@ -56,7 +57,7 @@ const controlTextX = (key: string) =>
 
 module('Integration | inline edit', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('the record reads as a string and writes as real fields', async function (assert) {
     await render(<template><InlineEdit /></template>);

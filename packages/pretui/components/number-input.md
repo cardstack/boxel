@@ -50,3 +50,5 @@ Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`
 Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics so a numeric field and a text field align in the same form.
 
 Native spinner buttons are a UA-rendered control that CSS custom properties cannot reach — a season cannot restyle them, and they will look like the browser's rather than like the kit's. **Stepper** exists partly for that reason. If a season wants consistent numeric chrome, prefer Stepper. The invalid dress arrives from an enclosing **Field** through the token channel, as with the rest of the family.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -22,6 +22,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -305,19 +306,32 @@ module(basename(import.meta.filename), function (hooks) {
     open = result.realms.find((realm) => realm.url === OPEN)!;
   }
 
+  async function stop() {
+    education.__testOnlySetBeforeBatchLock(undefined);
+    for (let realm of [education, org, open]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      education.__testOnlySetBeforeBatchLock(undefined);
-      for (let realm of [education, org, open]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
-      }
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   function bearer(
@@ -582,6 +596,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 3,
           pendingDischarges: 3,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each write’s predicate was evaluated once, under the lock',
       );
@@ -1460,6 +1475,7 @@ module(basename(import.meta.filename), function (hooks) {
         predicateEvaluations: 0,
         pendingDischarges: 0,
         definitionLookups: 0,
+        snapshotReads: 0,
       });
     });
   });

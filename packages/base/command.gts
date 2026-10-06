@@ -252,7 +252,7 @@ export class GenerateThumbnailOutput extends CardDef {
   @field imageDefIdentifier = contains(StringField);
 }
 
-export class CaptureCardInput extends CardDef {
+export class CaptureInput extends CardDef {
   @field card = linksTo(CardDef);
   @field format = contains(StringField); // 'isolated' | 'embedded'
   // The capture surface, exposed one JSON-primitive field per parameter.
@@ -285,12 +285,12 @@ export class Capture extends FieldDef {
   @field height = contains(NumberField);
 }
 
-export class CaptureCardOutput extends CardDef {
+export class CaptureOutput extends CardDef {
   static displayName = 'Capture Result';
 
   @field captures = containsMany(Capture);
 
-  static embedded = class Embedded extends Component<typeof CaptureCardOutput> {
+  static embedded = class Embedded extends Component<typeof CaptureOutput> {
     <template>
       <div class='capture-result'>
         {{#each @model.captures as |capture|}}
@@ -397,23 +397,63 @@ export class LintAndFixResult extends CardDef {
   @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
-export class PatchCodeResultField extends FieldDef {
-  @field status = contains(StringField); // 'applied', 'failed'
-  @field failureReason = contains(StringField); // only present if status is 'failed'
-}
-
-export class PatchCodeCommandResult extends CardDef {
-  @field patchedContent = contains(StringField);
-  @field finalFileIdentifier = contains(StringField);
-  @field lintIssues = containsMany(StringField);
-  @field results = containsMany(PatchCodeResultField);
-}
-
-export class PatchCodeInput extends CardDef {
-  @field fileIdentifier = contains(StringField);
-  @field codeBlocks = containsMany(StringField);
+export class RunRealmCodeInput extends CardDef {
+  @field code = contains(StringField);
+  @field realm = contains(StringField);
   @field roomId = contains(StringField);
 }
+
+export class RealmCodeFileResult extends FieldDef {
+  @field fileUrl = contains(StringField);
+  @field status = contains(StringField);
+  @field detail = contains(StringField);
+}
+
+// A capture the assistant looked at, already uploaded to the room's media.
+// The tool result that carries it attaches the image, which is how the model
+// receives it as image input; `sourceUrl` names what was captured.
+export class AttachedImageField extends FieldDef {
+  @field name = contains(StringField);
+  @field sourceUrl = contains(StringField);
+  @field url = contains(StringField);
+  @field contentType = contains(StringField);
+  @field contentHash = contains(StringField);
+  @field contentSize = contains(NumberField);
+  @field width = contains(NumberField);
+  @field height = contains(NumberField);
+}
+
+export class RunRealmCodeResult extends CardDef {
+  @field files = containsMany(RealmCodeFileResult);
+  @field scriptResult = contains(StringField);
+  // What the script looked at with `realm.capture`: each capture rides the tool
+  // result as an attached image, so the model sees it.
+  @field captures = containsMany(AttachedImageField);
+}
+
+export class ViewVisuallyInput extends CardDef {
+  // A card instance or a file in a workspace, by URL.
+  @field url = contains(StringField);
+  @field format = contains(StringField); // 'isolated' | 'embedded'
+  // Flat JSON-primitive geometry, for the reason `CaptureInput` gives.
+  @field viewportWidth = contains(NumberField);
+  @field viewportHeight = contains(NumberField);
+  @field fullPage = contains(BooleanField);
+}
+
+export class ViewVisuallyResult extends CardDef {
+  @field sourceUrl = contains(StringField);
+  @field kind = contains(StringField); // 'card' | 'file'
+  @field format = contains(StringField);
+  // Set when the attached image shows less than the capture (a full-page
+  // capture cut to its top).
+  @field note = contains(StringField);
+  @field attachedImages = containsMany(AttachedImageField);
+}
+
+// Aliases: a stored capture-card tool result adopts from `CaptureCardOutput`,
+// and realm content references these types by name.
+export { CaptureInput as CaptureCardInput, CaptureOutput as CaptureCardOutput };
 
 export class CheckCorrectnessInput extends CardDef {
   @field targetType = contains(StringField);

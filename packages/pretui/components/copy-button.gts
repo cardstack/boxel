@@ -29,10 +29,22 @@ export interface CopyButtonSignature {
 }
 
 export class CopyButton extends Component<CopyButtonSignature> {
-  @tracked copied = false;
+  @tracked status: 'idle' | 'copied' | 'failed' = 'idle';
 
+  get copied() {
+    return this.status === 'copied';
+  }
+  get dataState() {
+    return this.status === 'idle' ? undefined : this.status;
+  }
   get label() {
-    return this.copied ? 'Copied' : (this.args.label ?? 'Copy to clipboard');
+    if (this.status === 'copied') {
+      return 'Copied';
+    }
+    if (this.status === 'failed') {
+      return 'Copy failed';
+    }
+    return this.args.label ?? 'Copy to clipboard';
   }
   get text() {
     return firstDefined(this.args.text, this.args.value);
@@ -42,24 +54,32 @@ export class CopyButton extends Component<CopyButtonSignature> {
     if (text == null) {
       return;
     }
-    navigator.clipboard.writeText(text).then(
+    // absent outside a secure context, and writeText can throw synchronously
+    let write: Promise<void>;
+    try {
+      write = navigator.clipboard.writeText(text);
+    } catch (error) {
+      write = Promise.reject(error);
+    }
+    write.then(
       () => {
-        this.copied = true;
+        this.status = 'copied';
       },
       (error: unknown) => {
+        this.status = 'failed';
         console.error(error instanceof Error ? error.message : error);
       },
     );
   };
   reset = (_e: Event) => {
-    this.copied = false;
+    this.status = 'idle';
   };
   <template>
     <IconButton
       @label={{this.label}}
       @variant={{@variant}}
       @size={{@size}}
-      data-state={{if this.copied 'copied'}}
+      data-state={{this.dataState}}
       data-test-pretui-copy-button
       {{on 'click' this.copy}}
       {{on 'pointerleave' this.reset}}
@@ -106,8 +126,10 @@ export class CopyButton extends Component<CopyButtonSignature> {
       {{/if}}
     </IconButton>
     <style scoped>
-      .pretui-copy-check {
-        color: var(--success, var(--boxel-success));
+      @layer PretComponent {
+        .pretui-copy-check {
+          color: var(--success-ink);
+        }
       }
     </style>
   </template>

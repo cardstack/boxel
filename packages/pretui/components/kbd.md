@@ -46,3 +46,5 @@ The glyph run is the problem this component exists to manage: `⇧⌘K` is four 
 The 1.5em minimum width, the 1px/5px padding, `tabular-nums` and `white-space: nowrap` are fixed. The minimum width and tabular figures exist together so a column of shortcuts in a menu aligns instead of ragging.
 
 A season retunes every shortcut in the product through the two `--pretui-kbd-*` tokens; leaving them unset means the token follows `--inset` and `--muted-foreground`, so it stays quieter than the label beside it without any per-season work. The hairline comes from the shared `--pretui-shadow-hairline`, so a season that changes ring weight changes it here too.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

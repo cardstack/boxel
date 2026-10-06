@@ -47,7 +47,7 @@ The clock is correct while the picture is wrong.
 
 ## Root cause
 
-The relevant implementation is `packages/glimmer-motion/src/choreo/run.ts`,
+The relevant implementation is `packages/choreo/src/run.ts`,
 especially `ChoreoRun.seekTo()` and the camera branch in `evaluate()`.
 
 For a camera track, `evaluate()` initializes its camera state only when the
@@ -156,7 +156,7 @@ transport; Choreo must make `run.time = t` truthful for every kind of cue.
 
 ## Regression tests
 
-Add focused coverage under `test-app/tests/integration/choreo/`, either in
+Add focused coverage under `packages/choreo/tests/integration/choreo/`, either in
 `camera-tether-test.gts` or a new `camera-transport-test.gts`.
 
 Minimum cases:

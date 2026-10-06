@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 
 /**
  * A fake Maps screen for the phone mockup demos. No images, no network,

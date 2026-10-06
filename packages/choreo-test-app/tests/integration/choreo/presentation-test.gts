@@ -2,6 +2,8 @@
  * Presentation — gates as presenter mode (docs/choreo-constructs.md §8.1).
  * A three-build slide: auto kicker, click-through mid-path, then the pulse.
  */
+import type { ChoreoRun } from '@cardstack/choreo';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import {
   click,
   focus,
@@ -10,8 +12,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import type { ChoreoRun } from 'glimmer-motion';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Presentation } from 'test-app/components/examples/presentation';
 
@@ -34,7 +35,7 @@ const opacityOf = (sel: string) =>
 
 module('Integration | choreo | presentation', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('the kicker writes itself, then a mash completes the path', async function (assert) {
     await render(<template><Presentation /></template>);

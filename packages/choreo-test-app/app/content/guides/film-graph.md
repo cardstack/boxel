@@ -19,7 +19,7 @@ A film graph expresses an edit as nested components: a spine contains chapters a
 </FilmGraph>
 ```
 
-Import FilmGraph from `glimmer-motion/film`. This example compiles a graph; it does not mount a picture renderer. A complete film adds the picture block and the film's identity, as described in the picture guide.
+Import FilmGraph from `@cardstack/choreo/film`. This example compiles a graph; it does not mount a picture renderer. A complete film adds the picture block and the film's identity, as described in the picture guide.
 
 ## Understanding Defaults
 
@@ -35,9 +35,7 @@ The `FilmVocabulary` and `VOCABULARY` exports expose the same typed component se
 
 ## API Coverage
 
-**glimmer-motion**: `FilmChapter`.
-
-**glimmer-motion/film**: `FilmGraph`, `FilmGraphSignature`, `FilmVocabulary`, `VOCABULARY`, `GraphChapter`, `Sequence`, `Spine`, `Chapter`.
+**@cardstack/choreo/film**: `FilmGraph`, `FilmGraphSignature`, `FilmVocabulary`, `VOCABULARY`, `GraphChapter`, `Sequence`, `Spine`, `Chapter`.
 
 **FilmVocabulary**: `f.Chapter`, `f.Sequence`, `f.Spine`.
 

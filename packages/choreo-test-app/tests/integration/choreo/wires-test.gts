@@ -4,6 +4,7 @@
  * margin, cubics derived every frame. Versions reflow the copy; the
  * selected pair shows its thread (first comment on by default).
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import {
   click,
   find,
@@ -12,7 +13,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Wires } from 'test-app/components/examples/wires';
 
@@ -20,7 +21,7 @@ import { nextFrame } from '../../helpers/motion';
 
 module('Integration | choreo | wires', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   /**
    * The resting threads are DERIVED geometry: the modifier waits a frame

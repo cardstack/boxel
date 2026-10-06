@@ -53,3 +53,5 @@ Gaps:
 `--pretui-stat-line` (the headline line-height ratio, and the thing the digit cell height is derived from — the one token that moves both together), `--pretui-stat-min-digits` (set from `@minDigits`), plus the kit's type scale for the headline and `--muted-foreground` for the label. The delta's colours are **Delta**'s (`--success`, `--destructive`, `--muted-foreground`), and the rolling digits' motion tokens are **Odometer**'s (`@duration`, `@ease`, `@stagger` are args, not tokens).
 
 `--pretui-stat-line` is the important one: a season that restyles the headline's line-height through it gets the digit cells moving in lockstep and the baseline staying put. A season that instead overrides `line-height` directly on `.pretui-stat-value` will desynchronise the two and the label will shift when the value rolls.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

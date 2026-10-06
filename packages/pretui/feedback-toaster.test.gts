@@ -20,8 +20,8 @@
 // a sticky toast) and by `boxel read-transpiled`, which shows the keyframes and
 // `animation-play-state` surviving the transpile.
 //
-// Local-only test file; run with `boxel test` from this directory — do NOT
-// push to the realm (a pushed *.test.gts opts the realm into a QUnit gate).
+// Run with `boxel test` from this directory; deployment leaves `*.test.gts`
+// off the realm.
 import { module, test } from 'qunit';
 import { render, click, focus, settled, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';

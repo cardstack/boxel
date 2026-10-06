@@ -24,9 +24,20 @@ import { modifier } from 'ember-modifier';
 // accordion in a TOC hides the thing the reader came for; levels indent
 // instead), and scroll-into-view on activation (that is the caller's
 // scroll-behavior, not ours to seize).
+//
+// Two row modes, chosen the way the rest of the kit chooses: a row with an
+// href is a link, a row without one is a button. Links (the default) are
+// `<a href="#id">`, so the browser's fragment navigation scrolls the page.
+// `@links={{false}}` drops the href and renders every row as a
+// `<button type="button">`, so a caller whose sections live in its own
+// scrolling panel (an edit form, a split view) does the scrolling itself from
+// the @onSelect event's `currentTarget`. @onSelect only reports the click, in
+// either mode; it never changes what renders.
 
 export interface TocItem {
-  /** the target element's DOM id — becomes the link's href fragment */
+  /** the target element's DOM id — becomes the link's href fragment and
+   * what the spy observes; with `@links={{false}}` it is whatever key the
+   * caller needs */
   id: string;
   /** link text; override the rendering with the <:item> block */
   label: string;
@@ -53,15 +64,26 @@ export interface TableOfContentsSignature {
     /** fires with the id whenever the active section changes — from a click
      * or from the observer */
     onActiveChange?: (id: string) => void;
-    /** watch the document and follow the reader's scroll (default true) */
+    /** fires with the id and the click event when a row is clicked, in
+     * either mode; it reports, and never changes what renders */
+    onSelect?: (id: string, event: Event) => void;
+    /** rows are `<a href="#id">` fragment links (default true). False renders
+     * them as `<button type="button">` with no href: the component never
+     * scrolls, and the caller does from the @onSelect event's
+     * `currentTarget`. */
+    links?: boolean;
+    /** watch the document and follow the reader's scroll. Defaults to
+     * @links: on for fragment links, off for buttons, whose ids need not be
+     * DOM ids and would otherwise match unrelated elements in the document */
     spy?: boolean;
     /** how far down the viewport a heading must reach before it becomes
      * active, as a percentage (default 38 — the top ~38% is the read band) */
     band?: number;
   };
   Blocks: {
-    /** replaces the link text; receives the item and whether it is active */
-    item?: [item: TocItem, active: boolean];
+    /** replaces the row text; receives the item, whether it is active, and
+     * its 0-based position in @items */
+    item?: [item: TocItem, active: boolean, index: number];
   };
   Element: HTMLElement;
 }
@@ -101,8 +123,11 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
       this.args.activeId ?? this.internalActive ?? this.args.items?.[0]?.id
     );
   }
+  get links(): boolean {
+    return this.args.links ?? true;
+  }
   get spy(): boolean {
-    return this.args.spy ?? true;
+    return this.args.spy ?? this.links;
   }
   get band(): number {
     return Math.min(90, Math.max(5, this.args.band ?? 38));
@@ -116,8 +141,9 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
     }
     this.args.onActiveChange?.(id);
   }
-  activate = (id: string, _event: Event) => {
+  activate = (id: string, event: Event) => {
     this.setActive(id);
+    this.args.onSelect?.(id, event);
   };
   private handleSpy = (id: string) => {
     this.setActive(id);
@@ -219,101 +245,129 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         {{! role='list' is not redundant: list-style:none strips list
             semantics in Safari/VoiceOver, and the lint rule allows ol+list }}
         <ol class='pretui-toc-list' role='list'>
-          {{#each this.rows key='item.id' as |row|}}
+          {{#each this.rows key='item.id' as |row index|}}
             <li class='pretui-toc-row' style={{row.style}}>
-              <a
-                class='pretui-toc-link'
-                href={{this.hrefFor row}}
-                data-toc-id={{row.item.id}}
-                data-active={{if (this.isActive row) 'true'}}
-                aria-current={{if (this.isActive row) 'location'}}
-                {{on 'click' (fn this.activate row.item.id)}}
-              >
-                {{#if (has-block 'item')}}
-                  {{yield row.item (this.isActive row) to='item'}}
-                {{else}}
-                  {{row.item.label}}
-                {{/if}}
-              </a>
+              {{#if this.links}}
+                <a
+                  class='pretui-toc-link'
+                  href={{this.hrefFor row}}
+                  data-toc-id={{row.item.id}}
+                  data-active={{if (this.isActive row) 'true'}}
+                  aria-current={{if (this.isActive row) 'location'}}
+                  {{on 'click' (fn this.activate row.item.id)}}
+                >
+                  {{#if (has-block 'item')}}
+                    {{yield row.item (this.isActive row) index to='item'}}
+                  {{else}}
+                    {{row.item.label}}
+                  {{/if}}
+                </a>
+              {{else}}
+                <button
+                  type='button'
+                  class='pretui-toc-link'
+                  data-toc-id={{row.item.id}}
+                  data-active={{if (this.isActive row) 'true'}}
+                  aria-current={{if (this.isActive row) 'location'}}
+                  {{on 'click' (fn this.activate row.item.id)}}
+                >
+                  {{#if (has-block 'item')}}
+                    {{yield row.item (this.isActive row) index to='item'}}
+                  {{else}}
+                    {{row.item.label}}
+                  {{/if}}
+                </button>
+              {{/if}}
             </li>
           {{/each}}
         </ol>
       </div>
     </nav>
     <style scoped>
-      .pretui-toc {
-        min-width: 0;
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-toc-track {
-        position: relative;
-        padding-left: var(--pretui-toc-rail-gap, 11px);
-      }
-      /* the rail the marker travels down */
-      .pretui-toc-track::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: var(--border);
-      }
-      .pretui-toc-list {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 1px;
-      }
-      .pretui-toc-marker {
-        position: absolute;
-        left: 0;
-        width: 2px;
-        border-radius: 1px;
-        background: var(--pretui-primary-ink, var(--primary));
-        top: var(--pretui-toc-marker-top, 0px);
-        height: var(--pretui-toc-marker-height, 0px);
-        opacity: var(--pretui-toc-marker-opacity, 0);
-        transition:
-          top 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1)),
-          height 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1));
-      }
-      .pretui-toc-row {
-        padding-left: calc(
-          var(--pretui-toc-indent, 11px) * (var(--_level, 1) - 1)
-        );
-        min-width: 0;
-      }
-      .pretui-toc-link {
-        display: block;
-        padding: 3px 6px;
-        border-radius: var(--radius-chip, 6px);
-        color: var(--muted-foreground);
-        text-decoration: none;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        transition: color 140ms var(--pretui-ease-snap, ease);
-      }
-      .pretui-toc-link:hover {
-        color: var(--foreground);
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-toc-link[data-active='true'] {
-        color: var(--foreground);
-        font-weight: 500;
-      }
-      .pretui-toc-link:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      /* Law 5 — reduced motion keeps the END state (the marker is already
-         parked on the active row), it just stops travelling */
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-toc-marker,
+      @layer PretComponent {
+        .pretui-toc {
+          min-width: 0;
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-toc-track {
+          position: relative;
+          padding-left: var(--pretui-toc-rail-gap, 11px);
+        }
+        /* the rail the marker travels down */
+        .pretui-toc-track::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: var(--border);
+        }
+        .pretui-toc-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 1px;
+        }
+        .pretui-toc-marker {
+          position: absolute;
+          left: 0;
+          width: 2px;
+          border-radius: 1px;
+          background: var(--pretui-primary-ink, var(--primary));
+          top: var(--pretui-toc-marker-top, 0px);
+          height: var(--pretui-toc-marker-height, 0px);
+          opacity: var(--pretui-toc-marker-opacity, 0);
+          transition:
+            top 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1)),
+            height 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1));
+        }
+        .pretui-toc-row {
+          padding-left: calc(
+            var(--pretui-toc-indent, 11px) * (var(--_level, 1) - 1)
+          );
+          min-width: 0;
+        }
         .pretui-toc-link {
-          transition: none;
+          display: block;
+          padding: 3px 6px;
+          border-radius: var(--radius-chip, 6px);
+          color: var(--muted-foreground);
+          text-decoration: none;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          transition: color 140ms var(--pretui-ease-snap, ease);
+        }
+        /* button mode: the same row, without the button's own chrome */
+        button.pretui-toc-link {
+          width: 100%;
+          border: 0;
+          background: transparent;
+          font: inherit;
+          text-align: start;
+          cursor: pointer;
+        }
+        .pretui-toc-link:hover {
+          color: var(--foreground);
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-toc-link[data-active='true'] {
+          color: var(--foreground);
+          font-weight: 500;
+        }
+        .pretui-toc-link:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        /* Law 5 — reduced motion keeps the END state (the marker is already
+           parked on the active row), it just stops travelling */
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-toc-marker,
+          .pretui-toc-link {
+            transition: none;
+          }
         }
       }
     </style>

@@ -1,5 +1,5 @@
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, render } from '@ember/test-helpers';
-import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Gallery } from 'test-app/components/gallery';
 import { catalog } from 'test-app/lib/catalog';
@@ -33,7 +33,7 @@ function visible() {
 
 module('Integration | motion | gallery filter', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('filtering out and back leaves every card on screen', async function (assert) {
     await render(<template><Gallery /></template>);

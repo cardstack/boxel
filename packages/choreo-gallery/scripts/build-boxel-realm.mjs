@@ -69,7 +69,12 @@ await esbuild.build({
   platform: 'browser',
   target: 'es2022',
   mainFields: ['module', 'main'],
+  // These conditions leave out `developing:choreo`, so glimmer-motion and
+  // choreo resolve to their built output.
   conditions: ['import', 'module', 'default'],
+  // tsconfig.json maps choreo-player to its source for type-checking. The
+  // realm bundles its built output, so skip it.
+  tsconfigRaw: {},
   splitting: false,
   // Boxel currently evaluates lazy dependency initializers through a classic
   // wrapper. Three 0.185 uses import.meta.url only to construct DRACO defaults;

@@ -65,8 +65,8 @@ export interface HoverActionsSignature {
      * `overlay` (default) floats the cluster inside the host's own bounds;
      * `reserve` gives it a real grid column so it can never cover content.
      *
-     * The ruling: **both modes are layout-stable** — that is Appendix O.7's
-     * actual requirement, and an overlay satisfies it for free because it is
+     * The ruling: **both modes are layout-stable**, which is the actual
+     * requirement, and an overlay satisfies it for free because it is
      * out of flow. Overlay is the default because a permanently empty gutter
      * fails Law 8's still-frame test: at rest it is dead space that earns
      * nothing. Choose `reserve` for dense text rows, where an overlay would
@@ -375,105 +375,109 @@ export class HoverActions extends Component<HoverActionsSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-ha {
-        position: relative;
-        container-type: inline-size;
-        min-width: 0;
-      }
-      .pretui-ha:focus {
-        outline: none;
-      }
-      .pretui-ha:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-        border-radius: var(--radius);
-      }
-      .pretui-ha-host {
-        min-width: 0;
-      }
-      /* reserve: the cluster owns a real grid column, so it can never sit on
-         top of the host's words and the host never re-flows when it appears */
-      .pretui-ha[data-space='reserve'] {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        column-gap: var(--pretui-hoveractions-gap, 8px);
-      }
-      /* overlay: out of flow inside the host's own bounds — no portal, no
-         collision detection, nothing to dismiss */
-      .pretui-ha[data-space='overlay'] .pretui-ha-cluster {
-        position: absolute;
-        z-index: var(--pretui-z-raised, 1);
-      }
-      .pretui-ha[data-space='overlay'][data-placement='top-end'] .pretui-ha-cluster {
-        inset-block-start: var(--pretui-hoveractions-inset, 6px);
-        inset-inline-end: var(--pretui-hoveractions-inset, 6px);
-      }
-      .pretui-ha[data-space='overlay'][data-placement='top-start'] .pretui-ha-cluster {
-        inset-block-start: var(--pretui-hoveractions-inset, 6px);
-        inset-inline-start: var(--pretui-hoveractions-inset, 6px);
-      }
-      .pretui-ha[data-space='overlay'][data-placement='bottom-end'] .pretui-ha-cluster {
-        inset-block-end: var(--pretui-hoveractions-inset, 6px);
-        inset-inline-end: var(--pretui-hoveractions-inset, 6px);
-      }
-      .pretui-ha[data-space='overlay'][data-placement='bottom-start'] .pretui-ha-cluster {
-        inset-block-end: var(--pretui-hoveractions-inset, 6px);
-        inset-inline-start: var(--pretui-hoveractions-inset, 6px);
-      }
-      .pretui-ha-cluster {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--pretui-hoveractions-gap, 4px);
-        opacity: 0;
-        /* while hidden the cluster is transparent to the pointer, so a click
-           aimed at the host can never land on a phantom button */
-        pointer-events: none;
-        transition: opacity var(--pretui-dur-snap, 160ms)
-          var(--pretui-ease-snap, cubic-bezier(.3,.85,.3,1));
-      }
-      .pretui-ha:hover .pretui-ha-cluster,
-      .pretui-ha:focus-within .pretui-ha-cluster,
-      .pretui-ha[data-reveal='always'] .pretui-ha-cluster {
-        opacity: 1;
-        pointer-events: auto;
-      }
-      .pretui-ha-icon {
-        width: 1.14em;
-        height: 1.14em;
-        flex: none;
-      }
-      /* three dots drawn rather than typed: '⋯' announces as a character and
-         reads differently in every font */
-      .pretui-ha-dots {
-        width: 1.14em;
-        height: 0.2em;
-        background: radial-gradient(
-          circle at 0.1em 50%,
-          currentColor 0.1em,
-          transparent 0.1em
-        ),
-        radial-gradient(circle at 0.57em 50%, currentColor 0.1em, transparent 0.1em),
-        radial-gradient(circle at 1.04em 50%, currentColor 0.1em, transparent 0.1em);
-      }
-      .pretui-ha-sr {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-      }
-      /* Hover is not an input on a touchscreen: an affordance that only
-         exists on hover simply does not exist there. */
-      @media (any-pointer: coarse) {
+      /* above Button's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-ha {
+          position: relative;
+          container-type: inline-size;
+          min-width: 0;
+        }
+        .pretui-ha:focus {
+          outline: none;
+        }
+        .pretui-ha:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+          border-radius: var(--radius);
+        }
+        .pretui-ha-host {
+          min-width: 0;
+        }
+        /* reserve: the cluster owns a real grid column, so it can never sit on
+           top of the host's words and the host never re-flows when it appears */
+        .pretui-ha[data-space='reserve'] {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: center;
+          column-gap: var(--pretui-hoveractions-gap, 8px);
+        }
+        /* overlay: out of flow inside the host's own bounds — no portal, no
+           collision detection, nothing to dismiss */
+        .pretui-ha[data-space='overlay'] .pretui-ha-cluster {
+          position: absolute;
+          z-index: var(--pretui-z-raised, 1);
+        }
+        .pretui-ha[data-space='overlay'][data-placement='top-end'] .pretui-ha-cluster {
+          inset-block-start: var(--pretui-hoveractions-inset, 6px);
+          inset-inline-end: var(--pretui-hoveractions-inset, 6px);
+        }
+        .pretui-ha[data-space='overlay'][data-placement='top-start'] .pretui-ha-cluster {
+          inset-block-start: var(--pretui-hoveractions-inset, 6px);
+          inset-inline-start: var(--pretui-hoveractions-inset, 6px);
+        }
+        .pretui-ha[data-space='overlay'][data-placement='bottom-end'] .pretui-ha-cluster {
+          inset-block-end: var(--pretui-hoveractions-inset, 6px);
+          inset-inline-end: var(--pretui-hoveractions-inset, 6px);
+        }
+        .pretui-ha[data-space='overlay'][data-placement='bottom-start'] .pretui-ha-cluster {
+          inset-block-end: var(--pretui-hoveractions-inset, 6px);
+          inset-inline-start: var(--pretui-hoveractions-inset, 6px);
+        }
         .pretui-ha-cluster {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--pretui-hoveractions-gap, 4px);
+          opacity: 0;
+          /* while hidden the cluster is transparent to the pointer, so a click
+             aimed at the host can never land on a phantom button */
+          pointer-events: none;
+          transition: opacity var(--pretui-dur-snap, 160ms)
+            var(--pretui-ease-snap, cubic-bezier(.3,.85,.3,1));
+        }
+        .pretui-ha:hover .pretui-ha-cluster,
+        .pretui-ha:focus-within .pretui-ha-cluster,
+        .pretui-ha[data-reveal='always'] .pretui-ha-cluster {
           opacity: 1;
           pointer-events: auto;
         }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-ha-cluster {
-          transition: none;
+        .pretui-ha-icon {
+          width: 1.14em;
+          height: 1.14em;
+          flex: none;
+        }
+        /* three dots drawn rather than typed: '⋯' announces as a character and
+           reads differently in every font */
+        .pretui-ha-dots {
+          width: 1.14em;
+          height: 0.2em;
+          background: radial-gradient(
+            circle at 0.1em 50%,
+            currentColor 0.1em,
+            transparent 0.1em
+          ),
+          radial-gradient(circle at 0.57em 50%, currentColor 0.1em, transparent 0.1em),
+          radial-gradient(circle at 1.04em 50%, currentColor 0.1em, transparent 0.1em);
+        }
+        .pretui-ha-sr {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+        /* Hover is not an input on a touchscreen: an affordance that only
+           exists on hover simply does not exist there. */
+        @media (any-pointer: coarse) {
+          .pretui-ha-cluster {
+            opacity: 1;
+            pointer-events: auto;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-ha-cluster {
+            transition: none;
+          }
         }
       }
     </style>

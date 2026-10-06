@@ -366,6 +366,7 @@ export const BUNDLED_BASE_MODULES: Record<
   realm: () => import('@cardstack/base/realm'),
   'realm-config': () => import('@cardstack/base/realm-config'),
   'remix-card': () => import('@cardstack/base/remix-card'),
+  'render-context': () => import('@cardstack/base/render-context'),
   'resources/command-data': () =>
     import('@cardstack/base/resources/command-data'),
   'response-field': () => import('@cardstack/base/response-field'),

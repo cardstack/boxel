@@ -17,8 +17,6 @@ import {
 
 import type { RoomMember } from './member';
 
-import type MessageCodePatchResult from './message-code-patch-result';
-
 import type MessageTool from './message-tool';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { TokenUsage } from '@cardstack/base/matrix-event';
@@ -62,7 +60,6 @@ export class Message implements RoomMessageInterface {
   @tracked _body: string;
   @tracked _reasoningContent?: string | null;
   @tracked _tools: TrackedArray<MessageTool>;
-  @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
   @tracked _isCanceled?: boolean;
@@ -78,6 +75,9 @@ export class Message implements RoomMessageInterface {
   transactionId?: string | null;
   @tracked private _errorMessage?: string;
   clientGeneratedId?: string;
+  // The chat composer sent this message: the user typed it (see
+  // BoxelContext.typedByUser).
+  typedByUser?: boolean;
   isDebugMessage?: boolean;
   reloadBillingData?: boolean;
   isCodePatchCorrectness?: boolean;
@@ -112,7 +112,6 @@ export class Message implements RoomMessageInterface {
     this.continuationOf = init.continuationOf;
     this._reasoningContent = init.reasoningContent;
     this._tools = new TrackedArray<MessageTool>();
-    this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
     this.isCodePatchCorrectness = false;
   }

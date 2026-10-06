@@ -1,7 +1,7 @@
 /**
  * THE GOLDEN FIXTURES. A film is its cue table and its camera path; this
  * writes both, for every reference film, from the same pure schedule the
- * engine runs (`packages/glimmer-motion/src/film/schedule.ts`) and the
+ * engine runs (`packages/choreo/src/film/schedule.ts`) and the
  * same data the component renders (`packages/choreo-test-app/app/lib/films/*.ts`).
  *
  * The refactor of the film onto the graph is measured against these:
@@ -27,7 +27,7 @@ const out = resolve(root, 'packages/choreo-test-app/tests/fixtures/film');
 const check = process.argv.includes('--check');
 
 const { schedule } = await import(
-  resolve(root, 'packages/glimmer-motion/src/film/schedule.ts')
+  resolve(root, 'packages/choreo/src/film/schedule.ts')
 );
 
 /** each film: its data module, and the seam it gives a beat that names none */

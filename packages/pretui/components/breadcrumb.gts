@@ -16,9 +16,9 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
   <template>
     <nav class='pretui-breadcrumb' aria-label='Breadcrumb' data-test-pretui-breadcrumb ...attributes>
       {{#each @items as |item index|}}
-        {{#if index}}<span class='sep'>/</span>{{/if}}
+        {{#if index}}<span class='sep' aria-hidden='true'>/</span>{{/if}}
         {{#if (this.isLast index)}}
-          <b>{{item.label}}</b>
+          <b aria-current='page'>{{item.label}}</b>
         {{else if item.href}}
           <a href={{item.href}}>{{item.label}}</a>
         {{else}}
@@ -27,27 +27,29 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
       {{/each}}
     </nav>
     <style scoped>
-      .pretui-breadcrumb {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-      }
-      .pretui-breadcrumb b {
-        color: var(--foreground);
-        font-weight: 500;
-      }
-      .pretui-breadcrumb a {
-        color: inherit;
-        text-decoration: none;
-      }
-      .pretui-breadcrumb a:hover {
-        text-decoration: underline;
-        text-underline-offset: 2px;
-      }
-      .sep {
-        color: var(--ink-3, var(--boxel-400));
+      @layer PretComponent {
+        .pretui-breadcrumb {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+        }
+        .pretui-breadcrumb b {
+          color: var(--foreground);
+          font-weight: 500;
+        }
+        .pretui-breadcrumb a {
+          color: inherit;
+          text-decoration: none;
+        }
+        .pretui-breadcrumb a:hover {
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .sep {
+          color: var(--ink-3, var(--boxel-400));
+        }
       }
     </style>
   </template>

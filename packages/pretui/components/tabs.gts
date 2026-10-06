@@ -70,44 +70,46 @@ export class Tabs extends Component<TabsSignature> {
       {{/if}}
     </div>
     <style scoped>
-      .pretui-tabs {
-        position: relative;
-        display: flex;
-        gap: 22px;
-      }
-      .pretui-tab {
-        position: relative;
-        height: 34px;
-        padding: 0 2px;
-        border: 0;
-        background: none;
-        font-family: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 500;
-        letter-spacing: inherit;
-        color: var(--muted-foreground);
-        cursor: pointer;
-        transition: color 150ms var(--pretui-ease-snap, ease);
-      }
-      .pretui-tab:hover {
-        color: var(--foreground);
-      }
-      .pretui-tab[data-state='active'] {
-        color: var(--foreground);
-      }
-      /* the 2px accent bar used to be this tab's own ::after; it is now the
-         shared SlidingHighlight in its underline cut, same geometry (bottom
-         edge of the tab box, square ends via a zero radius) */
-      .pretui-tabs-rail {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: var(--border);
-      }
-      .pretui-tabpanel {
-        padding-top: var(--space-4, 11px);
+      @layer PretComponent {
+        .pretui-tabs {
+          position: relative;
+          display: flex;
+          gap: 22px;
+        }
+        .pretui-tab {
+          position: relative;
+          height: 34px;
+          padding: 0 2px;
+          border: 0;
+          background: none;
+          font-family: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 500;
+          letter-spacing: inherit;
+          color: var(--muted-foreground);
+          cursor: pointer;
+          transition: color 150ms var(--pretui-ease-snap, ease);
+        }
+        .pretui-tab:hover {
+          color: var(--foreground);
+        }
+        .pretui-tab[data-state='active'] {
+          color: var(--foreground);
+        }
+        /* the 2px accent bar is the shared SlidingHighlight in its underline
+           cut, same geometry (bottom
+           edge of the tab box, square ends via a zero radius) */
+        .pretui-tabs-rail {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: var(--border);
+        }
+        .pretui-tabpanel {
+          padding-top: var(--space-4, 11px);
+        }
       }
     </style>
   </template>

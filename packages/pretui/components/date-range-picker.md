@@ -19,7 +19,7 @@ Picked in reverse, start and end swap. While the end is unset, the prospective s
 
 ## Prior art
 
-**This was previously a wrap of boxel-ui's ember-power-calendar `DateRangePicker`, and the wrap was deliberately deleted** so both Pretui date controls share the same **Calendar**. That is the design decision to understand: two calendar implementations in one kit is a guaranteed inconsistency — different keyboard behaviour, different disabled-day rules, different visual language — and the rebuild traded a working third-party component for one that agrees with **DatePicker** in every detail.
+**DateRangePicker is built on Calendar rather than on boxel-ui's ember-power-calendar,** so both Pretui date controls share the same **Calendar**. That is the design decision to understand: two calendar implementations in one kit is a guaranteed inconsistency — different keyboard behaviour, different disabled-day rules, different visual language — and building on Calendar gives up a working third-party component for one that agrees with **DatePicker** in every detail.
 
 **React Spectrum `DateRangePicker`** is the field's reference: two segmented fields (each segment a `role="spinbutton"`), a range calendar, `minValue`/`maxValue`, `isDateUnavailable`, `allowsNonContiguousRanges`, and full internationalisation. **react-day-picker** with `mode="range"` is the ecosystem default. **Web Awesome** ships nothing.
 
@@ -51,3 +51,5 @@ Trigger: **Input**'s tokens. Surface: **Popover**'s, including the `--pretui-pop
 The range-specific dressing is where a season earns its keep: `data-range-start`, `data-in-range` and `data-range-end` should read as one continuous band, which usually means asymmetric radii on the endpoints and a flat fill between them. Because those are `data-*` attributes rather than component args, a season can do that entirely in CSS.
 
 Check `data-in-range` against `--hover` per season: the in-range fill and the pointer-hover fill often use the same token, and when they do, the user cannot tell the committed range from the one they are previewing.
+
+The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

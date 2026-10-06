@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 
 /**
  * A fake "Photos" screen for the phone mockup. Fills the 390 x 844 screen box

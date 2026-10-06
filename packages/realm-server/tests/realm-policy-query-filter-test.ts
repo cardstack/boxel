@@ -29,6 +29,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -273,16 +274,29 @@ module(basename(import.meta.filename), function (hooks) {
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
   }
 
+  async function stop() {
+    education.__testOnlyClearCaches();
+    education.unsubscribe();
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      education.__testOnlyClearCaches();
-      education.unsubscribe();
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   // The classrooms a grant's predicate holds for, evaluated as the policy
@@ -337,7 +351,17 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("each query grant's filter admits, for its caller, no classroom its predicate refuses", async function (assert) {
     let policy = await education.getCompiledPolicy();
-    assert.deepEqual(policy?.issues, [], 'every grant compiles a filter');
+    // A classroom links to `Person`, which nothing here grants, and that is
+    // recorded against each grant as a warning that keeps it.
+    assert.deepEqual(
+      policy?.issues.filter(
+        ({ code }) =>
+          code !== 'grant-reaches-ungranted-type' &&
+          code !== 'render-reaches-ungranted-type',
+      ),
+      [],
+      'every grant compiles a filter',
+    );
     let grants = policy?.rules[0]?.grants ?? [];
     assert.strictEqual(grants.length, CASES.length);
 

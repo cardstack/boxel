@@ -4,7 +4,7 @@ Choreo has four connected areas: an element binding over Motion, interactive sce
 
 ## Scope and Reading Depth
 
-The inventory covers the `glimmer-motion` root, the `glimmer-motion/film` subpath, the `glimmer-motion/test-support` subpath, and the separate `choreo-player` package. It also includes the components and queries yielded by ChoreoContext and FilmVocabulary. Each entry links to a substantial concept chapter with motivation, behavior, examples, and relevant constraints.
+The inventory covers the `glimmer-motion` root and its `glimmer-motion/test-support` subpath, the `@cardstack/choreo` root and its `@cardstack/choreo/film` and `@cardstack/choreo/test-support` subpaths, and the separate `choreo-player` package. It also includes the components and queries yielded by ChoreoContext and FilmVocabulary. Each entry links to a substantial concept chapter with motivation, behavior, examples, and relevant constraints.
 
 Related helpers, compatibility aliases, and supporting TypeScript types share the chapter about the behavior they describe. For example, a spring configuration and its argument type belong with spring transitions; the several query selectors belong with the changeset model. This avoids pretending that a type alias is an independent feature while still making every exported name discoverable.
 
@@ -14,7 +14,7 @@ Each guide contains at least 300 words of explanatory prose, approximately three
 
 The inventory reflects the checked-in implementation. Historical design notes can include proposals or older signatures, so the source links beside an API are the authority for its current shape. Advanced host APIs and the external-provider lane surface are identified as integration work rather than required application patterns. Wildcard deep imports expose implementation modules, but the inventory does not promise every internal helper as a supported standalone application API.
 
-The library uses MotionValues from `motion-dom` directly. The continuous-value guide explains that integration without inventing a Choreo re-export. Similarly, the spatial guides distinguish camera direction from renderer capabilities, and the film guides distinguish a compiled graph from decoded, paintable media. Those boundaries are part of learning the system, not details to skip when assembling a demonstration.
+The library uses the engine's own MotionValues. `glimmer-motion` re-exports a small, curated set of engine functions (`motionValue`, `transformValue`, `styleEffect`, `frame`, `animate`) rather than wrapping them, and the continuous-value guide explains that integration. Similarly, the spatial guides distinguish camera direction from renderer capabilities, and the film guides distinguish a compiled graph from decoded, paintable media. Those boundaries are part of learning the system, not details to skip when assembling a demonstration.
 
 ## Maintaining Coverage
 
@@ -24,134 +24,145 @@ Run `pnpm docs:check` after changing an export or a guide. The check compares th
 
 ### glimmer-motion
 
-| API                       | Guide                                                          | Source                                                                                                                       |
-| ------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `beacon`                  | [interactive-beacons](/docs/interactive-beacons)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/beacon.ts)                        |
-| `ChoreoContext`           | [interactive-start](/docs/interactive-start)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts)                       |
-| `Choreo`                  | [interactive-start](/docs/interactive-start)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts)                       |
-| `AnchorRef`               | [interactive-anchors](/docs/interactive-anchors)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts)                |
-| `after`                   | [interactive-anchors](/docs/interactive-anchors)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts)                |
-| `at`                      | [interactive-anchors](/docs/interactive-anchors)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts)                |
-| `Arming`                  | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)                 |
-| `ArmingOptions`           | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)                 |
-| `ArmingRegion`            | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)                 |
-| `createArming`            | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)                 |
-| `BeaconRef`               | [interactive-beacons](/docs/interactive-beacons)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/beacons.ts)                |
-| `Changeset`               | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/changeset.ts)              |
-| `easeIn`                  | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts)                |
-| `easeInAndOut`            | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts)                |
-| `easeOut`                 | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts)                |
-| `GestureRef`              | [core-drag](/docs/core-drag)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/gesture.ts)                |
-| `ChoreoHost`              | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)               |
-| `choreoHostAt`            | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)               |
-| `choreoHostById`          | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)               |
-| `ChoreoProvider`          | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)               |
-| `closestChoreo`           | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)               |
-| `ChoreoRun`               | [interactive-run](/docs/interactive-run)                       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/run.ts)                    |
-| `PlanePoint`              | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)                  |
-| `appliedCamera`           | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)                  |
-| `toLocal`                 | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)                  |
-| `toPage`                  | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)                  |
-| `StepArgs`                | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)                 |
-| `StepArgsBase`            | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)                 |
-| `StepComponent`           | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)                 |
-| `toMs`                    | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)                 |
-| `Block`                   | [interactive-blocks](/docs/interactive-blocks)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Bounds`                  | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Camera3DState`           | [spatial-camera3d](/docs/spatial-camera3d)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Camera3DWaypoint`        | [spatial-paths](/docs/spatial-paths)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `CameraState`             | [spatial-frame](/docs/spatial-frame)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `DeliveryBy`              | [interactive-delivery](/docs/interactive-delivery)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `DeliveryOrder`           | [interactive-delivery](/docs/interactive-delivery)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `DeriveContext`           | [interactive-follow](/docs/interactive-follow)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Easing`                  | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `FollowSource`            | [interactive-follow](/docs/interactive-follow)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `GateNode`                | [interactive-gates](/docs/interactive-gates)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `PerformCommand`          | [interactive-commands](/docs/interactive-commands)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `PropSource`              | [interactive-property-steps](/docs/interactive-property-steps) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `PropValue`               | [interactive-property-steps](/docs/interactive-property-steps) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Query`                   | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Rect`                    | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `SpringSpec`              | [core-springs](/docs/core-springs)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Sprite`                  | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `Step`                    | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `TimelineNode`            | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)                  |
-| `scroll`                  | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/index.ts)              |
-| `scrollInfo`              | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/track.ts)              |
-| `ScrollInfo`              | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/types.ts)              |
-| `ScrollOffset`            | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/types.ts)              |
-| `ScrollOptions`           | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/scroll/types.ts)              |
-| `InViewOptions`           | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/viewport.ts)                  |
-| `inView`                  | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/dom/viewport.ts)                  |
-| `Film`                    | [film-start](/docs/film-start)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film.ts)                          |
-| `FilmBeat`                | [film-poses](/docs/film-poses)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmCam`                 | [film-poses](/docs/film-poses)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmChapter`             | [film-graph](/docs/film-graph)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmClock`               | [film-schedule](/docs/film-schedule)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmGrade`               | [film-adjustments](/docs/film-adjustments)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmHandle`              | [film-transport](/docs/film-transport)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmJoin`                | [film-joins](/docs/film-joins)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `FilmPicture`             | [film-picture](/docs/film-picture)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts)                    |
-| `createDragControls`      | [core-drag-handles](/docs/core-drag-handles)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/drag-controls.ts)        |
-| `DragControls`            | [core-drag-handles](/docs/core-drag-handles)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/drag-controls.ts)        |
-| `correctParentTransform`  | [core-drag-handles](/docs/core-drag-handles)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/transform-page-point.ts) |
-| `transformViewBoxPoint`   | [core-drag-handles](/docs/core-drag-handles)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/transform-page-point.ts) |
-| `InertiaArgs`             | [core-drag](/docs/core-drag)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `SpringArgs`              | [core-springs](/docs/core-springs)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `TweenArgs`               | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `ease`                    | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `inertia`                 | [core-drag](/docs/core-drag)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `perValue`                | [core-targets](/docs/core-targets)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `spring`                  | [core-springs](/docs/core-springs)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `stagger`                 | [core-variants](/docs/core-variants)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `styles`                  | [core-targets](/docs/core-targets)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `to`                      | [core-targets](/docs/core-targets)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `tween`                   | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
-| `afterSettle`             | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `instantLayoutTransition` | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `layoutChange`            | [core-layout](/docs/core-layout)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `layoutLoopDetected`      | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `requestSettle`           | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `resetLayoutLoopGuard`    | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `snapshotAll`             | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
-| `closestLayoutGroup`      | [core-layout](/docs/core-layout)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts)                 |
-| `LayoutGroup`             | [core-layout](/docs/core-layout)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts)                 |
-| `snapshotOnRender`        | [core-layout](/docs/core-layout)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts)                 |
-| `MotionEl`                | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
-| `MotionProps`             | [core-elements](/docs/core-elements)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
-| `motion`                  | [core-elements](/docs/core-elements)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
-| `MotionModifier`          | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
-| `MotionConfigContext`     | [core-config](/docs/core-config)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts)                |
-| `closestMotionConfig`     | [core-config](/docs/core-config)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts)                |
-| `MotionConfig`            | [core-config](/docs/core-config)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts)                |
-| `flushPendingMounts`      | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/node.ts)                          |
-| `MotionNode`              | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/node.ts)                          |
-| `Presence`                | [core-presence](/docs/core-presence)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/presence.gts)                     |
-| `PresenceHandle`          | [core-presence](/docs/core-presence)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/presence-types.ts)                |
-| `ReorderGroup`            | [core-reorder](/docs/core-reorder)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/group.gts)                |
-| `ReorderItem`             | [core-reorder](/docs/core-reorder)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/item.gts)                 |
-| `ReorderAxis`             | [core-reorder](/docs/core-reorder)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/types.ts)                 |
-| `ReorderContextProps`     | [core-reorder](/docs/core-reorder)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/types.ts)                 |
-| `postRender`              | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scheduler.ts)                     |
-| `setPostRender`           | [core-host](/docs/core-host)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scheduler.ts)                     |
-| `ScrollValues`            | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `UseInViewOptions`        | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `UseScrollOptions`        | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `InView`                  | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `scrollProgress`          | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `useInView`               | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `useScroll`               | [core-scroll](/docs/core-scroll)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
-| `motionSpeed`             | [core-tempo](/docs/core-tempo)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
-| `onMotionSpeed`           | [core-tempo](/docs/core-tempo)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
-| `scaleTransition`         | [core-tempo](/docs/core-tempo)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
-| `setMotionSpeed`          | [core-tempo](/docs/core-tempo)                                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
-| `ViewTransitionBuilder`   | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
-| `ViewTransitionOptions`   | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
-| `ViewTransitionUpdate`    | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
-| `animateView`             | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
-| `viewTransition`          | [core-page-transitions](/docs/core-page-transitions)           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| API                          | Guide                                                | Source                                                                                                                       |
+| ---------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `BusyProbe`                  | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)                      |
+| `registerBusyProbe`          | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)                      |
+| `scroll`                     | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `scrollInfo`                 | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `ScrollInfo`                 | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `ScrollOffset`               | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `ScrollOptions`              | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `InViewOptions`              | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `inView`                     | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `createDragControls`         | [core-drag-handles](/docs/core-drag-handles)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/drag-controls.ts)        |
+| `DragControls`               | [core-drag-handles](/docs/core-drag-handles)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/drag-controls.ts)        |
+| `correctParentTransform`     | [core-drag-handles](/docs/core-drag-handles)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/transform-page-point.ts) |
+| `transformViewBoxPoint`      | [core-drag-handles](/docs/core-drag-handles)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/transform-page-point.ts) |
+| `InertiaArgs`                | [core-drag](/docs/core-drag)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `SpringArgs`                 | [core-springs](/docs/core-springs)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `TweenArgs`                  | [core-tweens](/docs/core-tweens)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `ease`                       | [core-tweens](/docs/core-tweens)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `inertia`                    | [core-drag](/docs/core-drag)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `perValue`                   | [core-targets](/docs/core-targets)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `spring`                     | [core-springs](/docs/core-springs)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `stagger`                    | [core-variants](/docs/core-variants)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `styles`                     | [core-targets](/docs/core-targets)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `to`                         | [core-targets](/docs/core-targets)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `tween`                      | [core-tweens](/docs/core-tweens)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts)                       |
+| `afterSettle`                | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `instantLayoutTransition`    | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `layoutChange`               | [core-layout](/docs/core-layout)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `layoutLoopDetected`         | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `requestSettle`              | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `resetLayoutLoopGuard`       | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `snapshotAll`                | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts)                        |
+| `closestLayoutGroup`         | [core-layout](/docs/core-layout)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts)                 |
+| `LayoutGroup`                | [core-layout](/docs/core-layout)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts)                 |
+| `snapshotOnRender`           | [core-layout](/docs/core-layout)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts)                 |
+| `MotionEl`                   | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
+| `MotionProps`                | [core-elements](/docs/core-elements)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
+| `motion`                     | [core-elements](/docs/core-elements)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
+| `MotionModifier`             | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts)                        |
+| `MotionConfigContext`        | [core-config](/docs/core-config)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts)                |
+| `closestMotionConfig`        | [core-config](/docs/core-config)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts)                |
+| `MotionConfig`               | [core-config](/docs/core-config)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts)                |
+| `flushPendingMounts`         | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/node.ts)                          |
+| `MotionNode`                 | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/node.ts)                          |
+| `MotionParticipant`          | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `ParticipantArgs`            | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `ParticipantHost`            | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `closestParticipantHost`     | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `defineParticipantArg`       | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `PARTICIPANT_HOST_ATTRIBUTE` | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `setParticipantHost`         | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/participant.ts)                   |
+| `Presence`                   | [core-presence](/docs/core-presence)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/presence.gts)                     |
+| `PresenceHandle`             | [core-presence](/docs/core-presence)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/presence-types.ts)                |
+| `ReorderGroup`               | [core-reorder](/docs/core-reorder)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/group.gts)                |
+| `ReorderItem`                | [core-reorder](/docs/core-reorder)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/item.gts)                 |
+| `ReorderAxis`                | [core-reorder](/docs/core-reorder)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/types.ts)                 |
+| `ReorderContextProps`        | [core-reorder](/docs/core-reorder)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/types.ts)                 |
+| `postRender`                 | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scheduler.ts)                     |
+| `setPostRender`              | [core-host](/docs/core-host)                         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scheduler.ts)                     |
+| `ScrollValues`               | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `UseInViewOptions`           | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `UseScrollOptions`           | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `InView`                     | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `scrollProgress`             | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `useInView`                  | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `useScroll`                  | [core-scroll](/docs/core-scroll)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/scroll.ts)                        |
+| `motionSpeed`                | [core-tempo](/docs/core-tempo)                       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
+| `onMotionSpeed`              | [core-tempo](/docs/core-tempo)                       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
+| `scaleTransition`            | [core-tempo](/docs/core-tempo)                       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
+| `setMotionSpeed`             | [core-tempo](/docs/core-tempo)                       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts)                         |
+| `ViewTransitionBuilder`      | [core-page-transitions](/docs/core-page-transitions) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| `ViewTransitionOptions`      | [core-page-transitions](/docs/core-page-transitions) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| `ViewTransitionUpdate`       | [core-page-transitions](/docs/core-page-transitions) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| `animateView`                | [core-page-transitions](/docs/core-page-transitions) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| `viewTransition`             | [core-page-transitions](/docs/core-page-transitions) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts)               |
+| `animate`                    | [core-tweens](/docs/core-tweens)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `frame`                      | [core-motion-values](/docs/core-motion-values)       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `MotionValue`                | [core-motion-values](/docs/core-motion-values)       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `motionValue`                | [core-motion-values](/docs/core-motion-values)       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `styleEffect`                | [core-motion-values](/docs/core-motion-values)       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
+| `transformValue`             | [core-motion-values](/docs/core-motion-values)       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/index.ts)                         |
 
-### glimmer-motion/film
+### @cardstack/choreo
+
+| API                | Guide                                                          | Source                                                                                                          |
+| ------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `beacon`           | [interactive-beacons](/docs/interactive-beacons)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/beacon.ts)           |
+| `ChoreoContext`    | [interactive-start](/docs/interactive-start)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts)          |
+| `Choreo`           | [interactive-start](/docs/interactive-start)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts)          |
+| `AnchorRef`        | [interactive-anchors](/docs/interactive-anchors)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts)   |
+| `after`            | [interactive-anchors](/docs/interactive-anchors)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts)   |
+| `at`               | [interactive-anchors](/docs/interactive-anchors)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts)   |
+| `Arming`           | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)    |
+| `ArmingOptions`    | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)    |
+| `ArmingRegion`     | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)    |
+| `createArming`     | [interactive-arming](/docs/interactive-arming)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts)    |
+| `BeaconRef`        | [interactive-beacons](/docs/interactive-beacons)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/beacons.ts)   |
+| `Changeset`        | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/changeset.ts) |
+| `easeIn`           | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts)   |
+| `easeInAndOut`     | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts)   |
+| `easeOut`          | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts)   |
+| `GestureRef`       | [core-drag](/docs/core-drag)                                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/gesture.ts)   |
+| `ChoreoHost`       | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)  |
+| `choreoHostAt`     | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)  |
+| `choreoHostById`   | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)  |
+| `ChoreoProvider`   | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)  |
+| `closestChoreo`    | [interactive-registry](/docs/interactive-registry)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts)  |
+| `ChoreoRun`        | [interactive-run](/docs/interactive-run)                       | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/run.ts)       |
+| `PlanePoint`       | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)     |
+| `appliedCamera`    | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)     |
+| `toLocal`          | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)     |
+| `toPage`           | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts)     |
+| `StepArgs`         | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)    |
+| `StepArgsBase`     | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)    |
+| `StepComponent`    | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)    |
+| `toMs`             | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts)    |
+| `Block`            | [interactive-blocks](/docs/interactive-blocks)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Bounds`           | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Camera3DState`    | [spatial-camera3d](/docs/spatial-camera3d)                     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Camera3DWaypoint` | [spatial-paths](/docs/spatial-paths)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `CameraState`      | [spatial-frame](/docs/spatial-frame)                           | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `DeliveryBy`       | [interactive-delivery](/docs/interactive-delivery)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `DeliveryOrder`    | [interactive-delivery](/docs/interactive-delivery)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `DeriveContext`    | [interactive-follow](/docs/interactive-follow)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Easing`           | [core-tweens](/docs/core-tweens)                               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `FollowSource`     | [interactive-follow](/docs/interactive-follow)                 | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `GateNode`         | [interactive-gates](/docs/interactive-gates)                   | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `PerformCommand`   | [interactive-commands](/docs/interactive-commands)             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `PropSource`       | [interactive-property-steps](/docs/interactive-property-steps) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `PropValue`        | [interactive-property-steps](/docs/interactive-property-steps) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Query`            | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Rect`             | [spatial-coordinates](/docs/spatial-coordinates)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `SpringSpec`       | [core-springs](/docs/core-springs)                             | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Sprite`           | [interactive-queries](/docs/interactive-queries)               | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `Step`             | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+| `TimelineNode`     | [interactive-composites](/docs/interactive-composites)         | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts)     |
+
+### @cardstack/choreo/film
 
 | API                      | Guide                                                  | Source                                                                                                            |
 | ------------------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
@@ -296,25 +307,32 @@ Run `pnpm docs:check` after changing an export or a guide. The check compares th
 
 ### glimmer-motion/test-support
 
-| API                  | Guide                                          | Source                                                                                                            |
-| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `isMotionIdle`       | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
-| `whatIsBusy`         | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
-| `Box`                | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `bounds`             | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `shape`              | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `boundsAndShape`     | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `SettleOptions`      | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `animationsSettled`  | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `advanceGate`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `seekTo`             | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `velocityOf`         | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `orphanCount`        | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `live`               | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `liveAll`            | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `strandedTransforms` | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `setupMotion`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
-| `resetMotion`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| API                   | Guide                                          | Source                                                                                                            |
+| --------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `isMotionIdle`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
+| `whatIsBusy`          | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts)           |
+| `Box`                 | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `bounds`              | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `shape`               | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `boundsAndShape`      | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `SettleOptions`       | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `animationsSettled`   | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `velocityOf`          | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `setupMotion`         | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `resetMotion`         | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+| `registerMotionReset` | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts) |
+
+### @cardstack/choreo/test-support
+
+| API                  | Guide                                          | Source                                                                                                                   |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `setupChoreo`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `advanceGate`        | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `seekTo`             | [core-test-timing](/docs/core-test-timing)     | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `orphanCount`        | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `live`               | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `liveAll`            | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
+| `strandedTransforms` | [core-test-geometry](/docs/core-test-geometry) | [Implementation](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts) |
 
 ### choreo-player
 

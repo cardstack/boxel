@@ -5,6 +5,7 @@ import {
   type CardResource,
   type CodeRef,
   type Diagnostics,
+  type ResolvedCodeRef,
   baseCardRef,
   internalKeyFor,
   isResolvedCodeRef,
@@ -54,6 +55,7 @@ import {
   RANGE_OPERATORS,
   InvalidQueryError,
   collectPositiveMatchTerms,
+  filterOperators,
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
@@ -288,6 +290,9 @@ export interface IndexedInstance {
 // An instance's row as its index visit left it, and nothing from its render.
 // `error` is set when the visit itself failed, and `instance` otherwise.
 export interface IndexedInstanceSource {
+  // The row's own URL: the file the instance is stored in, which is what an
+  // index visit of it is asked to visit.
+  url: string;
   realmURL: string;
   generation: number;
   sourceContentHash: string | null;
@@ -397,6 +402,14 @@ export const generalSortFields: Record<string, string> = {
 // flows through `generalFieldSortColumn` (it has no static column). Sorting by
 // it defaults to `desc` (best match first).
 export const MATCH_RELEVANCE_SORT_KEY = '_matchRelevance';
+
+// A relevance sort is recognized by its key alone. The score belongs to the
+// query, not to any card type, so an `on` beside it anchors nothing and is
+// ignored rather than sending the key down the card-field path, where it
+// would resolve as a nonexistent field.
+export function isMatchRelevanceSort(sort: { by: string }): boolean {
+  return sort.by === MATCH_RELEVANCE_SORT_KEY;
+}
 
 export { isValidPrerenderedHtmlFormat };
 
@@ -656,7 +669,7 @@ export class IndexQueryEngine {
     opts?: GetEntryOptions,
   ): Promise<IndexedInstanceSource | undefined> {
     let rows = (await this.#query([
-      'SELECT i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
+      'SELECT i.url, i.realm_url, i.generation, i.source_content_hash, i.types, i.pristine_doc, i.has_error, i.error_doc, i.diagnostics',
       `FROM ${tableFromOpts(opts)} AS i`,
       'WHERE',
       ...every([
@@ -669,6 +682,7 @@ export class IndexQueryEngine {
       ]),
       'LIMIT 1',
     ] as Expression)) as unknown as {
+      url: string;
       realm_url: string;
       generation: number;
       source_content_hash: string | null;
@@ -683,6 +697,7 @@ export class IndexQueryEngine {
       return undefined;
     }
     return {
+      url: row.url,
       realmURL: row.realm_url,
       generation: Number(row.generation),
       sourceContentHash: row.source_content_hash ?? null,
@@ -1034,6 +1049,38 @@ export class IndexQueryEngine {
     return rows.length > 0;
   }
 
+  // The types a realm holds cards of that descend from `ref`: the first entry
+  // of the adoption chain of every live instance row whose chain carries one
+  // of the ref's keys, once each. A row of the ref's own type contributes its
+  // own key. Rows whose visit failed count too, since a search that includes
+  // errors can return them.
+  async instanceTypesUnder(
+    realmURL: URL,
+    ref: ResolvedCodeRef,
+  ): Promise<string[]> {
+    let typeKeys = await this.typeKeysFor(ref);
+    let rows = (await this.#query([
+      'SELECT DISTINCT',
+      dbExpression({
+        pg: `i.types->>0`,
+        sqlite: `json_extract(i.types, '$[0]')`,
+      }),
+      'AS type_key',
+      'FROM boxel_index AS i',
+      'WHERE',
+      ...every([
+        ['i.realm_url =', param(realmURL.href)],
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
+      ]),
+    ] as Expression)) as unknown as { type_key: string | null }[];
+    return rows
+      .map(({ type_key }) => type_key)
+      .filter((key): key is string => typeof key === 'string')
+      .sort();
+  }
+
   private async getDefinition(codeRef: CodeRef): Promise<Definition> {
     if (!isResolvedCodeRef(codeRef)) {
       throw new Error(
@@ -1123,9 +1170,7 @@ export class IndexQueryEngine {
       // `_matchRelevance`, so every existing `matches` caller pays nothing. When
       // present it rides the projection as an aggregated, aliased column that the
       // ORDER BY (below) references — see `matchRelevanceExpression`.
-      let sortsByMatchRelevance = (sort ?? []).some(
-        (s) => !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY,
-      );
+      let sortsByMatchRelevance = (sort ?? []).some(isMatchRelevanceSort);
       let relevanceColumn: CardExpression = [];
       if (sortsByMatchRelevance) {
         // `assertQuery` already rejects this on the wire surfaces (as an
@@ -1381,7 +1426,7 @@ export class IndexQueryEngine {
           // `_matchRelevance` is the aggregated relevance column projected by
           // the SELECT (see `_search`); reference the alias directly and default
           // to `desc` (best match first). Everything else sorts on a column.
-          !('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY
+          isMatchRelevanceSort(s)
             ? [
                 `"${MATCH_RELEVANCE_SORT_KEY}"`,
                 sortDirection(s.direction ?? 'desc'),
@@ -1431,7 +1476,7 @@ export class IndexQueryEngine {
       // `_matchRelevance` is already projected by the inner SELECT (see
       // `_search`), so it rides through `sub.*` — reference it in the outer
       // ORDER BY directly, with no inner `_sort_i` alias, defaulting to `desc`.
-      if (!('on' in s) && s.by === MATCH_RELEVANCE_SORT_KEY) {
+      if (isMatchRelevanceSort(s)) {
         outerKeys.push([
           `"${MATCH_RELEVANCE_SORT_KEY}"`,
           sortDirection(s.direction ?? 'desc'),
@@ -1497,6 +1542,23 @@ export class IndexQueryEngine {
 
     if (typeRef && Object.keys(filter).length === 1) {
       return this.typeCondition(typeRef);
+    }
+
+    // The validator rejects a multi-operator node on the wire, but a
+    // query-backed field is indexed through here with no `assertQuery` in the
+    // path. Each branch below picks a single operator, so without this backstop
+    // such a node would compile on whichever one comes first and silently drop
+    // the rest — diverging from the host, which rejects the same query. Reject
+    // here too so every path agrees. `type`/`on` are not operators.
+    let operators = filterOperators(filter);
+    if (operators.length > 1) {
+      throw new InvalidQueryError(
+        `a filter may use only one operator, but found ${operators
+          .map((key) => `"${key}"`)
+          .join(
+            ', ',
+          )}; combine operators by nesting them under "every" or "any"`,
+      );
     }
 
     if ('eq' in filter) {

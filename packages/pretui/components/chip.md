@@ -44,6 +44,8 @@ The 18px height, 7px padding and 5px dot are fixed.
 
 A season retunes every chip in the product through `--pretui-chip-mix` and `--pretui-ink-mix`, and defines the palette through `--chart-1` … `--chart-5`. Because every derived colour mixes against `--card`, a dark season gets correct dark chips automatically — but it must pick chart hues that survive a 20% mix against a dark `--card`, or all five chips converge on the same near-black pill and the dot becomes the only distinction.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 | Agent types                    | Give them                  |

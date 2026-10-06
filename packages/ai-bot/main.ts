@@ -39,9 +39,18 @@ import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
   classifyToolCalls,
-  READ_REALM_FILE_TOOL_NAME,
-} from './lib/read-realm-file.ts';
-import { fulfillReadRealmFileCalls } from './lib/read-realm-file-fulfillment.ts';
+  offeredBotTools,
+  startBotToolTurns,
+  type BotToolTurn,
+  type ClassifiedToolCalls,
+} from './lib/bot-tools/index.ts';
+import {
+  ApprovalClaims,
+  releasedToolCalls,
+  type ReleasedToolCall,
+} from './lib/bot-tools/approval.ts';
+import { isApprovalResult } from '@cardstack/runtime-common/ai';
+import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
@@ -73,6 +82,10 @@ import {
 } from './lib/credit-tracking.ts';
 
 let log = logger('ai-bot');
+
+// The approved bot-tool calls this process has taken on running (see
+// ApprovalClaims).
+const approvalClaims = new ApprovalClaims();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -116,14 +129,10 @@ class Assistant {
   getResponse(
     prompt: PromptParts,
     senderMatrixUserId?: string,
-    offerRealmFileRead = false,
+    botTools: Tool[] = [],
   ) {
     return this.openai.chat.completions.stream(
-      buildChatCompletionRequest(
-        prompt,
-        senderMatrixUserId,
-        offerRealmFileRead,
-      ),
+      buildChatCompletionRequest(prompt, senderMatrixUserId, botTools),
     );
   }
 
@@ -251,9 +260,12 @@ Common issues are:
           .getJoinedMembers()
           .filter((member) => member.userId !== aiBotUserId);
         let humanRoomMemberCount = humanRoomMembers.length;
-        let realmFileReadingAllowed =
-          assistant.delegatedUserRealmSessions.enabled &&
-          humanRoomMemberCount === 1;
+        // The tools the bot runs itself that this room is offered; each
+        // tool decides from these facts (see lib/bot-tools).
+        let botTools = offeredBotTools({
+          humanMemberCount: humanRoomMemberCount,
+          realmDelegation: assistant.delegatedUserRealmSessions.enabled,
+        });
 
         if (event.event.origin_server_ts! < startTime) {
           return;
@@ -262,13 +274,14 @@ Common issues are:
           return; // don't print paginated results
         }
 
-        // A continuation the bot triggered with its own readRealmFile result
-        // event arrives with sender = the bot. Re-attribute it to the single
-        // human in the room so the guard below lets it through and all per-user
-        // logic (billing, the delegated read's onBehalfOf, request.user) acts on
-        // the user's behalf rather than the bot's. Only single-human rooms
-        // fulfill reads, so the human is unambiguous; every other bot-sent event
-        // keeps sender = bot and is ignored by the guard. getShouldRespond still
+        // A continuation the bot triggered with the result event of a tool it
+        // runs itself (see lib/bot-tools) arrives with sender = the bot.
+        // Re-attribute it to the single human in the room so the guard below
+        // lets it through and all per-user logic (billing, the delegated
+        // read's onBehalfOf, request.user) acts on the user's behalf rather
+        // than the bot's. Only single-human rooms fulfill bot tools, so the
+        // human is unambiguous; every other bot-sent event keeps sender = bot
+        // and is ignored by the guard. getShouldRespond still
         // decides whether we actually generate, so this can't loop on its own
         // answer.
         if (
@@ -367,16 +380,20 @@ Common issues are:
           resolveGenerationCompletion = resolve;
         });
 
-        // readRealmFile reads are fulfilled after the room lock is released
+        // Bot-tool calls are fulfilled after the room lock is released
         // (see the finally below). Fulfilling posts a command-result event that
         // re-triggers the bot for the continuation turn, and that re-trigger
         // has to acquire the room lock this handler holds — so fulfillment must
         // wait until the lock is free.
-        let pendingFulfillBotToolCalls: ReturnType<
-          typeof classifyToolCalls
-        >['botToolCalls'] = [];
+        let pendingFulfillBotToolCalls: ClassifiedToolCalls['botToolCalls'] =
+          [];
         let pendingFulfillRequestEventId: string | undefined;
         let pendingFulfillAgentId: string | undefined;
+        let pendingReleasedCalls: ReleasedToolCall[] = [];
+        let pendingReleasedAgentId: string | undefined;
+        // Each offered bot tool's state for this handler run, started once
+        // the room history is in hand.
+        let botToolTurns: Map<string, BotToolTurn> = new Map();
 
         try {
           log.info(
@@ -409,8 +426,8 @@ Common issues are:
             return;
           }
 
-          // The bot drives its own continuation by posting a readRealmFile
-          // result event, and the handler runs on that event's *local echo* —
+          // The bot drives its own continuation by posting a bot-tool result
+          // event, and the handler runs on that event's *local echo* —
           // before the homeserver has indexed it into /messages. getRoomEvents
           // is a server fetch, so it misses the just-posted result, which would
           // leave the read looking unresolved (shouldRespond=false) and stall
@@ -422,11 +439,10 @@ Common issues are:
           if (
             isToolResultEventType(event.getType()) &&
             triggerCommandRequestId &&
-            !eventList.some(
-              (e: any) =>
-                isToolResultEventType(e.type) &&
-                e.content?.commandRequestId === triggerCommandRequestId,
-            )
+            // Matched by event id, not by call: a call can already have
+            // another result in the fetch (the user's approval of a held
+            // bot-tool call) while this one is still missing.
+            !eventList.some((e: any) => e.event_id === event.getId())
           ) {
             eventList.push({
               type: event.getType(),
@@ -452,6 +468,47 @@ Common issues are:
               ? JSON.parse(event.getContent().data)
               : event.getContent().data;
           const agentId = contentData.context?.agentId;
+
+          // The offered tools' turns are started only when a run needs them
+          // (starting one can mean downloading what earlier calls read), and
+          // once per handler run.
+          let botToolTurnsStarted:
+            | Promise<Map<string, BotToolTurn>>
+            | undefined;
+          let startTurns = () =>
+            (botToolTurnsStarted ??= startBotToolTurns(botTools, {
+              humanMemberCount: humanRoomMemberCount,
+              realmDelegation: assistant.delegatedUserRealmSessions.enabled,
+              history: eventList,
+              aiBotUserId,
+              client,
+              onBehalfOf: senderMatrixUserId,
+              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
+            }));
+          // Run every held bot-tool call the user has approved and the bot
+          // hasn't run yet, whatever event this handler runs for: an approval
+          // whose own handler was stood down for a newer event is picked up
+          // here. Claimed in-process so an approval that lands while an
+          // earlier run of the same call is in flight doesn't run it again.
+          // The runs happen after the room lock is released; each result
+          // starts the continuation as any bot tool result does.
+          pendingReleasedCalls = approvalClaims.claim(
+            eventList,
+            releasedToolCalls(
+              eventList,
+              aiBotUserId,
+              new Set(botTools.map((tool) => tool.name)),
+            ),
+          );
+          pendingReleasedAgentId = agentId;
+          if (pendingReleasedCalls.length > 0) {
+            botToolTurns = await startTurns();
+          }
+          // An approval is not a turn of its own (getShouldRespond ignores
+          // it), so its handler stops here.
+          if (isApprovalResult({ content: event.getContent() })) {
+            return;
+          }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
           // handling in Responder) at the device that composed the prompt for
           // this turn. A continuation triggered by a tool / code-patch result
@@ -508,10 +565,11 @@ Common issues are:
             );
             responder.responseState.setAllowedToolNames([
               ...(promptParts.tools?.map((tool) => tool.function.name) ?? []),
-              // readRealmFile is offered separately (in getResponse), not via
-              // promptParts.tools, so allow it explicitly when this room may use
-              // it — otherwise the surfaced tool call would be filtered out.
-              ...(realmFileReadingAllowed ? [READ_REALM_FILE_TOOL_NAME] : []),
+              // Bot tools are offered separately (in getResponse), not via
+              // promptParts.tools, so allow the ones this room is offered
+              // explicitly — otherwise their surfaced calls would be filtered
+              // out.
+              ...botTools.map((tool) => tool.name),
             ]);
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
@@ -528,6 +586,10 @@ Common issues are:
               sendPromptAsDebugMessage(client, room.roomId, promptParts);
             }
             await responder.ensureThinkingMessageSent();
+            // Started before generation: the publisher asks each turn
+            // whether a streamed call waits for the user's approval.
+            botToolTurns = await startTurns();
+            responder.setBotToolTurns(botToolTurns);
           } catch (e) {
             log.error(e);
             Sentry.captureException(e, {
@@ -617,7 +679,7 @@ Common issues are:
               .getResponse(
                 promptParts,
                 senderMatrixUserId,
-                realmFileReadingAllowed,
+                botTools.map((tool) => tool.definition),
               )
               .on('chunk', async (chunk, snapshot) => {
                 log.info(`[${eventId}] Received chunk %s`, chunk.id);
@@ -684,10 +746,11 @@ Common issues are:
             );
             log.info(`[${eventId}] Response finalized`);
 
-            // readRealmFile is a tool ai-bot fulfills itself. The answer has
-            // already streamed (with the reads surfaced as executedBy:
-            // 'ai-bot' command requests); now fetch each file, attach it to
-            // a command-result event, and let the normal command-result path
+            // Bot tools are fulfilled by ai-bot itself. The answer has
+            // already streamed (with their calls surfaced as executedBy:
+            // 'ai-bot' command requests); now each tool runs its calls and
+            // publishes their command-result events, and the normal
+            // command-result path
             // drive the continuation on a later turn — exactly as a host
             // command result would. Because reads now resolve next-turn like
             // host commands, an answer may freely mix the two; the host
@@ -697,11 +760,16 @@ Common issues are:
             let { botToolCalls } = message
               ? classifyToolCalls(message)
               : { botToolCalls: [] };
-            if (
-              realmFileReadingAllowed &&
-              botToolCalls.length > 0 &&
-              responder.responseEventId
-            ) {
+            // Only the bot tools this room was offered are run, and a call
+            // held for the user's approval waits for it.
+            botToolCalls = botToolCalls.filter(
+              (call) =>
+                call.type === 'function' &&
+                botToolTurns
+                  .get(call.function.name)
+                  ?.needsApproval(call.function.arguments) === false,
+            );
+            if (botToolCalls.length > 0 && responder.responseEventId) {
               // Defer fulfillment until after the room lock is released
               // (see the finally below): fulfilling posts a result event
               // that re-triggers the bot, and that re-trigger needs the
@@ -837,18 +905,41 @@ Common issues are:
           // continuation turn; that re-trigger acquires the room lock this
           // handler just released. Fulfilling here (rather than inside the
           // lock) is what lets the continuation proceed.
+          for (let released of pendingReleasedCalls) {
+            let [outcome] =
+              (await botToolTurns
+                .get(released.toolName)
+                ?.fulfill([released.call], {
+                  client,
+                  roomId: room.roomId,
+                  requestEventId: released.requestEventId,
+                  agentId: pendingReleasedAgentId,
+                })) ?? [];
+            // A result that never reached the room leaves the call to be
+            // run on a later handler run.
+            if (!outcome?.published) {
+              approvalClaims.release(released.call.id);
+            }
+          }
           if (
             pendingFulfillRequestEventId &&
             pendingFulfillBotToolCalls.length > 0
           ) {
-            await fulfillReadRealmFileCalls(pendingFulfillBotToolCalls, {
-              client,
-              roomId: room.roomId,
-              requestEventId: pendingFulfillRequestEventId,
-              agentId: pendingFulfillAgentId,
-              onBehalfOf: senderMatrixUserId,
-              delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
-            });
+            // Each tool runs its own calls, in the registry's order.
+            for (let [toolName, turn] of botToolTurns) {
+              let calls = pendingFulfillBotToolCalls.filter(
+                (call) =>
+                  call.type === 'function' && call.function.name === toolName,
+              );
+              if (calls.length > 0) {
+                await turn.fulfill(calls, {
+                  client,
+                  roomId: room.roomId,
+                  requestEventId: pendingFulfillRequestEventId,
+                  agentId: pendingFulfillAgentId,
+                });
+              }
+            }
           }
         }
       } catch (e) {

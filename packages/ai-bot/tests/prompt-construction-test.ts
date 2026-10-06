@@ -51,11 +51,16 @@ import {
   absolutizeSkillLinks,
   buildPromptForModel,
   constructHistory,
+  currentTurnToolResultMedia,
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+  MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES,
+  MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
   getPromptParts,
   getRelevantCards,
   getTools,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  sessionSkillFeatures,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common/ai';
@@ -3903,7 +3908,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     assert.true(
       messageText(messages![messages!.length - 1]).includes(
-        'Re-read the file and send a new block whose SEARCH lines are copied exactly from the current file. Do not send the same block again. Attempt 1 of 3.',
+        'Re-read the file and use the run-realm-code tool with the current contents. Do not repeat a failed edit. Attempt 1 of 3.',
       ),
       'the retry instruction rides the trailing message, not history',
     );
@@ -4098,7 +4103,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.true(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the trailing message tells the model to retry',
     );
     assert.true(trailing.includes('Attempt 1 of 3.'), 'the attempt is counted');
@@ -4191,7 +4196,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'the third consecutive failure ends the retrying',
     );
     assert.false(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the retry instruction is gone',
     );
     const records = messages!.filter(
@@ -4228,7 +4233,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.true(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'the retry instruction is still given',
     );
     assert.true(
@@ -4285,7 +4290,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
     let trailing = messageText(messages![messages!.length - 1]);
     assert.false(
-      trailing.includes('Re-read the file and send a new block'),
+      trailing.includes('Re-read the file and use the run-realm-code tool'),
       'no retry instruction after the fix landed',
     );
     assert.true(
@@ -7522,6 +7527,806 @@ new
     );
   });
 
+  module('tool-result media', () => {
+    type AttachedFile = {
+      sourceUrl?: string;
+      url: string;
+      name: string;
+      contentType: string;
+      contentSize?: number;
+    };
+
+    let humanMessage = (eventId: string, ts: number, body: string) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          data: { context: { tools: [], submode: 'code', functions: [] } },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let botToolRequest = (eventId: string, ts: number, requestIds: string[]) =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: '',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: requestIds.map((id) => ({
+            id,
+            name: 'someTool_ab12',
+            arguments: JSON.stringify({ description: `run ${id}` }),
+          })),
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let toolResult = (
+      eventId: string,
+      ts: number,
+      {
+        requestId,
+        requestEventId,
+        sender = '@user:localhost',
+        status = 'applied',
+        attachedFiles = [],
+      }: {
+        requestId: string;
+        requestEventId: string;
+        sender?: string;
+        status?: string;
+        attachedFiles?: AttachedFile[];
+      },
+    ) =>
+      ({
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: status,
+            event_id: requestEventId,
+          },
+          data: { attachedFiles },
+        },
+        sender,
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    let png = (name: string): AttachedFile => ({
+      sourceUrl: `https://example.com/${name}`,
+      // Matrix media ids are [A-Za-z0-9_-] only.
+      url: `mxc://localhost/${name.replace(/[^A-Za-z0-9_-]/g, '_')}`,
+      name,
+      contentType: 'image/png',
+      contentSize: 2048,
+    });
+
+    // The homeserver media endpoint a tool-result file is downloaded from.
+    let mediaDownloadUrl = (file: AttachedFile) =>
+      fakeMatrixClient.mxcUrlToHttp(
+        file.url,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      )!;
+
+    let mockImage = (file: AttachedFile, text = `bytes-of-${file.name}`) => {
+      mockResponses.set(file.url, { ok: true, text });
+      mockResponses.set(mediaDownloadUrl(file), { ok: true, text });
+    };
+
+    let dataUrlOf = (file: AttachedFile) =>
+      `data:image/png;base64,${Buffer.from(`bytes-of-${file.name}`).toString('base64')}`;
+
+    let trailingParts = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content) ? (content as any[]) : [];
+    };
+
+    let toolMessageText = (prompt: { role?: string; content?: unknown }[]) => {
+      let content = prompt.find((m) => m.role === 'tool')?.content;
+      return Array.isArray(content)
+        ? (content as any[]).map((p) => p.text ?? '').join('\n')
+        : (content as string);
+    };
+
+    let trailingText = (prompt: { content?: unknown }[]) => {
+      let content = prompt[prompt.length - 1]?.content;
+      return Array.isArray(content)
+        ? (content as any[])
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text)
+            .join('\n')
+        : String(content ?? '');
+    };
+
+    let imageUrls = (prompt: { content?: unknown }[]) =>
+      trailingParts(prompt)
+        .filter((p) => p.type === 'image_url')
+        .map((p) => p.image_url.url);
+
+    test('an image attached to a client-sent tool result reaches the model on the trailing message', async () => {
+      let screenshot = png('capture.png');
+      mockImage(screenshot);
+      let history = [
+        humanMessage('1', 1, 'Look at my brand guide'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [screenshot],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(screenshot)]);
+      let parts = trailingParts(prompt);
+      let imageIndex = parts.findIndex((p) => p.type === 'image_url');
+      assert.strictEqual(
+        parts[imageIndex - 1]?.text,
+        'Attached to a tool result: capture.png (https://example.com/capture.png)',
+        'a label naming the file precedes the image',
+      );
+
+      let toolMessage = prompt.find((m) => m.role === 'tool');
+      assert.ok(
+        !Array.isArray(toolMessage?.content) ||
+          (toolMessage?.content as any[]).every((p) => p.type === 'text'),
+        'the tool message carries no media parts',
+      );
+      assert.ok(
+        toolMessageText(prompt).includes('[image/png, 2048 bytes]'),
+        'the tool message lists the image as metadata',
+      );
+    });
+
+    test('a multi-step tool loop keeps the images it collected earlier in the turn', async () => {
+      let first = png('first.png');
+      let second = png('second.png');
+      mockImage(first);
+      mockImage(second);
+      let history = [
+        humanMessage('1', 1, 'Compare these'),
+        botToolRequest('2', 2, ['read-1']),
+        toolResult('3', 3, {
+          requestId: 'read-1',
+          requestEventId: '2',
+          sender: '@aibot:localhost',
+          attachedFiles: [first],
+        }),
+        botToolRequest('4', 4, ['capture-1']),
+        toolResult('5', 5, {
+          requestId: 'capture-1',
+          requestEventId: '4',
+          attachedFiles: [second],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(first),
+        dataUrlOf(second),
+      ]);
+    });
+
+    test('tool-result images from an earlier turn stay metadata only', async () => {
+      let old = png('old.png');
+      mockImage(old);
+      let history = [
+        humanMessage('1', 1, 'Capture it'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [old],
+        }),
+        humanMessage('4', 4, 'Thanks, now something else'),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.ok(
+        toolMessageText(prompt).includes('[image/png, 2048 bytes]'),
+        'the earlier result still lists the image as metadata',
+      );
+    });
+
+    test('a model without image input is told by name which tool-result image it cannot see', async () => {
+      let screenshot = png('capture.png');
+      let history = [
+        humanMessage('1', 1, 'What does it look like?'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [screenshot],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+        ['text'],
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      let trailing = prompt[prompt.length - 1]?.content;
+      let text = Array.isArray(trailing)
+        ? (trailing as any[]).map((p) => p.text ?? '').join('\n')
+        : (trailing as string);
+      assert.ok(
+        text.includes(
+          'capture.png (https://example.com/capture.png): the active model does not accept image files',
+        ),
+        'the note names the image and why it was not sent',
+      );
+      assert.ok(
+        text.includes('you cannot see them'),
+        'the note says the model cannot see it',
+      );
+    });
+
+    test('a result mixing text files and images embeds only the images', async () => {
+      let screenshot = png('view.png');
+      mockImage(screenshot);
+      mockResponses.set('http://test.com/card.gts-uploaded', {
+        ok: true,
+        text: 'export class Card {}',
+      });
+      let history = [
+        humanMessage('1', 1, 'Build and show me the card'),
+        botToolRequest('2', 2, ['run-1']),
+        toolResult('3', 3, {
+          requestId: 'run-1',
+          requestEventId: '2',
+          attachedFiles: [
+            {
+              sourceUrl: 'http://localhost:4201/user/realm/card.gts',
+              url: 'http://test.com/card.gts-uploaded',
+              name: 'card.gts',
+              contentType: 'text/plain',
+            },
+            screenshot,
+          ],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(screenshot)]);
+      assert.notOk(
+        trailingParts(prompt).some(
+          (p) => p.type === 'text' && p.text.includes('card.gts'),
+        ),
+        'the text file is not labelled as media',
+      );
+      assert.ok(
+        toolMessageText(prompt).includes('export class Card {}'),
+        'the text file content rides in the tool message',
+      );
+    });
+
+    test('currentTurnToolResultMedia keeps the newest files up to the cap', () => {
+      let count = MAX_CURRENT_TURN_TOOL_RESULT_MEDIA + 3;
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i < count; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [png(`image-${i}.png`)],
+          }),
+        );
+      }
+
+      let { included: media } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        media.map((f) => f.name),
+        Array.from(
+          { length: MAX_CURRENT_TURN_TOOL_RESULT_MEDIA },
+          (_, i) => `image-${i + 3}.png`,
+        ),
+      );
+    });
+
+    test('currentTurnToolResultMedia counts only the latest result of a retried call', () => {
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          status: 'failed',
+          attachedFiles: [png('partial.png')],
+        }),
+        toolResult('4', 4, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [png('final.png')],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['final.png'],
+      );
+    });
+
+    test('a retried call takes the position of its latest result', () => {
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['call-a', 'call-b']),
+        toolResult('3', 3, {
+          requestId: 'call-a',
+          requestEventId: '2',
+          status: 'failed',
+          attachedFiles: [png('a-first-attempt.png')],
+        }),
+        toolResult('4', 4, {
+          requestId: 'call-b',
+          requestEventId: '2',
+          attachedFiles: [png('b.png')],
+        }),
+        toolResult('5', 5, {
+          requestId: 'call-a',
+          requestEventId: '2',
+          attachedFiles: [png('a-retry.png')],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['b.png', 'a-retry.png'],
+        'the retried call is newer than the call that finished before its retry',
+      );
+    });
+
+    test('files the model cannot take do not use up the media slots', () => {
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i < MAX_CURRENT_TURN_TOOL_RESULT_MEDIA; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [png(`image-${i}.png`)],
+          }),
+        );
+      }
+      history.push(botToolRequest('req-pdf', 100, ['call-pdf']));
+      history.push(
+        toolResult('res-pdf', 101, {
+          requestId: 'call-pdf',
+          requestEventId: 'req-pdf',
+          attachedFiles: [
+            {
+              sourceUrl: 'https://example.com/report.pdf',
+              url: 'http://test.com/report.pdf-uploaded',
+              name: 'report.pdf',
+              contentType: 'application/pdf',
+              contentSize: 4096,
+            },
+          ],
+        }),
+      );
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+        ['text', 'image'],
+      );
+
+      assert.strictEqual(
+        included.length,
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
+        'every image still fits',
+      );
+      assert.deepEqual(
+        omitted.map(({ file, reason }) => [file.name, reason]),
+        [['report.pdf', 'the active model does not accept PDF files']],
+      );
+    });
+
+    test('currentTurnToolResultMedia leaves out files over the per-file limit or of unknown size', () => {
+      let tooLarge = {
+        ...png('huge.png'),
+        contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+      };
+      let { contentSize: _omit, ...unsized } = png('unsized.png');
+      let history = [
+        humanMessage('1', 1, 'Go'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [png('small.png'), tooLarge, unsized],
+        }),
+      ];
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        included.map((f) => f.name),
+        ['small.png'],
+      );
+      assert.deepEqual(
+        omitted.map(({ file, reason }) => [file.name, reason]),
+        [
+          ['huge.png', 'it is larger than 3.75 MiB'],
+          ['unsized.png', 'its size is unknown'],
+        ],
+      );
+    });
+
+    test('currentTurnToolResultMedia keeps the newest files within the byte budget', () => {
+      let fileSize = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+      let fitting = Math.floor(
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / fileSize,
+      );
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      for (let i = 0; i <= fitting; i++) {
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [
+              { ...png(`image-${i}.png`), contentSize: fileSize },
+            ],
+          }),
+        );
+      }
+
+      let { included, omitted } = currentTurnToolResultMedia(
+        history,
+        '@aibot:localhost',
+      );
+
+      assert.deepEqual(
+        included.map((f) => f.name),
+        Array.from({ length: fitting }, (_, i) => `image-${i + 1}.png`),
+        'the newest files that fit the budget are kept',
+      );
+      assert.deepEqual(
+        omitted.map(({ file }) => file.name),
+        ['image-0.png'],
+        'the oldest file is left out once the budget is spent',
+      );
+    });
+
+    test('the trailing note names tool-result media the limits left out', async () => {
+      let small = png('small.png');
+      mockImage(small);
+      let tooLarge = {
+        ...png('huge.png'),
+        contentSize: MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1,
+      };
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [small, tooLarge],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [dataUrlOf(small)]);
+      let text = trailingParts(prompt)
+        .filter((p) => p.type === 'text')
+        .map((p) => p.text)
+        .join('\n');
+      assert.ok(
+        text.includes(
+          'huge.png (https://example.com/huge.png): it is larger than 3.75 MiB',
+        ),
+        'the note names the left-out file and why',
+      );
+      assert.ok(
+        text.includes('you cannot see them'),
+        'the note says the model cannot see it',
+      );
+    });
+
+    test('a tool-result file that is not a Matrix media item is never fetched', async () => {
+      let elsewhere: AttachedFile = {
+        sourceUrl: 'https://example.com/elsewhere.png',
+        url: 'https://attacker.example/collect.png',
+        name: 'elsewhere.png',
+        contentType: 'image/png',
+        contentSize: 2048,
+      };
+      let fetched: string[] = [];
+      let fetchBefore = (globalThis as any).fetch;
+      (globalThis as any).fetch = async (url: string, init: unknown) => {
+        fetched.push(url);
+        return fetchBefore(url, init);
+      };
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [elsewhere],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.notOk(
+        fetched.some((url) => url.includes('attacker.example')),
+        'the bot token is never sent to the named host',
+      );
+      let text = trailingText(prompt);
+      assert.ok(
+        text.includes(
+          'elsewhere.png (https://example.com/elsewhere.png): it is not a file stored in this conversation',
+        ),
+      );
+    });
+
+    test('a downloaded tool-result file over the per-file limit is left out whatever its declared size', async () => {
+      let understated = png('understated.png');
+      mockImage(understated, 'x'.repeat(MAX_TOOL_RESULT_MEDIA_FILE_BYTES + 1));
+      let history = [
+        humanMessage('1', 1, 'Show me'),
+        botToolRequest('2', 2, ['call-1']),
+        toolResult('3', 3, {
+          requestId: 'call-1',
+          requestEventId: '2',
+          attachedFiles: [understated],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), []);
+      assert.ok(
+        trailingText(prompt).includes(
+          'understated.png (https://example.com/understated.png): it is larger than 3.75 MiB',
+        ),
+      );
+    });
+
+    test('the per-turn budget holds on downloaded bytes, keeping the newest', async () => {
+      let perFile = MAX_TOOL_RESULT_MEDIA_FILE_BYTES;
+      let fitting = Math.floor(
+        MAX_CURRENT_TURN_TOOL_RESULT_MEDIA_BYTES / perFile,
+      );
+      let history: DiscreteMatrixEvent[] = [humanMessage('1', 1, 'Go')];
+      let files: AttachedFile[] = [];
+      for (let i = 0; i <= fitting; i++) {
+        // Each declares 2 KiB but downloads the full per-file limit.
+        let file = png(`under${i}.png`);
+        mockImage(file, 'x'.repeat(perFile));
+        files.push(file);
+        history.push(botToolRequest(`req-${i}`, 10 + i * 2, [`call-${i}`]));
+        history.push(
+          toolResult(`res-${i}`, 11 + i * 2, {
+            requestId: `call-${i}`,
+            requestEventId: `req-${i}`,
+            attachedFiles: [file],
+          }),
+        );
+      }
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.strictEqual(imageUrls(prompt).length, fitting);
+      assert.ok(
+        trailingText(prompt).includes(
+          'under0.png (https://example.com/under0.png): newer tool-result media already fill',
+        ),
+        'the oldest is left out once downloads fill the budget',
+      );
+      let labels = trailingParts(prompt)
+        .filter((p) => p.type === 'text' && p.text.startsWith('Attached to'))
+        .map((p) => p.text);
+      assert.deepEqual(
+        labels,
+        files
+          .slice(1)
+          .map(
+            (f) =>
+              `Attached to a tool result: ${f.name} (https://example.com/${f.name})`,
+          ),
+        'kept media stay in chronological order',
+      );
+    });
+
+    test('an image just under 5 MiB raw is over the limit, since its base64 is not', () => {
+      let { omitted } = currentTurnToolResultMedia(
+        [
+          humanMessage('1', 1, 'Go'),
+          botToolRequest('2', 2, ['call-1']),
+          toolResult('3', 3, {
+            requestId: 'call-1',
+            requestEventId: '2',
+            attachedFiles: [
+              { ...png('big.png'), contentSize: 5 * 1024 * 1024 - 1 },
+            ],
+          }),
+        ],
+        '@aibot:localhost',
+      );
+      assert.deepEqual(
+        omitted.map(({ file }) => file.name),
+        ['big.png'],
+      );
+    });
+
+    test("the human message's own media precede the tool-result media", async () => {
+      let attached = png('attached.png');
+      let captured = png('captured.png');
+      mockImage(attached);
+      mockImage(captured);
+      let message = humanMessage('1', 1, 'Compare mine with the capture');
+      (message.content as any).data.attachedFiles = [attached];
+      let history = [
+        message,
+        botToolRequest('2', 2, ['capture-1']),
+        toolResult('3', 3, {
+          requestId: 'capture-1',
+          requestEventId: '2',
+          attachedFiles: [captured],
+        }),
+      ];
+
+      let prompt = await buildPromptForModel(
+        history,
+        '@aibot:localhost',
+        undefined,
+        [],
+        fakeMatrixClient,
+      );
+
+      assert.deepEqual(imageUrls(prompt), [
+        dataUrlOf(attached),
+        dataUrlOf(captured),
+      ]);
+      let labels = trailingParts(prompt)
+        .filter(
+          (p) =>
+            p.type === 'text' && p.text.startsWith('Attached to a tool result'),
+        )
+        .map((p) => p.text);
+      assert.deepEqual(
+        labels,
+        [
+          'Attached to a tool result: captured.png (https://example.com/captured.png)',
+        ],
+        "only the tool result's image is labelled",
+      );
+    });
+
+    test('currentTurnToolResultMedia ignores non-media attachments and earlier turns', () => {
+      let history = [
+        humanMessage('1', 1, 'First'),
+        botToolRequest('2', 2, ['a']),
+        toolResult('3', 3, {
+          requestId: 'a',
+          requestEventId: '2',
+          attachedFiles: [png('earlier.png')],
+        }),
+        humanMessage('4', 4, 'Second'),
+        botToolRequest('5', 5, ['b']),
+        toolResult('6', 6, {
+          requestId: 'b',
+          requestEventId: '5',
+          attachedFiles: [
+            {
+              url: 'http://test.com/notes-uploaded',
+              name: 'notes.md',
+              contentType: 'text/markdown',
+            },
+            png('current.png'),
+          ],
+        }),
+      ];
+
+      assert.deepEqual(
+        currentTurnToolResultMedia(history, '@aibot:localhost').included.map(
+          (f) => f.name,
+        ),
+        ['current.png'],
+      );
+    });
+  });
+
   test('read-file tool call is rejected for files not previously attached in the room', async () => {
     // Policy: the AI should only be able to read files that were
     // previously attached by the user in the same room.
@@ -9003,6 +9808,74 @@ module('absolutizeSkillLinks', () => {
         '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
       ),
       'the prompt carries a copy-ready absolute url',
+    );
+  });
+});
+
+module('skill feature sections', () => {
+  const INDEX = 'https://localhost:4201/skills/index.md';
+  const instructions = [
+    'Before.',
+    '',
+    '<!-- feature:catalog-reuse -->',
+    'Search the catalog first.',
+    '<!-- /feature:catalog-reuse -->',
+    '',
+    'After.',
+  ].join('\n');
+  const skill = {
+    id: INDEX,
+    attributes: { title: 'Index', instructions },
+  };
+
+  test('leaves out a feature section when its feature is disabled', () => {
+    let [message] = skillCardsToMessages([skill]);
+    assert.false(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed too');
+    assert.true(message.includes('Before.'));
+    assert.true(message.includes('After.'));
+  });
+
+  test('keeps a feature section, without its markers, when its feature is enabled', () => {
+    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
+    assert.true(message.includes('Search the catalog first.'));
+    assert.false(message.includes('feature:'), 'the markers are removed');
+  });
+
+  test('a room enables and disables a feature with boxel-debug:feature messages', () => {
+    const message = (sender: string, body: string) => ({
+      type: 'm.room.message',
+      sender,
+      content: { body },
+    });
+    const bot = '@aibot:localhost';
+    const user = '@user:localhost';
+    assert.deepEqual(sessionSkillFeatures([], bot), []);
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      ['catalog-reuse'],
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [
+          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
+          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
+        ],
+        bot,
+      ),
+      [],
+      'a later disable wins',
+    );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
+        bot,
+      ),
+      [],
+      'the bot cannot enable a feature',
     );
   });
 });

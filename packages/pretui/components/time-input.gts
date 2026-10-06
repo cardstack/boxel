@@ -23,10 +23,10 @@ import { fn } from '@ember/helper';
 // supplies — @now, the same argument RelativeTime takes — defaulting to each
 // segment's minimum (00 / 00 / 00 / AM) when it is omitted. Seeding is
 // therefore deterministic and testable, which the upstream is not.
-// Review pass 2026-08-12 also added Home/End (the ARIA spinbutton pattern
-// requires them; WA omits them), aria-disabled on the segments, and a
-// forced-colors-safe focus outline; the colon separator moved out of a
-// template function call into the precomputed segment view.
+// Home/End are handled (the ARIA spinbutton pattern requires them; WA omits
+// them), the segments carry aria-disabled, the focus outline is
+// forced-colors-safe, and the colon separator comes from the precomputed
+// segment view.
 
 export type TimeInputHourCycle = '24' | '12';
 
@@ -422,52 +422,54 @@ export class TimeInput extends Component<TimeInputSignature> {
       {{/each}}
     </div>
     <style scoped>
-      /* the whole group wears the Pretui Input dress; segments live inside
-         one field face and take the focus treatment individually */
-      .pretui-time {
-        display: inline-flex;
-        align-items: center;
-        gap: 1px;
-        height: var(--control-h, 28px);
-        padding: 0 7px;
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        font-variant-numeric: tabular-nums;
-        color: var(--foreground);
-      }
-      .pretui-time[data-disabled] {
-        opacity: 0.45;
-      }
-      .pretui-time-seg {
-        padding: 1px 3px;
-        border-radius: 5px;
-        cursor: default;
-        user-select: none;
-      }
-      .pretui-time-seg[data-empty] {
-        color: var(--ink-3, var(--boxel-400));
-      }
-      /* segments take the native date/time-field treatment — the focused
-         segment is HIGHLIGHTED rather than ringed, because a ring inside a
-         one-field face reads as a second field. The transparent outline is
-         inert normally and becomes the visible indicator under
-         forced-colors, where a background swap is discarded. */
-      .pretui-time-seg:focus-visible {
-        outline: 2px solid transparent;
-        outline-offset: -1px;
-        background: var(--ring);
-        color: var(--primary-foreground);
-      }
-      .pretui-time-seg[data-segment='dayPeriod'] {
-        margin-left: 4px;
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: 500;
-      }
-      .pretui-time-literal {
-        color: var(--ink-3, var(--boxel-400));
+      @layer PretComponent {
+        /* the whole group wears the Pretui Input dress; segments live inside
+           one field face and take the focus treatment individually */
+        .pretui-time {
+          display: inline-flex;
+          align-items: center;
+          gap: 1px;
+          height: var(--control-h, 28px);
+          padding: 0 7px;
+          border-radius: var(--radius);
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          font-variant-numeric: tabular-nums;
+          color: var(--foreground);
+        }
+        .pretui-time[data-disabled] {
+          opacity: 0.45;
+        }
+        .pretui-time-seg {
+          padding: 1px 3px;
+          border-radius: 5px;
+          cursor: default;
+          user-select: none;
+        }
+        .pretui-time-seg[data-empty] {
+          color: var(--ink-3, var(--boxel-400));
+        }
+        /* segments take the native date/time-field treatment — the focused
+           segment is HIGHLIGHTED rather than ringed, because a ring inside a
+           one-field face reads as a second field. The transparent outline is
+           inert normally and becomes the visible indicator under
+           forced-colors, where a background swap is discarded. */
+        .pretui-time-seg:focus-visible {
+          outline: 2px solid transparent;
+          outline-offset: -1px;
+          background: var(--ring);
+          color: var(--primary-foreground);
+        }
+        .pretui-time-seg[data-segment='dayPeriod'] {
+          margin-left: 4px;
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: 500;
+        }
+        .pretui-time-literal {
+          color: var(--ink-3, var(--boxel-400));
+        }
       }
     </style>
   </template>

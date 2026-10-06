@@ -29,7 +29,7 @@
  */
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Film, Player } from 'glimmer-motion/film';
+import { Film, Player } from '@cardstack/choreo/film';
 import { Board } from 'test-app/components/long-take/board';
 import { LaptopStage } from 'test-app/components/long-take/stage';
 

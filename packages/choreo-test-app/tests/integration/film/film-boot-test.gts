@@ -6,15 +6,17 @@
  * caught — a field initialiser read the first row's camera at
  * construction — pinned so it cannot come back.
  */
+import { Film, IframePicture } from '@cardstack/choreo/film';
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, waitUntil } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { Film, IframePicture } from 'glimmer-motion/film';
 import { module, test } from 'qunit';
 import { SagradaScore } from 'test-app/components/films/sagrada-score';
 import { TowersScore } from 'test-app/components/films/towers-score';
 
 module('Integration | film | boot from the graph', function (hooks) {
   setupRenderingTest(hooks);
+  setupChoreo(hooks);
 
   test('Sagrada Família stands its door up from the graph alone', async function (assert) {
     await render(

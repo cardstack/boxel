@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, styles } from 'glimmer-motion';
+import { motion, styles } from 'glimmer-motion';
 
 const initialTasks = [
   { id: 'outline', title: 'Outline the story' },

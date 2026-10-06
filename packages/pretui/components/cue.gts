@@ -129,48 +129,50 @@ export class Cue extends Component<CueSignature> {
       {{#if @text}}{{@text}}{{else}}{{yield}}{{/if}}
     </span>
     <style scoped>
-      /* chrome, never a surface: no background, no elevation, no border */
-      .pretui-cue {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        min-width: 0;
-        font-size: var(--text-ui-sm, 11.5px);
-        line-height: 16px;
-        color: var(--pretui-cue-hue, var(--muted-foreground));
-      }
-      .pretui-cue[data-kind='label'] {
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        color: var(--foreground);
-      }
-      .pretui-cue[data-kind='error'],
-      .pretui-cue[data-tone='danger'] {
-        font-weight: 500;
-      }
-      /* the second, non-colour channel the source lacked */
-      .pretui-cue-glyph {
-        display: inline-grid;
-        place-items: center;
-        inline-size: 1.1em;
-        block-size: 1.1em;
-        flex: none;
-        border-radius: 50%;
-        font-size: 0.75em;
-        font-weight: 700;
-        background: var(--pretui-cue-hue, var(--muted-foreground));
-        color: var(--pretui-on-neutral, var(--boxel-light));
-      }
-      /* logical edges: the inline pair sit on the control's reading start /
-         end, the block pair above / below. RTL comes free. */
-      .pretui-cue[data-position='inline-start'] {
-        margin-inline-end: var(--space-2, 6px);
-      }
-      .pretui-cue[data-position='inline-end'] {
-        margin-inline-start: var(--space-2, 6px);
-      }
-      .pretui-cue[data-position='block-start'] {
-        margin-block-end: var(--space-1, 4px);
+      @layer PretComponent {
+        /* chrome, never a surface: no background, no elevation, no border */
+        .pretui-cue {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+          font-size: var(--text-ui-sm, 11.5px);
+          line-height: 16px;
+          color: var(--pretui-cue-hue, var(--muted-foreground));
+        }
+        .pretui-cue[data-kind='label'] {
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          color: var(--foreground);
+        }
+        .pretui-cue[data-kind='error'],
+        .pretui-cue[data-tone='danger'] {
+          font-weight: 500;
+        }
+        /* the second, non-colour channel the source lacked */
+        .pretui-cue-glyph {
+          display: inline-grid;
+          place-items: center;
+          inline-size: 1.1em;
+          block-size: 1.1em;
+          flex: none;
+          border-radius: 50%;
+          font-size: 0.75em;
+          font-weight: 700;
+          background: var(--pretui-cue-hue, var(--muted-foreground));
+          color: var(--pretui-on-neutral, var(--boxel-light));
+        }
+        /* logical edges: the inline pair sit on the control's reading start /
+           end, the block pair above / below. RTL comes free. */
+        .pretui-cue[data-position='inline-start'] {
+          margin-inline-end: var(--space-2, 6px);
+        }
+        .pretui-cue[data-position='inline-end'] {
+          margin-inline-start: var(--space-2, 6px);
+        }
+        .pretui-cue[data-position='block-start'] {
+          margin-block-end: var(--space-1, 4px);
+        }
       }
     </style>
   </template>

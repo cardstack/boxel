@@ -10,6 +10,7 @@
  * animationsSettled(): the gallery is thirty live demos and several of
  * them — by design — never go idle.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, currentURL, visit, waitUntil } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -27,6 +28,7 @@ const frames = (n: number) =>
 
 module('Acceptance | crossing', function (hooks) {
   setupApplicationTest(hooks);
+  setupChoreo(hooks);
 
   hooks.beforeEach(function () {
     setTempo('smooth');

@@ -1,8 +1,9 @@
+import { type Camera3DState, Choreo } from '@cardstack/choreo';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { type Camera3DState, Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 
 /** A CSS-only host. No WebGL renderer, assets, or private gallery helpers. */
 export class SpatialCard extends Component {

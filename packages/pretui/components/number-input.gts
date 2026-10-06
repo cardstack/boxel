@@ -168,21 +168,23 @@ export class NumberInput extends Component<NumberInputSignature> {
       />
     </div>
     <style scoped>
-      /* Same re-skin channel as EmailInput — see that component's note. */
-      .pretui-boxelwrap {
-        width: 100%;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        font-variant-numeric: tabular-nums;
-        --background: var(--field, var(--boxel-light));
-        --border: var(--input);
-        --ring: var(--primary);
-        --muted-foreground: var(--ink-3, var(--boxel-400));
-        --boxel-form-control-height: var(--control-h, 28px);
-        --boxel-input-height: var(--control-h, 28px);
-        --boxel-form-control-border-radius: var(--radius);
-        --boxel-sp-xs: 5px;
-        --boxel-sp-sm: 9px;
+      @layer PretComponent {
+        /* Same re-skin channel as EmailInput — see that component's note. */
+        .pretui-boxelwrap {
+          width: 100%;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          font-variant-numeric: tabular-nums;
+          --background: var(--field, var(--boxel-light));
+          --border: var(--input);
+          --ring: var(--primary);
+          --muted-foreground: var(--ink-3, var(--boxel-400));
+          --boxel-form-control-height: var(--control-h, 28px);
+          --boxel-input-height: var(--control-h, 28px);
+          --boxel-form-control-border-radius: var(--radius);
+          --boxel-sp-xs: 5px;
+          --boxel-sp-sm: 9px;
+        }
       }
     </style>
   </template>

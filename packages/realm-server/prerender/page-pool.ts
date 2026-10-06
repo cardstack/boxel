@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
-import { resolvePrerenderManagerURL } from './config.ts';
+import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import type { BrowserManager } from './browser-manager.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
@@ -3039,7 +3039,7 @@ export class PagePool {
         `${managerURL}/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
       );
       target.searchParams.set('url', this.#serverURL);
-      await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
+      await fetchFromManager(target, { method: 'DELETE' }).catch((e) => {
         log.debug('Manager affinity eviction notify failed:', e);
       });
     } catch (_e) {

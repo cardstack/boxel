@@ -449,6 +449,7 @@ async function grantedQuery(
   let granted = await policyQueryScope(core, {
     ...searchInvocation({ filter })!,
     principal: { kind: 'user', user: scope.caller.actor },
+    transport: 'envelope',
   });
   return granted.kind === 'scoped'
     ? policyScopedQuery(query, granted.filters)

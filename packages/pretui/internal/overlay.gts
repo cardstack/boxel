@@ -9,8 +9,6 @@
 // @starting-style (Motion Rule: encodes open state; reduced-motion gets the
 // end state).
 //
-// (the overlay group)
-
 // Pretui — overlay plumbing shared by Popup, Dialog, Drawer and Popover:
 // placement aliases, the measuring anchor modifier, the open-arg aliases and
 // the native <dialog> modal behaviour. Not a component.
@@ -205,7 +203,7 @@ function positionPopup(
 // positioning primitive: the same offset/flip/shift behavior floating-ui's
 // middleware provides, measured against the REAL panel box — floating-ui
 // itself is not realm-importable, and boxel-ui's Velcro path portals to the
-// app root, outside the theme island (Appendix F renderInPlace decision).
+// app root, outside the theme island.
 export const anchorTo = modifier(
   (
     el: HTMLElement,

@@ -7,7 +7,7 @@ A host often needs to know that a scene change is underway before Choreo has com
 Create an arming instance and call `begin(region)` when the host commits to the change. The region argument only needs to expose its current run through the `ArmingRegion` contract. `active()` is tracked, so a template can read it, and `settled()` resolves when the watch stands down.
 
 ```ts title="Component logic excerpt"
-import { createArming } from 'glimmer-motion';
+import { createArming } from '@cardstack/choreo';
 
 const crossing = createArming({ deadline: 4000 });
 // After obtaining the region instance:
@@ -35,6 +35,6 @@ Test no-op navigation, aborted changes, repeated selections, and a successor run
 
 ## API Coverage
 
-**glimmer-motion**: `Arming`, `ArmingOptions`, `ArmingRegion`, `createArming`.
+**@cardstack/choreo**: `Arming`, `ArmingOptions`, `ArmingRegion`, `createArming`.
 
 Read the implementation: [`arming.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts).

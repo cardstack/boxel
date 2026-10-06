@@ -1,5 +1,5 @@
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render } from '@ember/test-helpers';
-import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Gallery } from 'test-app/components/gallery';
 import { setupRenderingTest } from 'test-app/tests/helpers';
@@ -17,7 +17,7 @@ function rest() {
  */
 module('Integration | motion | gallery demos stay alive', function (hooks) {
   setupRenderingTest(hooks);
-  setupMotion(hooks);
+  setupChoreo(hooks);
 
   test('a whileInView row still waits to be scrolled into view', async function (assert) {
     await render(<template><Gallery /></template>);

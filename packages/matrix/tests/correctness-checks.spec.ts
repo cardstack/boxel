@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.ts';
 import { putEvent } from '../support/synapse/index.ts';
 import {
@@ -25,6 +26,139 @@ const serverIndexUrl = new URL(appURL).origin;
 
 function uniqueRealmName(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// The functionName the host gives the run-realm-code tool: its name plus a
+// hash of its code ref.
+const RUN_REALM_CODE_TOOL_NAME = 'run-realm-code_6b92';
+
+// A room's default skill declares no tools, so run-realm-code has to come from
+// a skill attached to the room. The skill does not require approval, so the
+// host runs the tool as soon as the request arrives.
+async function attachRunRealmCodeSkill(page: Page, realmURL: string) {
+  let skillId = await postNewCard(page, realmURL, {
+    data: {
+      attributes: {
+        cardTitle: 'Run Realm Code',
+        instructions: 'Use run-realm-code to edit realm source files.',
+        commands: [
+          {
+            codeRef: {
+              module: '@cardstack/boxel-host/tools/run-realm-code',
+              name: 'default',
+            },
+            requiresApproval: false,
+          },
+        ],
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/skill',
+          name: 'Skill',
+        },
+      },
+    },
+  });
+  await page
+    .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+    .click();
+  await page
+    .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
+    .click();
+  await page.locator(`[data-test-item-button="${skillId}"]`).click();
+  await page.locator('[data-test-card-chooser-go-button]').click();
+  await expect(
+    page.locator(`[data-test-pill-menu-item="${skillId}"]`),
+  ).toHaveCount(1);
+  await page.locator('[data-test-pill-menu-detail-close]').click();
+}
+
+// Sends a run-realm-code tool request as the bot, waits for the host to run
+// it, and checks that the tool result attaches each touched file: those
+// attachments are what the AI bot runs its correctness check on.
+async function runRealmCode({
+  page,
+  username,
+  password,
+  botAccessToken,
+  roomId,
+  agentId,
+  realmURL,
+  code,
+  touchedFiles,
+}: {
+  page: Page;
+  username: string;
+  password: string;
+  botAccessToken: string;
+  roomId: string;
+  agentId: string;
+  realmURL: string;
+  code: string;
+  touchedFiles: string[];
+}) {
+  let toolCallId = `run-realm-code-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+  await putEvent(botAccessToken, roomId, 'm.room.message', toolCallId, {
+    body: '',
+    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+    format: 'org.matrix.custom.html',
+    isStreamingFinished: true,
+    data: {
+      context: {
+        agentId,
+      },
+    },
+    [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+      {
+        id: toolCallId,
+        name: RUN_REALM_CODE_TOOL_NAME,
+        arguments: {
+          description: 'Edit realm source files',
+          attributes: {
+            code,
+            realm: realmURL,
+            roomId,
+          },
+        },
+      },
+    ],
+  });
+
+  await page
+    .locator(
+      `[data-test-tool-call-id="${toolCallId}"] [data-test-apply-state="applied"]`,
+    )
+    .waitFor();
+
+  let toolResultEvent: any;
+  await expect(async () => {
+    let events = await getRoomEvents(username, password, roomId);
+    toolResultEvent = events.find(
+      (e: any) =>
+        e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        e.content.commandRequestId === toolCallId,
+    );
+    expect(toolResultEvent).toBeDefined();
+  }).toPass();
+  expect(toolResultEvent.content['m.relates_to']?.key).toStrictEqual('applied');
+  let data =
+    typeof toolResultEvent.content.data === 'string'
+      ? JSON.parse(toolResultEvent.content.data)
+      : toolResultEvent.content.data;
+  expect(
+    (data.attachedFiles ?? []).map(
+      (file: { sourceUrl?: string }) => file.sourceUrl,
+    ),
+  ).toEqual(touchedFiles);
+}
+
+// The script a run-realm-code call runs for one exact-text replacement.
+function replaceScript(fileUrl: string, search: string, replacement: string) {
+  return `await realm.fs.replace(${JSON.stringify(fileUrl)}, ${JSON.stringify(
+    search,
+  )}, ${JSON.stringify(replacement)});`;
 }
 
 test.describe('Correctness Checks', () => {
@@ -67,6 +201,7 @@ test.describe('Correctness Checks', () => {
     await expect(
       page.locator(`[data-test-stack-card="${cardId}"]`),
     ).toHaveCount(1);
+    await attachRunRealmCodeSkill(page, realmURL);
 
     // Use the existing agentId from sessionStorage (same source the host uses) so the command auto-applies
     let agentId = await page.evaluate(() => {
@@ -220,62 +355,18 @@ test.describe('Correctness Checks', () => {
     expect(cardJson.data.attributes.correct).toBe(true);
     expect(cardJson.data.attributes.errors).toHaveLength(0);
 
-    // --- Break the card using a search/replace code patch message ---
-    let realmToken = await page.evaluate((realmURL) => {
-      let sessions = JSON.parse(
-        window.localStorage.getItem('boxel-session') ?? '{}',
-      );
-      return sessions[realmURL];
-    }, realmURL);
-    expect(realmToken).toBeDefined();
-
-    let originalResponse = await fetch(cardFileUrl, {
-      headers: {
-        Authorization: realmToken as string,
-      },
-    });
-
-    let originalContent = await originalResponse.text();
-    let brokenContent = originalContent.replace(
-      `"hasError": false`,
-      `"hasError": true`,
-    );
-
-    const breakMessageBody = `\`\`\`
-${cardId}.json
-╔═══ SEARCH ════╗
-${originalContent}
-╠═══════════════╣
-${brokenContent}
-╚═══ REPLACE ═══╝
-\`\`\``;
-
-    await putEvent(
-      botCredentials.accessToken,
+    // --- Break the card with a run-realm-code tool call ---
+    await runRealmCode({
+      page,
+      username,
+      password,
+      botAccessToken: botCredentials.accessToken,
       roomId,
-      'm.room.message',
-      'break',
-      {
-        body: breakMessageBody,
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-        data: JSON.stringify({
-          context: {
-            agentId,
-          },
-        }),
-      },
-    );
-
-    let acceptAllButton = page.locator('[data-test-accept-all]');
-    await acceptAllButton.waitFor();
-    await acceptAllButton.click();
-    await page
-      .locator(
-        `[data-test-message-idx="1"] [data-test-code-block-index="0"] [data-test-apply-state="applied"]`,
-      )
-      .waitFor();
+      agentId,
+      realmURL,
+      code: replaceScript(cardFileUrl, `"hasError": false`, `"hasError": true`),
+      touchedFiles: [cardFileUrl],
+    });
 
     // --- Run correctness check again; this time expect errors ---
     const failingCommandRequestId = `check-correctness-${Date.now()}`;
@@ -382,42 +473,18 @@ ${brokenContent}
       'hasError was set to true because we deliberately want to get this card to a broken state',
     );
 
-    // --- Revert the card using a search/replace code patch message and verify correctness is restored ---
-    const revertMessageBody = `\`\`\`
-${cardId}.json
-╔═══ SEARCH ════╗
-${brokenContent}
-╠═══════════════╣
-${originalContent}
-╚═══ REPLACE ═══╝
-\`\`\``;
-
-    await putEvent(
-      botCredentials.accessToken,
+    // --- Revert the card with a run-realm-code tool call and verify correctness is restored ---
+    await runRealmCode({
+      page,
+      username,
+      password,
+      botAccessToken: botCredentials.accessToken,
       roomId,
-      'm.room.message',
-      'revert',
-      {
-        body: revertMessageBody,
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-        data: JSON.stringify({
-          context: {
-            agentId,
-          },
-        }),
-      },
-    );
-
-    acceptAllButton = page.locator('[data-test-accept-all]');
-    await acceptAllButton.waitFor();
-    await acceptAllButton.click();
-    await page
-      .locator(
-        `[data-test-message-idx="3"] [data-test-code-block-index="0"] [data-test-apply-state="applied"]`,
-      )
-      .waitFor();
+      agentId,
+      realmURL,
+      code: replaceScript(cardFileUrl, `"hasError": true`, `"hasError": false`),
+      touchedFiles: [cardFileUrl],
+    });
 
     // Run correctness check again
     const finalCommandRequestId = `check-correctness-${Date.now()}`;
@@ -508,6 +575,8 @@ ${originalContent}
   test('checkCorrectness surfaces module errors and verifies fix for gts files', async ({
     page,
   }) => {
+    // The check can run more than once while the realm reindexes the module.
+    test.slow();
     const { username, password, credentials } =
       await createSubscribedUserAndLogin(
         page,
@@ -533,7 +602,8 @@ export class ImportCheck extends CardDef {
 }
 `.trim();
     const originalModuleContent = `${originalModuleSource}\n`;
-    const brokenModuleContent = originalModuleContent.replace(
+    const originalImport = `import { CardDef, field, contains, StringField } from '@cardstack/base/card-api';`;
+    const brokenImport = originalImport.replace(
       `@cardstack/base/card-api'`,
       `@cardstack/base/card-api-broken'`,
     );
@@ -593,127 +663,122 @@ export class ImportCheck extends CardDef {
       moduleUrl,
     );
 
-    let appliedLocator = page.locator('[data-test-apply-state="applied"]');
-    async function applyPatchMessage(messageBody: string) {
-      let appliedCountBefore = await appliedLocator.count();
-      await putEvent(
-        botCredentials.accessToken,
-        roomId,
-        'm.room.message',
-        `patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        {
-          body: messageBody,
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          isStreamingFinished: true,
-          data: JSON.stringify({
-            context: {
-              agentId,
-            },
-          }),
-        },
-      );
+    await attachRunRealmCodeSkill(page, realmURL);
 
-      let acceptAllButton = page.locator('[data-test-accept-all]');
-      await acceptAllButton.waitFor();
-      await acceptAllButton.click();
-      await expect(appliedLocator).toHaveCount(appliedCountBefore + 1);
-    }
+    await runRealmCode({
+      page,
+      username,
+      password,
+      botAccessToken: botCredentials.accessToken,
+      roomId,
+      agentId,
+      realmURL,
+      code: replaceScript(moduleUrl, originalImport, brokenImport),
+      touchedFiles: [moduleUrl],
+    });
 
-    const breakMessageBody = `\`\`\`
-${moduleUrl}
-╔═══ SEARCH ════╗
-${originalModuleContent}
-╠═══════════════╣
-${brokenModuleContent}
-╚═══ REPLACE ═══╝
-\`\`\``;
-    await applyPatchMessage(breakMessageBody);
-
+    // The run-realm-code result says the module was saved, not that the realm
+    // has reindexed it, and the check reads the index. A check that runs
+    // first reports the previous state, so the check is sent again until it
+    // reports the expected result.
     async function runCorrectnessCommand(
-      commandRequestId: string,
       description: string,
-      expectedApplyState: 'applied' | 'applied-with-error' = 'applied',
+      expectCorrect: boolean,
     ) {
-      let toolRequests = [
-        {
-          id: commandRequestId,
-          name: 'checkCorrectness',
-          arguments: {
-            description,
-            attributes: {
-              targetType: 'file',
-              targetRef: moduleUrl,
-              fileUrl: moduleUrl,
-              roomId,
-            },
-          },
-        },
-      ];
-
-      await putEvent(
-        credentials.accessToken,
-        roomId,
-        'm.room.message',
-        commandRequestId,
-        {
-          body: '',
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          isStreamingFinished: true,
-          data: {
-            context: {
-              agentId,
-            },
-          },
-          [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
-        },
-      );
-
-      let commandContainer = page.locator(
-        `[data-test-tool-call-id="${commandRequestId}"]`,
-      );
-      await commandContainer.waitFor();
-      await commandContainer
-        .locator(`[data-test-apply-state="${expectedApplyState}"]`)
-        .waitFor();
-
-      let toolResultEvent: any;
+      let resultJson: any;
       await expect(async () => {
-        let events = await getRoomEvents(username, password, roomId);
-        toolResultEvent = events.find(
-          (e: any) =>
-            e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
-            e.content.commandRequestId === commandRequestId,
+        let commandRequestId = `check-module-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 6)}`;
+        let toolRequests = [
+          {
+            id: commandRequestId,
+            name: 'checkCorrectness',
+            arguments: {
+              description,
+              attributes: {
+                targetType: 'file',
+                targetRef: moduleUrl,
+                fileUrl: moduleUrl,
+                roomId,
+              },
+            },
+          },
+        ];
+
+        await putEvent(
+          credentials.accessToken,
+          roomId,
+          'm.room.message',
+          commandRequestId,
+          {
+            body: '',
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            data: {
+              context: {
+                agentId,
+              },
+            },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
+          },
         );
-        expect(toolResultEvent).toBeDefined();
-      }).toPass();
 
-      let commandResultData =
-        typeof toolResultEvent!.content.data === 'string'
-          ? JSON.parse(toolResultEvent!.content.data)
-          : toolResultEvent!.content.data;
-      expect(commandResultData.card).toBeDefined();
-      expect(commandResultData.card.url).toBeDefined();
+        let commandContainer = page.locator(
+          `[data-test-tool-call-id="${commandRequestId}"]`,
+        );
+        await commandContainer
+          .locator(
+            '[data-test-apply-state="applied"], [data-test-apply-state="applied-with-error"]',
+          )
+          .waitFor();
 
-      let cardUrl = commandResultData.card.url;
-      let response: Response | undefined;
-      await expect(async () => {
-        response = await fetch(cardUrl, {
-          headers: {
-            Authorization: `Bearer ${credentials.accessToken}`,
-          },
-        });
-        expect(response.ok).toBe(true);
-      }).toPass();
+        let toolResultEvent: any;
+        await expect(async () => {
+          let events = await getRoomEvents(username, password, roomId);
+          toolResultEvent = events.find(
+            (e: any) =>
+              e.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+              e.content.commandRequestId === commandRequestId,
+          );
+          expect(toolResultEvent).toBeDefined();
+        }).toPass();
 
-      return await response!.json();
+        let commandResultData =
+          typeof toolResultEvent!.content.data === 'string'
+            ? JSON.parse(toolResultEvent!.content.data)
+            : toolResultEvent!.content.data;
+        expect(commandResultData.card).toBeDefined();
+        expect(commandResultData.card.url).toBeDefined();
+
+        let cardUrl = commandResultData.card.url;
+        let response: Response | undefined;
+        await expect(async () => {
+          response = await fetch(cardUrl, {
+            headers: {
+              Authorization: `Bearer ${credentials.accessToken}`,
+            },
+          });
+          expect(response.ok).toBe(true);
+        }).toPass();
+
+        resultJson = await response!.json();
+        expect(resultJson.data.attributes.correct).toBe(expectCorrect);
+        await expect(
+          commandContainer.locator(
+            `[data-test-apply-state="${
+              expectCorrect ? 'applied' : 'applied-with-error'
+            }"]`,
+          ),
+        ).toHaveCount(1);
+      }).toPass({ intervals: [1_000, 2_000, 5_000] });
+      return resultJson;
     }
 
     let failingResult = await runCorrectnessCommand(
-      `check-module-${Date.now()}`,
       'Check correctness of broken module',
-      'applied-with-error',
+      false,
     );
 
     expect(failingResult.data.attributes.correct).toBe(false);
@@ -725,20 +790,28 @@ ${brokenModuleContent}
       ),
     ).toBe(true);
 
-    const fixMessageBody = `\`\`\`
-${moduleUrl}
-╔═══ SEARCH ════╗
-} from '@cardstack/base/card-api-broken';
-╠═══════════════╣
-} from '@cardstack/base/card-api';
-╚═══ REPLACE ═══╝
-\`\`\``;
-    await applyPatchMessage(fixMessageBody);
+    await runRealmCode({
+      page,
+      username,
+      password,
+      botAccessToken: botCredentials.accessToken,
+      roomId,
+      agentId,
+      realmURL,
+      // The lint step that runs before each save can re-wrap the import, so
+      // the fix searches only the broken module specifier, which stays
+      // unique however the line is wrapped.
+      code: replaceScript(
+        moduleUrl,
+        `'@cardstack/base/card-api-broken'`,
+        `'@cardstack/base/card-api'`,
+      ),
+      touchedFiles: [moduleUrl],
+    });
 
     let fixedResult = await runCorrectnessCommand(
-      `check-module-${Date.now()}`,
       'Check correctness after fixing module import',
-      'applied',
+      true,
     );
 
     expect(fixedResult.data.attributes.correct).toBe(true);

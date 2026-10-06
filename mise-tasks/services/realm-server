@@ -97,6 +97,16 @@ else
   WORKER_MANAGER_ARG="$1"
 fi
 
+# The realms start one after another, in the order the reconciler's unordered
+# read of realm_registry returns them: on a fresh database, the order of the
+# --path arguments below; on an existing one, not guaranteed. A realm with no
+# index yet waits for its boot index before the next realm starts, so on a
+# fresh database (CI without the index cache) the boot indexes run in this
+# order. Each also spawns a prerender-html job that a worker runs to
+# completion, and a later realm's boot index waits whenever every worker
+# (WORKER_ALL_PRIORITY_COUNT, 1 by default) is inside such a pass, so a large
+# realm delays the realms after it. pretui, the largest, goes last so the
+# realms test stacks wait on are not queued behind its index or its HTML pass.
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -133,11 +143,6 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
-  --path='../pretui' \
-  --username='pretui_realm' \
-  --fromUrl='@cardstack/pretui/' \
-  --toUrl="${REALM_BASE_URL}/pretui/" \
-  \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
   ${START_SUBMISSION:+--username='submission_realm'} \
   ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
@@ -162,4 +167,9 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
   ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  --path='../pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl="${REALM_BASE_URL}/pretui/" \
   2>&1 | "$LOG_TEE" realm-server

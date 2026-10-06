@@ -5,21 +5,11 @@
  * page origin. ember-testing renders inside a 50%-scaled container, so for these suites the container
  * is pinned to the viewport origin at Cypress' size, unscaled, and made the containing block for
  * position: fixed descendants (contain: layout), so full-viewport overlays in fixtures get Cypress' viewport too
- * (not in `scroll` mode: layout containment would also stop the document from growing, and scrolling). `should()` keeps Cypress' retry semantics:
- * the assertions are re-run until they pass or 4s elapse, then asserted for real.
+ * (not in `scroll` mode: layout containment would also stop the document from growing, and scrolling).
  */
-import { settled } from '@ember/test-helpers';
 import { rootProjectionNode } from 'motion-dom';
 
 import { sleep } from './motion';
-
-export interface Bbox {
-  height?: number;
-  left?: number;
-  top?: number;
-  width?: number;
-}
-type Rounding = 'exact' | 'round' | 'floor';
 
 export function setupFixtureViewport(
   hooks: NestedHooks,
@@ -86,94 +76,6 @@ export function setupFixtureViewport(
   });
 }
 
-class ProbeFailure extends Error {}
-/** a throwing stand-in for QUnit's assert, used while retrying */
-const probe = {
-  strictEqual(a: unknown, b: unknown, msg?: string) {
-    if (a !== b) {
-      throw new ProbeFailure(
-        `${msg ?? ''} expected ${String(b)} got ${String(a)}`
-      );
-    }
-  },
-  notStrictEqual(a: unknown, b: unknown, msg?: string) {
-    if (a === b) {
-      throw new ProbeFailure(`${msg ?? ''} expected not ${String(b)}`);
-    }
-  },
-  true(v: unknown, msg?: string) {
-    if (v !== true) {
-      throw new ProbeFailure(`${msg ?? ''} expected true`);
-    }
-  },
-  false(v: unknown, msg?: string) {
-    if (v !== false) {
-      throw new ProbeFailure(`${msg ?? ''} expected false`);
-    }
-  },
-  ok(v: unknown, msg?: string) {
-    if (!v) {
-      throw new ProbeFailure(`${msg ?? ''} expected truthy`);
-    }
-  },
-  closeTo(a: number, b: number, d: number, msg?: string) {
-    if (Math.abs(a - b) > d) {
-      throw new ProbeFailure(`${msg ?? ''} expected ${a} within ${d} of ${b}`);
-    }
-  },
-};
-export type ProbeAssert = typeof probe;
-
-/** cy.should(fn): retry until the assertions hold (or 4s), then assert for real */
-export async function should(
-  assert: Assert,
-  fn: (a: ProbeAssert) => void,
-  timeout = 4000
-) {
-  const t0 = performance.now();
-  for (;;) {
-    try {
-      fn(probe);
-      break;
-    } catch (e) {
-      if (!(e instanceof ProbeFailure) || performance.now() - t0 > timeout) {
-        break;
-      }
-    }
-    await sleep(16);
-  }
-  const real: ProbeAssert = {
-    strictEqual: (a, b, m) => assert.strictEqual(a, b, m),
-    notStrictEqual: (a, b, m) => assert.notStrictEqual(a, b, m),
-    true: (v, m) => assert.true(v as boolean, m),
-    false: (v, m) => assert.false(v as boolean, m),
-    ok: (v, m) => assert.ok(v, m),
-    closeTo: (a, b, d, m) =>
-      assert.true(Math.abs(a - b) <= d, `${m ?? ''} ${a} within ${d} of ${b}`),
-  };
-  fn(real);
-}
-
-export function expectBbox(
-  a: ProbeAssert,
-  el: Element,
-  expected: Bbox,
-  rounding: Rounding = 'exact'
-) {
-  const r = el.getBoundingClientRect();
-  const f =
-    rounding === 'round'
-      ? Math.round
-      : rounding === 'floor'
-        ? Math.floor
-        : (n: number) => n;
-  for (const key of ['top', 'left', 'width', 'height'] as const) {
-    if (expected[key] !== undefined) {
-      a.strictEqual(f(r[key]), expected[key], key);
-    }
-  }
-}
-
 export const wait = sleep;
 export const $ = (sel: string) => document.querySelector(sel) as HTMLElement;
 
@@ -212,24 +114,4 @@ export function trigger(
   });
   el.dispatchEvent(ev);
   return ev;
-}
-
-/** cy.click(): pointer + mouse down/up then click, at the element's centre */
-export async function cyClick(target: Element | string) {
-  const el = typeof target === 'string' ? $(target) : target;
-  const r = el.getBoundingClientRect();
-  const init = {
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-    clientX: r.left + r.width / 2,
-    clientY: r.top + r.height / 2,
-    button: 0,
-  };
-  trigger(el, 'pointerdown');
-  el.dispatchEvent(new MouseEvent('mousedown', { ...init, buttons: 1 }));
-  trigger(el, 'pointerup');
-  el.dispatchEvent(new MouseEvent('mouseup', init));
-  el.dispatchEvent(new MouseEvent('click', init));
-  await settled();
 }

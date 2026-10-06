@@ -23,6 +23,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -264,17 +265,30 @@ module(basename(import.meta.filename), function (hooks) {
     educationAdapter = result.realmAdapters[index];
   }
 
+  async function stop() {
+    education.__testOnlySetBeforeBatchLock(undefined);
+    education.__testOnlyClearCaches();
+    education.unsubscribe();
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      education.__testOnlySetBeforeBatchLock(undefined);
-      education.__testOnlyClearCaches();
-      education.unsubscribe();
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   function bearer(
@@ -430,6 +444,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 2,
           pendingDischarges: 2,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each write’s predicate was evaluated once, under the lock',
       );
@@ -524,6 +539,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'neither write rested on a predicate',
       );
@@ -709,6 +725,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 2,
           pendingDischarges: 2,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'both predicates were evaluated under the lock',
       );
@@ -1233,6 +1250,7 @@ module(basename(import.meta.filename), function (hooks) {
         predicateEvaluations: 0,
         pendingDischarges: 0,
         definitionLookups: 0,
+        snapshotReads: 0,
       });
     });
   });

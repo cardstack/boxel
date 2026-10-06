@@ -35,6 +35,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
@@ -353,20 +354,33 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
+  async function stop() {
+    setCapabilityCheckSink(undefined);
+    setOperationPerfSink(undefined);
+    for (let realm of [education, org, library]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      setCapabilityCheckSink(undefined);
-      setOperationPerfSink(undefined);
-      for (let realm of [education, org, library]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
-      }
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   function bearer(
@@ -380,6 +394,20 @@ module(basename(import.meta.filename), function (hooks) {
     admin: () => bearer(ADMIN, ['read', 'write', 'realm-owner']),
     reader: () => bearer(READER, ['read']),
     teacher: () => bearer(TEACHER),
+    // The session a realm renders its own cards under, reading as the
+    // teacher.
+    teacherRealmRender: () =>
+      `Bearer ${education.createJWT(
+        {
+          user: TEACHER,
+          realm: education.url,
+          permissions: [],
+          sessionRoom: `test-session-room-for-${TEACHER}`,
+          realmServerURL: education.realmServerURL,
+          realmAuthority: true,
+        },
+        '7d',
+      )}`,
   };
 
   function path(url: string) {
@@ -513,6 +541,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );
@@ -549,6 +578,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each write reached the policy once and the read never did',
       );
@@ -753,6 +783,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 2,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'each predicate was evaluated once, and neither by the path that holds the write lock',
       );
@@ -996,6 +1027,7 @@ module(basename(import.meta.filename), function (hooks) {
           predicateEvaluations: 0,
           pendingDischarges: 0,
           definitionLookups: 0,
+          snapshotReads: 0,
         },
         'the gate did nothing for any of them',
       );
@@ -1053,14 +1085,33 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a request a render sends is judged as the search it sends is', async function (assert) {
       let pair = { target: CLASSROOM, operation: 'listMine' };
-      let rendering = await check(AUTH.teacher(), [pair]).set(
+      let rendering = await check(AUTH.teacherRealmRender(), [pair]).set(
         DURING_PRERENDER_HEADER,
         'true',
       );
       assert.deepEqual<unknown[]>(
         (rendering.body as { checks: CapabilityAnswer[] }).checks,
         [{ ...pair, allowed: false }],
-        "a render runs under the realm's own authority, which no policy grants anything",
+        "a realm's own render runs under the realm's own authority, which no policy grants anything",
+      );
+      assert.deepEqual(
+        ids(
+          await realmSearch(AUTH.teacherRealmRender(), searchFor(pair)).set(
+            DURING_PRERENDER_HEADER,
+            'true',
+          ),
+        ),
+        [],
+        'as the search it sends is served no rows',
+      );
+      let askedFor = await check(AUTH.teacher(), [pair]).set(
+        DURING_PRERENDER_HEADER,
+        'true',
+      );
+      assert.deepEqual<unknown[]>(
+        (askedFor.body as { checks: CapabilityAnswer[] }).checks,
+        [{ ...pair, allowed: true }],
+        "a render a user asks for runs on that user's own session, and is judged as them",
       );
       assert.deepEqual(
         ids(
@@ -1069,13 +1120,13 @@ module(basename(import.meta.filename), function (hooks) {
             'true',
           ),
         ),
-        [],
-        'as the search it sends is served no rows',
+        MINE,
+        'as the search it sends is served their classrooms',
       );
       assert.deepEqual(
         (await answers(AUTH.teacher(), [pair])).map((a) => a.allowed),
         [true],
-        'while the same session outside a render is allowed',
+        'and so is the same session outside a render',
       );
       assert.deepEqual(
         ids(await realmSearch(AUTH.teacher(), searchFor(pair))),

@@ -66,7 +66,7 @@ or the migration is rebased twice.
 
 Three things have to be true at the end, and each is testable:
 
-- **Engine:** `Attach` and `Value` are in `packages/glimmer-motion/src/choreo`
+- **Engine:** `Attach` and `Value` are in `packages/choreo/src`
   with contract tests; `mute`, `bias` and path names are on blocks; the
   run has `loop` / `hold` / a resuming `play()`.
 - **Sample code:** every film and film-shaped demo — Sagrada, Towers, the
@@ -89,7 +89,7 @@ current engine and every phase must reproduce them to the frame.
 > `wip/choreo-gallery-restructure` and main reset to `origin/main`. The
 > schedule — `totalSecs`, `secsBefore`, `beatStart`, `cues`,
 > `chapterHeads`, `contents`, `joinInto`, `tailFor`, `waypoints` — is
-> `packages/glimmer-motion/src/film/schedule.ts`, pure, and `film.gts`
+> `packages/choreo/src/film/schedule.ts`, pure, and `film.gts`
 > delegates to it. Both films' data moved to `test-app/app/lib/films/`
 > (no Ember in them). `scripts/film-fixtures.mjs` writes
 > `test-app/tests/fixtures/film/{sagrada,towers}.json` headless on

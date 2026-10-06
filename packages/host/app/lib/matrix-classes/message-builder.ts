@@ -26,8 +26,6 @@ import {
   APP_BOXEL_RELOAD_BILLING_DATA_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -44,7 +42,6 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import { Message } from './message';
-import MessageCodePatchResult from './message-code-patch-result';
 import MessageTool from './message-tool';
 
 import type { RoomMember } from './member';
@@ -53,7 +50,6 @@ import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
-  CodePatchResultEvent,
   DebugMessageEvent,
   ToolResultEvent,
   EncodedToolRequest,
@@ -84,7 +80,6 @@ export default class MessageBuilder {
       index: number;
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
-      codePatchResultEvent?: CodePatchResultEvent;
       toolResultEvent?: ToolResultEvent;
     },
   ) {
@@ -125,6 +120,18 @@ export default class MessageBuilder {
 
   get clientGeneratedId() {
     return (this.event.content as CardMessageContent).clientGeneratedId;
+  }
+
+  get typedByUser() {
+    let data: unknown = (this.event.content as CardMessageContent).data;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch {
+        return false;
+      }
+    }
+    return (data as CardMessageContent['data'])?.context?.typedByUser === true;
   }
 
   get attachedCardIds() {
@@ -181,6 +188,7 @@ export default class MessageBuilder {
       event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
     ) {
       message.clientGeneratedId = this.clientGeneratedId;
+      message.typedByUser = this.typedByUser;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
       message.reloadBillingData = shouldReloadBillingData(event.content);
@@ -189,7 +197,6 @@ export default class MessageBuilder {
       if (getToolRequests(event.content)) {
         message.setTools(await this.buildMessageCommands(message));
       }
-      message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
@@ -268,7 +275,7 @@ export default class MessageBuilder {
         (c) => c.toolRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        this.applyToolRequestChunk(command, encodedCommandRequest);
+        await this.updateExistingTool(message, command, encodedCommandRequest);
       } else {
         let built = await this.buildMessageCommand(
           message,
@@ -284,7 +291,11 @@ export default class MessageBuilder {
           (c) => c.toolRequest.id === encodedCommandRequest.id,
         );
         if (existing) {
-          this.applyToolRequestChunk(existing, encodedCommandRequest);
+          await this.updateExistingTool(
+            message,
+            existing,
+            encodedCommandRequest,
+          );
         } else {
           message.tools.push(built);
         }
@@ -321,8 +332,46 @@ export default class MessageBuilder {
     }
   }
 
-  updateMessageCodePatchResult(message: Message) {
-    message.codePatchResults = this.buildMessageCodePatchResults(message);
+  // A MessageTool resolves its tool (codeRef, approval, verb) once, when the
+  // first chunk of its request arrives. Resolve again when a later chunk
+  // renames the request, or when the finished request still has no tool: the
+  // first chunk can carry a name that is not complete yet, or the declaring
+  // skill can fail to load, and without this the call fails at validation
+  // with "No command for the name" although its skill declares it.
+  private async updateExistingTool(
+    message: Message,
+    tool: MessageTool,
+    encodedToolRequest: Partial<EncodedToolRequest>,
+  ) {
+    let decoded = decodeToolRequest(encodedToolRequest);
+    let renamed = !!decoded.name && decoded.name !== tool.name;
+    // Only a call nothing has answered yet: a result already recorded for it
+    // stays as it is.
+    let unresolvedAtEnd =
+      tool.toolCallStatus === 'ready' &&
+      !tool.codeRef &&
+      !!decoded.name &&
+      decoded.executedBy !== AI_BOT_EXECUTOR &&
+      !!(this.event.content as CardMessageContent).isStreamingFinished;
+    if (
+      (!renamed && !unresolvedAtEnd) ||
+      this.event.origin_server_ts < tool.toolRequestEventTs
+    ) {
+      this.applyToolRequestChunk(tool, encodedToolRequest);
+      return;
+    }
+    let rebuilt = await this.buildMessageCommand(message, decoded);
+    rebuilt.toolRequestEventTs = this.event.origin_server_ts;
+    // The build awaited network loads; find the tool again, since another
+    // pass may have replaced it or written a newer chunk meanwhile.
+    let index = message.tools.findIndex((c) => c.toolRequest.id === decoded.id);
+    if (index < 0) {
+      message.tools.push(rebuilt);
+    } else if (
+      message.tools[index].toolRequestEventTs <= rebuilt.toolRequestEventTs
+    ) {
+      message.tools.splice(index, 1, rebuilt);
+    }
   }
 
   // Builder passes finishing out of order must not regress a MessageTool's
@@ -411,8 +460,10 @@ export default class MessageBuilder {
         toolRequest,
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
-        false, // requiresApproval — never prompts or runs
-        'Apply', // actionVerb — unused; the indicator shows status, not a Run button
+        false, // requiresApproval — the host never runs it
+        // The only button a bot-run call can show is the approval of a call
+        // ai-bot holds for it (see MessageTool.awaitsApproval).
+        'Approve',
         (toolResultEvent
           ? toolResultEvent.content['m.relates_to']?.key || 'applied'
           : 'applying') as ToolCallStatus,
@@ -511,56 +562,6 @@ export default class MessageBuilder {
       neverAutoExecutes,
     );
     return messageTool;
-  }
-
-  private buildMessageCodePatchResults(message: Message) {
-    let codePatchResultEvents = this.builderContext.events.filter((e: any) => {
-      let r = e.content['m.relates_to'];
-      if (!r) {
-        return false;
-      }
-      return (
-        e.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
-        r.rel_type === APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
-        r.event_id === message.eventId
-      );
-    }) as CodePatchResultEvent[];
-
-    let codePatchResults = new TrackedArray<MessageCodePatchResult>();
-    for (let codePatchResultEvent of codePatchResultEvents) {
-      let finalFileUrlAfterCodePatching =
-        codePatchResultEvent.content.data.attachedFiles?.[0]?.sourceUrl;
-      let originalUploadedFileUrl =
-        codePatchResultEvent.content.data.attachedFiles?.[0]?.url;
-      if (!finalFileUrlAfterCodePatching) {
-        console.error(
-          'Bug: no final file url found for code patch result event - it should have been set',
-          codePatchResultEvent,
-        );
-        continue;
-      }
-      if (!originalUploadedFileUrl) {
-        console.error(
-          'Bug: no original uploaded file url found for code patch result event - it should have been set',
-          codePatchResultEvent,
-        );
-        continue;
-      }
-
-      codePatchResults.push(
-        new MessageCodePatchResult(
-          message,
-          this.builderContext.effectiveEventId,
-          codePatchResultEvent.content['m.relates_to'].key,
-          codePatchResultEvent.content.codeBlockIndex,
-          finalFileUrlAfterCodePatching,
-          originalUploadedFileUrl,
-          getOwner(this)!,
-          codePatchResultEvent.content.failureReason,
-        ),
-      );
-    }
-    return codePatchResults;
   }
 }
 

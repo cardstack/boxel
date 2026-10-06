@@ -57,7 +57,11 @@ import {
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
+import {
+  getLocalConfig as getSynapseConfig,
+  loginAsMatrixAdmin,
+  registerUser,
+} from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
 import type { LiveSearchCache } from '../../live-search-cache.ts';
 import jsonwebtoken from 'jsonwebtoken';
@@ -419,6 +423,31 @@ function getMatrixRegistrationSecret(): string {
 }
 
 export const matrixRegistrationSecret = getMatrixRegistrationSecret();
+
+// Tests that act as the synapse admin `@admin:localhost` (password
+// `password`) call this first. CI registers only the realm-owning users, so
+// the admin is registered on first use; a synapse that already has it keeps
+// the same credentials.
+export async function ensureMatrixAdminUser(): Promise<void> {
+  try {
+    await loginAsMatrixAdmin({
+      matrixURL,
+      adminUsername: 'admin',
+      adminPassword: 'password',
+    });
+    return;
+  } catch {
+    // not registered yet
+  }
+  await registerUser({
+    matrixURL,
+    displayname: 'admin',
+    username: 'admin',
+    password: 'password',
+    registrationSecret: matrixRegistrationSecret,
+    admin: true,
+  });
+}
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
@@ -1703,6 +1732,7 @@ export async function runTestRealmServerWithRealms({
   prerenderer: providedPrerenderer,
   liveSearchCache,
   linkShapePolicy,
+  mediaCacheAdapter,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1729,6 +1759,9 @@ export async function runTestRealmServerWithRealms({
   // Omit and every live read keeps its closure, which is what a server with no
   // admission gate to read a load from would do anyway.
   linkShapePolicy?: LinkShapePolicy;
+  // The store every capture surface persists to: the worker's capture task,
+  // each realm's `_screenshot/` route, and the server's `_screenshot-card`.
+  mediaCacheAdapter?: MediaCacheAdapter;
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1751,6 +1784,7 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mediaCacheAdapter,
   });
   await worker.run();
 
@@ -1777,6 +1811,7 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
+      mediaCacheAdapter,
       // Every realm this server serves, reached as the production server
       // reaches them: found without being mounted.
       realmFor: async (url) =>
@@ -1831,6 +1866,7 @@ export async function runTestRealmServerWithRealms({
     prerenderer,
     liveSearchCache,
     linkShapePolicy,
+    mediaCacheAdapter,
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
@@ -3210,6 +3246,141 @@ export function setupPermissionedRealmsCached(
   });
 }
 
+// Builds a template database once per key, for `setupDB`'s
+// `templateDatabase`, so each test starts from realms already indexed. It is
+// for a suite the cached realm helpers above don't fit, such as several realms
+// on one realm server: `build` brings up what the suite's own `beforeEach`
+// does and returns how to tear it down. Once the builder's queue drains, its
+// database is snapshotted as the template.
+//
+// A realm that boots on a copy finds its index there and skips its boot index
+// (see `Realm#startup`), so the copy has to hold what each test would index:
+// `key` must change whenever what `build` writes does. The cache spans the
+// whole test process, so a module's key must also differ from every other
+// module's: use its full path (`import.meta.filename`), not its basename,
+// which modules in different directories can share.
+export function setupTestDatabaseTemplate(
+  hooks: NestedHooks,
+  {
+    key,
+    build,
+  }: {
+    key: unknown;
+    build: (args: {
+      dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+    }) => Promise<() => Promise<void>>;
+  },
+): () => string | undefined {
+  let cacheKey = hashCacheKeyPayload({ kind: 'test-database-template', key });
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let acquiredTemplateDatabase: string | undefined;
+
+  hooks.before(async function (assert) {
+    // The first acquisition indexes every realm `build` brings up, inside the
+    // module's first test's budget.
+    assert.timeout(300_000);
+    let existing = permissionedRealmTemplateCache.get(cacheKey);
+    if (!existing) {
+      existing = {
+        ready: buildTestDatabaseTemplate(cacheKey, build).catch(
+          async (error) => {
+            permissionedRealmTemplateCache.delete(cacheKey);
+            try {
+              await dropDatabase(templateDatabaseName);
+            } catch {
+              // best-effort cleanup
+            }
+            throw error;
+          },
+        ),
+      };
+      permissionedRealmTemplateCache.set(cacheKey, existing);
+    }
+    await existing.ready;
+    acquiredTemplateDatabase = templateDatabaseName;
+  });
+
+  return () => acquiredTemplateDatabase;
+}
+
+async function buildTestDatabaseTemplate(
+  cacheKey: string,
+  build: Parameters<typeof setupTestDatabaseTemplate>[1]['build'],
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let teardown: (() => Promise<void>) | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'template-worker',
+    });
+
+    teardown = await build({ dbAdapter, publisher, runner });
+    await waitForQueueIdle(builderDatabaseName);
+    await teardown();
+    teardown = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (teardown) {
+      try {
+        await teardown();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
 export function createJWT(
   realm: Realm,
   user: string,
@@ -3282,6 +3453,10 @@ export function realmConfigCardJSON(
     // The pointer to the realm's policy card. Typed loosely so a test can
     // write a malformed one.
     policy?: unknown;
+    // How the realm limits and blocks callers its policy admits without a
+    // session. Typed loosely so a test can write malformed ones.
+    anonymousRateLimit?: unknown;
+    anonymousBlocklist?: unknown;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3306,6 +3481,12 @@ export function realmConfigCardJSON(
   }
   if (config.policy !== undefined) {
     attrs.policy = config.policy;
+  }
+  if (config.anonymousRateLimit !== undefined) {
+    attrs.anonymousRateLimit = config.anonymousRateLimit;
+  }
+  if (config.anonymousBlocklist !== undefined) {
+    attrs.anonymousBlocklist = config.anonymousBlocklist;
   }
   return JSON.stringify({
     data: {

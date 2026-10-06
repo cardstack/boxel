@@ -9,9 +9,21 @@
     "emitDeclarationOnly": false,
     "noEmit": true,
     "paths": {
-      "choreo-gallery/*": ["src/*"]
+      "choreo-gallery/*": ["src/*"],
+      /**
+        choreo-player resolves to its source, so type-checking needs it
+        unbuilt. Its package.json#exports point types at the build output
+        that npm consumers get.
+      */
+      "choreo-player": ["../choreo-player/src/index.ts"],
+      "choreo-player/hyperframes": ["../choreo-player/src/hyperframes.ts"]
     },
-    "rootDir": "./src",
+    /**
+      glimmer-motion and @cardstack/choreo resolve to their source through
+      the `developing:choreo` export condition, so type-checking needs
+      neither built.
+    */
+    "customConditions": ["developing:choreo"],
     "types": ["ember-source/types"]
   }
 }

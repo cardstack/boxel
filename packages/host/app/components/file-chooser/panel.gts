@@ -33,11 +33,13 @@ interface Signature {
   Args: {
     initialRealmURL?: string;
     selectedFile?: LocalPath;
+    multiSelect?: boolean;
+    selectedFiles?: LocalPath[];
     fileTypeFilter?: CodeRef;
     fileFieldFilter?: Record<string, unknown>;
     acceptTypes?: string;
     onRealmChange?: (realm: FileChooserRealm) => void;
-    onFileSelected?: (path: LocalPath) => void;
+    onFileSelected?: (path: LocalPath, realm: FileChooserRealm) => void;
     onFileConfirmed?: (path: LocalPath) => void;
     onUploadComplete: (file: FileDef) => void;
   };
@@ -51,6 +53,8 @@ interface Signature {
         FileTree: WithBoundArgs<
           typeof IndexedFileTree,
           | 'selectedFile'
+          | 'multiSelect'
+          | 'selectedFiles'
           | 'fileTypeFilter'
           | 'fileFieldFilter'
           | 'onFileSelected'
@@ -141,7 +145,9 @@ export default class FileChooser extends Component<Signature> {
 
   @action
   private handleFileSelected(path: LocalPath) {
-    this.args.onFileSelected?.(path);
+    if (this.selectedRealm) {
+      this.args.onFileSelected?.(path, this.selectedRealm);
+    }
   }
 
   @action
@@ -256,6 +262,8 @@ export default class FileChooser extends Component<Signature> {
         FileTree=(component
           IndexedFileTree
           selectedFile=@selectedFile
+          multiSelect=@multiSelect
+          selectedFiles=@selectedFiles
           fileTypeFilter=@fileTypeFilter
           fileFieldFilter=@fileFieldFilter
           onFileSelected=this.handleFileSelected

@@ -8,6 +8,7 @@
  * job of making the drag useless on its own. If a change ever breaks the
  * join, these fail while every rule test still passes.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -94,6 +95,7 @@ async function takeShot(ms: number, steps: number) {
 module('Integration | hang', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
+  setupChoreo(hooks);
 
   test('a flick carries the puck out of the pen under its own speed', async function (assert) {
     await render(<template><Hang /></template>);

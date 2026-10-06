@@ -10,6 +10,7 @@
  * transaction driven here is renderAt(), the same one the capture
  * worker's hf-seek barrier calls.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
@@ -51,6 +52,7 @@ const visuallyGone = (sel: string) => {
 
 module('Acceptance | feature reel transport', function (hooks) {
   setupApplicationTest(hooks);
+  setupChoreo(hooks);
 
   test('the preview PLAYS: WAAPI composites the camera, and cues fire with no recorder', async function (assert) {
     await visit('/_feature-reel');

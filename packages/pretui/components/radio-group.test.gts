@@ -1,5 +1,4 @@
-// Pretui — RadioGroup unit tests. Imports from its own module rather than the
-// './controls' barrel: the per-component test is the unit contract.
+// Pretui — RadioGroup unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness.

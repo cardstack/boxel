@@ -53,6 +53,8 @@ The 30×18 track, 14px thumb and 12px travel are fixed — there is no size axis
 
 A season that sets `--primary` close in luminance to `--line-strong` makes on and off indistinguishable for anyone not perceiving hue; the thumb position is the only other cue, and it is subtle at this size.
 
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+
 ## React ecosystem
 
 Immediate on/off setting. **Toggle** is a pressed _button_ (toolbar).

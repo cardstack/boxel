@@ -11,6 +11,9 @@ on:
       - "packages/boxel-icons/**"
       - "packages/boxel-ui/**"
       - "packages/bxl/**"
+      # Host's tests compile these packages' source.
+      - "packages/choreo/**"
+      - "packages/glimmer-motion/**"
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
       - "packages/runtime-common/**"
@@ -431,10 +434,24 @@ jobs:
       # stack is gone. `$!` is tee's pid, the last process in the pipeline:
       # it exits when the stack's output stream closes, i.e. when nothing in
       # the stack is left running.
+      #
+      # Two all-priority workers rather than the default one. When the index
+      # cache isn't imported (every main run, and any branch that changes how
+      # indexing behaves), the realms boot one at a time, and each realm's
+      # boot index spawns a prerender-html job that a worker claims before the
+      # next realm's boot index is enqueued, then runs to completion. With one
+      # worker, every realm's boot index waits behind the whole HTML pass of
+      # the realm booted before it. With two, a boot index waits only while
+      # both workers are inside HTML passes, which for the realms this job
+      # waits on means base's and skills' passes overlapping. Index visits
+      # outrank prerender-html renders at the prerender server, so a
+      # concurrent HTML pass costs the index little. Set on the command rather
+      # than in `env:` because mise-action has already exported the default
+      # of 1 into the job's environment.
       - name: Start test services (icons + host dist + realm servers)
         run: |
           date +%s > /tmp/test-services.started
-          mise run test-services:host | tee -a /tmp/server.log &
+          WORKER_ALL_PRIORITY_COUNT=2 mise run test-services:host | tee -a /tmp/server.log &
           echo $! > /tmp/test-services.pid
 
       # Register the matrix users (realm_server, base_realm, …) the

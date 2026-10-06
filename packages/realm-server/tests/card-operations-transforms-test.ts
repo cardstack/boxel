@@ -472,12 +472,12 @@ module(basename(import.meta.filename), function () {
     test('the projection question is answerable without assembling', async function (assert) {
       assert.deepEqual(
         await readPlan(stub({ read: REDACTING_READ }), new URL(CARD)),
-        { shape: 'staged', links: 'full' },
+        { shape: 'staged', links: 'full', unshareableFormats: [] },
         'a type that declares an output has a stage to run',
       );
       assert.deepEqual(
         await readPlan(stub(), new URL(CARD)),
-        { shape: 'plain', links: 'full' },
+        { shape: 'plain', links: 'full', unshareableFormats: [] },
         'a type that declares nothing does not',
       );
       assert.deepEqual(
@@ -485,7 +485,7 @@ module(basename(import.meta.filename), function () {
           stub({ read: { base: 'read', deterministic: true } }),
           new URL(CARD),
         ),
-        { shape: 'plain', links: 'full' },
+        { shape: 'plain', links: 'full', unshareableFormats: [] },
         'a declared read with no output does not either',
       );
     });
@@ -500,23 +500,69 @@ module(basename(import.meta.filename), function () {
           stub({ read: { base: 'read', deterministic: true, links: 'ids' } }),
           new URL(CARD),
         ),
-        { shape: 'plain', links: 'ids' },
+        { shape: 'plain', links: 'ids', unshareableFormats: [] },
         'a narrowed read is still plain, and says how far it reaches',
       );
+      // Lowering refuses `none` on a read, so a stored one only ever comes
+      // from an entry that got around it. It is served as `ids`, which still
+      // tells the host what the card links to, so an edit never replaces
+      // links the host was not shown.
+      for (let links of ['none', 'some']) {
+        assert.deepEqual(
+          await readPlan(
+            // What a stored entry holds is JSON, so it is only as good as
+            // whatever wrote it.
+            stub({
+              read: { base: 'read', deterministic: true, links },
+            } as unknown as Definition['operations']),
+            new URL(CARD),
+          ),
+          { shape: 'plain', links: 'ids', unshareableFormats: [] },
+          `a stored read declaring "${links}" names its links`,
+        );
+      }
       assert.deepEqual(
         await readPlan(
           stub({
             read: {
               base: 'read',
               deterministic: true,
-              links: 'none',
+              links: 'ids',
               output: { source: '{title:.title}', syntax: 'solidified' },
             },
           }),
           new URL(CARD),
         ),
-        { shape: 'staged', links: 'none' },
+        { shape: 'staged', links: 'ids', unshareableFormats: [] },
         'the two answers are independent',
+      );
+    });
+
+    test('the formats a read serves data-only are answerable without assembling', async function (assert) {
+      // The single-card HTML read and the host-mode page serve a card's
+      // markup without running its read, so the declaration has to be
+      // reachable from the definition alone.
+      assert.deepEqual(
+        await readPlan(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              html: {
+                isolated: 'unshareable',
+                embedded: 'shareable',
+                fitted: 'unshareable',
+              },
+            },
+          }),
+          new URL(CARD),
+        ),
+        {
+          shape: 'plain',
+          links: 'full',
+          unshareableFormats: ['fitted', 'isolated'],
+        },
+        'the unshareable formats, in the realm’s own format order',
       );
     });
 
@@ -541,8 +587,20 @@ module(basename(import.meta.filename), function () {
           new URL(CARD),
         ),
         // The widest strategy, which is the one that keeps the caller off
-        // every fast path a narrower answer would have opened.
-        { shape: 'unresolved', links: 'full' },
+        // every fast path a narrower answer would have opened — and every
+        // format data-only, since the routes that serve markup without
+        // running the read have no refusal coming to stand in for it.
+        {
+          shape: 'unresolved',
+          links: 'full',
+          unshareableFormats: [
+            'embedded',
+            'fitted',
+            'atom',
+            'head',
+            'isolated',
+          ],
+        },
         'a refusal is coming, and only the full request can report it',
       );
     });
