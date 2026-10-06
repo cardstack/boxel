@@ -73,6 +73,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
   "count": 1
 }
 `,
+          'notes/first.md': '# First\n',
         },
       }),
     );
@@ -411,5 +412,53 @@ return found;`,
 
     assert.ok(error, 'the run rejected');
     assert.strictEqual(error?.message, 'interrupted');
+  });
+
+  test('lists a directory without counting toward the file limit', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return {
+  root: await realm.fs.list(),
+  notes: await realm.fs.list('notes'),
+  notesWithSlash: await realm.fs.list('notes/'),
+  notesByURL: await realm.fs.list(${JSON.stringify(`${testRealmURL}notes/`)}),
+};`,
+    });
+
+    assert.deepEqual(result.files, [], 'a listing saves nothing');
+    let listed = JSON.parse(result.scriptResult!);
+    assert.deepEqual(
+      listed.root.find((entry: { name: string }) => entry.name === 'task.json'),
+      { name: 'task.json', path: 'task.json', kind: 'file' },
+    );
+    assert.deepEqual(
+      listed.root.find((entry: { name: string }) => entry.name === 'notes'),
+      { name: 'notes', path: 'notes/', kind: 'directory' },
+    );
+    let notes = [{ name: 'first.md', path: 'notes/first.md', kind: 'file' }];
+    assert.deepEqual(listed.notes, notes);
+    assert.deepEqual(listed.notesWithSlash, notes);
+    assert.deepEqual(listed.notesByURL, notes);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.list('../');`,
+      }),
+      /Path must be relative to the realm root/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.list('missing');`,
+      }),
+      /Directory not found/,
+    );
   });
 });

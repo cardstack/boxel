@@ -121,9 +121,9 @@ export async function compilePolicyFilter(
     .filter((issue) => issue.severity === 'error');
   if (refusals.length > 0) {
     return {
-      problem: `it uses something a search filter can't use: ${refusals
-        .map((issue) => `${issue.code}: ${issue.message}`)
-        .join('; ')}`,
+      problem: `it uses something a search filter can't use:\n${refusals
+        .map((issue) => `- ${issue.code}: ${issue.message}`)
+        .join('\n')}`,
     };
   }
   let compiler = new FilterCompiler(definition, predicate.snapshot, env);

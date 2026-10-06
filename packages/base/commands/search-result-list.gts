@@ -81,6 +81,7 @@ export class SearchResultList<T> extends GlimmerComponent<
         {{#if this.hasMore}}
           <Button
             @size='small'
+            @kind='secondary'
             class='toggle-show'
             {{on 'click' this.toggle}}
             data-test-toggle-show-button
@@ -98,9 +99,6 @@ export class SearchResultList<T> extends GlimmerComponent<
     </div>
     <style scoped>
       .tool-call-result {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
         --left-padding: var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
@@ -112,21 +110,12 @@ export class SearchResultList<T> extends GlimmerComponent<
         text-overflow: ellipsis;
       }
       .toggle-show {
-        --icon-color: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
-        --boxel-button-min-height: 1.875rem;
-        --boxel-button-padding: 0px;
-        --boxel-button-font: var(--boxel-font-xs);
+        --boxel-button-padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --icon-color: currentColor;
+        --icon-border: currentColor;
         --icon-stroke-width: 2.5;
-        font-weight: 600;
-        color: var(--boxel-highlight);
-        display: flex;
-        justify-content: flex-start;
-        gap: var(--boxel-sp-xxxs);
-        border: none;
-      }
-      .toggle-show:focus:not(:disabled) {
-        outline-offset: 2px;
+        gap: var(--boxel-sp-3xs);
       }
     </style>
   </template>

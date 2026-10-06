@@ -4,6 +4,7 @@
 export type RealmRunnerCallMethod =
   | 'fs.readText'
   | 'fs.exists'
+  | 'fs.list'
   | 'fs.replace'
   | 'fs.writeText'
   | 'capture';

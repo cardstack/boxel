@@ -1,6 +1,5 @@
-import { array, fn } from '@ember/helper';
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
@@ -25,14 +24,11 @@ import {
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import type { Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
-import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
-
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-import type ToolService from '@cardstack/host/services/tool-service';
 
 import Message from './text-content';
 
@@ -60,8 +56,6 @@ interface Signature {
 }
 
 export default class FormattedAiBotMessage extends Component<Signature> {
-  @service declare private toolService: ToolService;
-
   @cached
   private get reasoningHtml() {
     // `markdownToHtml()` already sanitizes by default, so this only needs to
@@ -77,10 +71,6 @@ export default class FormattedAiBotMessage extends Component<Signature> {
     return this.args
       .htmlParts!.slice(0, htmlPartIndex)
       .filter(isHtmlPreTagGroup).length;
-  };
-
-  private codePatchStatus = (codeData: CodeData) => {
-    return this.toolService.getCodePatchStatus(codeData);
   };
 
   <template>
@@ -122,21 +112,11 @@ export default class FormattedAiBotMessage extends Component<Signature> {
         {{#if (isHtmlPreTagGroup htmlPart)}}
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
-            @codePatchResult={{this.toolService.getCodePatchResult
-              htmlPart.codeData
-            }}
-            @onPatchCode={{fn
-              this.toolService.patchCode
-              htmlPart.codeData.roomId
-              htmlPart.codeData.fileUrl
-              (array htmlPart.codeData)
-            }}
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
             @isStreaming={{@isStreaming}}
             @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             @index={{this.preTagGroupIndex index}}
-            @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -190,19 +170,19 @@ interface HtmlGroupCodeBlockSignature {
   Element: HTMLDivElement;
   Args: {
     codeData: CodeData;
-    onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
     isStreaming: boolean;
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
     index: number;
-    codePatchStatus: CodePatchStatus | 'applying' | 'ready';
-    codePatchResult: MessageCodePatchResult | undefined;
-    originalUploadedFileUrl?: string | null;
   };
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
+  // The host does not apply search/replace blocks, so a block stays in the
+  // 'ready' state.
+  private codePatchStatus = 'ready' as const;
+
   @tracked diffEditorStats: {
     linesRemoved: number;
     linesAdded: number;
@@ -211,7 +191,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   codeDiffResource = getCodeDiffResultResource(this, () => ({
     fileUrl: this.args.codeData.fileUrl,
     searchReplaceBlock: this.args.codeData.searchReplaceBlock,
-    codePatchStatus: this.args.codePatchStatus as CodePatchStatus,
+    codePatchStatus: this.codePatchStatus as CodePatchStatus,
   }));
 
   errorMessage(errorMessage: string) {
@@ -235,10 +215,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
 
   private get isAppliedOrIgnoredCodePatch() {
     // Ignored means the user moved on to the next message
-    return (
-      this.args.codePatchStatus === 'applied' ||
-      !this.args.isLastAssistantMessage
-    );
+    return !this.args.isLastAssistantMessage;
   }
 
   private updateDiffEditorStats = (stats: {
@@ -247,12 +224,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }) => {
     this.diffEditorStats = stats;
   };
-
-  private get codePatchfinalFileUrlAfterCodePatching() {
-    return this.args.codePatchStatus === 'applied'
-      ? this.args.codePatchResult?.finalFileUrlAfterCodePatching
-      : null;
-  }
 
   // A block that opened a SEARCH marker but never resolved into a complete
   // search/replace block is unapplyable, and without this reads as an ordinary
@@ -269,11 +240,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }
 
   private get codePatchErrorMessage() {
-    if (this.args.codePatchStatus === 'applied') {
-      return null;
-    } else if (this.args.codePatchStatus === 'failed') {
-      return this.args.codePatchResult?.failureReason;
-    } else if (this.codeDiffResource?.errorMessage) {
+    if (this.codeDiffResource?.errorMessage) {
       return this.codeDiffResource.errorMessage;
     }
     return null;
@@ -292,9 +259,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
-              @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
-              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-              @codePatchStatus={{@codePatchStatus}}
+              @codePatchStatus={{this.codePatchStatus}}
               @codePatchErrorMessage={{this.codePatchErrorMessage}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
@@ -306,11 +271,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @textToCopy={{this.extractReplaceCode
                   @codeData.searchReplaceBlock
                 }}
-              />
-              {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
-              <actions.applyCodePatch
-                @codeData={{@codeData}}
-                @patchCodeStatus={{@codePatchStatus}}
               />
             </codeBlock.actions>
 
@@ -329,8 +289,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{this.diffEditorStats}}
-              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-              @codePatchStatus={{@codePatchStatus}}
+              @codePatchStatus={{this.codePatchStatus}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @codePatchErrorMessage={{this.codePatchErrorMessage}}
             />
@@ -346,18 +305,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               <actions.copyCode
                 @textToCopy={{this.codeDiffResource.modifiedCode}}
               />
-
-              <actions.applyCodePatch
-                @codeData={{@codeData}}
-                @performPatch={{fn @onPatchCode @codeData}}
-                @patchCodeStatus={{if
-                  this.codePatchErrorMessage
-                  'failed'
-                  @codePatchStatus
-                }}
-                @originalCode={{this.codeDiffResource.originalCode}}
-                @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              />
             </codeBlock.actions>
           {{else if this.codeDiffResource.isLoadingDiff}}
             {{! Together with the branch above, this makes the states a patch can
@@ -371,8 +318,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
-              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
-              @codePatchStatus={{@codePatchStatus}}
+              @codePatchStatus={{this.codePatchStatus}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @codePatchErrorMessage={{this.codePatchErrorMessage}}
             />
@@ -402,7 +348,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           <codeBlock.diffEditorHeader
             @codeData={{@codeData}}
             @diffEditorStats={{null}}
-            @codePatchStatus={{@codePatchStatus}}
+            @codePatchStatus={{this.codePatchStatus}}
           />
         {{/if}}
         <codeBlock.editor @code={{this.codeForEditor}} />

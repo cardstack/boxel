@@ -922,6 +922,33 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       },
     });
     await waitFor('[data-test-tool-result-header]');
+
+    // The result header and body share one light surface and foreground, so the
+    // dark panel shows through neither the seam nor an unthemed result's text.
+    let header = find(
+      '[data-test-tool-result-container] [data-test-tool-result-header]',
+    )!;
+    let resultCard = find(
+      '[data-test-tool-result-container] [data-test-boxel-tool-call-result]',
+    )!;
+    let headerStyle = window.getComputedStyle(header);
+    let cardStyle = window.getComputedStyle(resultCard);
+    assert.strictEqual(
+      cardStyle.backgroundColor,
+      headerStyle.backgroundColor,
+      'result body container shares the header background (no dark seam)',
+    );
+    assert.strictEqual(
+      cardStyle.color,
+      headerStyle.color,
+      'result body inherits the dark foreground, so embedded content stays readable',
+    );
+    assert.notStrictEqual(
+      cardStyle.color,
+      cardStyle.backgroundColor,
+      'result body text contrasts with its background',
+    );
+
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')

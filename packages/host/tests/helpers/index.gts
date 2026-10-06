@@ -338,12 +338,16 @@ function snapshotNameForCacheKey(
   )}_${slug}`;
 }
 
+// The prefix is keyed by the top-level module. QUnit names a nested module
+// "Parent > Child", and a snapshot made inside it must still fall under the
+// prefix that the top-level module's teardown deletes; otherwise it is never
+// deleted and stays in memory for the rest of the run.
 function snapshotPrefixForModule(moduleCacheKey: string): string {
-  let trimmedModuleCacheKey = moduleCacheKey.trim();
-  if (!trimmedModuleCacheKey) {
+  let topLevelModuleName = moduleCacheKey.split(' > ')[0]!.trim();
+  if (!topLevelModuleName) {
     throw new Error('snapshotPrefixForModule() requires a non-empty cache key');
   }
-  return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
+  return `snapshot_${simpleHash(topLevelModuleName)}_`;
 }
 
 // Delays every save the callback triggers by `delayMs` before it reaches the
