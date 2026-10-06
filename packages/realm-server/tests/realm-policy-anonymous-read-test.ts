@@ -540,33 +540,53 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a capability check answers a caller who is not signed in, and counts for nothing', async function (assert) {
+  test('a capability check answers a caller who is not signed in, counted once for each pair it asks about', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      anonymousRateLimit: { requests: 4, windowSeconds: 600 },
     });
-    let ask = (realm: string, target: string) =>
+    let ask = (realm: string, targets: string[]) =>
       request
         .post(`${new URL(realm).pathname}_capabilities`)
         .set('Accept', SupportedMimeType.JSON)
         .set('Content-Type', SupportedMimeType.JSON)
         .set('X-Forwarded-For', VISITOR)
-        .send({ checks: [{ target, operation: 'read' }] });
-    for (let i = 0; i < 3; i++) {
-      let response = await ask(NEWSROOM, PUBLISHED);
-      assert.strictEqual(response.status, 200, `check ${i}`);
-      assert.true(response.body.checks[0].allowed, 'a published article');
-    }
-    let draft = await ask(NEWSROOM, DRAFT);
-    assert.false(draft.body.checks[0].allowed, 'a draft');
+        .send({
+          checks: targets.map((target) => ({ target, operation: 'read' })),
+        });
+    let both = await ask(NEWSROOM, [PUBLISHED, DRAFT]);
+    assert.strictEqual(both.status, 200, both.text);
+    assert.true(both.body.checks[0].allowed, 'a published article');
+    assert.false(both.body.checks[1].allowed, 'a draft');
     unauthenticated(
-      await ask(LIBRARY, `${LIBRARY}articles/published`),
+      await ask(LIBRARY, [`${LIBRARY}articles/published`]),
       'a realm whose policy opens nothing',
       assert,
     );
+    let before = newsroom.__testOnlyPolicyGateStats().predicateEvaluations;
+    let tooMany = await ask(NEWSROOM, [PUBLISHED, PUBLISHED, PUBLISHED]);
+    assert.strictEqual(tooMany.status, 429, 'three pairs do not fit in two');
+    assert.strictEqual(tooMany.body.errors[0].code, 'rate-limited');
+    assert.strictEqual(
+      newsroom.__testOnlyPolicyGateStats().predicateEvaluations,
+      before,
+      'and none of them was checked',
+    );
+    assert.strictEqual((await ask(NEWSROOM, [PUBLISHED])).status, 200);
     assert.strictEqual(
       (await readCard(PUBLISHED)).status,
       200,
-      'none of the checks used up the budget',
+      'checks and reads draw on one budget',
+    );
+    assert.strictEqual((await readCard(PUBLISHED)).status, 429);
+    let checks = records.filter((r) => r.route.endsWith('/_capabilities'));
+    assert.deepEqual(
+      checks.map((r) => [r.outcome, r.cost]),
+      [
+        ['admitted', 2],
+        ['rate-limited', 3],
+        ['admitted', undefined],
+      ],
+      'each check is recorded with what it cost',
     );
   });
 
@@ -754,7 +774,10 @@ module(basename(import.meta.filename), function (hooks) {
     let path = new URL(NEWSROOM).pathname;
     let document = article('Breaking', 'published');
     let closed: [string, () => Test][] = [
-      ['a card+html read', () => readCard(PUBLISHED, VISITOR, 'text/html')],
+      [
+        'a card+html read',
+        () => readCard(PUBLISHED, VISITOR, SupportedMimeType.CardHtml),
+      ],
       [
         'a search',
         () =>

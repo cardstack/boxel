@@ -2442,7 +2442,8 @@ const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
 };
 // A capability check asks what the caller could invoke and invokes nothing, so
 // it answers an anonymous caller in any realm whose policy opens anything to
-// one, and is never counted.
+// one. It is counted by the handler, one unit for each pair it asks about,
+// before any is checked (see `handleCapabilities`).
 const ANONYMOUS_CAPABILITY_CHECK: AnonymousDispatch = {
   operations: [],
   charged: false,
@@ -6606,6 +6607,17 @@ export class Realm {
         });
       }
       let checks = parseCapabilityChecks(body);
+      // A caller admitted without a session is counted for every pair before
+      // any is checked: each one loads its target and runs its grants as a
+      // read would.
+      let turnedAway = await this.#countAnonymous(
+        request,
+        requestContext,
+        checks.length,
+      );
+      if (turnedAway) {
+        return turnedAway;
+      }
       let { actor } = this.#callerOf(request, requestContext);
       let lanes = await this.#capabilityLanes(request, requestContext);
       let { coarseDeclined } = lanes;
@@ -8272,9 +8284,32 @@ export class Realm {
     if (!caller.charged) {
       return response;
     }
+    let answer = await this.#countAnonymous(request, requestContext, 1);
+    if (answer) {
+      await discardBody(response);
+      return answer;
+    }
+    return response;
+  }
+
+  // Counts `cost` invocations by a caller the realm admitted without a
+  // session against its address's budget, and answers in their place when
+  // they don't fit or can't be counted. A request whose cost is known before
+  // it runs, such as a capability check asking about several pairs, is
+  // counted here first, so one that doesn't fit runs nothing. A caller of
+  // ours is recorded and never counted.
+  async #countAnonymous(
+    request: Request,
+    requestContext: RequestContext,
+    cost: number,
+  ): Promise<ResponseWithNodeStream | undefined> {
+    let caller = requestContext.anonymousCaller;
+    if (!caller || cost < 1) {
+      return undefined;
+    }
     if (caller.infra) {
       this.#recordAnonymous(request, caller, { outcome: 'infra' });
-      return response;
+      return undefined;
     }
     let { limit, limitFrom } = await this.getAnonymousAccess();
     let outcome: AnonymousRateOutcome;
@@ -8283,28 +8318,29 @@ export class Realm {
         realmURL: this.url,
         clientIP: caller.rateLimitKey!,
         limit,
-        cost: 1,
+        cost,
       });
     } catch (e: unknown) {
       this.#recordAnonymousCountFailure(request, caller, e);
-      await discardBody(response);
       return this.#countUnavailableResponse(requestContext);
     }
     let recordedLimit = { ...limit, from: limitFrom };
+    let costDetail = cost > 1 ? { cost } : {};
     if (outcome.admitted) {
       this.#recordAnonymous(request, caller, {
         outcome: 'admitted',
         limit: recordedLimit,
         count: outcome.count,
+        ...costDetail,
       });
-      return response;
+      return undefined;
     }
     this.#recordAnonymous(request, caller, {
       outcome: 'rate-limited',
       limit: recordedLimit,
       retryAfterSeconds: outcome.retryAfterSeconds,
+      ...costDetail,
     });
-    await discardBody(response);
     return this.#rateLimitedResponse(requestContext, outcome.retryAfterSeconds);
   }
 
@@ -8372,7 +8408,12 @@ export class Realm {
     caller: AnonymousCaller,
     detail: Pick<
       AnonymousRequestEvent,
-      'outcome' | 'blockReason' | 'limit' | 'count' | 'retryAfterSeconds'
+      | 'outcome'
+      | 'blockReason'
+      | 'limit'
+      | 'count'
+      | 'retryAfterSeconds'
+      | 'cost'
     >,
   ): void {
     recordSafely('anonymous-request', () =>

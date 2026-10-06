@@ -548,6 +548,9 @@ export interface AnonymousRequestEvent {
   };
   // The window's count once this request was counted.
   count?: number;
+  // How many units the request was counted as, where it was more than one:
+  // a capability check counts one for each pair it asks about.
+  cost?: number;
   retryAfterSeconds?: number;
   correlationId: string | null;
 }
