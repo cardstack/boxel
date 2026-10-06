@@ -377,15 +377,6 @@ export class UpdatePlaygroundSelectionInput extends CardDef {
   @field fieldIndex = contains(NumberField);
 }
 
-export class ApplySearchReplaceBlockInput extends CardDef {
-  @field fileContent = contains(StringField);
-  @field codeBlock = contains(StringField);
-}
-
-export class ApplySearchReplaceBlockResult extends CardDef {
-  @field resultContent = contains(StringField);
-}
-
 export class LintAndFixInput extends CardDef {
   @field fileContent = contains(StringField);
   @field realm = contains(StringField);
