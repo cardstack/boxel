@@ -18,7 +18,8 @@
 // Run with the pull request's description in $PR_BODY:
 //
 //   node scripts/pairing.ts --repository=<owner/repo> --number=<n> \
-//     --base=<branch> --counterpart=<owner/repo> --out=<file>
+//     --base=<branch> --counterpart=<owner/repo> --out=<file> \
+//     [--pin=<test-subset.json>]
 //
 // Writes the resolution to <file> as JSON, with one entry in `pairs` per
 // declared key: the counterpart's number, head commit, whether it has merged,
@@ -27,6 +28,19 @@
 // not hold up its side: it must exist, be open or merged, target main or be
 // stacked, come from a branch of its own repository, and name this pull
 // request back.
+//
+// With --pin, the counterpart repository's revision that this pull request
+// pins (the `revision` of the catalog test subset manifest) must contain every
+// merged counterpart this pull request merges after. Production deploys the
+// catalog at the revision the deployed boxel pins, so a pull request that
+// merges after a catalog change ships without it until the pin moves past that
+// change's merge commit. While that counterpart is still open, the pin can't
+// contain it yet, so the resolution records the pin and
+//
+//   node scripts/pairing.ts --pin-verdict=<resolution file>
+//
+// fails until the counterpart merges and a push re-pins past it: nothing else
+// re-runs the check when a pull request in the other repository merges.
 //
 // A paired pull request targets main, or is stacked on an open pull request
 // of its own repository: it targets that pull request's branch, and is
@@ -41,7 +55,7 @@
 // the reason, and whatever consumes the resolution decides whether that
 // matters.
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export type PairingKey = 'merges-before' | 'merges-after';
@@ -70,16 +84,19 @@ export interface Resolution {
   pairs: Pair[];
   // The open pull request this one is stacked on, when it is.
   stackedOn?: string;
+  // The counterpart revision this pull request pins, when it was checked.
+  pinnedRevision?: string;
 }
 
 // Where a pull request's base leads. `main` is main itself. `stacked` is the
 // branch of an open pull request, `parent`, reached directly or through the
 // branches of parents that have merged since (`mergedVia`, the first of them).
-// `landed` is a chain of merged parents that ends on main.
+// `landed` is a chain of merged parents that ends on main, and `mergeCommit`
+// is the commit the last of them merged into main as.
 export type Landing =
   | { kind: 'main' }
   | { kind: 'stacked'; parent: string; branch: string; mergedVia?: string }
-  | { kind: 'landed'; mergedVia: string }
+  | { kind: 'landed'; mergedVia: string; mergeCommit: string | null }
   | { kind: 'problem'; problem: string };
 
 // A pull request as the list endpoint returns it, which has `merged_at` but
@@ -88,6 +105,7 @@ interface ListedPull {
   number: number;
   state: string;
   merged_at: string | null;
+  merge_commit_sha: string | null;
   base: { ref: string };
   head: { repo: { full_name: string } | null };
 }
@@ -198,6 +216,7 @@ interface RestPull {
   state: string;
   merged: boolean;
   merged_at: string | null;
+  merge_commit_sha: string | null;
   draft?: boolean;
   body: string | null;
   base: { ref: string };
@@ -244,10 +263,13 @@ export async function landing(
   let [owner] = repository.split('/');
   let branch = base;
   let mergedVia: string | undefined;
+  let mergeCommit: string | null = null;
   let since = mergedAt;
   for (let depth = 0; depth < MAX_STACK_DEPTH; depth++) {
     if (branch === 'main') {
-      return mergedVia ? { kind: 'landed', mergedVia } : { kind: 'main' };
+      return mergedVia
+        ? { kind: 'landed', mergedVia, mergeCommit }
+        : { kind: 'main' };
     }
     let listed: ListedPull[] | undefined;
     try {
@@ -304,6 +326,7 @@ export async function landing(
       };
     }
     mergedVia ??= `${repository}#${merged.number}`;
+    mergeCommit = merged.merge_commit_sha;
     branch = merged.base.ref;
     since = merged.merged_at!;
   }
@@ -421,14 +444,68 @@ async function fetchApproval(repository: string, n: number) {
   return states.includes('APPROVED') && !states.includes('CHANGES_REQUESTED');
 }
 
+// Whether `revision` of `repository` contains `commit`: GitHub's compare of
+// the commit (base) against the revision (head) is ahead or identical.
+async function contains(repository: string, commit: string, revision: string) {
+  let comparison = await getJson<{ status: string }>(
+    `repos/${repository}/compare/${commit}...${revision}?per_page=1`,
+  );
+  if (!comparison) {
+    throw new Error(
+      `GitHub can't compare ${commit.slice(0, 12)} with ${revision.slice(0, 12)}`,
+    );
+  }
+  return comparison.status === 'ahead' || comparison.status === 'identical';
+}
+
+// What a pull request that merges after `there`, which reached main as
+// `mergeCommit`, is told when the revision it pins doesn't contain that, or
+// nothing when it does.
+async function pinProblem(
+  here: string,
+  there: string,
+  repository: string,
+  mergeCommit: string | null,
+  pinnedRevision: string,
+) {
+  if (!mergeCommit) {
+    return (
+      `${there} has merged, but GitHub reports no merge commit for it, so ` +
+      `whether ${here}'s pin contains it can't be read. Re-run this check.`
+    );
+  }
+  let pinned: boolean;
+  try {
+    pinned = await contains(repository, mergeCommit, pinnedRevision);
+  } catch (error) {
+    return (
+      `Could not read whether ${here}'s pin ${pinnedRevision.slice(0, 12)} ` +
+      `contains ${there}, which merged as ${mergeCommit.slice(0, 12)} ` +
+      `(${error instanceof Error ? error.message : String(error)}). Re-run ` +
+      `this check.`
+    );
+  }
+  if (pinned) {
+    return undefined;
+  }
+  return (
+    `${there} merged as ${mergeCommit.slice(0, 12)}, but ${here} pins ` +
+    `${pinnedRevision.slice(0, 12)}, which predates it. Run ` +
+    `\`pnpm --dir packages/catalog catalog:test-subset --bump\`.`
+  );
+}
+
 // Checks each declaration against its counterpart and returns the pairs, or
-// the problems, each one saying what to change on which pull request.
+// the problems, each one saying what to change on which pull request. With
+// `pinnedRevision`, the counterpart revision this pull request pins, a merged
+// counterpart it merges after must be in that revision.
 export async function resolvePairing(
   repository: string,
   n: number,
   base: string,
   counterpartRepository: string,
   body: string,
+  pinnedRevision?: string,
 ): Promise<{ resolution: Resolution; problems: string[]; notices: string[] }> {
   let here = `${repository}#${n}`;
   let notices: string[] = [];
@@ -582,6 +659,21 @@ export async function resolvePairing(
       );
       continue;
     }
+    if (pull.merged && key === 'merges-after' && pinnedRevision) {
+      let problem = await pinProblem(
+        here,
+        there,
+        counterpartRepository,
+        counterpartLanding.kind === 'landed'
+          ? counterpartLanding.mergeCommit
+          : pull.merge_commit_sha,
+        pinnedRevision,
+      );
+      if (problem) {
+        problems.push(problem);
+        continue;
+      }
+    }
     let approved: boolean | null = false;
     let approvalError: string | undefined;
     if (!pull.merged) {
@@ -611,10 +703,35 @@ export async function resolvePairing(
       number: n,
       pairs,
       ...(stackedOn ? { stackedOn } : {}),
+      ...(pinnedRevision ? { pinnedRevision } : {}),
     },
     problems,
     notices,
   };
+}
+
+// Why a pull request with a pin can't pass yet, or nothing when it can. A
+// counterpart it merges after that is still open isn't in the pin, and the
+// push that re-pins after it merges is what runs the check again.
+export function pinVerdict(resolution: Resolution) {
+  if (!resolution.pinnedRevision) {
+    return undefined;
+  }
+  let open = resolution.pairs.find(
+    (p) => p.key === 'merges-after' && !p.merged,
+  );
+  if (!open) {
+    return undefined;
+  }
+  let here = `${resolution.repository}#${resolution.number}`;
+  let there = `${open.repository}#${open.number}`;
+  return (
+    `${here} merges after ${there}, which hasn't merged, so ${here}'s pin ` +
+    `${resolution.pinnedRevision.slice(0, 12)} can't contain it yet. ` +
+    `Production deploys the catalog at the revision boxel pins. Once ` +
+    `${there} merges, run \`pnpm --dir packages/catalog catalog:test-subset ` +
+    `--bump\` and push: that push re-runs this check.`
+  );
 }
 
 // Whether catalog main may fail with the errors the change adds to it. A
@@ -735,7 +852,11 @@ export function mainVerdict(resolution: Resolution) {
 // stacked, to merge right after this change. The pin has to be its head, the
 // commit that lands. Answers undefined when `pull` isn't a pull request this
 // change merges before, so the pin waits on it to merge like any other.
-export function pinVerdict(resolution: Resolution, pull: number, pin: string) {
+export function openPinVerdict(
+  resolution: Resolution,
+  pull: number,
+  pin: string,
+) {
   let pair = resolution.pairs.find(
     (p) => p.key === 'merges-before' && !p.merged && p.number === pull,
   );
@@ -818,11 +939,23 @@ async function main() {
   let args = process.argv.slice(2);
   let option = (name: string) =>
     args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+  let verdictFile = option('pin-verdict');
+  if (verdictFile) {
+    let message = pinVerdict(
+      JSON.parse(readFileSync(resolve(verdictFile), 'utf8')) as Resolution,
+    );
+    if (message) {
+      console.log(`::error title=pairing::${annotation(message)}`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
   let repository = option('repository');
   let n = Number(option('number'));
   let base = option('base');
   let counterpart = option('counterpart');
   let out = option('out');
+  let pin = option('pin');
   if (
     !repository ||
     !Number.isInteger(n) ||
@@ -832,9 +965,20 @@ async function main() {
     !out
   ) {
     console.error(
-      'pairing: pass --repository=<owner/repo> --number=<n> --base=<branch> --counterpart=<owner/repo> --out=<file>, with the description in $PR_BODY',
+      'pairing: pass --repository=<owner/repo> --number=<n> --base=<branch> --counterpart=<owner/repo> --out=<file> [--pin=<test-subset.json>], with the description in $PR_BODY',
     );
     process.exit(1);
+  }
+  let pinnedRevision: string | undefined;
+  if (pin) {
+    let manifest = JSON.parse(readFileSync(resolve(pin), 'utf8')) as {
+      revision?: unknown;
+    };
+    if (typeof manifest.revision !== 'string' || !manifest.revision) {
+      console.error(`pairing: ${pin} has no revision`);
+      process.exit(1);
+    }
+    pinnedRevision = manifest.revision;
   }
   let { resolution, problems, notices } = await resolvePairing(
     repository,
@@ -842,6 +986,7 @@ async function main() {
     base,
     counterpart,
     process.env.PR_BODY ?? '',
+    pinnedRevision,
   );
   let here = `${repository}#${n}`;
   for (let pair of resolution.pairs) {

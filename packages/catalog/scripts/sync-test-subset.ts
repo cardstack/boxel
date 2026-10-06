@@ -44,7 +44,7 @@ import {
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { pinVerdict, type Resolution } from './pairing.ts';
+import { openPinVerdict, type Resolution } from './pairing.ts';
 
 const catalogDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(catalogDir, '..', '..');
@@ -784,7 +784,7 @@ function currentBranch() {
 // and fails while the pull request is open or once main changes a subset file
 // again. The one open pull request a pin may come from is the head of the
 // catalog pull request this change merges before, while it is approved to
-// merge right after this change (pinVerdict in pairing.ts).
+// merge right after this change (openPinVerdict in pairing.ts).
 async function checkPin(manifest: Manifest, pairing?: Resolution) {
   let headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -869,7 +869,7 @@ async function checkPin(manifest: Manifest, pairing?: Resolution) {
     // breaks pins that pull request's head, so the pin may wait on it while it
     // is ready to merge right after this change (pairing.ts).
     let verdict = pairing
-      ? pinVerdict(pairing, waitingOn.number, manifest.revision)
+      ? openPinVerdict(pairing, waitingOn.number, manifest.revision)
       : undefined;
     if (verdict?.passes) {
       log(`${differ}. ${verdict.message}`);

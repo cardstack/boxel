@@ -15,7 +15,7 @@ name: Catalog Test Subset
 #
 # The pin may also be the head of an open catalog pull request this change
 # merges before, while that pull request is approved to merge right after it
-# (pinVerdict in scripts/pairing.ts). The pairing is declared in the
+# (openPinVerdict in scripts/pairing.ts). The pairing is declared in the
 # description, so editing the description re-runs this.
 
 on:
