@@ -1,0 +1,42 @@
+#!/bin/bash
+#MISE description="Print each realm's boot index time from a realm-server log, and add it to the job summary"
+# Usage:
+#   mise run ci:realm-index-times <log-file>
+#
+# Reads the "Realm <url> is starting indexing" and "Realm <url> has completed
+# indexing in <n>s" lines the realm-server services print (`[services:…]`);
+# realms a test page runs in the browser print the same lines, unprefixed. A realm that started but has no
+# completion line is listed as not finished, which is the realm a
+# `ci:wait-for-realms` timeout was waiting behind. A realm indexed more than
+# once (a test realm reset between tests) keeps its first time, the boot index.
+set -uo pipefail
+
+log="${1:?usage: mise run ci:realm-index-times <log-file>}"
+
+table=$(
+  grep -F '[services:' "$log" |
+    grep -oE 'Realm [^ ]+ (is starting indexing|has completed indexing in [0-9.]+s)' |
+    awk '
+      $3 == "is" { if (!($2 in seen)) { seen[$2] = 1; order[++n] = $2 } }
+      $3 == "has" {
+        if (!($2 in seen)) { seen[$2] = 1; order[++n] = $2 }
+        if (!($2 in done)) { secs = $NF; sub(/s$/, "", secs); done[$2] = secs }
+      }
+      END {
+        for (i = 1; i <= n; i++) {
+          realm = order[i]
+          printf "| %s | %s |\n", realm, (realm in done) ? done[realm] "s" : "not finished"
+        }
+      }'
+)
+
+if [ -z "$table" ]; then
+  echo "No realm indexing lines in $log"
+  exit 0
+fi
+
+report=$(printf '### Realm boot index times\n\n| Realm | Boot index |\n| --- | --- |\n%s\n' "$table")
+echo "$report"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  echo "$report" >> "$GITHUB_STEP_SUMMARY"
+fi
