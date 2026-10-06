@@ -16,6 +16,10 @@ versions may change behavior until `1.0.0`.
 
 ### Fixed
 
+- **No `@glimmer/tracking` peer dependency.** Declaring it made pnpm and npm install the
+  standalone `@glimmer/tracking` 1.x package, and Embroider then resolved glimmer-motion's `tracked` to
+  that copy instead of ember-source's. Its tracked state never reached Ember's renderer, so a
+  `<Presence>` leaver stayed in the DOM after its exit finished. ember-source provides the module.
 - **`LICENSE` carries Motion's MIT notice.** The files adapted or ported from
   Motion (listed in `VENDORED.md`) ship under Framer B.V.'s copyright as well
   as Cardstack's.
