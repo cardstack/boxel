@@ -26,6 +26,7 @@ import {
   type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
+import { ActingUsers, NO_ACTING_USER } from './acting-users.ts';
 import type { GateTrace } from './gate-trace.ts';
 import { INTERNAL_ROUTE, type PolicyRoute } from './telemetry.ts';
 import { explainOperation, type TargetRealm } from './explain.ts';
@@ -372,6 +373,10 @@ export interface OperationScope {
   // The request surface and route this invocation arrived on, which the
   // gate's decision record names (see `PolicyDecisionEvent`).
   readonly route: PolicyRoute;
+  // Who the request's writes are made as, where it authenticated nobody and
+  // a grant naming an acting user admits them (see `ActingUsers`). One for the
+  // request, shared by every scope derived from this one.
+  readonly actingUsers: ActingUsers;
   // The archived realm's refusal, where the realm holds one for this caller
   // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
   // gate grants.
@@ -408,6 +413,10 @@ export interface ScopeInvocation {
   seal?: Error;
   advisory?: boolean;
   route?: PolicyRoute;
+  // The request's acting users, where its caller supplies the one its
+  // records read from. Otherwise the scope resolves them through the realm's
+  // policy access.
+  actingUsers?: ActingUsers;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -431,6 +440,11 @@ export function newOperationScope(
   invocation: ScopeInvocation = {},
 ): OperationScope {
   let rows = new Map<string, Promise<InstanceOrError | undefined>>();
+  let actingUsers =
+    invocation.actingUsers ??
+    new ActingUsers(
+      (key) => core.policy?.actingUser?.(key) ?? NO_ACTING_USER(),
+    );
   let peekInstance = (url: URL) => {
     let cached = rows.get(url.href);
     if (!cached) {
@@ -457,6 +471,7 @@ export function newOperationScope(
     seal,
     advisory,
     route,
+    actingUsers,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,

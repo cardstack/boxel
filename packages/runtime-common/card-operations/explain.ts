@@ -33,7 +33,8 @@ import {
   type MatchedGrant,
 } from './gate.ts';
 import { resolveNamedQuery, searchInvocation } from './named-query.ts';
-import type { CompiledRealmPolicy } from './policy.ts';
+import { NO_ACTING_USER, type ActingUserResolution } from './acting-users.ts';
+import type { CompiledOperationGrant, CompiledRealmPolicy } from './policy.ts';
 import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
 import type { PolicyRoute } from './telemetry.ts';
 import {
@@ -43,7 +44,7 @@ import {
   isOperationFailure,
   isWrite,
   refusalForNonReader,
-  type BaseOperation,
+  type ExplainedGrant,
   type ExplainedGrantOutcome,
   type ExplainedIndexLag,
   type ExplainedRule,
@@ -279,13 +280,21 @@ export async function explainOperation(
   let actor = scopeCallerFor(question.actor);
   let acl = await realm.aclFor(actor);
   let draft = 'draft' in governing ? governing.draft : undefined;
-  let answered = (explanation: PolicyExplanation): PolicyExplanation =>
-    draft ? { ...explanation, draft: { issues: draft.issues } } : explanation;
+  let deciding = await pinnedForExplain(governing.core);
+  let detailed = await detailer(deciding, actor);
+  let answered = async (
+    explanation: PolicyExplanation,
+  ): Promise<PolicyExplanation> => {
+    let withDetail = await detailed(explanation);
+    return draft
+      ? { ...withDetail, draft: { issues: draft.issues } }
+      : withDetail;
+  };
   if (question.search) {
     return {
-      explanation: answered(
+      explanation: await answered(
         await explainSearch(
-          governing.core,
+          deciding,
           realm,
           question.search,
           question,
@@ -304,12 +313,14 @@ export async function explainOperation(
     for (let url of cards) {
       try {
         explanations.push(
-          await explain(
-            governing.core,
-            { kind: 'instance', url },
-            question,
-            actor,
-            acl,
+          await detailed(
+            await explain(
+              deciding,
+              { kind: 'instance', url },
+              question,
+              actor,
+              acl,
+            ),
           ),
         );
       } catch (e: unknown) {
@@ -331,13 +342,131 @@ export async function explainOperation(
     };
   }
   let explanation = await explain(
-    governing.core,
+    deciding,
     target as OperationTarget & { kind: 'instance' },
     question,
     actor,
     acl,
   );
-  return { explanation: answered(explanation) };
+  return { explanation: await answered(explanation) };
+}
+
+// The core an explain decides with: the governing core, holding one compile
+// of its policy and one answer per acting-user key for the whole explain. A
+// listing runs the gate once per card, and the policy can recompile or a
+// user's permissions change between them, so without this one card could be
+// judged against a different policy from the next, or a grant reported with an
+// acting user the gate didn't see.
+async function pinnedForExplain(core: OperationCore): Promise<OperationCore> {
+  let access = core.policy;
+  if (!access) {
+    return core;
+  }
+  let compiled = await access.compiledPolicy();
+  let resolutions = new Map<string, Promise<ActingUserResolution>>();
+  return {
+    ...core,
+    policy: {
+      ...access,
+      compiledPolicy: async () => compiled,
+      actingUser: (key: string) => {
+        let resolution = resolutions.get(key);
+        if (!resolution) {
+          resolution = access.actingUser?.(key) ?? NO_ACTING_USER();
+          resolutions.set(key, resolution);
+        }
+        return resolution;
+      },
+    },
+  };
+}
+
+// What an explanation reports beyond the decision itself, read from the
+// policy and the realm that decided it: for a question about a caller who
+// isn't signed in, how the realm limits and blocks such callers; for each
+// grant listed that opts in to them, the user its writes are made as, or why
+// its key names no one; and for each grant listed, what compiling the policy
+// recorded against it. It reads the same compile and acting users the gate
+// decided with (see `pinnedForExplain`).
+async function detailer(
+  core: OperationCore,
+  actor: ScopeCaller,
+): Promise<(explanation: PolicyExplanation) => Promise<PolicyExplanation>> {
+  let compiled = await core.policy?.compiledPolicy();
+  let grants = new Map<string, CompiledOperationGrant>();
+  for (let rule of compiled?.rules ?? []) {
+    for (let grant of rule.grants) {
+      grants.set(grant.path, grant);
+    }
+  }
+  let issues = compiled?.issues ?? [];
+  let access =
+    actor.kind === 'user' ? undefined : await core.policy?.anonymousAccess?.();
+  let resolve = (key: string) =>
+    core.policy?.actingUser?.(key) ?? NO_ACTING_USER();
+  let detail = async (explained: ExplainedGrant): Promise<ExplainedGrant> => {
+    let grant = grants.get(explained.path);
+    // Issues are recorded at a grant's path or at a part of it, and
+    // `rules[1]` is a prefix of `rules[10]`, so only the path itself or one
+    // followed by `.` is this grant's.
+    let own = issues.filter(
+      ({ path }) =>
+        path === explained.path || path.startsWith(`${explained.path}.`),
+    );
+    let anonymous: ExplainedGrant['anonymous'];
+    if (grant?.anonymous) {
+      let key = grant.anonymous.actingUserKey;
+      if (key) {
+        let resolution = await resolve(key);
+        anonymous =
+          'user' in resolution
+            ? { actingUserKey: key, actingUser: resolution.user }
+            : { actingUserKey: key, actingUserFailure: resolution.failure };
+      } else {
+        anonymous = {};
+      }
+    }
+    return {
+      ...explained,
+      ...(anonymous ? { anonymous } : {}),
+      ...(own.length > 0 ? { issues: own } : {}),
+    };
+  };
+  // A blocklist entry that is neither an address nor a range closes the realm
+  // to every caller who isn't signed in, before the policy is consulted. So
+  // where the answer turned on the policy, it is refused as such a caller's
+  // request would be. A realm whose ACL answers the request, or whose policy
+  // opens nothing to them, refuses them before reading the blocklist, and its
+  // answer stands.
+  let blocklistCloses =
+    access !== undefined && access.invalidBlocklistEntries.length > 0;
+  return async (explanation) => ({
+    ...(blocklistCloses &&
+    explanation.reason !== 'acl' &&
+    explanation.reason !== 'actor-required'
+      ? (({ admittedBy: _admittedBy, ...rest }) => ({
+          ...rest,
+          decision: 'denied' as const,
+          reason: 'blocklist-invalid' as const,
+          refusal: { status: 401, code: 'actor-required' as const },
+        }))(explanation)
+      : explanation),
+    rules: await Promise.all(
+      explanation.rules.map(async (rule) => ({
+        ...rule,
+        grants: await Promise.all(rule.grants.map(detail)),
+      })),
+    ),
+    ...(access
+      ? {
+          anonymous: {
+            limit: { ...access.limit },
+            limitFrom: access.limitFrom,
+            invalidBlocklistEntries: [...access.invalidBlocklistEntries],
+          },
+        }
+      : {}),
+  });
 }
 
 // The core the target's realm would decide with were its policy card to hold
@@ -473,7 +602,13 @@ async function explainSearch(
   if (acl.read) {
     return { ...base, decision: 'allowed', reason: 'acl' };
   }
-  if (actor.kind !== 'user') {
+  // A caller who isn't signed in is judged, as the search judges one, by the
+  // grants that opt in to such callers, where the policy opens the operation
+  // to them, and told to authenticate everywhere else.
+  if (
+    actor.kind !== 'user' &&
+    !(await opensToAnonymous(core, invocation.operation))
+  ) {
     return refused(base, 'actor-required', {
       status: 401,
       code: 'actor-required',
@@ -495,7 +630,10 @@ async function explainSearch(
     scope = await policyQueryScope(core, {
       operation: invocation.operation,
       types: invocation.types,
-      principal: { kind: 'user', user: actor.actor },
+      principal:
+        actor.kind === 'user'
+          ? { kind: 'user', user: actor.actor }
+          : { kind: 'anonymous' },
       transport: 'explain',
       hypothetical: true,
     });
@@ -639,11 +777,6 @@ async function opensToAnonymous(
   core: OperationCore,
   operation: string,
 ): Promise<boolean> {
-  // No route admits a caller who isn't signed in to a write, whatever the
-  // policy opens, so explain answers such a caller's write as the route does.
-  if (isWrite(operation as BaseOperation)) {
-    return false;
-  }
   let policy = await core.policy?.compiledPolicy();
   return (
     !policy?.uncompilable &&
@@ -861,6 +994,8 @@ function refusalReason(
       return 'unmatchable-target';
     case 'no-grant':
       return 'no-grant';
+    case 'reads-actor':
+      return 'reads-actor';
     default:
       return trace.rules.some(({ grants }) => grants.length > 0)
         ? 'predicate-false'

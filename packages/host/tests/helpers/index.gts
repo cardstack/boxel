@@ -2635,6 +2635,13 @@ export function realmConfigCardJSON(
     includePrerenderedDefaultRealmIndex?: boolean;
     // The URL of the card whose policy governs the realm.
     policy?: string;
+    // The realm's own settings, which a card operation reads with
+    // `realmConfig("key")`.
+    config?: Record<string, unknown>;
+    // How the realm limits and blocks callers its policy admits without a
+    // session.
+    anonymousRateLimit?: { requests: number; windowSeconds: number };
+    anonymousBlocklist?: string[];
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2653,6 +2660,15 @@ export function realmConfigCardJSON(
   }
   if (config.policy !== undefined) {
     attrs.policy = config.policy;
+  }
+  if (config.config !== undefined) {
+    attrs.config = config.config;
+  }
+  if (config.anonymousRateLimit !== undefined) {
+    attrs.anonymousRateLimit = config.anonymousRateLimit;
+  }
+  if (config.anonymousBlocklist !== undefined) {
+    attrs.anonymousBlocklist = config.anonymousBlocklist;
   }
   return JSON.stringify({
     data: {
