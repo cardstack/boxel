@@ -192,6 +192,14 @@ module(basename(import.meta.filename), function (hooks) {
                 anonymous: true,
                 where: '.status == "published"',
               },
+              // Opts a write in to such callers, which no route admits them
+              // to, so it never admits one.
+              {
+                operation: 'update',
+                anonymous: true,
+                actingUser: 'submitter',
+                where: '.status == "published"',
+              },
             ]),
             // Grants only signed-in callers.
             'policies/library.json': policyCard(BOOK, [{ operation: 'read' }]),
@@ -485,7 +493,11 @@ module(basename(import.meta.filename), function (hooks) {
 
   // The org admin asks the policy card what it decides for a caller who isn't
   // signed in.
-  async function explainAnonymous(policy: string, target: string) {
+  async function explainAnonymous(
+    policy: string,
+    target: string,
+    operation = 'read',
+  ) {
     let response = await request
       .post(`${new URL(ORG).pathname}_operations`)
       .set('X-HTTP-Method-Override', 'QUERY')
@@ -502,7 +514,7 @@ module(basename(import.meta.filename), function (hooks) {
               op: 'invoke',
               'boxel:name': 'explain',
               href: policy,
-              data: { actor: '', target, operation: 'read' },
+              data: { actor: '', target, operation },
             },
           ],
         }),
@@ -537,6 +549,12 @@ module(basename(import.meta.filename), function (hooks) {
       library.reason,
       'actor-required',
       'a policy that opens nothing tells such a caller to authenticate',
+    );
+    let update = await explainAnonymous(NEWSROOM_POLICY, PUBLISHED, 'update');
+    assert.strictEqual(
+      update.reason,
+      'actor-required',
+      'a write is answered as its route answers it, whatever the policy opens',
     );
   });
 
