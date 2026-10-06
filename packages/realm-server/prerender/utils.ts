@@ -2422,9 +2422,10 @@ export async function captureDeclared(
         contentHash: args.contentHash,
       })
     ) {
-      // A carry-forward copies the prior manifest entry wholesale in persist,
-      // so its geometry/page facts ride there, not on this result — carry only
-      // the identity fields. A pdf slot has no raster box to report.
+      // A carry-forward copies the prior manifest entry in persist, so its
+      // geometry/page facts ride there, not on this result — carry the identity
+      // fields plus the filename this render resolved, which replaces the prior
+      // entry's. A pdf slot has no raster box to report.
       entries.push({
         name,
         specHash,
