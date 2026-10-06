@@ -30,6 +30,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { holdIndexingLane } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 // The school example realms, served exactly as they ship in
@@ -775,38 +776,6 @@ module(basename(import.meta.filename), function (hooks) {
   // returning the card until it is reindexed. This pins that behavior as it
   // is, the lagging search included, so a change to it is a deliberate one.
   module('a provider is taken off a schedule', function () {
-    // Work that holds the Education realm's index lane and never completes:
-    // a job a worker has claimed and not finished, which nothing runs. Every
-    // pass in the lane queues behind it until the returned function lets it
-    // go.
-    async function holdIndexLane() {
-      let [{ id: jobId }] = (await db.execute(
-        `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout, initiated_by)
-         VALUES ('incremental-index', $1, '{}'::jsonb, 'unfulfilled', 7200, $2)
-         RETURNING id`,
-        {
-          bind: [
-            `indexing:${EDUCATION}`,
-            JSON.stringify(['@elsewhere:localhost']),
-          ],
-        },
-      )) as unknown as { id: string }[];
-      await db.execute(
-        `INSERT INTO job_reservations (job_id, worker_id, locked_until)
-         VALUES ($1, 'school-example-test-worker', NOW() + INTERVAL '7200 seconds')`,
-        { bind: [jobId] },
-      );
-      return async () => {
-        await db.execute('DELETE FROM job_reservations WHERE job_id = $1', {
-          bind: [jobId],
-        });
-        await db.execute('DELETE FROM jobs WHERE id = $1', { bind: [jobId] });
-        // Removing a job wakes no worker, so the queue is told there is work,
-        // as publishing one tells it.
-        await db.execute('NOTIFY jobs');
-      };
-    }
-
     function listedIds(response: Response) {
       return (response.body.data as { id: string }[]).map((entry) => entry.id);
     }
@@ -818,7 +787,7 @@ module(basename(import.meta.filename), function (hooks) {
         'Carmen provides both speech-therapy schedules',
       );
 
-      let release = await holdIndexLane();
+      let release = await holdIndexingLane(db, EDUCATION);
       try {
         // Jordan's schedule passes to Ben. The bytes are stored now, and the
         // pass that indexes them waits behind the held lane.
@@ -841,6 +810,11 @@ module(basename(import.meta.filename), function (hooks) {
           (await getCard(SPEECH_JORDAN, onEducation(CARMEN))).status,
           404,
           'the direct read judges the stored provider id, and refuses her on the next request',
+        );
+        assert.strictEqual(
+          (await getCard(SPEECH_JORDAN, onEducation(BEN))).status,
+          200,
+          'and admits Ben, whom only the stored bytes name',
         );
         assert.deepEqual(
           listedIds(await listMySchedules(CARMEN)),
