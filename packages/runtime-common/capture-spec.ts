@@ -1507,9 +1507,6 @@ export function capturesMetaFromRoster(
       result[name] = {
         url: captureNameURLFor({ realmURL, instanceLocalPath, name }),
         contentType: captureOutputContentType('pdf'),
-        ...(payload.filename !== undefined
-          ? { filename: payload.filename }
-          : {}),
       };
       continue;
     }
