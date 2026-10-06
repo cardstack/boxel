@@ -1,8 +1,15 @@
+import { fileURLToPath } from 'node:url';
+
 import { ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { defaultClientConditions, defineConfig } from 'vite';
 
-import { glimmerMotionSource } from './scripts/source-resolution.mjs';
+import {
+  glimmerMotionSource,
+  selfReferenceSource,
+} from './scripts/source-resolution.mjs';
+
+const fromSource = process.env.CHOREO_LIBS !== 'dist';
 
 // This vite pipeline serves and builds the test suite (see tests/index.html
 // and the `test` script). Publishing is a separate rollup build; see
@@ -23,10 +30,9 @@ export default defineConfig(({ mode }) => ({
     // harness runs with no rollup build first. CHOREO_LIBS=dist leaves the
     // condition out and runs the suite against the built output instead, the
     // code npm consumers get; the package must be built.
-    conditions:
-      process.env.CHOREO_LIBS === 'dist'
-        ? defaultClientConditions
-        : ['developing:choreo', ...defaultClientConditions],
+    conditions: fromSource
+      ? ['developing:choreo', ...defaultClientConditions]
+      : defaultClientConditions,
     alias: [
       // glimmer-motion declares the npm `@glimmer/tracking` and
       // `@glimmer/validator` for their types, and those real packages would
@@ -45,6 +51,11 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   plugins: [
+    // the suite's own `glimmer-motion/*` imports, which Embroider would
+    // otherwise answer from dist/ whenever glimmer-motion is built
+    ...(fromSource
+      ? [selfReferenceSource(fileURLToPath(new URL('.', import.meta.url)))]
+      : []),
     glimmerMotionSource(),
     ember(),
     babel({
