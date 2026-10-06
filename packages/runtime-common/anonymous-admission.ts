@@ -19,7 +19,14 @@ import {
   type AnonymousRequestEvent,
 } from './card-operations/telemetry.ts';
 import {
+  ActingUsers,
+  type ActingUserResolution,
+} from './card-operations/acting-users.ts';
+import type { CommitBatchOptions } from './card-operations/coordinator.ts';
+import type { OperationScope } from './card-operations/dispatch.ts';
+import {
   ANONYMOUS_ELIGIBLE_OPERATIONS,
+  OperationFailure,
   isWrite,
   type OperationError,
 } from './card-operations/types.ts';
@@ -175,6 +182,11 @@ export interface AnonymousAdmissionEnvironment {
   openedOperations(): Promise<ReadonlySet<string>>;
   // The realm's limit and blocklist for such callers.
   access(): Promise<AnonymousAccessSettings>;
+  // Who an acting-user key names in the realm's current `realm.json`
+  // `config`, and whether that user may write the realm (see
+  // `ActingUsers`). The gate, explain and capability checks judge a key by
+  // this same function.
+  actingUser(key: string): Promise<ActingUserResolution>;
 }
 
 export class AnonymousAdmission {
@@ -249,6 +261,62 @@ export class AnonymousAdmission {
       }
     }
     return caller;
+  }
+
+  // See `AnonymousAdmissionEnvironment.actingUser`.
+  resolveActingUser(key: string): Promise<ActingUserResolution> {
+    return this.#env.actingUser(key);
+  }
+
+  // The acting users of a request a caller who isn't signed in sent, one set
+  // for the request, which every scope it builds shares.
+  actingUsersFor(requestContext: RequestContext): ActingUsers | undefined {
+    if (!requestContext.anonymousCaller) {
+      return undefined;
+    }
+    requestContext.actingUsers ??= new ActingUsers((key) =>
+      this.#env.actingUser(key),
+    );
+    return requestContext.actingUsers;
+  }
+
+  // What a batch by a caller the realm admitted without a session commits
+  // with: who it is made as, and its count. `cost` units are counted against
+  // the caller's budget once every entry is admitted and before anything is
+  // written, so a batch the gate refuses costs nothing, and one that doesn't
+  // fit is refused whole. Nothing for any other caller.
+  commitOptions(
+    request: Request,
+    requestContext: RequestContext,
+    scope: OperationScope,
+    cost: () => number,
+  ): Pick<CommitBatchOptions, 'actingUser' | 'beforeCommit'> {
+    let caller = requestContext.anonymousCaller;
+    if (!caller) {
+      return {};
+    }
+    // Counted once for the request, however many times its batch commits: a
+    // write the realm commits again to reserialize what it wrote is one write.
+    // A batch with nothing in it costs nothing.
+    let counting: Promise<void> | undefined;
+    let count = async () => {
+      let units = cost();
+      if (units < 1) {
+        return;
+      }
+      let counted = await this.chargeCaller(request, caller, units, {
+        actingUsers: scope.actingUsers.admitted,
+      });
+      if (counted.kind !== 'counted') {
+        let refusal = anonymousCountRefusal(counted);
+        caller.retryAfterSeconds = refusal.meta!.retryAfterSeconds as number;
+        throw new OperationFailure(refusal);
+      }
+    };
+    return {
+      actingUser: () => scope.actingUsers.admitted[0],
+      beforeCommit: () => (counting ??= count()),
+    };
   }
 
   // The answer a caller the realm admitted without a session gets in place of
