@@ -1018,6 +1018,14 @@ async function queryKeptOutOfReach(
 // grant on `FileDef` would answer "not found" for an empty path and "not
 // permitted" for a card's, which says which cards exist.
 //
+// A path the realm ignores is matched by nothing too: anything in a `.git` or
+// `node_modules` directory at any depth, a partial write, and whatever the
+// `.gitignore` at the realm's root names. The realm never indexes or lists such a path, so
+// no grant reaches its bytes, and it is refused as an empty path is. A caller
+// the realm ACL lets read still reads it, since that read never reaches the
+// gate. The `.gitignore` is a data file like any other, so a grant on `FileDef`
+// serves it unless its own patterns name it.
+//
 // The bytes judged here and the bytes the executor serves are two reads of
 // one path, so a write landing between them is served under this judgment —
 // the same window a read's predicate has between being evaluated and the
@@ -1035,6 +1043,9 @@ async function storedBytesSubject(
   let fileURL = pathsFor(core).fileURL(localPath);
   let codeRef = policyFileDefCodeRef(localPath);
   if (!codeRef) {
+    return undefined;
+  }
+  if (await core.isIgnored(fileURL)) {
     return undefined;
   }
   if (extensionOfName(localPath) === '.json') {

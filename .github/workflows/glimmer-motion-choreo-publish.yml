@@ -1,0 +1,454 @@
+name: glimmer-motion + choreo publish
+
+# Publishes `glimmer-motion` and `@cardstack/choreo` in lockstep: both carry
+# one version, every release publishes both, and choreo's peer dependency on
+# glimmer-motion (`workspace:*`, rewritten by pnpm at publish) names that exact
+# version. The release scripts live in packages/glimmer-motion/scripts/release.
+#
+#   • `unstable` job
+#       - On push to main touching either package — decide the version bump
+#         from the merged PR's title (conventional-commit prefix) and whether
+#         the push moved anything either tarball ships, stamp the new version
+#         into both manifests, commit it back to main, tag, and publish
+#         `glimmer-motion@<v>-unstable.<n>` then `@cardstack/choreo@<v>-unstable.<n>`
+#         under dist-tag `unstable`.
+#       - Via "Run workflow" with the `confirm` field left blank — republish
+#         main as it stands, skipping the PR-driven bump/commit/tag dance. The
+#         next free `-unstable.<n>` comes from npm (npm is the authority; the
+#         bump is not committed back to main), so a manual publish can neither
+#         clobber an existing version nor collide with the push path, which
+#         resolves its counter the same way.
+#
+#   • `stable` job — "Run workflow" with `confirm = promote`. Strips
+#     `-unstable.<n>` from the shared version, closes out both CHANGELOGs'
+#     `[Unreleased]` sections under that version, and publishes the clean
+#     semver of both packages under dist-tag `latest`. The deliberate "cut a
+#     release" step.
+#
+# Both flows live in one file so they share a single npm Trusted-Publisher rule
+# per package, each registered against this filename. Splitting them into
+# separate workflow files would require a second rule per package on
+# npmjs.com.
+#
+# Publish order: glimmer-motion, then choreo. choreo's declarations build
+# (its `prepack`) resolves glimmer-motion through the built output
+# glimmer-motion's own `prepack` just produced, and the choreo a consumer
+# installs names a glimmer-motion that must already be on npm. Both jobs
+# publish with `pnpm -r publish`, which takes that order from the workspace
+# dependency graph and skips a package whose version npm already holds — so a
+# stable run that published glimmer-motion and then failed on choreo can be
+# finished by running `promote` again (see the stable job's resume path). A
+# skipped package is not packed, so its `prepack` never runs; the resume path
+# builds glimmer-motion itself before publishing choreo.
+#
+# Loop safety (unstable job):
+#   - Bot commits end with [skip ci] so GitHub does not re-trigger workflows.
+#   - The job guards with `if: github.actor != 'github-actions[bot]'` (belt +
+#     suspenders).
+#
+# Concurrency:
+#   - `group: glimmer-motion-choreo-release` serializes these packages' own
+#     releases so two runs can't pick the same prerelease counter or tag.
+#   - `queue: max` keeps the queued ones. A group holds a single pending run by
+#     default and cancels it when a newer one arrives, so back-to-back merges
+#     would silently discard a release that nothing ever retries. `queue: max`
+#     lets up to 100 wait their turn instead. It cannot be combined with
+#     `cancel-in-progress: true`, which is not wanted here anyway.
+#   - The group is deliberately *not* shared with the other packages' publish
+#     workflows. Serializing across packages would make each one's releases
+#     wait on the others', and every wait is a checkout of a main that has
+#     moved on. The races that sharing would prevent — two workflows pushing a
+#     release commit at once — are handled where they happen, by replaying the
+#     commit onto a moved main (see the push below).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/glimmer-motion/**"
+      - "packages/choreo/**"
+      # The catalog resolves both packages' `catalog:` dependency specifiers
+      # into the published manifests, so a change to one of their entries
+      # changes what ships. compute-release.ts decides whether the entries that
+      # moved are ones either package depends on.
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Leave blank to publish current main as unstable. Type 'promote' to strip -unstable.N and publish as latest."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: read
+
+concurrency:
+  group: glimmer-motion-choreo-release
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  unstable:
+    name: Publish unstable
+    # Manual runs are restricted to "Use workflow from: main", so the YAML
+    # interpreting a publish is always main's (defense in depth — the checkout
+    # below also pins `ref: main`).
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && (
+        github.event_name == 'push'
+        || (inputs.confirm == '' && github.ref == 'refs/heads/main')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          # fetch-tags so compute-release.ts can read glimmer-motion-choreo-v* tags.
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/init
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch PR title from merge SHA
+        id: pr
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_JSON=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0] // empty')
+          if [ -z "$PR_JSON" ]; then
+            echo "No PR associated with ${{ github.sha }} — likely a direct push. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+          PR_BODY=$(echo "$PR_JSON" | jq -r '.body // ""')
+          # Multiline-safe output via heredoc delimiter (GitHub Actions docs).
+          {
+            echo "title<<__PR_EOF__"
+            echo "$PR_TITLE"
+            echo "__PR_EOF__"
+            echo "body<<__PR_EOF__"
+            echo "$PR_BODY"
+            echo "__PR_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "PR title: $PR_TITLE"
+
+      - name: Compute release
+        id: release
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
+        working-directory: packages/glimmer-motion
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_BODY: ${{ steps.pr.outputs.body }}
+          # The commits this push introduced. The checkout above is of `main`,
+          # whose tip may already have moved past this push — a run that waited
+          # its turn in the concurrency group, or one that started while another
+          # merge was landing, sees the newer commits. Without these, the
+          # changed-file check would describe someone else's commit and skip this
+          # release.
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          RESULT=$(NODE_NO_WARNINGS=1 node scripts/release/compute-release.ts)
+          echo "Compute result: $RESULT"
+          echo "bump=$(echo "$RESULT" | jq -r '.bump')" >> "$GITHUB_OUTPUT"
+          echo "nextVersion=$(echo "$RESULT" | jq -r '.nextVersion // ""')" >> "$GITHUB_OUTPUT"
+          echo "bootstrapStableTag=$(echo "$RESULT" | jq -r '.bootstrapStableTag // ""')" >> "$GITHUB_OUTPUT"
+
+      - name: Read the tag this release follows
+        id: previous
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none'
+        run: |
+          set -euo pipefail
+          # The nearest glimmer-motion-choreo-v* tag reachable from HEAD, which
+          # scopes the auto-generated release notes to just this release's
+          # commits. Nothing has been tagged yet at this point in the run, so
+          # HEAD is the right starting ref. Absent on the first release.
+          if TAG=$(git describe --tags --abbrev=0 --match 'glimmer-motion-choreo-v*' HEAD 2>/dev/null); then
+            echo "Previous tag: $TAG"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "No prior glimmer-motion-choreo-v* tag (first release); notes will cover the full history."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stamp the version, commit, tag, and push
+        id: commit
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none'
+        env:
+          BOOTSTRAP_TAG: ${{ steps.release.outputs.bootstrapStableTag }}
+          NEXT_VERSION: ${{ steps.release.outputs.nextVersion }}
+        run: |
+          set -euo pipefail
+          TAG="glimmer-motion-choreo-v${NEXT_VERSION}"
+          # An existing tag means an earlier run pushed it and then failed before
+          # publishing. The orphan needs deleting
+          # (`git push origin :refs/tags/<tag>`) and npm state checking for both
+          # packages before this can be re-run.
+          for existing in "$TAG" ${BOOTSTRAP_TAG:+"$BOOTSTRAP_TAG"}; do
+            if git rev-parse --verify --quiet "refs/tags/$existing" >/dev/null; then
+              echo "::error::Tag $existing already exists. A prior publish likely failed mid-flight. Delete the orphan tag and verify npm state for both packages before re-running."
+              exit 1
+            fi
+          done
+
+          # Where the base version still stands, before the bump — the commit the
+          # bootstrap tag belongs on, when one is needed. It stays an ancestor of
+          # main through any replay below.
+          BASE_SHA=$(git rev-parse HEAD)
+
+          node packages/glimmer-motion/scripts/release/set-version.ts "$NEXT_VERSION"
+          git add packages/glimmer-motion/package.json packages/choreo/package.json
+          git commit -m "chore(release): glimmer-motion + choreo v${NEXT_VERSION} [skip ci]"
+
+          # Push the commit before creating any tag. An ordinary merge can land
+          # on main while this run works, and pushing tags alongside a rejected
+          # branch update would leave tags naming a commit main never received.
+          # Replaying is safe: the commit rewrites version strings and nothing
+          # else.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::main moved under this run three times; nothing was published."
+              exit 1
+            fi
+            echo "main moved; replaying the release commit onto it and retrying."
+            git fetch origin main
+            git rebase origin/main
+          done
+
+          # Annotated tags: they carry a message, and `--follow-tags` skips
+          # lightweight ones silently.
+          git tag -a "$TAG" -m "$TAG"
+          if [ -n "$BOOTSTRAP_TAG" ]; then
+            # Nothing recorded the stable version this prerelease series builds
+            # on, and the manifests no longer hold it after the commit above.
+            git tag -a "$BOOTSTRAP_TAG" \
+              -m "$BOOTSTRAP_TAG — the version this prerelease series builds on" \
+              "$BASE_SHA"
+            git push origin "$TAG" "$BOOTSTRAP_TAG"
+          else
+            git push origin "$TAG"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the next unstable version
+        # Manual path only. The push path already has its version from
+        # compute-release.ts; this gives the manual path the same guarantee that
+        # the version is free on npm for both packages, without committing the
+        # bump.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: packages/glimmer-motion
+        run: |
+          set -euo pipefail
+          VERSION=$(NODE_NO_WARNINGS=1 node scripts/release/next-unstable-version.ts)
+          node scripts/release/set-version.ts "$VERSION"
+
+      - name: Publish to npm under unstable
+        if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.bump != 'none')
+        run: |
+          set -euo pipefail
+          # Authentication is npm Trusted Publishing. The `id-token: write`
+          # permission above lets each publish exchange a GitHub OIDC token for
+          # a short-lived npm credential, against a rule registered on
+          # npmjs.com for that package that names this repository and this
+          # workflow file — which is why both publish paths live here. No npm
+          # token is involved. A rule can only be added to a package that
+          # exists, so each package's very first version is published by hand;
+          # every one after it comes from here.
+          #
+          # Each package's `prepack` builds dist/ and declarations/.
+          # --no-git-checks because the commit and tag above are already
+          # pushed; pnpm's git-state check would otherwise object.
+          pnpm --filter glimmer-motion --filter @cardstack/choreo -r publish \
+            --tag unstable --access public --provenance --no-git-checks
+
+      - name: Create GitHub Release (prerelease)
+        if: github.event_name == 'push' && steps.commit.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_VERSION: ${{ steps.release.outputs.nextVersion }}
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+          TAG: ${{ steps.commit.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ARGS=(--title "glimmer-motion + @cardstack/choreo v${NEXT_VERSION}" --generate-notes --prerelease)
+          if [ -n "$PREVIOUS_TAG" ]; then
+            ARGS+=(--notes-start-tag "$PREVIOUS_TAG")
+          fi
+          gh release create "$TAG" "${ARGS[@]}"
+
+  stable:
+    name: Promote latest unstable to stable
+    # Any non-empty `confirm` routes here so the validation step can fail loudly
+    # on a typo. Gating on `confirm == 'promote'` would make a typo skip both
+    # jobs and read as a successful no-op run.
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        # Through the environment, not interpolated into the script: the input
+        # is free text.
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "promote" ]; then
+            echo "::error::Pass 'promote' as the confirm input to proceed."
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/init
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Strip -unstable.N from the version
+        id: strip
+        working-directory: packages/glimmer-motion
+        run: |
+          set -euo pipefail
+          # The shared version; this fails if the manifests disagree.
+          CURRENT=$(NODE_NO_WARNINGS=1 node --input-type=module -e "
+            const { currentLockstepVersion } = await import('./scripts/release/compute-release.ts');
+            console.log(currentLockstepVersion());
+          ")
+          echo "Current version: $CURRENT"
+          if [[ "$CURRENT" != *-unstable.* ]]; then
+            # A stable version whose release tag exists but which npm lacks
+            # for either package is a promotion that pushed its commit and tag
+            # and then failed before both publishes finished. Resume it from
+            # the tagged commit: publish what is missing and create the
+            # release. Anything else stable is refused rather than republished
+            # under a new tag.
+            TAG="glimmer-motion-choreo-v${CURRENT}"
+            MISSING=""
+            if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+              for name in glimmer-motion @cardstack/choreo; do
+                if [ -z "$(npm view "${name}@${CURRENT}" version 2>/dev/null || true)" ]; then
+                  MISSING="$MISSING ${name}@${CURRENT}"
+                fi
+              done
+            fi
+            if [ -z "$MISSING" ]; then
+              echo "::error::Version $CURRENT is already stable; nothing to promote."
+              exit 1
+            fi
+            echo "Resuming the $CURRENT promotion from $TAG; npm lacks:$MISSING"
+            git checkout --detach "refs/tags/$TAG"
+            echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+            echo "resume=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          STABLE="${CURRENT%-unstable.*}"
+          echo "Promoting to: $STABLE"
+          node scripts/release/set-version.ts "$STABLE"
+          echo "version=$STABLE" >> "$GITHUB_OUTPUT"
+          echo "resume=false" >> "$GITHUB_OUTPUT"
+
+      - name: Close out the CHANGELOGs
+        id: notes
+        working-directory: packages/glimmer-motion
+        env:
+          CHANGELOG_NOTES_FILE: ${{ runner.temp }}/release-notes.md
+          RESUME: ${{ steps.strip.outputs.resume }}
+          VERSION: ${{ steps.strip.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$RESUME" = "true" ]; then
+            # The tagged commit already closed the CHANGELOGs out; read the
+            # notes back from it.
+            node scripts/release/promote-changelog.ts --notes "$VERSION"
+          else
+            # The date is passed in rather than read from the clock inside the
+            # script, so the same inputs always produce the same files.
+            node scripts/release/promote-changelog.ts "$VERSION" "$(date -u +%F)"
+          fi
+          echo "body_file=$CHANGELOG_NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag stable
+        if: steps.strip.outputs.resume != 'true'
+        env:
+          VERSION: ${{ steps.strip.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="glimmer-motion-choreo-v${VERSION}"
+          # A stable tag for an unstable manifest version names a commit main
+          # doesn't hold at this version, so something outside this workflow
+          # made it. Stop rather than publish next to it.
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists, but main's manifests are still at a prerelease of it. Check where the tag came from and npm state for both packages before re-running."
+            exit 1
+          fi
+          git add \
+            packages/glimmer-motion/package.json packages/glimmer-motion/CHANGELOG.md \
+            packages/choreo/package.json packages/choreo/CHANGELOG.md
+          git commit -m "Release glimmer-motion + @cardstack/choreo v${VERSION} [skip ci]"
+
+          # Push the commit before tagging, and replay it if an ordinary merge
+          # landed on main first — same reasoning as the unstable job's push.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::main moved under this run three times; nothing was published."
+              exit 1
+            fi
+            echo "main moved; replaying the release commit onto it and retrying."
+            git fetch origin main
+            git rebase origin/main
+          done
+
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+      - name: Build glimmer-motion for a resumed choreo publish
+        # pnpm skips an already-published package without running its
+        # prepack, and choreo's declarations build reads glimmer-motion's
+        # built output.
+        if: steps.strip.outputs.resume == 'true'
+        working-directory: packages/glimmer-motion
+        run: pnpm build
+
+      - name: Publish to npm under latest
+        # Authenticated by npm Trusted Publishing, as in the unstable job, and
+        # in the same order. A resumed run publishes only the package npm lacks.
+        run: |
+          set -euo pipefail
+          pnpm --filter glimmer-motion --filter @cardstack/choreo -r publish \
+            --access public --provenance --no-git-checks
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES_BODY_FILE: ${{ steps.notes.outputs.body_file }}
+          VERSION: ${{ steps.strip.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "glimmer-motion-choreo-v${VERSION}" \
+            --title "glimmer-motion + @cardstack/choreo v${VERSION}" \
+            --notes-file "$NOTES_BODY_FILE"
