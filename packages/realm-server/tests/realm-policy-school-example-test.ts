@@ -769,10 +769,11 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  // Pins the documented posture "Search is not a prompt revocation boundary"
-  // in docs/realm-policy-limits.md. It asserts the behavior as it is, the
-  // lagging search included: a change that makes search revoke promptly
-  // changes that section too.
+  // Search is not a prompt revocation boundary. A direct read judges the card
+  // as stored, so taking someone off it refuses them on the next request,
+  // while a search composes the grant into a filter over the index and keeps
+  // returning the card until it is reindexed. This pins that behavior as it
+  // is, the lagging search included, so a change to it is a deliberate one.
   module('a provider is taken off a schedule', function () {
     // Work that holds the Education realm's index lane and never completes:
     // a job a worker has claimed and not finished, which nothing runs. Every

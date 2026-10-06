@@ -547,10 +547,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a write is authorized on the state before it, so it may write the field that authorized it', async function (assert) {
       // The known hole in judging pre-state alone: a caller a field admits can
-      // rewrite that field, and leave the card no longer admitting them. Pins
-      // "A write is judged against the state it changes" in
-      // docs/realm-policy-limits.md, which describes this hole and the
-      // authoring rules that contain it; a change here changes that section.
+      // rewrite that field, and leave the card no longer admitting them.
       let update = await operations(
         AUTH.teacher(),
         invoke('update', {
@@ -585,9 +582,6 @@ module(basename(import.meta.filename), function (hooks) {
 
   module('what a create is judged by', function () {
     test('a named create anchored on a card is judged by that card, which it cannot write', async function (assert) {
-      // Pins the containing rule in "A write is judged against the state it
-      // changes" (docs/realm-policy-limits.md): a grant resting on a field is
-      // safe beside an operation that cannot write that field.
       let appended = await operations(
         AUTH.teacher(),
         invoke('appendActivity', {
