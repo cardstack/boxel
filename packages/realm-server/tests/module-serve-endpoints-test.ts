@@ -3,7 +3,10 @@ const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  takeModuleCompileStats,
+} from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   createJWT,
@@ -278,6 +281,9 @@ module(basename(import.meta.filename), function () {
         // test here.
         await testRealm.write('shared-cache.gts', cardSource('SharedCache'));
         let before = testRealm.__testOnlyGetTranspileCallCount();
+        // The compile stats are process-wide, so take what earlier work left
+        // in them before counting this test's compile.
+        takeModuleCompileStats();
 
         // The header opts out of the in-memory cache alone. The shared one
         // still answers, which is what tells the two layers apart from
@@ -293,6 +299,12 @@ module(basename(import.meta.filename), function () {
           before + 1,
           'the first request compiled the module',
         );
+        let afterCompile = takeModuleCompileStats();
+        assert.true(
+          afterCompile.count >= 1,
+          'the compile is recorded in the compile stats',
+        );
+        assert.true(afterCompile.totalMs > 0, 'with the time it took');
 
         let second = await request
           .get('/shared-cache.gts')
@@ -309,6 +321,11 @@ module(basename(import.meta.filename), function () {
           testRealm.__testOnlyGetTranspileCallCount(),
           before + 1,
           'and the compiler did not run again: the shared cache held the bytes',
+        );
+        assert.strictEqual(
+          takeModuleCompileStats().count,
+          0,
+          'an answer from the shared cache is not recorded as a compile',
         );
         assert.strictEqual(
           second.text,
@@ -478,12 +495,19 @@ module(basename(import.meta.filename), function () {
           'uncompilable.gts',
           `export class Broken extends {{{ {`,
         );
+        // The compile stats are process-wide, so take what earlier work left
+        // in them before counting this test's compile.
+        takeModuleCompileStats();
 
         let response = await request
           .get('/uncompilable.gts')
           .set('Accept', SupportedMimeType.All);
 
         assert.strictEqual(response.status, 406, 'HTTP 406 status');
+        assert.true(
+          takeModuleCompileStats().count >= 1,
+          'the failed compile is recorded in the compile stats too',
+        );
         assert.strictEqual(
           response.headers['content-type'],
           SupportedMimeType.JSONAPI,

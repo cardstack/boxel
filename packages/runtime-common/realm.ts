@@ -390,6 +390,7 @@ import {
   type TextFileRef,
 } from './stream.ts';
 import { transpileJS } from './transpile.ts';
+import { recordModuleCompile } from './module-compile-stats.ts';
 import type {
   CoarseRefusal,
   Method,
@@ -1098,6 +1099,10 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 const MODULE_ETAG_VARIANT = 'module';
+
+// A compile this long holds up every other request the process has, so it is
+// logged at info rather than debug.
+const SLOW_MODULE_COMPILE_MS = 1000;
 const SOURCE_ETAG_VARIANT = 'source';
 // How long a conditional write waits for the realm's indexing lane before it
 // gives up and refuses, and how often it re-asks while waiting.
@@ -2454,6 +2459,7 @@ export class Realm {
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
   #perfLog = logger('perf');
+  #compileLog = logger('realm:transpile');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -8915,7 +8921,10 @@ export class Realm {
           `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched zero rows`,
         );
       } else {
-        this.#log.debug(
+        // At info so a wipe of a warm cache, which every later request for
+        // those modules pays for by compiling again, can be seen in deployed
+        // logs.
+        this.#log.info(
           `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched ${updated.length} row(s)`,
         );
       }
@@ -8973,6 +8982,7 @@ export class Realm {
       content: stored.body as FileRef['content'],
     });
     let transpiled: string;
+    let compileStart = 0;
     try {
       // Force an absolute path so babel's internal path.resolve doesn't depend
       // on process.cwd(), which differs between node and browser shims and was
@@ -8986,8 +8996,17 @@ export class Realm {
         await this.#testOnlyTranspileDelay();
       }
       this.#transpileCallCount += 1;
+      compileStart = performance.now();
       transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
+      // A compile that fails can hold the thread as long as one that
+      // succeeds, so it is recorded too. Nothing is recorded when the failure
+      // came before the compile started.
+      if (compileStart > 0) {
+        this.#recordCompile(canonicalPath, source.length, compileStart, {
+          failed: true,
+        });
+      }
       let cardError =
         err instanceof CardError
           ? err
@@ -9020,6 +9039,7 @@ export class Realm {
       this.url,
       this.paths,
     );
+    this.#recordCompile(canonicalPath, source.length, compileStart);
 
     return {
       kind: 'module',
@@ -9028,6 +9048,31 @@ export class Realm {
       headers,
       dependencyKeys,
     };
+  }
+
+  // Record one real compile: the wall time from the start of the transpile
+  // through the dependency scan of its output, or to the point where the
+  // transpile threw. The transform's parse and generate run on the calling
+  // thread, so for a large module this is about how long the compile kept the
+  // process from answering anything else. It is wall time, though: the
+  // transpile awaits babel, so if babel yields, other work, including a second
+  // compile, can run inside the span. Logged at info when it is long enough to
+  // be felt by other requests. `sourceChars` is the decoded source's length in
+  // UTF-16 code units, not its size on disk.
+  #recordCompile(
+    canonicalPath: string,
+    sourceChars: number,
+    start: number,
+    opts: { failed?: boolean } = {},
+  ) {
+    let durationMs = performance.now() - start;
+    recordModuleCompile(durationMs);
+    let line = `${opts.failed ? 'compile failed' : 'compiled'} ${canonicalPath} sourceChars=${sourceChars} ms=${Math.round(durationMs)}`;
+    if (durationMs >= SLOW_MODULE_COMPILE_MS) {
+      this.#compileLog.info(line);
+    } else {
+      this.#compileLog.debug(line);
+    }
   }
 
   private moduleErrorResponse(
