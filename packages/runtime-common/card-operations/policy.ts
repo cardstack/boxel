@@ -258,6 +258,25 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // holds now.
 const NO_OPERATIONS: ReadonlySet<string> = new Set();
 
+// Whether any grant in a policy card's attributes, as stored, opts in to
+// callers who aren't signed in. A card where none does opens nothing to them
+// however it compiles, so this answers for it without compiling. One where
+// some grant does is compiled to find out what that grant opens.
+function opensAnythingToAnonymous(attributes: unknown): boolean {
+  let rules = (attributes as { rules?: unknown } | undefined)?.rules;
+  return (
+    Array.isArray(rules) &&
+    rules.some(
+      (rule) =>
+        Array.isArray(rule?.grants) &&
+        rule.grants.some(
+          (grant: unknown) =>
+            (grant as { anonymous?: unknown } | null)?.anonymous === true,
+        ),
+    )
+  );
+}
+
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -313,9 +332,31 @@ export class RealmPolicyCache {
   // be compiled opens nothing, which leaves that caller with the answer every
   // other caller who isn't signed in gets, rather than a failure that would
   // tell them the realm names a policy.
+  //
+  // A policy no grant of which opts in to such callers is answered from the
+  // card as the index holds it, without compiling: the realm asks this of
+  // every request that authenticated nobody, including the ones its own
+  // renders make, and a realm whose policy opens nothing to such callers pays
+  // for no compile on their account.
   async anonymousAdmission(): Promise<ReadonlySet<string>> {
     let compiled: CompiledRealmPolicy | undefined;
     try {
+      let card = await this.#env.policyCard();
+      if (!card) {
+        return NO_OPERATIONS;
+      }
+      let current = this.#current;
+      let warm =
+        current &&
+        current.compiled.card === card &&
+        !this.#stale &&
+        now() - this.#validatedAt < MAX_UNVALIDATED_MS;
+      if (!warm) {
+        let row = await this.#env.readCard(new URL(card));
+        if (!opensAnythingToAnonymous(row?.instance?.attributes)) {
+          return NO_OPERATIONS;
+        }
+      }
       compiled = await this.get();
     } catch (e: unknown) {
       log.warn(

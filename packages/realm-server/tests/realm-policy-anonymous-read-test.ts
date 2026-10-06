@@ -136,9 +136,12 @@ module(basename(import.meta.filename), function (hooks) {
             'articles/published.json': article('Polls open', 'published'),
             'articles/draft.json': article('Polls close', 'draft', [EDITOR]),
           },
+          // The org admin reads the realms the org's policies govern, which
+          // is what lets them ask a policy what it decides there.
           permissions: {
             [EDITOR]: ['read', 'write', 'realm-owner'],
             [READER]: ['read'],
+            [ORG_ADMIN]: ['read'],
           },
         },
         {
@@ -151,7 +154,10 @@ module(basename(import.meta.filename), function (hooks) {
             'article.gts': ARTICLE_MODULE,
             'articles/published.json': article('Shelved', 'published'),
           },
-          permissions: { [EDITOR]: ['read', 'write', 'realm-owner'] },
+          permissions: {
+            [EDITOR]: ['read', 'write', 'realm-owner'],
+            [ORG_ADMIN]: ['read'],
+          },
         },
         {
           realmURL: new URL(ORG),
@@ -224,13 +230,22 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
+  // `from` is the caller's address, or null for a request whose address the
+  // server can't work out.
   function readCard(
     url: string,
-    from: string | undefined = VISITOR,
+    from: string | null = VISITOR,
     accept: string = SupportedMimeType.CardJson,
   ) {
     let req = request.get(new URL(url).pathname).set('Accept', accept);
-    return from === undefined ? req : req.set('X-Forwarded-For', from);
+    return from === null ? req : req.set('X-Forwarded-For', from);
+  }
+
+  // The records of this test's own requests for articles. The realm's own
+  // renders also reach it without credentials while it indexes, and are
+  // recorded as any such request is.
+  function articleRecords() {
+    return records.filter((record) => record.route.includes('/articles/'));
   }
 
   function readSource(url: string, from: string = VISITOR) {
@@ -317,7 +332,7 @@ module(basename(import.meta.filename), function (hooks) {
       before.predicateEvaluations,
       'no predicate',
     );
-    assert.deepEqual(records, [], 'and records nothing');
+    assert.deepEqual(articleRecords(), [], 'and records nothing');
   });
 
   test('signed-in callers read as they always have', async function (assert) {
@@ -327,7 +342,7 @@ module(basename(import.meta.filename), function (hooks) {
       .set('X-Forwarded-For', VISITOR)
       .set('Authorization', `Bearer ${createJWT(newsroom, READER, ['read'])}`);
     assert.strictEqual(response.status, 200, 'a reader reads the draft');
-    assert.deepEqual(records, [], 'and is no anonymous caller');
+    assert.deepEqual(articleRecords(), [], 'and is no anonymous caller');
   });
 
   test('an address that uses up the limit gets 429 until the window turns, and nobody else is affected', async function (assert) {
@@ -340,10 +355,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(over.status, 429, 'the third read is refused');
     assert.strictEqual(over.body.errors[0].code, 'rate-limited');
     let retryAfter = Number(over.headers['retry-after']);
-    assert.true(
-      retryAfter >= 1 && retryAfter <= 600,
-      `Retry-After says when: ${retryAfter}`,
-    );
+    assert.true(retryAfter >= 1, `Retry-After says when: ${retryAfter}`);
+    assert.true(retryAfter <= 600, 'no later than the window turns');
     assert.strictEqual(
       over.body.errors[0].meta.retryAfterSeconds,
       retryAfter,
@@ -366,7 +379,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a signed-in caller is never limited',
     );
 
-    let limited = records.filter((r) => r.outcome === 'rate-limited');
+    let limited = articleRecords().filter((r) => r.outcome === 'rate-limited');
     assert.strictEqual(limited.length, 1, 'the refusal is recorded');
     assert.deepEqual(
       {
@@ -395,14 +408,14 @@ module(basename(import.meta.filename), function (hooks) {
       'the budget is untouched',
     );
     assert.deepEqual(
-      records.map((r) => r.outcome),
+      articleRecords().map((r) => r.outcome),
       ['refused', 'refused', 'refused', 'admitted'],
     );
   });
 
   test('a limit the realm sets nothing for is the platform default', async function (assert) {
     await readCard(PUBLISHED);
-    let [admitted] = records;
+    let [admitted] = articleRecords();
     assert.strictEqual(admitted?.outcome, 'admitted');
     assert.strictEqual(admitted?.limit?.from, 'platform');
     assert.strictEqual(admitted?.count, 1);
@@ -422,7 +435,7 @@ module(basename(import.meta.filename), function (hooks) {
       200,
       'an address outside the range reads',
     );
-    let block = records.find((r) => r.outcome === 'blocked');
+    let block = articleRecords().find((r) => r.outcome === 'blocked');
     assert.strictEqual(block?.blockReason, 'blocklist');
     assert.strictEqual(block?.clientIP, BLOCKED_VISITOR);
   });
@@ -431,14 +444,14 @@ module(basename(import.meta.filename), function (hooks) {
     await setNewsroomConfig({ anonymousBlocklist: ['the spammer'] });
     unauthenticated(await readCard(PUBLISHED), 'any address', assert);
     assert.strictEqual(
-      records.find((r) => r.outcome === 'blocked')?.blockReason,
+      articleRecords().find((r) => r.outcome === 'blocked')?.blockReason,
       'blocklist-invalid',
     );
   });
 
   test('a caller whose address cannot be worked out is treated as blocked', async function (assert) {
-    unauthenticated(await readCard(PUBLISHED, undefined), 'no address', assert);
-    let block = records.find((r) => r.outcome === 'blocked');
+    unauthenticated(await readCard(PUBLISHED, null), 'no address', assert);
+    let block = articleRecords().find((r) => r.outcome === 'blocked');
     assert.strictEqual(block?.blockReason, 'ip-undetermined');
     assert.strictEqual(block?.clientIP, null);
   });
@@ -455,6 +468,93 @@ module(basename(import.meta.filename), function (hooks) {
       (await readCard(PUBLISHED, `${BLOCKED_VISITOR}, ${VISITOR}`)).status,
       429,
       'naming another address first does not buy another budget',
+    );
+  });
+
+  // The org admin asks the policy card what it decides for a caller who isn't
+  // signed in.
+  async function explainAnonymous(policy: string, target: string) {
+    let response = await request
+      .post(`${new URL(ORG).pathname}_operations`)
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('Accept', SupportedMimeType.BoxelOperations)
+      .set('Content-Type', SupportedMimeType.BoxelOperations)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(org, ORG_ADMIN, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send(
+        JSON.stringify({
+          'boxel:operations': [
+            {
+              op: 'invoke',
+              'boxel:name': 'explain',
+              href: policy,
+              data: { actor: '', target, operation: 'read' },
+            },
+          ],
+        }),
+      );
+    assertOk(response);
+    return response.body['atomic:results'][0];
+  }
+
+  function assertOk(response: Response) {
+    if (response.status !== 200) {
+      throw new Error(`explain answered ${response.status}: ${response.text}`);
+    }
+  }
+
+  test('explain answers for a caller who is not signed in where the policy opens the operation to one', async function (assert) {
+    let published = await explainAnonymous(NEWSROOM_POLICY, PUBLISHED);
+    assert.strictEqual(published.actor, null);
+    assert.strictEqual(published.decision, 'allowed', 'a published article');
+    assert.strictEqual(published.reason, 'granted');
+    let draft = await explainAnonymous(NEWSROOM_POLICY, DRAFT);
+    assert.strictEqual(draft.decision, 'denied', 'a draft');
+    assert.notStrictEqual(
+      draft.reason,
+      'actor-required',
+      'judged against the grants rather than refused for want of an actor',
+    );
+    let library = await explainAnonymous(
+      LIBRARY_POLICY,
+      `${LIBRARY}articles/published`,
+    );
+    assert.strictEqual(
+      library.reason,
+      'actor-required',
+      'a policy that opens nothing tells such a caller to authenticate',
+    );
+  });
+
+  test('a capability check answers a caller who is not signed in, and counts for nothing', async function (assert) {
+    await setNewsroomConfig({
+      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+    });
+    let ask = (realm: string, target: string) =>
+      request
+        .post(`${new URL(realm).pathname}_capabilities`)
+        .set('Accept', SupportedMimeType.JSON)
+        .set('Content-Type', SupportedMimeType.JSON)
+        .set('X-Forwarded-For', VISITOR)
+        .send({ checks: [{ target, operation: 'read' }] });
+    for (let i = 0; i < 3; i++) {
+      let response = await ask(NEWSROOM, PUBLISHED);
+      assert.strictEqual(response.status, 200, `check ${i}`);
+      assert.true(response.body.checks[0].allowed, 'a published article');
+    }
+    let draft = await ask(NEWSROOM, DRAFT);
+    assert.false(draft.body.checks[0].allowed, 'a draft');
+    unauthenticated(
+      await ask(LIBRARY, `${LIBRARY}articles/published`),
+      'a realm whose policy opens nothing',
+      assert,
+    );
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      200,
+      'none of the checks used up the budget',
     );
   });
 
@@ -476,7 +576,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert,
     );
     assert.deepEqual(
-      records.map((r) => r.outcome),
+      articleRecords().map((r) => r.outcome),
       ['infra', 'infra', 'infra', 'refused'],
     );
   });
