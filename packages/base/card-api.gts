@@ -124,6 +124,7 @@ import {
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
+import { untitledCardTitle } from './untitled-card-title';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -3537,8 +3538,9 @@ function defaultCaptureFilename(
     return instance.name?.replace(/\.[^.]+$/, '');
   }
   let title = instance.cardTitle;
-  let placeholder = `Untitled ${(instance.constructor as typeof CardDef).displayName}`;
-  return title === placeholder ? undefined : title;
+  return title === untitledCardTitle(instance.constructor as typeof CardDef)
+    ? undefined
+    : title;
 }
 
 function boundedCaptureFilename(value: unknown): string | undefined {
@@ -4247,7 +4249,7 @@ export class CardDef extends BaseDef {
     computeVia: function (this: CardDef) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
-        : `Untitled ${this.constructor.displayName}`;
+        : untitledCardTitle(this.constructor as typeof CardDef);
     },
   });
   @field cardDescription = contains(StringField, {
