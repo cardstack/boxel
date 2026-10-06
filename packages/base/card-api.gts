@@ -35,6 +35,7 @@ import {
   getAncestor,
   getMenuItems,
   getField,
+  hasNothingToShow,
   getSerializer,
   humanReadable,
   identifyCard,
@@ -4292,6 +4293,14 @@ export class CardDef extends BaseDef {
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     return getDefaultCardMenuItems(this, params);
+  }
+
+  // Whether this card, rendered as a tool's result in the AI assistant chat,
+  // has nothing in it for the user to look at. A result type with its own
+  // embedded view answers true for a result that view would render empty, and
+  // the chat then leaves the card out.
+  get [hasNothingToShow](): boolean {
+    return false;
   }
 }
 

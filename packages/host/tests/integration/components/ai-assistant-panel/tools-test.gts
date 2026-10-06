@@ -2882,6 +2882,19 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
   test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
     let roomId = await renderAiAssistantPanel();
+    // The chat makes the result card asynchronously; wait for that card, so
+    // the assertion below runs after the chat has decided whether to show it.
+    let store = getService('store');
+    let addWithoutPersisting = store.addWithoutPersisting.bind(store);
+    let resultCardMade = new Promise<void>((resolve) => {
+      store.addWithoutPersisting = (async (
+        ...args: Parameters<typeof addWithoutPersisting>
+      ) => {
+        let card = await addWithoutPersisting(...args);
+        resolve();
+        return card;
+      }) as typeof store.addWithoutPersisting;
+    });
 
     simulateToolResult(roomId, {
       requestId: 'run-realm-code-read-only',
@@ -2893,7 +2906,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }),
     });
 
-    await waitFor('[data-test-message-idx="0"] [data-test-apply-state]');
+    await resultCardMade;
     await settled();
 
     assert

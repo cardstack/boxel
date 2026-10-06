@@ -1,4 +1,5 @@
 import { modifier } from 'ember-modifier';
+import { hasNothingToShow } from '@cardstack/runtime-common';
 import {
   CardDef,
   Component,
@@ -490,9 +491,10 @@ export class RunRealmCodeResult extends CardDef {
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
 
-  // A run that only read saved no files and took no captures, so the chat
-  // has nothing of it to show.
-  get hasNothingToShow() {
+  // A run that saved no files and took no captures, such as one that only
+  // read, has nothing for the chat to show. Its script result goes to the
+  // model only.
+  get [hasNothingToShow](): boolean {
     return !this.files?.length && !this.captures?.length;
   }
 
@@ -512,6 +514,8 @@ export class RunRealmCodeResult extends CardDef {
               </li>
             {{/each}}
           </ul>
+        {{else}}
+          <p class='no-files'>No files were changed.</p>
         {{/if}}
         {{#if @model.captures.length}}
           <div class='captures'>
@@ -552,6 +556,10 @@ export class RunRealmCodeResult extends CardDef {
           flex-shrink: 0;
           color: var(--boxel-450);
           text-transform: capitalize;
+        }
+        .no-files {
+          margin: 0;
+          color: var(--boxel-450);
         }
         .captures {
           display: flex;

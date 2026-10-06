@@ -24,6 +24,7 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   getMenuItems,
+  hasNothingToShow,
 } from '@cardstack/runtime-common';
 
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
@@ -243,10 +244,7 @@ export default class RoomMessageTool extends Component<Signature> {
     if (isRealmCard) {
       return true;
     }
-    return (
-      hasOwnEmbeddedView(card) &&
-      !(card as CardDef & { hasNothingToShow?: boolean }).hasNothingToShow
-    );
+    return hasOwnEmbeddedView(card) && !card[hasNothingToShow];
   }
 
   private get didFailCorrectnessCheck() {
