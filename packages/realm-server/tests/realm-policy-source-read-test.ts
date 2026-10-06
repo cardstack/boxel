@@ -210,6 +210,21 @@ const DOTTED_CARD = `${EDUCATION}classrooms/room.v2`;
 const GONE_DOTTED_CARD = `${EDUCATION}classrooms/room.v9`;
 const DOTTED_MODULE = `${EDUCATION}classroom.v2`;
 const GONE_DOTTED_MODULE = `${EDUCATION}classroom.v9`;
+// A dot-file, which has no extension and so is typed as `FileDef`, and paths
+// the realm ignores: one under `.git/`, one in a repository nested below the
+// root, one under `node_modules`, and one its `.gitignore` names. Each ignored file has a missing path of the same length
+// beside it, outside anything ignored.
+const GITIGNORE = `${EDUCATION}.gitignore`;
+const GIT_CONFIG = `${EDUCATION}.git/config`;
+const GONE_GIT_CONFIG = `${EDUCATION}.gix/config`;
+const NESTED_GIT_CONFIG = `${EDUCATION}vendor/lib/.git/config`;
+const GONE_NESTED_GIT_CONFIG = `${EDUCATION}vendor/lib/.gix/config`;
+const DRAFT_PDF = `${EDUCATION}drafts/plan.pdf`;
+const GONE_DRAFT_PDF = `${EDUCATION}public/gone.pdf`;
+const PACKAGE_README = `${EDUCATION}node_modules/pkg/README.md`;
+const GONE_PACKAGE_README = `${EDUCATION}public/gone/pkgs/README.md`;
+// A card's document under the path the `.gitignore` names.
+const DRAFT_ROOM_SOURCE = `${EDUCATION}drafts/room.json`;
 
 module(basename(import.meta.filename), function (hooks) {
   let education: Realm;
@@ -271,6 +286,15 @@ module(basename(import.meta.filename), function (hooks) {
               { title: 'Room 2', teacherIds: [TEACHER], announcements: [] },
             ),
             'private/handbook.pdf': '%PDF-1.4 the staff handbook',
+            '.gitignore': 'drafts/\n',
+            '.git/config': '[core]\n\tbare = false\n',
+            'drafts/plan.pdf': '%PDF-1.4 the draft plan',
+            'drafts/room.json': card(
+              { module: '../classroom', name: 'Classroom' },
+              { title: 'Draft', teacherIds: [TEACHER], announcements: [] },
+            ),
+            'node_modules/pkg/README.md': 'a dependency',
+            'vendor/lib/.git/config': '[core]\n\tbare = true\n',
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -403,6 +427,13 @@ module(basename(import.meta.filename), function (hooks) {
     writeFileSync(join(realmsRootPath, 'realm_0', localPath), content);
   }
 
+  // The realm learns what its `.gitignore` files name on a from-scratch
+  // index, and a realm that boots onto an index it already has runs none, so
+  // a test about those rules runs one first.
+  async function readIgnoreFiles() {
+    await education.fullIndex();
+  }
+
   function classroomSource(title: string) {
     return card(
       { module: '../classroom', name: 'Classroom' },
@@ -441,6 +472,33 @@ module(basename(import.meta.filename), function (hooks) {
       await education.write('public/notes.pdf', 'term notes');
       await education.indexing();
       await served(assert, NOTES_PDF, 'the same bytes named notes.pdf');
+    });
+  });
+
+  module('a dot-file, and a path the realm ignores', function () {
+    test('a FileDef grant covers a dot-file', async function (assert) {
+      await policy('anyFile');
+      await served(assert, GITIGNORE, 'a .gitignore resolves to FileDef');
+    });
+
+    test('a narrower file type does not cover a dot-file', async function (assert) {
+      await refused(assert, GITIGNORE, 'a .gitignore under a PdfDef grant');
+    });
+
+    test('no grant reaches a path the realm ignores', async function (assert) {
+      await readIgnoreFiles();
+      await refused(assert, DRAFT_PDF, 'an ignored .pdf under a PdfDef grant');
+      await policy('anyFile');
+      await refused(assert, GIT_CONFIG, 'a file under .git/');
+      await refused(assert, DRAFT_PDF, 'a file the .gitignore names');
+      await refused(assert, PACKAGE_README, 'a file under node_modules');
+      await refused(assert, NESTED_GIT_CONFIG, "a nested repository's .git/");
+      await policy('classroomSource');
+      await refused(
+        assert,
+        DRAFT_ROOM_SOURCE,
+        "a Classroom's .json under a path the .gitignore names",
+      );
     });
   });
 
@@ -917,6 +975,54 @@ module(basename(import.meta.filename), function (hooks) {
           { actual: nameOf(LICENSE), expected: nameOf(GONE_LICENSE) },
           `${label}: a PdfDef grant does not cover it`,
         );
+      }
+    });
+
+    test('a FileDef grant serves a dot-file and no path the realm ignores', async function (assert) {
+      await readIgnoreFiles();
+      await policy('anyFile');
+      for (let { label, accept } of BYTE_ROUTES) {
+        let gitignore = await get(GITIGNORE, accept, AS.teacher());
+        assert.strictEqual(gitignore.status, 200, `${label}: the .gitignore`);
+        assert.strictEqual(textOf(gitignore), 'drafts/\n', `${label}: bytes`);
+        for (let [url, missing] of [
+          [GIT_CONFIG, GONE_GIT_CONFIG],
+          [DRAFT_PDF, GONE_DRAFT_PDF],
+          [PACKAGE_README, GONE_PACKAGE_README],
+          [NESTED_GIT_CONFIG, GONE_NESTED_GIT_CONFIG],
+        ] as [string, string][]) {
+          let response = await get(url, accept, AS.teacher());
+          assert.strictEqual(response.status, 404, `${label}: ${nameOf(url)}`);
+          assertSameAnswer(
+            assert,
+            response,
+            await get(missing, accept, AS.teacher()),
+            { actual: nameOf(url), expected: nameOf(missing) },
+            `${label}: ${nameOf(url)} is refused as a missing file is`,
+          );
+          assert.deepEqual(
+            headersOf(await head(url, accept, AS.teacher())),
+            headersOf(await head(missing, accept, AS.teacher())),
+            `${label}: a HEAD of ${nameOf(url)} answers as a missing file's`,
+          );
+        }
+      }
+    });
+
+    test('a reader reads the paths the realm ignores as before', async function (assert) {
+      await readIgnoreFiles();
+      for (let { label, accept } of BYTE_ROUTES) {
+        for (let [url, bytes] of [
+          [GITIGNORE, 'drafts/\n'],
+          [GIT_CONFIG, '[core]\n\tbare = false\n'],
+          [DRAFT_PDF, '%PDF-1.4 the draft plan'],
+          [PACKAGE_README, 'a dependency'],
+          [NESTED_GIT_CONFIG, '[core]\n\tbare = true\n'],
+        ] as [string, string][]) {
+          let response = await get(url, accept, AS.reader());
+          assert.strictEqual(response.status, 200, `${label}: ${nameOf(url)}`);
+          assert.strictEqual(textOf(response), bytes, `${label}: its bytes`);
+        }
       }
     });
 
