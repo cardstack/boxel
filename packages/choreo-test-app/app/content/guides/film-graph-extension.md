@@ -13,8 +13,8 @@ The film graph is an authoring layer over a compiled edit. Its extension APIs le
 `GraphProvider` exposes `node()`. `GraphNodeComponent` supplies the marker lifecycle for a component implementing that contract. A patch-oriented component can extend `PatchComponent` and return a `Patch`, while Adjustment and Filter express more specific authoring intent.
 
 ```ts title="Component logic excerpt"
-import { Adjustment } from 'glimmer-motion/film';
-import type { Patch } from 'glimmer-motion/film';
+import { Adjustment } from '@cardstack/choreo/film';
+import type { Patch } from '@cardstack/choreo/film';
 
 export class SoftRim extends Adjustment<{ amount?: number }> {
   patch(): Patch {
@@ -37,6 +37,6 @@ Test the compiled graph before testing the pixels. Assert which beats receive th
 
 ## API Coverage
 
-**glimmer-motion/film**: `Adjustment`, `Filter`, `AttachNode`, `CompiledGraph`, `compileGraph`, `EyeNode`, `GraphNode`, `GroupNode`, `JoinNode`, `Patch`, `PatchNode`, `ShotNode`, `ToNode`, `VoiceNode`, `collectGraph`, `GraphNodeComponent`, `GraphProvider`, `PatchComponent`.
+**@cardstack/choreo/film**: `Adjustment`, `Filter`, `AttachNode`, `CompiledGraph`, `compileGraph`, `EyeNode`, `GraphNode`, `GroupNode`, `JoinNode`, `Patch`, `PatchNode`, `ShotNode`, `ToNode`, `VoiceNode`, `collectGraph`, `GraphNodeComponent`, `GraphProvider`, `PatchComponent`.
 
 Read the implementation: [`adjust.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/adjust.gts), [`compile.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/compile.ts), [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts).

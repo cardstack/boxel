@@ -516,7 +516,7 @@ export class ContactLink extends Component<ContactLinkSignature> {
         a.pretui-contact:hover {
           background: color-mix(in oklch, var(--hue) 20%, var(--card));
         }
-        /* Appendix O.4 — one consistent press across everything pressable. */
+        /* One consistent press across everything pressable. */
         a.pretui-contact:active {
           transform: scale(0.96);
         }
@@ -532,7 +532,7 @@ export class ContactLink extends Component<ContactLinkSignature> {
           flex: 0 0 auto;
           display: inline-flex;
         }
-        /* Appendix O.8 — min-width: 0 plus truncation on every flex child, or a
+        /* Min-width: 0 plus truncation on every flex child, or a
            long address blows the row out. */
         .pretui-contact-value {
           min-width: 0;

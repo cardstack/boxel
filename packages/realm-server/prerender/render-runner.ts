@@ -492,6 +492,7 @@ export class RenderRunner {
 
       let waitResult = await withTimeout(
         page,
+        requestId,
         async () => {
           const jsHandle = await page.waitForFunction(
             (expectedNonce: string) => {
@@ -699,47 +700,116 @@ export class RenderRunner {
       );
 
       let renderStart = Date.now();
-      let nonce = String(this.#nonce);
-      // A capture is always a card render. The only caller option it honors is
-      // the realm's `loaderEpoch`, which resets a pooled tab holding a
-      // superseded module graph before this render (see the render route's
-      // loader-epoch synchronization) rather than capturing the old module.
-      // Take just that field rather than spreading the caller's options, so a
-      // capture can never be handed a second, conflicting render kind
-      // (`fileRender` / `fileExtract`).
-      let renderOptions: RenderRouteOptions = {
-        cardRender: true,
-        ...(callerRenderOptions?.loaderEpoch !== undefined
+      // A capture is a card render, or — when the caller asks for
+      // `fileRender` — a file render: the file's resource is extracted in
+      // this tab first, then rendered through its FileDef, the two steps an
+      // index visit takes for a file. Besides that choice the only caller
+      // option a capture honors is the realm's `loaderEpoch`, which resets a
+      // pooled tab holding a superseded module graph before this render (see
+      // the render route's loader-epoch synchronization) rather than
+      // capturing the old module. The options are built from those fields
+      // rather than by spreading the caller's, so a capture is never handed
+      // two conflicting render kinds.
+      let loaderEpochOption =
+        callerRenderOptions?.loaderEpoch !== undefined
           ? { loaderEpoch: callerRenderOptions.loaderEpoch }
-          : {}),
-      };
-      let serializedOptions = serializeRenderRouteOptions(renderOptions);
-      const captureOptions: CaptureOptions = {
-        expectedId: url.replace(/\.json$/i, ''),
-        expectedNonce: nonce,
-        simulateTimeoutMs: opts?.simulateTimeoutMs,
-        timeoutMs: opts?.timeoutMs,
-        ...(captureSpec ? { captureSpec } : {}),
-      };
-
-      let capture = await withTimeout(
-        page,
-        async () => {
-          await transitionTo(
-            page,
-            'render.html',
-            url,
-            nonce,
-            serializedOptions,
-            format,
-            '0',
+          : {};
+      let isFileCapture = callerRenderOptions?.fileRender === true;
+      // A file capture's extract and render share the one time limit a card
+      // capture's render has, so the capture as a whole stays inside the
+      // request and job deadlines sized for a single render, and running out
+      // reads as a render timeout either way.
+      let captureDeadline = Date.now() + (opts?.timeoutMs ?? cardRenderTimeout);
+      let remainingOpts = () => ({
+        ...opts,
+        timeoutMs: Math.max(1, captureDeadline - Date.now()),
+      });
+      let extractError: RenderError | undefined;
+      let renderOptions: RenderRouteOptions | undefined;
+      if (isFileCapture) {
+        let fileDefCodeRef = callerRenderOptions?.fileDefCodeRef;
+        let extracted = fileDefCodeRef
+          ? await this.#extractFileForCapture({
+              page,
+              url,
+              options: {
+                fileExtract: true,
+                fileDefCodeRef,
+                ...loaderEpochOption,
+              },
+              opts: remainingOpts(),
+              affinityKey,
+              signal,
+            })
+          : {
+              error: buildInvalidFileExtractResponseError(
+                url,
+                'a file capture needs the file definition to render it with',
+                { title: 'Invalid capture request' },
+              ),
+            };
+        if ('error' in extracted) {
+          extractError = extracted.error;
+        } else {
+          // The render route reads a file render's model from this stash,
+          // with the realm alongside it (a file render has no response
+          // header to learn its realm from). It stays on the tab after this
+          // render; every capture and every visit clears both stashes before
+          // its own render, so no later render reads it.
+          await abortable(signal, () =>
+            page.evaluate(
+              (data) => {
+                (globalThis as any).__boxelFileRenderData = data;
+              },
+              { resource: extracted.resource, fileDefCodeRef, realmURL: realm },
+            ),
           );
-          return await runCapture(page, format, 0, captureOptions);
-        },
-        opts?.timeoutMs,
-        this.#profileContext(affinityKey, url, `capture ${format}`),
-        signal,
-      );
+          renderOptions = {
+            fileRender: true,
+            fileDefCodeRef,
+            ...loaderEpochOption,
+          };
+        }
+      } else {
+        renderOptions = { cardRender: true, ...loaderEpochOption };
+      }
+
+      let capture: PrerenderCapture | RenderError;
+      if (extractError || !renderOptions) {
+        capture = extractError!;
+      } else {
+        let nonce = String(isFileCapture ? ++this.#nonce : this.#nonce);
+        let serializedOptions = serializeRenderRouteOptions(renderOptions);
+        let renderOpts = isFileCapture ? remainingOpts() : opts;
+        const captureOptions: CaptureOptions = {
+          // A card render reports the extensionless card id; a file render
+          // reports the file's own URL.
+          expectedId: isFileCapture ? url : url.replace(/\.json$/i, ''),
+          expectedNonce: nonce,
+          simulateTimeoutMs: renderOpts?.simulateTimeoutMs,
+          timeoutMs: renderOpts?.timeoutMs,
+          ...(captureSpec ? { captureSpec } : {}),
+        };
+        capture = await withTimeout(
+          page,
+          url,
+          async () => {
+            await transitionTo(
+              page,
+              'render.html',
+              url,
+              nonce,
+              serializedOptions,
+              format,
+              '0',
+            );
+            return await runCapture(page, format, 0, captureOptions);
+          },
+          renderOpts?.timeoutMs,
+          this.#profileContext(affinityKey, url, `capture ${format}`),
+          signal,
+        );
+      }
 
       let response: CapturePrerenderResponse;
       if (isRenderError(capture)) {
@@ -792,6 +862,83 @@ export class RenderRunner {
     } finally {
       release();
     }
+  }
+
+  // The extract half of a file capture: a standalone `render.file-extract`
+  // transition, as an index visit's extract pass runs it, yielding the
+  // resource the capture's file render is hydrated from. A failed extract
+  // comes back as the render error the capture reports.
+  async #extractFileForCapture({
+    page,
+    url,
+    options,
+    opts,
+    affinityKey,
+    signal,
+  }: {
+    page: Page;
+    url: string;
+    options: RenderRouteOptions;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    affinityKey: string;
+    signal?: AbortSignal;
+  }): Promise<
+    | { resource: NonNullable<FileExtractResponse['resource']> }
+    | { error: RenderError }
+  > {
+    let nonce = String(++this.#nonce);
+    let captureOptions: CaptureOptions = {
+      expectedId: url,
+      expectedNonce: nonce,
+      simulateTimeoutMs: opts?.simulateTimeoutMs,
+      timeoutMs: opts?.timeoutMs,
+    };
+    let capture = await withTimeout(
+      page,
+      url,
+      async () => {
+        await transitionTo(
+          page,
+          'render.file-extract',
+          url,
+          nonce,
+          serializeRenderRouteOptions(options),
+        );
+        return await captureFileExtract(page, captureOptions);
+      },
+      opts?.timeoutMs,
+      this.#profileContext(affinityKey, url, 'capture file-extract'),
+      signal,
+    );
+    if (isRenderError(capture)) {
+      return { error: capture as RenderError };
+    }
+    let extract: FileExtractResponse;
+    try {
+      extract = JSON.parse(
+        (capture as FileExtractCapture).value,
+      ) as FileExtractResponse;
+    } catch {
+      return {
+        error: buildInvalidFileExtractResponseError(
+          url,
+          'file extract returned an invalid payload',
+          { title: 'Invalid file extract response' },
+        ),
+      };
+    }
+    if (extract.status !== 'ready' || !extract.resource) {
+      return {
+        error:
+          extract.error ??
+          buildInvalidFileExtractResponseError(
+            url,
+            `file extract of ${url} produced no resource`,
+            { title: 'Invalid file extract response' },
+          ),
+      };
+    }
+    return { resource: extract.resource };
   }
 
   async prerenderModuleAttempt({
@@ -884,6 +1031,7 @@ export class RenderRunner {
 
       let capture = await withTimeout(
         page,
+        url,
         async () => {
           await transitionTo(
             page,
@@ -924,7 +1072,7 @@ export class RenderRunner {
           response = JSON.parse(moduleCapture.value) as ModuleRenderResponse;
           if (response.status !== moduleCapture.status) {
             let renderError = buildInvalidModuleResponseError(
-              page,
+              url,
               `module prerender status mismatch (${moduleCapture.status} vs ${response.status})`,
               { title: 'Invalid module response', evict: true },
             );
@@ -965,7 +1113,7 @@ export class RenderRunner {
           }
         } catch (_e) {
           let renderError = buildInvalidModuleResponseError(
-            page,
+            url,
             `module prerender returned invalid payload: ${moduleCapture.value}`,
             { title: 'Invalid module response' },
           );
@@ -1301,6 +1449,7 @@ export class RenderRunner {
         let extractStart = Date.now();
         let capture = await withTimeout(
           page,
+          url,
           async () => {
             await transitionTo(
               page,
@@ -1358,7 +1507,7 @@ export class RenderRunner {
             ) as FileExtractResponse;
             if (extractResponse.status !== fileCapture.status) {
               let renderError = buildInvalidFileExtractResponseError(
-                page,
+                url,
                 `file extract status mismatch (${fileCapture.status} vs ${extractResponse.status})`,
                 { title: 'Invalid file extract response', evict: true },
               );
@@ -1383,7 +1532,7 @@ export class RenderRunner {
             }
           } catch (_e) {
             let renderError = buildInvalidFileExtractResponseError(
-              page,
+              url,
               `file extract returned invalid payload: ${fileCapture.value}`,
               { title: 'Invalid file extract response' },
             );
@@ -1513,6 +1662,7 @@ export class RenderRunner {
           let stepResult = await this.#step(affinityKey, step, () =>
             withTimeout(
               page,
+              url,
               fn,
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, step, jobId),
@@ -1546,6 +1696,7 @@ export class RenderRunner {
           let isolatedStart = Date.now();
           let isolatedResult = await withTimeout(
             page,
+            url,
             async () => {
               await transitionTo(
                 page,
@@ -2051,6 +2202,7 @@ export class RenderRunner {
             let isolatedStart = Date.now();
             let isolatedResult = await withTimeout(
               page,
+              url,
               async () => {
                 await transitionTo(
                   page,
@@ -2105,6 +2257,7 @@ export class RenderRunner {
             let iconStart = Date.now();
             let iconResult = await withTimeout(
               page,
+              url,
               async () => {
                 await transitionTo(
                   page,
@@ -2145,6 +2298,7 @@ export class RenderRunner {
               () =>
                 withTimeout(
                   page,
+                  url,
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, 'file head/0', jobId),
@@ -2240,6 +2394,7 @@ export class RenderRunner {
               let res = await this.#step(affinityKey, step.name, () =>
                 withTimeout(
                   page,
+                  url,
                   step.cb,
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, step.name, jobId),
@@ -2529,6 +2684,7 @@ export class RenderRunner {
     let stepResult = await this.#step(affinityKey, label, () =>
       withTimeout(
         page,
+        url,
         () => captureDeclared(page, captures, kind, captureOptions),
         timeoutMs,
         this.#profileContext(affinityKey, url, label, jobId),

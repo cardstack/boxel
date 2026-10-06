@@ -373,15 +373,15 @@ that to carry.
 } satisfies OperationDeclaration;
 ```
 
-| `links` | What the response carries                                          |
-| ------- | ------------------------------------------------------------------ |
-| `full`  | The whole assembled closure in `included[]`. The default.          |
-| `ids`   | The relationships name their targets; nothing is assembled.        |
-| `none`  | No relationship data at all — nothing assembled and nothing named. |
+| `links` | What the response carries                                                          |
+| ------- | ---------------------------------------------------------------------------------- |
+| `full`  | The whole assembled closure in `included[]`. The default.                          |
+| `ids`   | The relationships name their targets; nothing is assembled.                        |
+| `none`  | A `query` only. No relationship data at all — nothing assembled and nothing named. |
 
 Under `ids` a consumer fetches each target on its own request, which is one
 round trip per link it actually displays rather than one response carrying
-every link it might. Under `none` the card answers for itself alone.
+every link it might. Under `none` each row answers for its card alone.
 
 **It governs reads of this card, not the card's appearances in other reads.**
 The strategy decides what a read rooted at this card serves. When the card turns
@@ -392,28 +392,30 @@ that is read: to keep the cards a `Classroom` links to out of a `Classroom`
 read, declare it on `Classroom`, not on the types it links to.
 
 A declaration on `read` itself governs the card's plain `GET`, which is what
-the host loads a card with to render it live — in every mode, for every user.
-Under `ids` the host resolves the named links itself as it displays them. Under
-`none` it is never told what the card links to, so wherever the host renders the
-card live from its `GET` its link fields come up empty, including for the realm's
-own writers. A card the host first holds from a search row that carried its
-links — an ad-hoc search's, or a `full` query's — keeps them: what a search
-carries is governed by the search, not by the card's `read`.
-Prerendered HTML is different: it is rendered from the card's stored source
-under the realm's own authority, so the card's prerendered formats still draw
-its links, and so does every view the host fills from them, such as search
-results and embedded or fitted rows.
+the host loads a card with to render and edit it live — in every mode, for every
+user. Under `ids` the host resolves the named links itself as it displays them,
+and each linked card is fetched through the gate on its own request. A card the
+host first holds from a search row that carried its links — an ad-hoc search's,
+or a `full` query's — keeps them: what a search carries is governed by the
+search, not by the card's `read`. Prerendered HTML is different: it is rendered
+from the card's stored source under the realm's own authority, so the card's
+prerendered formats still draw its links under every strategy, and so does
+every view the host fills from them, such as search results and embedded or
+fitted rows.
 
-Editing such a card in the host is where `none` costs data. Saving a card whose
-link fields were left alone keeps its stored links, because a save leaves out
-the link fields the loaded document never set. Editing a link field does not:
-the editor starts from empty, and the save replaces what is stored with what the
-editor showed — a `linksToMany` edit replaces the whole list, so adding one card
-drops every one the editor never displayed, and a `linksTo` edit overwrites a
-target the writer never saw. Reach for `none` only where a card's representation
-genuinely should not say what it points at and its links are not edited in the
-host; where they are viewed or edited there, `ids` narrows the closure without
-hiding them.
+**A `read` may not declare `none`.** Under `none` the host would never be told
+what the card links to, so wherever it rendered the card live its link fields
+would come up empty, including for the realm's own writers — and an edit would
+cost data. Saving a card whose link fields were left alone keeps its stored
+links, because a save leaves out the link fields the loaded document never set,
+but editing a link field does not: the editor starts from empty, and the save
+replaces what is stored with what the editor showed. A `linksToMany` edit
+replaces the whole list, so adding one card would drop every one the editor
+never displayed, and a `linksTo` edit would overwrite a target the writer never
+saw. To narrow a `read`, declare `ids`: it keeps the closure out of the response
+without hiding what the card links to. A query's `none` carries no such risk,
+because the host never adopts its rows as live cards (see
+[On a `query`](#on-a-query)).
 
 **It applies to every caller alike.** The declaration belongs to the operation,
 not to the caller, so the same request answers a realm writer and a caller
@@ -422,17 +424,17 @@ costs the round trips to everyone, which is the trade to weigh — and the reaso
 the strategy is not a way to show one caller less than another.
 
 **It governs assembly, not derivation.** A computed value that derives from a
-linked card still carries its value under all three strategies. The value is
-computed when the card is indexed and lives in the card's own attributes, so
-withholding the link withholds the linked card's document and nothing about
-what the card itself computed from it. This is the part that most often
-surprises: `links: 'none'` on a card whose `summary` is computed from its
-linked records still answers with that summary.
+linked card still carries its value under every strategy. The value is computed
+when the card is indexed and lives in the card's own attributes, so withholding
+the link withholds the linked card's document and nothing about what the card
+itself computed from it. This is the part that most often surprises: `links:
+'ids'` on a card whose `summary` is computed from its linked records still
+answers with that summary, and so does each row of a `none` query.
 
 #### On a `query`
 
-A `query` declaration narrows its results the same way, with the same three
-values:
+A `query` declaration narrows its results the same way, and may declare any of
+the three values, `none` included:
 
 ```ts
 @operation static allRosters = {
@@ -498,8 +500,13 @@ the host then holds the card with the links that row carried.
 or a query's results assemble, and no other base assembles one. A write answers
 without assembling the card's closure, and a `readSource` serves stored bytes. A
 `links` on any other base is refused where it is written, and a stored
-definition carrying one records a `links-without-assembly` issue; a value that
-is not one of the three records `invalid-link-strategy`.
+definition carrying one records a `links-without-assembly` issue. A value its
+base cannot apply records `invalid-link-strategy`: on a `query`, anything but the
+three; on a `read`, anything but `full` and `ids`. The `@operation` decorator
+refuses a `read` declaring `none` where it is written, and the declaration's
+type does not admit it. A stored `read` entry that carries `none` anyway, or a
+value the realm cannot interpret, is served as `ids`, so the card's `GET` still
+tells the host what it links to.
 
 ### `html` — which prerendered formats a read or a query serves
 
@@ -935,9 +942,12 @@ Four worth recognizing:
   realm is told this. A caller who may not gets the same 404 as for a card
   that does not exist. Whether a predicate throws depends on the card's stored
   values, so a 500 would say that the card is there and something about what
-  it holds. The realm logs the fault on its `realm:policy` channel, and an
-  explain reports it as `predicate-threw`. Write predicates that cannot throw
-  on any value the card can store.
+  it holds. The realm logs the fault on its `realm:policy` channel, at most
+  once a minute for each predicate, and an explain reports it as
+  `predicate-threw`. The line names the realm, the caller, the operation, the
+  card, the grant's path in the policy card (`rules[3].grants[0]`) and the
+  kind of error, and quotes neither the predicate nor anything the card
+  stores. Write predicates that cannot throw on any value the card can store.
 
 ## The card routes and a realm's policy
 
@@ -991,6 +1001,28 @@ and `_permissions`. The first two write or remove stored bytes verbatim, whether
 those are module source, a data file or a card's whole document, and a verbatim
 replacement can change a card's type out from under the grant that admitted it.
 The administration routes do not act on a card at all.
+
+The realm's reads that come straight from its index answer on its own
+permissions alone too, so a caller the realm admits only through a grant is
+refused them:
+
+- the `card+html`, `file-meta+html`, `markdown` and `file-meta` reads of a path.
+  They serve what the index holds for it without running an operation, so no
+  `read` grant is consulted and no projection it declares narrows them. Such a
+  caller reads the card through `card+json` or `_search`, which resolve the read
+  through the policy.
+- `_types`, `_mtimes`, `_publishability` and `_indexing-errors`, which answer for
+  the whole realm at once. A grant reaches a card, not the realm.
+- `_dependencies`, `_card-dependencies` and `_lint`, which read the realm's
+  modules. Modules are code, and no grant reaches code.
+- `_sign-capture-urls`, which signs URLs for the capture serve, and the capture
+  serve itself.
+
+`_info` is the exception. It answers any signed-in caller in a realm that names
+a policy, since it carries the realm's name and icon, which a view of a granted
+card shows. It does not carry the policy's pointer. A caller who authenticated
+nobody is still told to authenticate, and in a realm with no policy `_info`
+answers as the realm's permissions say.
 
 ### Stored bytes, and code
 

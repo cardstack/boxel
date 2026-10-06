@@ -3,17 +3,26 @@
 module.exports = {
   extends: 'recommended',
   rules: {
-    // <style> is allowed, as in boxel's own template-lint plugin: the film
-    // components carry their stylesheet with them.
-    'no-forbidden-elements': ['meta', 'html', 'script'],
-    // The layout wrappers (Choreo's overlay layers, LayoutGroup, MotionConfig,
-    // the film graph host) carry static structural styles — display:
-    // contents, absolute overlay positioning — on the element, so they work
-    // without the consumer importing any CSS. CSS the engine animates goes
-    // through the motion modifier, never a bound style attribute.
+    // The layout wrappers (LayoutGroup, MotionConfig) carry a static
+    // `display: contents` on the element, so they work without the consumer
+    // importing any CSS. CSS the engine animates goes through the motion
+    // modifier, never a bound style attribute.
     'no-inline-styles': false,
-    // A drag, press or scrub gesture starts on pointer down; binding it to
-    // pointer up would break the gesture.
-    'no-pointer-down-event-binding': false,
   },
+  overrides: [
+    {
+      // Test fixtures bind gestures to plain elements to exercise the engine
+      // directly, start drag and press gestures on pointer down as the engine
+      // does, and set exact geometry with <style> blocks and computed inline
+      // styles so the engine's measurements are deterministic. The leading
+      // ** also matches the absolute paths the pre-commit autofix passes.
+      files: ['**/tests/**'],
+      rules: {
+        'no-forbidden-elements': ['meta', 'html', 'script'],
+        'no-invalid-interactive': false,
+        'no-pointer-down-event-binding': false,
+        'style-concatenation': false,
+      },
+    },
+  ],
 };

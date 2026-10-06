@@ -179,13 +179,16 @@
   --boxel-teal: #00ffba;
   --boxel-dark-teal: #00da9f; /* darker teal; feeds --boxel-highlight-hover */
   --boxel-red: #ff5050;
+  --boxel-dark-red: #bc0302;
   --boxel-pink: #ff009d;
   --boxel-orange: #ff7f00;
-  --boxel-amber: #d97706; /* attention status default */
+  --boxel-amber: #d97706;
+  --boxel-dark-amber: #b26106; /* attention status default */
   --boxel-yellow: #ffd800;
   --boxel-lime: #c3fc33;
   --boxel-green: #37eb77;
   --boxel-dark-green: #00ac3d;
+  --boxel-deep-green: #00892f;
   --boxel-lilac: #a66dfa;
   --boxel-fuschia: #ac00ff;
   --boxel-purple: #6638ff;
@@ -243,9 +246,9 @@
   --boxel-light-600: var(--boxel-300);
 
   /* Status colors */
-  --boxel-destructive: var(--boxel-danger);
+  --boxel-destructive: var(--boxel-error-100);
   --boxel-warning: var(--boxel-yellow);
-  --boxel-success: var(--boxel-dark-green);
+  --boxel-success: var(--boxel-deep-green);
 
   --boxel-error-100: #dc0202; /* alert - attention - error */
   --boxel-error-200: #ed0000;

@@ -1,8 +1,9 @@
+import { Choreo } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, spring, to } from 'glimmer-motion';
+import { motion, spring, to } from 'glimmer-motion';
 import { tuneMotion, tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 
 const slides = [0, 1, 2] as const;

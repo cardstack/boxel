@@ -15,7 +15,8 @@ A shared element needs a consistent identity on both pages and compatible geomet
 For live navigation, put the changing outlet inside a persistent region:
 
 ```gts title="Component template excerpt"
-import { Choreo, spring } from 'glimmer-motion';
+import { Choreo } from '@cardstack/choreo';
+import { spring } from 'glimmer-motion';
 const flight = spring({ stiffness: 260, damping: 30 });
 
 <template>

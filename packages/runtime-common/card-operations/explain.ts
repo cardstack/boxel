@@ -35,6 +35,7 @@ import {
 import { resolveNamedQuery, searchInvocation } from './named-query.ts';
 import type { CompiledRealmPolicy } from './policy.ts';
 import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
+import type { PolicyRoute } from './telemetry.ts';
 import {
   EXPLAIN_CAP,
   OperationFailure,
@@ -79,8 +80,12 @@ import {
 // explain would tell them otherwise. So the caller asking must be able to read
 // both realms: the policy card's, which the gate checks, since no grant ever
 // reaches an explain, and the target's, which this checks. A caller missing
-// either is told what a target that does not exist is told, the same bytes
-// either way. So a caller refused because they may not read the target's
+// read on the target's realm is told what a target that does not exist is
+// told, the same bytes either way. A caller missing read on the policy card's
+// realm is refused by that realm before the explain runs, with the answer it
+// gives any refused request: a missing target where it names a policy of its
+// own, its permissions' 403 where it doesn't, and the same bytes whatever the
+// question names. So a caller refused because they may not read the target's
 // realm cannot ask why, since the answer would say what the refusal did not.
 // A caller who reads both realms can ask about any actor, themselves
 // included. The caller is judged in the target's realm by a session that
@@ -490,6 +495,8 @@ async function explainSearch(
       operation: invocation.operation,
       types: invocation.types,
       principal: { kind: 'user', user: actor.actor },
+      transport: 'explain',
+      hypothetical: true,
     });
   } catch (e: unknown) {
     if (!isOperationFailure(e) || e.error.status < 500) {
@@ -625,6 +632,12 @@ async function listedCards(
   };
 }
 
+// What an explain's gate decisions are recorded as having arrived on.
+const EXPLAIN_ROUTE: PolicyRoute = Object.freeze({
+  transport: 'explain' as const,
+  route: 'explain',
+});
+
 // The gate's decision for the question, and how it got there.
 async function explain(
   core: OperationCore,
@@ -663,6 +676,7 @@ async function explain(
     caller: actor,
     coarseDeclined,
     trace,
+    route: EXPLAIN_ROUTE,
   });
   let decision: GateDecision | undefined;
   let failure: OperationFailure | undefined;

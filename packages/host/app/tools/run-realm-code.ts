@@ -1,9 +1,18 @@
 import { service } from '@ember/service';
 
-import { rri } from '@cardstack/runtime-common';
+import { logger, rri } from '@cardstack/runtime-common';
 
-import HostBaseTool from '../lib/host-base-tool';
+import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
+import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import runRealmCode from '../lib/realm-runner/runner';
+import {
+  captureDeadline,
+  captureForAgent,
+  resolveViewTarget,
+  uploadedImages,
+  type ViewedImage,
+  type ViewOptions,
+} from '../lib/visual-capture';
 
 import LintAndFixTool from './lint-and-fix';
 
@@ -14,8 +23,11 @@ import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type RealmServerService from '../services/realm-server';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
+
+const log = logger('tools:run-realm-code');
 
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
@@ -28,7 +40,6 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
-
 // Saves one file and returns the content that was saved (lint may reformat
 // it). `expected` is the content the script last saw, undefined for a file
 // that did not exist; the save refuses if the realm no longer matches it.
@@ -48,6 +59,10 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
+  // What `realm.capture` takes in this run.
+  readonly captures: RealmCaptures;
+  // Calls and saves refused because the run had already ended.
+  private refused = 0;
   private queue: Promise<unknown> = Promise.resolve();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
@@ -60,13 +75,22 @@ class RealmFsSession {
       url: string,
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
-  ) {}
+    captureURL: CaptureURL,
+  ) {
+    this.captures = new RealmCaptures(captureURL);
+  }
+
+  // Calls, saves and captures refused because the run had already ended.
+  get refusedAfterClose() {
+    return this.refused + this.captures.refusedAfterClose;
+  }
 
   // Calls run one at a time, so two unawaited calls cannot race over the same
   // file.
   call(method: RealmRunnerCallMethod, args: unknown[]): Promise<unknown> {
     let result = this.queue.then(() => {
       if (this.closed) {
+        this.refused += 1;
         throw new Error('The run has ended; this realm call was not made');
       }
       return this.dispatch(method, args);
@@ -77,6 +101,7 @@ class RealmFsSession {
 
   close() {
     this.closed = true;
+    this.captures.close();
   }
 
   // Settles once every call already made has finished or been refused.
@@ -152,6 +177,10 @@ class RealmFsSession {
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
       }
+      case 'capture': {
+        let url = this.resolve(method, args[0]);
+        return await this.captures.take(url, this.relative(url), args[1]);
+      }
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -216,6 +245,7 @@ class RealmFsSession {
       throw new Error(`File is too large after editing: ${url}`);
     }
     if (this.closed) {
+      this.refused += 1;
       throw new Error(`The run has ended; ${url} was not saved`);
     }
     let saved = await this.writeFile(url, content, expected);
@@ -233,9 +263,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
   @service declare private toolService: ToolService;
 
-  description = 'Run safe Realm code that reads and edits realm source files.';
+  description =
+    'Run safe Realm code that reads and edits realm source files, and can ' +
+    'look at what it made with realm.capture.';
   static actionVerb = 'Run';
 
   async getInputType() {
@@ -277,6 +310,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.cardService.getSource(new URL(url)),
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
+      (url, options, doneBy, signal) =>
+        this.captureURL(url, options, doneBy, signal),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -289,6 +324,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
         ),
       CALL_DEADLINE_MS,
     );
+    // The worker allows the script `RUN_TIMEOUT_MS` once QuickJS is ready;
+    // measured from here it is a conservative end, since sandbox start only
+    // pushes the real one later.
+    session.captures.runEndsAt = Date.now() + RUN_TIMEOUT_MS;
     try {
       runnerResult = await runRealmCode(
         {
@@ -310,6 +349,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       // files already. Name them, so the model knows what state it left.
       let message = error instanceof Error ? error.message : String(error);
       let saved = [...session.saved];
+      // A call the script did not await either finished before the session
+      // closed, and is named as saved, or was refused after it closed. Which
+      // one happened depends on timing, so record it.
+      log.debug(
+        `run failed: saved=${saved.length} refusedAfterClose=${session.refusedAfterClose}: ${message}`,
+      );
       throw new Error(
         saved.length > 0
           ? `${message}. Files already saved by this run: ${saved.join(', ')}`
@@ -332,7 +377,53 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
       scriptResult: runnerResult.scriptResult,
+      captures: session.captures.taken.map(
+        (viewed) =>
+          new commandModule.AttachedImageField({
+            name: viewed.file.name,
+            sourceUrl: viewed.file.sourceUrl,
+            url: viewed.file.url,
+            contentType: viewed.file.contentType,
+            contentHash: viewed.file.contentHash,
+            contentSize: viewed.file.contentSize,
+            width: viewed.width,
+            height: viewed.height,
+          }),
+      ),
     });
+  }
+
+  // The files it saved, then the captures it took.
+  resultAttachments(
+    result: BaseToolModule.RunRealmCodeResult,
+  ): ResultAttachment[] {
+    let saved = (result.files ?? []).flatMap((file) =>
+      file?.fileUrl && file.status === 'saved'
+        ? [{ sourceUrl: file.fileUrl, name: file.fileUrl.split('/').pop() }]
+        : [],
+    );
+    return [...saved, ...uploadedImages(result.captures)];
+  }
+
+  private async captureURL(
+    url: string,
+    options: ViewOptions,
+    doneBy: number,
+    signal: AbortSignal,
+  ): Promise<ViewedImage> {
+    let services = {
+      loaderService: this.loaderService,
+      matrixService: this.matrixService,
+      network: this.network,
+      realm: this.realm,
+      realmServer: this.realmServer,
+    };
+    return await captureForAgent(
+      await resolveViewTarget(url, services, { signal }),
+      options,
+      services,
+      { deadline: captureDeadline(doneBy), signal },
+    );
   }
 
   // Lints a .gts/.ts file, checks the realm still holds what the script last

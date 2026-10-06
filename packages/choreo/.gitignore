@@ -1,0 +1,5 @@
+dist/
+declarations/
+tmp/
+*.log
+dist-tests/

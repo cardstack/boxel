@@ -18,6 +18,10 @@ on:
       - "packages/realm-server/**"
       - "packages/realm-test-harness/**"
       - "packages/software-factory/**"
+      # The skill loader reads the boxel-skills release the marketplace pins,
+      # through the boxel-cli clone script, so moving the pin re-runs this suite.
+      - ".claude-plugin/marketplace.json"
+      - "packages/boxel-cli/scripts/boxel-skills.mts"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"

@@ -22,7 +22,7 @@ Choreo's `Camera3D` step describes an orbit-style camera in terms of framing. `d
 </Choreo>
 ```
 
-Import `Choreo` and `motion` from `glimmer-motion`. The host supplies `applyPose`, which applies the emitted pose to its renderer. This excerpt describes camera direction; it does not construct a WebGL scene.
+Import `Choreo` from `@cardstack/choreo` and `motion` from `glimmer-motion`. The host supplies `applyPose`, which applies the emitted pose to its renderer. This excerpt describes camera direction; it does not construct a WebGL scene.
 
 The second step uses `@by={{true}}` to move relative to the pose already in force. Without that relationship, independently authored moves can unexpectedly replace one another's framing.
 

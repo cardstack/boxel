@@ -25,8 +25,8 @@
  */
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { at } from 'glimmer-motion';
-import { Film, Player, Shot, type ShotArgs } from 'glimmer-motion/film';
+import { at } from '@cardstack/choreo';
+import { Film, Player, Shot, type ShotArgs } from '@cardstack/choreo/film';
 import { FieldCard } from 'test-app/components/sylva/field-card';
 import { MossWorld } from 'test-app/components/sylva/world';
 

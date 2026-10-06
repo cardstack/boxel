@@ -262,12 +262,8 @@ async function createResultCard(
           `grade ${graded.grade}`,
           ...result.reasons,
           ...graded.misses,
-          ...(a && a.patchBlocks
-            ? [
-                `${a.patchBlocks} SEARCH/REPLACE block(s)${
-                  a.gitStyleBlocks ? `, ${a.gitStyleBlocks} git-style` : ''
-                }; ${a.patchResults.applied} applied, ${a.patchResults.failed} failed`,
-              ]
+          ...(a && a.realmCodeWrites
+            ? [`${a.realmCodeWrites} realm write(s)`]
             : []),
           ...(result.cardRendered
             ? [`rendered ${result.cardRendered} in the ${result.renderedIn}`]

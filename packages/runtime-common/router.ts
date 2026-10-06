@@ -300,6 +300,14 @@ export interface RouteOptions {
   // type the endpoint does not answer) needs the credentials that route needs
   // and is sealed like any other.
   operationalEndpoint?: true;
+  // The route answers on the realm ACL alone, by decision: a caller the ACL
+  // declines is refused with the ACL's own refusal in a realm with a policy
+  // as in one without, because what the route serves or does is something no
+  // policy grant reaches. It changes nothing about how a request is answered,
+  // since a route that does not consume the ACL's outcome is refused by it
+  // anyway. It records that the route was weighed and left to the ACL, so
+  // that a route that says nothing about the policy is one nobody decided.
+  aclOnly?: true;
 }
 
 export interface Route {
@@ -309,6 +317,7 @@ export interface Route {
   appliesArchivedSeal: boolean;
   grantableBytes: boolean;
   operationalEndpoint: boolean;
+  aclOnly: boolean;
 }
 
 export interface RouteDescription {
@@ -320,6 +329,7 @@ export interface RouteDescription {
   appliesArchivedSeal: boolean;
   grantableBytes: boolean;
   operationalEndpoint: boolean;
+  aclOnly: boolean;
 }
 
 export class Router {
@@ -412,6 +422,7 @@ export class Router {
       appliesArchivedSeal: opts.appliesArchivedSeal === true,
       grantableBytes: opts.grantableBytes === true,
       operationalEndpoint: opts.operationalEndpoint === true,
+      aclOnly: opts.aclOnly === true,
     });
   }
 
@@ -432,6 +443,7 @@ export class Router {
             appliesArchivedSeal: route.appliesArchivedSeal,
             grantableBytes: route.grantableBytes,
             operationalEndpoint: route.operationalEndpoint,
+            aclOnly: route.aclOnly,
           });
         }
       }

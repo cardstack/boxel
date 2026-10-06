@@ -32,7 +32,7 @@ Check the annotation's beginning, its readable interval, and its removal. Test b
 
 ## API Coverage
 
-**glimmer-motion/film**: `GraphStamp`, `Lineup`, `Mark`, `Sky`, `Trace`.
+**@cardstack/choreo/film**: `GraphStamp`, `Lineup`, `Mark`, `Sky`, `Trace`.
 
 **FilmVocabulary**: `f.Lineup`, `f.Mark`, `f.Sky`, `f.Stamp`, `f.Trace`.
 

@@ -471,17 +471,17 @@ ducking, against silence everywhere else.
 # Built: `<Film>`, and the two films cut on it
 
 The construct exists (2026-09-02). It lives in the addon at
-`packages/glimmer-motion/src/film/` and is imported as `glimmer-motion/film`
+`packages/choreo/src/film/` and is imported as `@cardstack/choreo/film`
 (`Film` is also exported from the package root). Both reference films are
 now cut ON it and serve from the same routes as before.
 
 ## What moved, in lines
 
-| file                                           | before | after |
-| ---------------------------------------------- | -----: | ----: |
-| `test-app/app/components/tower-film.gts`       |  7,377 | 1,447 |
-| `test-app/app/components/sagrada-film.gts`     |  8,939 | 1,788 |
-| `packages/glimmer-motion/src/film/` (10 files) |      — | 7,670 |
+| file                                       | before | after |
+| ------------------------------------------ | -----: | ----: |
+| `test-app/app/components/tower-film.gts`   |  7,377 | 1,447 |
+| `test-app/app/components/sagrada-film.gts` |  8,939 | 1,788 |
+| `packages/choreo/src/film/` (10 files)     |      — | 7,670 |
 
 Of the construct's 7,670 lines, 2,480 are the chrome stylesheet and 179 the
 composed template; the rest is the engine and the components. What stays in
@@ -683,7 +683,7 @@ clip: {
 
 - **Every state is re-derived from the film time on every frame**
   (`resolveClip` in `clips.ts`, pure, unit-tested in
-  `test-app/tests/unit/film-clips-test.ts`): absent before `start`, active
+  `packages/choreo/tests/unit/film-clips-test.ts`): absent before `start`, active
   inside the window with its source time, then the end policy — removed,
   held on the last sample, or frozen. Nothing is discovered by playing
   from zero, so an exact film scrubs into the middle of a clip and finds

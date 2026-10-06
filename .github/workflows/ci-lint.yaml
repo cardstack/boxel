@@ -117,6 +117,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/experiments-realm
+      - name: Lint School Example Realm
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/school-example-realm
       - name: Lint Pret UI
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -161,6 +165,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/glimmer-motion
+      - name: Lint Choreo
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo
       - name: Lint Choreo Player
         if: ${{ !cancelled() }}
         run: pnpm run lint

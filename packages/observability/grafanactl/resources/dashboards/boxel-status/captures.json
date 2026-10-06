@@ -24,7 +24,7 @@
         }
       ]
     },
-    "description": "Capture pipeline stage telemetry (channel boxel:capture-perf): request records from the serving surfaces (realm-server) and capture records from the capture-card worker task, joined by jobId/correlationId. The same capture breakdown is persisted on media_cache_ledger.diagnostics for SQL reads.",
+    "description": "Capture pipeline stage telemetry (channel boxel:capture-perf): request records from the serving surfaces (realm-server) and capture records from the capture worker task, joined by jobId/correlationId. The same capture breakdown is persisted on media_cache_ledger.diagnostics for SQL reads.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 1,
@@ -132,7 +132,7 @@
             "refId": "A"
           }
         ],
-        "description": "capture-card jobs that finished (any status)."
+        "description": "capture jobs that finished (any status)."
       },
       {
         "datasource": {
@@ -717,7 +717,7 @@
             "legendFormat": "{{surface}}"
           }
         ],
-        "description": "get-dsl is the GET _capture/ DSL route; post is POST /_capture-card."
+        "description": "get-dsl is the GET _capture/ DSL route; post is POST /_capture."
       },
       {
         "datasource": {

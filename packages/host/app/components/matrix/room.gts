@@ -1432,6 +1432,9 @@ export default class Room extends Component<Signature> {
       myLastMessage.attachedFiles,
       myLastMessage.clientGeneratedId,
       true,
+      // A retry resends the message as it was: one the app composed stays
+      // unmarked.
+      myLastMessage.typedByUser === true,
     );
   }
 
@@ -1820,6 +1823,7 @@ export default class Room extends Component<Signature> {
       files?: FileDef[],
       clientGeneratedId: string = uuidv4(),
       keepInputAndAttachments = false,
+      typedByUser = true,
     ) => {
       this.unknownMessageSendError = undefined;
       const isRetry = keepInputAndAttachments;
@@ -1882,8 +1886,14 @@ export default class Room extends Component<Signature> {
           ...(this.operatorModeStateService.getOpenCardIds() || []),
           ...this.autoAttachedCardIds,
         ]) as Set<RealmResourceIdentifier>;
-        let context =
-          await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
+        let context = {
+          ...(await this.operatorModeStateService.getSummaryForAIBot(
+            openCardIds,
+          )),
+          // Sent from the chat composer, the user typed this message; a
+          // retry carries over the original message's mark.
+          typedByUser,
+        };
         let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
@@ -2094,6 +2104,9 @@ export default class Room extends Component<Signature> {
         (command.status === 'ready' || command.status === undefined) &&
         !this.toolService.currentlyExecutingToolRequestIds.has(command.id!) &&
         !this.toolService.executedToolRequestIds.has(command.id!) &&
+        // A call ai-bot holds for approval is answered on its own, with its
+        // full URL in view, never in bulk.
+        !command.awaitsApproval &&
         // Commands destined for auto-execution must not surface the manual
         // Accept All / Cancel bar, even during the ~100ms debounce before
         // tool-service flips `acceptingAllRoomIds`. Without this filter,

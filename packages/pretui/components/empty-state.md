@@ -6,14 +6,19 @@ What a region shows when it has nothing to show: a title, an optional message, a
 
 ```
 @title: string   (required)
-@message?, @texture? (default true)
-<:default>  <:action>
+@message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm')
+<:default>   — the message with markup in it; wins over @message
+<:action>  <:altAction>
 Element: HTMLDivElement
 ```
 
 **`@title` is required and `@message` is not.** That ordering is the opinion: an empty state must always name what is absent, and may explain. A component that let you render a lone paragraph would produce the vague "Nothing here yet" that empty states are notorious for.
 
 **This is the one place texture lives.** The kit's Law 6 says decoration is confined, and an EmptyState is where it is allowed: a radial gradient at 8% `--primary` centred slightly above the middle. `@texture={{false}}` turns it off for dense contexts. Everything else in the kit is flat, and that is what makes this read as a deliberate pause rather than as ornament.
+
+**The message takes markup through `<:default>`.** `@message` is plain text. When the message needs a **Token**, a link or emphasis, pass the message as the block; it renders in the same place with the same type, colour and measure. A block wins over its arg, as on **Notification**, **AlertDialog** and **Card**: if both are given, the block renders and `@message` does not.
+
+**`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `1rem` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
 
@@ -23,11 +28,11 @@ The title is set in `--font-serif`. That is the only serif in the control and st
 
 **React Spectrum `IllustratedMessage`** is the closest match — an illustration slot, `Heading`, `Content`, and it is what Spectrum's tables render via `renderEmptyState`. **shadcn** ships no empty state; it is a documentation recipe. **Web Awesome** has none. **SLDS** has an `illustration` blueprint with a fixed set of SVGs.
 
-Pretui differs on the illustration question, and it is the interesting one: Spectrum and SLDS both centre the pattern on an **illustration**, which means every product must commission or choose art, and most ship the same three stock SVGs everywhere. Pretui substitutes a **generated texture** — a tinted radial that picks up the season's `--primary` — so an empty state looks intentional and on-brand with zero assets. That is a genuinely better default for a system where cards are authored quickly, and the `<:default>` block is still there if you want real art.
+Pretui differs on the illustration question, and it is the interesting one: Spectrum and SLDS both centre the pattern on an **illustration**, which means every product must commission or choose art, and most ship the same three stock SVGs everywhere. Pretui substitutes a **generated texture** — a tinted radial that picks up the season's `--primary` — so an empty state looks intentional and on-brand with zero assets. That is a genuinely better default for a system where cards are authored quickly.
 
 The other improvement: **`@title` being required**. Spectrum's `Heading` is optional.
 
-Where it is behind: no illustration slot convention, no size variants (a table's empty state and a full-page one get the same 45px/19px padding), and no `<:icon>` — you must use `<:default>`, which sits between the texture and the title with no layout guarantees of its own.
+Where it is behind: no illustration slot and no `<:icon>`, and only two sizes (a compact well and the page-section default) where Spectrum's `IllustratedMessage` scales its illustration and heading together.
 
 ## Accessibility
 
@@ -44,7 +49,7 @@ Gaps, and the first two are the real ones:
 
 ## Theming
 
-`--canvas` (the surface — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--primary` (the texture tint, at 8%), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--text-ui-md` (message), `--radius-surface`, `--space-2/3/6/9`.
+`--canvas` (the surface — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--primary` (the texture tint, at 8%), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--text-ui-md` (message), `--radius-surface`, `--space-2/3/6/9`. At `@size='s'` the padding is a fixed `1rem` and the title reads `--boxel-font-size`, so `--space-6/9` and `--text-heading` no longer apply.
 
 A season **must** define `--font-serif`; it is used almost nowhere else, so a season that omits it falls back to Georgia and the one moment of typographic voice in the kit lands on a system font. A season must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
 

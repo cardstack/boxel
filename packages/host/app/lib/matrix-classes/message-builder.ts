@@ -127,6 +127,18 @@ export default class MessageBuilder {
     return (this.event.content as CardMessageContent).clientGeneratedId;
   }
 
+  get typedByUser() {
+    let data: unknown = (this.event.content as CardMessageContent).data;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch {
+        return false;
+      }
+    }
+    return (data as CardMessageContent['data'])?.context?.typedByUser === true;
+  }
+
   get attachedCardIds() {
     let content = this.event.content as CardMessageContent;
     let attachedCardIds: string[] = [];
@@ -181,6 +193,7 @@ export default class MessageBuilder {
       event.content.msgtype === APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE
     ) {
       message.clientGeneratedId = this.clientGeneratedId;
+      message.typedByUser = this.typedByUser;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
       message.reloadBillingData = shouldReloadBillingData(event.content);
@@ -457,8 +470,10 @@ export default class MessageBuilder {
         toolRequest,
         undefined, // no codeRef — never run on the host
         this.builderContext.effectiveEventId,
-        false, // requiresApproval — never prompts or runs
-        'Apply', // actionVerb — unused; the indicator shows status, not a Run button
+        false, // requiresApproval — the host never runs it
+        // The only button a bot-run call can show is the approval of a call
+        // ai-bot holds for it (see MessageTool.awaitsApproval).
+        'Approve',
         (toolResultEvent
           ? toolResultEvent.content['m.relates_to']?.key || 'applied'
           : 'applying') as ToolCallStatus,

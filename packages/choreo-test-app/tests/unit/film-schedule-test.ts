@@ -9,7 +9,7 @@
  * A phase that MEANS to change the film re-runs the script and reviews
  * the diff of the JSON; nothing else may.
  */
-import { schedule } from 'glimmer-motion/film';
+import { schedule } from '@cardstack/choreo/film';
 import { module, test } from 'qunit';
 import {
   BEATS as SAGRADA,

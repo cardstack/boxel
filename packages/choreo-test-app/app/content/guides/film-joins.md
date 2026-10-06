@@ -32,9 +32,7 @@ Review several frames before, during, and after the join. Confirm the outgoing s
 
 ## API Coverage
 
-**glimmer-motion**: `FilmJoin`.
-
-**glimmer-motion/film**: `JoinInto`, `Blend`, `Blur`, `Dip`, `Flash`, `inGlass`, `Iris`, `JOIN_SECS`, `Joins`, `Luma`, `Melt`, `Presentation`, `PresentationComponent`, `PRESENTATIONS`, `PresentationSignature`, `retire`, `seamShape`, `STILL_JOINS`, `Wipe`, `Join`, `JoinName`, `Over`, `SeamSpec`.
+**@cardstack/choreo/film**: `JoinInto`, `Blend`, `Blur`, `Dip`, `Flash`, `inGlass`, `Iris`, `JOIN_SECS`, `Joins`, `Luma`, `Melt`, `Presentation`, `PresentationComponent`, `PRESENTATIONS`, `PresentationSignature`, `retire`, `seamShape`, `STILL_JOINS`, `Wipe`, `Join`, `JoinName`, `Over`, `SeamSpec`.
 
 **FilmVocabulary**: `f.Join`.
 

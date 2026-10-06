@@ -1178,7 +1178,29 @@ module('Integration | operations', function (hooks) {
         return Report;
       },
       /`links` must name how much of the card's link graph this read carries/,
-      'and it names one of the three strategies',
+      'and it names one of the strategies a read applies',
+    );
+    assert.throws(
+      () => {
+        class Report extends CardDef {
+          @operation static read = { base: 'read', links: 'none' };
+        }
+        return Report;
+      },
+      /this read carries — one of "full", "ids"\. .*"ids" narrows a read/,
+      'a read may not withhold its links from the host that edits the card',
+    );
+    class Gradebook extends CardDef {
+      @operation static listAll = {
+        base: 'query',
+        query: { filter: { type: () => Gradebook } },
+        links: 'none',
+      };
+    }
+    assert.strictEqual(
+      (getDeclaredOperations(Gradebook).listAll as { links?: unknown }).links,
+      'none',
+      'while a query may',
     );
     assert.throws(
       () => {

@@ -244,6 +244,37 @@ export async function fetchUserPermissions(
   );
 }
 
+// The active realms whose indexed `realm.json` names a policy card. A realm a
+// caller may not read can still answer them through its policy, so a render
+// made as that caller carries a session for each of these alongside the realms
+// its permissions name (see the capture task). It is read from the index, which
+// lags a write to `realm.json` by an index pass. A pointer of only whitespace
+// names no policy, as `namesNoRealmPolicy` reads it; a realm whose pointer it
+// drops as malformed is listed anyway, and a session there lets its ACL judge
+// the render as it would judge the user.
+//
+// Driven by the realms' permission rows, which every realm has (its owner's),
+// so each realm costs one primary-key probe of its `realm.json` row rather
+// than a pass over the index. Published realms are left out, as
+// `fetchUserPermissions` leaves them out.
+export async function fetchRealmsNamingPolicy(
+  dbAdapter: DBAdapter,
+): Promise<string[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT realms.realm_url
+     FROM (SELECT DISTINCT realm_url FROM realm_user_permissions) realms
+     JOIN boxel_index config
+       ON config.url = realms.realm_url || 'realm.json'
+      AND config.realm_url = realms.realm_url
+      AND config.type = 'instance'
+     WHERE (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+       AND COALESCE(config.search_doc->>'policy', config.pristine_doc->'attributes'->>'policy', '') ~ '[^[:space:]]'
+       AND realms.realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+       AND realms.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)`,
+  ])) as { realm_url: string }[];
+  return rows.map(({ realm_url }) => realm_url);
+}
+
 export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
   // Catalog realms are publicly-readable realms that aren't themselves
   // published snapshots — published rows live in realm_registry with

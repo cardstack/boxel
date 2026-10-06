@@ -3,8 +3,15 @@ const { module, test } = QUnit;
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
+import { colorCoverage } from './helpers/png.ts';
 import { dirSync } from 'tmp';
-import { rri } from '@cardstack/runtime-common';
+import {
+  SupportedMimeType,
+  archiveRealm,
+  fetchRealmsNamingPolicy,
+  rri,
+  unarchiveRealm,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -53,12 +60,18 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 //   reader may not. It holds one open schedule.
 // - Board: owned by the board's owner. Both readers may read it. Holds the
 //   board and one open schedule of its own, and lets a reader capture on
-//   demand.
+//   demand. It also holds a styled board, which draws each Grants row it gets
+//   back as the schedule's own embedded rendering, whose scoped stylesheet
+//   sets its height.
 //
 // So the requester sees three rows through the board and the other reader
 // sees one. A capture's height is the board's own chrome plus its rows, so
 // the difference between the two readers' captures of one spec is exactly
 // the rows the requester sees and the other does not.
+//
+// A row's stylesheets are served from the realm that answered with the row,
+// so the requester's styled row draws at its stylesheet's height only if
+// Grants serves them its stylesheets.
 // ============================================================================
 
 // Paths of this file's own: a prerender tab pooled by realm keeps the modules
@@ -75,6 +88,7 @@ const REQUESTER = '@requester:localhost';
 const OTHER_READER = '@other-reader:localhost';
 
 const BOARD_CARD = `${BOARD}boards/board`;
+const STYLED_BOARD_CARD = `${BOARD}boards/styled-board`;
 const BOARD_SCHEDULE = `${BOARD}schedules/open`;
 
 // Each realm's rows draw at their own height, so a sum of heights names the
@@ -82,6 +96,8 @@ const BOARD_SCHEDULE = `${BOARD}schedules/open`;
 const BOARD_ROW_HEIGHT = 100;
 const GRANTED_ROW_HEIGHT = 200;
 const PRIVATE_ROW_HEIGHT = 400;
+// Set only by the schedule's own scoped stylesheet.
+const STYLED_ROW_HEIGHT = 300;
 
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
@@ -91,7 +107,7 @@ const REALM_POLICY = {
 const SCHEDULE = { module: `${LIB}schedule`, name: 'ServicePlanSchedule' };
 
 const SCHEDULE_MODULE = `
-  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import { operation } from "@cardstack/base/operations";
 
@@ -99,6 +115,21 @@ const SCHEDULE_MODULE = `
     @field title = contains(StringField);
     @field providerId = contains(StringField);
     @field status = contains(StringField);
+
+    static embedded = class extends Component<typeof this> {
+      <template>
+        <div class="styled-schedule">{{@model.title}}</div>
+        <style scoped>
+          .styled-schedule {
+            display: block;
+            box-sizing: border-box;
+            margin: 0;
+            overflow: hidden;
+            height: ${STYLED_ROW_HEIGHT}px;
+          }
+        </style>
+      </template>
+    };
 
     @operation static listOpen = {
       base: 'query',
@@ -164,6 +195,59 @@ const BOARD_MODULE = `
   }
 `;
 
+// Draws the embedded rendering of each Grants row its search gets back, so a
+// row's height is whatever its own stylesheet gives it.
+const STYLED_BOARD_MODULE = `
+  import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+  import NumberField from "@cardstack/base/number";
+  import { operations } from "@cardstack/base/operations";
+  import { ServicePlanSchedule } from "./schedule";
+
+  export class StyledBoard extends CardDef {
+    @field revision = contains(NumberField);
+
+    static isolated = class extends Component<typeof this> {
+      get query() {
+        let query = operations(ServicePlanSchedule).listOpen.query(undefined, {
+          realms: ["${GRANTS}"],
+        });
+        if (!query) {
+          return undefined;
+        }
+        return {
+          ...query,
+          filter: {
+            ...query.filter,
+            eq: {
+              ...query.filter?.eq,
+              htmlQuery: { eq: { format: "embedded" } },
+            },
+          },
+        };
+      }
+
+      <template>
+        <div class="styled-board-search">
+          {{#if @context.searchResultsComponent}}
+            <@context.searchResultsComponent @query={{this.query}} @mode="none" as |results|>
+              {{#each results.entries as |entry|}}
+                <div class="styled-board-row"><entry.component /></div>
+              {{/each}}
+            </@context.searchResultsComponent>
+          {{/if}}
+        </div>
+        <style scoped>
+          .styled-board-row {
+            display: block;
+            margin: 0;
+            padding: 0;
+          }
+        </style>
+      </template>
+    };
+  }
+`;
+
 function policyCard() {
   return JSON.stringify({
     data: {
@@ -195,12 +279,12 @@ function schedule(title: string, providerId: string) {
   });
 }
 
-function board() {
+function board(module = 'board', name = 'Board') {
   return JSON.stringify({
     data: {
       type: 'card',
       attributes: { revision: 1 },
-      meta: { adoptsFrom: { module: rri(`${LIB}board`), name: 'Board' } },
+      meta: { adoptsFrom: { module: rri(`${LIB}${module}`), name } },
     },
   });
 }
@@ -239,6 +323,7 @@ module(basename(import.meta.filename), function (hooks) {
           fileSystem: {
             'schedule.gts': SCHEDULE_MODULE,
             'board.gts': BOARD_MODULE,
+            'styled-board.gts': STYLED_BOARD_MODULE,
           },
           permissions: { ...owner, '*': ['read'] },
         },
@@ -261,6 +346,12 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(PRIVATE),
           fileSystem: {
             'schedules/open.json': schedule('Private open', OWNER),
+            'notes/private-notes.md':
+              '# Private notes\n\nOnly its readers see this.\n',
+            // A page whose body is a color no file chrome uses, so a capture
+            // shows whether the HTML itself was drawn.
+            'notes/swatch.html':
+              '<!doctype html><html><body style="margin:0;background:rgb(255,0,254);height:2000px"></body></html>',
           },
           permissions: { ...owner, [REQUESTER]: ['read'] },
         },
@@ -272,6 +363,7 @@ module(basename(import.meta.filename), function (hooks) {
               allowArbitraryCaptures: true,
             }),
             'boards/board.json': board(),
+            'boards/styled-board.json': board('styled-board', 'StyledBoard'),
             'schedules/open.json': schedule('Board open', OWNER),
           },
           permissions: {
@@ -328,9 +420,13 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  function postCapture(user: string, captureSpec: Record<string, unknown>) {
+  function postCapture(
+    user: string,
+    captureSpec: Record<string, unknown>,
+    cardId = BOARD_CARD,
+  ) {
     return request
-      .post('/_capture-card')
+      .post('/_capture')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/vnd.api+json')
       .set(
@@ -342,14 +438,35 @@ module(basename(import.meta.filename), function (hooks) {
       )
       .send({
         data: {
-          type: 'capture-card',
+          type: 'capture',
           attributes: {
             realmURL: BOARD,
-            cardId: BOARD_CARD,
+            cardId,
             format: 'isolated',
             includeBase64: false,
             captureSpec,
           },
+        },
+      });
+  }
+
+  // A POST of a file capture: the file is named by `fileURL` in its realm.
+  function postFileCapture(user: string, realmURL: string, fileURL: string) {
+    return request
+      .post('/_capture')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user, sessionRoom: `session-room-${user}` },
+          realmSecretSeed,
+        )}`,
+      )
+      .send({
+        data: {
+          type: 'capture',
+          attributes: { realmURL, fileURL, format: 'isolated' },
         },
       });
   }
@@ -441,6 +558,61 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a file capture through the endpoint draws the rendered HTML of an HTML file', async function (assert) {
+    let response = await postFileCapture(
+      REQUESTER,
+      PRIVATE,
+      `${PRIVATE}notes/swatch.html`,
+    );
+    assert.strictEqual(response.status, 201, JSON.stringify(response.body));
+    let attrs = response.body.data.attributes;
+    assert.strictEqual(attrs.status, 'ready', `rendered: ${attrs.error}`);
+    let coverage = colorCoverage(attrs.captures[0].base64, [255, 0, 254]);
+    assert.true(
+      coverage > 0.33,
+      `the page's own body color fills the preview (${Math.round(coverage * 100)}% of the capture)`,
+    );
+  });
+
+  // The caller who cannot read the realm is refused before any tab runs: the
+  // task finds no permissions for them there. A reader's in-tab read of the
+  // file uses the same per-user session the card branch's reads do, which the
+  // card tests above pin.
+  test('a file capture draws the file for a reader of its realm and nothing for anyone else', async function (assert) {
+    let fileURL = `${PRIVATE}notes/private-notes.md`;
+
+    let reader = await postFileCapture(REQUESTER, PRIVATE, fileURL);
+    assert.strictEqual(reader.status, 201, JSON.stringify(reader.body));
+    assert.strictEqual(
+      reader.body.data.attributes.status,
+      'ready',
+      `a reader of the realm is drawn the file: ${reader.body.data.attributes.error}`,
+    );
+    assert.ok(
+      reader.body.data.attributes.captures[0].base64,
+      'and handed its image',
+    );
+
+    let outsider = await postFileCapture(OTHER_READER, PRIVATE, fileURL);
+    assert.notStrictEqual(
+      outsider.body?.data?.attributes?.status,
+      'ready',
+      `a caller who cannot read the realm is drawn nothing: ${JSON.stringify(outsider.body)}`,
+    );
+    assert.notOk(
+      outsider.body?.data?.attributes?.base64,
+      'and handed no image',
+    );
+    let persistedForOutsider = await db.execute(
+      `SELECT 1 FROM media_cache_ledger WHERE source_url = '${fileURL}' AND rendered_as LIKE '${OTHER_READER}%'`,
+    );
+    assert.strictEqual(
+      persistedForOutsider.length,
+      0,
+      'and nothing is stored for them',
+    );
+  });
+
   test('a capture a reader asks for on the GET route renders as them', async function (assert) {
     // Each reader's render can outrun the GET's inline wait and be retried.
     assert.timeout(240_000);
@@ -498,5 +670,266 @@ module(basename(import.meta.filename), function (hooks) {
       [BOARD_SCHEDULE],
       `the realm's render drew its own schedule, and neither the grant nor the private realm's row: ${html}`,
     );
+  });
+  // The stylesheet hrefs a search as `user` serves with the rows `realm`
+  // answers, each the path under the realm's `_scoped-css/` serving space.
+  async function stylesheetsServedFrom(user: string, realm: string) {
+    let response = await request
+      .post('/_federated-search')
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Content-Type', 'application/json')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user, sessionRoom: `session-room-${user}` },
+          realmSecretSeed,
+        )}`,
+      )
+      .send({
+        operation: 'listOpen',
+        on: SCHEDULE,
+        realms: [realm],
+        filter: { eq: { htmlQuery: { eq: { format: 'embedded' } } } },
+      });
+    if (response.status !== 200) {
+      throw new Error(`search answered ${response.status}: ${response.text}`);
+    }
+    let included = (response.body.included ?? []) as {
+      type: string;
+      attributes: { href: string };
+    }[];
+    return included
+      .filter((resource) => resource.type === 'css')
+      .map((resource) => resource.attributes.href)
+      .filter((href) => href.startsWith(`${realm}_scoped-css/`))
+      .map((href) => new URL(href).pathname);
+  }
+
+  function getStylesheet(path: string, auth?: string) {
+    let get = request.get(path);
+    return auth ? get.set('Authorization', `Bearer ${auth}`) : get;
+  }
+
+  test('a realm with a policy serves its stylesheets to every caller the policy judges', async function (assert) {
+    let paths = await stylesheetsServedFrom(REQUESTER, GRANTS);
+    assert.true(
+      paths.length > 0,
+      `the requester's rows from Grants reference stylesheets Grants serves: ${JSON.stringify(paths)}`,
+    );
+    for (let path of paths) {
+      let served = await getStylesheet(
+        path,
+        createJWT(realms[GRANTS], REQUESTER, []),
+      );
+      assert.strictEqual(
+        served.status,
+        200,
+        `the requester, whose grant admits them to the rows, is served ${path}`,
+      );
+      assert.strictEqual(
+        served.headers['content-type'],
+        'text/javascript',
+        `as the module that injects it: ${path}`,
+      );
+      assert.true(
+        served.headers['cache-control']?.startsWith('private,'),
+        `and no shared cache may hold it: ${served.headers['cache-control']}`,
+      );
+      let other = await getStylesheet(
+        path,
+        createJWT(realms[GRANTS], OTHER_READER, []),
+      );
+      assert.strictEqual(
+        other.status,
+        200,
+        `a caller no grant admits to a row is served it too, since the policy judges them: ${path}`,
+      );
+      let anonymous = await getStylesheet(path);
+      assert.strictEqual(
+        anonymous.status,
+        401,
+        `a request that authenticated nobody is told to authenticate: ${path}`,
+      );
+    }
+  });
+
+  test('a realm with no policy serves its stylesheets to its readers alone', async function (assert) {
+    let paths = await stylesheetsServedFrom(REQUESTER, PRIVATE);
+    assert.true(
+      paths.length > 0,
+      `the requester's rows from Private reference stylesheets Private serves: ${JSON.stringify(paths)}`,
+    );
+    for (let path of paths) {
+      let reader = await getStylesheet(
+        path,
+        createJWT(realms[PRIVATE], REQUESTER, ['read']),
+      );
+      assert.strictEqual(reader.status, 200, `a reader is served ${path}`);
+      let nonReader = await getStylesheet(
+        path,
+        createJWT(realms[PRIVATE], OTHER_READER, []),
+      );
+      assert.strictEqual(
+        nonReader.status,
+        403,
+        `a caller who may not read the realm is refused ${path}`,
+      );
+    }
+  });
+
+  test("a capture draws a grant-reached row with its own realm's stylesheets", async function (assert) {
+    // The render holds a session for every realm that names a policy, which
+    // is how it fetches what Grants serves the requester.
+    let naming = await fetchRealmsNamingPolicy(db);
+    assert.true(naming.includes(GRANTS), 'Grants names a policy');
+    assert.deepEqual(
+      [LIB, BOARD, PRIVATE].filter((realm) => naming.includes(realm)),
+      [],
+      'and no other realm here does',
+    );
+    // Shorter than anything the board draws, so a full-page capture's height
+    // is the styled board's own, an unstyled row's line of text included.
+    let captureSpec = { viewport: { width: 400, height: 1 }, fullPage: true };
+    let requesters = await postCapture(
+      REQUESTER,
+      captureSpec,
+      STYLED_BOARD_CARD,
+    );
+    let others = await postCapture(
+      OTHER_READER,
+      captureSpec,
+      STYLED_BOARD_CARD,
+    );
+    for (let [who, response] of [
+      ['the requester', requesters],
+      ['the other reader', others],
+    ] as const) {
+      assert.strictEqual(
+        response.status,
+        201,
+        `${who}'s capture: ${JSON.stringify(response.body)}`,
+      );
+      assert.strictEqual(
+        response.body.data.attributes.status,
+        'ready',
+        `${who}'s capture rendered: ${response.body.data.attributes.error}`,
+      );
+    }
+    // The styled board draws nothing but its rows, and a capture is never
+    // shorter than its viewport.
+    assert.strictEqual(
+      requesters.body.data.attributes.captures[0].height,
+      STYLED_ROW_HEIGHT,
+      "the requester's capture drew the row their grant admits them to at the height its stylesheet gives it",
+    );
+    assert.strictEqual(
+      others.body.data.attributes.captures[0].height,
+      captureSpec.viewport.height,
+      "the other reader's drew no row",
+    );
+  });
+  test('an archived realm seals a caller its policy judges only where it would serve them a stylesheet', async function (assert) {
+    let [path] = await stylesheetsServedFrom(REQUESTER, GRANTS);
+    assert.ok(path, 'Grants serves the requester a stylesheet');
+    let unknown = `${new URL(GRANTS).pathname}_scoped-css/schedule.gts.md5-${'0'.repeat(32)}.glimmer-scoped.css`;
+    let auth = createJWT(realms[GRANTS], REQUESTER, []);
+    let activeUnknown = await getStylesheet(unknown, auth);
+    assert.strictEqual(
+      activeUnknown.status,
+      404,
+      'a hash the realm holds no stylesheet for is not found',
+    );
+    await archiveRealm(db, new URL(GRANTS));
+    try {
+      let sealed = await getStylesheet(path, auth);
+      assert.strictEqual(
+        sealed.status,
+        403,
+        'a stylesheet it would serve meets the seal',
+      );
+      assert.strictEqual(
+        sealed.headers['x-boxel-realm-archived'],
+        'true',
+        'which says the realm is archived',
+      );
+      let archivedUnknown = await getStylesheet(unknown, auth);
+      assert.strictEqual(
+        archivedUnknown.status,
+        activeUnknown.status,
+        'a hash it holds no stylesheet for is answered as while active',
+      );
+      assert.notOk(
+        archivedUnknown.headers['x-boxel-realm-archived'],
+        'and says nothing of the seal',
+      );
+    } finally {
+      await unarchiveRealm(db, new URL(GRANTS));
+    }
+  });
+
+  test('the realms naming a policy leave out a blank pointer, a deleted config, and archived and published realms', async function (assert) {
+    let base = 'http://127.0.0.1:4444/capture-naming-';
+    let named = `${base}named/`;
+    let blank = `${base}blank/`;
+    let deleted = `${base}deleted/`;
+    let archived = `${base}archived/`;
+    let published = `${base}published/`;
+    let realmsHere = [named, blank, deleted, archived, published];
+    let pointer = (realm: string) => `${realm}policies/policy`;
+    let config: [string, string, boolean][] = [
+      [named, pointer(named), false],
+      [blank, ' \t\n', false],
+      [deleted, pointer(deleted), true],
+      [archived, pointer(archived), false],
+      [published, pointer(published), false],
+    ];
+    try {
+      for (let [realm, policy, isDeleted] of config) {
+        await db.execute(
+          `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ($1, $2, true, true, true)`,
+          { bind: [realm, OWNER] },
+        );
+        await db.execute(
+          `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, search_doc, is_deleted) VALUES ($1, $2, 'instance', 1, $3, $4::jsonb, $5)`,
+          {
+            bind: [
+              `${realm}realm.json`,
+              `${realm}realm`,
+              realm,
+              JSON.stringify({ policy }),
+              isDeleted,
+            ],
+          },
+        );
+      }
+      await archiveRealm(db, new URL(archived));
+      await db.execute(
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url) VALUES ($1, 'published', $2, $3, $4)`,
+        { bind: [published, 'capture-naming-published', OWNER, named] },
+      );
+      let naming = await fetchRealmsNamingPolicy(db);
+      assert.deepEqual(
+        realmsHere.filter((realm) => naming.includes(realm)),
+        [named],
+        'only the active, unpublished realm whose config names a policy',
+      );
+    } finally {
+      for (let realm of realmsHere) {
+        await db.execute(`DELETE FROM boxel_index WHERE realm_url = $1`, {
+          bind: [realm],
+        });
+        await db.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = $1`,
+          { bind: [realm] },
+        );
+        await db.execute(`DELETE FROM realm_metadata WHERE url = $1`, {
+          bind: [realm],
+        });
+        await db.execute(`DELETE FROM realm_registry WHERE url = $1`, {
+          bind: [realm],
+        });
+      }
+    }
   });
 });

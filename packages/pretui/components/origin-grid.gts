@@ -103,7 +103,7 @@ export interface OriginGridSignature {
  *
  * Free positioning is an ENHANCEMENT on top, not the primary contract. When
  * the value is not on an anchor, no radio is checked and the state reads as
- * the word "Custom" plus the exact numbers — a text channel, per Appendix L.
+ * the word "Custom" plus the exact numbers — a text channel.
  */
 export class OriginGrid extends Component<OriginGridSignature> {
   @tracked private internal: Point2 =

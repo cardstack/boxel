@@ -572,7 +572,7 @@ export class AmountInput extends Component<AmountInputSignature> {
           font-weight: var(--weight-medium, 500);
           color: var(--muted-foreground);
         }
-        /* Reserved space (Appendix O.7): the readout appears and disappears as
+        /* Reserved space: the readout appears and disappears as
            the box fills, and a row that changes height while you type is the
            defect this rule exists to prevent. */
         .pretui-amount-readout {

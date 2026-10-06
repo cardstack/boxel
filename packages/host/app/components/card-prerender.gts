@@ -48,6 +48,7 @@ import {
   type ModuleTypesCache,
 } from '../routes/module';
 
+import { ISOLATED_RENDER_ELEMENT_ID } from '../services/render-service';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { REALM_INDEX_BOILERPLATE_HTML } from '../utils/realm-index-boilerplate';
 import {
@@ -979,11 +980,18 @@ export default class CardPrerender extends Component {
   }
 }
 
+// Marks the render a card makes for this tab's own index. The render context
+// is set only while that render runs, and it names the element the render
+// mounts into, so a component elsewhere in the tab, which someone is looking
+// at, can tell that it is still live (`isLiveRender` in base's
+// `render-context`). A prerender tab, which sets the context for its whole
+// page, names no element.
 async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
   let hadContext = Boolean((globalThis as any).__boxelRenderContext);
   let restoreTimers: (() => void) | undefined;
   if (!hadContext) {
     (globalThis as any).__boxelRenderContext = true;
+    (globalThis as any).__boxelRenderContextScope = ISOLATED_RENDER_ELEMENT_ID;
     if (!isTesting()) {
       restoreTimers = enableRenderTimerStub();
     }
@@ -993,6 +1001,7 @@ async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
   } finally {
     if (!hadContext) {
       delete (globalThis as any).__boxelRenderContext;
+      delete (globalThis as any).__boxelRenderContextScope;
       restoreTimers?.();
     }
   }

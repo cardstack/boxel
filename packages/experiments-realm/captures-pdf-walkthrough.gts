@@ -41,9 +41,9 @@ export class ReleaseNote extends CardDef {
 //   {realm}_capture/{path}?name=hero`;
 
 const IMPERATIVE_SNIPPET = `// Imperative — an AI / command tool; returns a durable served URL
-import CaptureCardTool from '@cardstack/boxel-host/tools/capture-card';
+import CaptureTool from '@cardstack/boxel-host/tools/capture';
 
-let result = await new CaptureCardTool(toolContext).execute({
+let result = await new CaptureTool(toolContext).execute({
   card,               // a linksTo(CardDef)
   format: 'isolated', // or 'embedded'
 });
@@ -230,7 +230,7 @@ class Isolated extends Component<typeof CapturesPdfWalkthrough> {
             <div class='entry-head'><Wand width='16' height='16' /><h3
               >Imperative</h3></div>
             <p>Call the capture tool from an AI action or command. It POSTs to
-              <code>/_capture-card</code>
+              <code>/_capture</code>
               and hands back the durable URL.</p>
             <pre class='code'>{{IMPERATIVE_SNIPPET}}</pre>
           </div>
@@ -244,7 +244,7 @@ class Isolated extends Component<typeof CapturesPdfWalkthrough> {
             <div class='entry-head'><Terminal width='16' height='16' /><h3
               >CLI</h3></div>
             <p>Drive the same
-              <code>/_capture-card</code>
+              <code>/_capture</code>
               endpoint from a shell. Writes image files plus a per-capture
               manifest, so a CI job can capture a set of cards and diff them.</p>
             <pre class='code'>{{CLI_SNIPPET}}</pre>

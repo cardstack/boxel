@@ -17,6 +17,7 @@ import {
   withConnectionTenant,
 } from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
+import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
@@ -710,7 +711,16 @@ export async function setContextResponse(
   }
 
   if (nodeStream) {
-    ctxt.body = nodeStream;
+    let declaredLength = headers.get('content-length');
+    ctxt.body =
+      declaredLength != null && ctxt.method !== 'HEAD'
+        ? guardDeclaredLength({
+            body: nodeStream,
+            declaredLength: Number(declaredLength),
+            url,
+            response: ctxt.res,
+          })
+        : nodeStream;
   } else if (body instanceof ReadableStream) {
     // A quirk with native fetch Response in node is that it will be clever
     // and convert strings or buffers in the response.body into web-streams

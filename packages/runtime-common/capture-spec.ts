@@ -70,7 +70,7 @@ export function isDeclaredCaptureFormat(
 }
 
 // The capture spec: every way a capture can be parameterized,
-// shared by the POST /_capture-card body and the GET `_capture/` URL
+// shared by the POST /_capture body and the GET `_capture/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
 // both. The spec's canonical form is what keys the MediaCache ledger, so
 // everything here is deliberately strict: two requests that mean the same
@@ -225,7 +225,7 @@ export const DEFAULT_CAPTURE_VIEWPORT = {
 // grows later) cannot ride into the identity and silently hash two distinct
 // captures onto one ledger key. Widening the identity means changing this
 // pick, `canonicalCaptureIdentityString` / `canonicalCaptureIdentityQuery` below,
-// and `sameCaptureIdentity` (jobs/capture-card.ts) together — and the
+// and `sameCaptureIdentity` (jobs/capture.ts) together — and the
 // exhaustive destructure in `canonicalOverrides` refuses to compile until
 // the widened pick is actually handled there.
 export interface CaptureIdentity extends Pick<
@@ -238,7 +238,7 @@ export interface CaptureIdentity extends Pick<
 // The geometry overrides a spec carries beyond the engine defaults — the
 // portion of the identity the prerenderer must be told about (`format` rides
 // separately on the job args). Null when the spec is all-defaults, matching
-// the `CaptureCardArgs.captureSpec: ... | null` contract.
+// the `CaptureArgs.captureSpec: ... | null` contract.
 export function captureIdentityOverrides(
   spec: CaptureIdentity,
 ): CaptureRequestSpec | null {
@@ -249,7 +249,7 @@ export function captureIdentityOverrides(
 // ---------------------------------------------------------------------------
 // CaptureRequestSpec bounds + strict parse — one enforcement point for
 // every surface that accepts a spec off the wire (the realm-server's POST
-// /_capture-card body, the GET `_capture/` URL DSL via
+// /_capture body, the GET `_capture/` URL DSL via
 // `parseCaptureSpecParams`, and the prerender server's /prerender-capture
 // route), and the home of the caps the capture path itself enforces for the
 // extents only it can know (a fullPage capture's document size).
@@ -995,7 +995,7 @@ export function parseCaptureSpecParams(
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
   if (!isCanonicalCaptureFormat(format)) {
-    // Deliberately narrower than the POST /_capture-card roster
+    // Deliberately narrower than the POST /_capture roster
     // (ON_DEMAND_CAPTURE_FORMATS): CANONICAL_CAPTURE_FORMATS is the canonical ledger/GET-DSL
     // serving contract and stays viewport-filling only, so this message
     // speaks its own roster.

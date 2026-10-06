@@ -19,7 +19,7 @@ Picked in reverse, start and end swap. While the end is unset, the prospective s
 
 ## Prior art
 
-**This was previously a wrap of boxel-ui's ember-power-calendar `DateRangePicker`, and the wrap was deliberately deleted** so both Pretui date controls share the same **Calendar**. That is the design decision to understand: two calendar implementations in one kit is a guaranteed inconsistency — different keyboard behaviour, different disabled-day rules, different visual language — and the rebuild traded a working third-party component for one that agrees with **DatePicker** in every detail.
+**DateRangePicker is built on Calendar rather than on boxel-ui's ember-power-calendar,** so both Pretui date controls share the same **Calendar**. That is the design decision to understand: two calendar implementations in one kit is a guaranteed inconsistency — different keyboard behaviour, different disabled-day rules, different visual language — and building on Calendar gives up a working third-party component for one that agrees with **DatePicker** in every detail.
 
 **React Spectrum `DateRangePicker`** is the field's reference: two segmented fields (each segment a `role="spinbutton"`), a range calendar, `minValue`/`maxValue`, `isDateUnavailable`, `allowsNonContiguousRanges`, and full internationalisation. **react-day-picker** with `mode="range"` is the ecosystem default. **Web Awesome** ships nothing.
 

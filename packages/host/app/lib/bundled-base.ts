@@ -230,6 +230,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'markdown-helpers': () => import('@cardstack/base/markdown-helpers'),
   'menu-items': () => import('@cardstack/base/menu-items'),
   'query-field-support': () => import('@cardstack/base/query-field-support'),
+  'render-context': () => import('@cardstack/base/render-context'),
   'shared-state': () => import('@cardstack/base/shared-state'),
   'text-input-validator': () => import('@cardstack/base/text-input-validator'),
   'watched-array': () => import('@cardstack/base/watched-array'),

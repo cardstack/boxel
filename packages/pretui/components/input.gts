@@ -22,7 +22,7 @@ export interface InputSignature {
     required?: boolean;
     /** additive — renders boxel-ui's 'Optional' indicator above the control */
     optional?: boolean;
-    /** additive — native readonly (Appendix E boolean set) */
+    /** additive — native readonly */
     readonly?: boolean;
     /** alias — React Aria / Base UI spelling of @invalid */
     isInvalid?: boolean;

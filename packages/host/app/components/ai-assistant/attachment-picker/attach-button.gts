@@ -163,11 +163,13 @@ export default class AttachButton extends Component<Signature> {
   });
 
   private doChooseFile = restartableTask(async () => {
-    let chosenFile: FileDef | undefined = await chooseFile();
-    if (chosenFile) {
-      await this.args.chooseFile(chosenFile);
-    }
-    return chosenFile;
+    let chosenFiles: FileDef[] | undefined = await chooseFile({
+      multiSelect: true,
+    });
+    // Hand every file over before awaiting any, so restarting this task (the
+    // chooser reopened) or one file failing to attach can't drop the rest.
+    await Promise.all((chosenFiles ?? []).map((f) => this.args.chooseFile(f)));
+    return chosenFiles;
   });
 
   private doChooseLocalFile = restartableTask(async () => {

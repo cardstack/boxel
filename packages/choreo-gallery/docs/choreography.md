@@ -187,7 +187,7 @@ timeline the legacy could only print as a matrix.
 
 ## Tests
 
-`test-app/tests/integration/choreo/`:
+`packages/choreo/tests/integration/choreo/`:
 
 - **changeset** — inserted / removed / kept classification; `role` and `id`
   queries; `still` / `moved`; no run on the region's first render; no run on a
@@ -208,7 +208,8 @@ timeline the legacy could only print as a matrix.
 - **presence** — a leaving `<Presence>` child is a removed sprite and its exit
   completes when its row ends
 - **interruption** — a second dirty pass cancels timers, releases holds, and
-  does not strand orphans
+  does not strand orphans (a soak over the gallery demos, so it lives in
+  `packages/choreo-test-app/tests/integration/choreo/`)
 - **counterpart** — an inserted id matching a removed one carries the old
   element as `counterpart`
 
