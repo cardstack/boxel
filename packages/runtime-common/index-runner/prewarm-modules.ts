@@ -11,6 +11,7 @@ import {
 import type { CacheScope, DefinitionLookup } from '../definition-lookup.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { isScopedCSSRequest } from '../scoped-css.ts';
+import { referenceNamesFile } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
 
 // Default module pre-warm concurrency. Serial by default: a cold/shared
@@ -245,11 +246,18 @@ export async function preWarmModulesTable({
     if (row?.deps?.length) {
       for (let dep of row.deps) {
         let resolved = canonicalURL(dep, url.href, virtualNetwork);
-        // `.json` marks an instance dep and `.glimmer-scoped.css` marks an
-        // inline-styles artifact; everything else in the deps array is a
-        // module URL (stored extensionless after normalizeModuleURL /
-        // normalizeDependency).
-        if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
+        // `.json` marks an instance dep, any other registered file extension
+        // that isn't executable a file dep (a markdown file, a linked image),
+        // and `.glimmer-scoped.css` an inline-styles artifact; everything else
+        // in the deps array is a module URL (stored extensionless after
+        // normalizeModuleURL / normalizeDependency). Warming a file dep as a
+        // module makes the loader probe `<file>.gts`, `.ts`, `.gjs` and `.js`.
+        if (
+          !(
+            referenceNamesFile(resolved) && !hasExecutableExtension(resolved)
+          ) &&
+          !isScopedCSSRequest(resolved)
+        ) {
           toWarm.add(resolved);
         }
       }
