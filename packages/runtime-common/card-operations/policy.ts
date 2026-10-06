@@ -335,18 +335,19 @@ export class RealmPolicyCache {
     return await this.#refresh(card);
   }
 
-  // The operations the realm's policy opens to callers who aren't signed in,
-  // or none. Read from the compiled policy and nothing else, so answering such
-  // a caller loads no target and evaluates no predicate. A policy that can't
-  // be compiled opens nothing, which leaves that caller with the answer every
-  // other caller who isn't signed in gets, rather than a failure that would
-  // tell them the realm names a policy.
+  // Which operations this realm's policy lets unauthenticated callers run.
+  // Empty if none. Reading this is cheap: it never loads a card or runs a
+  // predicate. If the policy fails to compile, the answer is "none", so an
+  // unauthenticated caller gets the same 401 they'd get from any realm and
+  // can't tell that this one has a policy at all.
   //
-  // A policy no grant of which opts in to such callers is answered from the
-  // card as the index holds it, without compiling: the realm asks this of
-  // every request that authenticated nobody, including the ones its own
-  // renders make, and a realm whose policy opens nothing to such callers pays
-  // for no compile on their account.
+  // Cost matters here because this runs for every request the ACL rejects
+  // for missing credentials, and the realm's own renders send such requests
+  // while it indexes. So before compiling anything, we read the raw policy
+  // card from the index and look for a grant with `anonymous: true`, and
+  // remember the answer as long as a compile is kept. If there isn't one, we
+  // return "none" without compiling. If a fresh compile is already cached, we
+  // skip that check and use it directly.
   async anonymousAdmission(): Promise<ReadonlySet<string>> {
     let compiled: CompiledRealmPolicy | undefined;
     try {
