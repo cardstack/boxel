@@ -16,8 +16,9 @@ const COUNTRY_NAMES = [
 const COUNTRY_OPTIONS = COUNTRY_NAMES.map((c) => ({ value: c, label: c }));
 // ── Select ← select/usage.gts ────────────────────────────────────────────
 // Dropped knobs: @variant (tone/appearance theming not on Select yet),
-// @verticalPosition (listbox always opens below), @renderInPlace (always
-// in place — no portal), @matchTriggerWidth (listbox always matches),
+// @verticalPosition (listbox always opens below), @renderInPlace (the
+// listbox always renders in the wormhole, so nothing clips it),
+// @matchTriggerWidth (listbox always matches),
 // @searchEnabled / @searchField (keyboard typeahead replaces the search
 // box), item yield block (options are {value, label} data, rendered by the
 // component).

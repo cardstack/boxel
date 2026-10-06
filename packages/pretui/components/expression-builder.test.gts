@@ -43,8 +43,9 @@ function has(name: string, n: number): HTMLElement {
   return el;
 }
 async function pickOption(wrapper: HTMLElement, text: string) {
-  await click(wrapper.querySelector('.pretui-selecttrigger') as HTMLElement);
-  let opt = Array.from(wrapper.querySelectorAll('.ember-power-select-option')).find((o) => o.textContent?.trim() === text) as HTMLElement;
+  await click(wrapper.querySelector('[data-test-pretui-select-trigger]') as HTMLElement);
+  // the listbox renders in the dropdown wormhole, outside the wrapper
+  let opt = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option]")).find((o) => o.textContent?.trim() === text) as HTMLElement;
   await click(opt);
 }
 function announcement(): string | undefined {
@@ -58,7 +59,7 @@ module('Pretui | components/expression-builder', function (hooks) {
     let issues: ExpressionIssue[] | undefined;
     const onIssues = (i: ExpressionIssue[]) => (issues = i);
     await render(<template><ExpressionBuilder @resources={{RESOURCES}} @onIssues={{onIssues}} /></template>);
-    assert.strictEqual(builder().querySelector('.xb-title')?.textContent?.trim(), 'Conditions');
+    assert.strictEqual(builder().querySelector('[data-test-pretui-expression-title]')?.textContent?.trim(), 'Conditions');
     assert.strictEqual(rows().length, 0);
     assert.true(builder().querySelector('[data-test-pretui-expression-issues]')?.textContent?.includes('No conditions yet'));
     assert.ok(builder().querySelector('[data-test-pretui-expression-add]'));
@@ -203,7 +204,7 @@ module('Pretui | components/expression-builder', function (hooks) {
     const START = [OVER];
     const EXTRA: ExpressionIssue[] = [{ severity: 'warning', message: 'This rule duplicates R-4.' }, { severity: 'info', conditionId: 'c1', message: 'Rounded.' }];
     await render(<template><ExpressionBuilder @resources={{RESOURCES}} @defaultConditions={{START}} @issues={{EXTRA}} @conditionNoun='Check' @title='Gates' /></template>);
-    assert.strictEqual(builder().querySelector('.xb-title')?.textContent?.trim(), 'Gates');
+    assert.strictEqual(builder().querySelector('[data-test-pretui-expression-title]')?.textContent?.trim(), 'Gates');
     assert.true(builder().querySelector('[data-test-pretui-expression-issues]')?.textContent?.includes('duplicates R-4'), 'an expression-level issue goes to the list');
     assert.true(rowN(1).textContent?.includes('Rounded.'), 'a row-addressed issue goes to its row');
     assert.strictEqual(builder().querySelector('ol.xb-rows')?.getAttribute('aria-label'), 'Gates, 1 check', 'the noun is lowercased in running text');
