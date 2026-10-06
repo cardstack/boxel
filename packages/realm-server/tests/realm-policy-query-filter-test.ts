@@ -29,6 +29,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -109,9 +110,10 @@ function classroom({
   });
 }
 
-// Six classrooms. `c`'s one teacher id merely contains the teacher's, `d` has
-// nothing set at all, and `f` has an empty roster and no room number: the
-// places where a filter is narrower than its predicate.
+// Six classrooms. `c`'s one teacher id merely contains the teacher's, so an
+// exact membership test refuses it on both lanes. `d` has nothing set at all,
+// and `f` has an empty roster and no room number: the places where a filter
+// is narrower than its predicate.
 const CLASSROOMS: Record<string, string> = {
   a: classroom({
     attributes: {
@@ -167,13 +169,6 @@ const CASES: {
 }[] = [
   { where: '.providerId == actor()', admits: ['a', 'e', 'f'] },
   { where: '.teacherIds | any(. == actor())', admits: ['b', 'e'] },
-  {
-    where: '.teacherIds | contains([actor()])',
-    admits: ['b', 'e'],
-    holds: ['b', 'c', 'e'],
-    because:
-      "BXL's `contains` also admits `c`, whose id only contains the teacher's; the filter matches whole ids",
-  },
   { where: '.roomNumber > 200', admits: ['b', 'c', 'e'] },
   {
     where: '.roomNumber < 200',
@@ -279,16 +274,29 @@ module(basename(import.meta.filename), function (hooks) {
     education = result.realms.find((realm) => realm.url === EDUCATION)!;
   }
 
+  async function stop() {
+    education.__testOnlyClearCaches();
+    education.unsubscribe();
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      education.__testOnlyClearCaches();
-      education.unsubscribe();
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   // The classrooms a grant's predicate holds for, evaluated as the policy
@@ -343,7 +351,17 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("each query grant's filter admits, for its caller, no classroom its predicate refuses", async function (assert) {
     let policy = await education.getCompiledPolicy();
-    assert.deepEqual(policy?.issues, [], 'every grant compiles a filter');
+    // A classroom links to `Person`, which nothing here grants, and that is
+    // recorded against each grant as a warning that keeps it.
+    assert.deepEqual(
+      policy?.issues.filter(
+        ({ code }) =>
+          code !== 'grant-reaches-ungranted-type' &&
+          code !== 'render-reaches-ungranted-type',
+      ),
+      [],
+      'every grant compiles a filter',
+    );
     let grants = policy?.rules[0]?.grants ?? [];
     assert.strictEqual(grants.length, CASES.length);
 

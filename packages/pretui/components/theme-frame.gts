@@ -5,6 +5,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import { realmURL } from 'https://cardstack.com/base/card-api';
 import { Popover } from './popover';
 import { Select } from './select';
 import { SegmentedControl } from './segmented-control';
@@ -30,7 +31,7 @@ import { SegmentedControl } from './segmented-control';
 // helpers are the part that was actually wanted.
 //
 // 'Auto' stamps no attribute, so the island follows the ambient host
-// scheme. Components never branch on dark (Appendix F) — the flip is
+// scheme. Components never branch on dark — the flip is
 // entirely token re-resolution.
 
 const THEME_MODES = [
@@ -41,6 +42,7 @@ const THEME_MODES = [
 
 interface ThemeLike {
   id?: string;
+  [realmURL]?: URL;
   cssVariables?: string | null;
   // `cardTitle`, not `title` — CardDef exposes no `title`, so reading `.title`
   // silently yields undefined and every theme labels itself "Untitled theme".
@@ -94,14 +96,16 @@ const ThemeInlineControls: TemplateOnlyComponent<ThemePopoverControlsSignature> 
       {{/if}}
     </span>
     <style scoped>
-      .pretui-theme-inline {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .pretui-theme-inline-pick {
-        min-width: 170px;
-        font-size: var(--text-ui, 12px);
+      @layer PretComponent {
+        .pretui-theme-inline {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .pretui-theme-inline-pick {
+          min-width: 170px;
+          font-size: var(--text-ui, 12px);
+        }
       }
     </style>
   </template>
@@ -142,40 +146,42 @@ const ThemePopoverControls: TemplateOnlyComponent<ThemePopoverControlsSignature>
       </:default>
     </Popover>
     <style scoped>
-      .pretui-theme-trigger {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 26px;
-        height: 26px;
-        border: 0;
-        border-radius: var(--radius-chip, 6px);
-        background: transparent;
-        color: var(--muted-foreground);
-        font-size: 14px;
-        line-height: 1;
-        cursor: pointer;
-      }
-      .pretui-theme-trigger:hover,
-      .pretui-theme-trigger[data-state='open'] {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-theme-pop {
-        display: grid;
-        gap: 8px;
-        min-width: 210px;
-      }
-      .pretui-theme-pop-cap {
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-theme-name {
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
+      @layer PretComponent {
+        .pretui-theme-trigger {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          height: 26px;
+          border: 0;
+          border-radius: var(--radius-chip, 6px);
+          background: transparent;
+          color: var(--muted-foreground);
+          font-size: 14px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .pretui-theme-trigger:hover,
+        .pretui-theme-trigger[data-state='open'] {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-theme-pop {
+          display: grid;
+          gap: 8px;
+          min-width: 210px;
+        }
+        .pretui-theme-pop-cap {
+          font-size: var(--text-ui-xs, 11px);
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-theme-name {
+          font-size: var(--text-ui, 12px);
+          color: var(--muted-foreground);
+        }
       }
     </style>
   </template>
@@ -187,9 +193,8 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   setMode = (v: string) => (this.mode = v);
   pickTheme = (v: string) => (this.selectedThemeId = v);
 
-  // All Theme instances in the page card's realm (derived from the linked
-  // theme's id — themes live one directory below the realm root). Absent
-  // context (prerender, tests) degrades to the linked theme only.
+  // All Theme instances in the linked theme's realm. Absent context
+  // (prerender, tests) degrades to the linked theme only.
   themesResource = this.args.context?.getCards?.(
     this,
     () => ({
@@ -202,9 +207,10 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
       },
     }),
     () => {
-      // theme id .../pretui/Theme/<slug> → realm root .../pretui/
-      let id = this.args.theme?.id;
-      return id ? [new URL('../', id).href] : undefined;
+      // the theme id may be prefix-form, which is not a URL base, so the
+      // realm comes from the theme card itself
+      let realm = this.args.theme?.[realmURL];
+      return realm ? [realm.href] : undefined;
     },
   );
 
@@ -308,42 +314,44 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-theme-frame {
-        min-height: 100%;
-      }
-      /* the scoped theme channel only carries custom properties, so the
-         frame owns the native color-scheme switch for form controls */
-      .pretui-theme-frame[data-theme='dark'] {
-        color-scheme: dark;
-      }
-      .pretui-theme-frame[data-theme='light'] {
-        color-scheme: light;
-      }
-      .pretui-theme-surface {
-        min-height: 100%;
-      }
-      .pretui-theme-bar {
-        /* in-flow (not sticky): pages may carry their own sticky top bar
-           (the workbench format) and the bar must not collide with it.
-           No box of its own — the segmented control and select carry their
-           own rounded chrome, and wrapping rounded controls in another
-           rounded container reads as double chrome. */
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 8px;
-        width: fit-content;
-        margin: 10px 0 0 10px;
-      }
-      .pretui-theme-name {
-        font-size: var(--text-ui, 12px);
-        letter-spacing: var(--track-ui, 0.01em);
-        color: var(--muted-foreground);
-        white-space: nowrap;
-      }
-      .pretui-theme-pick {
-        min-width: 180px;
-        font-size: var(--text-ui, 12px);
+      @layer PretComponent {
+        .pretui-theme-frame {
+          min-height: 100%;
+        }
+        /* the scoped theme channel only carries custom properties, so the
+           frame owns the native color-scheme switch for form controls */
+        .pretui-theme-frame[data-theme='dark'] {
+          color-scheme: dark;
+        }
+        .pretui-theme-frame[data-theme='light'] {
+          color-scheme: light;
+        }
+        .pretui-theme-surface {
+          min-height: 100%;
+        }
+        .pretui-theme-bar {
+          /* in-flow (not sticky): pages may carry their own sticky top bar
+             (the workbench format) and the bar must not collide with it.
+             No box of its own — the segmented control and select carry their
+             own rounded chrome, and wrapping rounded controls in another
+             rounded container reads as double chrome. */
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 8px;
+          width: fit-content;
+          margin: 10px 0 0 10px;
+        }
+        .pretui-theme-name {
+          font-size: var(--text-ui, 12px);
+          letter-spacing: var(--track-ui, 0.01em);
+          color: var(--muted-foreground);
+          white-space: nowrap;
+        }
+        .pretui-theme-pick {
+          min-width: 180px;
+          font-size: var(--text-ui, 12px);
+        }
       }
     </style>
   </template>

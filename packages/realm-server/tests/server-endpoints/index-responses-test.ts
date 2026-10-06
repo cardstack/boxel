@@ -13,6 +13,7 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import { currentConnectionTenant } from '@cardstack/postgres';
 import { testRealmURL } from './helpers.ts';
 import {
   rejectedPrerenderHtmlJobIds,
@@ -1308,13 +1309,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           );
         });
 
-        // A capture URL (`_screenshot/…`) is served by the realm on every
+        // A capture URL (`_capture/…`) is served by the realm on every
         // Accept value: a tab navigation to a card's PDF must get the PDF (or
         // the realm's own miss/auth answer), never the app shell — the shell
         // would try to open the capture URL as a card.
         test('an address-bar navigation to a capture URL is answered by the realm, not the app shell', async function (assert) {
           let response = await request
-            .get('/test/_screenshot/person-1?type=pdf&media=print')
+            .get('/test/_capture/person-1?type=pdf&media=print')
             .set('Accept', FRAME_STYLE_ACCEPT)
             .set('Sec-Fetch-Dest', 'document');
 
@@ -1328,12 +1329,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           );
         });
 
-        test('a nested path that merely contains a _screenshot/ segment still opens the app', async function (assert) {
-          // The realm reserves `_screenshot/` at its root only; deeper in the
+        test('an address-bar navigation to a legacy _screenshot/ capture URL is answered by the realm, not the app shell', async function (assert) {
+          let response = await request
+            .get('/test/_screenshot/person-1?type=pdf&media=print')
+            .set('Accept', FRAME_STYLE_ACCEPT)
+            .set('Sec-Fetch-Dest', 'document');
+
+          assert.notOk(
+            response.headers['content-type']?.includes('text/html'),
+            `the realm answers, not the shell (got ${response.status} ${response.headers['content-type']})`,
+          );
+          assert.notOk(
+            (response.text ?? '').includes('<title>'),
+            'the app shell is not served for a legacy capture URL',
+          );
+        });
+
+        test('a nested path that merely contains a _capture/ segment still opens the app', async function (assert) {
+          // The realm reserves `_capture/` at its root only; deeper in the
           // tree it is an ordinary directory name, so the card URL beneath it
           // keeps the app-shell answer every card URL gets.
           let response = await request
-            .get('/test/folder/_screenshot/card')
+            .get('/test/folder/_capture/card')
             .set('Accept', FRAME_STYLE_ACCEPT)
             .set('Sec-Fetch-Dest', 'document');
 
@@ -1434,6 +1451,30 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(
         response.text.includes('data-test-home-card'),
         'index HTML is served',
+      );
+    });
+
+    test('a page load queries the database ordered as the published realm', async function (assert) {
+      // Record which tenant each query is charged to, from inside the query
+      // path. Background work may query too, so this asserts the page load's
+      // queries are among them, not that nothing else ran.
+      let tenants = new Set<string | undefined>();
+      let execute = dbAdapter.execute;
+      dbAdapter.execute = function (this: DBAdapter, ...args) {
+        tenants.add(currentConnectionTenant());
+        return execute.apply(this, args);
+      } as DBAdapter['execute'];
+      let response;
+      try {
+        response = await request.get('/published/').set('Accept', 'text/html');
+      } finally {
+        dbAdapter.execute = execute;
+      }
+
+      assert.strictEqual(response.status, 200, 'serves HTML response');
+      assert.true(
+        tenants.has(testRealm.url),
+        `queries ran ordered as ${testRealm.url}; saw ${JSON.stringify([...tenants])}`,
       );
     });
 

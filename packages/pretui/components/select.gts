@@ -1,6 +1,8 @@
 // Pretui — Select: BoxelSelect (ember-power-select) behind Pretui's value API.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
+import { guidFor } from '@ember/object/internals';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlNotifyArgs } from '../pretui-primitives';
@@ -21,6 +23,12 @@ export interface SelectSignature {
     placeholder?: string;
     disabled?: boolean;
     controlId?: string;
+    /** accessible name for the trigger. The trigger is not a labelable
+     * element, so a `<label for={{controlId}}>` alone may not name it. */
+    label?: string;
+    /** id of an element that names the trigger; preferred over @label when
+     * a visible or visually hidden label already exists */
+    labelledBy?: string;
     /** alias — React Aria / Base UI spelling of @disabled */
     isDisabled?: boolean;
   };
@@ -58,6 +66,8 @@ interface PoweredSelectSignature {
     matchTriggerWidth?: boolean;
     renderInPlace?: boolean;
     dropdownClass?: string;
+    ariaLabel?: string;
+    ariaLabelledBy?: string;
   };
   Blocks: { default: [SelectOption] };
   Element: HTMLElement;
@@ -67,8 +77,47 @@ const PoweredSelect = BoxelSelect as unknown as new (
   args: PoweredSelectSignature['Args'],
 ) => Component<PoweredSelectSignature>;
 
+// The trigger is a role='button' div, which a <label> does not name, so a
+// label pointing at @controlId (or wrapping the Select) is linked through
+// aria-labelledby — label first, then the trigger itself, so the chosen
+// value is still announced after the name.
+const nameFromLabel = modifier(
+  (
+    wrap: HTMLElement,
+    [controlId, explicit, fallbackId]: [string | undefined, boolean, string],
+  ) => {
+    if (explicit) {
+      return;
+    }
+    let trigger = wrap.querySelector<HTMLElement>('.pretui-selecttrigger');
+    if (!trigger) {
+      return;
+    }
+    let label =
+      (controlId
+        ? document.querySelector<HTMLElement>(`label[for="${CSS.escape(controlId)}"]`)
+        : null) ?? wrap.closest('label');
+    if (!label) {
+      return;
+    }
+    if (!trigger.id) {
+      trigger.id = fallbackId;
+    }
+    if (!label.id) {
+      label.id = `${trigger.id}-label`;
+    }
+    trigger.setAttribute('aria-labelledby', `${label.id} ${trigger.id}`);
+  },
+);
+
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
+  get triggerId(): string {
+    return this.args.controlId ?? `${guidFor(this)}-trigger`;
+  }
+  get explicitName(): boolean {
+    return this.args.label !== undefined || this.args.labelledBy !== undefined;
+  }
 
   get options(): SelectOption[] {
     return firstDefined(this.args.options, this.args.items) ?? [];
@@ -97,7 +146,12 @@ export class Select extends Component<SelectSignature> {
   };
 
   <template>
-    <div class='pretui-selectwrap' data-test-pretui-select ...attributes>
+    <div
+      class='pretui-selectwrap'
+      data-test-pretui-select
+      {{nameFromLabel @controlId this.explicitName this.triggerId}}
+      ...attributes
+    >
       {{! id lands on the power-select trigger (label[for] wiring). It
           overrides BoxelSelect's own guid id, which is safe here: that id
           only feeds its wormhole theme observer, skipped for renderInPlace. }}
@@ -114,35 +168,41 @@ export class Select extends Component<SelectSignature> {
         @matchTriggerWidth={{true}}
         @renderInPlace={{true}}
         @dropdownClass='pretui-select-dropdown'
+        @ariaLabel={{@label}}
+        @ariaLabelledBy={{@labelledBy}}
         as |option|
       >
         {{option.label}}
       </PoweredSelect>
     </div>
     <style scoped>
-      .pretui-selectwrap {
-        position: relative; /* anchors the in-place dropdown */
-        min-width: 0;
-        /* boxel-ui custom-property channel: route Pretui tokens through the
-           knobs BoxelSelect exposes (renderInPlace keeps these inheriting
-           straight down into the dropdown). Colors without a knob are
-           overridden in the :deep() rules below. */
-        --boxel-form-control-border-radius: var(--radius);
-        /* 10px, not 9px: this trigger spends its hairline as a box-shadow
-           with `border: 0`, so 9px of padding puts its text 9px from the box
-           edge — while a boxel-ui-backed Input draws a real 1px border and
-           puts its text at 1 + 9 = 10px. Stacked, the two were 1px out. */
-        --boxel-select-trigger-padding: 0 10px;
-        --boxel-select-trigger-gap: 6px;
-        --boxel-select-trigger-content-wrap: nowrap;
-        --boxel-select-background-color: var(--field, var(--boxel-light));
-        --boxel-select-text-color: var(--foreground);
-        --boxel-dropdown-background-color: var(--popover);
-        --boxel-dropdown-text-color: var(--foreground);
-        --boxel-dropdown-hover-color: var(--hover, var(--boxel-100));
-        --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
-        --boxel-dropdown-selected-text-color: var(--foreground);
+      @layer PretComponent {
+        .pretui-selectwrap {
+          position: relative; /* anchors the in-place dropdown */
+          min-width: 0;
+          /* boxel-ui custom-property channel: route Pretui tokens through the
+             knobs BoxelSelect exposes (renderInPlace keeps these inheriting
+             straight down into the dropdown). Colors without a knob are
+             overridden in the :deep() rules below. */
+          --boxel-form-control-border-radius: var(--radius);
+          /* 10px, not 9px: this trigger spends its hairline as a box-shadow
+             with `border: 0`, so 9px of padding puts its text 9px from the box
+             edge — while a boxel-ui-backed Input draws a real 1px border and
+             puts its text at 1 + 9 = 10px. Stacked, the two were 1px out. */
+          --boxel-select-trigger-padding: 0 10px;
+          --boxel-select-trigger-gap: 6px;
+          --boxel-select-trigger-content-wrap: nowrap;
+          --boxel-select-background-color: var(--field, var(--boxel-light));
+          --boxel-select-text-color: var(--foreground);
+          --boxel-dropdown-background-color: var(--popover);
+          --boxel-dropdown-text-color: var(--foreground);
+          --boxel-dropdown-hover-color: var(--hover, var(--boxel-100));
+          --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
+          --boxel-dropdown-selected-text-color: var(--foreground);
+        }
       }
+      /* Unlayered: BoxelSelect's own rules are unlayered, and unlayered CSS
+         beats any layer, so these overrides only win from outside one. */
       /* trigger — dressed to match .pretui-input exactly: hairline rides
          box-shadow (not border) so the box metrics stay identical */
       .pretui-selectwrap :deep(.pretui-selecttrigger) {

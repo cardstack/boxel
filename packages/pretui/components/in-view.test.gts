@@ -1,5 +1,4 @@
-// Pretui — InView unit tests. Imports from ../motion-core; when InView moves to its
-// own file only the import path changes.
+// Pretui — InView unit tests.
 //
 // No assertion touches a computed style: the
 // component's own `<style scoped>` is inert in this harness (the scoped-css
@@ -7,7 +6,7 @@
 // as the custom properties and structure the CSS animates from, never as
 // movement.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { InView } from './in-view';
 
@@ -23,7 +22,9 @@ module('Pretui | components/in-view', function (hooks) {
     assert.strictEqual(root().dataset['mode'], 'block');
     assert.strictEqual(root().getAttribute('style'), '--pretui-inview-from: translateY(var(--pretui-motion-distance, 8px)); --pretui-inview-duration: 0.480s; --pretui-inview-delay: 0.000s; --pretui-inview-stagger: 0.000s', 'rise is the default entrance');
     assert.ok(root().querySelector('[data-test-body]'));
-    assert.strictEqual(root().dataset['inview'], 'true', 'in the test viewport the observer has already flipped it visible');
+    // the observer reports asynchronously; render settling does not wait for it
+    await waitUntil(() => root().dataset['inview'] === 'true', { timeout: 2000 });
+    assert.strictEqual(root().dataset['inview'], 'true', 'in the test viewport the observer flips it visible');
   });
 
   test('installs hidden — data-inview="false" is written before the observer ever reports', async function (assert) {

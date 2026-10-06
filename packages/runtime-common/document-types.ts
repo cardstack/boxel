@@ -64,6 +64,23 @@ export interface EntryCollectionDocument {
       // level — it cannot vary across entries, so it is never repeated per
       // entry. Present whenever the fieldset puts the html branch in play.
       htmlQuery?: HtmlQuery;
+      // Each answering realm's own match count, keyed by realm URL. The summed
+      // `page.total` can't tell a consumer how many rows one realm holds past
+      // its page, which is what paging a single realm's results needs.
+      realmTotals?: Record<string, number>;
+      // The realms whose rows here are the only ones of theirs the result may
+      // hold, because the server decided them by more than the caller's query:
+      // the caller does not read the realm outright, so what they see of it is
+      // their policy's to decide, or the query is a declared one the server
+      // resolved from its own definition. A client reconciling the result
+      // against cards it holds may drop one of these realms' rows that no
+      // longer matches, and may never add a row of theirs the server did not
+      // return.
+      //
+      // It names realms and nothing more. No filter, no rule and no count of
+      // what was withheld, since any of those tells the caller the shape of
+      // their own grant. Absent when no realm is scoped.
+      policyScopedRealms?: string[];
     };
 }
 

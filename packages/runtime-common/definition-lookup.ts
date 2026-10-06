@@ -37,8 +37,8 @@ import {
   type ModuleDefinitionResult,
   type ModuleRenderResponse,
   type Prerenderer,
+  type CreatePrerenderAuth,
   type Realm,
-  type RealmPermissions,
   type ResolvedCodeRef,
   type Diagnostics,
   executableExtensions,
@@ -365,6 +365,15 @@ export interface DefinitionLookup {
     codeRef: ResolvedCodeRef,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition>;
+  // The type's whole entry: its definition together with the adoption chain
+  // recorded beside it, the type itself and every type it descends from up to
+  // the root of its family, each keyed the way an index row's `types` records
+  // a card's. One read, so the two describe the same module. Resolved exactly
+  // as `lookupDefinition` resolves the type, and refused where it would be.
+  lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult>;
   // Like lookupDefinition but does not trigger a prerenderer call or
   // populate missing definitions. It may still perform lookup-context
   // resolution (including remote visibility probing) before reading from the
@@ -480,10 +489,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #fetch: typeof fetch;
   #virtualNetwork: VirtualNetwork;
   #realms: LocalRealm[] = [];
-  #createPrerenderAuth: (
-    userId: string,
-    permissions: RealmPermissions,
-  ) => string;
+  #createPrerenderAuth: CreatePrerenderAuth;
   // Dedupes concurrent loadDefinitionCacheEntry calls that would hit the same
   // cache row so a single prerenderer round-trip is shared by all waiters
   // instead of each caller racing to the prerenderer independently.
@@ -523,10 +529,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     dbAdapter: DBAdapter,
     prerenderer: Prerenderer,
     virtualNetwork: VirtualNetwork,
-    createPrerenderAuth: (
-      userId: string,
-      permissions: RealmPermissions,
-    ) => string,
+    createPrerenderAuth: CreatePrerenderAuth,
     populateCoordinator?: PopulateCoordinator,
   ) {
     this.#dbAdapter = dbAdapter;
@@ -541,7 +544,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef, {
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).definition;
+  }
+
+  async lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult> {
+    return await this.lookupDefinitionEntryWithContext(codeRef, {
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
     });
   }
@@ -1056,10 +1070,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return entry;
   }
 
-  private async lookupDefinitionWithContext(
+  private async lookupDefinitionEntryWithContext(
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
-  ): Promise<Definition> {
+  ): Promise<ModuleDefinitionResult> {
     let canonicalModuleURL = canonicalURL(
       codeRef.module,
       undefined,
@@ -1151,7 +1165,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
 
     if (defOrError.type === 'definition') {
-      return defOrError.definition;
+      return defOrError;
     }
 
     throw new FilterRefersToNonexistentTypeError(codeRef, {
@@ -1367,7 +1381,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     realm: LocalRealm,
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef, {
+    return (
+      await this.lookupDefinitionEntryWithContext(codeRef, {
+        requestingRealm: realm,
+        ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      })
+    ).definition;
+  }
+
+  async lookupDefinitionEntryForRealm(
+    codeRef: ResolvedCodeRef,
+    realm: LocalRealm,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult> {
+    return await this.lookupDefinitionEntryWithContext(codeRef, {
       requestingRealm: realm,
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
     });
@@ -1589,7 +1616,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     priority?: number,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
-    let auth = this.#createPrerenderAuth(userId, permissions);
+    // A definition is cached and read by every realm that uses the module, so
+    // the render that produces one runs under realm authority.
+    let auth = this.#createPrerenderAuth(userId, permissions, {
+      realmAuthority: true,
+    });
     // A populate exists because no usable row was found, which on the write
     // path is precisely because the module's bytes just changed — so the tab
     // this render lands on is the one most likely to be holding the module it
@@ -2248,6 +2279,17 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
     return await this.#inner.lookupDefinitionForRealm(
+      codeRef,
+      this.#realm,
+      opts,
+    );
+  }
+
+  async lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleDefinitionResult> {
+    return await this.#inner.lookupDefinitionEntryForRealm(
       codeRef,
       this.#realm,
       opts,

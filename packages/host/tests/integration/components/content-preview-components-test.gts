@@ -324,7 +324,7 @@ module('Integration | content-only file preview components', function (hooks) {
 
   test('ImagePreview assembles srcset from the captured rendition slots', async function (assert) {
     let { ImagePreview } = fileFormats;
-    // A wire-shape model carrying the same `screenshotsMeta` key a FileDef
+    // A wire-shape model carrying the same `capturesMeta` key a FileDef
     // instance exposes: the reading formats offer the captured renditions as
     // narrower candidates with the original as the largest.
     let image = {
@@ -334,22 +334,22 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/png',
       width: 3000,
       height: 2250,
-      screenshotsMeta: {
+      capturesMeta: {
         thumb: {
-          url: 'http://example.com/_screenshot/img/hero.png?name=thumb',
+          url: 'http://example.com/_capture/img/hero.png?name=thumb',
           width: 170,
           height: 250,
           deviceScaleFactor: 2,
           useAsThumbnail: true,
         },
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-640',
+          url: 'http://example.com/_capture/img/hero.png?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
         },
         'rendition-1280': {
-          url: 'http://example.com/_screenshot/img/hero.png?name=rendition-1280',
+          url: 'http://example.com/_capture/img/hero.png?name=rendition-1280',
           width: 1280,
           height: 960,
           deviceScaleFactor: 1,
@@ -389,8 +389,9 @@ module('Integration | content-only file preview components', function (hooks) {
 
   test('ImagePreview offers no srcset for animated or vector sources', async function (assert) {
     let { ImagePreview } = fileFormats;
-    // A rendition of a GIF is a still of its first frame — substituting it
-    // in a reading format would silently drop the animation.
+    // A GIF with no extracted verdict may animate, and a rendition of it is a
+    // still of its first frame — substituting it in a reading format would
+    // silently drop the animation.
     let gif = {
       id: 'http://example.com/img/loop.gif',
       url: 'http://example.com/img/loop.gif',
@@ -398,9 +399,9 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/gif',
       width: 3000,
       height: 2250,
-      screenshotsMeta: {
+      capturesMeta: {
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/loop.gif?name=rendition-640',
+          url: 'http://example.com/_capture/img/loop.gif?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
@@ -419,37 +420,99 @@ module('Integration | content-only file preview components', function (hooks) {
     assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
   });
 
-  test('ImagePreview offers no srcset for animatable formats (WebP/AVIF)', async function (assert) {
-    let { ImagePreview } = fileFormats;
-    // WebP and AVIF can animate, and no extracted signal says whether a
-    // given file does — a rendition of an animated one would be a frozen
-    // first frame, so the whole format sits out.
-    let webp = {
-      id: 'http://example.com/img/loop.webp',
-      url: 'http://example.com/img/loop.webp',
-      name: 'loop.webp',
-      contentType: 'image/webp',
+  // A 4:3 image large enough for both renditions, so animation is the only
+  // thing that can keep srcset off.
+  function renditionReadyImage(
+    fileName: string,
+    contentType: string,
+    animation?: 'animated' | 'still',
+  ) {
+    let url = `http://example.com/img/${fileName}`;
+    return {
+      id: url,
+      url,
+      name: fileName,
+      contentType,
       width: 3000,
       height: 2250,
-      screenshotsMeta: {
+      ...(animation ? { animation } : {}),
+      capturesMeta: {
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/loop.webp?name=rendition-640',
+          url: `http://example.com/_capture/img/${fileName}?name=rendition-640`,
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
         },
       },
     };
+  }
+
+  async function renderImagePreview(image: object) {
+    let { ImagePreview } = fileFormats;
     await renderComponent(
       <template>
         {{! template-lint-disable no-inline-styles }}
         <div style='position: relative; width: 200px; height: 150px;'>
-          <ImagePreview @model={{webp}} />
+          <ImagePreview @model={{image}} />
         </div>
       </template>,
     );
+  }
+
+  test('ImagePreview offers no srcset for an animated WebP or AVIF', async function (assert) {
+    // A rendition of an animated file is a frozen first frame.
+    await renderImagePreview(
+      renditionReadyImage('loop.webp', 'image/webp', 'animated'),
+    );
     assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
-    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('sizes');
+
+    await renderImagePreview(
+      renditionReadyImage('loop.avif', 'image/avif', 'animated'),
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+  });
+
+  test('ImagePreview offers no srcset for a WebP or AVIF not known to be a still', async function (assert) {
+    // No extracted verdict — a reader that couldn't tell, or a row that
+    // predates the field — is treated as possibly animated for these
+    // animation-capable containers.
+    await renderImagePreview(renditionReadyImage('photo.webp', 'image/webp'));
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+
+    await renderImagePreview(renditionReadyImage('photo.avif', 'image/avif'));
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+  });
+
+  test('ImagePreview offers srcset for a WebP, AVIF, or GIF known to be a still', async function (assert) {
+    for (let [fileName, contentType] of [
+      ['photo.webp', 'image/webp'],
+      ['photo.avif', 'image/avif'],
+      ['diagram.gif', 'image/gif'],
+    ]) {
+      await renderImagePreview(
+        renditionReadyImage(fileName!, contentType!, 'still'),
+      );
+      let srcset =
+        find('img[data-test-image-preview]')?.getAttribute('srcset') ?? '';
+      assert.ok(
+        srcset.includes(`${fileName}?name=rendition-640 640w`),
+        `a still ${contentType} offers its rendition (got: ${srcset})`,
+      );
+    }
+  });
+
+  test('ImagePreview offers no srcset for an animated PNG, and keeps it for a PNG with no verdict', async function (assert) {
+    // APNG is the exception among PNGs, so only a positive finding excludes
+    // one; an unknown PNG keeps srcset.
+    await renderImagePreview(
+      renditionReadyImage('spinner.png', 'image/png', 'animated'),
+    );
+    assert.dom('img[data-test-image-preview]').doesNotHaveAttribute('srcset');
+
+    await renderImagePreview(renditionReadyImage('photo.png', 'image/png'));
+    assert
+      .dom('img[data-test-image-preview]')
+      .hasAttribute('srcset', /rendition-640 640w/);
   });
 
   test('ImagePreview offers no srcset for images narrower than the rendition canvas', async function (assert) {
@@ -464,15 +527,15 @@ module('Integration | content-only file preview components', function (hooks) {
       contentType: 'image/png',
       width: 2250,
       height: 3000,
-      screenshotsMeta: {
+      capturesMeta: {
         'rendition-640': {
-          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-640',
+          url: 'http://example.com/_capture/img/tall.png?name=rendition-640',
           width: 640,
           height: 480,
           deviceScaleFactor: 1,
         },
         'rendition-1280': {
-          url: 'http://example.com/_screenshot/img/tall.png?name=rendition-1280',
+          url: 'http://example.com/_capture/img/tall.png?name=rendition-1280',
           width: 1280,
           height: 960,
           deviceScaleFactor: 1,

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
 import {
   extensions as _extensions,
   classicEmberSupport,
@@ -14,6 +14,8 @@ import { scopedCSS } from 'glimmer-scoped-css/rollup';
 
 import { bundledBaseScopedCSS } from './lib/bundled-base-scoped-css.mjs';
 import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
+import { versionStableShellReferencesPlugin } from './lib/build/version-stable-shell-references.mjs';
+import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
 
 // Local HTTPS dev access: the realm-server speaks HTTPS+HTTP/2 in local
 // dev (see `infra:ensure-dev-cert`), and the browser hits both Vite and
@@ -339,8 +341,20 @@ export default defineConfig(({ mode }) => ({
     },
   },
   resolve: {
+    // glimmer-motion and @cardstack/choreo compile from their source through
+    // the `developing:choreo` export condition, so neither needs building
+    // first. npm consumers, which don't set it, get their built output.
+    conditions: ['developing:choreo', ...defaultClientConditions],
     alias: [
       ...hostToolAliases(),
+      // Bundled base modules import host library modules as
+      // `@cardstack/boxel-host/lib/<name>`, the specifier app/lib/externals.ts
+      // shims for the loader at runtime. Map it onto the same files so the
+      // bundler resolves what the runtime serves.
+      {
+        find: /^@cardstack\/boxel-host\/lib\/(.*)$/,
+        replacement: path.join(__dirname, 'app', 'lib', '$1'),
+      },
       { find: 'path', replacement: require.resolve('path-browserify') },
       { find: 'stream', replacement: require.resolve('stream-browserify') },
       { find: /^util$/, replacement: require.resolve('util/') },
@@ -349,6 +363,7 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   plugins: [
+    glimmerMotionSource(),
     bundledBaseScopedCSS(),
     scopedCSS(),
     classicEmberSupport(),
@@ -361,6 +376,7 @@ export default defineConfig(({ mode }) => ({
     }),
     boxelUIChecksumPlugin(__dirname),
     excludeTestFixturesFromProduction(mode),
+    versionStableShellReferencesPlugin(),
   ],
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],

@@ -202,7 +202,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .remove:focus,
       .remove:hover {
-        --icon-color: var(--destructive, var(--boxel-danger));
+        --icon-color: var(--destructive-ink);
         outline: 0;
       }
       .remove:focus + .item-container,

@@ -159,102 +159,104 @@ export class DataGrid extends Component<DataGridSignature> {
       </table>
     </div>
     <style scoped>
-      .pretui-gridwrap {
-        overflow: auto;
-        border-radius: inherit;
-      }
-      .pretui-datagrid {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: var(--text-ui-md, 12.5px);
-        background: var(--card);
-      }
-      .pretui-datagrid th {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        height: 30px;
-        padding: 0 10px;
-        text-align: left;
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 500;
-        letter-spacing: var(--track-eyebrow, 0.08em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-        background: var(--inset, var(--boxel-100));
-        box-shadow: inset 0 -1px 0 var(--line-strong, var(--boxel-400));
-        white-space: nowrap;
-        cursor: pointer;
-        user-select: none;
-      }
-      .pretui-datagrid th[data-sort] {
-        color: var(--foreground);
-      }
-      .pretui-th-btn {
-        background: none;
-        border: 0;
-        padding: 0;
-        font: inherit;
-        letter-spacing: inherit;
-        text-transform: inherit;
-        color: inherit;
-        cursor: pointer;
-        white-space: inherit;
-      }
-      .pretui-datagrid td {
-        height: 32px;
-        padding: 0 10px;
-        box-shadow: inset 0 -1px 0 var(--border);
-        white-space: nowrap;
-      }
-      .pretui-datagrid th[data-align='right'],
-      .pretui-datagrid td[data-align='right'] {
-        text-align: right;
-      }
-      .pretui-datagrid tbody tr:nth-child(even) td {
-        background: var(--stripe, var(--boxel-100));
-      }
-      .pretui-datagrid tbody tr:hover td {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-datagrid tbody tr[data-state='selected'] td {
-        background: var(--pretui-selected, var(--boxel-100));
-      }
-      .pretui-num {
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
-      .pretui-mono {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-      }
-      .pretui-selcol {
-        width: 32px;
-      }
-      .pretui-checkbox {
-        appearance: none;
-        width: 15px;
-        height: 15px;
-        margin: 0;
-        border-radius: 5px;
-        background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
-        box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
-        cursor: pointer;
-        display: inline-grid;
-        place-content: center;
-      }
-      .pretui-checkbox:checked {
-        background: var(--primary);
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
-          var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
-      }
-      .pretui-checkbox:checked::before {
-        content: '';
-        width: 9px;
-        height: 9px;
-        background: var(--primary-foreground);
-        clip-path: polygon(14% 47%, 38% 70%, 86% 18%, 96% 30%, 39% 89%, 4% 58%);
+      @layer PretComponent {
+        .pretui-gridwrap {
+          overflow: auto;
+          border-radius: inherit;
+        }
+        .pretui-datagrid {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: var(--text-ui-md, 12.5px);
+          background: var(--card);
+        }
+        .pretui-datagrid th {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          height: 30px;
+          padding: 0 10px;
+          text-align: left;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: var(--track-eyebrow, 0.08em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+          background: var(--inset, var(--boxel-100));
+          box-shadow: inset 0 -1px 0 var(--line-strong, var(--boxel-400));
+          white-space: nowrap;
+          cursor: pointer;
+          user-select: none;
+        }
+        .pretui-datagrid th[data-sort] {
+          color: var(--foreground);
+        }
+        .pretui-th-btn {
+          background: none;
+          border: 0;
+          padding: 0;
+          font: inherit;
+          letter-spacing: inherit;
+          text-transform: inherit;
+          color: inherit;
+          cursor: pointer;
+          white-space: inherit;
+        }
+        .pretui-datagrid td {
+          height: 32px;
+          padding: 0 10px;
+          box-shadow: inset 0 -1px 0 var(--border);
+          white-space: nowrap;
+        }
+        .pretui-datagrid th[data-align='right'],
+        .pretui-datagrid td[data-align='right'] {
+          text-align: right;
+        }
+        .pretui-datagrid tbody tr:nth-child(even) td {
+          background: var(--stripe, var(--boxel-100));
+        }
+        .pretui-datagrid tbody tr:hover td {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-datagrid tbody tr[data-state='selected'] td {
+          background: var(--pretui-selected, var(--boxel-100));
+        }
+        .pretui-num {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        .pretui-mono {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+        }
+        .pretui-selcol {
+          width: 32px;
+        }
+        .pretui-checkbox {
+          appearance: none;
+          width: 15px;
+          height: 15px;
+          margin: 0;
+          border-radius: 5px;
+          background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
+          box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
+          cursor: pointer;
+          display: inline-grid;
+          place-content: center;
+        }
+        .pretui-checkbox:checked {
+          background: var(--primary);
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 70%, var(--border)),
+            var(--pretui-edge-highlight, inset 0 1px 0 rgb(255 255 255 / 0.14));
+        }
+        .pretui-checkbox:checked::before {
+          content: '';
+          width: 9px;
+          height: 9px;
+          background: var(--primary-foreground);
+          clip-path: polygon(14% 47%, 38% 70%, 86% 18%, 96% 30%, 39% 89%, 4% 58%);
+        }
       }
     </style>
   </template>

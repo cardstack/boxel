@@ -1,0 +1,2814 @@
+{
+  "minimumProseWords": 300,
+  "scope": "Public glimmer-motion root and test-support, @cardstack/choreo root, film and test-support, and choreo-player entrypoints; yielded Choreo and film vocabulary. Related helpers, aliases and supporting types share a concept chapter. Wildcard deep implementation modules are not promised as standalone application APIs.",
+  "entries": [
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "beacon",
+      "source": "packages/choreo/src/beacon.ts",
+      "kind": "value",
+      "guide": "interactive-beacons",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "ChoreoContext",
+      "source": "packages/choreo/src/choreo.gts",
+      "kind": "type",
+      "guide": "interactive-start",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Choreo",
+      "source": "packages/choreo/src/choreo.gts",
+      "kind": "value",
+      "guide": "interactive-start",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "AnchorRef",
+      "source": "packages/choreo/src/anchors.ts",
+      "kind": "type",
+      "guide": "interactive-anchors",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "after",
+      "source": "packages/choreo/src/anchors.ts",
+      "kind": "value",
+      "guide": "interactive-anchors",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "at",
+      "source": "packages/choreo/src/anchors.ts",
+      "kind": "value",
+      "guide": "interactive-anchors",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Arming",
+      "source": "packages/choreo/src/arming.ts",
+      "kind": "type",
+      "guide": "interactive-arming",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "ArmingOptions",
+      "source": "packages/choreo/src/arming.ts",
+      "kind": "type",
+      "guide": "interactive-arming",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "ArmingRegion",
+      "source": "packages/choreo/src/arming.ts",
+      "kind": "type",
+      "guide": "interactive-arming",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "createArming",
+      "source": "packages/choreo/src/arming.ts",
+      "kind": "value",
+      "guide": "interactive-arming",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "BeaconRef",
+      "source": "packages/choreo/src/beacons.ts",
+      "kind": "type",
+      "guide": "interactive-beacons",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Changeset",
+      "source": "packages/choreo/src/changeset.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "easeIn",
+      "source": "packages/choreo/src/easings.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "easeInAndOut",
+      "source": "packages/choreo/src/easings.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "easeOut",
+      "source": "packages/choreo/src/easings.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "GestureRef",
+      "source": "packages/choreo/src/gesture.ts",
+      "kind": "type",
+      "guide": "core-drag",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "ChoreoHost",
+      "source": "packages/choreo/src/registry.ts",
+      "kind": "type",
+      "guide": "interactive-registry",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "choreoHostAt",
+      "source": "packages/choreo/src/registry.ts",
+      "kind": "value",
+      "guide": "interactive-registry",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "choreoHostById",
+      "source": "packages/choreo/src/registry.ts",
+      "kind": "value",
+      "guide": "interactive-registry",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "ChoreoProvider",
+      "source": "packages/choreo/src/registry.ts",
+      "kind": "type",
+      "guide": "interactive-registry",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "closestChoreo",
+      "source": "packages/choreo/src/registry.ts",
+      "kind": "value",
+      "guide": "interactive-registry",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "ChoreoRun",
+      "source": "packages/choreo/src/run.ts",
+      "kind": "type",
+      "guide": "interactive-run",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "PlanePoint",
+      "source": "packages/choreo/src/space.ts",
+      "kind": "type",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "appliedCamera",
+      "source": "packages/choreo/src/space.ts",
+      "kind": "value",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "toLocal",
+      "source": "packages/choreo/src/space.ts",
+      "kind": "value",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "toPage",
+      "source": "packages/choreo/src/space.ts",
+      "kind": "value",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "StepArgs",
+      "source": "packages/choreo/src/steps.gts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "StepArgsBase",
+      "source": "packages/choreo/src/steps.gts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "StepComponent",
+      "source": "packages/choreo/src/steps.gts",
+      "kind": "value",
+      "guide": "interactive-composites",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "toMs",
+      "source": "packages/choreo/src/steps.gts",
+      "kind": "value",
+      "guide": "interactive-composites",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Block",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-blocks",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Bounds",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Camera3DState",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "spatial-camera3d",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Camera3DWaypoint",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "spatial-paths",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "CameraState",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "spatial-frame",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "DeliveryBy",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-delivery",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "DeliveryOrder",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-delivery",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "DeriveContext",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-follow",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Easing",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "core-tweens",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "FollowSource",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-follow",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "GateNode",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-gates",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "PerformCommand",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-commands",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "PropSource",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-property-steps",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "PropValue",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-property-steps",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Query",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Rect",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "spatial-coordinates",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "SpringSpec",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "core-springs",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Sprite",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-queries",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "Step",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo",
+      "symbol": "TimelineNode",
+      "source": "packages/choreo/src/types.ts",
+      "kind": "type",
+      "guide": "interactive-composites",
+      "declaration": "packages/choreo/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "BusyProbe",
+      "source": "packages/glimmer-motion/src/activity.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "registerBusyProbe",
+      "source": "packages/glimmer-motion/src/activity.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scroll",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scrollInfo",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollInfo",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollOffset",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollOptions",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "InViewOptions",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "inView",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "createDragControls",
+      "source": "packages/glimmer-motion/src/gestures/drag-controls.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "DragControls",
+      "source": "packages/glimmer-motion/src/gestures/drag-controls.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "correctParentTransform",
+      "source": "packages/glimmer-motion/src/gestures/transform-page-point.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "transformViewBoxPoint",
+      "source": "packages/glimmer-motion/src/gestures/transform-page-point.ts",
+      "kind": "value",
+      "guide": "core-drag-handles",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "InertiaArgs",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "type",
+      "guide": "core-drag",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "SpringArgs",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "type",
+      "guide": "core-springs",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "TweenArgs",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "type",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ease",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "inertia",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-drag",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "perValue",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-targets",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "spring",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-springs",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "stagger",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-variants",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "styles",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-targets",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "to",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-targets",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "tween",
+      "source": "packages/glimmer-motion/src/helpers.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "afterSettle",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "instantLayoutTransition",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "layoutChange",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "layoutLoopDetected",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "requestSettle",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "resetLayoutLoopGuard",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "snapshotAll",
+      "source": "packages/glimmer-motion/src/layout.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestLayoutGroup",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "LayoutGroup",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "snapshotOnRender",
+      "source": "packages/glimmer-motion/src/layout-group.gts",
+      "kind": "value",
+      "guide": "core-layout",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionEl",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionProps",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "type",
+      "guide": "core-elements",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "motion",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "value",
+      "guide": "core-elements",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionModifier",
+      "source": "packages/glimmer-motion/src/motion.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionConfigContext",
+      "source": "packages/glimmer-motion/src/motion-config.gts",
+      "kind": "type",
+      "guide": "core-config",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestMotionConfig",
+      "source": "packages/glimmer-motion/src/motion-config.gts",
+      "kind": "value",
+      "guide": "core-config",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionConfig",
+      "source": "packages/glimmer-motion/src/motion-config.gts",
+      "kind": "value",
+      "guide": "core-config",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "flushPendingMounts",
+      "source": "packages/glimmer-motion/src/node.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionNode",
+      "source": "packages/glimmer-motion/src/node.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionParticipant",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ParticipantArgs",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ParticipantHost",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "type",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "closestParticipantHost",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "defineParticipantArg",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PARTICIPANT_HOST_ATTRIBUTE",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "setParticipantHost",
+      "source": "packages/glimmer-motion/src/participant.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "Presence",
+      "source": "packages/glimmer-motion/src/presence.gts",
+      "kind": "value",
+      "guide": "core-presence",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "PresenceHandle",
+      "source": "packages/glimmer-motion/src/presence-types.ts",
+      "kind": "type",
+      "guide": "core-presence",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderGroup",
+      "source": "packages/glimmer-motion/src/reorder/group.gts",
+      "kind": "value",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderItem",
+      "source": "packages/glimmer-motion/src/reorder/item.gts",
+      "kind": "value",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderAxis",
+      "source": "packages/glimmer-motion/src/reorder/types.ts",
+      "kind": "type",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ReorderContextProps",
+      "source": "packages/glimmer-motion/src/reorder/types.ts",
+      "kind": "type",
+      "guide": "core-reorder",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "postRender",
+      "source": "packages/glimmer-motion/src/scheduler.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "setPostRender",
+      "source": "packages/glimmer-motion/src/scheduler.ts",
+      "kind": "value",
+      "guide": "core-host",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ScrollValues",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "UseInViewOptions",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "UseScrollOptions",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "type",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "InView",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scrollProgress",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "useInView",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "useScroll",
+      "source": "packages/glimmer-motion/src/scroll.ts",
+      "kind": "value",
+      "guide": "core-scroll",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "motionSpeed",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "onMotionSpeed",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "scaleTransition",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "setMotionSpeed",
+      "source": "packages/glimmer-motion/src/speed.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ViewTransitionBuilder",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "type",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ViewTransitionOptions",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "type",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "ViewTransitionUpdate",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "type",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "animateView",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "value",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "viewTransition",
+      "source": "packages/glimmer-motion/src/view-transition.ts",
+      "kind": "value",
+      "guide": "core-page-transitions",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "animate",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-tweens",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "frame",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "MotionValue",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "type",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "motionValue",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "styleEffect",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
+      "symbol": "transformValue",
+      "source": "packages/glimmer-motion/src/index.ts",
+      "kind": "value",
+      "guide": "core-motion-values",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Clip",
+      "source": "packages/choreo/src/film/clip.gts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ClipEnd",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ClipKind",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "clipLanes",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ClipLook",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ClipSpec",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ClipState",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "clipWindow",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "resolveClip",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "resolveClips",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "value",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ResolvedClip",
+      "source": "packages/choreo/src/film/clips.ts",
+      "kind": "type",
+      "guide": "film-clips",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Film",
+      "source": "packages/choreo/src/film/film.gts",
+      "kind": "value",
+      "guide": "film-start",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmContext",
+      "source": "packages/choreo/src/film/film.gts",
+      "kind": "type",
+      "guide": "film-start",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmSignature",
+      "source": "packages/choreo/src/film/film.gts",
+      "kind": "type",
+      "guide": "film-start",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "TICK",
+      "source": "packages/choreo/src/film/film.gts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Adjustment",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Build",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Filter",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "IFRAME_PICTURE",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Light",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Look",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Mix",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-audio-mix",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Set",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "SOUND",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-audio-mix",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Sun",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Weather",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Winter",
+      "source": "packages/choreo/src/film/graph/adjust.gts",
+      "kind": "value",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "AttachNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "CompiledGraph",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "compileGraph",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "EyeNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GroupNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "JoinNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Patch",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PatchNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ShotNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ToNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "VoiceNode",
+      "source": "packages/choreo/src/film/graph/compile.ts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmGraph",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmGraphSignature",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmVocabulary",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "VOCABULARY",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "collectGraph",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Eye",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Freeze",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphAttach",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphChapter",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphInsert",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphNodeComponent",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphProvider",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "type",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "GraphStamp",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "JoinInto",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Lineup",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Mark",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PatchComponent",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph-extension",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Sequence",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Shot",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Sky",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Spine",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "To",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Trace",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-world-annotations",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Type",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Video",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-media-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Voice",
+      "source": "packages/choreo/src/film/graph/nodes.gts",
+      "kind": "value",
+      "guide": "film-audio-mix",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Blend",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Blur",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Dip",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Flash",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "inGlass",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Iris",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "JOIN_SECS",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Joins",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Luma",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Melt",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Presentation",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PresentationComponent",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PRESENTATIONS",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PresentationSignature",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "retire",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "seamShape",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "STILL_JOINS",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Wipe",
+      "source": "packages/choreo/src/film/joins.gts",
+      "kind": "value",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "clamp01",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "hex",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "lerp",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "luminance",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "mmss",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "RAD",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "rgba",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "smooth",
+      "source": "packages/choreo/src/film/math.ts",
+      "kind": "value",
+      "guide": "film-utilities",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Captions",
+      "source": "packages/choreo/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Insert",
+      "source": "packages/choreo/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Stamp",
+      "source": "packages/choreo/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Track",
+      "source": "packages/choreo/src/film/overlays.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "IframePicture",
+      "source": "packages/choreo/src/film/picture.gts",
+      "kind": "value",
+      "guide": "film-picture",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "IframePictureSignature",
+      "source": "packages/choreo/src/film/picture.gts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PictureSpec",
+      "source": "packages/choreo/src/film/picture.gts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Plate",
+      "source": "packages/choreo/src/film/plate.gts",
+      "kind": "value",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Burst",
+      "source": "packages/choreo/src/film/player.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Menu",
+      "source": "packages/choreo/src/film/player.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "MenuEntry",
+      "source": "packages/choreo/src/film/player.gts",
+      "kind": "type",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PlaybarSegment",
+      "source": "packages/choreo/src/film/player.gts",
+      "kind": "type",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Player",
+      "source": "packages/choreo/src/film/player.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Rail",
+      "source": "packages/choreo/src/film/rail.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "RailMark",
+      "source": "packages/choreo/src/film/rail.gts",
+      "kind": "type",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "beatStart",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "chapterHeads",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Content",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "contents",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Cue",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "cues",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "joinInto",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Schedule",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "schedule",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "secsBefore",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "tailFor",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "totalSecs",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Waypoint",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "waypoints",
+      "source": "packages/choreo/src/film/schedule.ts",
+      "kind": "value",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Seam",
+      "source": "packages/choreo/src/film/seam.ts",
+      "kind": "value",
+      "guide": "film-seam-readiness",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "EndCard",
+      "source": "packages/choreo/src/film/titles.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Gate",
+      "source": "packages/choreo/src/film/titles.gts",
+      "kind": "value",
+      "guide": "film-interface",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Beat",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Cam",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Chapter",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-graph",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmClock",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-schedule",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmGrade",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "FilmHandle",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-transport",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Join",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "JoinName",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "LookFx",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-adjustments",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Over",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Picture",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-picture",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "PlateMode",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-typography",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "Pt3",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "SeamSpec",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-joins",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/film",
+      "symbol": "ShotState",
+      "source": "packages/choreo/src/film/types.ts",
+      "kind": "type",
+      "guide": "film-poses",
+      "declaration": "packages/choreo/src/film/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "isMotionIdle",
+      "source": "packages/glimmer-motion/src/activity.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "whatIsBusy",
+      "source": "packages/glimmer-motion/src/activity.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "Box",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "type",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "bounds",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "shape",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "boundsAndShape",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "SettleOptions",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "type",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "animationsSettled",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "velocityOf",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "setupMotion",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "resetMotion",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion/test-support",
+      "symbol": "registerMotionReset",
+      "source": "packages/glimmer-motion/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/glimmer-motion/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "setupChoreo",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "advanceGate",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "seekTo",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-timing",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "orphanCount",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "live",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "liveAll",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "@cardstack/choreo/test-support",
+      "symbol": "strandedTransforms",
+      "source": "packages/choreo/src/test-support/index.ts",
+      "kind": "value",
+      "guide": "core-test-geometry",
+      "declaration": "packages/choreo/src/test-support/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoRun",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoPlayer",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoPlayerUpdateOptions",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "ChoreoPlayerOptions",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "type",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "choreo-player",
+      "symbol": "createChoreoPlayer",
+      "source": "packages/choreo-player/src/index.ts",
+      "kind": "value",
+      "guide": "film-player",
+      "declaration": "packages/choreo-player/src/index.ts"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Aim",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Attach",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "film-attachments"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Camera",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Camera3D",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-camera3d"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Crossing",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-crossings"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Follow",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-follow"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Frame",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Gate",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-gates"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Hold",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-holds"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Move",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-move"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Pan",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-relative"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Parallel",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-blocks"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Perform",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-commands"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Raise",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-raise-scroll"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Scroll",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-raise-scroll"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Sequence",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-blocks"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.SlowZoom",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-relative"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Spring",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-property-steps"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Tether",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-tethers"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Tween",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-property-steps"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.Wait",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-holds"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.advance",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-gates"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.all",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.beacon",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-beacons"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.camera",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "spatial-frame"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.counterpart",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.gesture",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "core-drag"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.id",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.inserted",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.kept",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.moved",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.onstage",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.received",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.removed",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.role",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.run",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-run"
+    },
+    {
+      "entrypoint": "ChoreoContext",
+      "symbol": "c.still",
+      "source": "packages/choreo/src/choreo.gts",
+      "declaration": "packages/choreo/src/choreo.gts",
+      "kind": "context",
+      "guide": "interactive-queries"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Attach",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Chapter",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Eye",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-poses"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Freeze",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Insert",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Inset",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Join",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-joins"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Lineup",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Mark",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Sequence",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Shot",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-poses"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Sky",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Spine",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Stamp",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.To",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-poses"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Trace",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-world-annotations"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Type",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-typography"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Video",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-media-graph"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.Voice",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-audio-mix"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.clip",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-adjustments"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.picture",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-adjustments"
+    },
+    {
+      "entrypoint": "FilmVocabulary",
+      "symbol": "f.sound",
+      "source": "packages/choreo/src/film/graph/host.gts",
+      "declaration": "packages/choreo/src/film/graph/host.gts",
+      "kind": "context",
+      "guide": "film-audio-mix"
+    }
+  ]
+}

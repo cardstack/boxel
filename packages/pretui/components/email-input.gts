@@ -58,23 +58,25 @@ export class EmailInput extends Component<EmailInputSignature> {
       />
     </div>
     <style scoped>
-      /* Pretui control dress fed into boxel-ui's Input via its token
-         channel: semantic vars (--background/--border/--ring read the
-         Pretui field tokens) plus the --boxel-* dimension knobs. The two
-         --boxel-sp-* overrides tune boxel's inner padding so the control
-         lands on the h28 / 0-9px Pretui input geometry. */
-      .pretui-boxelwrap {
-        width: 100%;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        --background: var(--field, var(--boxel-light));
-        --border: var(--input);
-        --ring: var(--primary);
-        --boxel-form-control-height: var(--control-h, 28px);
-        --boxel-input-height: var(--control-h, 28px);
-        --boxel-form-control-border-radius: var(--radius);
-        --boxel-sp-xs: 5px;
-        --boxel-sp-sm: 9px;
+      @layer PretComponent {
+        /* Pretui control dress fed into boxel-ui's Input via its token
+           channel: semantic vars (--background/--border/--ring read the
+           Pretui field tokens) plus the --boxel-* dimension knobs. The two
+           --boxel-sp-* overrides tune boxel's inner padding so the control
+           lands on the h28 / 0-9px Pretui input geometry. */
+        .pretui-boxelwrap {
+          width: 100%;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          --background: var(--field, var(--boxel-light));
+          --border: var(--input);
+          --ring: var(--primary);
+          --boxel-form-control-height: var(--control-h, 28px);
+          --boxel-input-height: var(--control-h, 28px);
+          --boxel-form-control-border-radius: var(--radius);
+          --boxel-sp-xs: 5px;
+          --boxel-sp-sm: 9px;
+        }
       }
     </style>
   </template>

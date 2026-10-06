@@ -10,6 +10,7 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
 } from '@cardstack/runtime-common';
+import { SERVER_MATRIX_DEVICE_ID } from '@cardstack/runtime-common/matrix-client';
 
 function homeserverFile(): string {
   if (process.env.BOXEL_ENVIRONMENT) {
@@ -119,9 +120,22 @@ export async function registerUser({
   return { accessToken, userId, homeServer, deviceId };
 }
 
+export class MatrixHttpError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 // Log in as a matrix admin user via the standard password-login endpoint and
 // return the resulting access token. The token is later used to drive synapse
 // admin endpoints (notably the per-user admin-impersonation login below).
+//
+// Every login reuses the server device, so it adds no device and writes no
+// device-list change rows; see SERVER_MATRIX_DEVICE_ID. Logging out a token
+// from this login deletes that shared device, which revokes every other
+// admin token on it, including ones another request is still using.
 export async function loginAsMatrixAdmin({
   matrixURL,
   adminUsername,
@@ -138,6 +152,7 @@ export async function loginAsMatrixAdmin({
       type: 'm.login.password',
       user: adminUsername,
       password: adminPassword,
+      device_id: SERVER_MATRIX_DEVICE_ID,
     }),
   });
   if (!response.ok) {
@@ -174,18 +189,95 @@ export async function adminImpersonateUser({
     },
   );
   if (!response.ok) {
-    throw new Error(
+    throw new MatrixHttpError(
       `matrix admin-impersonate for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
+      response.status,
     );
   }
   let body = (await response.json()) as { access_token: string };
   return body.access_token;
 }
 
-// Invalidate a single matrix access token via the standard logout
-// endpoint. Used so the short-lived admin login + admin-impersonate
-// tokens minted for one grafana grant don't pile up in synapse's
-// access_tokens table. Treats 401 as "token already invalid" — fine.
+// One admin access token per matrix server and admin user, shared by every
+// request in this process, so admin work doesn't log in (and leave a token
+// behind) per request.
+const adminTokens = new Map<string, Promise<string>>();
+
+export async function getMatrixAdminToken({
+  matrixURL,
+  adminUsername,
+  adminPassword,
+  stale,
+}: {
+  matrixURL: URL;
+  adminUsername: string;
+  adminPassword: string;
+  // A token synapse rejected. Passing it logs in again, unless another
+  // request already replaced it, so concurrent rejections share one login.
+  stale?: string;
+}): Promise<string> {
+  let key = `${matrixURL.href} ${adminUsername}`;
+  let token = adminTokens.get(key);
+  if (
+    token &&
+    stale !== undefined &&
+    (await token.catch(() => undefined)) === stale
+  ) {
+    if (adminTokens.get(key) === token) {
+      adminTokens.delete(key);
+    }
+    token = adminTokens.get(key);
+  }
+  if (!token) {
+    token = loginAsMatrixAdmin({ matrixURL, adminUsername, adminPassword });
+    adminTokens.set(key, token);
+    // A failed login isn't cached, so the next request tries again.
+    token.catch(() => {
+      if (adminTokens.get(key) === token) {
+        adminTokens.delete(key);
+      }
+    });
+  }
+  return await token;
+}
+
+// Mint an access token for `userId` through the process's shared admin token,
+// logging the admin in again if synapse no longer accepts it. The returned
+// token has no device, so logging it out deletes only that token.
+export async function impersonateAsMatrixAdmin({
+  matrixURL,
+  adminUsername,
+  adminPassword,
+  userId,
+}: {
+  matrixURL: URL;
+  adminUsername: string;
+  adminPassword: string;
+  userId: string;
+}): Promise<string> {
+  let admin = { matrixURL, adminUsername, adminPassword };
+  let adminAccessToken = await getMatrixAdminToken(admin);
+  try {
+    return await adminImpersonateUser({ matrixURL, adminAccessToken, userId });
+  } catch (e) {
+    if (!(e instanceof MatrixHttpError && e.status === 401)) {
+      throw e;
+    }
+    return await adminImpersonateUser({
+      matrixURL,
+      adminAccessToken: await getMatrixAdminToken({
+        ...admin,
+        stale: adminAccessToken,
+      }),
+      userId,
+    });
+  }
+}
+
+// Invalidate a matrix access token via the standard logout endpoint, so
+// short-lived impersonation tokens don't pile up in synapse's access_tokens
+// table. A token with a device takes its whole device with it, along with
+// every other token on that device. Treats 401 as "token already invalid".
 export async function logoutMatrixAccessToken({
   matrixURL,
   accessToken,

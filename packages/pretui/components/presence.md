@@ -51,3 +51,5 @@ Gaps and cautions:
 `--pretui-motion-distance` (default 8px, used by rise/fall/slide) and `--pretui-motion-scale` (default 0.96, used by scale) — two tokens that a season sets once to give every Presence and **InView** in the product the same travel. Duration, exit duration and delay are args in seconds rather than tokens, so a season cannot set a house pace; that is an inconsistency with the kit's `--pretui-dur-*` tokens elsewhere.
 
 Because the presets resolve _through_ those custom properties rather than baking in pixel values, a caller can override `--pretui-motion-distance` on an ancestor and every preset inside adapts — including a season that wants near-zero travel for a calm theme, which is also the poor-man's reduced-motion switch.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

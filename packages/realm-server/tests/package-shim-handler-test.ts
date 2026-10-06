@@ -108,5 +108,26 @@ module(basename(import.meta.filename), function () {
     test('describeShimError handles non-Error values without throwing', async function (assert) {
       await runSharedTest(packageShimHandlerTests, assert, {});
     });
+    test('a VirtualNetwork retries a shim resolver while the global setTimeout is disabled', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('the retry log says which attempt a resolver recovered on, and when it gave up', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+  });
+
+  module('shimAsyncModule resolve deadline', function () {
+    test('withResolveDeadline rejects when the resolver never settles', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('withResolveDeadline cancels its timer when the resolver settles first', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('a prefix shim deadline names the module that was asked for', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
+    test('a shimAsyncModule resolver that never settles fails the lookup rather than hanging it', async function (assert) {
+      await runSharedTest(packageShimHandlerTests, assert, {});
+    });
   });
 });

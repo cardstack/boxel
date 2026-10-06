@@ -4,8 +4,6 @@
 // from Meter (qualitative). Realm adaptation: LoadingState's elapsed clock is
 // caller-supplied (@elapsed) — no timers in realm components.
 //
-// (the feedback group)
-
 // Pretui — pixel sizing shared by Spinner and ProgressRadial.
 import { resolveSize } from '../pretui-primitives';
 import type { PretuiSize } from '../pretui-primitives';

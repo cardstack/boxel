@@ -113,61 +113,65 @@ export class Field extends Component<FieldSignature> {
       </div>
     </div>
     <style scoped>
-      .pretui-fieldw {
-        display: grid;
-        gap: 5px;
-        grid-template-rows: auto auto auto;
-        align-content: start;
-        justify-items: start;
-      }
-      .pretui-fieldw > label {
-        line-height: 16px;
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        color: var(--foreground);
-      }
-      /* the control row: accessories sit at the LOGICAL edges, so an RTL
-         reading order moves them without a second rule */
-      .pretui-fieldrow {
-        display: flex;
-        align-items: center;
-        justify-self: stretch;
-        min-width: 0;
-      }
-      .pretui-fieldctl {
-        flex: 1;
-        min-width: 0;
-      }
-      .pretui-fieldcue {
-        flex: none;
-      }
-      .pretui-fieldctl > :deep(.pretui-input),
-      .pretui-fieldctl > :deep(.pretui-inputwrap),
-      .pretui-fieldctl > :deep(.pretui-boxelwrap) {
-        width: 100%;
-      }
-      .pretui-fieldw > :deep(.pretui-input),
-      .pretui-fieldw > :deep(.pretui-inputwrap),
-      .pretui-fieldw > :deep(.pretui-boxelwrap) {
-        justify-self: stretch;
-      }
-      .pretui-fieldmsg {
-        min-height: 16px;
-        line-height: 16px;
-      }
-      /* the hint / error spans are gone: the message line is a <Cue>, which
-         brings its own type scale, its own tone and its own glyph */
-      .pretui-fieldw[data-invalid] :deep(.pretui-input) {
-        box-shadow: 0 0 0 1px var(--destructive);
-        background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
-      }
-      /* boxel-ui-wrapped controls: the invalid dress travels through the
-         token channel — repoint the wrapper's --border/--background and the
-         inner BoxelInput re-dresses itself; no CSS reaches boxel markup. */
-      .pretui-fieldw[data-invalid] :deep(.pretui-inputwrap),
-      .pretui-fieldw[data-invalid] :deep(.pretui-boxelwrap) {
-        --border: var(--destructive);
-        --background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+      /* above Input's layer, so these win by layer order, not file order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-fieldw {
+          display: grid;
+          gap: 5px;
+          grid-template-rows: auto auto auto;
+          align-content: start;
+          justify-items: start;
+        }
+        .pretui-fieldw > label {
+          line-height: 16px;
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          color: var(--foreground);
+        }
+        /* the control row: accessories sit at the LOGICAL edges, so an RTL
+           reading order moves them without a second rule */
+        .pretui-fieldrow {
+          display: flex;
+          align-items: center;
+          justify-self: stretch;
+          min-width: 0;
+        }
+        .pretui-fieldctl {
+          flex: 1;
+          min-width: 0;
+        }
+        .pretui-fieldcue {
+          flex: none;
+        }
+        .pretui-fieldctl > :deep(.pretui-input),
+        .pretui-fieldctl > :deep(.pretui-inputwrap),
+        .pretui-fieldctl > :deep(.pretui-boxelwrap) {
+          width: 100%;
+        }
+        .pretui-fieldw > :deep(.pretui-input),
+        .pretui-fieldw > :deep(.pretui-inputwrap),
+        .pretui-fieldw > :deep(.pretui-boxelwrap) {
+          justify-self: stretch;
+        }
+        .pretui-fieldmsg {
+          min-height: 16px;
+          line-height: 16px;
+        }
+        /* the hint / error spans are gone: the message line is a <Cue>, which
+           brings its own type scale, its own tone and its own glyph */
+        .pretui-fieldw[data-invalid] :deep(.pretui-input) {
+          box-shadow: 0 0 0 1px var(--destructive);
+          background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+        }
+        /* boxel-ui-wrapped controls: the invalid dress travels through the
+           token channel — repoint the wrapper's --border/--background and the
+           inner BoxelInput re-dresses itself; no CSS reaches boxel markup. */
+        .pretui-fieldw[data-invalid] :deep(.pretui-inputwrap),
+        .pretui-fieldw[data-invalid] :deep(.pretui-boxelwrap) {
+          --border: var(--destructive);
+          --background: color-mix(in oklch, var(--destructive) 4%, var(--field, var(--boxel-light)));
+        }
       }
     </style>
   </template>

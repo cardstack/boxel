@@ -47,3 +47,5 @@ Where it is thinner: no schema validation, no JSON Pointer navigation, no diff o
 Inherited from **JsonTree** — `--pretui-json-indent`, `--pretui-json-row-height`, `--pretui-json-max-height`, `--pretui-destructive-ink` for rejected edits.
 
 `@indent` here is a different thing from the tree's indent token: it is spaces in the _emitted text_, not pixels on screen. Both exist because one is a serialisation choice and the other is a display one.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

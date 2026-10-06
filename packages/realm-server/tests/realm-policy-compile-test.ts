@@ -22,6 +22,7 @@ import {
   realmConfigCardJSON,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -41,40 +42,74 @@ const REALM_POLICY = {
   name: 'RealmPolicy',
 };
 
+// `lock` is kept out of every policy's reach. `OpenClassroom` redeclares it
+// without the flag, and inherits the rest. The head teacher is computed from
+// the roster, so only the index holds it.
 function classroomModule(rosterField: string) {
   return `
-    import { containsMany, field, CardDef } from "@cardstack/base/card-api";
+    import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
     import StringField from "@cardstack/base/string";
+    import { operation } from "@cardstack/base/operations";
     export class Classroom extends CardDef {
       @field ${rosterField} = containsMany(StringField);
+      @field status = contains(StringField);
+      @field headTeacher = contains(StringField, {
+        computeVia: function (this: Classroom) {
+          return this.${rosterField}?.[0];
+        },
+      });
+
+      @operation static appendActivity = {
+        base: 'transform',
+        set: { status: 'active' },
+      };
+      @operation static approve = {
+        base: 'transform',
+        set: { status: 'approved' },
+      };
+      @operation static rename = {
+        base: 'transform',
+        set: { status: 'renamed' },
+      };
+      @operation static lock = {
+        base: 'transform',
+        set: { status: 'locked' },
+        nonGrantable: true,
+      };
+    }
+    export class OpenClassroom extends Classroom {
+      @operation static lock = {
+        base: 'transform',
+        set: { status: 'locked' },
+      };
     }
   `;
 }
 
 type Grant = { operation: string; where?: unknown };
+type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
+
+const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
 
 function policyCard(grants: Grant[], adoptsFrom: object = REALM_POLICY) {
+  return policyOf([{ targetType: CLASSROOM, grants }], adoptsFrom);
+}
+
+function policyOf(rules: Rule[], adoptsFrom: object = REALM_POLICY) {
   return JSON.stringify({
     data: {
       type: 'card',
-      attributes: {
-        rules: [
-          {
-            targetType: { module: `${EDUCATION}classroom`, name: 'Classroom' },
-            grants,
-          },
-        ],
-      },
+      attributes: { rules },
       meta: { adoptsFrom },
     },
   });
 }
 
 const GRANTS: Grant[] = [
-  { operation: 'read', where: '.teacherIds | contains(actor())' },
+  { operation: 'read', where: '.teacherIds | any(. == actor())' },
   {
     operation: 'appendActivity',
-    where: { bxl: 'actor() in .teacherIds', snapshot: true },
+    where: { bxl: '.headTeacher == actor()', snapshot: true },
   },
   { operation: 'approve', where: '.teacherIds[0] == realmConfig("approver")' },
   { operation: 'rename', where: 'instance().teacherIds | length > 0' },
@@ -156,18 +191,31 @@ module(basename(import.meta.filename), function (hooks) {
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
+  async function stop() {
+    for (let realm of [education, org]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  // Every realm `start` brings up is indexed once, into a template database
+  // each test starts from, rather than from scratch before each test.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      for (let realm of [education, org]) {
-        realm.__testOnlyClearCaches();
-        realm.unsubscribe();
-      }
-      await closeServer(server);
-      resetCatalogRealms();
-    },
+    afterEach: stop,
   });
 
   async function writeTo(realm: Realm, path: string, contents: string) {
@@ -252,25 +300,29 @@ module(basename(import.meta.filename), function (hooks) {
             module: rri(`${EDUCATION}classroom`),
             name: 'Classroom',
           },
+          path: 'rules[0]',
           grants: [
             {
               operation: 'read',
+              path: 'rules[0].grants[0]',
               where: {
-                source: '.teacherIds | contains(actor())',
-                canonical: '.teacherIds | contains(actor())',
+                source: '.teacherIds | any(. == actor())',
+                canonical: '.teacherIds | any(. == actor())',
                 snapshot: false,
               },
             },
             {
               operation: 'appendActivity',
+              path: 'rules[0].grants[1]',
               where: {
-                source: 'actor() in .teacherIds',
-                canonical: '(actor() | IN(.teacherIds))',
+                source: '.headTeacher == actor()',
+                canonical: '.headTeacher == actor()',
                 snapshot: true,
               },
             },
             {
               operation: 'approve',
+              path: 'rules[0].grants[2]',
               where: {
                 source: '.teacherIds[0] == realmConfig("approver")',
                 canonical: '.teacherIds[0] == realmConfig("approver")',
@@ -279,13 +331,14 @@ module(basename(import.meta.filename), function (hooks) {
             },
             {
               operation: 'rename',
+              path: 'rules[0].grants[3]',
               where: {
                 source: 'instance().teacherIds | length > 0',
                 canonical: 'instance().teacherIds | length > 0',
                 snapshot: false,
               },
             },
-            { operation: 'readSource' },
+            { operation: 'readSource', path: 'rules[0].grants[4]' },
           ],
         },
       ],
@@ -372,15 +425,56 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a predicate that reads a computed value without the annotation records `unsnapshotted-policy-read`, and the rest of the policy compiles', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
+        { operation: 'approve', where: '.headTeacher == actor()' },
+        {
+          operation: 'rename',
+          where: { bxl: '.headTeacher == actor()', snapshot: true },
+        },
+        {
+          operation: 'appendActivity',
+          where: { bxl: '.status == "open"', snapshot: true },
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[1].where' }],
+      'the unannotated read of the computed value is recorded against its grant',
+    );
+    assert.true(
+      /`\.headTeacher` is computed/.test(policy?.issues[0]?.message ?? ''),
+      `the issue names the computed value: ${policy?.issues[0]?.message}`,
+    );
+    assert.deepEqual(
+      policy?.rules[0].grants.map(({ operation, where }) => [
+        operation,
+        where?.snapshot,
+      ]),
+      [
+        ['read', false],
+        ['rename', true],
+        ['appendActivity', false],
+      ],
+      'the other grants compile: annotated, the computed read is judged against the snapshot, and an annotated read of the stored source is judged against the stored source',
+    );
+  });
+
   test('a predicate that reads params(), does not parse, or is empty is refused, and the rest of the policy compiles', async function (assert) {
     await writeTo(
       org,
       'policies/education.json',
       policyCard([
-        { operation: 'read', where: '.teacherIds | contains(actor())' },
+        { operation: 'read', where: '.teacherIds | any(. == actor())' },
         { operation: 'update', where: 'params("teacher") == actor()' },
         { operation: 'delete', where: '.teacherIds ==' },
-        { operation: 'archive', where: '   ' },
+        { operation: 'transform', where: '   ' },
       ]),
     );
     let policy = await compiled();
@@ -406,12 +500,100 @@ module(basename(import.meta.filename), function (hooks) {
       `the profile names params(): ${paramsIssue}`,
     );
     assert.true(
-      String(parseIssue).includes('does not parse'),
-      `a predicate that does not parse says so: ${parseIssue}`,
+      String(parseIssue).includes('has a syntax error'),
+      `a predicate with a syntax error says so: ${parseIssue}`,
     );
     assert.true(
       String(emptyIssue).includes('`where` is empty'),
       `an empty predicate is refused rather than read as no condition: ${emptyIssue}`,
+    );
+  });
+
+  // Each refused predicate calls one builtin that can hold for a value it
+  // matches only in part. Each admitted one beside it comes close, and
+  // compares exactly or anchors its match at a fixed string.
+  test('a predicate that matches a value only in part is refused, whichever builtin it uses, and one that compares exactly compiles', async function (assert) {
+    let refused: [string, string][] = [
+      ['.teacherIds | contains([actor()])', 'contains'],
+      ['.status | inside("approved or pending")', 'inside'],
+      ['.teacherIds | any(index(actor()) != null)', 'index'],
+      ['.status | rindex("pro") != null', 'rindex'],
+      ['.status | indices("pro") | length > 0', 'indices'],
+      ['ISNUMBER(FIND("appro", .status))', 'FIND'],
+      ['ISNUMBER(SEARCH(actor(), .status))', 'SEARCH'],
+      // Anchored, and refused all the same: the rule is the builtin's.
+      ['.status | test("^approved$")', 'test'],
+      ['(.status | match("appro")) != null', 'match'],
+      ['(.status | capture("(?<s>appro)")) != null', 'capture'],
+      ['[.status | scan("appro")] | length > 0', 'scan'],
+      ['.status like "appro%"', 'like'],
+      ['ISNUMBER(MATCH(actor(), .teacherIds))', 'MATCH'],
+      ['LOOKUP(actor(), .teacherIds) == actor()', 'LOOKUP'],
+      ['VLOOKUP(actor(), .teacherIds, 1) == actor()', 'VLOOKUP'],
+      ['HLOOKUP(actor(), .teacherIds, 1) == actor()', 'HLOOKUP'],
+      ['XLOOKUP(actor(), .teacherIds, .teacherIds) == actor()', 'XLOOKUP'],
+      ['LOOKUP_BY(.teacherIds, "id", actor(), "id") == actor()', 'LOOKUP_BY'],
+      ['VLOOKUP_BY(.teacherIds, "id", actor(), "id") == actor()', 'VLOOKUP_BY'],
+      // The validators, which load lazily.
+      ['matches(.status, actor())', 'matches'],
+      ['isIn(actor(), .status)', 'isIn'],
+      ['.teacherIds | bsearch(actor()) >= 0', 'bsearch'],
+      // Anchored at a value the author did not write.
+      ['.teacherIds | any(startswith(actor()))', 'startswith'],
+      ['actor() | endswith(.status)', 'endswith'],
+      ['(.status | ltrimstr(actor())) != .status', 'ltrimstr'],
+      // jq's internal helpers, which the builtins above are built on.
+      ['.teacherIds | any(_strindices(actor()) | length > 0)', '_strindices'],
+      ['.teacherIds | any(_match_impl(actor(); null; true))', '_match_impl'],
+      // Refused wherever it appears, and not only where it reads the caller.
+      ['.status == "approved" and (.teacherIds | any(test("^@")))', 'test'],
+    ];
+    // Anchored at a fixed string, the way a namespace is written.
+    let admitted = [
+      '.teacherIds | any(. == actor())',
+      '.status | startswith("appro")',
+      'actor() | endswith(":localhost")',
+      '(.status | ltrimstr("un")) == "approved"',
+      '.status | split(",") | any(. == "approved")',
+      '(.status | ascii_downcase) == "approved"',
+      'EXACT(.status, "approved")',
+      // Excel's `INDEX` reads a position; jq's `index` finds a substring.
+      'INDEX(.teacherIds, 1) == actor()',
+    ];
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard(
+        [...refused.map(([where]) => where), ...admitted].map((where) => ({
+          operation: 'read',
+          where,
+        })),
+      ),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      refused.map((_, index) => ({
+        code: 'partial-match',
+        path: `rules[0].grants[${index}].where`,
+      })),
+      'each refused predicate is recorded against its grant, and nothing else is',
+    );
+    for (let [index, [where, builtin]] of refused.entries()) {
+      let message = String(policy?.issues[index]?.message);
+      assert.true(
+        message.includes(`\`${builtin}\``),
+        `${where}: the issue names \`${builtin}\`: ${message}`,
+      );
+      assert.true(
+        message.includes('.list | any(. == actor())'),
+        `${where}: and the exact spelling`,
+      );
+    }
+    assert.deepEqual(
+      policy?.rules[0]?.grants.map((grant) => grant.where?.source),
+      admitted,
+      'every predicate that compares exactly compiles',
     );
   });
 
@@ -484,6 +666,11 @@ module(basename(import.meta.filename), function (hooks) {
       policy?.issues.map(({ code }) => code),
       ['policy-card-unloadable'],
     );
+    assert.strictEqual(
+      policy?.version,
+      undefined,
+      'and names no version, since nothing was compiled from its bytes',
+    );
 
     await pointAt(`${ORG}note`);
     policy = await compiled();
@@ -502,5 +689,128 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(await compiled(), 'the policy compiles while the pointer is set');
     await pointAt(null);
     assert.strictEqual(await compiled(), undefined, 'no policy once it is not');
+  });
+
+  // Each rule or grant here that is refused earns exactly one issue, and each
+  // one beside it that resembles it and earns none compiles.
+  test('each problem is recorded against the rule or grant that has it, and the rest of the policy compiles', async function (assert) {
+    const TS_FILE_DEF = {
+      module: rri('@cardstack/base/ts-file-def'),
+      name: 'TsFileDef',
+    };
+    const GTS_FILE_DEF = {
+      module: rri('@cardstack/base/gts-file-def'),
+      name: 'GtsFileDef',
+    };
+    const JSON_FILE_DEF = {
+      module: rri('@cardstack/base/json-file-def'),
+      name: 'JsonFileDef',
+    };
+    let grants = (...operations: string[]) =>
+      operations.map((operation) => ({ operation }));
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyOf([
+        {
+          targetType: CLASSROOM,
+          grants: [
+            { operation: 'read', where: '.teacherIds | any(. == actor())' },
+            // No such operation on the type, and a built-in behavior only a
+            // file carries.
+            ...grants('enroll', 'appendLine'),
+            // Declared non-grantable on the type.
+            ...grants('lock'),
+            // A built-in behavior every card carries.
+            ...grants('transform', 'query'),
+          ],
+        },
+        {
+          targetType: {
+            module: `${EDUCATION}classroom`,
+            name: 'OpenClassroom',
+          },
+          // Redeclared without the flag, which does not undo it; and an
+          // operation the type inherits.
+          grants: grants('lock', 'approve'),
+        },
+        {
+          targetType: REALM_POLICY,
+          // A write on a RealmPolicy, two reads of one, and a query, none of
+          // which a rule naming a policy type grants.
+          grants: grants('read', 'update', 'readSource', 'query'),
+        },
+        { targetType: TS_FILE_DEF, grants: grants('readSource') },
+        { targetType: GTS_FILE_DEF, grants: grants('readSource') },
+        // A data file's type, which is grantable.
+        { targetType: JSON_FILE_DEF, grants: grants('readSource') },
+        {
+          targetType: { module: '../no-such-module', name: 'Nothing' },
+          grants: grants('read'),
+        },
+        // An operation a subtype declares, named on a type it descends from,
+        // beside a built-in the type carries.
+        {
+          targetType: {
+            module: rri('@cardstack/base/card-api'),
+            name: 'CardDef',
+          },
+          grants: grants('approve', 'update'),
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path }) => ({ code, path })),
+      [
+        { code: 'unknown-operation', path: 'rules[0].grants[1].operation' },
+        { code: 'unknown-operation', path: 'rules[0].grants[2].operation' },
+        {
+          code: 'grants-authorization-infrastructure',
+          path: 'rules[0].grants[3].operation',
+        },
+        {
+          code: 'grants-authorization-infrastructure',
+          path: 'rules[1].grants[0].operation',
+        },
+        ...[0, 1, 2, 3].map((grant) => ({
+          code: 'grants-authorization-infrastructure',
+          path: `rules[2].grants[${grant}].operation`,
+        })),
+        { code: 'grants-module-source', path: 'rules[3].targetType' },
+        { code: 'grants-module-source', path: 'rules[4].targetType' },
+        { code: 'unresolved-type', path: 'rules[6].targetType' },
+        { code: 'unknown-operation', path: 'rules[7].grants[0].operation' },
+      ],
+      'every refused rule and grant is recorded where it is, and nothing else is',
+    );
+    assert.true(
+      String(policy?.issues[3]?.message).includes('non-grantable on Classroom'),
+      `a subclass's grant names the type that keeps the operation out of reach: ${policy?.issues[3]?.message}`,
+    );
+    assert.deepEqual(
+      policy?.rules.map((rule) => ({
+        rule: rule.path,
+        grants: rule.grants.map(
+          ({ operation, path }) => `${path} ${operation}`,
+        ),
+      })),
+      [
+        {
+          rule: 'rules[0]',
+          grants: [
+            'rules[0].grants[0] read',
+            'rules[0].grants[4] transform',
+            'rules[0].grants[5] query',
+          ],
+        },
+        { rule: 'rules[1]', grants: ['rules[1].grants[1] approve'] },
+        { rule: 'rules[2]', grants: [] },
+        { rule: 'rules[5]', grants: ['rules[5].grants[0] readSource'] },
+        { rule: 'rules[7]', grants: ['rules[7].grants[1] update'] },
+      ],
+      'what is left compiles, at the positions the author wrote it',
+    );
+    assert.notOk(policy?.uncompilable, 'the policy as a whole compiled');
   });
 });

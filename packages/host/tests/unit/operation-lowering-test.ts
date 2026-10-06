@@ -557,6 +557,201 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('a non-grantable declaration is carried through, and nothing else is marked', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation } = operations;
+    class Ledger extends CardDef {
+      static displayName = 'Ledger';
+      @field status = contains(StringField);
+      @field entries = containsMany(StringField);
+      @operation static seal = {
+        base: 'transform',
+        nonGrantable: true,
+        set: { status: 'sealed' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static reopen = {
+        base: 'transform',
+        set: { status: 'open' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static appendContainsMany = {
+        base: 'appendContainsMany',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static broken = {
+        base: 'transform',
+        nonGrantable: true,
+        set: { missing: 'x' },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Ledger });
+
+    let { operations: lowered, issues } = await lower(Ledger);
+    assert.deepEqual(
+      issues.map((issue) => `${issue.operation}: ${issue.code}`),
+      ['broken: unknown-field'],
+      'only the declaration naming a missing field has findings',
+    );
+    assert.true(lowered.seal.nonGrantable, 'the flag reaches the realm');
+    assert.false(
+      'nonGrantable' in lowered.reopen,
+      'a declaration that does not ask carries no flag',
+    );
+    assert.deepEqual(
+      lowered.appendContainsMany,
+      { base: 'appendContainsMany', deterministic: true, nonGrantable: true },
+      'the built-in append, marked, lowers to no items, which the executor reads as the built-in',
+    );
+    assert.true(lowered.broken.invalid, 'the broken declaration is invalid');
+    assert.true(
+      lowered.broken.nonGrantable,
+      'and a finding against it does not make it grantable',
+    );
+  });
+
+  test('an explain lowers to its params, and is non-grantable whatever reaches lowering', async function (assert) {
+    let { CardDef } = api;
+    let { operation } = operations;
+    class Policy extends CardDef {
+      static displayName = 'Policy';
+      @operation static explain = {
+        base: 'explain',
+        params: {
+          actor: StringField,
+          target: StringField,
+          operation: StringField,
+        },
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Policy });
+
+    let { operations: lowered, issues } = await lower(Policy);
+    assert.deepEqual(issues, [], 'the declaration lowers clean');
+    assert.strictEqual(lowered.explain.base, 'explain');
+    assert.deepEqual(
+      Object.keys(lowered.explain.params ?? {}).sort(),
+      ['actor', 'operation', 'target'],
+      'the question travels as declared params',
+    );
+    assert.true(lowered.explain.nonGrantable, 'the flag reaches the realm');
+
+    // Lowering is exported over plain data, so an entry the decorator never
+    // saw can reach it. One that leaves the flag off is marked anyway, and one
+    // that reshapes the answer is recorded as unreachable.
+    let context: Parameters<typeof lowerOperationDeclarations>[1] = {
+      definition: buildDefinition(Policy),
+      lookupDefinition,
+      identifyCard: (target) => identifyCard(target),
+    };
+    let unmarked = await lowerOperationDeclarations(
+      { explain: { base: 'explain' } } as unknown as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      context,
+    );
+    assert.true(
+      unmarked.operations.explain.nonGrantable,
+      'an explain is never grantable, flag or no flag',
+    );
+    let projected = await lowerOperationDeclarations(
+      {
+        explain: {
+          base: 'explain',
+          nonGrantable: true,
+          output: { decision: { $bxl: '.decision' } },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      codes(projected),
+      ['unrunnable-program'],
+      'a projection over the explanation is recorded as never reached',
+    );
+    assert.true(projected.operations.explain.invalid);
+  });
+
+  test('a validate lowers with no payload, and is non-grantable whatever reaches lowering', async function (assert) {
+    let { CardDef } = api;
+    let { operation } = operations;
+    class Policy extends CardDef {
+      static displayName = 'Policy';
+      @operation static validate = {
+        base: 'validate',
+        nonGrantable: true,
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Policy });
+
+    let { operations: lowered, issues } = await lower(Policy);
+    assert.deepEqual(issues, [], 'the declaration lowers clean');
+    assert.strictEqual(lowered.validate.base, 'validate');
+    assert.true(lowered.validate.nonGrantable, 'the flag reaches the realm');
+
+    // Lowering is exported over plain data, so an entry the decorator never
+    // saw can reach it. One that leaves the flag off is marked anyway, and one
+    // that reshapes the answer is recorded as unreachable.
+    let context: Parameters<typeof lowerOperationDeclarations>[1] = {
+      definition: buildDefinition(Policy),
+      lookupDefinition,
+      identifyCard: (target) => identifyCard(target),
+    };
+    let unmarked = await lowerOperationDeclarations(
+      { validate: { base: 'validate' } } as unknown as Record<
+        string,
+        OperationsModule.OperationDeclaration
+      >,
+      context,
+    );
+    assert.true(
+      unmarked.operations.validate.nonGrantable,
+      'a validate is never grantable, flag or no flag',
+    );
+    let projected = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          output: { issues: { $bxl: '.issues' } },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      codes(projected),
+      ['unrunnable-program'],
+      'a projection over the validation is recorded as never reached',
+    );
+    assert.true(projected.operations.validate.invalid);
+
+    let withPayload = await lowerOperationDeclarations(
+      {
+        validate: {
+          base: 'validate',
+          nonGrantable: true,
+          params: { realm: { type: 'string' } },
+          input: { $bxl: '{ strict: true }' },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      withPayload.issues.map((issue) => [issue.code, issue.path]),
+      [
+        ['unrunnable-program', 'params'],
+        ['unrunnable-program', 'input'],
+      ],
+      'a payload stage on a validate is recorded as never read',
+    );
+    assert.strictEqual(
+      withPayload.operations.validate.params,
+      undefined,
+      'and no payload schema is stored for one',
+    );
+    assert.strictEqual(withPayload.operations.validate.input, undefined);
+  });
+
   // -------------------------------------------------------------------------
   // The source-level writes
   // -------------------------------------------------------------------------
@@ -1561,6 +1756,258 @@ module('Unit | operation lowering', function (hooks) {
     }
   });
 
+  test('a link strategy is carried onto a read or a query and recorded on anything else', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+
+    let read = await lowerOperationDeclarations(
+      {
+        summary: { base: 'read', links: 'ids' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(read), [], 'a read may declare one');
+    assert.strictEqual(
+      read.operations.summary.links,
+      'ids',
+      'and the realm executes it from the stored entry',
+    );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry — which outlives the code that built it, and where a
+    // narrowing that is never applied reads as one that is.
+    let write = await lowerOperationDeclarations(
+      {
+        rename: { base: 'transform', set: { title: 'Renamed' }, links: 'none' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(
+      codes(write),
+      ['links-without-assembly'],
+      'a base that assembles no link closure has nothing to narrow',
+    );
+    assert.strictEqual(
+      write.operations.rename.links,
+      undefined,
+      'and nothing is stored that a serving path would read as a narrowing',
+    );
+
+    // A query assembles a closure for each row it answers with, so it narrows
+    // those the way a read narrows its document.
+    let query = await lowerOperationDeclarations(
+      {
+        roll: {
+          base: 'query',
+          query: { filter: { on: Roster, eq: { title: 'x' } } },
+          links: 'ids',
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(query), [], 'a query may declare one');
+    assert.strictEqual(
+      query.operations.roll.links,
+      'ids',
+      'and the realm serves its results from the stored entry',
+    );
+
+    let unknown = await lowerOperationDeclarations(
+      {
+        summary: { base: 'read', links: 'some' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Roster as unknown as typeof BaseDef),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(
+      codes(unknown),
+      ['invalid-link-strategy'],
+      'a value that names no strategy is its own finding',
+    );
+    assert.strictEqual(
+      unknown.operations.summary.links,
+      undefined,
+      'and is not stored for the serving path to read as the narrowest one',
+    );
+  });
+
+  test('`none` is a query strategy, and a read declaring it is recorded', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+    let lower = (
+      declarations: Record<string, unknown>,
+    ): ReturnType<typeof lowerOperationDeclarations> =>
+      lowerOperationDeclarations(
+        declarations as unknown as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Roster as unknown as typeof BaseDef),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry. A read's strategy governs the card's plain GET, which the
+    // host loads the card with to render and edit it, so a read served without
+    // its links would have them replaced by the first edit to a link field.
+    for (let name of ['read', 'summary']) {
+      let none = await lower({ [name]: { base: 'read', links: 'none' } });
+      assert.deepEqual(
+        codes(none),
+        ['invalid-link-strategy'],
+        `a read named "${name}" may not withhold its links`,
+      );
+      assert.true(
+        none.operations[name].invalid,
+        `and "${name}" is refused rather than served without them`,
+      );
+      assert.strictEqual(
+        none.operations[name].links,
+        undefined,
+        `and no narrowing is stored for "${name}"`,
+      );
+    }
+
+    for (let links of ['full', 'ids']) {
+      let narrowed = await lower({ read: { base: 'read', links } });
+      assert.deepEqual(codes(narrowed), [], `a read may declare "${links}"`);
+      assert.strictEqual(
+        narrowed.operations.read.links,
+        links,
+        `and "${links}" is stored for the realm to serve`,
+      );
+    }
+
+    let query = await lower({
+      roll: {
+        base: 'query',
+        query: { filter: { on: Roster, eq: { title: 'x' } } },
+        links: 'none',
+      },
+    });
+    assert.deepEqual(codes(query), [], 'a query may declare "none"');
+    assert.strictEqual(
+      query.operations.roll.links,
+      'none',
+      'and its rows are served under it',
+    );
+  });
+
+  test('an html declaration is carried onto a read or a query and recorded on anything else', async function (assert) {
+    let { field, contains, CardDef } = api;
+    class Roster extends CardDef {
+      static displayName = 'Roster';
+      @field title = contains(StringField);
+    }
+    shim({ Roster });
+    let lower = (
+      declarations: Record<string, unknown>,
+    ): ReturnType<typeof lowerOperationDeclarations> =>
+      lowerOperationDeclarations(
+        declarations as unknown as Record<
+          string,
+          OperationsModule.OperationDeclaration
+        >,
+        {
+          definition: buildDefinition(Roster as unknown as typeof BaseDef),
+          lookupDefinition,
+          identifyCard: (target) => identifyCard(target),
+        },
+      );
+
+    let read = await lower({
+      summary: {
+        base: 'read',
+        html: { embedded: 'unshareable', fitted: 'shareable' },
+      },
+    });
+    assert.deepEqual(codes(read), [], 'a read may declare one');
+    assert.deepEqual(
+      read.operations.summary.html,
+      { embedded: 'unshareable', fitted: 'shareable' },
+      'and the realm serves reads of the card from the stored entry',
+    );
+
+    let query = await lower({
+      roll: {
+        base: 'query',
+        query: { filter: { on: Roster, eq: { title: 'x' } } },
+        html: { isolated: 'unshareable' },
+      },
+    });
+    assert.deepEqual(codes(query), [], 'a query may declare one');
+    assert.deepEqual(
+      query.operations.roll.html,
+      { isolated: 'unshareable' },
+      'and the realm serves its rows from the stored entry',
+    );
+
+    // The decorator refuses this where it is written, so one only ever reaches
+    // a stored entry — which outlives the code that built it, and where a
+    // withholding that is never applied reads as one that is.
+    let write = await lower({
+      rename: {
+        base: 'transform',
+        set: { title: 'Renamed' },
+        html: { embedded: 'unshareable' },
+      },
+    });
+    assert.deepEqual(
+      codes(write),
+      ['html-without-rendering'],
+      'a base that serves no prerendered HTML has nothing to withhold',
+    );
+    assert.strictEqual(
+      write.operations.rename.html,
+      undefined,
+      'and nothing is stored that a serving path would read as a withholding',
+    );
+
+    for (let [label, html] of [
+      ['a format the realm does not prerender', { edit: 'unshareable' }],
+      ['a value that says neither', { embedded: 'hidden' }],
+      ['something other than a record of formats', ['embedded']],
+    ] as const) {
+      let unknown = await lower({ summary: { base: 'read', html } });
+      assert.deepEqual(
+        codes(unknown),
+        ['invalid-html-declaration'],
+        `${label} is its own finding`,
+      );
+      assert.strictEqual(
+        unknown.operations.summary.html,
+        undefined,
+        `${label} is not stored for the serving path to read as withholding every format`,
+      );
+    }
+  });
+
   test('an append that says nothing to append is recorded rather than stored as work', async function (assert) {
     // The decorator refuses each of these, so one only ever arrives on a
     // stored entry — where appending nothing, or a literal `null`, or picking
@@ -1730,5 +2177,39 @@ module('Unit | operation lowering', function (hooks) {
         `${name} is marked invalid rather than dropped, so a consumer reading the entry sees the refusal`,
       );
     }
+  });
+
+  test('a stored saved search under the name `query` is refused rather than lowered', async function (assert) {
+    // The decorator refuses the name, so this is driven from a raw record: a
+    // stored entry outlives the code that built it. An ad-hoc search is
+    // invoked and granted under this name, so an entry lowered under it would
+    // share its grant with every filter a caller writes over the type.
+    let { field, contains, CardDef } = api;
+    class Listed extends CardDef {
+      static displayName = 'Listed';
+      @field title = contains(StringField);
+    }
+    shim({ Listed });
+
+    let result = await lowerOperationDeclarations(
+      {
+        query: {
+          base: 'transform',
+          set: { title: 'x' },
+        },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Listed),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(result), ['reserved-name']);
+    assert.true(result.operations.query?.invalid, 'stored invalid');
+    assert.strictEqual(
+      result.operations.query?.base,
+      'query',
+      'on the base the name means, whatever base the entry named',
+    );
   });
 });

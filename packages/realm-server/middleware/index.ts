@@ -5,7 +5,6 @@ import type {
   ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import {
-  isSessionRevoked,
   logger as getLogger,
   webStreamToText,
   sanitizeLoggingCorrelationId,
@@ -13,9 +12,14 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
-import { withConnectionTenant } from '@cardstack/postgres';
+import {
+  withConnectionOrdering,
+  withConnectionTenant,
+} from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
-import { retrieveTokenClaim } from '../utils/jwt.ts';
+import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
+import { retrieveUserSessionClaim } from '../utils/jwt.ts';
+import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -188,7 +192,7 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 // The request URL as the log lines print it: any `token` query param is
 // masked, because two token-bearing families travel there — capture-URL
-// tokens on `_screenshot/` GETs and full session JWTs on `_download-realm`
+// tokens on `_capture/` GETs and full session JWTs on `_download-realm`
 // links — and these lines ship to Loki. (ALB access logs still record the
 // raw request line; the capture token's single-URL scope and short TTL are
 // the mitigation there.)
@@ -304,6 +308,34 @@ export async function withSearchConnectionTenant<T>(
     return await fn();
   }
   return await withConnectionTenant([...new Set(realms)].sort().join(' '), fn);
+}
+
+// Order the database work of every request that names a realm as that realm,
+// so a quiet realm's request is not queued behind a busy realm's non-search
+// work, which would otherwise share one arrival-order queue with it (see the
+// connection scheduler in `@cardstack/postgres`). A published site's page
+// load is the case that matters: its queries run before any handler knows
+// which realm it is, so the realm is resolved here, from memory only, ahead
+// of every handler. The tenant is the realm's URL, the same key a search of
+// that realm alone is charged to, so the two are ordered as one. A search
+// the request turns out to be still opens its own tenant scope inside this
+// one and is held to its share as before.
+export function orderConnectionsByRealm(
+  deps: Pick<RealmRoutingDeps, 'reconciler'>,
+) {
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let realmURL: string | undefined;
+    try {
+      realmURL = knownRealmURL(fullRequestURL(ctxt), deps);
+    } catch {
+      // A request whose URL cannot be built is left to the handlers to
+      // reject; its work runs untagged.
+    }
+    if (!realmURL) {
+      return next();
+    }
+    await withConnectionOrdering(realmURL, () => next());
+  };
 }
 
 // Puts a search through the admission gate (`search-inflight.ts`). A search
@@ -552,13 +584,11 @@ export function jwtMiddleware(
       // the server. If we introduce another type of realm-server permission,
       // then we will need to compare the token with what is configured on the
       // server.
-      let token = retrieveTokenClaim(authorization, secretSeed);
-      if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
-        throw new AuthenticationError(
-          AuthenticationErrorMessages.SessionRevoked,
-        );
-      }
-      ctxt.state.token = token;
+      ctxt.state.token = await retrieveUserSessionClaim(
+        authorization,
+        secretSeed,
+        dbAdapter,
+      );
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);
@@ -681,7 +711,16 @@ export async function setContextResponse(
   }
 
   if (nodeStream) {
-    ctxt.body = nodeStream;
+    let declaredLength = headers.get('content-length');
+    ctxt.body =
+      declaredLength != null && ctxt.method !== 'HEAD'
+        ? guardDeclaredLength({
+            body: nodeStream,
+            declaredLength: Number(declaredLength),
+            url,
+            response: ctxt.res,
+          })
+        : nodeStream;
   } else if (body instanceof ReadableStream) {
     // A quirk with native fetch Response in node is that it will be clever
     // and convert strings or buffers in the response.body into web-streams

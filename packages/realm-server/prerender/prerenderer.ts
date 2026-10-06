@@ -7,9 +7,9 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager.ts';
 import {
@@ -447,6 +447,7 @@ export class Prerenderer {
       // result we return, not earlier retries. Reset the marker at the
       // top of each iteration so launch+render still sums to ~total.
       let attemptStart = Date.now();
+      let freshTabRetried = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         throwIfAborted(signal);
         attemptStart = Date.now();
@@ -540,6 +541,24 @@ export class Prerenderer {
             `module prerender retry with clearCache did not resolve error signature ${retrySignature.join(
               ' | ',
             )} for ${url}`,
+          );
+        }
+
+        let failedChunk = result.pool.evicted
+          ? this.#renderRunner.failedHostChunkImport(result.response.error)
+          : undefined;
+        if (failedChunk && !freshTabRetried) {
+          // The evicted tab can never import that chunk again, but a fresh
+          // tab fetches it anew, so the next attempt gets one.
+          log.warn(
+            `retrying module prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
+          );
+          freshTabRetried = true;
+          continue;
+        }
+        if (failedChunk) {
+          log.warn(
+            `module prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
           );
         }
 
@@ -643,7 +662,7 @@ export class Prerenderer {
     }
   }
 
-  async prerenderScreenshot({
+  async prerenderCapture({
     realm,
     url,
     auth,
@@ -657,27 +676,27 @@ export class Prerenderer {
     realm: string;
     url: string;
     auth: string;
-    format: ScreenshotFormat;
-    captureSpec?: ScreenshotCaptureSpec;
+    format: OnDemandCaptureFormat;
+    captureSpec?: CaptureRequestSpec;
     renderOptions?: RenderRouteOptions;
     priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
   }): Promise<{
-    response: ScreenshotPrerenderResponse;
+    response: CapturePrerenderResponse;
     timings: Timings;
     pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let screenshotStart = Date.now();
+    let cdpCaptureStart = Date.now();
     let affinityKey = toAffinityKey({
       affinityType: 'realm',
       affinityValue: realm,
     });
     try {
-      let result = await this.#renderRunner.captureScreenshotAttempt({
+      let result = await this.#renderRunner.runCaptureAttempt({
         affinityType: 'realm',
         affinityValue: realm,
         realm,
@@ -693,16 +712,16 @@ export class Prerenderer {
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
-        Date.now() - screenshotStart,
+        Date.now() - cdpCaptureStart,
         { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
       if (e instanceof PrerenderCancelledError) {
-        await this.#handlePrerenderCancel(e, affinityKey, screenshotStart, url);
+        await this.#handlePrerenderCancel(e, affinityKey, cdpCaptureStart, url);
         throw e;
       }
-      log.error(`screenshot attempt failed (url ${url})`, e);
+      log.error(`capture attempt failed (url ${url})`, e);
       throw e;
     }
   }
@@ -750,7 +769,7 @@ export class Prerenderer {
       priority,
       jobId,
       batchId,
-      screenshots,
+      captures,
       renderScope,
       cardSource,
     } = this.#gateClearCache(rawArgs);
@@ -791,6 +810,7 @@ export class Prerenderer {
       // CS-10872: see prerenderModule for why totalElapsedMs is
       // attempt-local rather than loop-wide.
       let attemptStart = Date.now();
+      let freshTabRetried = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         throwIfAborted(signal);
         attemptStart = Date.now();
@@ -815,7 +835,7 @@ export class Prerenderer {
             priority,
             jobId,
             batchId,
-            screenshots,
+            captures,
             renderScope,
             cardSource,
             signal,
@@ -854,7 +874,7 @@ export class Prerenderer {
               priority,
               jobId,
               batchId,
-              screenshots,
+              captures,
               renderScope,
               cardSource,
               signal,
@@ -903,6 +923,22 @@ export class Prerenderer {
             )} for ${url}`,
           );
         }
+        let failedChunk = result.pool.evicted
+          ? this.#visitFailedHostChunkImport(result.response)
+          : undefined;
+        if (failedChunk && !freshTabRetried) {
+          // See the matching retry in prerenderModule.
+          log.warn(
+            `retrying visit prerender for ${url} on a fresh tab: the evicted tab failed to import host chunk ${failedChunk}`,
+          );
+          freshTabRetried = true;
+          continue;
+        }
+        if (failedChunk) {
+          log.warn(
+            `visit prerender for ${url} failed to import host chunk ${failedChunk} on a fresh tab too`,
+          );
+        }
         Prerenderer.decorateRenderErrorsWithTimings(
           result.response,
           result.timings,
@@ -948,6 +984,21 @@ export class Prerenderer {
       if (!sub) continue;
       let signature = this.#renderRunner.shouldRetryWithClearCache(sub);
       if (signature) return signature;
+    }
+    return undefined;
+  }
+
+  #visitFailedHostChunkImport(
+    response: RenderVisitResponse,
+  ): string | undefined {
+    for (let renderError of [
+      response.pageUnusableError,
+      response.card?.error,
+      response.fileExtract?.error,
+      response.fileRender?.error,
+    ]) {
+      let failedChunk = this.#renderRunner.failedHostChunkImport(renderError);
+      if (failedChunk) return failedChunk;
     }
     return undefined;
   }

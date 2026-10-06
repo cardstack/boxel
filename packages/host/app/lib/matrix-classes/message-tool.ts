@@ -22,7 +22,15 @@ import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 
-type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid' | 'failed';
+// 'approved' is the user's approval of a call ai-bot holds for approval; the
+// call is then running (see `status`) until ai-bot's result lands.
+type ToolCallStatus =
+  | 'applied'
+  | 'ready'
+  | 'applying'
+  | 'invalid'
+  | 'failed'
+  | 'approved';
 
 // 'read-file-for-ai-assistant_a831' -> 'Read file for ai assistant',
 // 'patchCardInstance' -> 'Patch card instance'. Tool names are a kebab or
@@ -93,15 +101,45 @@ export default class MessageTool {
     return this.toolRequest.executedBy;
   }
 
+  get argumentsError() {
+    return this.toolRequest.argumentsError;
+  }
+
+  get argumentsText() {
+    return this.toolRequest.argumentsText;
+  }
+
   // ai-bot fulfilled this tool call itself (e.g. readRealmFile), so the host
   // shows only a status indicator for it — never an Apply button.
   get isBotExecuted() {
     return this.executedBy === AI_BOT_EXECUTOR;
   }
 
-  get arguments() {
-    return this.toolRequest.arguments;
+  // Set by validation when it had to convert a stringified argument to make
+  // the call valid; the run uses these.
+  #coercedArguments: ToolRequest['arguments'] | undefined;
+  setCoercedArguments(args: unknown) {
+    this.#coercedArguments = args as ToolRequest['arguments'];
   }
+
+  // Every host tool takes its input under `attributes`. A model can lose that
+  // nesting and send the fields at the top level; nest them again rather than
+  // fail the call on its shape, since the call is otherwise the one the model
+  // meant. Memoized on the request's arguments so each read returns the same
+  // object.
+  get arguments() {
+    if (this.#coercedArguments) {
+      return this.#coercedArguments;
+    }
+    let raw = this.toolRequest.arguments;
+    if (raw !== this.#rawArguments) {
+      this.#rawArguments = raw;
+      this.#arguments = nestTopLevelAttributes(raw);
+    }
+    return this.#arguments;
+  }
+  #rawArguments: ToolRequest['arguments'] | undefined;
+  #arguments: ToolRequest['arguments'] | undefined;
 
   get description() {
     // The model does not always send the `description` label (it is optional
@@ -120,12 +158,28 @@ export default class MessageTool {
     );
   }
 
-  get status() {
+  // ai-bot runs this call itself, but only once the user approves it (the
+  // bot tool marked it `approvalRequired`). Until an answer lands the call
+  // shows the full request with Approve / Decline rather than a status
+  // indicator.
+  get awaitsApproval() {
+    return (
+      this.isBotExecuted &&
+      this.toolRequest.approvalRequired === true &&
+      this.toolCallStatus === 'applying' &&
+      !this.toolService.answeredApprovalIds.has(this.id!)
+    );
+  }
+
+  get status(): Exclude<ToolCallStatus, 'approved'> | undefined {
     if (this.toolService.currentlyExecutingToolRequestIds.has(this.id!)) {
       return 'applying';
     }
-
-    return this.toolCallStatus;
+    if (this.awaitsApproval) {
+      return 'ready';
+    }
+    let status = this.toolCallStatus;
+    return status === 'approved' ? 'applying' : status;
   }
 
   async commandResultCardDoc() {
@@ -167,15 +221,45 @@ export default class MessageTool {
     }
     let id = cardDoc.data.id;
     if (id) {
-      let live = await this.store.get<CardDef>(id);
+      let live = await this.store.get(id);
       if (isCardInstance(live)) {
         return live;
       }
     }
     let { id: _id, ...resource } = cardDoc.data;
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
-    return (await this.store.add(ephemeralDoc, {
-      doNotPersist: true,
-    })) as CardDef;
+    return (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
   }
+}
+
+const TOP_LEVEL_TOOL_ARGUMENT_KEYS = new Set([
+  'attributes',
+  'relationships',
+  'description',
+]);
+
+export function nestTopLevelAttributes(
+  args: ToolRequest['arguments'] | undefined,
+): ToolRequest['arguments'] | undefined {
+  if (
+    !args ||
+    typeof args !== 'object' ||
+    Array.isArray(args) ||
+    'attributes' in args
+  ) {
+    return args;
+  }
+  let attributes: Record<string, unknown> = {};
+  let rest: Record<string, unknown> = {};
+  for (let [key, value] of Object.entries(args)) {
+    if (TOP_LEVEL_TOOL_ARGUMENT_KEYS.has(key)) {
+      rest[key] = value;
+    } else {
+      attributes[key] = value;
+    }
+  }
+  if (Object.keys(attributes).length === 0) {
+    return args;
+  }
+  return { ...rest, attributes };
 }

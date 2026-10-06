@@ -106,6 +106,9 @@ function makeDefinitionLookup(): DefinitionLookup {
         `unexpected definition lookup: ${codeRef.module}/${codeRef.name}`,
       );
     },
+    async lookupDefinitionEntry(): Promise<never> {
+      throw new Error('lookupDefinitionEntry is not used by these tests');
+    },
     async lookupCachedDefinition() {
       return undefined;
     },

@@ -66,12 +66,11 @@ let operations: (typeof OperationsModule)['operations'];
 // lowered by the in-browser indexer, which is what puts real `@operation`
 // declarations in front of the endpoint.
 //
-// No declaration here reads the actor. A request from an integration test
-// reaches the in-browser realm unauthenticated, because the harness's own
-// `verifyJWT` (`tests/helpers/adapter.ts`) treats a token that has *not*
-// expired as expired — and an operation that reads the actor is refused
-// outright on such a request. What the actor resolves to is asserted against a
-// real realm in the realm server's endpoint suite instead.
+// No declaration here reads the actor. This suite's realm answers the host's
+// requests as its own internal dispatch, which reads no session, so an
+// operation that reads the actor is refused outright here. What the actor
+// resolves to is asserted against a real realm in the realm server's endpoint
+// suite instead.
 const REPORT_MODULE = `
   import {
     contains,
@@ -263,17 +262,16 @@ module('Integration | operations invocation', function (hooks) {
   // as an error.
   async function cardAt(localPath: string): Promise<CardDefType> {
     return loaded(
-      await getService('store').get<CardDefType>(`${testRealmURL}${localPath}`),
+      await getService('store').get(`${testRealmURL}${localPath}`),
       localPath,
     );
   }
 
   async function fileAt(localPath: string): Promise<FileDefType> {
     return loaded(
-      await getService('store').get<FileDefType>(
-        `${testRealmURL}${localPath}`,
-        { type: 'file-meta' },
-      ),
+      await getService('store').get(`${testRealmURL}${localPath}`, {
+        type: 'file-meta',
+      }),
       localPath,
     );
   }
@@ -810,7 +808,7 @@ module('Integration | operations invocation', function (hooks) {
         typeof OperationsModule
       >('@cardstack/base/operations'));
       let elsewhere = loaded(
-        await getService('store').get<CardDefType>(`${testRealm2URL}elsewhere`),
+        await getService('store').get(`${testRealm2URL}elsewhere`),
         'test2/elsewhere',
       );
       let report = await cardAt('report-refused');

@@ -13,12 +13,35 @@ export type {
   RealmPolicyCacheEnvironment,
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
-export { notPermitted, policyGateStats } from './gate.ts';
+export {
+  dischargePendingDecision,
+  notPermitted,
+  pendingWriteFor,
+  pendingWriteHolds,
+  policyGateStats,
+} from './gate.ts';
+export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
+export type { CapabilityCaller } from './capabilities.ts';
+export { CAPABILITY_CHECK_CAP } from './capability-wire.ts';
+export type { CapabilityAnswer, CapabilityCheck } from './capability-wire.ts';
+export {
+  policyQueryScope,
+  principalQueryScope,
+  withoutMisreadings,
+  RealmAuthorityPolicyScopeError,
+  searchPrincipal,
+} from './policy-query.ts';
+export type { PolicyQueryScope, SearchPrincipal } from './policy-query.ts';
 export type {
   GateDecision,
+  GrantedDecision,
+  LockedGrant,
   MatchedGrant,
   OperationPolicyAccess,
+  PendingDecision,
+  PendingWrite,
   PolicyGateStats,
+  StoredCardCheck,
 } from './gate.ts';
 export {
   assertParamsSupplied,
@@ -28,7 +51,9 @@ export {
   newOperationScope,
   scopeCallerFor,
   pathsFor,
-  readShape,
+  readPlan,
+  htmlDeclarationOf,
+  resolveFacadeWrite,
   resolveGatedOperation,
   resolveOperation,
   runOperation,
@@ -45,6 +70,8 @@ export type {
   ScopeInvocation,
   OperationStoredFile,
   OperationStoredFileMeta,
+  HtmlDeclarationAnswer,
+  ReadPlan,
   ReadShape,
   RunOperationOptions,
 } from './dispatch.ts';
@@ -67,6 +94,7 @@ export {
   stageUpdate,
 } from './executors.ts';
 export type {
+  AdmissionSubject,
   AppendContainsManyEntry,
   AppendLineEntry,
   BatchDocument,
@@ -89,16 +117,35 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  emitCapabilityCheck,
   emitOperationPerf,
+  INTERNAL_ROUTE,
+  emitPolicyCompile,
+  emitPolicyDecision,
+  emitPolicySearchScope,
+  emitPolicySnapshotRead,
+  setCapabilityCheckSink,
   setOperationPerfSink,
+  setPolicyCompileSink,
+  setPolicyDecisionSink,
+  setPolicySearchScopeSink,
+  setPolicySnapshotReadSink,
 } from './telemetry.ts';
 export type {
+  CapabilityCheckEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
   OperationOutcome,
   OperationPerfEvent,
   OperationReadLayer,
+  PolicyCompileEvent,
+  PolicyDecisionEvent,
+  PolicyDecisionReason,
+  PolicyRoute,
+  PolicySearchScopeEvent,
+  PolicySnapshotReadEvent,
+  PolicyTransport,
 } from './telemetry.ts';
 export {
   MalformedCardSourceError,
@@ -122,6 +169,7 @@ export {
   needsActor,
   paramsFor,
   parseOperationsEnvelope,
+  pendingWriteOf,
   projectedResult,
   readResult,
   resultsTree,
@@ -152,6 +200,18 @@ export type {
   TransformProgramError,
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
+export {
+  isNamedQueryPayload,
+  namedQueryInvocation,
+  namedQueryRendering,
+  resolveNamedQuery,
+  searchInvocation,
+} from './named-query.ts';
+export type {
+  NamedQueryContext,
+  ResolvedNamedQuery,
+  SearchInvocation,
+} from './named-query.ts';
 export type {
   QueryDefinition,
   QueryInvocation,
@@ -160,23 +220,41 @@ export type {
 } from './query.ts';
 export {
   DEFINITION_FREE_BASE_OPERATIONS,
+  EXPLAIN_CAP,
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isDocumentResult,
+  isExplainListingResult,
+  isExplainResult,
+  isValidateResult,
   isHeadResult,
   isIdentityResult,
+  effectiveLinkStrategy,
+  isHtmlDeclaration,
+  isLinkStrategy,
   isOperationFailure,
   isSourceResult,
   isWrite,
+  linkStrategyOf,
+  readLinkStrategyOf,
+  refusalForNonReader,
+  unshareableFormatsOf,
 } from './types.ts';
 export type {
   BaseOperation,
   EntryPosition,
   LowerOperationDeclarationsResult,
   OperationDefinition,
+  ExplainedGrant,
+  ExplainedGrantOutcome,
+  ExplainedIndexLag,
+  ExplainedRule,
+  ExplainedSearch,
   OperationDocumentResult,
   OperationError,
   OperationErrorCode,
+  OperationExplainListingResult,
+  OperationExplainResult,
   OperationHeadResult,
   OperationIdentityResult,
   OperationLoweringIssue,
@@ -190,4 +268,14 @@ export type {
   OperationSourceResult,
   OperationTarget,
   OperationTemplate,
+  PolicyExplanation,
+  PolicyExplanationDecision,
+  PolicyExplanationListing,
+  PolicyExplanationReason,
+  OperationValidateResult,
+  PolicyValidation,
+  ValidatedGrant,
+  ValidatedGrantInertia,
+  ValidatedPolicyIssue,
+  ValidatedRule,
 } from './types.ts';

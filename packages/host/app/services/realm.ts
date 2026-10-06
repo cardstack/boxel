@@ -75,7 +75,7 @@ const log = logger('service:realm');
 
 // Reports "pending" while a realm has incremental indexing in flight (between
 // the incremental-index-initiation Matrix event and the matching incremental/
-// full/copy completion event). Lets `await settled()` automatically wait for
+// full completion event). Lets `await settled()` automatically wait for
 // indexing to finish in tests, which is the primary leverage point for
 // fixing the test surface that pre-CS-11003 relied on the synchronous-
 // indexing semantic of the +source POST.
@@ -153,7 +153,7 @@ class RealmResource {
   @tracked private realmPermissions: RealmPermissions | null | undefined;
 
   // When realm-side indexing is in flight (incremental-index-initiation
-  // received but matching incremental/full/copy event hasn't arrived yet),
+  // received but matching incremental/full event hasn't arrived yet),
   // hold a test-waiter token so `await settled()` and other Ember test
   // helpers wait for the index event before proceeding. This is the
   // primary semaphore for tests that, before CS-11003, relied on the
@@ -323,7 +323,6 @@ class RealmResource {
               }
               break;
             case 'full':
-            case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
               if (this.indexingWaiterToken) {
@@ -334,7 +333,7 @@ class RealmResource {
               // which surfaces as an incremental re-index that invalidates the
               // config card. Refresh realm info then, so the workspace chooser
               // label and index card title update without a reload. Other
-              // re-indexes (full/copy, or incremental of unrelated cards) are
+              // re-indexes (full, or incremental of unrelated cards) are
               // deliberately left alone — refetching on those would, among
               // other things, clobber client-managed publish state. Instance
               // invalidations carry the card id without `.json`, so the
@@ -352,7 +351,7 @@ class RealmResource {
               // Optimistic and client-clock based — no round-trip, so it can't
               // fail, log, or fire a stray request mid-test; the next federated
               // info load reconciles it with the authoritative value. Scoped to
-              // incremental indexes: full/copy re-indexes are rebuilds, not user
+              // incremental indexes: full re-indexes are rebuilds, not user
               // writes, and only source realms actually move (a non-source realm
               // would self-correct on that next load).
               if (data.indexType === 'incremental' && this.info) {
@@ -1676,15 +1675,25 @@ export default class RealmService extends Service {
       return inProgressAuthentication;
     }
     let deferred = new Deferred<string | undefined>();
+    // Every caller that joins this sign-in awaits the deferred and handles
+    // its rejection; this keeps a failure nobody joined from also surfacing
+    // as an unhandled rejection.
+    deferred.promise.catch(() => {});
     this.reauthentications.set(realmURL, deferred.promise);
 
-    let resource = this.getOrCreateRealmResource(realmURL);
-    resource.logout();
-    await resource.login();
-    let result = resource.token;
-    deferred.fulfill(result);
+    // A sign-in that fails is reported to every caller waiting on it, and
+    // clears the in-progress entry as one that succeeds does, so the next
+    // call signs in afresh rather than waiting on this one.
     try {
+      let resource = this.getOrCreateRealmResource(realmURL);
+      resource.logout();
+      await resource.login();
+      let result = resource.token;
+      deferred.fulfill(result);
       return result;
+    } catch (e) {
+      deferred.reject(e);
+      throw e;
     } finally {
       this.reauthentications.delete(realmURL);
     }

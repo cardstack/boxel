@@ -608,7 +608,9 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       permissions,
       realmURL,
     );
-    let auth = createPrerenderAuth(userId, prerenderPermissions);
+    let auth = createPrerenderAuth(userId, prerenderPermissions, {
+      realmAuthority: true,
+    });
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
@@ -757,7 +759,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       permissions,
       realmURL,
     );
-    let auth = createPrerenderAuth(userId, prerenderPermissions);
+    let auth = createPrerenderAuth(userId, prerenderPermissions, {
+      realmAuthority: true,
+    });
 
     let deferPrerenderHtml = args.deferPrerenderHtml === true;
     let carriedPrerenderHtmlChanges = Array.isArray(

@@ -1,6 +1,8 @@
 import type { Readable } from 'stream';
-import { RealmPaths, type LocalPath } from '../paths.ts';
+import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
+import { codeRefFromInternalKey } from '../index.ts';
+import { baseRealm } from '../constants.ts';
 import { readOperation } from './read.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
@@ -10,16 +12,32 @@ import {
   type TransformContext,
 } from './transforms.ts';
 import {
+  GATE_FAULTED,
+  GATE_MISSING,
+  GATE_REFUSED,
   gateOperation,
+  gateRefusal,
+  leavesToLock,
+  loadPolicy,
+  recordPolicyLoadFailure,
+  type GateSubject,
   notPermitted,
   type GateDecision,
+  type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
+import type { GateTrace } from './gate-trace.ts';
+import { INTERNAL_ROUTE, type PolicyRoute } from './telemetry.ts';
+import { explainOperation, type TargetRealm } from './explain.ts';
+import type { CompiledPolicyCard } from './policy.ts';
+import { validateOperation } from './validate.ts';
 import {
   DEFINITION_FREE_BASE_OPERATIONS,
   OperationFailure,
   isDocumentResult,
+  readLinkStrategyOf,
   isOperationFailure,
+  unshareableFormatsOf,
   isHeadResult,
   type BaseOperation,
   type OperationDefinition,
@@ -28,7 +46,16 @@ import {
   type OperationSourceBody,
   type OperationTarget,
 } from './types.ts';
-import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
+import {
+  PRERENDERED_HTML_FORMATS,
+  type PrerenderedHtmlFormat,
+} from '../prerendered-html-format.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
+import {
+  isResolvedCodeRef,
+  type CodeRef,
+  type ResolvedCodeRef,
+} from '../code-ref.ts';
 import type { Definition } from '../definitions.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type {
@@ -148,6 +175,30 @@ export interface OperationCore {
   // What the policy gate reads for a caller the realm ACL declined. A core
   // without it admits no such caller.
   policy?: OperationPolicyAccess;
+  // The realm that serves `href`, and the URL `href` resolves to there, for
+  // the explain operation, which runs that realm's policy gate. A target
+  // commonly lives in a realm other than the policy card's, so this reaches
+  // any realm the server serves, on the server's own authority: the explain
+  // judges for itself what its caller may be told. Undefined where no realm
+  // this server serves holds `href`. A core without it explains nothing.
+  targetRealm?(href: string): Promise<TargetRealm | undefined>;
+  // The policy card at `card` compiled as a realm that names it compiles it,
+  // on the server's own authority, for the validate operation, with every URL
+  // compiling read. Compiled from what the card's latest index visit recorded,
+  // and neither cached nor put in force anywhere. A core without it validates
+  // nothing.
+  compilePolicyCard?(card: URL): Promise<CompiledPolicyCard>;
+  // The realm this server serves `href` from, and whether `caller` may read
+  // it by that realm's own permissions, reached on the server's own authority
+  // as an explain reaches a target's realm. An archived realm, which answers
+  // every request with a refusal, is one no caller may read. Undefined where
+  // no realm this server serves holds `href`: the definition lookup reads such
+  // a module as the owner of the realm asking, as it does for every card in
+  // that realm.
+  readsRealmOf?(
+    href: string,
+    caller: ScopeCaller,
+  ): Promise<{ realm: string; read: boolean } | undefined>;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -172,6 +223,17 @@ export interface OperationStoredFile {
     start: number,
     end: number,
   ) => ReadableStream<Uint8Array> | Readable;
+  // Opens `content` and reports the byte length of exactly what it delivers,
+  // where the adapter can measure what it opened; `size` above is the stat
+  // the handle opened with, which a write elsewhere can leave describing a
+  // version of the file the stream does not read. The content returned is
+  // the stream `content` yields.
+  openContent?: () => {
+    content: OperationSourceBody;
+    size?: number;
+    // The opened content's modification time, in milliseconds.
+    lastModifiedMs?: number;
+  };
 }
 
 export interface OperationStoredFileMeta {
@@ -182,9 +244,14 @@ export interface OperationStoredFileMeta {
   createdAt?: number;
 }
 
-// `CachingDefinitionLookup`, narrowed to the one read an operation makes.
+// `CachingDefinitionLookup`, narrowed to the reads an operation makes.
 export interface OperationDefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition | undefined>;
+  // A type's definition with the adoption chain recorded beside it, from one
+  // read of its entry, for a type target the policy gate judges by that chain.
+  lookupDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<{ definition: Definition; types: string[] } | undefined>;
 }
 
 // `RealmIndexQueryEngine`, narrowed to the reads an operation makes.
@@ -217,6 +284,13 @@ export interface OperationIndexQueryEngine {
 }
 
 export interface RunOperationOptions {
+  // The gate's decision about this very invocation, where the caller already
+  // resolved it in the same request: the operations envelope resolves every
+  // entry before it runs any. The read then runs on that decision rather than
+  // asking the gate again, so its predicates are evaluated, and the decision
+  // recorded, once. It is judged as `resolveOperation` judges one, so a write
+  // left to the lock and an archived realm's seal are refused here as there.
+  gated?: GatedOperation;
   // The metadata a response's headers are computed from, and no body: for a
   // `read` the four values the card+json headers rest on and no document, for
   // a `readSource` everything but the bytes. What a `HEAD`, or a conditional
@@ -290,10 +364,26 @@ export interface OperationScope {
   // Absent for every other invocation, and for a create until those two
   // stages have run.
   readonly proposed: Record<string, unknown> | undefined;
+  // Where the policy gate records how it reached its decision, for an explain
+  // to report, or for a capability check to read why the gate refused. Absent
+  // on every invocation a caller makes.
+  readonly trace: GateTrace | undefined;
+  // Set for a capability check, which asks what the gate would decide and
+  // invokes nothing, so nothing it evaluates is recorded as a decision.
+  readonly advisory: boolean;
+  // The request surface and route this invocation arrived on, which the
+  // gate's decision record names (see `PolicyDecisionEvent`).
+  readonly route: PolicyRoute;
+  // The archived realm's refusal, where the realm holds one for this caller
+  // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
+  // gate grants.
+  readonly seal: Error | undefined;
   // A scope for another invocation in the same request, sharing this one's row
   // memo so the invocations of one request still cost one read of each row
-  // between them. The caller and the ACL's verdict carry over unless named; a
-  // proposed document belongs to one invocation and never does.
+  // between them. The caller, the ACL's verdict, the seal and whether the
+  // request is advisory carry over unless named, and so does its route; a
+  // proposed document belongs to one invocation and never does, and neither
+  // does a trace.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -318,6 +408,10 @@ export interface ScopeInvocation {
   caller?: ScopeCaller;
   coarseDeclined?: CoarseDeclined;
   proposed?: Record<string, unknown>;
+  trace?: GateTrace;
+  seal?: Error;
+  advisory?: boolean;
+  route?: PolicyRoute;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -356,22 +450,38 @@ export function newOperationScope(
     caller: ScopeCaller,
     coarseDeclined: CoarseDeclined,
     proposed: Record<string, unknown> | undefined,
+    trace: GateTrace | undefined,
+    seal: Error | undefined,
+    advisory: boolean,
+    route: PolicyRoute,
   ): OperationScope => ({
     peekInstance,
     caller,
     coarseDeclined,
     proposed,
+    trace,
+    seal,
+    advisory,
+    route,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
         next.proposed,
+        next.trace,
+        next.seal ?? seal,
+        next.advisory ?? advisory,
+        next.route ?? route,
       ),
   });
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
     invocation.coarseDeclined ?? 'none',
     invocation.proposed,
+    invocation.trace,
+    invocation.seal,
+    invocation.advisory ?? false,
+    invocation.route ?? INTERNAL_ROUTE,
   );
 }
 
@@ -413,6 +523,8 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   transform: true,
   appendContainsMany: true,
   appendLine: true,
+  explain: true,
+  validate: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -429,6 +541,26 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   transform: ['card-def'],
   appendContainsMany: ['card-def'],
   appendLine: ['file-def'],
+  // Carried by nothing on its own. See `DECLARATION_ONLY`.
+  explain: [],
+  validate: [],
+};
+
+// The behaviors a target carries only under a name its type declares on
+// them. Nothing implies one, so a target whose type declares none has no
+// operation by that name, and asking for it is asking for an operation that
+// does not exist. An explain and a validate are the two: each answers only on
+// the card that declares it, a policy card, or for a validate the realm's
+// config card too.
+const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
+  Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
+    explain: true,
+    validate: true,
+  });
+
+const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
+  explain: ['card-def'],
+  validate: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -489,8 +621,20 @@ function carries(
   if (own(ALLOWED_BASE_OPERATIONS[kind], base)) {
     return true;
   }
+  if (own(DECLARABLE_ON, base)?.includes(kind)) {
+    return true;
+  }
   return (
     target.kind === 'instance' && own(FILE_WRITES_ON_ANY_INSTANCE, base) != null
+  );
+}
+
+// Whether a type of this kind answers `name` with a built-in behavior when it
+// declares nothing under that name: the behavior an instance of the type runs
+// when a caller invokes the name on it.
+export function carriesBuiltIn(kind: DefKind, name: string): boolean {
+  return (
+    isBaseOperation(name) && own(ALLOWED_BASE_OPERATIONS[kind], name) != null
   );
 }
 
@@ -560,24 +704,49 @@ function own<T>(
 // is in the index, the built-in behavior does not consult its definition, and
 // refusing here would make a broken module's cards unreadable.
 //
-// A write the gate could only admit on a predicate is refused here. Its
-// predicate has to be evaluated under the write lock, and a caller resolving
-// through here holds no lock and carries no pending decision to one. A caller
-// that does takes the decision from `resolveGatedOperation` instead.
+// A write the gate left anything for the write lock to decide is refused
+// here: one it could only admit on a predicate, and one to a stored card,
+// whose type the lock judges again from its bytes. A caller resolving through
+// here holds no lock and carries no pending decision to one. A caller that
+// does takes the decision from `resolveGatedOperation` instead.
+//
+// An invocation the gate grants in a scope that carries an archived realm's
+// seal is refused with the seal, here and not before, so the invocation never
+// runs and a caller the gate refuses is refused in the gate's own words.
 export async function resolveOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<OperationDefinition> {
-  let { definition, decision } = await resolveGatedOperation(
-    core,
+  return admittedDefinition(
+    await resolveGatedOperation(core, target, name, scope),
     target,
     name,
     scope,
   );
-  if (decision.kind === 'pending') {
+}
+
+function sameTarget(a: OperationTarget, b: OperationTarget): boolean {
+  return a.kind === 'instance'
+    ? b.kind === 'instance' && a.url === b.url
+    : b.kind === 'type' &&
+        JSON.stringify(a.codeRef) === JSON.stringify(b.codeRef);
+}
+
+// The definition a gated operation runs, where the gate's decision lets it run
+// with no write lock to decide anything more (see `resolveOperation`).
+function admittedDefinition(
+  { definition, decision }: GatedOperation,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): OperationDefinition {
+  if (leavesToLock(decision)) {
     throw notPermitted(target, name);
+  }
+  if (decision.kind === 'granted' && scope.seal) {
+    throw scope.seal;
   }
   return definition;
 }
@@ -592,40 +761,153 @@ export interface GatedOperation {
 // `resolveOperation`, answering the gate's decision rather than acting on it.
 //
 // The gate is the last stage, after the operation is known to exist and to be
-// carried by the target. It matches rules against the adoption chain the index
-// recorded for the target, never against a type the caller named.
+// carried by the target. It matches rules against the adoption chain the realm
+// recorded for the target, never against a type the caller named: it is handed
+// the target as resolution resolved it, and not the target itself.
 //
 // For a caller the ACL declined outright, every refusal the resolution itself
 // makes is answered as the gate's. The resolution refuses for reasons that
 // describe the target: no such operation on its type, a declaration that did
 // not lower, a type that does not resolve. Answered as themselves, they would
 // tell such a caller which cards exist and what their types declare, which is
-// what the gate's refusal is written not to say.
+// what the gate's refusal is written not to say. For the same reason such a
+// caller's policy is loaded before the target resolves, so a policy the realm
+// cannot load is answered the same way for every target.
 export async function resolveGatedOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
 ): Promise<GatedOperation> {
+  return await resolveAndGate(core, target, name, scope);
+}
+
+// What the policy gate decides about a write one of the card verbs carries
+// out: a card+json `POST` creating a card, a `PATCH` updating one, or a
+// `DELETE` removing one.
+//
+// A verb performs the built-in behavior it is named for, on the document it
+// was sent, whatever the target's type declares under that name. A declaration
+// is how an author specializes the behavior: an `update` with an `input`
+// stage, a `delete` rebound onto `transform` as a soft delete. A grant on the
+// name admits what the declaration does, and the verb would do something else.
+// So a grant reaches a verb only where the name means the built-in behavior,
+// and a write to a type that declares the name is refused as one no grant
+// admits. The operations envelope runs the declaration, and is where such a
+// grant is used.
+//
+// That refusal is made before the gate judges anything, for every caller the
+// realm ACL declined. The gate judges an operation by the base its declaration
+// builds on, and the verb writes whatever that base is: a declared `update`
+// built on `read` would read to the gate as a read the ACL allowed a reader,
+// and the verb would then write for them with no grant at all.
+//
+// A caller the realm ACL allowed is answered as the gate answers them, without
+// the policy, and the verb performs the built-in behavior for them whatever the
+// type declares.
+export async function resolveFacadeWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  base: 'create' | 'update' | 'delete',
+  scope: OperationScope,
+): Promise<GateDecision> {
+  let { decision } = await resolveAndGate(core, target, base, scope, {
+    builtInOnly: true,
+  });
+  // The verb writes, and a write the ACL declined is never the ACL's to allow,
+  // so for such a caller the gate's answer is a grant or a refusal.
+  if (decision.kind === 'coarse' && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, base);
+  }
+  return decision;
+}
+
+async function resolveAndGate(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+  // Refuse a name the target's type declares, for a caller the ACL declined,
+  // before the gate runs (see `resolveFacadeWrite`).
+  opts: { builtInOnly?: true } = {},
+): Promise<GatedOperation> {
+  let refusal = (e: unknown): unknown =>
+    scope.coarseDeclined === 'all' && isOperationFailure(e)
+      ? notPermitted(target, name)
+      : e;
+  let loaded: LoadedPolicy | undefined;
+  if (scope.coarseDeclined === 'all') {
+    // A target outside this realm is refused before the policy is consulted
+    // at all. That refusal is arithmetic on the URL the caller sent, so it
+    // says nothing about what the realm holds.
+    try {
+      assertInRealm(core, target);
+    } catch (e: unknown) {
+      throw refusal(e);
+    }
+    let started = performance.now();
+    try {
+      loaded = { ...(await loadPolicy(core)), started };
+    } catch (e: unknown) {
+      recordPolicyLoadFailure(core, scope, name, started, e);
+      throw e;
+    }
+  }
   let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
     resolved = await resolveUngated(core, target, name, scope);
   } catch (e: unknown) {
-    if (scope.coarseDeclined === 'all' && isOperationFailure(e)) {
-      throw notPermitted(target, name);
+    if (isOperationFailure(e)) {
+      scope.trace?.resolutionRefused(e);
     }
-    throw e;
+    throw refusal(e);
   }
-  let { definition, typeDefinition } = resolved;
+  let { definition, typeDefinition, typeChain, declared } = resolved;
+  if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
+    throw notPermitted(target, name);
+  }
   let decision = await gateOperation(
     core,
-    target,
+    gateSubject(target, typeChain),
     name,
-    definition.base,
+    definition,
     typeDefinition,
     scope,
+    loaded,
   );
+  if (
+    decision.kind === GATE_REFUSED.kind ||
+    decision.kind === GATE_MISSING.kind ||
+    decision.kind === GATE_FAULTED.kind
+  ) {
+    throw gateRefusal(core, decision, target, name);
+  }
   return { definition, decision };
+}
+
+// The target as the gate judges it. A card is judged by the row the index
+// holds for its URL. A type is judged by the chain recorded on the entry its
+// definition came from, read in the same lookup, so the gate holds the realm's
+// answer about the type and never the caller's claim about it.
+//
+// A path whose extension names a file is handed over as one. A stored-bytes
+// read is the only behavior the gate grants on a file, and what that read's
+// bytes are is the gate's to settle from the bytes themselves: the path a
+// card's own document sits at is spelled with an extension like any other.
+function gateSubject(
+  target: OperationTarget,
+  typeChain: string[] | undefined,
+): GateSubject {
+  if (target.kind === 'type') {
+    return typeChain
+      ? { kind: 'type', types: typeChain }
+      : { kind: 'unmatched' };
+  }
+  let url = parseTargetURL(target.url);
+  if (!url) {
+    return { kind: 'unmatched' };
+  }
+  return urlNamesFile(url) ? { kind: 'file', url } : { kind: 'card', url };
 }
 
 async function resolveUngated(
@@ -635,8 +917,13 @@ async function resolveUngated(
   scope: OperationScope,
 ): Promise<{
   definition: OperationDefinition;
-  // The target type's own entry, where one resolved.
+  // The target type's own entry, where one resolved, and for a type target
+  // the adoption chain recorded on it.
   typeDefinition?: Definition;
+  typeChain?: string[];
+  // Whether the name resolved to a declaration on the target's type rather
+  // than to the built-in behavior of that name.
+  declared?: true;
 }> {
   assertInRealm(core, target);
   if (isDefinitionFreeOperation(name)) {
@@ -651,7 +938,9 @@ async function resolveUngated(
     }
     return { definition: { base: name, deterministic: true } };
   }
-  let definition = await definitionFor(core, target, scope);
+  let typeEntry = await definitionFor(core, target, scope);
+  let definition = typeEntry?.definition;
+  let typeChain = typeEntry?.types;
   if (target.kind === 'type' && !definition) {
     // Nothing else can be said about a type nobody can resolve: whether it
     // carries the operation is a question about a definition that is not
@@ -701,9 +990,14 @@ async function resolveUngated(
     if (!carries(target, kind, declared.base)) {
       throw notAllowed(target, name, kind, declared.base);
     }
-    return { definition: declared, typeDefinition: definition };
+    return {
+      definition: declared,
+      typeDefinition: definition,
+      typeChain,
+      declared: true,
+    };
   }
-  if (!isBaseOperation(name)) {
+  if (!isBaseOperation(name) || own(DECLARATION_ONLY, name)) {
     throw new OperationFailure({
       id: targetId(target),
       status: 404,
@@ -720,12 +1014,12 @@ async function resolveUngated(
   // construction.
   return {
     definition: { base: name, deterministic: true },
-    ...(definition ? { typeDefinition: definition } : {}),
+    ...(definition ? { typeDefinition: definition, typeChain } : {}),
   };
 }
 
-// Whether a `read` of this target may be answered without running it, asked
-// before anything is read.
+// What a `read` of this target would answer with, and whether it may be
+// answered without running it — both asked before anything is read.
 //
 // The card+json `GET` has to know this before it answers, because a projected
 // body is not the representation its validator describes: the ETag is built
@@ -759,61 +1053,225 @@ async function resolveUngated(
 // the `output` stage decides that.
 export type ReadShape = 'plain' | 'staged' | 'unresolved';
 
-export async function readShape(
+// What a `read` of this target would answer with, settled from its definition
+// alone. Both members are facts about the type rather than about the request,
+// which is what lets one answer be remembered across requests.
+export interface ReadPlan {
+  shape: ReadShape;
+  // The link strategy the type's `read` declares, `full` where it declares
+  // none. The same hazard `shape` exists for applies to it: an ETag is built
+  // from the index row, and a row says nothing about how much of the link
+  // graph a type's declaration carries — so a caller building a validator
+  // ahead of the assembly folds this in, or a card whose type narrows its
+  // strategy keeps the validator it had and a conditional request is answered
+  // 304 with the wider body still in the client's cache.
+  links: LinkStrategy;
+  // The prerendered formats the type's `read` serves data-only, none where it
+  // declares none. Reads rooted at the card that serve its prerendered HTML
+  // without running the read — the single-card HTML read and the host-mode
+  // page — withhold these, so the declaration holds on every route a card's
+  // markup leaves the realm by, and not only on the ones that run the read.
+  unshareableFormats: PrerenderedHtmlFormat[];
+}
+
+export async function readPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope = newOperationScope(core),
   // Answers already reached, held by the caller across requests. The
   // definition lookup behind this is a database read, and it lands on the two
   // paths that exist to answer without one — so a caller that can say when the
-  // answer may have changed should hand one in. See `#readShapeByURL`.
-  memo?: Map<string, ReadShape>,
-): Promise<ReadShape> {
+  // answer may have changed should hand one in. See `#readPlanByURL`.
+  memo?: Map<string, ReadPlan>,
+): Promise<ReadPlan> {
   let remembered = memo?.get(url.href);
   if (remembered) {
     return remembered;
   }
-  let shape = await resolveReadShape(core, url, scope);
-  // An unresolved read is not remembered: it is a declaration with findings
-  // against it, which the author is presumably mid-way through fixing, and
-  // the answer costs the same to reach again.
-  if (shape !== 'unresolved') {
-    memo?.set(url.href, shape);
+  let { plan, rememberable } = await resolveReadPlan(core, url, scope);
+  if (rememberable) {
+    memo?.set(url.href, plan);
   }
-  return shape;
+  return plan;
 }
 
-async function resolveReadShape(
+// A read plan, and whether it holds until this realm's index next changes —
+// the event the caller's memo is cleared on.
+//
+// It does not when the plan could read differently on the next ask with this
+// realm's index standing still: a read with findings against it, which the
+// author is presumably mid-way through fixing; a type entry that could not be
+// read; a path the realm holds no row for, which every path a caller names
+// would otherwise take a memo entry for; and a type declared in another
+// realm's module, whose declaration can change without this realm's index
+// moving at all.
+async function resolveReadPlan(
   core: OperationCore,
   url: URL,
   scope: OperationScope,
-): Promise<ReadShape> {
-  let definition: OperationDefinition;
+): Promise<{ plan: ReadPlan; rememberable: boolean }> {
+  let resolved: Awaited<ReturnType<typeof resolveUngated>>;
   try {
-    definition = await resolveOperation(
+    // Unattributed whatever the caller's scope says: this asks what kind of
+    // read the target has, not whether anyone may run it. A request that goes
+    // on to assemble is resolved again with its caller, but the two fast paths
+    // this answer opens — the conditional 304 and the shared response cache —
+    // are served without that second resolution, so nothing that judges the
+    // caller runs on them. The cross-request memo in `readPlan` is keyed by
+    // URL alone, which is sound only while this question stays caller-less.
+    // For the same reason the policy gate never runs here, and a caller the
+    // realm ACL declined is kept off both fast paths by the handler.
+    resolved = await resolveUngated(
       core,
       { kind: 'instance', url: url.href },
       'read',
-      // Unattributed whatever the caller's scope says: this asks what kind of
-      // read the target has, not whether anyone may run it. A request that
-      // goes on to assemble is resolved again with its caller, but the two
-      // fast paths this answer opens — the conditional 304 and the shared
-      // response cache — are served without that second resolution, so
-      // nothing that judges the caller runs on them. The cross-request memo in
-      // `readShape` is keyed by URL alone, which is sound only while this
-      // question stays caller-less. For the same reason the policy gate never
-      // runs here, and a caller the realm ACL declined is kept off both fast
-      // paths by the handler.
       scope.derive({
         caller: { kind: 'unattributed' },
         coarseDeclined: 'none',
       }),
     );
   } catch {
-    return 'unresolved';
+    // Nothing is known about the read, including how much of the link graph it
+    // would carry, so the widest strategy is reported — which is the one that
+    // keeps the caller off every fast path it could take with a narrower
+    // answer. The refusal this read has coming is what the request gets.
+    //
+    // Every format is reported data-only, for the opposite reason: the routes
+    // that read this serve markup without running the read, so no refusal
+    // follows to stand in for a declaration nobody could read, and a
+    // withholding the realm cannot interpret is not a reason to serve more.
+    return {
+      plan: {
+        shape: 'unresolved',
+        links: 'full',
+        unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+      },
+      rememberable: false,
+    };
   }
-  return hasTransforms(definition) ? 'staged' : 'plain';
+  let { definition, typeDefinition, declared } = resolved;
+  // A type entry that resolved answers the `html` question itself, whether or
+  // not it declares a `read`. Without one the read resolved to the built-in
+  // behavior, which says nothing about what the card's type withholds: the
+  // row may be errored, or its type's entry unreadable, and either still
+  // serves the markup an earlier render left.
+  let html = typeDefinition
+    ? htmlAnswer(core, declared ? definition : undefined, typeDefinition)
+    : await htmlDeclarationOf(core, url, scope);
+  return {
+    plan: {
+      shape: hasTransforms(definition) ? 'staged' : 'plain',
+      // Read the same way the executor reads it, so the validator this answer
+      // is folded into names the shape the body will actually take.
+      links: readLinkStrategyOf(definition.links),
+      unshareableFormats: html.unshareableFormats,
+    },
+    rememberable: html.rememberable,
+  };
 }
+
+// The prerendered formats reads rooted at a card serve data-only, and whether
+// that answer holds until this realm's index next changes.
+export interface HtmlDeclarationAnswer {
+  unshareableFormats: PrerenderedHtmlFormat[];
+  rememberable: boolean;
+}
+
+// What the `read` a card's type declares withholds, read off the row the realm
+// holds for the card, healthy or errored.
+//
+// An errored row still names its type — on the document its last good visit
+// left, or in the adoption chain the realm recorded — and it still serves the
+// markup an earlier render left, so its type's declaration governs that markup
+// as it would a healthy card's. A path the realm holds no row for serves no
+// markup, so it withholds nothing.
+//
+// What the realm cannot read withholds every format: a row that names no type,
+// a type whose entry does not resolve, a `read` declaration lowering flagged.
+// A withholding the realm cannot interpret is not a reason to serve more.
+export async function htmlDeclarationOf(
+  core: OperationCore,
+  url: URL,
+  scope: OperationScope,
+): Promise<HtmlDeclarationAnswer> {
+  let codeRef: CodeRef | undefined;
+  if (urlNamesFile(url)) {
+    if (!(await core.indexQueryEngine.file(url))) {
+      return { unshareableFormats: [], rememberable: false };
+    }
+    codeRef = core.fileDefCodeRef(url);
+  } else {
+    let row = await scope.peekInstance(url);
+    if (!row) {
+      return { unshareableFormats: [], rememberable: false };
+    }
+    codeRef =
+      row.instance?.meta?.adoptsFrom ??
+      (row.type === 'instance-error'
+        ? codeRefFromInternalKey(row.types?.[0])
+        : undefined);
+  }
+  let resolved = codeRef ? core.resolveCodeRef(codeRef, url) : undefined;
+  let typeDefinition: Definition | undefined;
+  if (resolved) {
+    try {
+      typeDefinition = await core.definitionLookup.lookupDefinition(resolved);
+    } catch {
+      typeDefinition = undefined;
+    }
+  }
+  if (!typeDefinition) {
+    return {
+      unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+      rememberable: false,
+    };
+  }
+  return htmlAnswer(
+    core,
+    own(typeDefinition.operations, 'read'),
+    typeDefinition,
+  );
+}
+
+function htmlAnswer(
+  core: OperationCore,
+  read: OperationDefinition | undefined,
+  typeDefinition: Definition,
+): HtmlDeclarationAnswer {
+  if (read?.invalid) {
+    return {
+      unshareableFormats: [...PRERENDERED_HTML_FORMATS],
+      rememberable: false,
+    };
+  }
+  return {
+    unshareableFormats: unshareableFormatsOf(read?.html),
+    rememberable: declaredWhereTheIndexMoves(core, typeDefinition.codeRef),
+  };
+}
+
+// Whether a change to the module declaring this type moves this realm's index,
+// which is what clears a memo of what the type declares. A module of this
+// realm's own does. The base realm's modules change only with a deploy, which
+// starts every realm afresh. A module of any other realm changes on that
+// realm's schedule, and invalidates that realm's cards alone.
+function declaredWhereTheIndexMoves(
+  core: OperationCore,
+  codeRef: CodeRef,
+): boolean {
+  if (!isResolvedCodeRef(codeRef)) {
+    return false;
+  }
+  let module = codeRef.module;
+  return (
+    module.startsWith(core.realmURL) ||
+    module.startsWith(baseRealm.url) ||
+    module.startsWith(BASE_REALM_PREFIX)
+  );
+}
+
+// The registered prefix the base realm's modules are spelled with.
+const BASE_REALM_PREFIX = '@cardstack/base/';
 
 export async function runOperation(
   core: OperationCore,
@@ -834,8 +1292,17 @@ export async function runOperation(
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(canonical.actor),
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
+    ...(canonical.seal ? { seal: canonical.seal } : {}),
+    ...(canonical.route ? { route: canonical.route } : {}),
   });
-  let definition = await resolveOperation(core, target, canonical.name, scope);
+  // A decision made in the same request is reused only for the target it was
+  // made about. The envelope canonicalizes the realm root to its index card for
+  // every name, and a stored-bytes read here keeps the root, so the two can
+  // differ.
+  let definition =
+    opts.gated && sameTarget(target, request.target)
+      ? admittedDefinition(opts.gated, target, canonical.name, scope)
+      : await resolveOperation(core, target, canonical.name, scope);
   // The four stages of an invocation, in the one order they run: the `input`
   // transform over the payload, the `params` check against what it produced,
   // the behavior, and the `output` transform over its result. The check runs
@@ -989,21 +1456,26 @@ async function runBaseOperation(
       // and an executor that peeked a row would put back the index read
       // resolving it definition-free just took out.
       return await readSourceOperation(core, canonical, opts);
+    case 'explain':
+      return await explainOperation(core, canonical);
+    case 'validate':
+      return await validateOperation(core, canonical);
     case 'query':
-      // A declared query is a saved search, not work the realm carries out
-      // here: an invocation resolves its markers with `lowerQueryOperation`
-      // and runs the result on the search engine, which is the one place a
-      // query is planned and executed. Reaching this with a perfectly valid
-      // declaration means the caller used the wrong entry point, so it is
-      // theirs to correct rather than a fault to page someone about.
+      // A declared query is a saved search, invoked by naming it in a request
+      // to `_search` or `_federated-search`. The realm resolves it there, from
+      // its own definition of the type, and the search engine plans and
+      // executes the query it resolves to; nothing in an operation batch runs
+      // one. Reaching this with a perfectly valid declaration means the caller
+      // used the wrong entry point, so it is theirs to correct rather than a
+      // fault to page someone about.
       throw new OperationFailure({
         id: targetId(canonical.target),
         status: 400,
         code: 'wrong-entry-point',
         title: 'Operation not executable here',
         detail:
-          `operation "${canonical.name}" is a query; resolve it with ` +
-          `lowerQueryOperation and run it on the search engine`,
+          `operation "${canonical.name}" is a query; name it in a request ` +
+          `to _search or _federated-search, which runs it on the search engine`,
       });
     case 'create':
     case 'update':
@@ -1200,16 +1672,32 @@ export function instanceTargetURL(request: OperationRequest): URL {
 // parse is left alone — the executor has the better refusal for that.
 function assertInRealm(core: OperationCore, target: OperationTarget): void {
   if (target.kind === 'type') {
-    // A type target names the realm its operation is scoped to. Nothing reads
-    // it here, but it is resolved against later, so an unparseable one is the
-    // caller's mistake rather than something to throw out of a URL constructor
-    // deeper in.
-    if (!parseTargetURL(target.realm)) {
+    // A type target names the realm its operation is scoped to, which for a
+    // create is the realm the card is minted in. An unparseable one is the
+    // caller's mistake rather than something to throw out of a URL
+    // constructor deeper in.
+    let realm = parseTargetURL(target.realm);
+    if (!realm) {
       throw new OperationFailure({
         status: 400,
         code: 'invalid-params',
         title: 'Invalid target',
         detail: `target realm "${target.realm}" is not a URL`,
+      });
+    }
+    // Another realm's type target is not this core's to resolve. Its ref
+    // would be resolved against that realm, and its operation would be judged
+    // against this realm's policy.
+    if (
+      ensureTrailingSlash(realm.href) !== ensureTrailingSlash(core.realmURL)
+    ) {
+      throw new OperationFailure({
+        status: 400,
+        code: 'invalid-params',
+        title: 'Invalid target',
+        detail:
+          `target realm ${target.realm} is not ${core.realmURL}; an ` +
+          `operation runs in the realm that serves it`,
       });
     }
     return;
@@ -1223,11 +1711,17 @@ function assertInRealm(core: OperationCore, target: OperationTarget): void {
 // The type entry a target's operations are declared on. Undefined where it
 // cannot be read — an unresolvable ref, an index row with no `adoptsFrom`, an
 // unreachable module. Callers decide what that means for them.
+//
+// A type target's entry is read whole, its definition with the adoption chain
+// recorded beside it, because the policy gate judges the type by that chain.
+// Read apart, a module edit landing between the two reads would pair one
+// type's declarations with another's chain. A card's chain is its own row's,
+// so an instance target reads the definition alone.
 async function definitionFor(
   core: OperationCore,
   target: OperationTarget,
   scope: OperationScope,
-): Promise<Definition | undefined> {
+): Promise<{ definition: Definition; types?: string[] } | undefined> {
   let codeRef: CodeRef | undefined;
   let relativeTo: URL;
   if (target.kind === 'type') {
@@ -1255,7 +1749,11 @@ async function definitionFor(
     return undefined;
   }
   try {
-    return await core.definitionLookup.lookupDefinition(resolved);
+    if (target.kind === 'type') {
+      return await core.definitionLookup.lookupDefinitionEntry(resolved);
+    }
+    let definition = await core.definitionLookup.lookupDefinition(resolved);
+    return definition ? { definition } : undefined;
   } catch {
     return undefined;
   }

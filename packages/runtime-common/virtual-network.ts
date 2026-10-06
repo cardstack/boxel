@@ -14,6 +14,7 @@ import {
   PackageShimHandler,
   PACKAGES_FAKE_ORIGIN,
   type ModuleLike,
+  type ShimRetryDeps,
 } from './package-shim-handler.ts';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher.ts';
@@ -91,10 +92,11 @@ export class VirtualNetwork {
     nativeFetch = createEnvironmentAwareFetch(),
     opts?: {
       fetchHeaderTimeoutMs?: number;
-      // A timer scheduler for the fetch retry path. Defaults to the global
+      // A timer scheduler for the fetch retry path, which includes the
+      // package shim resolvers' retry backoff. Defaults to the global
       // setTimeout; the host passes a NATIVE (un-stubbed) scheduler so the
-      // header-timeout abort and retry backoff still fire during prerender,
-      // where render-timer-stub disables the global setTimeout.
+      // header-timeout abort and both retry backoffs still fire during
+      // prerender, where render-timer-stub disables the global setTimeout.
       scheduleFetchTimer?: (callback: () => void, ms: number) => unknown;
     },
   ) {
@@ -186,14 +188,38 @@ export class VirtualNetwork {
     return moduleIdentifier;
   };
 
-  private packageShimHandler = new PackageShimHandler(this.resolveImport);
+  // A shim resolver's retry backoff sleeps on the fetch timer, so during a
+  // prerender its retries run out and the resolver gives up promptly rather
+  // than waiting on a stubbed setTimeout that never fires. Giving up promptly
+  // matters even though a retried `import()` of a chunk that failed to fetch
+  // fails again in the same document: the prerender recognises that failure
+  // and moves the render to a fresh tab, which it can only do once the render
+  // has failed. The resolver's deadline runs on the same timer for the same
+  // reason: on the stubbed setTimeout it would never fire, and a resolver that
+  // never settles would park the import until the render's own timeout instead
+  // of failing with the specifier named. `clearTimeout` isn't stubbed, so it
+  // cancels the fetch timer's handle. The scheduler is read when a timer
+  // starts, since the constructor assigns it after this field.
+  private packageShimHandler = new PackageShimHandler(this.resolveImport, {
+    delay: (ms) =>
+      new Promise<void>((resolve) => {
+        this.scheduleFetchTimer(resolve, ms);
+      }),
+    scheduleTimeout: (callback, ms) => {
+      let handle = this.scheduleFetchTimer(callback, ms);
+      return () => clearTimeout(handle as ReturnType<typeof setTimeout>);
+    },
+  });
 
   shimModule(moduleIdentifier: string, module: ModuleLike) {
     this.packageShimHandler.shimModule(moduleIdentifier, module);
   }
 
-  shimAsyncModule(descriptor: ModuleDescriptor) {
-    this.packageShimHandler.shimAsyncModule(descriptor);
+  // `retryDeps` reaches the handler's retry and deadline knobs, which is how
+  // a test registers a shim through the network it is exercising instead of
+  // reaching past it to build a handler of its own.
+  shimAsyncModule(descriptor: ModuleDescriptor, retryDeps?: ShimRetryDeps) {
+    this.packageShimHandler.shimAsyncModule(descriptor, retryDeps);
   }
 
   // Lets a Loader serve a module shimmed on this network from its module-fetch

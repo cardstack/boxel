@@ -23,6 +23,7 @@ import type {
   FileMetaResource,
   QueryResultsMeta,
   LinkShapePolicy,
+  ServedRealm,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -56,7 +57,11 @@ import {
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { getLocalConfig as getSynapseConfig } from '../../synapse.ts';
+import {
+  getLocalConfig as getSynapseConfig,
+  loginAsMatrixAdmin,
+  registerUser,
+} from '../../synapse.ts';
 import { RealmServer } from '../../server.ts';
 import type { LiveSearchCache } from '../../live-search-cache.ts';
 import jsonwebtoken from 'jsonwebtoken';
@@ -65,6 +70,8 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
+import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import { findRealm } from '../../lib/realm-routing.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
 import {
@@ -316,10 +323,13 @@ export const localBaseRealm = isEnvironmentMode()
   : 'http://localhost:4201/base';
 // The catalog realm the test stack serves: the pinned catalog test subset
 // (packages/catalog/test-subset.json), at the URL the prerender host bundle
-// resolves `@cardstack/catalog/` to.
+// resolves `@cardstack/catalog/` to. The stack serves it over TLS, and an
+// http URL for it answers with a redirect that a module load in the
+// prerenderer cannot follow, so a definition the realm looks up in a catalog
+// module would never load.
 export const localCatalogRealm = isEnvironmentMode()
   ? `${serviceURL('realm-server')}/catalog/`
-  : 'http://localhost:4201/catalog/';
+  : 'https://localhost:4201/catalog/';
 export const matrixURL = new URL(
   isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
 );
@@ -413,6 +423,31 @@ function getMatrixRegistrationSecret(): string {
 }
 
 export const matrixRegistrationSecret = getMatrixRegistrationSecret();
+
+// Tests that act as the synapse admin `@admin:localhost` (password
+// `password`) call this first. CI registers only the realm-owning users, so
+// the admin is registered on first use; a synapse that already has it keeps
+// the same credentials.
+export async function ensureMatrixAdminUser(): Promise<void> {
+  try {
+    await loginAsMatrixAdmin({
+      matrixURL,
+      adminUsername: 'admin',
+      adminPassword: 'password',
+    });
+    return;
+  } catch {
+    // not registered yet
+  }
+  await registerUser({
+    matrixURL,
+    displayname: 'admin',
+    username: 'admin',
+    password: 'password',
+    registrationSecret: matrixRegistrationSecret,
+    admin: true,
+  });
+}
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
@@ -511,16 +546,11 @@ export function makeTestReconciler(
           `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
         );
       }
-      let diskPath: string;
-      if (row.kind === 'bootstrap') {
-        diskPath = row.disk_id;
-      } else if (row.kind === 'source') {
-        diskPath = join(dynamicMountDeps.realmsRootPath, row.disk_id);
-      } else {
-        diskPath = join(
-          dynamicMountDeps.realmsRootPath,
-          PUBLISHED_DIRECTORY_NAME,
-          row.disk_id,
+      // Resolved as the production mount resolves it.
+      let diskPath = realmDiskPath(row, dynamicMountDeps.realmsRootPath);
+      if (!diskPath) {
+        throw new Error(
+          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
         );
       }
       let adapter = new NodeAdapter(
@@ -1332,11 +1362,13 @@ export async function createRealm({
   videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  skipBootIndex,
   mediaCacheAdapter,
-  screenshotSyncWaitMs,
+  captureSyncWaitMs,
   readIndexDrainBudgetMs,
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
+  realmFor,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1367,15 +1399,20 @@ export async function createRealm({
   // Production sets this via `resolveFullIndexOnStartup`; tests opt in
   // explicitly because `createRealm` has no realm-registry row to read.
   fullIndexOnStartup?: true;
+  // Forwarded to the Realm constructor's `skipBootIndex` option: the realm
+  // mounts and serves without indexing, as the dev realm server's realms do on
+  // the realm-server test stack, which starts it with
+  // `REALM_SERVER_SKIP_BOOT_INDEX=true`.
+  skipBootIndex?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
-  // MediaCache object store for the realm's `_screenshot/` route; absent
-  // means every screenshot request serves as an uncaptured miss.
+  // MediaCache object store for the realm's `_capture/` route; absent
+  // means every capture request serves as an uncaptured miss.
   mediaCacheAdapter?: MediaCacheAdapter;
-  // Shrinks the `_screenshot/` route's on-demand sync-wait budget so tests
+  // Shrinks the `_capture/` route's on-demand sync-wait budget so tests
   // can exercise the 503 + Retry-After path without holding real time.
-  screenshotSyncWaitMs?: number;
+  captureSyncWaitMs?: number;
   // Shrinks the card read endpoints' read-your-writes indexing-drain budget
   // so tests can exercise the bounded-wait path without holding real time.
   readIndexDrainBudgetMs?: number;
@@ -1389,6 +1426,9 @@ export async function createRealm({
   // instance to read its stats, or `ttlMs: 0` to keep coalescing while
   // disabling retention.
   cardDocumentCache?: CardDocumentCache;
+  // The other realms the realm can reach, for an explain on its policy card
+  // that asks about a target in one of them.
+  realmFor?: (url: URL) => Promise<ServedRealm | undefined>;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1468,10 +1508,12 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
       cardDocumentCache,
+      ...(realmFor ? { realmFor } : {}),
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
-      ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
+      ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
+      ...(captureSyncWaitMs !== undefined ? { captureSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
         ? { readIndexDrainBudgetMs }
@@ -1578,7 +1620,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
-    // The indexing worker persists declared screenshots when a store is
+    // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
   });
@@ -1690,6 +1732,7 @@ export async function runTestRealmServerWithRealms({
   prerenderer: providedPrerenderer,
   liveSearchCache,
   linkShapePolicy,
+  mediaCacheAdapter,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1716,6 +1759,9 @@ export async function runTestRealmServerWithRealms({
   // Omit and every live read keeps its closure, which is what a server with no
   // admission gate to read a load from would do anyway.
   linkShapePolicy?: LinkShapePolicy;
+  // The store every capture surface persists to: the worker's capture task,
+  // each realm's `_screenshot/` route, and the server's `_screenshot-card`.
+  mediaCacheAdapter?: MediaCacheAdapter;
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1738,12 +1784,15 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mediaCacheAdapter,
   });
   await worker.run();
 
   let createdRealms: Realm[] = [];
   let realmAdapters: RealmAdapter[] = [];
   let matrixUsers = ['test_realm', 'node-test_realm'];
+  // Built once every realm is, which is before any of them reaches another.
+  let reconciler: RealmRegistryReconciler | undefined;
 
   for (let [index, realmConfig] of realms.entries()) {
     let realmDir = join(realmsRootPath, `realm_${index}`);
@@ -1762,6 +1811,17 @@ export async function runTestRealmServerWithRealms({
       dbAdapter,
       enableFileWatcher,
       definitionLookup,
+      mediaCacheAdapter,
+      // Every realm this server serves, reached as the production server
+      // reaches them: found without being mounted.
+      realmFor: async (url) =>
+        reconciler
+          ? await findRealm(url, {
+              realms: createdRealms,
+              reconciler,
+              dbAdapter,
+            })
+          : undefined,
     });
     await realm.logInToMatrix();
     virtualNetwork.mount(realm.handle);
@@ -1776,7 +1836,7 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
-  let reconciler = makeTestReconciler(dbAdapter, createdRealms, {
+  reconciler = makeTestReconciler(dbAdapter, createdRealms, {
     realmsRootPath,
     virtualNetwork,
     queue: publisher,
@@ -1806,6 +1866,7 @@ export async function runTestRealmServerWithRealms({
     prerenderer,
     liveSearchCache,
     linkShapePolicy,
+    mediaCacheAdapter,
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
@@ -2169,15 +2230,11 @@ export function setupMatrixRoom(
 
   return {
     matrixClient,
+    // Every event the room received at or after `since`, however many that
+    // is. The comparison is inclusive so an event sent in the same millisecond
+    // the caller recorded its start time still counts.
     getMessagesSince: async function (since: number) {
-      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-      // Allow same-ms clock values between the test process and matrix so we don't
-      // miss events that are emitted immediately after we record the start time.
-      let messagesAfterSentinel = allMessages.filter(
-        (m) => m.origin_server_ts >= since,
-      );
-
-      return messagesAfterSentinel;
+      return await matrixClient.roomMessagesSince(testAuthRoomId!, since);
     },
   };
 }
@@ -3189,6 +3246,141 @@ export function setupPermissionedRealmsCached(
   });
 }
 
+// Builds a template database once per key, for `setupDB`'s
+// `templateDatabase`, so each test starts from realms already indexed. It is
+// for a suite the cached realm helpers above don't fit, such as several realms
+// on one realm server: `build` brings up what the suite's own `beforeEach`
+// does and returns how to tear it down. Once the builder's queue drains, its
+// database is snapshotted as the template.
+//
+// A realm that boots on a copy finds its index there and skips its boot index
+// (see `Realm#startup`), so the copy has to hold what each test would index:
+// `key` must change whenever what `build` writes does. The cache spans the
+// whole test process, so a module's key must also differ from every other
+// module's: use its full path (`import.meta.filename`), not its basename,
+// which modules in different directories can share.
+export function setupTestDatabaseTemplate(
+  hooks: NestedHooks,
+  {
+    key,
+    build,
+  }: {
+    key: unknown;
+    build: (args: {
+      dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+    }) => Promise<() => Promise<void>>;
+  },
+): () => string | undefined {
+  let cacheKey = hashCacheKeyPayload({ kind: 'test-database-template', key });
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let acquiredTemplateDatabase: string | undefined;
+
+  hooks.before(async function (assert) {
+    // The first acquisition indexes every realm `build` brings up, inside the
+    // module's first test's budget.
+    assert.timeout(300_000);
+    let existing = permissionedRealmTemplateCache.get(cacheKey);
+    if (!existing) {
+      existing = {
+        ready: buildTestDatabaseTemplate(cacheKey, build).catch(
+          async (error) => {
+            permissionedRealmTemplateCache.delete(cacheKey);
+            try {
+              await dropDatabase(templateDatabaseName);
+            } catch {
+              // best-effort cleanup
+            }
+            throw error;
+          },
+        ),
+      };
+      permissionedRealmTemplateCache.set(cacheKey, existing);
+    }
+    await existing.ready;
+    acquiredTemplateDatabase = templateDatabaseName;
+  });
+
+  return () => acquiredTemplateDatabase;
+}
+
+async function buildTestDatabaseTemplate(
+  cacheKey: string,
+  build: Parameters<typeof setupTestDatabaseTemplate>[1]['build'],
+): Promise<void> {
+  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+
+  let dbAdapter: PgAdapter | undefined;
+  let publisher: QueuePublisher | undefined;
+  let runner: QueueRunner | undefined;
+  let teardown: (() => Promise<void>) | undefined;
+
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
+
+  try {
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
+    publisher = new PgQueuePublisher(dbAdapter);
+    runner = new PgQueueRunner({
+      adapter: dbAdapter,
+      workerId: 'template-worker',
+    });
+
+    teardown = await build({ dbAdapter, publisher, runner });
+    await waitForQueueIdle(builderDatabaseName);
+    await teardown();
+    teardown = undefined;
+
+    await publisher.destroy();
+    publisher = undefined;
+    await runner.destroy();
+    runner = undefined;
+    await dbAdapter.close();
+    dbAdapter = undefined;
+
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+  } finally {
+    if (teardown) {
+      try {
+        await teardown();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (publisher) {
+      try {
+        await publisher.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (runner) {
+      try {
+        await runner.destroy();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    if (dbAdapter && !dbAdapter.isClosed) {
+      try {
+        await dbAdapter.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    try {
+      await dropDatabase(builderDatabaseName);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
 export function createJWT(
   realm: Realm,
   user: string,
@@ -3254,13 +3446,17 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
-    allowArbitraryScreenshots?: boolean;
+    allowArbitraryCaptures?: boolean;
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
     // The pointer to the realm's policy card. Typed loosely so a test can
     // write a malformed one.
     policy?: unknown;
+    // How the realm limits and blocks callers its policy admits without a
+    // session. Typed loosely so a test can write malformed ones.
+    anonymousRateLimit?: unknown;
+    anonymousBlocklist?: unknown;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3277,14 +3473,20 @@ export function realmConfigCardJSON(
     attrs.includePrerenderedDefaultRealmIndex =
       config.includePrerenderedDefaultRealmIndex;
   }
-  if (config.allowArbitraryScreenshots !== undefined) {
-    attrs.allowArbitraryScreenshots = config.allowArbitraryScreenshots;
+  if (config.allowArbitraryCaptures !== undefined) {
+    attrs.allowArbitraryCaptures = config.allowArbitraryCaptures;
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
   }
   if (config.policy !== undefined) {
     attrs.policy = config.policy;
+  }
+  if (config.anonymousRateLimit !== undefined) {
+    attrs.anonymousRateLimit = config.anonymousRateLimit;
+  }
+  if (config.anonymousBlocklist !== undefined) {
+    attrs.anonymousBlocklist = config.anonymousBlocklist;
   }
   return JSON.stringify({
     data: {

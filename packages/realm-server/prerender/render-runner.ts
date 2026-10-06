@@ -1,6 +1,6 @@
 import {
-  type DeclaredScreenshotVisitArgs,
-  type DeclaredScreenshotVisitResult,
+  type DeclaredCaptureVisitArgs,
+  type DeclaredCaptureVisitResult,
   type FusedIndexMeta,
   type PrerenderMeta,
   type PrerenderTypes,
@@ -12,9 +12,9 @@ import {
   type FileRenderResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
-  type ScreenshotCaptureSpec,
-  type ScreenshotFormat,
-  type ScreenshotPrerenderResponse,
+  type CaptureRequestSpec,
+  type OnDemandCaptureFormat,
+  type CapturePrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
   type RenderVisitResponse,
@@ -36,8 +36,8 @@ import {
   captureResult,
   captureModule,
   captureFileExtract,
-  captureDeclaredScreenshots,
-  captureScreenshot,
+  captureDeclared,
+  runCapture,
   isRenderError,
   renderAncestors,
   renderHTML,
@@ -48,7 +48,7 @@ import {
   type CaptureOptions,
   type ModuleCapture,
   type FileExtractCapture,
-  type ScreenshotCapture,
+  type PrerenderCapture,
   cardRenderTimeout,
   withTimeout,
   transitionTo,
@@ -114,6 +114,47 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
   // capture with a cleared store/loader cache will workaround this issue.
   [`Failed to execute 'removeChild' on 'Node'`, 'NotFoundError'],
 ];
+
+// Chrome's message for a native `import()` whose fetch failed. In a prerender
+// tab only the host bundle imports natively (card modules load through the
+// Boxel loader, which rewrites their dynamic imports), so the URL it names is a
+// host chunk. The document remembers the failure: every later `import()` of
+// that chunk fails at once without asking the network again, so the tab cannot
+// serve anything that needs the chunk until a fresh document replaces it. No
+// in-page retry can recover it, which is why it evicts the tab.
+const HOST_CHUNK_IMPORT_FAILURE_RE =
+  /Failed to fetch dynamically imported module:?\s*(\S*)/;
+
+// Searches the error, and the errors nested in it, since the failed import is
+// usually the cause of whatever the render reports on top.
+function failedHostChunkImportIn(
+  renderError: RenderError | undefined,
+): string | undefined {
+  let pending: unknown[] = renderError?.error ? [renderError.error] : [];
+  let visited = new Set<unknown>();
+  while (pending.length > 0) {
+    let error = pending.shift();
+    if (!error || typeof error !== 'object' || visited.has(error)) {
+      continue;
+    }
+    visited.add(error);
+    let { message, stack, additionalErrors } =
+      error as Partial<SerializedError>;
+    for (let text of [message, stack]) {
+      if (typeof text !== 'string') {
+        continue;
+      }
+      let match = HOST_CHUNK_IMPORT_FAILURE_RE.exec(text);
+      if (match) {
+        return match[1] || match[0];
+      }
+    }
+    if (Array.isArray(additionalErrors)) {
+      pending.push(...additionalErrors);
+    }
+  }
+  return undefined;
+}
 
 // Title shown on the SerializedError that wraps a captured console
 // or runtime-exception entry. Distinct labels make it obvious in the
@@ -343,7 +384,7 @@ export class RenderRunner {
   ): RenderProfileContext {
     // `card`/`step` mirror what `label` concatenates but stay structured so
     // the artifact sink can key on them; `jobId` is threaded only by the
-    // visit path (on-demand screenshot/module/command renders carry none).
+    // visit path (on-demand capture/module/command renders carry none).
     return { affinityKey, label: `${url} ${step}`, card: url, step, jobId };
   }
 
@@ -451,6 +492,7 @@ export class RenderRunner {
 
       let waitResult = await withTimeout(
         page,
+        requestId,
         async () => {
           const jsHandle = await page.waitForFunction(
             (expectedNonce: string) => {
@@ -579,7 +621,7 @@ export class RenderRunner {
     }
   }
 
-  async captureScreenshotAttempt({
+  async runCaptureAttempt({
     affinityType,
     affinityValue,
     realm,
@@ -597,21 +639,21 @@ export class RenderRunner {
     realm: string;
     url: string;
     auth: string;
-    format: ScreenshotFormat;
-    captureSpec?: ScreenshotCaptureSpec;
+    format: OnDemandCaptureFormat;
+    captureSpec?: CaptureRequestSpec;
     renderOptions?: RenderRouteOptions;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
     signal?: AbortSignal;
   }): Promise<{
-    response: ScreenshotPrerenderResponse;
+    response: CapturePrerenderResponse;
     timings: Timings;
     pool: PoolInfo;
   }> {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     log.info(
-      `screenshot prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
+      `capture prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
@@ -658,64 +700,133 @@ export class RenderRunner {
       );
 
       let renderStart = Date.now();
-      let nonce = String(this.#nonce);
-      // A capture is always a card render. The only caller option it honors is
-      // the realm's `loaderEpoch`, which resets a pooled tab holding a
-      // superseded module graph before this render (see the render route's
-      // loader-epoch synchronization) rather than capturing the old module.
-      // Take just that field rather than spreading the caller's options, so a
-      // capture can never be handed a second, conflicting render kind
-      // (`fileRender` / `fileExtract`).
-      let renderOptions: RenderRouteOptions = {
-        cardRender: true,
-        ...(callerRenderOptions?.loaderEpoch !== undefined
+      // A capture is a card render, or — when the caller asks for
+      // `fileRender` — a file render: the file's resource is extracted in
+      // this tab first, then rendered through its FileDef, the two steps an
+      // index visit takes for a file. Besides that choice the only caller
+      // option a capture honors is the realm's `loaderEpoch`, which resets a
+      // pooled tab holding a superseded module graph before this render (see
+      // the render route's loader-epoch synchronization) rather than
+      // capturing the old module. The options are built from those fields
+      // rather than by spreading the caller's, so a capture is never handed
+      // two conflicting render kinds.
+      let loaderEpochOption =
+        callerRenderOptions?.loaderEpoch !== undefined
           ? { loaderEpoch: callerRenderOptions.loaderEpoch }
-          : {}),
-      };
-      let serializedOptions = serializeRenderRouteOptions(renderOptions);
-      const captureOptions: CaptureOptions = {
-        expectedId: url.replace(/\.json$/i, ''),
-        expectedNonce: nonce,
-        simulateTimeoutMs: opts?.simulateTimeoutMs,
-        timeoutMs: opts?.timeoutMs,
-        ...(captureSpec ? { captureSpec } : {}),
-      };
-
-      let capture = await withTimeout(
-        page,
-        async () => {
-          await transitionTo(
-            page,
-            'render.html',
-            url,
-            nonce,
-            serializedOptions,
-            format,
-            '0',
+          : {};
+      let isFileCapture = callerRenderOptions?.fileRender === true;
+      // A file capture's extract and render share the one time limit a card
+      // capture's render has, so the capture as a whole stays inside the
+      // request and job deadlines sized for a single render, and running out
+      // reads as a render timeout either way.
+      let captureDeadline = Date.now() + (opts?.timeoutMs ?? cardRenderTimeout);
+      let remainingOpts = () => ({
+        ...opts,
+        timeoutMs: Math.max(1, captureDeadline - Date.now()),
+      });
+      let extractError: RenderError | undefined;
+      let renderOptions: RenderRouteOptions | undefined;
+      if (isFileCapture) {
+        let fileDefCodeRef = callerRenderOptions?.fileDefCodeRef;
+        let extracted = fileDefCodeRef
+          ? await this.#extractFileForCapture({
+              page,
+              url,
+              options: {
+                fileExtract: true,
+                fileDefCodeRef,
+                ...loaderEpochOption,
+              },
+              opts: remainingOpts(),
+              affinityKey,
+              signal,
+            })
+          : {
+              error: buildInvalidFileExtractResponseError(
+                url,
+                'a file capture needs the file definition to render it with',
+                { title: 'Invalid capture request' },
+              ),
+            };
+        if ('error' in extracted) {
+          extractError = extracted.error;
+        } else {
+          // The render route reads a file render's model from this stash,
+          // with the realm alongside it (a file render has no response
+          // header to learn its realm from). It stays on the tab after this
+          // render; every capture and every visit clears both stashes before
+          // its own render, so no later render reads it.
+          await abortable(signal, () =>
+            page.evaluate(
+              (data) => {
+                (globalThis as any).__boxelFileRenderData = data;
+              },
+              { resource: extracted.resource, fileDefCodeRef, realmURL: realm },
+            ),
           );
-          return await captureScreenshot(page, format, 0, captureOptions);
-        },
-        opts?.timeoutMs,
-        this.#profileContext(affinityKey, url, `screenshot ${format}`),
-        signal,
-      );
+          renderOptions = {
+            fileRender: true,
+            fileDefCodeRef,
+            ...loaderEpochOption,
+          };
+        }
+      } else {
+        renderOptions = { cardRender: true, ...loaderEpochOption };
+      }
 
-      let response: ScreenshotPrerenderResponse;
+      let capture: PrerenderCapture | RenderError;
+      if (extractError || !renderOptions) {
+        capture = extractError!;
+      } else {
+        let nonce = String(isFileCapture ? ++this.#nonce : this.#nonce);
+        let serializedOptions = serializeRenderRouteOptions(renderOptions);
+        let renderOpts = isFileCapture ? remainingOpts() : opts;
+        const captureOptions: CaptureOptions = {
+          // A card render reports the extensionless card id; a file render
+          // reports the file's own URL.
+          expectedId: isFileCapture ? url : url.replace(/\.json$/i, ''),
+          expectedNonce: nonce,
+          simulateTimeoutMs: renderOpts?.simulateTimeoutMs,
+          timeoutMs: renderOpts?.timeoutMs,
+          ...(captureSpec ? { captureSpec } : {}),
+        };
+        capture = await withTimeout(
+          page,
+          url,
+          async () => {
+            await transitionTo(
+              page,
+              'render.html',
+              url,
+              nonce,
+              serializedOptions,
+              format,
+              '0',
+            );
+            return await runCapture(page, format, 0, captureOptions);
+          },
+          renderOpts?.timeoutMs,
+          this.#profileContext(affinityKey, url, `capture ${format}`),
+          signal,
+        );
+      }
+
+      let response: CapturePrerenderResponse;
       if (isRenderError(capture)) {
         let renderError = capture as RenderError;
         markTimeout(renderError);
         if (
-          await this.#maybeEvict(affinityKey, 'screenshot render', renderError)
+          await this.#maybeEvict(affinityKey, 'capture render', renderError)
         ) {
           poolInfo.evicted = true;
         }
         let isUnusable = poolInfo.evicted || renderError.evict === true;
         response = {
           status: isUnusable ? 'unusable' : 'error',
-          error: renderError.error.message ?? 'screenshot render failed',
+          error: renderError.error.message ?? 'capture render failed',
         };
       } else {
-        let shot = capture as ScreenshotCapture;
+        let shot = capture as PrerenderCapture;
         // Top-level base64/width/height mirror captures[0] for back-compat with
         // the shipped host tool + staging capture command, which read the
         // singular fields.
@@ -734,10 +845,10 @@ export class RenderRunner {
           // response envelope's `meta.timing`/`meta.pool`.
           meta: {
             diagnostics: {
-              screenshotNavMs: shot.stepTimings.navMs,
-              screenshotSettleMs: shot.stepTimings.settleMs,
-              screenshotImagePaintMs: shot.stepTimings.imagePaintMs,
-              screenshotCaptureMs: shot.stepTimings.screenshotMs,
+              captureNavMs: shot.stepTimings.navMs,
+              captureSettleMs: shot.stepTimings.settleMs,
+              captureImagePaintMs: shot.stepTimings.imagePaintMs,
+              cdpCaptureMs: shot.stepTimings.cdpCaptureMs,
             },
           },
         };
@@ -751,6 +862,83 @@ export class RenderRunner {
     } finally {
       release();
     }
+  }
+
+  // The extract half of a file capture: a standalone `render.file-extract`
+  // transition, as an index visit's extract pass runs it, yielding the
+  // resource the capture's file render is hydrated from. A failed extract
+  // comes back as the render error the capture reports.
+  async #extractFileForCapture({
+    page,
+    url,
+    options,
+    opts,
+    affinityKey,
+    signal,
+  }: {
+    page: Page;
+    url: string;
+    options: RenderRouteOptions;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    affinityKey: string;
+    signal?: AbortSignal;
+  }): Promise<
+    | { resource: NonNullable<FileExtractResponse['resource']> }
+    | { error: RenderError }
+  > {
+    let nonce = String(++this.#nonce);
+    let captureOptions: CaptureOptions = {
+      expectedId: url,
+      expectedNonce: nonce,
+      simulateTimeoutMs: opts?.simulateTimeoutMs,
+      timeoutMs: opts?.timeoutMs,
+    };
+    let capture = await withTimeout(
+      page,
+      url,
+      async () => {
+        await transitionTo(
+          page,
+          'render.file-extract',
+          url,
+          nonce,
+          serializeRenderRouteOptions(options),
+        );
+        return await captureFileExtract(page, captureOptions);
+      },
+      opts?.timeoutMs,
+      this.#profileContext(affinityKey, url, 'capture file-extract'),
+      signal,
+    );
+    if (isRenderError(capture)) {
+      return { error: capture as RenderError };
+    }
+    let extract: FileExtractResponse;
+    try {
+      extract = JSON.parse(
+        (capture as FileExtractCapture).value,
+      ) as FileExtractResponse;
+    } catch {
+      return {
+        error: buildInvalidFileExtractResponseError(
+          url,
+          'file extract returned an invalid payload',
+          { title: 'Invalid file extract response' },
+        ),
+      };
+    }
+    if (extract.status !== 'ready' || !extract.resource) {
+      return {
+        error:
+          extract.error ??
+          buildInvalidFileExtractResponseError(
+            url,
+            `file extract of ${url} produced no resource`,
+            { title: 'Invalid file extract response' },
+          ),
+      };
+    }
+    return { resource: extract.resource };
   }
 
   async prerenderModuleAttempt({
@@ -843,6 +1031,7 @@ export class RenderRunner {
 
       let capture = await withTimeout(
         page,
+        url,
         async () => {
           await transitionTo(
             page,
@@ -883,7 +1072,7 @@ export class RenderRunner {
           response = JSON.parse(moduleCapture.value) as ModuleRenderResponse;
           if (response.status !== moduleCapture.status) {
             let renderError = buildInvalidModuleResponseError(
-              page,
+              url,
               `module prerender status mismatch (${moduleCapture.status} vs ${response.status})`,
               { title: 'Invalid module response', evict: true },
             );
@@ -907,10 +1096,24 @@ export class RenderRunner {
                 error: renderError.error,
               },
             };
+          } else if (
+            // A module error the route reports leaves the tab usable, except
+            // one caused by a host chunk the tab failed to import: that
+            // failure sticks to the document, so the eviction reason treats
+            // the tab as unusable and it is replaced.
+            response.status === 'error' &&
+            this.failedHostChunkImport(response.error) &&
+            (await this.#maybeEvict(
+              affinityKey,
+              'module render',
+              response.error,
+            ))
+          ) {
+            poolInfo.evicted = true;
           }
         } catch (_e) {
           let renderError = buildInvalidModuleResponseError(
-            page,
+            url,
             `module prerender returned invalid payload: ${moduleCapture.value}`,
             { title: 'Invalid module response' },
           );
@@ -970,7 +1173,7 @@ export class RenderRunner {
     priority,
     jobId,
     batchId,
-    screenshots,
+    captures,
     renderScope,
     cardSource,
     signal,
@@ -1246,6 +1449,7 @@ export class RenderRunner {
         let extractStart = Date.now();
         let capture = await withTimeout(
           page,
+          url,
           async () => {
             await transitionTo(
               page,
@@ -1303,7 +1507,7 @@ export class RenderRunner {
             ) as FileExtractResponse;
             if (extractResponse.status !== fileCapture.status) {
               let renderError = buildInvalidFileExtractResponseError(
-                page,
+                url,
                 `file extract status mismatch (${fileCapture.status} vs ${extractResponse.status})`,
                 { title: 'Invalid file extract response', evict: true },
               );
@@ -1328,7 +1532,7 @@ export class RenderRunner {
             }
           } catch (_e) {
             let renderError = buildInvalidFileExtractResponseError(
-              page,
+              url,
               `file extract returned invalid payload: ${fileCapture.value}`,
               { title: 'Invalid file extract response' },
             );
@@ -1458,6 +1662,7 @@ export class RenderRunner {
           let stepResult = await this.#step(affinityKey, step, () =>
             withTimeout(
               page,
+              url,
               fn,
               opts?.timeoutMs,
               this.#profileContext(affinityKey, url, step, jobId),
@@ -1491,6 +1696,7 @@ export class RenderRunner {
           let isolatedStart = Date.now();
           let isolatedResult = await withTimeout(
             page,
+            url,
             async () => {
               await transitionTo(
                 page,
@@ -1746,32 +1952,27 @@ export class RenderRunner {
           }
         }
 
-        // Declared screenshots capture on the same warm tab, after the
+        // Declared captures capture on the same warm tab, after the
         // format renders (the hydrated card and its images are already
         // settled and cached). Only the prerender-html half captures — the
-        // caller opts in by sending `screenshots` when it has a MediaCache
+        // caller opts in by sending `captures` when it has a MediaCache
         // to persist into.
-        let cardScreenshots: DeclaredScreenshotVisitResult | undefined;
-        if (
-          !cardShortCircuit &&
-          runHtmlSteps &&
-          !runIndexSteps &&
-          screenshots
-        ) {
-          let { result, escalation } = await this.#declaredScreenshotsStep({
+        let cardCaptures: DeclaredCaptureVisitResult | undefined;
+        if (!cardShortCircuit && runHtmlSteps && !runIndexSteps && captures) {
+          let { result, escalation } = await this.#declaredCapturesStep({
             page,
             kind: 'instance',
             bucket: 'card',
-            screenshots,
+            captures,
             captureOptions,
             affinityKey,
             url,
             jobId,
             timeoutMs: opts?.timeoutMs,
             signal,
-            recordStepMs: (ms) => recordFormatMs('card', 'screenshots', ms),
+            recordStepMs: (ms) => recordFormatMs('card', 'captures', ms),
           });
-          cardScreenshots = result;
+          cardCaptures = result;
           if (escalation) {
             applyStepError(escalation.error, escalation.evicted);
           }
@@ -1779,9 +1980,9 @@ export class RenderRunner {
             // The settle-time deps snapshot read after the isolated render
             // predates the captures above — a capture-only component's loads
             // (linked cards, their images) land in the tracker only during
-            // its render.screenshot render. Re-snapshot now so those loads
+            // its render.capture render. Re-snapshot now so those loads
             // fan into the row's deps and edits to that data invalidate the
-            // screenshot. Best-effort like the initial read: a null refresh
+            // capture. Best-effort like the initial read: a null refresh
             // (stale host build, dead page) keeps the settle-time deps.
             let refreshedDeps = await abortable(signal, () =>
               this.#refreshCapturedDeps(page),
@@ -1813,7 +2014,7 @@ export class RenderRunner {
           ...(meta as PrerenderMeta),
           ...(capturedDeps ? { deps: capturedDeps } : {}),
           ...(cardError ? { error: cardError } : {}),
-          ...(cardScreenshots ? { screenshots: cardScreenshots } : {}),
+          ...(cardCaptures ? { captures: cardCaptures } : {}),
           iconHTML,
           isolatedHTML,
           headHTML,
@@ -1963,7 +2164,7 @@ export class RenderRunner {
             // with the visit's realm alongside — a file render has no
             // response header to learn its realm from (the card branch reads
             // x-boxel-realm-url off the card GET), and the route needs it to
-            // compose declaration-derived screenshot URLs.
+            // compose declaration-derived capture URLs.
             await abortable(signal, () =>
               page.evaluate(
                 (data) => {
@@ -2001,6 +2202,7 @@ export class RenderRunner {
             let isolatedStart = Date.now();
             let isolatedResult = await withTimeout(
               page,
+              url,
               async () => {
                 await transitionTo(
                   page,
@@ -2055,6 +2257,7 @@ export class RenderRunner {
             let iconStart = Date.now();
             let iconResult = await withTimeout(
               page,
+              url,
               async () => {
                 await transitionTo(
                   page,
@@ -2095,6 +2298,7 @@ export class RenderRunner {
               () =>
                 withTimeout(
                   page,
+                  url,
                   () => renderHTML(page, 'head', 0, captureOptions),
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, 'file head/0', jobId),
@@ -2190,6 +2394,7 @@ export class RenderRunner {
               let res = await this.#step(affinityKey, step.name, () =>
                 withTimeout(
                   page,
+                  url,
                   step.cb,
                   opts?.timeoutMs,
                   this.#profileContext(affinityKey, url, step.name, jobId),
@@ -2212,13 +2417,13 @@ export class RenderRunner {
             }
           }
 
-          // The file rendering's declared screenshots, mirroring the card
+          // The file rendering's declared captures, mirroring the card
           // pass's capture step above: same warm tab, after the file's format
           // renders, and only when the caller can persist the bytes. The
-          // render.screenshots roster and render.screenshot captures read the
+          // render.captures roster and render.capture captures read the
           // parent render model's instance, which the fileRender transitions
           // above have set to the hydrated FileDef — so the roster here is
-          // the file family's `static screenshots`, not the card's.
+          // the file family's `static captures`, not the card's.
           //
           // Unlike the card half, no `#refreshCapturedDeps` follows these
           // captures — deliberately: a file row's deps are the extract
@@ -2228,27 +2433,22 @@ export class RenderRunner {
           // file row's deps, so edits to that data won't invalidate the
           // capture. A family like that needs this gate to grow the card
           // half's re-snapshot before it can rely on recapture.
-          let fileScreenshots: DeclaredScreenshotVisitResult | undefined;
-          if (
-            !fileShortCircuit &&
-            runHtmlSteps &&
-            !runIndexSteps &&
-            screenshots
-          ) {
-            let { result, escalation } = await this.#declaredScreenshotsStep({
+          let fileCaptures: DeclaredCaptureVisitResult | undefined;
+          if (!fileShortCircuit && runHtmlSteps && !runIndexSteps && captures) {
+            let { result, escalation } = await this.#declaredCapturesStep({
               page,
               kind: 'file',
               bucket: 'file',
-              screenshots,
+              captures,
               captureOptions,
               affinityKey,
               url,
               jobId,
               timeoutMs: opts?.timeoutMs,
               signal,
-              recordStepMs: (ms) => recordFormatMs('file', 'screenshots', ms),
+              recordStepMs: (ms) => recordFormatMs('file', 'captures', ms),
             });
-            fileScreenshots = result;
+            fileCaptures = result;
             if (escalation) {
               applyStepError(escalation.error, escalation.evicted);
             }
@@ -2256,7 +2456,7 @@ export class RenderRunner {
 
           let fileResponse: FileRenderResponse = {
             ...(fileError ? { error: fileError } : {}),
-            ...(fileScreenshots ? { screenshots: fileScreenshots } : {}),
+            ...(fileCaptures ? { captures: fileCaptures } : {}),
             iconHTML,
             isolatedHTML,
             headHTML,
@@ -2362,6 +2562,15 @@ export class RenderRunner {
     return undefined;
   }
 
+  // The host chunk a render failed to import, if its error says one failed —
+  // see HOST_CHUNK_IMPORT_FAILURE_RE. The chunk's URL when the error names it,
+  // or the matched message when it does not.
+  failedHostChunkImport(
+    renderError: RenderError | undefined,
+  ): string | undefined {
+    return failedHostChunkImportIn(renderError);
+  }
+
   #isAuthError(err?: RenderError): boolean {
     let status = Number(err?.error?.status);
     return status === 401 || status === 403;
@@ -2389,7 +2598,7 @@ export class RenderRunner {
 
   // Post-settle re-snapshot via the render route's refresh hook: the card's
   // tracking session accumulates through child-route renders (capture-only
-  // screenshot components), so a late snapshot is a superset of the
+  // capture components), so a late snapshot is a superset of the
   // settle-time one. Best-effort like #readCapturedDeps; null when the hook
   // is absent (stale host build) or the page died mid-call.
   async #refreshCapturedDeps(page: Page): Promise<string[] | null> {
@@ -2435,18 +2644,18 @@ export class RenderRunner {
     return { ok: true, value: r as T };
   }
 
-  // One rendering's declared-screenshot capture step, shared by the card and
+  // One rendering's declared-capture step, shared by the card and
   // file passes: runs the capture against the pass's settled page and
   // normalizes a step failure into the all-slots-errored result — a failed
-  // capture is an absent screenshot, never an errored row (the broken-links
+  // capture is an absent capture, never an errored row (the broken-links
   // model). Only an eviction or an auth failure comes back as an escalation
   // for the caller to fold into its pass error, since the page is then
   // unusable for anyone.
-  async #declaredScreenshotsStep({
+  async #declaredCapturesStep({
     page,
     kind,
     bucket,
-    screenshots,
+    captures,
     captureOptions,
     affinityKey,
     url,
@@ -2458,7 +2667,7 @@ export class RenderRunner {
     page: Page;
     kind: 'instance' | 'file';
     bucket: 'card' | 'file';
-    screenshots: DeclaredScreenshotVisitArgs;
+    captures: DeclaredCaptureVisitArgs;
     captureOptions: CaptureOptions;
     affinityKey: string;
     url: string;
@@ -2467,16 +2676,16 @@ export class RenderRunner {
     signal?: AbortSignal;
     recordStepMs: (ms: number) => void;
   }): Promise<{
-    result: DeclaredScreenshotVisitResult;
+    result: DeclaredCaptureVisitResult;
     escalation?: { error: RenderError; evicted: boolean };
   }> {
-    let label = `visit ${bucket} declared screenshots`;
+    let label = `visit ${bucket} declared captures`;
     let stepStart = Date.now();
     let stepResult = await this.#step(affinityKey, label, () =>
       withTimeout(
         page,
-        () =>
-          captureDeclaredScreenshots(page, screenshots, kind, captureOptions),
+        url,
+        () => captureDeclared(page, captures, kind, captureOptions),
         timeoutMs,
         this.#profileContext(affinityKey, url, label, jobId),
         signal,
@@ -2492,8 +2701,7 @@ export class RenderRunner {
             {
               name: '*',
               message:
-                stepResult.error.error?.message ??
-                'declared screenshot capture failed',
+                stepResult.error.error?.message ?? 'declared capture failed',
               // The step failed as a unit, so this is the whole step's
               // elapsed time, not one slot's share.
               captureMs: stepMs,
@@ -2510,7 +2718,7 @@ export class RenderRunner {
           : {}),
       };
     }
-    return { result: stepResult.value as DeclaredScreenshotVisitResult };
+    return { result: stepResult.value as DeclaredCaptureVisitResult };
   }
 
   #captureToError(capture: RenderCapture): RenderError | undefined {
@@ -2642,6 +2850,9 @@ export class RenderRunner {
       return 'timeout';
     }
     if ((renderError as any).evict) {
+      return 'unusable';
+    }
+    if (failedHostChunkImportIn(renderError)) {
       return 'unusable';
     }
     let normalizedMessage = (renderError.error?.message ?? '')

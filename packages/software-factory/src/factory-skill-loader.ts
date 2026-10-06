@@ -6,6 +6,7 @@ import type {
   ProjectData,
   ResolvedSkill,
 } from './factory-agent/index.ts';
+import { boxelSkillsDir } from '../../boxel-cli/scripts/boxel-skills.mts';
 import { logger } from './logger.ts';
 import { startSpan } from './run-trace.ts';
 
@@ -34,29 +35,29 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  * Additional skill search directories, checked in order when a skill is not
  * found in the primary directory.
  *
- * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
- *   plugin skills (`boxel`, `boxel-api`, `boxel-command`, `boxel-file-def`,
- *   etc.) — boxel-cli owns the entire Boxel API surface, so its skills
- *   describe the platform. Same directory the plugin distributes to end
- *   users; these skills and `ember-best-practices` /
- *   `boxel-ui-component-discovery` are built from the boxel-skills repo by
- *   `pnpm build:skills`.
+ * - `packages/boxel-cli/plugin/skills/` hosts the skills the boxel-cli plugin
+ *   authors itself (`boxel-api`, `boxel-command`, `boxel-file-structure`,
+ *   `realm-sync`, …) — boxel-cli owns the Boxel API surface, so its skills
+ *   describe the platform.
+ * - `boxelSkillsDir()` is the local clone of the pinned cardstack/boxel-skills
+ *   release (`boxel`, `boxel-file-def`, `catalog-reuse`,
+ *   `boxel-ui-component-discovery`, `ember-best-practices`, …), the same
+ *   release the plugin marketplace installs for end users. `pnpm
+ *   factory:setup` clones it, and preflight refuses a run without it.
  * - The monorepo root `.agents/skills/` is a fallback slot for shared domain
- *   skills, read directly by agents that follow the `.agents/skills`
- *   convention. It holds `boxel-workspace-cardinal-rules`, which the plugin
- *   dir above also carries: the plugin dir is searched first, so the copy
- *   this loader resolves is the generated one, and editing the root copy does
- *   not change what a factory run reads. Content changes to that skill belong
- *   upstream in boxel-skills, which the plugin dir is generated from.
+ *   skills that agents following the `.agents/skills` convention read
+ *   directly. Searched after the boxel-skills clone, so it cannot shadow a
+ *   released skill.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
+  boxelSkillsDir(),
   join(MONOREPO_ROOT, '.agents', 'skills'),
   // Package-local interactive skills (`packages/software-factory/.agents/skills`)
   // are the primary skill set for the runbook (interactive Claude Code) loop.
   // Listing them here lets the orchestrator's resolver pick them up too.
-  // `boxel-ui-component-discovery` (gated by `--enable-boxel-ui-discovery`)
-  // now resolves from the plugin dir above, not from here.
+  // The reuse skills (`catalog-reuse`, `boxel-ui-component-discovery`)
+  // resolve from the boxel-skills clone above, not from here.
   join(PACKAGE_ROOT, '.agents', 'skills'),
 ];
 
@@ -83,6 +84,7 @@ const SKILL_PRIORITY: readonly string[] = [
   'boxel-api',
   'boxel-command',
   'boxel-file-def',
+  'catalog-reuse',
   'boxel-ui-component-discovery',
   'ember-best-practices',
   'software-factory-operations',
@@ -142,11 +144,11 @@ export const ALWAYS_LOAD_REFERENCES: readonly string[] = [
 ];
 
 /**
- * Curated reference names not yet present in the built `boxel` skill —
+ * Curated reference names not yet present in the pinned `boxel` skill —
  * listed ahead of a boxel-skills release that adds them. Missing names are
  * harmless at runtime (`filterBoxelRefs` filters what's actually on disk),
  * and the validation test uses this set strictly: once a name ships in the
- * built skill, the test fails until it is removed from here.
+ * pinned skill, the test fails until it is removed from here.
  *
  * Empty: `qunit-testing.md` shipped in boxel-skills v0.0.30.
  */
@@ -175,7 +177,49 @@ export interface SkillResolver {
   resolve(issue: IssueData, project: ProjectData): string[];
 }
 
+export interface SkillResolverConfig {
+  /**
+   * Whether this run does catalog reuse. Defaults to on, matching
+   * `factory-issue-loop-wiring.ts` and `factory-entrypoint.ts`: only an
+   * explicit `false` opts out.
+   */
+  enableCatalogReuse?: boolean;
+}
+
 export class DefaultSkillResolver implements SkillResolver {
+  #enableCatalogReuse: boolean;
+
+  constructor({ enableCatalogReuse = true }: SkillResolverConfig = {}) {
+    this.#enableCatalogReuse = enableCatalogReuse;
+  }
+
+  /**
+   * The reuse skills, in the core rather than discoverable on demand — and
+   * empty when the run has opted out.
+   *
+   * Catalog reuse only happens if it happens before authoring, and a skill the
+   * agent has to decide to read is one it reads after it has already started.
+   * Being in the core is also what lets the prompts defer method to the skill
+   * instead of restating it.
+   *
+   * The flag has to reach here, not just the system prompt. A skill is
+   * rendered into the context through an unguarded `{{#each skills}}`, so a
+   * `--no-catalog-reuse` run that still loads `catalog-reuse` is handed
+   * "MANDATORY before writing any `.gts`" underneath a firewall line naming
+   * the catalog as off limits — two instructions, one of which the run drops
+   * for reasons it does not control.
+   *
+   * Listing a name a skill directory does not supply is silent — the loader
+   * warns and continues — so `tests/factory-skill-loader.test.ts` holds these
+   * names to what actually resolves.
+   */
+  private reuseSkills(): string[] {
+    if (!this.#enableCatalogReuse) {
+      return [];
+    }
+    return ['catalog-reuse', 'boxel-ui-component-discovery'];
+  }
+
   /**
    * Determine which skills to load based on issue and project context.
    *
@@ -200,12 +244,23 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['boxel-file-structure'];
     }
 
-    // Design-foundation turns author a brand guide + tokens + family
-    // coherence sheet — taste work, not card code. File-structure covers
-    // the KA JSON; boxel-design carries the visual-language method (it
-    // resolves from the materialized catalog's fallback dirs).
+    // `issueType === 'design'` is the design-FOUNDATION turn
+    // (`Issues/design-foundation-seed` → `issue-design-foundation.md`), not
+    // the per-card design turn: that one is `context.phase === 'design'` on an
+    // ordinary implementation issue, whose issueType stays `feature`, so it
+    // takes the lean core below and gets the reuse skills from there.
+    //
+    // The foundation turn authors a brand guide, a Theme, tokens and a
+    // coherence sheet — taste work, not card code. File-structure covers the
+    // KA JSON; boxel-design carries the visual-language method.
+    //
+    // It gets the reuse skills for a read-only sweep of the domain before it
+    // writes the guide. The guide binds every later turn, so a rendering form
+    // it fixes in ignorance of the catalog is one no later turn can adopt —
+    // which is why `issue-design-foundation.md` sends it to look first and
+    // stops its authority at the token layer.
     if (issueType === 'design') {
-      return ['boxel-file-structure', 'boxel-design'];
+      return ['boxel-file-structure', 'boxel-design', ...this.reuseSkills()];
     }
 
     // Lean core: small always-on set; everything else on demand via the
@@ -216,6 +271,7 @@ export class DefaultSkillResolver implements SkillResolver {
       'software-factory-operations',
       'boxel-file-structure',
       'boxel-workspace-cardinal-rules',
+      ...this.reuseSkills(),
     ];
     for (let skillName of extractKnowledgeSkillTags(project, issue)) {
       if (!leanSkills.includes(skillName)) {

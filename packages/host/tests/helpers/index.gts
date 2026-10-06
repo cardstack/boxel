@@ -3,6 +3,7 @@ import Service from '@ember/service';
 import {
   type TestContext,
   getContext,
+  getRootElement,
   visit,
   settled,
 } from '@ember/test-helpers';
@@ -20,6 +21,7 @@ import {
   CachingDefinitionLookup,
   cardDefComputedFields,
   ensureTrailingSlash,
+  fetchEffectiveRealmPermissions,
   getCreatedTime,
   IndexWriter,
   insertPermissions,
@@ -50,6 +52,7 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
+import { awaitPublishedHtmlReady } from '@cardstack/runtime-common/jobs/prerender-html';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
@@ -576,10 +579,11 @@ export async function capturePrerenderResult(
     ''
   ).trim();
   if (errorText.length > 0) {
-    return {
-      status: 'error',
-      value: normalizeCapturedErrorText(errorText),
-    };
+    let value = normalizeCapturedErrorText(errorText);
+    if (expectedStatus === 'ready') {
+      warnUnexpectedPrerenderError(errorElement!, value);
+    }
+    return { status: 'error', value };
   }
   if (!container) {
     throw new Error(
@@ -592,14 +596,34 @@ export async function capturePrerenderResult(
     | 'unusable'
     | undefined;
   if (status === 'error' || status === 'unusable') {
-    return {
-      status: 'error',
-      value: normalizeCapturedErrorText(
-        container.innerHTML!.replace(/}[^}]*$/, '}'),
-      ),
-    };
+    let value = normalizeCapturedErrorText(
+      container.innerHTML!.replace(/}[^}]*$/, '}'),
+    );
+    if (expectedStatus === 'ready') {
+      warnUnexpectedPrerenderError(container, value);
+    }
+    return { status: 'error', value };
   }
   return { status: 'ready', value: container.children[0][capture]! };
+}
+
+// A capture that waited for `ready` and read an error says where the error
+// came from. The queries above search the whole document. Everything the app
+// renders sits inside its root element; a marker outside it was appended to
+// the page by the render route's own fallback for a failure before any render
+// template mounted — this test's, or an earlier test's that nothing removed.
+function warnUnexpectedPrerenderError(element: HTMLElement, value: string) {
+  let placement = getRootElement().contains(element)
+    ? 'inside the app root element'
+    : 'OUTSIDE the app root element (appended by the render route fallback)';
+  let marker = element.closest<HTMLElement>('[data-prerender]');
+  console.warn(
+    `capturePrerenderResult waited for 'ready' but read an error from ` +
+      `<${element.tagName.toLowerCase()}> ${placement}; ` +
+      `data-prerender-id=${marker?.dataset.prerenderId ?? 'none'} ` +
+      `data-prerender-status=${marker?.dataset.prerenderStatus ?? 'none'}: ` +
+      value,
+  );
 }
 
 export interface WaitForLoadedImageOptions {
@@ -1340,6 +1364,7 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
+  enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1362,15 +1387,43 @@ export async function setupIntegrationTestRealm({
   // does: relationships carry their links, but the targets behind them are
   // not side-loaded into `included`, so the reader resolves each one itself.
   linkShapePolicy?: LinkShapePolicy;
+  // Judge the host's requests by the realm's ACL, as a deployed realm does.
+  //
+  // By default the realm answers every request as its own internal dispatch,
+  // so `permissions` decide nothing about what the host is served: no ACL
+  // check runs, and so no policy gate, no refusal, and no capability check
+  // or explain that turns on who is asking. With this set, a request the host
+  // sends is judged against the session it carries, and that session is the
+  // signed-in user's, carrying what the realm computes for them from the
+  // permissions it stores. A user `permissions` gives nothing is a signed-in
+  // caller the ACL declines, which is who a realm's policy exists for.
+  //
+  // The realm's own work is still its own: the indexer's requests and the
+  // in-browser render that indexes a card are dispatched as the realm's,
+  // which is the authority they run under in a deployed realm. A request the
+  // test sends while a render is under way is taken for the realm's too; see
+  // `permissionCheckingHandler` for which renders those are and how a test
+  // keeps its assertions clear of them.
+  //
+  // A 401 or 403 the host is answered with raises its auth-error signal, which
+  // the in-browser renderer reads too, and the renderer then fails the next
+  // render it runs. The realm renders to read the definitions its policy names,
+  // so a refusal of that kind can make the realm refuse what its policy grants.
+  // Setup signs the host in with the session its permissions call for, so none
+  // of the host's own requests is refused that way; a test that provokes such
+  // a refusal on purpose has to allow for it.
+  enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
   videoSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
-  setupAuthEndpoints({
-    [resolvedRealmURL]: deriveTestUserPermissions(permissions),
-  });
+  if (!enforcePermissions) {
+    setupAuthEndpoints({
+      [resolvedRealmURL]: deriveTestUserPermissions(permissions),
+    });
+  }
   let result = await setupTestRealm({
     contents,
     realmURL: resolvedRealmURL,
@@ -1379,6 +1432,7 @@ export async function setupIntegrationTestRealm({
     mockMatrixUtils,
     skipBootIndex,
     linkShapePolicy,
+    enforcePermissions,
     startMatrix,
     fileSizeLimitBytes,
     audioSizeLimitBytes,
@@ -1463,6 +1517,7 @@ async function setupTestRealm({
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
+  enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
   audioSizeLimitBytes,
@@ -1475,6 +1530,7 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
   linkShapePolicy?: LinkShapePolicy;
+  enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
@@ -1529,6 +1585,35 @@ async function setupTestRealm({
   }
 
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
+  // Before accepting a session the realm asks whether its user's sessions were
+  // revoked, which it reads from the realm server's `users` table. The
+  // browser's schema leaves that table out with the rest of the realm server's
+  // account tables, so only the column the check reads is made. Every realm
+  // needs it, not only one that sets `enforcePermissions`: a realm asks the
+  // question of any session it verifies, and the read probe a card+json `HEAD`
+  // makes verifies one in any realm not everyone may read.
+  await dbAdapter.execute(
+    `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
+  );
+  if (enforcePermissions) {
+    // The sessions the signed-in user is handed for this realm carry what the
+    // realm will compute for them, read back from where the realm reads it,
+    // since it refuses a session whose permissions differ from its own.
+    let sessionFor = async (user: string) =>
+      await fetchEffectiveRealmPermissions(
+        dbAdapter,
+        new URL(realmURL),
+        user,
+        baseTestMatrix.url.href,
+      );
+    setupAuthEndpoints({ [realmURL]: await sessionFor(TEST_MATRIX_USER) });
+    if (mockMatrixUtils.loggedInAs) {
+      mockMatrixUtils.setRealmSessionPermissions(
+        realmURL,
+        await sessionFor(mockMatrixUtils.loggedInAs),
+      );
+    }
+  }
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
     queue,
@@ -1601,25 +1686,41 @@ async function setupTestRealm({
   );
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
+  let handler = enforcePermissions
+    ? permissionCheckingHandler(realm)
+    : realm.maybeHandle;
+
   // A realm that skipped its boot index serves its seeded instances from an
   // index that was never built, so a read for one comes back empty instead of
   // failing. That surfaces as a missing card or an empty result set far from
   // its cause, so reject it here instead, where the option is visible.
   //
-  // `maybeHandle` is the realm's request surface and the only route a test
-  // takes to it; the realm's own lookups go through its query engine directly
-  // and are unaffected. Instances written during a test are indexed
+  // The mounted handler is the realm's request surface and the only route a
+  // test takes to it; the realm's own lookups go through its query engine
+  // directly and are unaffected. Instances written during a test are indexed
   // incrementally, so only the seeded ones are refused.
   virtualNetwork.mount(
-    skipBootIndex
-      ? guardIndexReads(realm.maybeHandle, realmURL, contents)
-      : realm.maybeHandle,
+    skipBootIndex ? guardIndexReads(handler, realmURL, contents) : handler,
   );
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (enforcePermissions) {
+    await settleRealmRenders();
+  }
   if (startMatrix) {
     await mockMatrixUtils.start();
+    if (enforcePermissions) {
+      // The host signs in to this realm now, with the session its permissions
+      // call for, rather than on its first request. A session it holds from
+      // before the realm was set up carries the default realm's permissions,
+      // and without one its first request is anonymous; the realm refuses
+      // either with a 401. The host recovers from that by signing in, but the
+      // in-browser renderer shares the host's auth-error signal and fails its
+      // next render on it, and the realm renders to read the definitions its
+      // policy names.
+      await getService('realm').reauthenticate(realmURL);
+    }
   }
 
   let realmServer = getService('realm-server');
@@ -1630,10 +1731,74 @@ async function setupTestRealm({
   return { realm, adapter };
 }
 
+const TEST_MATRIX_USER = '@testuser:localhost';
+
+// The realm's request surface for a test that has it judge the host's
+// requests by its ACL (see `enforcePermissions`).
+//
+// The realm's own work carries the realm's authority in a deployed realm, so
+// it is dispatched as the realm's own here: the indexer sends every request
+// assuming the realm's owner, and the in-browser render that indexes a card
+// runs inside the render context. A render reads the source of every card it
+// indexes, the realm's policy card included, so judged as the signed-in user
+// the realm could not index what its ACL keeps from them.
+//
+// In a deployed realm the render runs in a tab of its own. Here it shares the
+// app with the test, and the render context is the only thing that marks its
+// requests, so a request the test sends while a render is under way is taken
+// for the realm's as well. `settleRealmRenders` waits out the renders the
+// realm queues after indexing. It cannot wait out one the realm runs while it
+// answers a request, to read a definition it has not cached, so a request the
+// test sends while another is still being answered can be taken for the
+// realm's too. A test sends the requests whose answers it asserts one at a
+// time, and pairs each admission it asserts with a refusal under the same
+// session, which a request taken for the realm's own would not get.
+function permissionCheckingHandler(
+  realm: Realm,
+): (request: Request) => Promise<ResponseWithNodeStream | null> {
+  return async (request: Request) => {
+    let realmsOwn =
+      request.headers.has('X-Boxel-Assume-User') ||
+      (globalThis as { __boxelRenderContext?: boolean })
+        .__boxelRenderContext === true;
+    return realmsOwn
+      ? await realm.maybeHandle(request)
+      : await realm.handle(request);
+  };
+}
+
+// Waits until no test realm owes a render: each one's indexing has finished
+// and every card it indexed has its HTML rendered. A realm renders after an
+// index pass as a job of its own, so a render can still be under way after
+// setup returns or a write has been answered.
+//
+// A suite that sets `enforcePermissions` needs that before it asks the realm
+// anything its ACL decides, since a request sent while any realm's render is
+// under way is answered as the realm's own (see `permissionCheckingHandler`):
+// the render context that marks a render's requests is the app's, not one
+// realm's. Setting up a realm that checks permissions settles every realm set
+// up before it; a test that writes, or sets up another realm afterwards,
+// calls this before it asks.
+export async function settleRealmRenders(): Promise<void> {
+  let dbAdapter = await getDbAdapter();
+  for (let { realm } of getTestRealmRegistry().values()) {
+    await realm.incrementalIndexing();
+    await realm.indexing();
+    let rendered = await awaitPublishedHtmlReady(dbAdapter, realm.url, {
+      timeoutMs: 30_000,
+      pollIntervalMs: 25,
+    });
+    if (!rendered) {
+      throw new Error(
+        `${realm.url} still owes renders of what it indexed after 30 seconds`,
+      );
+    }
+  }
+}
+
 function deriveTestUserPermissions(
   permissions?: RealmPermissions,
 ): RealmAction[] {
-  const TEST_MATRIX_USER = '@testuser:localhost';
   if (!permissions) {
     return ['read', 'write'];
   }
@@ -2464,6 +2629,8 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
+    // The URL of the card whose policy governs the realm.
+    policy?: string;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2479,6 +2646,9 @@ export function realmConfigCardJSON(
   if (config.includePrerenderedDefaultRealmIndex !== undefined) {
     attrs.includePrerenderedDefaultRealmIndex =
       config.includePrerenderedDefaultRealmIndex;
+  }
+  if (config.policy !== undefined) {
+    attrs.policy = config.policy;
   }
   return JSON.stringify({
     data: {

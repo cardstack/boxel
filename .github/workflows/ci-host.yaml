@@ -11,6 +11,9 @@ on:
       - "packages/boxel-icons/**"
       - "packages/boxel-ui/**"
       - "packages/bxl/**"
+      # Host's tests compile these packages' source.
+      - "packages/choreo/**"
+      - "packages/glimmer-motion/**"
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
       - "packages/runtime-common/**"
@@ -46,9 +49,19 @@ on:
         type: boolean
         default: false
 
+# Pull requests: a new push cancels the run in progress for the same branch.
+# Pushes to main share one group but never cancel a run in progress: GitHub
+# keeps at most one running and one pending run per group, and a newer pending
+# run replaces the older one. A burst of merges therefore runs the commit in
+# progress and then the newest, rather than every commit in between. Every run
+# that starts still finishes, so Percy finalisation and the host baseline update
+# always read complete main runs. Hand-run builds keep a group of their own.
+# The main group is `push:main` because `:` cannot appear in a branch name, so
+# no pull request's head_ref (a fork's `main`, say) can land in it and cancel a
+# main run.
 concurrency:
-  group: ci-host-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-host-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -56,7 +69,7 @@ permissions:
   # Lets the warm-test-images step pull the private GHCR mirror packages.
   packages: read
   pull-requests: read
-  # Lets scripts/import-cached-index.sh (via `gh run list` / `gh run
+  # Lets scripts/import-cached-index.sh (via the artifacts API / `gh run
   # download`) fetch the boxel-index-cache artifact produced by main runs
   # of ci.yaml.
   actions: read
@@ -64,7 +77,8 @@ permissions:
 jobs:
   check-percy:
     name: Check if Percy is needed
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, which waits on it; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-check-percy/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       percy_needed: ${{ steps.check.outputs.percy_needed }}
@@ -139,7 +153,8 @@ jobs:
     # as it would be for a pull request on that branch. Anything comparing
     # timings with PR runs wants it on.
     name: Check if cached index is usable
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, which waits on it; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-check-index-cache/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       use_cache: ${{ steps.check.outputs.use_cache }}
@@ -198,12 +213,12 @@ jobs:
           use_cache=true
           while IFS= read -r file; do
             case "$file" in
-              # Realm content whose name reads like a spec file. Matched ahead
-              # of the spec-file arm, which spans `/` and would otherwise treat
-              # it as inert; this keeps such a file gated by the package globs'
-              # own verdict.
+              # Realm content under a package's `tests/`. Matched ahead of the
+              # test-code arm below, which covers the rest of `tests/` and would
+              # otherwise treat it as inert; this keeps a fixture gated by the
+              # package globs' own verdict.
               #
-              # One prefix per package the spec arm covers, rather than
+              # One prefix per package the test-code arm covers, rather than
               # `packages/*/`: a wildcard here reaches packages those globs
               # never gated, and would make a fixture in one of them newly
               # force a from-scratch index.
@@ -213,29 +228,27 @@ jobs:
                 echo "Realm fixture change detected: $file"
                 break
                 ;;
-              # A spec file cannot change how anything indexes or renders: the
+              # Test code cannot change how anything indexes or renders: the
               # realm servers this stack starts boot from main.ts / worker.ts,
               # and the host bundle is built from app sources, so nothing under
-              # a package's `tests/` is ever loaded by either. Matched ahead of
-              # the package globs below, which would otherwise catch every one
-              # of them — editing a realm-server test was the single most
-              # common cause of a needless from-scratch index.
+              # a package's `tests/` is ever loaded by either. That covers the
+              # spec files and everything they lean on — helpers, shared test
+              # bodies, the realm-server suite's own test-database scripts.
+              # Matched ahead of the package globs below, which would otherwise
+              # catch every one of them.
               #
-              # Scoped to spec files, not to `tests/`: a fixture directory
-              # under `tests/` is realm content — `realm-server/tests/fixtures/
-              # realistic` is served as the node-test realm — and stays gated.
-              # The arm above is what keeps it that way, because the names
-              # overlap: `fixtures/realistic/code-ref-test.gts` is a card that
-              # reads as a spec file.
+              # The exception is a fixture directory, which is realm content:
+              # `realm-server/tests/fixtures/realistic` is served as the
+              # node-test realm. The arm above keeps fixtures gated, including
+              # the ones named like spec files, such as
+              # `fixtures/realistic/code-ref-test.gts`.
               #
               # `case` patterns are not path-aware — `*` spans `/` — which is
-              # what lets one pattern per package cover its nested spec
-              # directories, and equally what makes the fixtures arm above
-              # necessary rather than merely tidy.
-              packages/realm-server/tests/*-test.ts|packages/realm-server/tests/*-test.gts|\
-              packages/runtime-common/tests/*-test.ts|packages/runtime-common/tests/*-test.gts|\
-              packages/boxel-ui/tests/*-test.ts|packages/boxel-ui/tests/*-test.gts|\
-              packages/boxel-ui/docs-app/tests/*-test.ts|packages/boxel-ui/docs-app/tests/*-test.gts)
+              # what lets one pattern per package cover its nested directories,
+              # and equally what makes the fixtures arm above necessary rather
+              # than merely tidy.
+              packages/realm-server/tests/*|packages/runtime-common/tests/*|\
+              packages/boxel-ui/tests/*|packages/boxel-ui/docs-app/tests/*)
                 ;;
               packages/realm-server/*|packages/runtime-common/*|packages/postgres/*|packages/boxel-ui/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml)
                 use_cache=false
@@ -281,6 +294,9 @@ jobs:
       # URLs into the host bundle. The standard-mode build still exists
       # in ci.yaml for `matrix-client-test` / `vscode-boxel-tools-package`.
       boxel_environment: ci
+      # host-test waits on this build, so it follows host-test onto RunsOn,
+      # under the same variable and the same fork guard; see host-test.
+      runs_on_spec: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.HOST_TEST_RUNS_ON || '' }}
     concurrency:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -288,7 +304,9 @@ jobs:
   live-test:
     name: Live Tests (realm)
     if: github.event.action != 'ready_for_review'
-    runs-on: ubuntu-latest
+    # Same service stack as a host-test shard, so it moves with host-test onto
+    # RunsOn under the same variable and guard; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-live-test/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     # See the note on host-test's timeout. This job has never taken more than
     # ~10 minutes when healthy.
     timeout-minutes: 25
@@ -321,8 +339,12 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
+      # Non-fatal, as in host-test: the workaround is for GitHub's Azure VMs, and
+      # a RunsOn EC2 instance has no interface named eth0.
       - name: Disable TCP/UDP network offloading
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          sudo ethtool -K eth0 tx off rx off ||
+            echo "could not disable offloading on eth0; continuing"
       # EXPERIMENT — this replaces an apt install of dbus-x11 and upower, added
       # in October 2025 to reduce Percy instability. Every Percy cause diagnosed
       # since has been elsewhere (a module-level panel-width singleton, the
@@ -412,10 +434,24 @@ jobs:
       # stack is gone. `$!` is tee's pid, the last process in the pipeline:
       # it exits when the stack's output stream closes, i.e. when nothing in
       # the stack is left running.
+      #
+      # Two all-priority workers rather than the default one. When the index
+      # cache isn't imported (every main run, and any branch that changes how
+      # indexing behaves), the realms boot one at a time, and each realm's
+      # boot index spawns a prerender-html job that a worker claims before the
+      # next realm's boot index is enqueued, then runs to completion. With one
+      # worker, every realm's boot index waits behind the whole HTML pass of
+      # the realm booted before it. With two, a boot index waits only while
+      # both workers are inside HTML passes, which for the realms this job
+      # waits on means base's and skills' passes overlapping. Index visits
+      # outrank prerender-html renders at the prerender server, so a
+      # concurrent HTML pass costs the index little. Set on the command rather
+      # than in `env:` because mise-action has already exported the default
+      # of 1 into the job's environment.
       - name: Start test services (icons + host dist + realm servers)
         run: |
           date +%s > /tmp/test-services.started
-          mise run test-services:host | tee -a /tmp/server.log &
+          WORKER_ALL_PRIORITY_COUNT=2 mise run test-services:host | tee -a /tmp/server.log &
           echo $! > /tmp/test-services.pid
 
       # Register the matrix users (realm_server, base_realm, …) the
@@ -490,7 +526,25 @@ jobs:
 
   host-test:
     name: Host Tests
-    runs-on: ubuntu-latest
+    # EXPERIMENT — shards can run on RunsOn: ephemeral EC2 spot
+    # instances in our own AWS account, which take the sixteen shards out of
+    # GitHub's concurrent-job cap so the rest of CI stops queueing behind them.
+    # Setting the repo variable HOST_TEST_RUNS_ON to a RunsOn spec such as
+    # `cpu=4/ram=16/family=m8i+m7i+m7a+m6i+m6a/image=ubuntu24-full-x64` (the
+    # shape of a public repo's ubuntu-latest) turns it on. RunsOn refuses a
+    # spec without `family` and runs the job on a fallback that fails it; the
+    # more families listed, the more spot pools an instance can come from.
+    # Deleting the variable puts every shard back on ubuntu-latest without a
+    # PR. Fork PRs always stay on GitHub's runners: the repo is public, and a
+    # fork's code must never run inside our AWS account.
+    # The label carries the shard index because RunsOn needs a label unique to
+    # each matrix entry, or one shard's instance can be claimed by another.
+    #
+    # The three jobs this one needs (check-percy, check-index-cache and the
+    # test-web-assets build) follow it onto RunsOn under the same variable and
+    # guard. Left on ubuntu-latest, they queue behind GitHub's cap and hold the
+    # shards back with them.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
     # every other PR in the repo. A healthy shard has never exceeded ~19
@@ -548,8 +602,12 @@ jobs:
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Non-fatal, as in actions/init: the workaround is for GitHub's Azure VMs,
+      # and a RunsOn EC2 instance has no interface named eth0.
       - name: Disable TCP/UDP network offloading
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          sudo ethtool -K eth0 tx off rx off ||
+            echo "could not disable offloading on eth0; continuing"
       # EXPERIMENT — this replaces an apt install of dbus-x11 and upower, added
       # in October 2025 to reduce Percy instability. Every Percy cause diagnosed
       # since has been elsewhere (a module-level panel-width singleton, the
@@ -1045,7 +1103,9 @@ jobs:
       group: host-percy-finalize-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: [host-test, check-percy]
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn, so a run's tail doesn't queue behind
+    # GitHub's cap either; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-percy-finalize/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 15
     # Job-level so the reject step can test for their presence in its `if:` —
     # a step's own `env:` block is not in scope for that step's condition.
@@ -1228,7 +1288,8 @@ jobs:
       group: host-merge-reports-and-publish-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: host-test
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn; see host-test.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-merge-reports/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       # checks/pull-requests: needed by publish-unit-test-result-action to post
@@ -1329,7 +1390,9 @@ jobs:
       group: host-memory-baseline-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     needs: host-test
-    runs-on: ubuntu-latest
+    # Follows host-test onto RunsOn; see host-test. It only reads the shards'
+    # memory reports, so where it runs doesn't change what it measures.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-memory-baseline/{1}', github.run_id, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -1373,6 +1436,10 @@ jobs:
     # report comes from a qualifying PR run rather than from this run's
     # merge-and-publish job.
     needs: [host-test]
+    # Stays on ubuntu-latest while the rest of this workflow follows host-test
+    # onto RunsOn: a RunsOn instance is reachable over SSM from our AWS
+    # account, and this job's contents: write token has no reason to be there.
+    # Nothing waits on it, so the queue it sits in holds nothing back.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

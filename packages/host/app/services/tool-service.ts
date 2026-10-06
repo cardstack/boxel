@@ -22,6 +22,7 @@ import {
   identifyCard,
   rri,
   type PatchData,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
@@ -37,6 +38,7 @@ import type Realm from '@cardstack/host/services/realm';
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCodeTool from '@cardstack/host/tools/patch-code';
 
+import HostBaseTool from '../lib/host-base-tool';
 import LimitedSet from '../lib/limited-set';
 import {
   CHECK_CORRECTNESS_COMMAND_NAME,
@@ -54,6 +56,7 @@ import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patc
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
 import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 import type { IEvent } from 'matrix-js-sdk';
 
@@ -89,6 +92,13 @@ const MAX_TOOL_INDEX_WAIT_RETRIES = isTesting() ? 20 : 300;
 // which is what un-sticks both the UI spinner and the waiting ai-bot — is
 // only sent once execute settles.
 const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 3_000 : 120_000;
+// Upper bound on validating one tool request in the drain. Validation loads
+// the tool's module and input schema; a load that never settles would hold
+// the drain pass, and with it every later drain pass in the tab.
+const VALIDATE_TIMEOUT_MS = isTesting() ? 3_000 : 60_000;
+// When a validation is still running after this long, log the step it is on
+// and what the loader and store are waiting for.
+const VALIDATE_WATCHDOG_MS = isTesting() ? 1_000 : 20_000;
 
 // Promise.race with a cleared timer: the losing execute keeps running (we
 // cannot cancel it), but the run task settles and reports. That means a
@@ -116,12 +126,76 @@ async function withTimeout<T>(
   }
 }
 
+// Every tool module the host provides is registered under this specifier.
+const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
+
 type GenericCommand = Command<
   typeof CardDef | undefined,
   typeof CardDef | undefined
 >;
 
 const toolProcessingWaiter = buildWaiter('tool-service:command-processing');
+
+// Converts, where the schema asks for an object, an array or a number, a
+// string value that parses to one. Nothing else changes.
+function coerceToSchema(
+  value: unknown,
+  schema: any,
+): { value: unknown; changed: boolean } {
+  if (!schema || typeof schema !== 'object') {
+    return { value, changed: false };
+  }
+  let type = schema.type;
+  if (typeof value === 'string') {
+    if (type === 'object' || type === 'array') {
+      try {
+        let parsed = JSON.parse(value);
+        let fits =
+          type === 'array'
+            ? Array.isArray(parsed)
+            : parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+        if (fits) {
+          return { value: coerceToSchema(parsed, schema).value, changed: true };
+        }
+      } catch {
+        // not JSON; leave it for validation to report
+      }
+    } else if (
+      (type === 'number' || type === 'integer') &&
+      value.trim() !== '' &&
+      !Number.isNaN(Number(value))
+    ) {
+      return { value: Number(value), changed: true };
+    }
+    return { value, changed: false };
+  }
+  if (Array.isArray(value) && schema.items) {
+    let changed = false;
+    let items = value.map((item) => {
+      let result = coerceToSchema(item, schema.items);
+      changed ||= result.changed;
+      return result.value;
+    });
+    return { value: changed ? items : value, changed };
+  }
+  if (value && typeof value === 'object' && schema.properties) {
+    let changed = false;
+    let out: Record<string, unknown> = {
+      ...(value as Record<string, unknown>),
+    };
+    for (let [key, propertySchema] of Object.entries(schema.properties)) {
+      if (key in out) {
+        let result = coerceToSchema(out[key], propertySchema);
+        if (result.changed) {
+          out[key] = result.value;
+          changed = true;
+        }
+      }
+    }
+    return { value: changed ? out : value, changed };
+  }
+  return { value, changed: false };
+}
 
 export default class ToolService extends Service {
   @service declare private loaderService: LoaderService;
@@ -415,10 +489,10 @@ export default class ToolService extends Service {
 
   private async drainToolProcessingQueue() {
     let waiterToken = toolProcessingWaiter.beginAsync();
+    let finishedProcessingTools: (() => void) | undefined;
     try {
       await this.flushToolProcessingQueue;
 
-      let finishedProcessingTools: () => void;
       this.flushToolProcessingQueue = new Promise(
         (res) => (finishedProcessingTools = res),
       );
@@ -632,9 +706,22 @@ export default class ToolService extends Service {
           // single throw killed the whole drain pass silently: the request
           // stayed claimed forever, its spinner never cleared, and the bot
           // waited forever. Report it as a failed result instead.
+          //
+          // The same holds for a validate() that never settles, and there the
+          // cost is larger: every later drain pass awaits this one, so every
+          // tool in the tab stops. Bound it like execute, and log what it is
+          // waiting on if it is slow, so the stuck step can be named.
           let isValid = false;
+          let watchdog = setTimeout(
+            () => this.logSlowValidation(messageTool),
+            VALIDATE_WATCHDOG_MS,
+          );
           try {
-            isValid = await this.validate(messageTool);
+            isValid = await withTimeout(
+              this.validate(messageTool),
+              VALIDATE_TIMEOUT_MS,
+              `Validating tool "${messageTool.name}"`,
+            );
           } catch (e) {
             let error = e instanceof Error ? e : new Error(String(e));
             console.error(
@@ -668,6 +755,11 @@ export default class ToolService extends Service {
               }
             }
             continue;
+          } finally {
+            clearTimeout(watchdog);
+            if (messageTool.id) {
+              this.validationSteps.delete(messageTool.id);
+            }
           }
           if (!isValid) {
             continue;
@@ -701,8 +793,13 @@ export default class ToolService extends Service {
           }
         }
       }
-      finishedProcessingTools!();
+    } catch (e) {
+      console.error('A tool processing pass failed', e);
     } finally {
+      // Every pass awaits the one before it, so a pass that throws must
+      // still release the next: otherwise no tool in the tab runs again, and
+      // each one that arrives shows its spinner forever.
+      finishedProcessingTools?.();
       toolProcessingWaiter.endAsync(waiterToken);
     }
   }
@@ -949,6 +1046,64 @@ export default class ToolService extends Service {
     return undefined;
   }
 
+  // Answers a call ai-bot holds for the user's approval (see
+  // MessageTool.awaitsApproval). Approving sends an 'approved' result, which
+  // releases the call: ai-bot runs it and publishes its real result.
+  // Declining sends an 'invalid' result saying so, which settles the call;
+  // the model reads the reason on its next turn. A call already answered is
+  // left alone.
+  // The held calls this client has answered. A call stops awaiting approval
+  // the moment it is answered, before the answer's event comes back, so a
+  // second click can't send a second answer; a send that fails offers the
+  // choice again.
+  answeredApprovalIds = new TrackedSet<string>();
+
+  answerApproval = task(
+    async (command: MessageTool, answer: 'approve' | 'decline') => {
+      let callId = command.toolRequest.id;
+      if (!command.awaitsApproval || !callId) {
+        return;
+      }
+      this.answeredApprovalIds.add(callId);
+      try {
+        await this.sendApprovalAnswer(command, callId, answer);
+      } catch (e) {
+        // The answer never reached the room: offer the choice again.
+        this.answeredApprovalIds.delete(callId);
+        console.error(
+          `could not send the answer to held tool call ${callId}`,
+          e,
+        );
+      }
+    },
+  );
+
+  private async sendApprovalAnswer(
+    command: MessageTool,
+    callId: string,
+    answer: 'approve' | 'decline',
+  ) {
+    let invokedToolFromEventId =
+      this.getCurrentEventIdForCommandRequest(
+        command.message.roomId,
+        command.toolRequest.id,
+      ) ?? command.eventId;
+    await this.matrixService.sendToolResultEvent({
+      roomId: command.message.roomId,
+      invokedToolFromEventId,
+      toolCallId: callId,
+      ...(answer === 'approve'
+        ? { status: 'approved' as const }
+        : {
+            status: 'invalid' as const,
+            failureReason: `The user declined this call (${
+              command.description ?? command.name ?? 'a tool call'
+            }). Do not request it again unless the user asks you to.`,
+          }),
+      context: await this.operatorModeStateService.getSummaryForAIBot(),
+    });
+  }
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageTool) => {
     // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
@@ -970,6 +1125,7 @@ export default class ToolService extends Service {
         commandRequestId,
       ) ?? command.eventId;
     let resultCard: CardDef | undefined;
+    let toolToRun: Command<any, any> | undefined;
     // Distinguishes "the tool never ran" from "the tool ran, the aftermath
     // failed" — the catch below must not tell the room a committed write
     // failed.
@@ -992,8 +1148,6 @@ export default class ToolService extends Service {
       // that un-sticks the UI and the waiting ai-bot is only sent once this
       // settles.
       let performTool = async (): Promise<CardDef | undefined> => {
-        let toolToRun;
-
         // If we don't find it in the one-offs, start searching for
         // one in the skills we can construct
         let toolCodeRef = command.codeRef;
@@ -1077,6 +1231,11 @@ export default class ToolService extends Service {
         toolCallId: commandRequestId!,
         status: 'applied',
         resultCard,
+        attachedFiles: this.attachedFilesForToolResult(
+          command.codeRef,
+          toolToRun,
+          resultCard,
+        ),
         context: userContextForAiBot,
       });
     } catch (e) {
@@ -1108,6 +1267,11 @@ export default class ToolService extends Service {
             toolCallId: commandRequestId!,
             status: 'applied',
             resultCard,
+            attachedFiles: this.attachedFilesForToolResult(
+              command.codeRef,
+              toolToRun,
+              resultCard,
+            ),
           });
         } catch (sendError) {
           console.error(
@@ -1143,6 +1307,50 @@ export default class ToolService extends Service {
     }
   });
 
+  // The files a tool result attaches for the model, as the tool that ran
+  // declares them. Only a tool the host itself provides is asked, so a command
+  // loaded from a realm cannot attach files this way. (A command can still
+  // attach a file through `FileForAttachmentCard`, which is handled
+  // separately.)
+  private attachedFilesForToolResult(
+    codeRef: ResolvedCodeRef | undefined,
+    tool: Command<any, any> | undefined,
+    resultCard: CardDef | undefined,
+  ): FileDef[] {
+    if (
+      !resultCard ||
+      !(tool instanceof HostBaseTool) ||
+      !codeRef?.module.startsWith(HOST_TOOL_MODULE_PREFIX)
+    ) {
+      return [];
+    }
+    return tool
+      .resultAttachments(resultCard)
+      .map((file) => this.matrixService.fileAPI.createFileDef(file));
+  }
+
+  // Which step each in-flight validation is on, for the slow-validation log.
+  private validationSteps = new Map<string, string>();
+
+  private markValidationStep(command: MessageTool, step: string) {
+    if (command.id) {
+      this.validationSteps.set(command.id, step);
+    }
+  }
+
+  private logSlowValidation(command: MessageTool) {
+    let step = command.id ? this.validationSteps.get(command.id) : undefined;
+    let moduleImports = this.loaderService.loader.inFlightModuleImports;
+    let queryLoads = this.store.queryLoadsInFlight();
+    console.warn(
+      `Tool "${command.name}" (${command.id}) is still validating after ${VALIDATE_WATCHDOG_MS}ms, at step: ${
+        step ?? 'before the first load'
+      }. Loader imports in flight: ${JSON.stringify(
+        moduleImports,
+      )}. Store query loads in flight: ${JSON.stringify(queryLoads)}`,
+    );
+  }
+
   async validate(command: MessageTool): Promise<boolean> {
     let error: string | undefined;
     // ai-bot ran this one itself (e.g. readRealmFile): the host has no command
@@ -1157,7 +1365,9 @@ export default class ToolService extends Service {
       return false;
     }
 
-    if (command.name === 'patchCardInstance') {
+    if (command.argumentsError) {
+      error = `The arguments of this "${command.name}" call were not valid JSON (${command.argumentsError}), so the call was not run. Send the call again with complete, valid JSON arguments.`;
+    } else if (command.name === 'patchCardInstance') {
       // special case for patchCardInstance command
       return true;
     }
@@ -1165,11 +1375,17 @@ export default class ToolService extends Service {
     let toolCodeRef = command.codeRef;
     let toolInstance: GenericCommand | undefined;
 
-    if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+    if (error) {
+      // Already invalid; there is no tool to resolve.
+    } else if (command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
       toolInstance = new CheckCorrectnessTool(this.toolContext);
     } else if (!toolCodeRef) {
       error = `No command for the name "${command.name}" was found`;
     } else {
+      this.markValidationStep(
+        command,
+        `load tool module ${toolCodeRef.module}`,
+      );
       let ToolConstructor = (await getClass(
         toolCodeRef,
         this.loaderService.loader,
@@ -1187,7 +1403,9 @@ export default class ToolService extends Service {
           'service:loader-service',
         ) as LoaderService
       ).loader;
+      this.markValidationStep(command, 'load basic field mappings');
       let mappings = await basicMappings(loader);
+      this.markValidationStep(command, 'build input JSON schema');
       // `description` is the UI label only (see TOOL_CALL_DESCRIPTION_SCHEMA),
       // so it is not required here even though the tool definition given to
       // the model lists it as required.
@@ -1204,9 +1422,16 @@ export default class ToolService extends Service {
         additionalProperties: false,
       };
       const ajv = new Ajv();
-      const valid = ajv.validate(jsonSchema, command.arguments);
+      let valid = ajv.validate(jsonSchema, command.arguments);
       if (!valid) {
         error = `Command "${command.name}" validation failed: ${ajv.errorsText()}`;
+        // A model sometimes sends an object argument as its JSON text, or a
+        // number as a string. Run the call if converting those makes it valid.
+        let coerced = coerceToSchema(command.arguments, jsonSchema);
+        if (coerced.changed && ajv.validate(jsonSchema, coerced.value)) {
+          command.setCoercedArguments(coerced.value);
+          error = undefined;
+        }
       }
     }
     if (error) {
@@ -1260,7 +1485,7 @@ export default class ToolService extends Service {
             relationships: relationships ?? {},
           },
         };
-        typedInput = await this.store.add(inputDoc, { doNotPersist: true });
+        typedInput = await this.store.addWithoutPersisting(inputDoc);
       } else {
         // identifyCard can fail in some circumstances where the input type is not exported
         // in that case, we'll fall back to this less reliable method of constructing the input type

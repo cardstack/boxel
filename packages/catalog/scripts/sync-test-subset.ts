@@ -6,8 +6,11 @@
 //   node scripts/sync-test-subset.ts --into-clone    also merge into contents/
 //   node scripts/sync-test-subset.ts --remove-from-clone
 //   node scripts/sync-test-subset.ts --bump          re-pin to catalog main
-//   node scripts/sync-test-subset.ts --check-pin     fail unless main contains the pin
-//   node scripts/sync-test-subset.ts --touch=<test-subset|clone>
+//   node scripts/sync-test-subset.ts --check-pin     fail unless every subset file at the pin
+//                                                    matches catalog main
+//   node scripts/sync-test-subset.ts --check-no-copies=<dir>
+//                                                    fail when <dir> holds a copy of a
+//                                                    subset definition
 //
 // `test-subset/` is served as the catalog realm by stacks that start with
 // CATALOG_SOURCE=test-subset. A stack that serves the full clone instead runs
@@ -20,20 +23,21 @@
 //
 // Each run writes a marker, served next to the definitions, that test helpers
 // compare with the manifest so a stale subset fails loudly instead of running
-// assertions against old definitions.
+// assertions against old definitions. The marker also records a hash of each
+// file as written, so a copy edited in place — which neither CI nor a
+// deployment would ever see — fails just as loudly.
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
-  utimesSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const catalogDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,6 +72,9 @@ interface Marker {
   revision: string;
   files: string[];
   divergent: string[];
+  // sha256 of each file's content as the sync wrote it: the pinned revision's
+  // content, or the local checkout's under CATALOG_TEST_SUBSET_SOURCE.
+  hashes: Record<string, string>;
 }
 
 function readManifest(): Manifest {
@@ -146,10 +153,24 @@ async function loadContents(manifest: Manifest) {
     marker?.source === 'pin' &&
     marker.revision === manifest.revision &&
     marker.listHash === listHash(manifest) &&
+    marker.hashes !== undefined &&
     manifest.files.every(({ path }) => existsSync(join(subsetDir, path)));
   if (current) {
+    let edited: string[] = [];
     for (let { path } of manifest.files) {
-      contents.set(path, readFileSync(join(subsetDir, path), 'utf8'));
+      let text = readFileSync(join(subsetDir, path), 'utf8');
+      if (sha256(text) !== marker!.hashes[path]) {
+        edited.push(path);
+      }
+      contents.set(path, text);
+    }
+    if (edited.length) {
+      fail(
+        `${edited.join(', ')} in ${relative(repoRoot, subsetDir)} was edited after the sync wrote it. ` +
+          `That directory is generated from ${manifest.repository}@${manifest.revision}, so an edit there reaches neither CI nor a deployment. ` +
+          `Make the change in a ${manifest.repository} checkout and serve it with CATALOG_TEST_SUBSET_SOURCE=<dir> (see .claude/skills/catalog-test-subset), ` +
+          `or delete ${relative(repoRoot, subsetDir)} and re-run the sync to discard the edit.`,
+      );
     }
     return { contents, source: 'pin' as const, unchanged: true };
   }
@@ -208,6 +229,12 @@ function checkClosure(contents: Map<string, string>) {
   }
 }
 
+function hashes(contents: Map<string, string>) {
+  return Object.fromEntries(
+    [...contents].map(([path, text]) => [path, sha256(text)]),
+  );
+}
+
 function writeMarker(dir: string, marker: Marker, manifest: Manifest) {
   writeFileSync(
     join(dir, MARKER_FILE),
@@ -252,6 +279,7 @@ function writeSubsetDir(
       revision: manifest.revision,
       files: [...contents.keys()],
       divergent: [],
+      hashes: hashes(contents),
     },
     manifest,
   );
@@ -387,13 +415,23 @@ function mergeIntoClone(
       revision: manifest.revision,
       files: [...contents.keys()],
       divergent,
+      hashes: hashes(contents),
     },
     manifest,
   );
   if (added.length) {
     log(`added to the catalog clone: ${added.join(', ')}`);
   }
-  if (divergent.length) {
+  if (divergent.length && source === 'local') {
+    // The clone's own copy is what the stack serves, so the checkout the
+    // files were read from never reaches it.
+    console.warn(
+      `catalog test subset: the catalog clone has its own copy of ${divergent.join(', ')}, which differs from ${process.env.CATALOG_TEST_SUBSET_SOURCE}. ` +
+        `A stack serving the clone serves the clone's copy, so tests that use these definitions will fail rather than test your checkout. ` +
+        `Serve the checkout on a stack that serves only the subset (CATALOG_SOURCE=test-subset, as mise run test-services:realm-server does), ` +
+        `or make the change in packages/catalog/contents itself.`,
+    );
+  } else if (divergent.length) {
     console.warn(
       `catalog test subset: the catalog clone's copy differs from the pinned revision for ${divergent.join(', ')}. ` +
         `Tests that use these definitions will fail until the clone matches the pin: ` +
@@ -401,6 +439,80 @@ function mergeIntoClone(
         `or set CATALOG_TEST_SUBSET_SOURCE=packages/catalog/contents to test against the clone.`,
     );
   }
+}
+
+// A subset definition's only source is the catalog. A copy of one in this
+// repo, whether a file named like a subset file or a class named like one a
+// subset file exports, drifts from the definition deployments serve while
+// tests keep passing against it.
+//
+// File names come from the manifest alone. Class names come from the subset
+// files' contents, which are absent when they could not be fetched; then only
+// the file names are checked, since a network error is nothing to fix here.
+function checkNoCopies(
+  manifest: Manifest,
+  contents: Map<string, string> | undefined,
+  dir: string,
+) {
+  let classNames = new Set<string>();
+  for (let source of contents?.values() ?? []) {
+    for (let [, name] of source.matchAll(
+      /^export\s+(?:default\s+)?class\s+(\w+)/gm,
+    )) {
+      classNames.add(name);
+    }
+  }
+  let fileNames = new Set(manifest.files.map(({ path }) => basename(path)));
+  // A declaration starts its line, as a class statement or as a class
+  // expression bound to a name, so a comment or a string that mentions the
+  // class is not one. Subclasses and type aliases of the same name aren't
+  // matched either.
+  let names = [...classNames].join('|');
+  let declaration = classNames.size
+    ? new RegExp(
+        `^\\s*(?:export\\s+)?(?:default\\s+)?(?:declare\\s+)?(?:abstract\\s+)?class\\s+(${names})\\b` +
+          `|^\\s*(?:export\\s+)?(?:const|let|var)\\s+(${names})\\s*(?::[^=]*)?=\\s*class\\b`,
+        'm',
+      )
+    : undefined;
+  let copies: string[] = [];
+  let visit = (current: string) => {
+    for (let entry of readdirSync(current, { withFileTypes: true })) {
+      let path = join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (
+          !entry.name.startsWith('.') &&
+          !['node_modules', 'dist', 'declarations', 'tmp'].includes(entry.name)
+        ) {
+          visit(path);
+        }
+      } else if (/\.g?[jt]s$/.test(entry.name)) {
+        if (fileNames.has(entry.name)) {
+          copies.push(`${relative(repoRoot, path)} has a subset file's name`);
+        }
+        let match =
+          declaration && readFileSync(path, 'utf8').match(declaration);
+        if (match) {
+          copies.push(
+            `${relative(repoRoot, path)} declares ${match[1] ?? match[2]}`,
+          );
+        }
+      }
+    }
+  };
+  visit(dir);
+  if (copies.length) {
+    fail(
+      `${relative(repoRoot, dir)} holds a copy of a catalog test subset definition:\n  ${copies.join('\n  ')}\n` +
+        `The definitions packages/catalog/test-subset.json lists live only in ${manifest.repository}. ` +
+        `Change them there and re-pin (see .claude/skills/catalog-test-subset).`,
+    );
+  }
+  log(
+    classNames.size
+      ? `${relative(repoRoot, dir)} holds no copy of a subset definition (${[...classNames].join(', ')})`
+      : `${relative(repoRoot, dir)} holds no file named like a subset file`,
+  );
 }
 
 function bump(manifest: Manifest) {
@@ -415,7 +527,7 @@ function bump(manifest: Manifest) {
   );
   let sha = output.split(/\s/)[0];
   if (!/^[0-9a-f]{40}$/.test(sha)) {
-    fail(`could not resolve main of ${manifest.repository}`);
+    fail(`could not resolve ${manifest.repository} main`);
   }
   let raw = readFileSync(manifestPath, 'utf8');
   writeFileSync(manifestPath, raw.replace(manifest.revision, sha));
@@ -423,8 +535,237 @@ function bump(manifest: Manifest) {
   return { ...manifest, revision: sha };
 }
 
-// The deployed catalog realm serves boxel-catalog's main, so a pin that main
-// does not contain describes definitions no deployment has.
+interface PullRequest {
+  number: number;
+  html_url: string;
+  state: 'open' | 'closed';
+  merged_at: string | null;
+  merge_commit_sha: string | null;
+  head: { sha: string };
+}
+
+const boxelRepository = 'cardstack/boxel';
+
+// The pull request lookups only enrich a failure message, so an error answers
+// nothing rather than masking the failure they describe.
+async function lookup<T>(
+  url: string,
+  headers: Record<string, string>,
+  init?: RequestInit,
+): Promise<T | undefined> {
+  try {
+    let response = await fetch(url, { ...init, headers });
+    return response.ok ? ((await response.json()) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// For a commit main does not contain, GitHub lists the open pull requests that
+// carry it, and the merged one it came from when that pull request was
+// squash-merged (a squash lands a new commit on main, never the head itself).
+// For a commit on main, it lists the pull request that merged it.
+async function pullRequestsFor(
+  repository: string,
+  sha: string,
+  headers: Record<string, string>,
+): Promise<PullRequest[]> {
+  return (
+    (await lookup<PullRequest[]>(
+      `https://api.github.com/repos/${repository}/commits/${sha}/pulls`,
+      headers,
+    )) ?? []
+  );
+}
+
+// The pull requests that changed `paths` on main since `since`: each path's
+// history on main, narrowed to the commits main has and `since` lacks.
+async function pullRequestsChanging(
+  manifest: Manifest,
+  since: string,
+  paths: string[],
+  headers: Record<string, string>,
+): Promise<string[]> {
+  let api = `https://api.github.com/repos/${manifest.repository}`;
+  let compare = await lookup<{ commits: { sha: string }[] }>(
+    `${api}/compare/${since}...main`,
+    headers,
+  );
+  if (!compare) {
+    return [];
+  }
+  let sincePin = new Set(compare.commits.map((c) => c.sha));
+  let shas = new Set<string>();
+  for (let path of paths) {
+    let history = await lookup<{ sha: string }[]>(
+      `${api}/commits?sha=main&path=${encodeURIComponent(path)}&per_page=100`,
+      headers,
+    );
+    for (let { sha } of history ?? []) {
+      if (sincePin.has(sha)) {
+        shas.add(sha);
+      }
+    }
+  }
+  let urls = new Set<string>();
+  for (let sha of shas) {
+    for (let pr of await pullRequestsFor(manifest.repository, sha, headers)) {
+      urls.add(pr.html_url);
+    }
+  }
+  return [...urls];
+}
+
+const boxelPinsQuery = `
+  query ($owner: String!, $name: String!, $path: String!, $mainPath: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      main: object(expression: $mainPath) { ... on Blob { text } }
+      pullRequests(states: OPEN, first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          url
+          headRefName
+          commits(last: 1) {
+            nodes { commit { file(path: $path) { object { ... on Blob { text } } } } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface BoxelPinsAnswer {
+  data?: {
+    repository: {
+      main: { text?: string } | null;
+      pullRequests: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: {
+          url: string;
+          headRefName: string;
+          commits: {
+            nodes: {
+              commit: { file: { object: { text?: string } | null } | null };
+            }[];
+          };
+        }[];
+      };
+    };
+  };
+}
+
+// The catalog revision boxel main pins, and the one each open boxel pull
+// request pins at its head, read from their manifests with a GraphQL query
+// per hundred pull requests. A pull request whose branch has no manifest, or
+// one that doesn't parse, is left out. GraphQL takes no anonymous requests, so
+// without GITHUB_TOKEN this answers nothing.
+async function boxelPins(headers: Record<string, string>) {
+  let [owner, name] = boxelRepository.split('/');
+  let path = relative(repoRoot, manifestPath);
+  let revisionIn = (text: string | undefined) => {
+    try {
+      return text ? (JSON.parse(text) as Manifest).revision : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  let main: string | undefined;
+  let pullRequests: { url: string; branch: string; revision: string }[] = [];
+  let after: string | null = null;
+  do {
+    let answer: BoxelPinsAnswer | undefined = await lookup<BoxelPinsAnswer>(
+      'https://api.github.com/graphql',
+      headers,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          query: boxelPinsQuery,
+          variables: { owner, name, path, mainPath: `main:${path}`, after },
+        }),
+      },
+    );
+    if (!answer?.data) {
+      break;
+    }
+    let { repository } = answer.data;
+    main ??= revisionIn(repository.main?.text);
+    for (let pr of repository.pullRequests.nodes) {
+      let revision = revisionIn(pr.commits.nodes[0]?.commit.file?.object?.text);
+      if (revision) {
+        pullRequests.push({ url: pr.url, branch: pr.headRefName, revision });
+      }
+    }
+    let { hasNextPage, endCursor } = repository.pullRequests.pageInfo;
+    after = hasNextPage ? endCursor : null;
+  } while (after);
+  return { main, pullRequests };
+}
+
+// Where a pin that clears a changed-subset-file failure is already waiting:
+// boxel main, or open boxel pull requests other than the branch under check,
+// whose pin has every subset file as catalog main has it. That is the check's
+// own condition, so merging one of them is what makes this branch pass.
+async function pinsMatchingMain(
+  manifest: Manifest,
+  mainBlobs: Map<string, string | undefined>,
+  headers: Record<string, string>,
+) {
+  let pins = await boxelPins(headers);
+  let matches = new Map<string, Promise<boolean>>();
+  let matchesMain = (revision: string) => {
+    if (!matches.has(revision)) {
+      matches.set(
+        revision,
+        Promise.all(
+          [...mainBlobs].map(async ([path, sha]) => {
+            let blob = await lookup<{ sha: string }>(
+              `https://api.github.com/repos/${manifest.repository}/contents/${path}?ref=${revision}`,
+              headers,
+            );
+            return blob?.sha === sha;
+          }),
+        ).then((each) => each.every(Boolean)),
+      );
+    }
+    return matches.get(revision)!;
+  };
+  if (
+    pins.main &&
+    pins.main !== manifest.revision &&
+    (await matchesMain(pins.main))
+  ) {
+    return { main: true, pullRequests: [] };
+  }
+  let current = process.env.GITHUB_HEAD_REF || currentBranch();
+  let candidates = pins.pullRequests.filter(
+    (pr) => pr.branch !== current && pr.revision !== manifest.revision,
+  );
+  let matching = await Promise.all(
+    candidates.map((pr) => matchesMain(pr.revision)),
+  );
+  return {
+    main: false,
+    pullRequests: candidates.filter((_, i) => matching[i]).map((pr) => pr.url),
+  };
+}
+
+function currentBranch() {
+  try {
+    return execFileSync('git', ['-C', repoRoot, 'branch', '--show-current'], {
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+// The deployed catalog realm serves boxel-catalog's main, so boxel's tests
+// should run against exactly the subset files main has. That is the whole
+// rule: every subset file at the pin matches main. Which commit the pin names
+// doesn't matter. A commit from a catalog pull request passes once that pull
+// request merges, whether it merged as a merge commit, a squash or a rebase,
+// and fails while the pull request is open or once main changes a subset file
+// again.
 async function checkPin(manifest: Manifest) {
   let headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -432,44 +773,131 @@ async function checkPin(manifest: Manifest) {
   if (process.env.GITHUB_TOKEN) {
     headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
-  let url = `https://api.github.com/repos/${manifest.repository}/compare/main...${manifest.revision}`;
-  let response = await fetch(url, { headers });
-  if (!response.ok) {
-    fail(`GET ${url} answered ${response.status}`);
-  }
-  let { status } = (await response.json()) as { status: string };
-  if (status !== 'behind' && status !== 'identical') {
+  let api = `https://api.github.com/repos/${manifest.repository}`;
+
+  // Test stacks fetch the pinned files from GitHub, so a commit that exists
+  // only in a local catalog checkout can't be pinned.
+  let commitUrl = `${api}/commits/${manifest.revision}`;
+  let commit = await fetch(commitUrl, { headers });
+  if (commit.status === 404 || commit.status === 422) {
     fail(
-      `${manifest.revision} is not on ${manifest.repository} main (compare status "${status}"). ` +
-        `Merge the catalog change first, then re-pin to a commit on main (pnpm catalog:test-subset --bump).`,
+      `${manifest.revision} is not a commit in ${manifest.repository}. ` +
+        `Pin a commit pushed to ${manifest.repository}: its main (pnpm catalog:test-subset --bump), ` +
+        `or the head of the pushed catalog pull request this change pairs with.`,
     );
   }
-  log(`${manifest.revision} is on ${manifest.repository} main`);
-}
+  if (!commit.ok) {
+    fail(`GET ${commitUrl} answered ${commit.status}`);
+  }
 
-// A realm's compiled-module cache is keyed by path and cleared by the running
-// realm's file watcher, so files the sync rewrote before the realm booted can
-// still be served from a compile of their old content. Touching them once the
-// realm is up makes the watcher clear those entries.
-function touch(where: string) {
-  let dir = where === 'clone' ? cloneDir : subsetDir;
-  let now = new Date();
-  for (let { path } of readManifest().files) {
-    let file = join(dir, path);
-    if (existsSync(file)) {
-      utimesSync(file, now, now);
+  // The contents API answers with each file's blob sha, so comparing a file
+  // at two refs needs no download. A file a ref doesn't have answers 404.
+  let blobSha = async (path: string, ref: string) => {
+    let url = `${api}/contents/${path}?ref=${ref}`;
+    let response = await fetch(url, { headers });
+    if (response.status === 404) {
+      return undefined;
+    }
+    if (!response.ok) {
+      fail(`GET ${url} answered ${response.status}`);
+    }
+    return ((await response.json()) as { sha: string }).sha;
+  };
+  let mainBlobs = new Map<string, string | undefined>();
+  let changed: string[] = [];
+  for (let { path } of manifest.files) {
+    let sha = await blobSha(path, 'main');
+    mainBlobs.set(path, sha);
+    if (sha !== (await blobSha(path, manifest.revision))) {
+      changed.push(path);
     }
   }
-  log(`touched the subset files in ${relative(repoRoot, dir)}`);
+  if (!changed.length) {
+    log(
+      `the subset files at ${manifest.revision} match ${manifest.repository} main`,
+    );
+    return;
+  }
+
+  // Everything from here explains the failure: the catalog pull request the
+  // pin is waiting on, or what main changed after the pin's files reached it.
+  let differ = `${changed.join(', ')} at ${manifest.revision} ${changed.length === 1 ? 'differs' : 'differ'} from ${manifest.repository} main`;
+  let prs = await pullRequestsFor(
+    manifest.repository,
+    manifest.revision,
+    headers,
+  );
+  let open = prs.filter((pr) => pr.state === 'open');
+  let waitingOn =
+    open.find((pr) => pr.head.sha === manifest.revision) ?? open[0];
+  // Merging the pull request settles the difference only when the pull
+  // request is what changed the file. One that left the file alone differs
+  // from main because main moved on after it branched. A full page of files
+  // may hide the one that matters, so it counts as changing it.
+  let waitingFiles =
+    waitingOn &&
+    (await lookup<{ filename: string }[]>(
+      `${api}/pulls/${waitingOn.number}/files?per_page=100`,
+      headers,
+    ));
+  if (
+    waitingOn &&
+    (!waitingFiles ||
+      waitingFiles.length === 100 ||
+      waitingFiles.some(({ filename }) => changed.includes(filename)))
+  ) {
+    fail(
+      `${differ}, because the pin is a commit in ${waitingOn.html_url}, which hasn't merged: ` +
+        `waiting on ${manifest.repository}#${waitingOn.number} to merge. ` +
+        `Once it merges, re-run this check.` +
+        (waitingOn.head.sha === manifest.revision
+          ? ''
+          : ` The pin isn't that pull request's head (${waitingOn.head.sha}), so boxel's tests aren't running its latest change: re-pin to the head.`),
+    );
+  }
+
+  let merged = prs.find((pr) => pr.merged_at);
+  let compare = await lookup<{ status: string }>(
+    `${api}/compare/main...${manifest.revision}`,
+    headers,
+  );
+  let onMain = compare?.status === 'behind' || compare?.status === 'identical';
+  if (compare && !onMain && !merged && !waitingOn) {
+    fail(
+      `${differ}, and ${manifest.revision} is on neither ${manifest.repository} main nor any of its open or merged pull requests, ` +
+        `so boxel's tests would run against definitions no deployment serves. ` +
+        `Re-pin to ${manifest.repository} main (pnpm catalog:test-subset --bump), or to the head of the catalog pull request this change pairs with.`,
+    );
+  }
+
+  // Main has changed the files since the pin's own versions: since the pin
+  // when it is on main or still on a branch, and since the merge when it came
+  // from a pull request that merged.
+  let since =
+    !onMain && merged?.merge_commit_sha
+      ? merged.merge_commit_sha
+      : manifest.revision;
+  let changing = await pullRequestsChanging(manifest, since, changed, headers);
+  let waiting = await pinsMatchingMain(manifest, mainBlobs, headers);
+  let steps = `to ${manifest.repository} main (pnpm catalog:test-subset --bump), run the manifest's tests against it, and commit the new pin.`;
+  let [one, ...more] = waiting.pullRequests;
+  fail(
+    `${manifest.repository} main has changed ${changed.join(', ')} since ${manifest.revision}` +
+      (changing.length ? ` (in ${changing.join(', ')})` : '') +
+      `, so boxel's tests would run against definitions deployments no longer serve. ` +
+      (waiting.main
+        ? `${boxelRepository} main already pins a revision that matches ${manifest.repository} main: merge ${boxelRepository} main into this branch.`
+        : one
+          ? more.length
+            ? `${waiting.pullRequests.join(', ')} already pin a revision that matches ${manifest.repository} main: once one merges, merge ${boxelRepository} main into this branch. To move the pin without them, re-pin ${steps}`
+            : `${one} already pins a revision that matches ${manifest.repository} main: once it merges, merge ${boxelRepository} main into this branch. To move the pin without it, re-pin ${steps}`
+          : `Re-pin ${steps}`),
+  );
 }
 
 async function main() {
   let args = new Set(process.argv.slice(2));
-  let touchArg = [...args].find((a) => a.startsWith('--touch='));
-  if (touchArg) {
-    touch(touchArg.slice('--touch='.length));
-    return;
-  }
+  let noCopiesArg = [...args].find((a) => a.startsWith('--check-no-copies='));
   if (args.has('--check-pin')) {
     await checkPin(readManifest());
     return;
@@ -488,6 +916,17 @@ async function main() {
     loaded = await loadContents(manifest);
   } catch (e) {
     let message = `could not fetch ${manifest.repository}@${manifest.revision}: ${(e as Error).message}`;
+    if (noCopiesArg) {
+      console.warn(
+        `catalog test subset: ${message}; checking file names only, since the class names come from the files`,
+      );
+      checkNoCopies(
+        manifest,
+        undefined,
+        resolve(noCopiesArg.slice('--check-no-copies='.length)),
+      );
+      return;
+    }
     if (args.has('--best-effort')) {
       console.warn(`catalog test subset: ${message}; continuing without it`);
       return;
@@ -495,6 +934,14 @@ async function main() {
     fail(message);
   }
   let { contents, source } = loaded;
+  if (noCopiesArg) {
+    checkNoCopies(
+      manifest,
+      contents,
+      resolve(noCopiesArg.slice('--check-no-copies='.length)),
+    );
+    return;
+  }
   checkClosure(contents);
 
   if ('unchanged' in loaded && loaded.unchanged) {

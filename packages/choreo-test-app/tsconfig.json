@@ -1,0 +1,42 @@
+{
+  "extends": "@ember/app-tsconfig",
+  "include": ["app", "tests", "types"],
+  "compilerOptions": {
+    "allowJs": true,
+    /**
+      https://www.typescriptlang.org/tsconfig#noEmitOnError
+      Do not block emit on TS errors.
+    */
+    "noEmitOnError": false,
+
+    "declaration": false,
+    "declarationMap": false,
+
+    /**
+      https://www.typescriptlang.org/tsconfig#allowImportingTsExtensions
+
+      We want our tooling to know how to resolve our custom files so the appropriate plugins
+      can do the proper transformations on those files.
+    */
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "test-app/tests/*": ["./tests/*"],
+      "test-app/*": ["./app/*"],
+      /**
+        choreo-player resolves to its source, so type-checking needs it
+        unbuilt. Its package.json#exports point types at the build output
+        that npm consumers get.
+      */
+      "choreo-player": ["../choreo-player/src/index.ts"],
+      "choreo-player/hyperframes": ["../choreo-player/src/hyperframes.ts"],
+      "*": ["./types/*"]
+    },
+    /**
+      glimmer-motion and @cardstack/choreo resolve to their source through
+      the `developing:choreo` export condition, so type-checking needs
+      neither built.
+    */
+    "customConditions": ["developing:choreo"],
+    "types": ["ember-source/types"]
+  }
+}

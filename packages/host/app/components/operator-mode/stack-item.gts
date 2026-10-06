@@ -17,7 +17,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
-import { restartableTask, timeout, dropTask } from 'ember-concurrency';
+import { dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
@@ -95,9 +95,7 @@ import type {
 } from '@cardstack/base/card-api';
 
 export interface StackItemComponentAPI {
-  clearSelections: () => void;
   deselectCard: (cardId: string) => void;
-  scrollIntoView: (selector: string) => Promise<void>;
   startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
 }
 
@@ -110,10 +108,6 @@ interface Signature {
     toolContext: ToolContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
-    onSelectedCards: (
-      selectedCards: CardDefOrId[],
-      stackItem: StackItem,
-    ) => void;
     setupStackItem: (
       model: StackItem,
       componentAPI: StackItemComponentAPI,
@@ -161,8 +155,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     | 'movingForward'
     | undefined = 'opening';
   @tracked private cardResource: ReturnType<getCard> | undefined;
-  private contentEl: HTMLElement | undefined;
-  private containerEl: HTMLElement | undefined;
   private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
@@ -185,9 +177,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.args.setupStackItem(this.args.item, {
-      clearSelections: this.clearSelections,
       deselectCard: this.deselectCard,
-      scrollIntoView: this.scrollIntoViewTask.perform,
       startAnimation: this.startAnimation.perform,
     });
   }
@@ -200,6 +190,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get url() {
     return this.card?.id ?? this.cardError?.id;
+  }
+
+  private get codeSubmodeOffered() {
+    return this.operatorModeStateService.codeSubmodeOffered(
+      this.url ?? this.args.item.id,
+    );
   }
 
   private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
@@ -459,10 +455,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     } else {
       this.selectedCards.add(cardId);
     }
-
-    // pass a copy of the array so that this doesn't become a
-    // back door into mutating the state of this component
-    this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
   private clearSelections = () => {
@@ -477,15 +469,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   // extensionless form rather than an exact string.
   private deselectCard = (cardId: string) => {
     let target = removeCardJsonExtension(cardId);
-    let removed = false;
     for (let selectedId of [...this.selectedCards]) {
       if (removeCardJsonExtension(selectedId) === target) {
         this.selectedCards.delete(selectedId);
-        removed = true;
       }
-    }
-    if (removed) {
-      this.args.onSelectedCards([...this.selectedCards], this.args.item);
     }
   };
 
@@ -499,9 +486,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     availableCards.forEach((cardId) => {
       this.selectedCards.add(cardId);
     });
-
-    // Notify parent component of selection changes
-    this.args.onSelectedCards([...this.selectedCards], this.args.item);
   };
 
   private confirmAndDeleteSelected = () => {
@@ -559,9 +543,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.deleteError = 'An unexpected error occurred. Please try again.';
     } finally {
       this.isDeletingCards = false;
-
-      // Notify parent component of selection changes
-      this.args.onSelectedCards([...this.selectedCards], this.args.item);
     }
   };
 
@@ -789,29 +770,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.operatorModeStateService.setItemFormat(item, 'isolated', { request });
   };
 
-  private scrollIntoViewTask = restartableTask(async (selector: string) => {
-    if (!this.contentEl || !this.containerEl) {
-      return;
-    }
-    await timeout(500); // need to wait for DOM to update with new card(s)
-
-    let item = document.querySelector(selector);
-    if (!item) {
-      return;
-    }
-    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await timeout(1000);
-    // ember-velcro uses visibility: hidden to hide items (vs display: none).
-    // visibility:hidden alters the geometry of the DOM elements such that
-    // scrollIntoView thinks the container itself is scrollable (it's not) because of
-    // the additional height that the hidden velcro-ed items are adding and
-    // scrolls the entire container (including the header). this is a workaround
-    // to reset the scroll position for the container. I tried adding middleware to alter
-    // the hiding behavior for ember-velcro, but for some reason the state
-    // used to indicate if the item is visible is not available to middleware...
-    this.containerEl.scrollTop = 0;
-  });
-
   private startAnimation = dropTask(
     async (animationType: 'closing' | 'movingForward') => {
       this.animationType = animationType;
@@ -879,14 +837,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private finishOpeningAnimation = () => {
     this.handleAnimationCompletion('opening');
-  };
-
-  private setupContentEl = (el: HTMLElement) => {
-    this.contentEl = el;
-  };
-
-  private setupContainerEl = (el: HTMLElement) => {
-    this.containerEl = el;
   };
 
   private get canEdit() {
@@ -1011,7 +961,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         style={{cssVar
           card-error-header-height='var(--stack-item-header-height)'
         }}
-        {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if (not this.cardResource.isLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
@@ -1050,7 +999,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{else}}
               <CardError
                 @error={{this.cardError}}
-                @viewInCodeMode={{true}}
+                @viewInCodeMode={{this.codeSubmodeOffered}}
                 @headerOptions={{this.cardErrorHeaderOptions}}
                 class='stack-item-header'
                 style={{cssVar
@@ -1161,11 +1110,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               />
             {{/if}}
           {{/let}}
-          <div
-            class='stack-item-content'
-            {{ContentElement onSetup=this.setupContentEl}}
-            data-test-stack-item-content
-          >
+          <div class='stack-item-content' data-test-stack-item-content>
             <CardRenderer
               class='stack-item-preview'
               @card={{this.card}}

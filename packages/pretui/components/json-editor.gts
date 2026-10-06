@@ -750,262 +750,264 @@ export class JsonEditor extends JsonRowsBase<JsonEditorSignature> {
     </div>
 
     <style scoped>
-      .pretui-json {
-        --_indent: var(--pretui-json-indent, 14px);
-        --_row-h: var(--pretui-json-row-height, 26px);
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2, 6px);
-        font-size: var(--text-ui-md, 12.5px);
-        color: var(--foreground);
-        container-type: inline-size;
-      }
-      /* The blank document. Deliberately almost no dress: the textarea
-         inherits the field tokens and the hint is the smallest legible
-         label the scale has. Reserves the rows' own minimum height so the
-         field does not jump when the first paste lands (Law 8's corollary
-         — a value that arrives late reserves its space). */
-      .pretui-json-seed {
-        display: flex;
-        flex-direction: column;
-      }
-      .pretui-json-seed :is(textarea) {
-        min-height: calc(var(--_row-h) * 4);
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-md, 12.5px);
-      }
-      .pretui-json-bar {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        min-height: var(--control-h, 28px);
-      }
-      .pretui-json-bar-name {
-        font-size: var(--text-ui-sm, 11.5px);
-        font-weight: 600;
-        letter-spacing: var(--track-eyebrow, 0.06em);
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .pretui-json-count {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-      }
-      .pretui-json-gap {
-        flex: 1 1 auto;
-      }
-
-      .pretui-json-list {
-        padding: var(--space-2, 6px) 0;
-        border-radius: var(--radius-surface, 10px);
-        background: var(--inset, var(--boxel-100));
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        overflow: auto;
-        max-height: var(--pretui-json-max-height, 26rem);
-      }
-
-      .pretui-json-row {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        min-height: var(--_row-h);
-        padding-inline-start: calc(var(--space-3, 8px) + (var(--_level, 1) - 1) * var(--_indent));
-        padding-inline-end: var(--space-3, 8px);
-        font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
-        font-variant-numeric: tabular-nums;
-        outline: none;
-      }
-      .pretui-json-row:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-json-row:focus-visible {
-        box-shadow: inset 0 0 0 2px var(--ring);
-        border-radius: var(--radius-chip, 6px);
-      }
-      .pretui-json-row[data-matched='true'] {
-        background: color-mix(in oklch, var(--primary) 12%, transparent);
-        box-shadow: inset 3px 0 0 0 var(--primary);
-      }
-      .pretui-json-row[data-editing='true'] {
-        background: var(--card);
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        min-height: calc(var(--control-h, 28px) + 8px);
-      }
-
-      .pretui-json-cell {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2, 6px);
-        min-width: 0;
-      }
-      .pretui-json-cell-key {
-        flex: 0 0 auto;
-        max-width: 14rem;
-      }
-      .pretui-json-cell-kind {
-        flex: 0 0 auto;
-      }
-      .pretui-json-cell-value {
-        flex: 1 1 auto;
-      }
-      .pretui-json-row[data-editing='true'] .pretui-json-cell-key,
-      .pretui-json-row[data-editing='true'] .pretui-json-cell-kind {
-        flex: 0 0 9rem;
-      }
-
-      .pretui-json-twisty {
-        flex: 0 0 auto;
-        width: 10px;
-        height: 10px;
-        position: relative;
-      }
-      .pretui-json-twisty[data-leaf='true'] {
-        visibility: hidden;
-      }
-      .pretui-json-twisty::before {
-        content: '';
-        position: absolute;
-        inset-block-start: 1px;
-        inset-inline-start: 2px;
-        width: 5px;
-        height: 5px;
-        border-inline-end: 1.5px solid var(--muted-foreground);
-        border-block-end: 1.5px solid var(--muted-foreground);
-        transform: rotate(-45deg);
-        transition: transform var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
-      }
-      .pretui-json-twisty[data-open='true']::before {
-        transform: rotate(45deg);
-      }
-
-      .pretui-json-key {
-        color: var(--foreground);
-        font-weight: 600;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        cursor: text;
-      }
-      .pretui-json-kind {
-        padding: 0 4px;
-        border-radius: var(--radius-chip, 6px);
-        font-size: var(--text-ui-xs, 11px);
-        line-height: 1.5;
-        color: var(--muted-foreground);
-        background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
-      }
-      .pretui-json-row[data-kind='string'] .pretui-json-value {
-        color: var(--chart-1);
-      }
-      .pretui-json-row[data-kind='number'] .pretui-json-value {
-        color: var(--chart-2);
-      }
-      .pretui-json-row[data-kind='boolean'] .pretui-json-value {
-        color: var(--chart-4);
-      }
-      .pretui-json-row[data-kind='null'] .pretui-json-value {
-        color: var(--muted-foreground);
-        font-style: italic;
-      }
-      .pretui-json-value {
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        cursor: text;
-      }
-      .pretui-json-n {
-        flex: 0 0 auto;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-      }
-
-      .pretui-json-acts {
-        flex: 0 0 auto;
-        gap: 2px;
-        opacity: 0;
-        transition: opacity var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
-      }
-      .pretui-json-row:hover .pretui-json-acts,
-      .pretui-json-row:focus-visible .pretui-json-acts,
-      .pretui-json-row[data-editing='true'] .pretui-json-acts,
-      .pretui-json-acts:focus-within {
-        opacity: 1;
-      }
-      @media (any-pointer: coarse) {
-        .pretui-json-acts {
-          opacity: 1;
+      @layer PretComponent {
+        .pretui-json {
+          --_indent: var(--pretui-json-indent, 14px);
+          --_row-h: var(--pretui-json-row-height, 26px);
+          display: flex;
+          flex-direction: column;
+          gap: var(--space-2, 6px);
+          font-size: var(--text-ui-md, 12.5px);
+          color: var(--foreground);
+          container-type: inline-size;
         }
-        .pretui-json-act {
-          min-width: 30px;
-          min-height: 30px;
+        /* The blank document. Deliberately almost no dress: the textarea
+           inherits the field tokens and the hint is the smallest legible
+           label the scale has. Reserves the rows' own minimum height so the
+           field does not jump when the first paste lands (Law 8's corollary
+           — a value that arrives late reserves its space). */
+        .pretui-json-seed {
+          display: flex;
+          flex-direction: column;
         }
-      }
-      .pretui-json-act {
-        appearance: none;
-        border: 0;
-        min-height: 18px;
-        padding: 1px 5px;
-        border-radius: var(--radius-chip, 6px);
-        font: inherit;
-        font-size: var(--text-ui-xs, 11px);
-        color: var(--muted-foreground);
-        background: var(--card);
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        cursor: pointer;
-      }
-      .pretui-json-act:hover {
-        color: var(--foreground);
-      }
-      .pretui-json-act-danger:hover {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .pretui-json-act:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
+        .pretui-json-seed :is(textarea) {
+          min-height: calc(var(--_row-h) * 4);
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-md, 12.5px);
+        }
+        .pretui-json-bar {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          min-height: var(--control-h, 28px);
+        }
+        .pretui-json-bar-name {
+          font-size: var(--text-ui-sm, 11.5px);
+          font-weight: 600;
+          letter-spacing: var(--track-eyebrow, 0.06em);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
+        }
+        .pretui-json-count {
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+        }
+        .pretui-json-gap {
+          flex: 1 1 auto;
+        }
 
-      .pretui-json-more {
-        flex: 1 1 auto;
-        color: var(--muted-foreground);
-        font-style: italic;
-      }
-      .pretui-json-more-cue {
-        font-size: var(--text-ui-xs, 11px);
-        opacity: 0.8;
-      }
+        .pretui-json-list {
+          padding: var(--space-2, 6px) 0;
+          border-radius: var(--radius-surface, 10px);
+          background: var(--inset, var(--boxel-100));
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          overflow: auto;
+          max-height: var(--pretui-json-max-height, 26rem);
+        }
 
-      .pretui-json-live {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
-      }
-
-      @container (max-width: 34rem) {
+        .pretui-json-row {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          min-height: var(--_row-h);
+          padding-inline-start: calc(var(--space-3, 8px) + (var(--_level, 1) - 1) * var(--_indent));
+          padding-inline-end: var(--space-3, 8px);
+          font-family: var(--font-mono);
+          font-size: var(--text-ui-sm, 11.5px);
+          font-variant-numeric: tabular-nums;
+          outline: none;
+        }
+        .pretui-json-row:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-json-row:focus-visible {
+          box-shadow: inset 0 0 0 2px var(--ring);
+          border-radius: var(--radius-chip, 6px);
+        }
+        .pretui-json-row[data-matched='true'] {
+          background: color-mix(in oklch, var(--primary) 12%, transparent);
+          box-shadow: inset 3px 0 0 0 var(--primary);
+        }
         .pretui-json-row[data-editing='true'] {
-          flex-wrap: wrap;
+          background: var(--card);
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          min-height: calc(var(--control-h, 28px) + 8px);
         }
-        .pretui-json-cell-key,
+
+        .pretui-json-cell {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+          min-width: 0;
+        }
+        .pretui-json-cell-key {
+          flex: 0 0 auto;
+          max-width: 14rem;
+        }
+        .pretui-json-cell-kind {
+          flex: 0 0 auto;
+        }
+        .pretui-json-cell-value {
+          flex: 1 1 auto;
+        }
         .pretui-json-row[data-editing='true'] .pretui-json-cell-key,
         .pretui-json-row[data-editing='true'] .pretui-json-cell-kind {
-          flex: 1 1 100%;
-          max-width: none;
+          flex: 0 0 9rem;
         }
-      }
 
-      @media (prefers-reduced-motion: reduce) {
-        .pretui-json-twisty::before,
+        .pretui-json-twisty {
+          flex: 0 0 auto;
+          width: 10px;
+          height: 10px;
+          position: relative;
+        }
+        .pretui-json-twisty[data-leaf='true'] {
+          visibility: hidden;
+        }
+        .pretui-json-twisty::before {
+          content: '';
+          position: absolute;
+          inset-block-start: 1px;
+          inset-inline-start: 2px;
+          width: 5px;
+          height: 5px;
+          border-inline-end: 1.5px solid var(--muted-foreground);
+          border-block-end: 1.5px solid var(--muted-foreground);
+          transform: rotate(-45deg);
+          transition: transform var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
+        }
+        .pretui-json-twisty[data-open='true']::before {
+          transform: rotate(45deg);
+        }
+
+        .pretui-json-key {
+          color: var(--foreground);
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          cursor: text;
+        }
+        .pretui-json-kind {
+          padding: 0 4px;
+          border-radius: var(--radius-chip, 6px);
+          font-size: var(--text-ui-xs, 11px);
+          line-height: 1.5;
+          color: var(--muted-foreground);
+          background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
+        }
+        .pretui-json-row[data-kind='string'] .pretui-json-value {
+          color: var(--chart-1);
+        }
+        .pretui-json-row[data-kind='number'] .pretui-json-value {
+          color: var(--chart-2);
+        }
+        .pretui-json-row[data-kind='boolean'] .pretui-json-value {
+          color: var(--chart-4);
+        }
+        .pretui-json-row[data-kind='null'] .pretui-json-value {
+          color: var(--muted-foreground);
+          font-style: italic;
+        }
+        .pretui-json-value {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          cursor: text;
+        }
+        .pretui-json-n {
+          flex: 0 0 auto;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+        }
+
         .pretui-json-acts {
-          transition: none;
+          flex: 0 0 auto;
+          gap: 2px;
+          opacity: 0;
+          transition: opacity var(--pretui-dur-snap, 120ms) var(--pretui-ease-snap, ease);
+        }
+        .pretui-json-row:hover .pretui-json-acts,
+        .pretui-json-row:focus-visible .pretui-json-acts,
+        .pretui-json-row[data-editing='true'] .pretui-json-acts,
+        .pretui-json-acts:focus-within {
+          opacity: 1;
+        }
+        @media (any-pointer: coarse) {
+          .pretui-json-acts {
+            opacity: 1;
+          }
+          .pretui-json-act {
+            min-width: 30px;
+            min-height: 30px;
+          }
+        }
+        .pretui-json-act {
+          appearance: none;
+          border: 0;
+          min-height: 18px;
+          padding: 1px 5px;
+          border-radius: var(--radius-chip, 6px);
+          font: inherit;
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          background: var(--card);
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          cursor: pointer;
+        }
+        .pretui-json-act:hover {
+          color: var(--foreground);
+        }
+        .pretui-json-act-danger:hover {
+          color: var(--pretui-destructive-ink, var(--boxel-danger));
+        }
+        .pretui-json-act:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+
+        .pretui-json-more {
+          flex: 1 1 auto;
+          color: var(--muted-foreground);
+          font-style: italic;
+        }
+        .pretui-json-more-cue {
+          font-size: var(--text-ui-xs, 11px);
+          opacity: 0.8;
+        }
+
+        .pretui-json-live {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
+
+        @container (max-width: 34rem) {
+          .pretui-json-row[data-editing='true'] {
+            flex-wrap: wrap;
+          }
+          .pretui-json-cell-key,
+          .pretui-json-row[data-editing='true'] .pretui-json-cell-key,
+          .pretui-json-row[data-editing='true'] .pretui-json-cell-kind {
+            flex: 1 1 100%;
+            max-width: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-json-twisty::before,
+          .pretui-json-acts {
+            transition: none;
+          }
         }
       }
     </style>

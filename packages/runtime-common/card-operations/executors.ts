@@ -186,12 +186,36 @@ interface EntryCommon {
   // the write conditional in the reporting sense: the result says whether the
   // target was still at that version, and the write happens either way.
   baseVersion?: string;
+  // Whether this entry may be carried out at all, where that rests on the
+  // state the entry is about to change and so can only be decided under the
+  // lock. Handed the card the entry is judged by, as the batch holds it where
+  // the entry stages, or undefined where there is no such card to judge, and
+  // refuses by throwing. Absent for an entry that was admitted in full before
+  // the batch was composed, which is every entry but a policy-granted write
+  // to a stored card, and a policy-granted create whose grants carry
+  // predicates.
+  admit?: (judged: AdmissionSubject | undefined) => Promise<void>;
+}
+
+// The card an entry that is admitted under the lock is judged by: the card it
+// changes, as the batch holds it when the entry stages, or, for a create that
+// names no card, the card it would mint.
+export interface AdmissionSubject {
+  id: string;
+  source: string;
+  // Set where an earlier entry in the batch appended to the card without
+  // holding its bytes, so `source` is the card from beneath that append. An
+  // append never changes a card's type, so these bytes still say what type
+  // the card is. They do not say what its fields will hold once the append
+  // lands.
+  beneathAppend?: true;
 }
 
 export interface CreateEntry extends EntryCommon {
   op: 'create';
-  // The client's own id for the card being minted. It names the file the card
-  // lands in, and it is the key other entries in the batch link to it by.
+  // The client's own id for the card being minted. It is the key other entries
+  // in the batch link to it by, and it names the file the card lands in,
+  // except in a batch that mints its ids (see `CommitBatchOptions.mintIds`).
   // Absent means the realm mints an id, and nothing else in the batch can
   // refer to the card.
   lid?: string;
@@ -742,11 +766,13 @@ export async function stageUpdate(
   // land the same bytes because they are the same code.
   //
   // Realm-managed keys never come from a patch: `realmInfo` and `realmURL` are
-  // stamped by the realm serving the card, `screenshots` is joined from the
+  // stamped by the realm serving the card, `captures` is joined from the
   // prerendered manifest at serve time, `version` / `lastModified` /
   // `resourceCreatedAt` describe the stored file and are reported on a write
-  // response, and `type` is fixed by the document shape. A client echoing back
-  // what it was served must not persist any of them into the source file.
+  // response, `relationshipsWithheld` describes how a search row was served
+  // rather than the card, and `type` is fixed by the document shape. A client
+  // echoing back what it was served must not persist any of them into the
+  // source file.
   //
   // Dropped here and not only where the bytes are serialized, because these run
   // ahead of the unchanged-patch comparison below, and a key that survives the
@@ -765,10 +791,11 @@ export async function stageUpdate(
   delete (patch as { type?: unknown }).type;
   delete patch.meta.realmInfo;
   delete patch.meta.realmURL;
-  delete patch.meta.screenshots;
+  delete patch.meta.captures;
   delete patch.meta.version;
   delete patch.meta.lastModified;
   delete patch.meta.resourceCreatedAt;
+  delete patch.meta.relationshipsWithheld;
 
   promoteStagedLinks(patch, ctx);
 
@@ -1233,6 +1260,10 @@ export interface BxlMutationModule {
       resolveReference?: (reference: string) => string;
     },
   ): unknown;
+  mergeBxlMutationOverlays(
+    stored: unknown,
+    overlays: ProgramOverlays | undefined,
+  ): { root: unknown };
   mutateBxlCardSource(
     document: { data: CardResource },
     source: string,
@@ -2053,12 +2084,14 @@ function assertPathSegment(value: string, what: string): void {
 // or named an operation that mints the type. The `lid` index is consulted
 // first so the file a create writes and the link another entry records are
 // read from one place; an entry with no `lid` cannot be linked to, so its id
-// is minted here.
+// is minted here. With `mintIds` the id is minted whatever the entry names
+// (see `CommitBatchOptions.mintIds`).
 export function createIdentity(
   entry: CreateEntry,
   resource: CardResource | undefined,
   paths: RealmPaths,
   lids: LidIndex,
+  { mintIds = false }: { mintIds?: boolean } = {},
 ): StagedIdentity {
   let lid = localIdOf(entry);
   if (lid !== undefined) {
@@ -2067,12 +2100,24 @@ export function createIdentity(
       return staged;
     }
   }
-  return stagedIdentity(
-    resource?.meta?.adoptsFrom ?? entry.definition?.of,
-    lid ?? uuidV4(),
-    entry.directory,
-    paths,
-  );
+  let type = resource?.meta?.adoptsFrom ?? entry.definition?.of;
+  return lid !== undefined && mintIds
+    ? mintedIdentity(type, lid, entry.directory, paths)
+    : stagedIdentity(type, lid ?? uuidV4(), entry.directory, paths);
+}
+
+// The identity a card takes in a batch that mints its ids (see
+// `CommitBatchOptions.mintIds`). The local id the caller sent is still held to
+// the rule any id is, so what a batch accepts of a request doesn't depend on
+// who sent it. Only where the card lands does.
+export function mintedIdentity(
+  adoptsFrom: CodeRef | undefined,
+  lid: string,
+  directory: string | undefined,
+  paths: RealmPaths,
+): StagedIdentity {
+  stagedIdentity(adoptsFrom, lid, directory, paths);
+  return stagedIdentity(adoptsFrom, uuidV4(), directory, paths);
 }
 
 // Whether a resource declares itself to belong to another realm. One batch

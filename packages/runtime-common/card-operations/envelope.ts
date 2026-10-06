@@ -3,7 +3,10 @@ import { RealmPaths, type LocalPath } from '../paths.ts';
 import {
   OperationFailure,
   isDocumentResult,
+  isExplainListingResult,
+  isExplainResult,
   isOperationFailure,
+  isValidateResult,
   isWrite,
   type BaseOperation,
   type EntryPosition,
@@ -16,8 +19,10 @@ import type { BatchEntryResult, BatchNode } from './coordinator.ts';
 import { assertParamsSupplied, type OperationScope } from './dispatch.ts';
 import { runInputTransform, type TransformContext } from './transforms.ts';
 import type { BatchEntry } from './executors.ts';
-import type { GateDecision } from './gate.ts';
+import { pendingWriteFor } from './gate.ts';
+import type { GateDecision, PendingWrite } from './gate.ts';
 import { isCodeRef } from '../card-document-shape.ts';
+import { isRelativePath, moduleFrom } from '../code-ref.ts';
 import type { CardResource } from '../resource-types.ts';
 import type { SearchEntryWireFilter } from '../search-entry.ts';
 
@@ -601,6 +606,11 @@ function hrefIn(
 // resolved; whether the thing is a code ref at all is not, and an object that
 // is not one reaches the resolver's `'type' in ref` recursion and throws out of
 // it — a malformed payload answered as a fault in the realm.
+//
+// The realm a type target is scoped to is the one the entry's resource names
+// in `data.meta.realmURL`, where it names one, and this realm otherwise. A
+// create naming another realm is then refused where every target is checked
+// against the realm, before its type is looked up or its operation judged.
 export function targetFor(
   entry: EnvelopeEntry,
   realmURL: string,
@@ -623,7 +633,12 @@ export function targetFor(
       entry.position,
     );
   }
-  return { kind: 'type', codeRef: adoptsFrom, realm: realmURL };
+  let named = asRecord(entry.data?.meta)?.realmURL;
+  return {
+    kind: 'type',
+    codeRef: adoptsFrom,
+    realm: typeof named === 'string' && named ? named : realmURL,
+  };
 }
 
 // One entry with the behavior its name resolved to. The name is the whole of
@@ -640,6 +655,16 @@ export interface ResolvedEnvelopeEntry {
   // memo, and — once `stageWriteEntry` has run — the document a create would
   // write.
   scope: OperationScope;
+}
+
+// What the policy gate left the write lock to decide of this entry, in the
+// form the lock decides it in. Undefined for an entry the gate left nothing
+// to decide of.
+export function pendingWriteOf(
+  resolved: ResolvedEnvelopeEntry,
+): PendingWrite | undefined {
+  let { entry, target, decision, scope } = resolved;
+  return pendingWriteFor(target, entry.name, decision, scope);
 }
 
 // The two behaviors that are reached somewhere other than here.
@@ -792,6 +817,24 @@ export function batchEntryFor(
             `names an href; a create has no existing resource to target`,
           position,
           entry.href,
+        );
+      }
+      // The realm resolved the type this entry names against its own root,
+      // which is where it found the operation and judged the caller. The card
+      // is stored beneath that root and reads a relative module against its
+      // own file, so a relative one would name one type to the resolution and
+      // another to the card it mints.
+      // Read through a nested ref too: an `ancestorOf` or `fieldOf` names its
+      // module on the card it wraps.
+      let adoptsFrom = asRecord(entry.data?.meta)?.adoptsFrom;
+      let module = isCodeRef(adoptsFrom) ? moduleFrom(adoptsFrom) : undefined;
+      if (isRelativePath(module)) {
+        throw refuse(
+          `entry ${position} names the type it mints by the relative module ` +
+            `"${module}"; a card that is not stored yet has no location for ` +
+            `a module to be relative to, so a create names its type by URL ` +
+            `or registered prefix`,
+          position,
         );
       }
       return {
@@ -1105,10 +1148,23 @@ export function projectedResult(
   return projection as Record<string, unknown>;
 }
 
+// An entry that does not write answers with what it read: a read with its
+// document, an explain with its explanation, or a listing explain with its
+// page of them, and a validate with its validation, as the object a card reads
+// back.
 export function readResult(
   entry: EnvelopeEntry,
   result: OperationResult,
 ): EnvelopeResult {
+  if (isExplainResult(result)) {
+    return result.explanation as unknown as Record<string, unknown>;
+  }
+  if (isExplainListingResult(result)) {
+    return result.listing as unknown as Record<string, unknown>;
+  }
+  if (isValidateResult(result)) {
+    return result.validation as unknown as Record<string, unknown>;
+  }
   if (!isDocumentResult(result)) {
     throw new OperationFailure({
       ...(entry.href ? { id: entry.href } : {}),

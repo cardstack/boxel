@@ -3,6 +3,8 @@ import { ensureTrailingSlash } from './paths.ts';
 import type { Query } from './query.ts';
 import type { RequestTimings } from './request-timings.ts';
 import { SupportedMimeType } from './router.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
+import type { LinkStrategy } from '@cardstack/base/operations';
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
@@ -112,12 +114,23 @@ export type SearchOpts = {
   // every result from card+source and reads only `data[].id`). Live /
   // external callers leave it unset and receive fully-assembled documents.
   omitIncluded?: boolean;
-  // Answer each result's relationships but side-load none of their targets,
-  // leaving `included[]` empty and the consumer to fetch the cards it
-  // displays. Set for live traffic when the realm-server is configured to
-  // stop side-loading the link closure; unset, a live search assembles the
-  // whole closure as before.
-  resolveLinksOnly?: boolean;
+  // How much of each result's link graph the response carries, in the
+  // vocabulary an operation declares one in. Absent is `full`, the whole
+  // closure. `ids` answers each result's relationships and side-loads none of
+  // their targets, leaving the consumer to fetch the cards it displays; `none`
+  // answers each result's card with no relationship data at all.
+  //
+  // The endpoint settles it from its two sources — the link-shape policy,
+  // which asks for `ids` when the realm-server is shedding load, and the
+  // declaration of a named query — through `effectiveLinkStrategy`, so it is
+  // always the narrower of the two.
+  links?: LinkStrategy;
+  // Prerendered formats every row is served data-only for: the rows carry no
+  // markup for them, and a consumer renders those rows from their data. Set
+  // from the `html` declaration of a named query, and never on a render's own
+  // search, which keeps every format's markup. Absent or empty, every format's
+  // markup is served.
+  unshareableFormats?: PrerenderedHtmlFormat[];
   priority?: number;
   // Correlation id minted by the client — a prerendering host stamps
   // `x-boxel-logging-correlation-id` on its `_federated-search` fetch, and so

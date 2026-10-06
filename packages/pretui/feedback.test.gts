@@ -1,21 +1,21 @@
 // Pretui — semantics proof for the feedback territory's status and progress
-// components (Toast, ProgressBar, ProgressRadial, Spinner, BrokenLink,
-// LoadingState) and the shared `resolvePixelSize` helper. Alert's own
-// contract is asserted in controls.test.gts.
+// components (Toast, ProgressRadial, Spinner, BrokenLink, LoadingState) and
+// the shared `resolvePixelSize` helper. Alert's own contract is asserted in
+// components/alert.test.gts and its React-dialect aliases in controls.test.gts;
+// ProgressBar's contract is asserted in components/progress-bar.test.gts.
 //
 // No assertion reads a computed style: the components' own `<style scoped>` is
 // inert in this harness (the scoped-css attribute is stamped, the rules are not
-// applied). Progress components are the case where that matters most — what is
-// actually promised is the ARIA value pair (aria-valuenow / aria-valuemax;
-// neither component emits aria-valuemin) and the inline width/percentage the
-// CSS then paints, so those are read off the attributes directly.
+// applied). ProgressRadial is the case where that matters most — what is
+// actually promised is the ARIA value pair (aria-valuenow / aria-valuemax; it
+// emits no aria-valuemin) and the inline percentage the CSS then paints, so
+// those are read off the attributes directly.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 
 import { BrokenLink } from './components/broken-link';
 import { LoadingState } from './components/loading-state';
-import { ProgressBar } from './components/progress-bar';
 import { ProgressRadial } from './components/progress-radial';
 import { Spinner } from './components/spinner';
 import { Toast } from './components/toast';
@@ -97,81 +97,6 @@ module('Pretui | feedback', function (hooks) {
     );
   });
 
-  // ── ProgressBar ─────────────────────────────────────────────────────────
-  test('ProgressBar defaults to a percentage of 100 and reports it to assistive tech', async function (assert) {
-    await render(<template><ProgressBar @value={{40}} /></template>);
-    let bar = q('.pretui-progress');
-    assert.strictEqual(bar.getAttribute('role'), 'progressbar');
-    assert.strictEqual(bar.getAttribute('aria-valuenow'), '40');
-    assert.strictEqual(bar.getAttribute('aria-valuemax'), '100');
-    assert.strictEqual(px(q('.pretui-progress-fill'), 'width'), '40%');
-    assert.notOk(q('.pretui-progress-head'), 'no header without a label or count');
-  });
-
-  test('ProgressBar clamps out-of-range values instead of overflowing its track', async function (assert) {
-    await render(
-      <template>
-        <ProgressBar @value={{-20}} @label='Under' />
-        <ProgressBar @value={{180}} @label='Over' />
-      </template>,
-    );
-    assert.deepEqual(
-      all('.pretui-progress-fill').map((f) => px(f, 'width')),
-      ['0%', '100%'],
-      'the fill never leaves 0–100',
-    );
-    assert.deepEqual(
-      all('.pretui-progress-count').map((c) => c.textContent?.trim()),
-      ['0%', '100%'],
-      'the visible readout is clamped with the fill',
-    );
-    // KNOWN GAP, pinned rather than patched: aria-valuenow is the raw @value on
-    // both ProgressBar and ProgressRadial, so assistive tech hears -20 and 180
-    // against aria-valuemax=100 — invalid ARIA, and it disagrees with the bar
-    // a sighted user sees. A fix routes aria-valuenow through the same clamp;
-    // when it lands these flip to ['0', '100'].
-    assert.deepEqual(
-      all('[role="progressbar"]').map((b) => b.getAttribute('aria-valuenow')),
-      ['-20', '180'],
-      'KNOWN GAP: the announced value is not clamped',
-    );
-  });
-
-  test('ProgressBar stays continuous for a small total when no @count is given', async function (assert) {
-    await render(<template><ProgressBar @value={{3}} @max={{6}} /></template>);
-    assert.ok(q('.pretui-progress'), 'the count is what opts a small total into steps');
-    assert.notOk(q('.pretui-progress-steps'));
-  });
-
-  test('ProgressBar gives a zero-width fill no minimum, so an empty bar reads as empty', async function (assert) {
-    await render(<template><ProgressBar @value={{0}} /></template>);
-    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0px');
-  });
-
-  test('ProgressBar switches to steps for a small discrete total with a count', async function (assert) {
-    await render(<template><ProgressBar @value={{3}} @max={{6}} @count='3 / 6' @label='Gates' /></template>);
-    let steps = all('.pretui-progress-step');
-    assert.strictEqual(steps.length, 6, 'one step per unit of @max');
-    assert.deepEqual(
-      steps.map((s) => s.dataset['on']),
-      ['true', 'true', 'true', undefined, undefined, undefined],
-    );
-    assert.strictEqual(q('.pretui-progress-steps').getAttribute('aria-valuemax'), '6');
-    assert.strictEqual(q('.pretui-progress-count').textContent?.trim(), '3 / 6', '@count replaces the percentage');
-    assert.notOk(q('.pretui-progress'), 'the continuous track is not also rendered');
-  });
-
-  test('ProgressBar stays continuous for a large total even with a count', async function (assert) {
-    await render(<template><ProgressBar @value={{300}} @max={{1200}} @count='300 files' /></template>);
-    assert.notOk(q('.pretui-progress-steps'), '1,200 steps would be nonsense');
-    assert.ok(q('.pretui-progress'));
-  });
-
-  test('ProgressBar honours an explicit @steps against the count heuristic', async function (assert) {
-    await render(<template><ProgressBar @value={{1}} @max={{4}} @steps={{true}} /></template>);
-    assert.strictEqual(all('.pretui-progress-step').length, 4, 'stepped without a count');
-  });
-
   // ── ProgressRadial ──────────────────────────────────────────────────────
   test('ProgressRadial publishes its percentage as a custom property and sizes by the scale', async function (assert) {
     await render(<template><ProgressRadial @value={{25}} /></template>);
@@ -194,7 +119,7 @@ module('Pretui | feedback', function (hooks) {
       all('[data-test-pretui-radial]').map((e) => px(e, '--pretui-radial-pct')),
       ['75', '100'],
     );
-    // KNOWN GAP (same defect as ProgressBar): the announced value is raw.
+    // KNOWN GAP: ProgressRadial clamps its fill but announces the raw value.
     assert.deepEqual(
       all('[data-test-pretui-radial]').map((e) => e.getAttribute('aria-valuenow')),
       ['3', '9'],

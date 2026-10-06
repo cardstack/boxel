@@ -18,6 +18,10 @@ on:
       - "packages/realm-server/**"
       - "packages/realm-test-harness/**"
       - "packages/software-factory/**"
+      # The skill loader reads the boxel-skills release the marketplace pins,
+      # through the boxel-cli clone script, so moving the pin re-runs this suite.
+      - ".claude-plugin/marketplace.json"
+      - "packages/boxel-cli/scripts/boxel-skills.mts"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -28,9 +32,19 @@ on:
       - "packages/observability/scripts/**"
   workflow_dispatch:
 
+# Pull requests: a new push cancels the run in progress for the same branch.
+# Pushes to main share one group but never cancel a run in progress: GitHub
+# keeps at most one running and one pending run per group, and a newer pending
+# run replaces the older one. A burst of merges therefore runs the commit in
+# progress and then the newest, rather than every commit in between. ci-bisect
+# pushes, whose every commit must be tested, and hand-run builds keep a group of
+# their own.
+# The main group is `push:main` because `:` cannot appear in a branch name, so
+# no pull request's head_ref (a fork's `main`, say) can land in it and cancel a
+# main run.
 concurrency:
-  group: ci-software-factory-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-software-factory-${{ github.head_ref || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'push:main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   checks: write

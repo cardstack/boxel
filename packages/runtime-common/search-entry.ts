@@ -697,6 +697,161 @@ export function parseSearchEntryQueryFromPayload(
 }
 
 // ---------------------------------------------------------------------------
+// Composing a realm's policy into a search.
+//
+// A `query` grant's predicate compiled to a filter when the policy compiled,
+// so a search the policy scopes runs that filter alongside the caller's own
+// rather than judging each row it finds. Both must hold: the caller asked for
+// a shape, and the grant admits a set of cards, and what comes back is the
+// rows in both.
+//
+//   effectiveFilter = { every: [ callerFilter, { any: [ ...grantFilters ] } ] }
+//
+// Composing before the query is planned is the whole point. The engine pages
+// over the rows the composed filter matches, so a page comes back full rather
+// than sparse — a page filtered after the fact would be short by however many
+// of its rows the policy removed, which reads as data loss rather than as a
+// policy.
+//
+// A realm contributing no filter is left alone. Not wrapped in an `every` of
+// one, not anchored, not touched: it runs the caller's query as the caller
+// sent it, which is what every caller a realm reads coarsely gets.
+// ---------------------------------------------------------------------------
+
+// The filter a search runs for one realm, given what the caller asked for and
+// what that realm's policy contributes.
+//
+// The grants are composed under `any` whether there is one of them or several.
+// Grants union, so the shape says what it means, and it says the same thing
+// however many rules happened to match — adding a second grant to a policy
+// widens what comes back without reshaping the query that was already running.
+export function composePolicyScopedFilter(
+  callerFilter: Filter | undefined,
+  grantFilters: Filter[],
+): Filter | undefined {
+  if (grantFilters.length === 0) {
+    return callerFilter;
+  }
+  let granted: Filter = { any: grantFilters };
+  return callerFilter === undefined
+    ? granted
+    : { every: [callerFilter, granted] };
+}
+
+// A policy's compiled filter in the grammar the engine runs. The fragment is
+// stored as a wire filter, the same grammar a request carries, so it is read
+// the way a request's filter is read — including the validation, which is what
+// keeps a filter the compiler should never have produced from reaching the
+// engine.
+//
+// A fragment binds no `htmlQuery`: it is compiled from a predicate over a
+// card's fields, and the rendering a search asks for is the caller's to
+// choose. So the whole fragment is membership, and it always reads as some
+// filter. One that reads as none is refused rather than returned, since a
+// grant that composed nothing into a search would leave the search running
+// unscoped.
+export function policyFilterFromWire(filter: SearchEntryWireFilter): Filter {
+  let translated = parseSearchEntryQueryFromPayload({ filter }).itemQuery
+    .filter;
+  if (!translated) {
+    throw new Error(
+      `a policy filter translated to no filter at all: ${JSON.stringify(filter)}`,
+    );
+  }
+  return translated;
+}
+
+// The query a realm runs for a caller its policy scopes: the caller's query,
+// with the grants that admit them composed into its filter. Composed on the
+// parsed query rather than on the wire filter, because the wire grammar binds
+// the caller's rendering choice in the filter's top-level `eq`, and nesting
+// that filter inside an `every` would carry the binding away from where it is
+// read. Everything but the filter — page, sort, fieldset, rendering — is the
+// caller's query as it stands.
+export function policyScopedQuery(
+  query: SearchEntryQuery,
+  grantFilters: Filter[],
+): SearchEntryQuery {
+  if (grantFilters.length === 0) {
+    throw new Error(
+      'a policy-scoped search needs at least one grant filter; with none, the search would run unscoped',
+    );
+  }
+  return {
+    ...query,
+    itemQuery: {
+      ...query.itemQuery,
+      filter: composePolicyScopedFilter(query.itemQuery.filter, grantFilters),
+    },
+  };
+}
+
+// The realms of a search whose rows the result marks policy-scoped
+// (`meta.policyScopedRealms`). A realm the caller does not read outright is
+// scoped whatever it contributed. Its policy composed a grant, admitted
+// nothing, or could not be judged, and the mark reads the same in each case,
+// so it cannot tell a caller whether they hold a grant there. A declared query
+// the server resolved from its own definition scopes every realm the request
+// named, since what it matched is the server's resolution rather than the
+// caller's. That includes a realm its declaration leaves out, which contributes
+// no rows to it, so the mark never says which realms the declaration searched.
+// `realms` are the ones the request named, and they are marked in that order,
+// once each.
+export function policyScopedRealms({
+  realms,
+  readable,
+  resolvedByServer,
+}: {
+  realms: string[];
+  readable: (realm: string) => boolean;
+  resolvedByServer: boolean;
+}): string[] {
+  return [
+    ...new Set(
+      resolvedByServer ? realms : realms.filter((realm) => !readable(realm)),
+    ),
+  ];
+}
+
+// `doc` with `realms` marked policy-scoped, beside any it already marks. A
+// document with no realm to mark is returned as it is, so a search of realms
+// the caller reads outright carries no mark at all.
+export function markPolicyScoped(
+  doc: EntryCollectionDocument,
+  realms: string[],
+): EntryCollectionDocument {
+  if (realms.length === 0) {
+    return doc;
+  }
+  return {
+    ...doc,
+    meta: {
+      ...doc.meta,
+      policyScopedRealms: [
+        ...new Set([...(doc.meta.policyScopedRealms ?? []), ...realms]),
+      ],
+    },
+  };
+}
+
+// The document a realm answers with when it contributes no rows because the
+// caller may not see any: the one a search matching nothing produces, so a
+// realm that grants the caller nothing reads exactly as a realm holding
+// nothing for them. The rendering choice is echoed whenever the html branch
+// is in play, as the engine echoes it.
+export function emptySearchEntryDocument(
+  query: SearchEntryQuery,
+): EntryCollectionDocument {
+  return {
+    data: [],
+    meta: {
+      page: { total: 0 },
+      ...(query.fieldset.html ? { htmlQuery: query.htmlQuery } : {}),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The single-instance GET's query-string surface. The card+html /
 // file-meta+html GET sources one entry by URL, so it needs no membership
 // query — only the rendering selection (`?format=` / `?renderType=`) and the
@@ -910,6 +1065,64 @@ export function wireFilterTypeAnchors(
   return undefined;
 }
 
+// The card types a policy is asked about for an ad-hoc search with this
+// filter, or `undefined` when the filter admits an entry of any type.
+//
+// Every entry the filter matches adopts from at least one of them, as with
+// `wireFilterTypeAnchors`, and on the same readings of a node: an unanchored
+// node is read only through its one deciding member, and `any` only when all
+// of its branches are anchored. It differs in what it keeps. Where a live
+// search needs only enough of a filter's anchors to bound its matches, a
+// policy is asked about every type a match is known to adopt from, since each
+// such type brings its own rules. So an `every` contributes the anchors of all
+// of its anchored branches rather than the first one found, and an anchored
+// node contributes its own anchor together with those its body names. Two
+// filters that match the same cards are then asked about the same types,
+// whichever order their branches are written in.
+//
+// A match of an `every` adopts from all of its anchors at once, so each of
+// them brings rules the gate would consult for that match. A match of an `any`
+// adopts from the anchors of one branch, and `policyQueryScope` confines what
+// each type's rules admit to that type's cards, so the other branches' types
+// admit nothing of it.
+export function wireFilterGrantTypes(
+  filter: SearchEntryWireFilter | undefined,
+): CodeRef[] | undefined {
+  if (!filter) {
+    return undefined;
+  }
+  let own = filter[ITEM_ANCHOR];
+  let body = grantTypesOfBody(filter);
+  if (own) {
+    return [own, ...(body ?? [])];
+  }
+  return body;
+}
+
+function grantTypesOfBody(
+  filter: SearchEntryWireFilter,
+): CodeRef[] | undefined {
+  let member = soleShapeMember(filter);
+  if (member === 'every' && filter.every?.length) {
+    let types = filter.every.flatMap(
+      (branch) => wireFilterGrantTypes(branch) ?? [],
+    );
+    return types.length > 0 ? types : undefined;
+  }
+  if (member === 'any' && filter.any?.length) {
+    let types: CodeRef[] = [];
+    for (let branch of filter.any) {
+      let branchTypes = wireFilterGrantTypes(branch);
+      if (!branchTypes) {
+        return undefined;
+      }
+      types.push(...branchTypes);
+    }
+    return types;
+  }
+  return undefined;
+}
+
 // The members that decide what a filter node matches, as opposed to the
 // `item.on` anchor that gates whichever of them runs.
 const SHAPE_MEMBERS = [
@@ -993,7 +1206,9 @@ export interface SearchEntryWireQuery {
   scope?: SearchEntryScope;
 }
 
-function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
+// A filter in the grammar the engine runs, written back in the grammar a
+// search request carries.
+export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
   let out: SearchEntryWireFilter = {};
   for (let [key, value] of Object.entries(filter)) {
     if (key === 'type' || key === 'on') {
@@ -1085,6 +1300,12 @@ export function combineSearchEntryResults(
   for (let doc of docs) {
     combined.data.push(...doc.data);
     combined.meta.page.total += doc.meta?.page?.total ?? 0;
+    if (doc.meta?.realmTotals) {
+      combined.meta.realmTotals = {
+        ...combined.meta.realmTotals,
+        ...doc.meta.realmTotals,
+      };
+    }
     if (combined.meta.htmlQuery == null && doc.meta?.htmlQuery != null) {
       combined.meta.htmlQuery = doc.meta.htmlQuery;
     }
@@ -1095,6 +1316,16 @@ export function combineSearchEntryResults(
     // merge.
     if (doc.meta?.linkClosureTruncated) {
       combined.meta.linkClosureTruncated = true;
+    }
+    // A realm that scoped its own rows scopes them in the merge too: the mark
+    // is per realm, so merging only collects which realms carry it.
+    if (doc.meta?.policyScopedRealms?.length) {
+      combined.meta.policyScopedRealms = [
+        ...new Set([
+          ...(combined.meta.policyScopedRealms ?? []),
+          ...doc.meta.policyScopedRealms,
+        ]),
+      ];
     }
     for (let resource of doc.included ?? []) {
       if (resource.id) {
@@ -1135,6 +1366,12 @@ export async function searchEntryRealms(
   realms: Array<SearchEntrySearchableRealm | null | undefined>,
   searchEntryQuery: SearchEntryQuery,
   opts?: SearchOpts,
+  // The query one realm runs, where it differs from the one every other realm
+  // runs. A realm whose policy scopes this caller searches the caller's query
+  // with that realm's grants composed into it, and a policy governs the realm
+  // it belongs to alone — so the fan-out is over one question asked several
+  // ways, rather than one query run several times.
+  queryForRealm?: (realm: SearchEntrySearchableRealm) => SearchEntryQuery,
 ): Promise<EntryCollectionDocument> {
   // Same instrumentation contract as `searchRealms`: a caller that threads
   // its own collector (the realm-server handler) emits the complete
@@ -1149,7 +1386,22 @@ export async function searchEntryRealms(
   let docs = await fanOutRealmSearch(
     realms,
     searchEntryQuery.itemQuery,
-    (realm) => realm.searchEntries(searchEntryQuery, perRealmOpts),
+    async (realm) => {
+      let doc = await realm.searchEntries(
+        queryForRealm ? queryForRealm(realm) : searchEntryQuery,
+        perRealmOpts,
+      );
+      if (!realm.url) {
+        return doc;
+      }
+      return {
+        ...doc,
+        meta: {
+          ...doc.meta,
+          realmTotals: { [realm.url]: doc.meta?.page?.total ?? 0 },
+        },
+      };
+    },
     (label, queryLabel) =>
       `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
   );

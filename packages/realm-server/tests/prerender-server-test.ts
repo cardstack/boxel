@@ -400,12 +400,12 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('screenshot route rejects an out-of-bounds captureSpec by field name', async function (assert) {
+    test('capture route rejects an out-of-bounds captureSpec by field name', async function (assert) {
       // This route is its own HTTP surface: without the shared bounds check
       // an oversize viewport would reach page.setViewport on a pooled page
       // with none of the realm-server's cost caps applied.
       let res = await request
-        .post('/prerender-screenshot')
+        .post('/prerender-capture')
         .send({
           data: {
             attributes: {
@@ -427,9 +427,9 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('screenshot route rejects an unknown captureSpec field by name', async function (assert) {
+    test('capture route rejects an unknown captureSpec field by name', async function (assert) {
       let res = await request
-        .post('/prerender-screenshot')
+        .post('/prerender-capture')
         .send({
           data: {
             attributes: {

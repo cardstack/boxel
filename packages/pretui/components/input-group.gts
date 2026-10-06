@@ -237,25 +237,27 @@ export class InputGroup extends Component<InputGroupSignature> {
       {{/if}}
     </div>
     <style scoped>
-      /* Pretui group dress via the token channel: field face, hairline,
-         h28, r(--radius), 12.5px type; the ring token powers boxel's
-         focus-within outline. */
-      .pretui-inputgroup {
-        width: 100%;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        --background: var(--field, var(--boxel-light));
-        --border: var(--input);
-        --ring: var(--primary);
-        --boxel-form-control-height: var(--control-h, 28px);
-        --boxel-input-height: var(--control-h, 28px);
-        --boxel-form-control-border-radius: var(--radius);
-        --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
-        --boxel-sp-xs: 5px;
-        --boxel-sp-sm: 9px;
-      }
-      .pretui-inputgroup[data-disabled] {
-        opacity: 0.75;
+      @layer PretComponent {
+        /* Pretui group dress via the token channel: field face, hairline,
+           h28, r(--radius), 12.5px type; the ring token powers boxel's
+           focus-within outline. */
+        .pretui-inputgroup {
+          width: 100%;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          --background: var(--field, var(--boxel-light));
+          --border: var(--input);
+          --ring: var(--primary);
+          --boxel-form-control-height: var(--control-h, 28px);
+          --boxel-input-height: var(--control-h, 28px);
+          --boxel-form-control-border-radius: var(--radius);
+          --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
+          --boxel-sp-xs: 5px;
+          --boxel-sp-sm: 9px;
+        }
+        .pretui-inputgroup[data-disabled] {
+          opacity: 0.75;
+        }
       }
     </style>
   </template>

@@ -36,6 +36,7 @@ import type { VirtualNetwork } from './virtual-network.ts';
 import { FILE_META_RESERVED_KEYS } from './realm.ts';
 import { RealmPaths } from './paths.ts';
 import type { RequestTimings } from './request-timings.ts';
+import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type {
   RealmResourceIdentifier,
   RealmIdentifier,
@@ -102,8 +103,8 @@ import {
   assembledLinkResourceBudget,
 } from './search-bounds.ts';
 import {
-  screenshotsMetaFromManifest,
-  type ScreenshotManifest,
+  capturesMetaFromManifest,
+  type CaptureManifest,
 } from './capture-spec.ts';
 
 // We allow up to this many traversals into the same card type per
@@ -190,6 +191,26 @@ type Options = {
   // answer to "which cards does this field name?" — the part a consumer
   // cannot cheaply recompute — and drops the cards themselves, which it can.
   resolveLinksOnly?: boolean;
+  // When true, a search entry's item answers for itself alone: the resource
+  // carries no `relationships`, and the `loadLinks` pass that would assemble
+  // them does not run — so nothing is named and nothing is side-loaded. Unlike
+  // `omitIncluded`, which skips the pass and leaves the stored links standing
+  // on each item, this withholds even which cards an item points at. It
+  // narrows the item and never the entry: the entry still names its item and
+  // carries its renderings. Each item it narrows is marked
+  // `meta.relationshipsWithheld`, so a consumer that keeps full items as live
+  // instances can tell one silent about its links from one that has none.
+  // Read by `searchEntries` alone.
+  omitRelationships?: boolean;
+  // Prerendered formats every entry is served data-only for: no `html`
+  // rendering of these formats is emitted, whatever the htmlQuery selects,
+  // and the entry answers as it would for a row with no rendering of them —
+  // its item where the fieldset falls back to one, an empty html branch where
+  // it pins html. An error row still reports its error for such a format, as a
+  // rendering carrying no markup. It narrows the renderings and never the item
+  // or the membership: the same rows come back, each with its data. Read by
+  // `searchEntries` alone.
+  unshareableFormats?: readonly PrerenderedHtmlFormat[];
   // Per-request wall-clock collector, threaded from `searchRealms` when a
   // request carries a correlation id. The post-SQL stages here — the SQL
   // query and the `loadLinks` relationship assembly — stamp their elapsed
@@ -264,11 +285,11 @@ export interface SearchResultDoc {
   // invalidation does not cascade indexed_at (see
   // `index-writer.ts.calculateInvalidations` realm_url filter).
   deps: string[] | null;
-  // The primary card's declared-screenshot manifest
-  // (`prerendered_html.screenshots`). Like `generation`, kept off the
-  // assembled `doc` and joined into per-instance `meta.screenshots` only by
+  // The primary card's declared-capture manifest
+  // (`prerendered_html.captures`). Like `generation`, kept off the
+  // assembled `doc` and joined into per-instance `meta.captures` only by
   // the realm's card+json GET handler.
-  screenshots: ScreenshotManifest | null;
+  captures: CaptureManifest | null;
   // Whether assembling this document applied any query-backed field — a
   // field whose targets are found by running a query now rather than by
   // following a stored link. Such a document is not a function of this
@@ -446,6 +467,7 @@ export class RealmIndexQueryEngine {
       internalKeyFor(ref, undefined, this.#realm.virtualNetwork),
     );
     let nativeOnly = !htmlQueryHasRenderTypePredicate(htmlQuery);
+    let unshareable = new Set<string>(opts?.unshareableFormats ?? []);
 
     let data: EntryResource[] = [];
     let htmlResources: EntryIncludedResource[] = [];
@@ -483,7 +505,10 @@ export class RealmIndexQueryEngine {
           iconById,
         );
         if (fieldset.html) {
-          let matched = enumerateFileRenderings(file).filter((candidate) =>
+          let matched = shareableRenderings(
+            enumerateFileRenderings(file),
+            unshareable,
+          ).filter((candidate) =>
             htmlQueryMatches(resolvedHtmlQuery, candidate),
           );
           let cssIds: string[] = [];
@@ -524,6 +549,9 @@ export class RealmIndexQueryEngine {
             new URL(url),
             file,
           );
+          if (opts?.omitRelationships) {
+            item = withoutRelationships(item);
+          }
           if (fieldset.item.kind === 'sparse') {
             item = buildSparseItemResource(item, fieldset.item.fields);
           } else {
@@ -576,7 +604,10 @@ export class RealmIndexQueryEngine {
       );
       if (fieldset.html) {
         let nativeKey = (row.types as string[] | null)?.[0];
-        let candidates = enumerateRowRenderings(row);
+        let candidates = shareableRenderings(
+          enumerateRowRenderings(row),
+          unshareable,
+        );
         if (nativeOnly) {
           candidates = candidates.filter(
             (candidate) =>
@@ -666,6 +697,9 @@ export class RealmIndexQueryEngine {
           id: cardUrl as RealmResourceIdentifier,
           links: { self: cardUrl },
         };
+        if (opts?.omitRelationships) {
+          item = withoutRelationships(item);
+        }
         if (fieldset.item.kind === 'sparse') {
           item = buildSparseItemResource(item, fieldset.item.fields);
         } else {
@@ -773,7 +807,12 @@ export class RealmIndexQueryEngine {
       ...itemResources,
     ];
 
-    if (fullItemRoots.length > 0 && opts?.loadLinks && !opts?.omitIncluded) {
+    if (
+      fullItemRoots.length > 0 &&
+      opts?.loadLinks &&
+      !opts?.omitIncluded &&
+      !opts?.omitRelationships
+    ) {
       let omit = itemResources.map((r) => r.id).filter(Boolean) as string[];
       // One assembly serves the whole page, so the budget is spent across the
       // page's rows jointly and the report belongs on the document rather than
@@ -836,6 +875,15 @@ export class RealmIndexQueryEngine {
   // rows a filter anchored on this ref selects.
   async typeKeysFor(ref: CodeRef): Promise<string[]> {
     return await this.#indexQueryEngine.typeKeysFor(ref);
+  }
+
+  // The types this realm holds cards of that descend from `ref`, as the
+  // first key of each row's adoption chain.
+  async instanceTypesUnder(ref: ResolvedCodeRef): Promise<string[]> {
+    return await this.#indexQueryEngine.instanceTypesUnder(
+      new URL(this.#realm.url),
+      ref,
+    );
   }
 
   async fetchCardTypeSummary() {
@@ -928,7 +976,7 @@ export class RealmIndexQueryEngine {
       version: instance.sourceContentHash,
       indexedAt: instance.indexedAt,
       deps: instance.deps,
-      screenshots: instance.screenshots,
+      captures: instance.captures,
       queryBacked,
     };
   }
@@ -964,24 +1012,24 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
   }
 
-  // The live instance's declared-screenshot manifest with the row's
+  // The live instance's declared-capture manifest with the row's
   // canonical url (undefined when not live, manifest null when live but
   // uncaptured) — the `?name=` serving route's addressing read; liveness
   // gate, ledger spelling, and manifest in one narrow read.
-  async liveInstanceScreenshots(
+  async liveInstanceCaptures(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#indexQueryEngine.liveInstanceScreenshots(url, opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#indexQueryEngine.liveInstanceCaptures(url, opts);
   }
 
-  // The file-row twin of `liveInstanceScreenshots` — the `?name=` route's
+  // The file-row twin of `liveInstanceCaptures` — the `?name=` route's
   // fallback addressing read for paths that resolve to no live instance.
-  async liveFileScreenshots(
+  async liveFileCaptures(
     url: URL,
     opts?: QueryOptions,
-  ): Promise<{ url: string; manifest: ScreenshotManifest | null } | undefined> {
-    return await this.#indexQueryEngine.liveFileScreenshots(url, opts);
+  ): Promise<{ url: string; manifest: CaptureManifest | null } | undefined> {
+    return await this.#indexQueryEngine.liveFileCaptures(url, opts);
   }
 
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
@@ -2321,24 +2369,21 @@ export class RealmIndexQueryEngine {
             let maybeResult = instanceMap.get(entry.linkURL.href);
             if (maybeResult) {
               linkResource = maybeResult.resource;
-              // Join the linked instance's declared-screenshot manifest into
+              // Join the linked instance's declared-capture manifest into
               // its `meta`, mirroring what the serving realm's own card+json
               // GET stamps — a cross-realm link gets the same key from that
               // realm's GET, so consumers see one shape either way. (This
               // layer already rewrites the resource's relationships in
               // place; the row's resources are parsed fresh per query.)
-              if (maybeResult.screenshots) {
+              if (maybeResult.captures) {
                 linkResource.meta = {
                   ...linkResource.meta,
-                  screenshots: screenshotsMetaFromManifest(
-                    maybeResult.screenshots,
-                    {
-                      realmURL: realmURL.href,
-                      instanceLocalPath: realmPath
-                        .local(new URL(maybeResult.canonicalURL))
-                        .replace(/\.json$/, ''),
-                    },
-                  ),
+                  captures: capturesMetaFromManifest(maybeResult.captures, {
+                    realmURL: realmURL.href,
+                    instanceLocalPath: realmPath
+                      .local(new URL(maybeResult.canonicalURL))
+                      .replace(/\.json$/, ''),
+                  }),
                 };
               }
             }
@@ -2678,6 +2723,18 @@ function enumerateRowRenderings(row: {
   return candidates;
 }
 
+// A row's renderings less those of the formats it is served data-only for.
+// Applied before the htmlQuery selects among them, so a withheld format is
+// indistinguishable from one the row has no rendering of.
+function shareableRenderings(
+  candidates: RowRendering[],
+  unshareable: ReadonlySet<string>,
+): RowRendering[] {
+  return unshareable.size === 0
+    ? candidates
+    : candidates.filter((candidate) => !unshareable.has(candidate.format));
+}
+
 // The file counterpart: a file renders natively, so its fitted/embedded
 // candidates come from its own type's entry and no candidate carries a
 // renderTypeKey (a renderType predicate in the htmlQuery never matches a
@@ -2704,6 +2761,19 @@ function enumerateFileRenderings(file: IndexedFile): RowRendering[] {
     candidates.push({ format: 'isolated', html: file.isolatedHtml });
   }
   return candidates;
+}
+
+// An item with its relationships taken off, and marked as withheld so it is
+// never read as a card that links to nothing. A shallow copy, so the row the
+// item was built from keeps its own.
+function withoutRelationships<T extends CardResource<Saved> | FileMetaResource>(
+  item: T,
+): T {
+  let { relationships: _withheld, ...rest } = item;
+  return {
+    ...rest,
+    meta: { ...rest.meta, relationshipsWithheld: true },
+  } as T;
 }
 
 // Takes the narrow shape rather than a full `IndexedFile`, which is a
@@ -2770,13 +2840,13 @@ function fileResourceFromIndex(
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
       ...fileMetaTimestamps(lastModified, createdAt),
-      // The file row's declared-screenshot manifest, joined here so a linked
-      // FileDef carries `meta.screenshots` the way a linked instance does
+      // The file row's declared-capture manifest, joined here so a linked
+      // FileDef carries `meta.captures` the way a linked instance does
       // (see the loadLinks instance branch) — a file's own GET stamps the
       // same key via `fileMetaDocumentFromIndex`.
-      ...(fileEntry.screenshots && fileURL.href.startsWith(fileEntry.realmURL)
+      ...(fileEntry.captures && fileURL.href.startsWith(fileEntry.realmURL)
         ? {
-            screenshots: screenshotsMetaFromManifest(fileEntry.screenshots, {
+            captures: capturesMetaFromManifest(fileEntry.captures, {
               realmURL: fileEntry.realmURL,
               instanceLocalPath: fileURL.href.slice(fileEntry.realmURL.length),
             }),

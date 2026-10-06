@@ -2304,14 +2304,14 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('an echoed serve-time meta.screenshots never persists into the source file', async function (assert) {
+        test('an echoed serve-time meta.captures never persists into the source file', async function (assert) {
           // The shape a card+json GET stamps — a client that GETs a doc and
           // POSTs it back to duplicate the card echoes this, and persisting
           // it would pin the copy's source file to the original instance's
           // captures.
-          let echoedScreenshots = {
+          let echoedCaptures = {
             card: {
-              url: `${testRealmHref}_screenshot/some-card?name=card`,
+              url: `${testRealmHref}_capture/some-card?name=card`,
               hash: 'abc123',
               contentType: 'image/png',
               width: 400,
@@ -2331,7 +2331,7 @@ module(basename(import.meta.filename), function () {
                     module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
-                  screenshots: echoedScreenshots,
+                  captures: echoedCaptures,
                 },
               },
             })
@@ -2348,7 +2348,7 @@ module(basename(import.meta.filename), function () {
           assert.ok(existsSync(cardFile), 'card json exists');
           let card = readJSONSync(cardFile);
           assert.strictEqual(
-            card.data.meta.screenshots,
+            card.data.meta.captures,
             undefined,
             'the POSTed echo is stripped from the source file',
           );
@@ -2364,7 +2364,7 @@ module(basename(import.meta.filename), function () {
                     module: rri('@cardstack/base/card-api'),
                     name: 'CardDef',
                   },
-                  screenshots: echoedScreenshots,
+                  captures: echoedCaptures,
                 },
               },
             })
@@ -2372,7 +2372,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(patchResponse.status, 200, 'HTTP 200 status');
           card = readJSONSync(cardFile);
           assert.strictEqual(
-            card.data.meta.screenshots,
+            card.data.meta.captures,
             undefined,
             'the PATCHed echo is stripped from the source file',
           );
@@ -6768,9 +6768,10 @@ module(basename(import.meta.filename), function () {
         });
 
         test('a probe that sends no Accept names the realm whatever the path', async function (assert) {
-          // What the realm-discovery callers send: no `Accept` of their own,
-          // which matches no route, so the request lands on the module/file
-          // fallback and the realm identity comes off whatever that answers.
+          // A `HEAD` with no `Accept` matches no route, so it lands on the
+          // module/file fallback, and the realm identity comes off whatever
+          // that answers. (Browser and Node `fetch` send `*/*` when the caller
+          // sets no `Accept`, and the discovery route answers that.)
           for (let path of [
             '/person-1',
             '/no-such-card',

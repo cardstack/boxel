@@ -1,7 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { inflateSync } from 'zlib';
 import type {
   RealmPermissions,
   RealmAdapter,
@@ -9,7 +8,7 @@ import type {
   ModuleRenderResponse,
   FileExtractResponse,
   RenderRouteOptions,
-  ScreenshotCaptureSpec,
+  CaptureRequestSpec,
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index.ts';
@@ -26,6 +25,7 @@ import {
 } from './helpers/index.ts';
 import { prerenderCard, prerenderFileExtract } from './helpers/prerender.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { colorCoverage, decodePngRGBA, type RgbaImage } from './helpers/png.ts';
 import {
   baseCardRef,
   trimExecutableExtension,
@@ -33,6 +33,7 @@ import {
   baseRealmRRI,
   baseRRI,
   executableExtensions,
+  FILEDEF_CODE_REF_BY_EXTENSION,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
@@ -268,119 +269,6 @@ function firstMediaBox(
   };
 }
 
-interface RgbaImage {
-  width: number;
-  height: number;
-  // Row-major RGBA, 4 bytes per pixel.
-  data: Uint8Array;
-}
-
-// Decode a base64 PNG into raw RGBA pixels — enough of the format to
-// pixel-compare two Chromium screenshots, without pulling in an image
-// library (the header-only `decodePng` above shares this no-dependency
-// stance). Handles what `page.screenshot` actually emits: 8-bit,
-// non-interlaced, truecolor with (colorType 6) or without (colorType 2) an
-// alpha channel. Anything else throws rather than silently misreading.
-function decodePngRGBA(base64: string): RgbaImage {
-  let buf = Buffer.from(base64, 'base64');
-  let signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  if (buf.length < 24 || !signature.every((byte, i) => buf[i] === byte)) {
-    throw new Error('not a PNG');
-  }
-  let width = buf.readUInt32BE(16);
-  let height = buf.readUInt32BE(20);
-  let bitDepth = buf[24];
-  let colorType = buf[25];
-  let interlace = buf[28];
-  if (bitDepth !== 8) {
-    throw new Error(`unsupported PNG bit depth ${bitDepth}`);
-  }
-  if (colorType !== 6 && colorType !== 2) {
-    throw new Error(`unsupported PNG color type ${colorType}`);
-  }
-  if (interlace !== 0) {
-    throw new Error('interlaced PNGs are not supported');
-  }
-  let channels = colorType === 6 ? 4 : 3;
-
-  // Concatenate the (possibly split) IDAT chunk payloads, then inflate.
-  let idat: Buffer[] = [];
-  let offset = 8;
-  while (offset + 8 <= buf.length) {
-    let length = buf.readUInt32BE(offset);
-    let type = buf.toString('ascii', offset + 4, offset + 8);
-    let dataStart = offset + 8;
-    if (type === 'IDAT') {
-      idat.push(buf.subarray(dataStart, dataStart + length));
-    } else if (type === 'IEND') {
-      break;
-    }
-    offset = dataStart + length + 4; // skip data + CRC
-  }
-  let raw = inflateSync(Buffer.concat(idat));
-
-  // Reverse the per-scanline PNG filters (spec §9.2). Each scanline is
-  // prefixed with a 1-byte filter type; reconstruction reads already-decoded
-  // bytes to the left (a=bpp back) and above (b=prior row), so it must run
-  // top-to-bottom, left-to-right.
-  let bpp = channels;
-  let stride = width * bpp;
-  let out = new Uint8Array(width * height * 4);
-  let prev = new Uint8Array(stride);
-  let cur = new Uint8Array(stride);
-  let paeth = (a: number, b: number, c: number) => {
-    let p = a + b - c;
-    let pa = Math.abs(p - a);
-    let pb = Math.abs(p - b);
-    let pc = Math.abs(p - c);
-    if (pa <= pb && pa <= pc) return a;
-    if (pb <= pc) return b;
-    return c;
-  };
-  for (let y = 0; y < height; y++) {
-    let rowStart = y * (stride + 1);
-    let filter = raw[rowStart];
-    for (let i = 0; i < stride; i++) {
-      let x = raw[rowStart + 1 + i];
-      let a = i >= bpp ? cur[i - bpp] : 0;
-      let b = prev[i];
-      let c = i >= bpp ? prev[i - bpp] : 0;
-      let recon: number;
-      switch (filter) {
-        case 0:
-          recon = x;
-          break;
-        case 1:
-          recon = x + a;
-          break;
-        case 2:
-          recon = x + b;
-          break;
-        case 3:
-          recon = x + ((a + b) >> 1);
-          break;
-        case 4:
-          recon = x + paeth(a, b, c);
-          break;
-        default:
-          throw new Error(`unknown PNG filter type ${filter}`);
-      }
-      cur[i] = recon & 0xff;
-    }
-    // Expand the scanline into RGBA, filling alpha for truecolor sources.
-    for (let px = 0; px < width; px++) {
-      let src = px * bpp;
-      let dst = (y * width + px) * 4;
-      out[dst] = cur[src];
-      out[dst + 1] = cur[src + 1];
-      out[dst + 2] = cur[src + 2];
-      out[dst + 3] = channels === 4 ? cur[src + 3] : 0xff;
-    }
-    [prev, cur] = [cur, prev];
-  }
-  return { width, height, data: out };
-}
-
 // Count the pixels exactly matching an RGB color — enough to assert a
 // media-gated style is (or is not) visible in a capture without depending on
 // where the styled element lays out.
@@ -439,7 +327,7 @@ function regionMismatch(
 
 // Assert a clip image exactly equals the region of `full` anchored at
 // (originX, originY). Exact, not tolerant: both rects are integer-valued at
-// deviceScaleFactor 1, so puppeteer passes them to Page.captureScreenshot
+// deviceScaleFactor 1, so puppeteer passes them to Page.runCapture
 // unchanged and there is no rounding to absorb — any nonzero mismatch is a
 // finding. On failure, the ±1px whole-pixel offset neighborhood is searched
 // purely to enrich the message: a best offset of (±1, ±1) with mismatches
@@ -1070,7 +958,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('prerender - screenshot capture', function (hooks) {
+  module('prerender - capture', function (hooks) {
     let realmURL = 'http://127.0.0.1:4461/test/';
     let prerenderServerURL = new URL(realmURL).origin;
     let testUserId = '@user1:localhost';
@@ -1090,17 +978,35 @@ module(basename(import.meta.filename), function () {
       return JSON.stringify(sessions);
     };
 
-    let screenshot = (
+    let capture = (
       cardURL: string,
-      captureSpec?: ScreenshotCaptureSpec,
+      captureSpec?: CaptureRequestSpec,
       format: 'isolated' | 'embedded' | 'fitted' = 'isolated',
     ) =>
-      prerenderer.prerenderScreenshot({
+      prerenderer.prerenderCapture({
         realm: realmURL,
         url: cardURL,
         auth: auth(),
         format,
         ...(captureSpec ? { captureSpec } : {}),
+      });
+
+    // A file capture: the file is extracted and rendered through the FileDef
+    // its extension maps to, as the capture task asks for one.
+    let captureFile = (fileURL: string) =>
+      prerenderer.prerenderCapture({
+        realm: realmURL,
+        url: fileURL,
+        auth: auth(),
+        format: 'isolated',
+        renderOptions: {
+          fileExtract: true,
+          fileRender: true,
+          fileDefCodeRef:
+            FILEDEF_CODE_REF_BY_EXTENSION[
+              fileURL.slice(fileURL.lastIndexOf('.'))
+            ],
+        },
       });
 
     hooks.before(async () => {
@@ -1140,6 +1046,10 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
+            // A page whose rendered body is a solid color no shell chrome
+            // uses, so a capture shows whether the HTML itself was drawn.
+            'swatch.html': `<!doctype html><html><head><title>Swatch</title></head><body style="margin:0;background:rgb(255,0,254);height:2000px"><h1>Swatch</h1></body></html>`,
+            'notes.md': `# Release notes\n\nThe capture draws this markdown file.\n`,
             'long.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Long extends CardDef {
@@ -1284,7 +1194,7 @@ module(basename(import.meta.filename), function () {
             `,
             // Tall under screen media — ~29 pages at Chrome's default paper
             // (1056px of content per page at 96dpi letter with no margins),
-            // comfortably past SCREENSHOT_PDF_MAX_PAGES — so a pdf capture of
+            // comfortably past CAPTURE_PDF_MAX_PAGES — so a pdf capture of
             // it must error on the page cap rather than paginate it all.
             'skyscraper.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
@@ -1333,8 +1243,8 @@ module(basename(import.meta.filename), function () {
     });
 
     test('default capture is a PNG at the 800x600 viewport', async function (assert) {
-      let { response } = await screenshot(`${realmURL}1`);
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let { response } = await capture(`${realmURL}1`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       assert.ok(response.base64, 'returns base64 image data');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG (magic bytes)');
@@ -1344,11 +1254,44 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.height, 600, 'reports 600 CSS px tall');
     });
 
+    test('a file capture draws the rendered HTML of an HTML file', async function (assert) {
+      let { response } = await captureFile(`${realmURL}swatch.html`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG');
+      assert.strictEqual(png.width, 800, 'PNG is 800px wide');
+      // The page's body color fills its rendered area, so it should cover a
+      // large share of the frame, not just paint a stray pixel.
+      let coverage = colorCoverage(response.base64!, [255, 0, 254]);
+      assert.true(
+        coverage > 0.33,
+        `the page's own body color fills the preview (${Math.round(coverage * 100)}% of the capture)`,
+      );
+    });
+
+    test('a file capture draws a markdown file', async function (assert) {
+      let { response } = await captureFile(`${realmURL}notes.md`);
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
+      assert.true(decodePng(response.base64!).isPng, 'payload is a PNG');
+    });
+
+    test('a card capture on a tab that just captured a file renders the card', async function (assert) {
+      let fileCapture = await captureFile(`${realmURL}swatch.html`);
+      assert.strictEqual(fileCapture.response.status, 'ready');
+      let { response } = await capture(`${realmURL}1`);
+      assert.strictEqual(response.status, 'ready', 'card capture succeeded');
+      assert.strictEqual(
+        colorCoverage(response.base64!, [255, 0, 254]),
+        0,
+        "the card capture shows none of the file's page",
+      );
+    });
+
     test('viewport override widens the capture to 1280', async function (assert) {
-      let { response } = await screenshot(`${realmURL}1`, {
+      let { response } = await capture(`${realmURL}1`, {
         viewport: { width: 1280, height: 720 },
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG');
       assert.strictEqual(png.width, 1280, 'PNG is 1280px wide');
@@ -1357,10 +1300,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('fullPage captures beyond the viewport height for a long card', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         fullPage: true,
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG');
       assert.strictEqual(png.width, 800, 'PNG keeps the 800px viewport width');
@@ -1376,10 +1319,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('clip captures exactly the requested region', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         clip: { x: 0, y: 0, width: 400, height: 300 },
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'payload is a PNG');
       assert.strictEqual(png.width, 400, 'PNG matches the clip width');
@@ -1393,13 +1336,13 @@ module(basename(import.meta.filename), function () {
       // fullPage capture. All three captures come from one batch — a single
       // settled render — so this compares crops of one DOM, not
       // independently-hydrated renders. Neither entry changes the viewport:
-      // both reduce to a single Page.captureScreenshot with
+      // both reduce to a single Page.runCapture with
       // captureBeyondViewport, so nothing reflows between entries. The `tall`
       // card is a top-anchored 1500px vertical gradient with its name at the
       // top-left: the gradient makes a 1px *vertical* shift change every
       // sampled color, and the name's text glyphs make a 1px *horizontal*
       // shift detectable (the gradient alone is horizontally uniform).
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         captures: [
           { name: 'full', fullPage: true },
           // Top-left region including the card name; kept clear of the
@@ -1446,7 +1389,7 @@ module(basename(import.meta.filename), function () {
       // scroll size), so the capture path enforces the physical-pixel cap:
       // a 6000px-tall document at 3× is ~18k physical px, past the 16384
       // Chromium texture cap.
-      let { response } = await screenshot(`${realmURL}huge`, {
+      let { response } = await capture(`${realmURL}huge`, {
         fullPage: true,
         deviceScaleFactor: 3,
       });
@@ -1460,10 +1403,10 @@ module(basename(import.meta.filename), function () {
     test('fullPage within the cap still captures at scale', async function (assert) {
       // The same document is fine at 1× (6000 < 16384) — the cap composes
       // with the scale factor rather than banning tall documents outright.
-      let { response } = await screenshot(`${realmURL}huge`, {
+      let { response } = await capture(`${realmURL}huge`, {
         fullPage: true,
       });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.strictEqual(response.status, 'ready', 'capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(
         png.height > 5000,
@@ -1480,14 +1423,12 @@ module(basename(import.meta.filename), function () {
       // A leaked viewport would silently resize the next capture (and any index
       // prerender) reusing this pooled page. Custom capture in the middle, plain
       // captures on either side must both stay at the default viewport.
-      let before = decodePng(
-        (await screenshot(`${realmURL}1`)).response.base64!,
-      );
+      let before = decodePng((await capture(`${realmURL}1`)).response.base64!);
       assert.strictEqual(before.width, 800, 'first plain capture is 800 wide');
 
       let custom = decodePng(
         (
-          await screenshot(`${realmURL}1`, {
+          await capture(`${realmURL}1`, {
             viewport: { width: 1280, height: 900 },
             deviceScaleFactor: 2,
           })
@@ -1499,9 +1440,7 @@ module(basename(import.meta.filename), function () {
         'custom capture is 1280 * 2x wide',
       );
 
-      let after = decodePng(
-        (await screenshot(`${realmURL}1`)).response.base64!,
-      );
+      let after = decodePng((await capture(`${realmURL}1`)).response.base64!);
       assert.strictEqual(
         after.width,
         800,
@@ -1524,7 +1463,7 @@ module(basename(import.meta.filename), function () {
 
       // Capture at a large custom viewport + 2x scale on the same affinity's
       // pooled page.
-      await screenshot(cardURL, {
+      await capture(cardURL, {
         viewport: { width: 1440, height: 2000 },
         deviceScaleFactor: 2,
       });
@@ -1542,12 +1481,12 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         cleanWhiteSpace(after.response.isolatedHTML ?? ''),
         cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
-        'indexed isolated HTML is identical before and after the screenshot',
+        'indexed isolated HTML is identical before and after the capture',
       );
     });
 
     test('a batch of 3 yields 3 named captures from one settle', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         captures: [
           { name: 'wide', viewport: { width: 1280, height: 720 } },
           { name: 'full', fullPage: true },
@@ -1590,7 +1529,7 @@ module(basename(import.meta.filename), function () {
       // viewport must resolve from the page's base viewport (800), not inherit
       // the first entry's 1280. This also guards `sameViewport`'s switch-back —
       // if it wrongly kept 1280, the bare entry would capture at 1280.
-      let { response } = await screenshot(`${realmURL}tall`, {
+      let { response } = await capture(`${realmURL}tall`, {
         captures: [
           { name: 'wide', viewport: { width: 1280, height: 720 } },
           { name: 'base' },
@@ -1613,8 +1552,8 @@ module(basename(import.meta.filename), function () {
     });
 
     test('singular-shape request stays byte-compatible under the new response', async function (assert) {
-      let singular = await screenshot(`${realmURL}1`);
-      let batchOfOne = await screenshot(`${realmURL}1`, {
+      let singular = await capture(`${realmURL}1`);
+      let batchOfOne = await capture(`${realmURL}1`, {
         captures: [{ name: 'default' }],
       });
 
@@ -1647,7 +1586,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a pdf capture paginates the settled render', async function (assert) {
-      let { response } = await screenshot(`${realmURL}tall`, { type: 'pdf' });
+      let { response } = await capture(`${realmURL}tall`, { type: 'pdf' });
       assert.strictEqual(response.status, 'ready', 'pdf capture succeeded');
       assert.strictEqual(
         response.contentType,
@@ -1673,7 +1612,7 @@ module(basename(import.meta.filename), function () {
 
       // Pooled-page hygiene: the same page then serves a raster capture with
       // the canonical geometry, undisturbed by the pdf leg.
-      let raster = await screenshot(`${realmURL}1`);
+      let raster = await capture(`${realmURL}1`);
       assert.strictEqual(raster.response.status, 'ready');
       let png = decodePng(raster.response.base64!);
       assert.deepEqual(
@@ -1689,7 +1628,7 @@ module(basename(import.meta.filename), function () {
       // and 60000px under print — a print render would page past the cap and
       // error, a screen render stays within it. The spec asks for the default
       // (screen), so the capture must emulate screen and succeed.
-      let { response } = await screenshot(`${realmURL}print-probe-card`, {
+      let { response } = await capture(`${realmURL}print-probe-card`, {
         type: 'pdf',
       });
       assert.strictEqual(
@@ -1709,7 +1648,7 @@ module(basename(import.meta.filename), function () {
       // The acceptance: print media engages the card's `@page`/`break-*` CSS,
       // so the paged card's `@page { size: A4 }` sets the paper and its three
       // `break-after: page` sheets produce a multi-page A4 document.
-      let { response } = await screenshot(`${realmURL}paged-card`, {
+      let { response } = await capture(`${realmURL}paged-card`, {
         type: 'pdf',
         media: 'print',
       });
@@ -1750,10 +1689,10 @@ module(basename(import.meta.filename), function () {
       // bytes: one Letter page, no card.
       //
       // So: leave the page on one card's render, then capture a different one.
-      let first = await screenshot(`${realmURL}1`, { type: 'pdf' });
+      let first = await capture(`${realmURL}1`, { type: 'pdf' });
       assert.strictEqual(first.response.status, 'ready', 'first pdf captured');
 
-      let { response } = await screenshot(`${realmURL}paged-card`, {
+      let { response } = await capture(`${realmURL}paged-card`, {
         type: 'pdf',
         media: 'print',
       });
@@ -1762,10 +1701,10 @@ module(basename(import.meta.filename), function () {
         'ready',
         `second pdf captured (got ${response.status}: ${response.error ?? ''})`,
       );
-      let capture = response.captures?.[0];
+      let entry = response.captures?.[0];
       assert.ok(
-        (capture?.pageCount ?? 0) >= 2,
-        `paginated the paged card's own flow, not a one-page loading screen (got ${capture?.pageCount})`,
+        (entry?.pageCount ?? 0) >= 2,
+        `paginated the paged card's own flow, not a one-page loading screen (got ${entry?.pageCount})`,
       );
       let box = firstMediaBox(Buffer.from(response.base64!, 'base64'));
       let isA4 =
@@ -1781,7 +1720,7 @@ module(basename(import.meta.filename), function () {
     test('print media does not bleed into the next pooled capture', async function (assert) {
       // Media emulation is sticky per pooled page, so a print capture must
       // restore screen media in its `finally`. Engage print on the page…
-      let printed = await screenshot(`${realmURL}paged-card`, {
+      let printed = await capture(`${realmURL}paged-card`, {
         type: 'pdf',
         media: 'print',
       });
@@ -1790,7 +1729,7 @@ module(basename(import.meta.filename), function () {
       // …then a default (screen) pdf of the print-probe must settle under
       // screen again — 200px, a page or two — not the 60000px print layout a
       // leaked emulation would render and page past the cap on.
-      let probe = await screenshot(`${realmURL}print-probe-card`, {
+      let probe = await capture(`${realmURL}print-probe-card`, {
         type: 'pdf',
       });
       assert.strictEqual(
@@ -1804,7 +1743,7 @@ module(basename(import.meta.filename), function () {
       );
 
       // …and a plain raster still renders at the canonical viewport.
-      let raster = await screenshot(`${realmURL}1`);
+      let raster = await capture(`${realmURL}1`);
       assert.strictEqual(raster.response.status, 'ready');
       let png = decodePng(raster.response.base64!);
       assert.deepEqual(
@@ -1821,7 +1760,7 @@ module(basename(import.meta.filename), function () {
       // layout as-is — the probe's print-only magenta reaches its pixels only
       // if the settle itself ran under print media.
       let magenta: [number, number, number] = [255, 0, 254];
-      let printed = await screenshot(`${realmURL}print-probe-card`, {
+      let printed = await capture(`${realmURL}print-probe-card`, {
         media: 'print',
       });
       assert.strictEqual(
@@ -1839,7 +1778,7 @@ module(basename(import.meta.filename), function () {
       // render-level restore is all that keeps this capture's print emulation
       // off the pooled page — the same probe under the default (screen) media
       // must show none of the print-only color.
-      let after = await screenshot(`${realmURL}print-probe-card`);
+      let after = await capture(`${realmURL}print-probe-card`);
       assert.strictEqual(after.response.status, 'ready');
       let afterPng = decodePngRGBA(after.response.base64!);
       assert.strictEqual(
@@ -1853,7 +1792,7 @@ module(basename(import.meta.filename), function () {
       // The skyscraper fixture is 30000px tall under screen media — well past
       // the page cap at Chrome's default paper — so the capture must refuse
       // it by name, never truncate it to a partial document.
-      let { response } = await screenshot(`${realmURL}skyscraper-card`, {
+      let { response } = await capture(`${realmURL}skyscraper-card`, {
         type: 'pdf',
       });
       assert.strictEqual(response.status, 'error', 'capture is refused');
@@ -1873,7 +1812,7 @@ module(basename(import.meta.filename), function () {
       // `title` field is a fixed 200×50, so the crop dimensions are predictable.
       // Pixel-exact crop equivalence is the acceptance sweep's job; this pins
       // the dimensional contract.
-      let { response } = await screenshot(`${realmURL}disco-card`, {
+      let { response } = await capture(`${realmURL}disco-card`, {
         target: '[data-card-field="title"]',
       });
       assert.strictEqual(response.status, 'ready', 'target capture succeeded');
@@ -1894,7 +1833,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a target matching no element is a named capture error', async function (assert) {
-      let { response } = await screenshot(`${realmURL}disco-card`, {
+      let { response } = await capture(`${realmURL}disco-card`, {
         target: '[data-card-field="does-not-exist"]',
       });
       assert.strictEqual(response.status, 'error', 'a missing target errors');
@@ -1908,7 +1847,7 @@ module(basename(import.meta.filename), function () {
       // The parse does not special-case XPath; the capture path resolves the
       // selector with `document.querySelector`, which cannot execute XPath, so
       // an XPath-shaped string dead-ends as a named "invalid selector" error.
-      let { response } = await screenshot(`${realmURL}disco-card`, {
+      let { response } = await capture(`${realmURL}disco-card`, {
         target: '//div[@data-card-field]',
       });
       assert.strictEqual(response.status, 'error', 'an XPath target errors');
@@ -1922,7 +1861,7 @@ module(basename(import.meta.filename), function () {
       // The canonical fitted matrix renders one card at many box sizes off a
       // single hydrate: each entry re-transitions the same card into a new
       // envelope box and the capture is sized to that box.
-      let { response } = await screenshot(
+      let { response } = await capture(
         `${realmURL}1`,
         {
           captures: [
@@ -1975,7 +1914,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a fitted envelope capture leaves indexed HTML unchanged', async function (assert) {
-      // The envelope wrapper only exists on the screenshot render (it rides on
+      // The envelope wrapper only exists on the capture render (it rides on
       // query params). A pooled page reused by indexing must not inherit it.
       let cardURL = `${realmURL}1`;
       await realm.realmIndexUpdater.fullIndex();
@@ -1988,7 +1927,7 @@ module(basename(import.meta.filename), function () {
         auth: auth(),
       });
 
-      let { response } = await screenshot(
+      let { response } = await capture(
         cardURL,
         { envelope: { width: 250, height: 275 } },
         'fitted',
@@ -2016,7 +1955,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         cleanWhiteSpace(after.response.isolatedHTML ?? ''),
         cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
-        'indexed isolated HTML is identical before and after the fitted screenshot',
+        'indexed isolated HTML is identical before and after the fitted capture',
       );
     });
   });
@@ -2268,6 +2207,39 @@ module(basename(import.meta.filename), function () {
                     adoptsFrom: {
                       module: rri('./rejects'),
                       name: 'Rejects',
+                    },
+                  },
+                },
+              },
+              'resize-observer-loop.gts': `
+              import { CardDef, Component } from '@cardstack/base/card-api';
+              import { modifier } from 'ember-modifier';
+              // each delivery grows the element it observes, so the browser
+              // skips the re-notification for that frame, reports the loop
+              // notice, and delivers it on the next frame, until 100px
+              const growOnResize = modifier((el) => {
+                let observer = new ResizeObserver(() => {
+                  if (el.offsetHeight < 100) {
+                    el.style.height = \`\${el.offsetHeight + 10}px\`;
+                  }
+                });
+                observer.observe(el);
+                return () => observer.disconnect();
+              });
+              export class ResizeObserverLoop extends CardDef {
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div class='resize-loop' {{growOnResize}}>resizes itself</div>
+                  </template>
+                }
+              }
+            `,
+              'resize-observer-loop.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./resize-observer-loop'),
+                      name: 'ResizeObserverLoop',
                     },
                   },
                 },
@@ -3240,6 +3212,33 @@ module(basename(import.meta.filename), function () {
         assert.true(
           result.pool.evicted,
           'unhandled rejection evicts prerender page to recover clean state',
+        );
+      });
+
+      test('card prerender renders a card whose ResizeObserver resizes what it observes', async function (assert) {
+        let cardURL = `${realmURL}resize-observer-loop.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.notOk(
+          result.response.error,
+          `ResizeObserver loop notice is not a render error, got: ${result.response.error?.error.message}`,
+        );
+        assert.ok(
+          /<div(?=[^>]*class="resize-loop)(?=[^>]*style="height:\s*\d+px)/.test(
+            result.response.isolatedHTML ?? '',
+          ),
+          `the observer resized its element before capture, got: ${result.response.isolatedHTML}`,
+        );
+        assert.false(
+          result.pool.evicted,
+          'the page is not evicted as unusable',
         );
       });
 
@@ -8201,6 +8200,427 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('prerender - host chunk import failures', function () {
+    // What a tab reports once it has failed to fetch a host chunk: the
+    // loader's message for the module that needed the chunk, with Chrome's
+    // import failure as its cause.
+    function hostChunkImportFailure(chunkURL: string) {
+      return {
+        message: `encountered error loading module "https://chunk-retry.example/module.gts": unable to fetch https://packages/@cardstack/runtime-common/helpers/ai`,
+        status: 500,
+        title: 'boom',
+        additionalErrors: [
+          {
+            message: `fetch failed for https://packages/@cardstack/runtime-common/helpers/ai: Failed to fetch dynamically imported module: ${chunkURL}`,
+            status: 500,
+            additionalErrors: null,
+          },
+        ],
+      };
+    }
+
+    function attemptResult<T>(
+      response: T,
+      args: { affinityType: 'realm' | 'user'; affinityValue: string },
+      attemptCount: number,
+      evicted: boolean,
+    ) {
+      return {
+        response,
+        timings: {
+          launchMs: 0,
+          renderMs: 1,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+        },
+        pool: {
+          pageId: `page-${attemptCount}`,
+          affinityType: args.affinityType,
+          affinityValue: args.affinityValue,
+          reused: false,
+          evicted,
+          timedOut: false,
+        },
+      };
+    }
+
+    test('a host chunk import failure is recognised through the errors nested under it', async function (assert) {
+      let runner = new RenderRunner({
+        pagePool: undefined as unknown as PagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      assert.strictEqual(
+        runner.failedHostChunkImport({
+          type: 'module-error',
+          error: hostChunkImportFailure(
+            'https://host.example/assets/ai-abc123.js',
+          ),
+        }),
+        'https://host.example/assets/ai-abc123.js',
+        'names the chunk from the nested cause',
+      );
+      assert.strictEqual(
+        runner.failedHostChunkImport({
+          type: 'module-error',
+          error: {
+            message: `encountered error loading module "https://chunk-retry.example/module.gts": unable to fetch https://chunk-retry.example/missing.gts: 404`,
+            status: 404,
+            additionalErrors: null,
+          },
+        }),
+        undefined,
+        'a card module the loader could not fetch is not a host chunk failure',
+      );
+      assert.strictEqual(
+        runner.failedHostChunkImport(undefined),
+        undefined,
+        'no error, no failure',
+      );
+    });
+
+    // A tab whose module route answers with `routeResponse`, in a pool that
+    // records the affinities it disposes. It answers the few page calls a
+    // module render makes: the session write, the transition to the module
+    // route, the wait for its output, and the read of that output.
+    function fakeModuleTab(
+      routeResponse: (id: string, nonce: string) => ModuleRenderResponse,
+    ) {
+      let disposed: string[] = [];
+      let transition: { id: string; nonce: string } | undefined;
+      let page = {
+        url: () => 'https://host.example/module',
+        isClosed: () => false,
+        waitForFunction: async () => ({}),
+        evaluate: async (_fn: unknown, ...args: unknown[]) => {
+          if (args[0] === 'module' && Array.isArray(args[1])) {
+            let [id, nonce] = args[1] as [string, string];
+            transition = { id, nonce };
+            return undefined;
+          }
+          if (args.length === 0 && transition) {
+            let response = routeResponse(transition.id, transition.nonce);
+            return {
+              status: response.status,
+              value: JSON.stringify(response),
+              id: transition.id,
+              nonce: transition.nonce,
+            };
+          }
+          return undefined;
+        },
+      };
+      let pagePool = {
+        getPage: async () => ({
+          page,
+          reused: true,
+          launchMs: 0,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+          pageId: 'fake-tab',
+          release: () => {},
+        }),
+        resetConsoleErrors: () => {},
+        takeConsoleErrors: () => [],
+        disposeAffinity: async (affinityKey: string) => {
+          disposed.push(affinityKey);
+        },
+      };
+      return { pagePool: pagePool as unknown as PagePool, disposed };
+    }
+
+    function moduleRouteError(
+      id: string,
+      nonce: string,
+      error: ModuleRenderResponse['error'],
+    ): ModuleRenderResponse {
+      return {
+        id,
+        nonce,
+        status: 'error',
+        isShimmed: false,
+        lastModified: 0,
+        createdAt: 0,
+        deps: [],
+        definitions: {},
+        error,
+      };
+    }
+
+    test('a module render whose route reports a failed host chunk import evicts the tab', async function (assert) {
+      let realm = 'https://chunk-retry.example/';
+      let { pagePool, disposed } = fakeModuleTab((id, nonce) =>
+        moduleRouteError(id, nonce, {
+          type: 'module-error',
+          error: hostChunkImportFailure(
+            'https://host.example/assets/ai-abc123.js',
+          ),
+        }),
+      );
+      let runner = new RenderRunner({
+        pagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      let result = await runner.prerenderModuleAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url: `${realm}module.gts`,
+        auth: 'test-auth',
+      });
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'the route error is returned',
+      );
+      assert.true(result.pool.evicted, 'the attempt reports the tab evicted');
+      assert.deepEqual(
+        disposed,
+        [toAffinityKey({ affinityType: 'realm', affinityValue: realm })],
+        'the tab is disposed so the next attempt gets a fresh one',
+      );
+    });
+
+    test('a module render whose route reports an ordinary module error keeps the tab', async function (assert) {
+      let realm = 'https://chunk-retry.example/';
+      let { pagePool, disposed } = fakeModuleTab((id, nonce) =>
+        moduleRouteError(id, nonce, {
+          type: 'module-error',
+          error: {
+            message: `encountered error loading module "${id}": rejected promise from an RSVP chain`,
+            status: 500,
+            additionalErrors: null,
+          },
+        }),
+      );
+      let runner = new RenderRunner({
+        pagePool,
+        boxelHostURL: 'https://host.example',
+      });
+      let result = await runner.prerenderModuleAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url: `${realm}broken.gts`,
+        auth: 'test-auth',
+      });
+      assert.strictEqual(
+        result.response.status,
+        'error',
+        'the route error is returned',
+      );
+      assert.false(result.pool.evicted, 'the tab is not evicted');
+      assert.deepEqual(disposed, [], 'nothing is disposed');
+    });
+
+    test('module prerender retries on a fresh tab when the evicted tab failed to import a host chunk', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderModuleAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let realm = 'https://chunk-retry.example/';
+      let moduleURL = `${realm}module.gts`;
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderModuleAttempt = async function (
+          args: Parameters<RenderRunner['prerenderModuleAttempt']>[0],
+        ) {
+          attempts.push(args.renderOptions);
+          attemptCount++;
+          let baseResponse = {
+            id: args.url,
+            nonce: `nonce-${attemptCount}`,
+            isShimmed: false,
+            lastModified: 0,
+            createdAt: 0,
+            deps: [],
+            definitions: {},
+          };
+          let response: ModuleRenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  status: 'error',
+                  error: {
+                    type: 'module-error',
+                    error: hostChunkImportFailure(
+                      'https://host.example/assets/ai-abc123.js',
+                    ),
+                  },
+                }
+              : { ...baseResponse, status: 'ready' };
+          return attemptResult(
+            response,
+            args,
+            attemptCount,
+            attemptCount === 1,
+          );
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: moduleURL,
+          auth: 'test-auth',
+        });
+        assert.strictEqual(attempts.length, 2, 'one retry on a fresh tab');
+        assert.strictEqual(
+          attempts[1],
+          undefined,
+          'the retry renders with the same options, not a cleared cache',
+        );
+        assert.strictEqual(
+          result.response.status,
+          'ready',
+          'the fresh tab result is returned',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderModuleAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+
+    test('module prerender returns a module error that names no host chunk without retrying', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderModuleAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attemptCount = 0;
+      let realm = 'https://chunk-retry.example/';
+      try {
+        RenderRunner.prototype.prerenderModuleAttempt = async function (
+          args: Parameters<RenderRunner['prerenderModuleAttempt']>[0],
+        ) {
+          attemptCount++;
+          let response: ModuleRenderResponse = {
+            id: args.url,
+            nonce: `nonce-${attemptCount}`,
+            isShimmed: false,
+            lastModified: 0,
+            createdAt: 0,
+            deps: [],
+            definitions: {},
+            status: 'error',
+            error: {
+              type: 'module-error',
+              error: {
+                message: `encountered error loading module "${args.url}": SyntaxError: Unexpected token`,
+                status: 500,
+                additionalErrors: null,
+              },
+            },
+          };
+          return attemptResult(response, args, attemptCount, false);
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: `${realm}broken.gts`,
+          auth: 'test-auth',
+        });
+        assert.strictEqual(attemptCount, 1, 'no retry');
+        assert.strictEqual(
+          result.response.status,
+          'error',
+          'the module error is returned',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderModuleAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+
+    test('card prerender retries on a fresh tab when the evicted tab failed to import a host chunk', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let attempts: Array<RenderRouteOptions | undefined> = [];
+      let realm = 'https://chunk-retry.example/';
+      let cardURL = `${realm}card`;
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
+        ) {
+          attempts.push(args.renderOptions);
+          attemptCount++;
+          let baseResponse: RenderResponse = {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: null,
+            types: null,
+            iconHTML: null,
+            isolatedHTML: `${args.url}-render-${attemptCount}`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            markdown: null,
+          };
+          let card: RenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  error: {
+                    type: 'instance-error',
+                    error: hostChunkImportFailure(
+                      'https://host.example/assets/tool-field-def456.js',
+                    ),
+                  },
+                }
+              : baseResponse;
+          return attemptResult(
+            { card },
+            args,
+            attemptCount,
+            attemptCount === 1,
+          );
+        };
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: cardURL,
+          auth: 'test-auth',
+        });
+        assert.strictEqual(attempts.length, 2, 'one retry on a fresh tab');
+        assert.deepEqual(
+          attempts[1],
+          { cardRender: true },
+          'the retry renders with the same options, not a cleared cache',
+        );
+        assert.notOk(result.response.error, 'the fresh tab result is returned');
+        assert.strictEqual(
+          result.response.isolatedHTML,
+          `${cardURL}-render-2`,
+          'the response came from the retry',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
   module('prerender - file retries', function () {
     test('file prerender retries with clear cache on retry signature', async function (assert) {
       let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
@@ -9503,10 +9923,16 @@ module(basename(import.meta.filename), function () {
           fusedRest,
           'file extract matches the fused visit',
         );
+        let indexSet = new Set(indexDeps);
+        let fusedSet = new Set(fusedDeps);
+        // Named on failure, since each set is mostly scoped-CSS module ids
+        // too long to compare by eye.
+        let onlyIndex = [...indexSet].filter((dep) => !fusedSet.has(dep));
+        let onlyFused = [...fusedSet].filter((dep) => !indexSet.has(dep));
         assert.deepEqual(
-          [...new Set(indexDeps)].sort(),
-          [...new Set(fusedDeps)].sort(),
-          'file extract deps match the fused visit as a set',
+          { onlyIndex, onlyFused },
+          { onlyIndex: [], onlyFused: [] },
+          `file extract deps match the fused visit as a set: only in the index visit ${JSON.stringify(onlyIndex)}, only in the fused visit ${JSON.stringify(onlyFused)}`,
         );
       }
       assert.deepEqual(

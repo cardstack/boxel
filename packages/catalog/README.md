@@ -34,11 +34,11 @@ If you have started from scratch these should have been automatically run for yo
 
 The catalog realm package includes helper scripts for managing the catalog repository:
 
-| Script                | Description                                                               |
-| --------------------- | ------------------------------------------------------------------------- |
-| `pnpm catalog:setup`  | Clones the boxel-catalog repository into `contents/` if it doesn't exist  |
-| `pnpm catalog:update` | Pulls latest changes from the boxel-catalog repository                    |
-| `pnpm catalog:reset`  | Removes the `contents/` directory and re-clones the repository            |
+| Script                | Description                                                              |
+| --------------------- | ------------------------------------------------------------------------ |
+| `pnpm catalog:setup`  | Clones the boxel-catalog repository into `contents/` if it doesn't exist |
+| `pnpm catalog:update` | Pulls latest changes from the boxel-catalog repository                   |
+| `pnpm catalog:reset`  | Removes the `contents/` directory and re-clones the repository           |
 
 ## Development Workflows
 
@@ -64,7 +64,7 @@ This workflow is ideal for rapid iteration and testing of catalog content:
 
 4. **Deploy to staging** happens automatically when the PR is merged
 
-5. **Tag the commit** to release to production
+5. **Deploy to production** with boxel-catalog's "Deploy to production" workflow, or let the next boxel production deploy carry it (see [Deployment Pipeline](#deployment-pipeline))
 
 ## Linting
 
@@ -94,13 +94,28 @@ pnpm lint:types   # TypeScript type check
 
 These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
 
+### Catalog lint in boxel CI
+
+The catalog type-checks and lints its cards against this monorepo, so a platform change here (removing a field from a command input, tightening a type, adding a lint rule) can break the catalog's lint without failing anything in boxel. The **Lint Catalog** workflow (`.github/workflows/lint-catalog.yaml`) guards against that: it checks out boxel-catalog into `contents/` and runs this package's lint against the change, using `scripts/lint-sweep.ts`.
+
+- It lints boxel-catalog `main`, unless the boxel pull request's description pairs it with a boxel-catalog pull request, in which case it lints that pull request's head. A pair is a line in each description naming the other, keyed by merge order (`Merges before:` on the one that lands first, `Merges after:` on the other), and `scripts/pairing.ts` checks it from both sides. A pull request in a pair targets `main`, or is stacked on an open pull request of its own repository, and is retargeted to `main` once that pull request merges. The `catalog-pairing` skill describes the protocol. Editing the description re-runs the workflow.
+- With a pair, it lints catalog `main` against the change as well. The catalog's own CI Lint always lints against boxel `main`, so a catalog fix for a breaking boxel change can't pass there until the boxel change merges, and until the catalog pull request then merges, catalog `main` fails with whatever the boxel change broke. A catalog pull request the change merges after has to land first, so until it does the job fails, waiting on it. Otherwise, errors the change adds to catalog `main` pass only while a catalog pull request the change merges before is open, ready for review, and approved, by GitHub's own review decision. While either of the two is stacked on a parent, this fails too, because the stacked one lands on its parent's branch rather than `main`; retarget it once the parent merges. Once the catalog pull request is approved and neither is stacked, re-run the job, then merge the catalog pull request right after the boxel one. A change on the catalog side, including a push, doesn't re-run this job, so re-run it by hand. Without a pair, errors the change adds to catalog `main` fail, and the job says which lines to add to pair the change with a catalog fix.
+- It fails only on errors the change introduces. When linting the catalog against the change finds errors, the job lints the same catalog revision against the pull request's base branch too, and errors that appear in both runs are listed as already present rather than failing the check. On pushes to `main` there is no base to compare with, so any error fails.
+- The job summary lists each error, linking catalog files to their line in boxel-catalog.
+
+To reproduce it locally, run `pnpm lint` here with the boxel-catalog revision the job names checked out in `contents/`.
+
 ## Deployment Pipeline
 
 1. **Development**: Edit catalog content locally or remotely
 2. **Pull Request**: Submit changes to boxel-catalog repository
 3. **Review**: Code review process in GitHub
-4. **Merge**: Changes automatically deployed to staging
-5. **Tag**: Create a git tag to trigger production deployment
+4. **Merge**: Changes automatically deployed to staging, which runs boxel `main`
+5. **Production**: boxel-catalog's "Deploy to production" workflow deploys the catalog, in one of two ways:
+   - **In lockstep with boxel.** Manual Deploy [boxel] to production deploys the catalog revision the deployed boxel pins in `test-subset.json` twice. The run before the release ships the catalog changes the new boxel needs, and the run after it ships the rest. Neither moves production's catalog backwards.
+   - **Ahead of boxel.** Run the workflow by hand from boxel-catalog's Actions tab to deploy catalog `main`, for changes that need nothing new from boxel.
+
+   Before it changes anything, the deploy checks each catalog pull request since the last production deploy. It refuses when one says `Merges after: cardstack/boxel#N` and production doesn't run #N yet, and it names both pull requests. The script is `scripts/catalog-deploy-check.ts`, and the `catalog-deploy` skill (`.claude/skills/catalog-deploy/SKILL.md`) explains how to read a refusal.
 
 ## Troubleshooting
 

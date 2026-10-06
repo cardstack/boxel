@@ -14,7 +14,8 @@ export type PretuiAppearance =
   | 'filled'
   | 'outlined'
   | 'filled-outlined'
-  | 'plain';
+  | 'plain'
+  | 'link';
 export type PretuiSize = 'xs' | 's' | 'm' | 'l' | 'xl';
 
 export const PRETUI_TONES = [
@@ -32,6 +33,7 @@ export const PRETUI_APPEARANCES = [
   'outlined',
   'filled-outlined',
   'plain',
+  'link',
 ] as const;
 export const PRETUI_SIZES = ['xs', 's', 'm', 'l', 'xl'] as const;
 
@@ -76,6 +78,7 @@ const SIZE_ALIASES: Record<string, PretuiSize> = Object.assign(
     small: 's',
     medium: 'm',
     large: 'l',
+    middle: 'm',
   } as const,
 );
 /** Every `@size` spelling accepted, narrowed to the house scale. */
@@ -87,7 +90,8 @@ export type PretuiSizeArg =
   | 'default'
   | 'small'
   | 'medium'
-  | 'large';
+  | 'large'
+  | 'middle';
 
 export function resolveSize(
   size: string | undefined,

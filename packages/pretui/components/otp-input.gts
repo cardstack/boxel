@@ -20,12 +20,10 @@ import { fn } from '@ember/helper';
 // value.length === @length in @onValueChange instead).
 // A11y per Spectrum's segmented-input notes: role='group' with a group
 // label, plus a per-digit label ('Digit N of L') on every segment.
-// Review pass 2026-08-12 fixed: Backspace on the empty fill-edge segment now
-// splices the previous character (it took two presses); Home/End reach the
-// first/last segment; the focus ring rides --ring (it hard-coded --primary,
-// so the theme's ring knob was ignored) and carries a transparent outline so
-// it survives forced-colors; and completion is no longer conveyed by ring
-// colour alone — a polite live region says so.
+// Backspace on the empty fill-edge segment splices the previous character;
+// Home/End reach the first/last segment; the focus ring rides --ring and
+// carries a transparent outline so it survives forced-colors; and completion
+// is never conveyed by ring colour alone — a polite live region says so.
 
 export type OtpInputType = 'numeric' | 'alpha' | 'alphanumeric';
 
@@ -227,62 +225,64 @@ export class OtpInput extends Component<OtpInputSignature> {
       <span class='pretui-vh' role='status'>{{this.statusText}}</span>
     </div>
     <style scoped>
-      .pretui-otp {
-        display: inline-flex;
-        gap: var(--pretui-otp-gap, 6px);
-      }
-      /* each segment wears the Pretui Input dress: field face, hairline on
-         box-shadow, r(--radius), primary focus ring */
-      .pretui-otp-seg {
-        width: var(--pretui-otp-size, var(--control-h, 28px));
-        height: var(--pretui-otp-size, var(--control-h, 28px));
-        padding: 0;
-        border: 0;
-        border-radius: var(--radius);
-        text-align: center;
-        font-family: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        font-variant-numeric: tabular-nums;
-        color: var(--foreground);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
-        caret-color: transparent;
-      }
-      /* the ring rides --ring (falling back to --primary) so the theme's own
-         focus knob lands; the transparent outline is inert in normal render
-         and becomes THE focus indicator under forced-colors, where a
-         box-shadow ring is simply dropped */
-      .pretui-otp-seg:focus-visible {
-        outline: 2px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 2px var(--ring),
-          var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-      }
-      .pretui-otp-seg::selection {
-        background: color-mix(in oklch, var(--ring) 25%, transparent);
-      }
-      .pretui-otp-seg:disabled {
-        opacity: 0.45;
-      }
-      .pretui-otp[data-complete] .pretui-otp-seg {
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--success, var(--boxel-success)) 55%, var(--input));
-      }
-      .pretui-otp[data-complete] .pretui-otp-seg:focus-visible {
-        box-shadow: 0 0 0 2px var(--ring),
-          var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-      }
-      .pretui-vh {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: -1px;
-        padding: 0;
-        overflow: hidden;
-        clip: rect(0 0 0 0);
-        clip-path: inset(50%);
-        white-space: nowrap;
-        border: 0;
+      @layer PretComponent {
+        .pretui-otp {
+          display: inline-flex;
+          gap: var(--pretui-otp-gap, 6px);
+        }
+        /* each segment wears the Pretui Input dress: field face, hairline on
+           box-shadow, r(--radius), primary focus ring */
+        .pretui-otp-seg {
+          width: var(--pretui-otp-size, var(--control-h, 28px));
+          height: var(--pretui-otp-size, var(--control-h, 28px));
+          padding: 0;
+          border: 0;
+          border-radius: var(--radius);
+          text-align: center;
+          font-family: inherit;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          font-variant-numeric: tabular-nums;
+          color: var(--foreground);
+          background: var(--field, var(--boxel-light));
+          box-shadow: 0 0 0 1px var(--input);
+          caret-color: transparent;
+        }
+        /* the ring rides --ring (falling back to --primary) so the theme's own
+           focus knob lands; the transparent outline is inert in normal render
+           and becomes THE focus indicator under forced-colors, where a
+           box-shadow ring is simply dropped */
+        .pretui-otp-seg:focus-visible {
+          outline: 2px solid transparent;
+          outline-offset: 1px;
+          box-shadow: 0 0 0 2px var(--ring),
+            var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+        }
+        .pretui-otp-seg::selection {
+          background: color-mix(in oklch, var(--ring) 25%, transparent);
+        }
+        .pretui-otp-seg:disabled {
+          opacity: 0.45;
+        }
+        .pretui-otp[data-complete] .pretui-otp-seg {
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--success, var(--boxel-success)) 55%, var(--input));
+        }
+        .pretui-otp[data-complete] .pretui-otp-seg:focus-visible {
+          box-shadow: 0 0 0 2px var(--ring),
+            var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
+        }
+        .pretui-vh {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          clip-path: inset(50%);
+          white-space: nowrap;
+          border: 0;
+        }
       }
     </style>
   </template>

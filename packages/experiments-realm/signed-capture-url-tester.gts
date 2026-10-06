@@ -92,7 +92,7 @@ class Isolated extends Component<typeof SignedCaptureUrlTester> {
     let path = id.slice(realm.length);
     return VARIANTS.map((v) => ({
       ...v,
-      durableUrl: `${realm}_screenshot/${path}${v.qs}`,
+      durableUrl: `${realm}_capture/${path}${v.qs}`,
     }));
   }
 

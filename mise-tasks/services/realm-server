@@ -48,17 +48,14 @@ fi
 # pin. CATALOG_SOURCE=test-subset serves only the pinned subset, which is what
 # the test stacks use in place of cloning the whole catalog.
 CATALOG_PATH='../catalog/contents'
-CATALOG_TOUCH=''
 if [ "${SKIP_CATALOG:-}" != "true" ]; then
   if [ "${CATALOG_SOURCE:-}" = "test-subset" ]; then
     CATALOG_PATH='../catalog/test-subset'
-    CATALOG_TOUCH='test-subset'
     pnpm --dir=../catalog catalog:test-subset || exit 1
   else
     pnpm --dir=../catalog catalog:setup
     pnpm --dir=../catalog catalog:update
     pnpm --dir=../catalog catalog:test-subset --into-clone --best-effort
-    CATALOG_TOUCH='clone'
   fi
 fi
 
@@ -100,22 +97,16 @@ else
   WORKER_MANAGER_ARG="$1"
 fi
 
-# The compiled-module cache survives restarts and is cleared only by the
-# running realm's file watcher, so subset files the sync rewrote above could
-# be served from a compile of their old content. Once the catalog realm
-# answers, touch them so the watcher clears those entries.
-if [ -n "$CATALOG_TOUCH" ]; then
-  (
-    for _ in $(seq 1 300); do
-      if curl -skf "${CATALOG_REALM_URL}_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson" >/dev/null 2>&1; then
-        node ../catalog/scripts/sync-test-subset.ts --touch="$CATALOG_TOUCH"
-        exit 0
-      fi
-      sleep 2
-    done
-  ) &
-fi
-
+# The realms start one after another, in the order the reconciler's unordered
+# read of realm_registry returns them: on a fresh database, the order of the
+# --path arguments below; on an existing one, not guaranteed. A realm with no
+# index yet waits for its boot index before the next realm starts, so on a
+# fresh database (CI without the index cache) the boot indexes run in this
+# order. Each also spawns a prerender-html job that a worker runs to
+# completion, and a later realm's boot index waits whenever every worker
+# (WORKER_ALL_PRIORITY_COUNT, 1 by default) is inside such a pass, so a large
+# realm delays the realms after it. pretui, the largest, goes last so the
+# realms test stacks wait on are not queued behind its index or its HTML pass.
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -152,11 +143,6 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
-  --path='../pretui' \
-  --username='pretui_realm' \
-  --fromUrl='@cardstack/pretui/' \
-  --toUrl="${REALM_BASE_URL}/pretui/" \
-  \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
   ${START_SUBMISSION:+--username='submission_realm'} \
   ${START_SUBMISSION:+--fromUrl="${SUBMISSION_REALM_URL}"} \
@@ -181,4 +167,9 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
   ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  --path='../pretui' \
+  --username='pretui_realm' \
+  --fromUrl='@cardstack/pretui/' \
+  --toUrl="${REALM_BASE_URL}/pretui/" \
   2>&1 | "$LOG_TEE" realm-server

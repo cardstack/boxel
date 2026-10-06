@@ -49,3 +49,5 @@ Where it is thinner: no icon slot, no dismissal, and no multi-line structure —
 Tone resolves through the kit's shared semantic hues; position and kind are structural.
 
 There is no cue-specific palette, which is what keeps an error beside a field the same red as an error anywhere else in the season.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

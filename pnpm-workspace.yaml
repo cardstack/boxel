@@ -42,13 +42,13 @@ catalog:
   "@glint/template": ^1.7.7
 
   "@lezer/markdown": ^1.6.3
-  "@koa/cors": ^4.0.0
+  "@koa/cors": ^5.0.0
   "@koa/router": ^14.0.0
   "@lucide/lab": ^0.1.2
   "@lukeed/uuid": ^2.0.1
   "@octokit/rest": ^22.0.1
   "@openfga/syntax-transformer": 0.2.0
-  "@percy/cli": ^1.31.1
+  "@percy/cli": ^1.32.11
   "@percy/ember": ^5.0.0
   "@playwright/test": ^1.54.0
   "@rollup/plugin-babel": ^6.0.4
@@ -77,7 +77,7 @@ catalog:
   "@types/jsonwebtoken": 9.0.10
   "@types/koa": ^2.13.5
   "@types/koa-compose": ^3.2.5
-  "@types/koa__cors": ^4.0.0
+  "@types/koa__cors": ^5.0.1
   "@types/koa__router": ^12.0.0
   "@types/line-column": ^1.0.0
   "@types/lodash": ^4.17.15
@@ -178,7 +178,7 @@ catalog:
   ignore: ^5.2.0
   indefinite: ^2.4.3
   js-string-escape: ^1.0.1
-  js-yaml: ^4.1.0
+  js-yaml: ^4.3.2
   jsdom: ^21.1.1
   json-typescript: ^1.1.2
   jsonwebtoken: 9.0.3
@@ -205,6 +205,15 @@ catalog:
   mime-types: ^2.1.35
   moment: ^2.29.4
   monaco-editor: ^0.52.2
+  # Pinned together: glimmer-motion inlines framer-motion's gesture and feature
+  # modules into its build, with hand-written declarations for them that match
+  # this release, and motion-dom / motion-utils are the versions it was released
+  # against. The Motion Bump workflow moves all four (see
+  # packages/glimmer-motion/VENDORED.md).
+  framer-motion: 13.4.6
+  motion: 13.4.6
+  motion-dom: 13.4.5
+  motion-utils: 13.3.0
   ms: ^2.1.3
   node-pg-migrate: ^6.2.2
   normalize.css: 8.0.1
@@ -236,7 +245,7 @@ catalog:
   simple-html-tokenizer: ^0.5.11
   sinon: ^19.0.2
   sql-parser-cst: ^0.28.0
-  start-server-and-test: ^1.14.0
+  start-server-and-test: ^3.0.12
   statuses: ^2.0.1
   stream-browserify: ^3.0.0
   stream-chain: ^2.2.5
@@ -246,32 +255,32 @@ catalog:
   style-value-types: ^5.1.2
   super-fast-md5: ^1.0.1
   supertest: ^6.2.4
-  svgo: ^3.0.2
+  svgo: ^3.3.5
   testem: ^3.10.1
   testem-multi-reporter: ^1.2.0
   tmp: ^0.2.1
   tracked-built-ins: ^4.0.0
   typescript: ~5.9.3
   typescript-eslint: ^8.67.0
-  undici: ^7.22.0
+  undici: ^7.30.0
   util: ^0.12.5
   uuid: ^9.0.1
   validate-peer-dependencies: ^1.1.0
   validator: ^13.15.35
   vite: ^6.3.2
-  vitest: ^2.1.9
+  vitest: ^3.2.6
   wait-for-localhost-cli: ^3.2.0
   webpack: ^5.99.6
   yaml: ^2.5.1
   yargs: ^17.5.1
 
-# pnpm 11 defaults this to `install`, making every `pnpm run` first check
+# pnpm defaults this to `install`, making every `pnpm run` first check
 # node_modules freshness and silently run a full install when the check
 # fails. The check never passes in CI, so each of the ~9 services `run-p`
 # boots kicks off its own concurrent workspace-wide install into the same
 # node_modules; when they collide badly enough, start:matrix never reaches
-# `docker run` and the shard dies with "Failed to reach Synapse". Disabling
-# restores pnpm 10 behavior: scripts run against node_modules as-is.
+# `docker run` and the shard dies with "Failed to reach Synapse". Disabled
+# here so scripts run against node_modules as-is.
 verifyDepsBeforeRun: false
 
 minimumReleaseAge: 1440
@@ -281,6 +290,12 @@ minimumReleaseAgeExclude:
 allowedDeprecatedVersions:
   babel-eslint: 10.1.0
 overrides:
+  # One Motion engine: motion and glimmer-motion pull framer-motion, which pulls
+  # motion-dom and motion-utils on caret ranges that would otherwise resolve past
+  # the pinned release and away from the copy glimmer-motion takes as a peer.
+  framer-motion: "catalog:"
+  motion-dom: "catalog:"
+  motion-utils: "catalog:"
   "@types/eslint": 8.56.5
   "@embroider/util": 1.13.1
   "@glimmer/tracking>@glimmer/validator": 0.84.3
@@ -288,6 +303,17 @@ overrides:
   jsesc: ^3.0.0
   ember-modifier: ^4.1.0
   tracked-built-ins: ^4.1.2
+  # Security floors for transitive dependencies whose parents pin a range that
+  # admits no patched release. Each is scoped to the vulnerable versions so it
+  # lifts only the copies that need it.
+  vm2@<3.11.7: ^3.11.8
+  ws@>=8.0.0 <8.21.0: ^8.21.0
+  basic-ftp@<6.2.1: ^6.2.1
+  braces@<3.0.3: ^3.0.3
+  browserslist@<4.28.7: ^4.28.7
+  tmp@<0.2.6: ^0.2.6
+  ansi-html@<0.0.8: ^0.0.9
+  linkify-it@<5.0.2: ^5.0.2
 peerDependencyRules:
   allowedVersions:
     mustache: "3"
@@ -312,4 +338,5 @@ allowBuilds:
   fsevents: true
   keytar: true
   opencode-ai: true
+  protobufjs: false
   puppeteer: true

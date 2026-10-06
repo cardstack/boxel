@@ -51,3 +51,5 @@ Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`
 Forwarded into boxel-ui through the `--boxel-*` channel. `data-state` (the validation enum) and `data-disabled` are reflected on the wrapper, so a season can dress both without reaching inside.
 
 The shared hairline is the thing to check per season: because the group's edge and its internal dividers both come from `--input`, a season with a strong input colour will see the dividers as prominently as the outline, and the assembly stops reading as one control. A season that wants quieter dividers has no separate token for them — that is the main theming limitation here.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

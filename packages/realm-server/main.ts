@@ -16,11 +16,11 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+  parseRateLimitSpec,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
-import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -42,6 +42,8 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
+import { realmDiskPath } from './lib/realm-disk-path.ts';
+import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener.ts';
@@ -54,7 +56,6 @@ import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
-import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -191,6 +192,19 @@ const PRERENDER_COALESCE_ACROSS_PROCESSES =
 // from the load this process is under. The construction, and why it is not an
 // operator setting, live beside the gate it reads in `search-inflight.ts`.
 const linkShapePolicy = buildLinkShapePolicy();
+
+// The rate limit callers a realm's policy admits without a session get, as
+// `requests/windowSeconds`, wherever the realm's own `realm.json` sets none.
+// Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`. A value that is not a limit stops the
+// server rather than leaving every realm on a limit nobody chose.
+const anonymousRateLimit = process.env.BOXEL_ANONYMOUS_RATE_LIMIT
+  ? parseRateLimitSpec(process.env.BOXEL_ANONYMOUS_RATE_LIMIT)
+  : undefined;
+if (process.env.BOXEL_ANONYMOUS_RATE_LIMIT && !anonymousRateLimit) {
+  throw new Error(
+    `BOXEL_ANONYMOUS_RATE_LIMIT must be a limit as requests/windowSeconds, for example 300/60, not "${process.env.BOXEL_ANONYMOUS_RATE_LIMIT}"`,
+  );
+}
 
 let {
   port,
@@ -563,7 +577,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     moduleCacheCoordinator,
   );
 
-  // One store shared by every realm this server mounts; the `_screenshot/`
+  // One store shared by every realm this server mounts; the `_capture/`
   // route serves every request as an uncaptured miss when none is configured.
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
 
@@ -637,14 +651,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
+    bootstrapOrder: hrefs.map(([url]) => url),
     prepareRealmFromRow: (row: RealmRegistryRow) => {
-      let diskPath: string;
-      if (row.kind === 'bootstrap') {
-        diskPath = row.disk_id;
-      } else if (row.kind === 'source') {
-        diskPath = join(realmsRootPath, row.disk_id);
-      } else {
-        diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
+      // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
+      // to decide whether to mount it, so the file it reads is the one the
+      // mounted realm reads its policy pointer from.
+      let diskPath = realmDiskPath(row, realmsRootPath);
+      if (!diskPath) {
+        throw new Error(
+          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
+        );
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
       let fullIndexOnStartup = resolveFullIndexOnStartup(
@@ -686,6 +702,10 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           ),
           mediaCacheAdapter,
           cardDocumentCache,
+          realmFor: (url: URL) =>
+            reconciler
+              ? findRealm(url, { realms, reconciler, dbAdapter })
+              : Promise.resolve(undefined),
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -700,6 +720,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             ? { disableModuleCaching: true }
             : {}),
           linkShapePolicy,
+          ...(anonymousRateLimit ? { anonymousRateLimit } : {}),
         },
       );
       // Publish synchronously into realms[] + virtualNetwork. The
@@ -964,10 +985,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
   log.info(`Realm server listening on port ${actualPort} is serving realms:`);
-  // Phase 3: realms[] is populated by the reconciler in realm_registry
-  // row order, not in CLI --path order, so hrefs[index] / paths[index]
-  // no longer correspond. Log just the realm URLs; URL mappings are
-  // logged separately below.
+  // realms[] is populated by the reconciler from realm_registry rows, so
+  // hrefs[index] / paths[index] do not correspond. Log just the realm URLs;
+  // URL mappings are logged separately below.
   for (let { url } of realms) {
     log.info(`    ${url}`);
   }

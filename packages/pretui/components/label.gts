@@ -43,16 +43,18 @@ export const Label: TemplateOnlyComponent<LabelSignature> = <template>
     </label>
   {{/if}}
   <style scoped>
-    .pretui-label {
-      display: inline-block;
-      padding: 0;
-      font-family: var(--font-mono);
-      font-size: var(--text-ui-xs, 11px);
-      font-weight: 500;
-      line-height: 16px;
-      letter-spacing: var(--track-eyebrow, 0.08em);
-      text-transform: uppercase;
-      color: var(--muted-foreground);
+    @layer PretComponent {
+      .pretui-label {
+        display: inline-block;
+        padding: 0;
+        font-family: var(--font-mono);
+        font-size: var(--text-ui-xs, 11px);
+        font-weight: 500;
+        line-height: 16px;
+        letter-spacing: var(--track-eyebrow, 0.08em);
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
     }
   </style>
 </template>;

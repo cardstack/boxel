@@ -1,5 +1,4 @@
-// Pretui — Breadcrumb unit tests. Imports from ../structure; when Breadcrumb moves to
-// its own file only the import path changes.
+// Pretui — Breadcrumb unit tests.
 //
 // No assertion touches a computed style: the component's own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
@@ -41,10 +40,18 @@ module('Pretui | components/breadcrumb', function (hooks) {
       ],
     );
     assert.strictEqual(nav.querySelector('b')?.textContent?.trim(), 'Wuyi Origins', 'the leaf is not a link');
-    // Pinned as shipped (KNOWN GAP): the separators are real text spans with
-    // no aria-hidden, so they are announced. breadcrumb.md names
-    // aria-hidden="true" (or a CSS ::before) as the fix.
-    assert.strictEqual(nav.querySelectorAll('.sep').length, 2, 'separators sit between, not before the first — KNOWN GAP: announced, not aria-hidden');
+    assert.deepEqual(
+      Array.from(nav.querySelectorAll('[aria-current]')).map((e) => [e.textContent?.trim(), e.getAttribute('aria-current')]),
+      [['Wuyi Origins', 'page']],
+      'only the leaf is announced as the current page',
+    );
+    let seps = Array.from(nav.querySelectorAll('.sep'));
+    assert.strictEqual(seps.length, 2, 'separators sit between, not before the first');
+    assert.deepEqual(
+      seps.map((s) => s.getAttribute('aria-hidden')),
+      ['true', 'true'],
+      'the separators are decoration, so a screen reader does not read "slash" between crumbs',
+    );
   });
 
   test('Breadcrumb renders an hrefless middle crumb as plain text, not a dead link', async function (assert) {
@@ -58,6 +65,11 @@ module('Pretui | components/breadcrumb', function (hooks) {
     const ONE: CrumbSpec[] = [{ label: 'Realm', href: '/' }];
     await render(<template><Breadcrumb @items={{ONE}} /></template>);
     assert.strictEqual(q('[data-test-pretui-breadcrumb] b')?.textContent?.trim(), 'Realm');
+    assert.strictEqual(
+      q('[data-test-pretui-breadcrumb] b')?.getAttribute('aria-current'),
+      'page',
+      'a lone crumb with an href is still the current page, not a link',
+    );
     assert.strictEqual(all('.sep').length, 0);
   });
 });

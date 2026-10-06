@@ -11,13 +11,15 @@
     "@types/stream-chain": "catalog:",
     "@types/stream-json": "catalog:",
     "debug": "^4.4.3",
+    "htmlparser2": "^10.1.0",
     "lodash-es": "catalog:",
     "matrix-js-sdk": "catalog:",
     "openai": "catalog:",
     "qunit": "catalog:",
     "stream-chain": "catalog:",
     "stream-json": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "undici": "catalog:"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",

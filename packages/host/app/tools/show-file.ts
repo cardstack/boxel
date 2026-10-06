@@ -2,6 +2,8 @@ import { service } from '@ember/service';
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import { codeSubmodeUnavailable } from '../services/operator-mode-state-service';
+
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -27,6 +29,9 @@ export default class ShowFileTool extends HostBaseTool<
     input: BaseToolModule.FileIdentifierCard,
   ): Promise<undefined> {
     let { operatorModeStateService } = this;
+    if (!operatorModeStateService.codeSubmodeOffered(input.fileIdentifier)) {
+      throw new Error(codeSubmodeUnavailable(input.fileIdentifier));
+    }
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
     }

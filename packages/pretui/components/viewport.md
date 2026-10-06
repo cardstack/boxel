@@ -22,7 +22,7 @@ State is reflected as `data-*`, so a season or a test can read the current mode.
 
 ## Prior art
 
-Built against the kit's artboard contract (Appendix H). The comparison set is design tooling rather than component libraries: **Storybook's viewport addon** (a dropdown of device presets that resizes the preview iframe), **Figma's frames**, and **Chrome DevTools' device toolbar**.
+Built against the kit's artboard contract. The comparison set is design tooling rather than component libraries: **Storybook's viewport addon** (a dropdown of device presets that resizes the preview iframe), **Figma's frames**, and **Chrome DevTools' device toolbar**.
 
 Where this differs from Storybook's viewport addon, which is the closest analogue:
 
@@ -51,3 +51,5 @@ Gaps, and the first two are the ones that matter for a tool:
 Stage and gutter surfaces (`--canvas` or `--inset`), the frame's `--border` and `--pretui-shadow-card`, `--muted-foreground` for the caption, and **SegmentedControl**'s tokens for the mode picker.
 
 **The stage is deliberately neutral** with explicit surface and gutter settings, because an artboard that shares the page's background makes the framed component's own surface invisible. A season must keep the stage distinguishable from `--card` — otherwise every example appears to float in nothing, which is exactly the illusion an artboard exists to prevent.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

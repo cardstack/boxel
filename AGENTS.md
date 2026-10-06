@@ -11,6 +11,11 @@
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
 
+## Parallel agent sessions
+
+- Other sessions may be live on this machine, and — when Remote Control is enabled — on the user's other machines and in the cloud. `ListAgents` names them, labelled by kind, and `SendMessage` addresses one by name. Coordinate rather than duplicating work; the `agent-peer-collaboration` skill carries the protocol and the shared-resource rules.
+- Enabling cross-machine reachability is a human step, documented in [docs/parallel-claude-sessions.md](docs/parallel-claude-sessions.md). If a peer you expect is missing from `ListAgents`, say so instead of assuming it is gone — a session without Remote Control is simply invisible there.
+
 ## GitHub Actions failure triage helper
 
 - Use `pnpm ci:failures -- ...` to quickly summarize failed jobs and extract actionable test failures from GitHub Actions logs.
@@ -98,6 +103,7 @@ mise exec -- pnpm build-common-deps   # builds @cardstack/boxel-icons `dist` (co
 ```
 
 Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow build):
+
 - The blocker is almost always a single unresolved import breaking the whole test module graph. Read the Vite error overlay directly instead of polling for QUnit — it names the exact import in seconds:
   `document.querySelector('vite-error-overlay')?.shadowRoot?.querySelector('.message')?.textContent`
 - `Failed to resolve import "@cardstack/bxl"` (or any `@cardstack/*` workspace package) ⇒ run `pnpm install`.
@@ -138,6 +144,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 ### packages/realm-server
 
+- Unless a test module is testing the boot index itself (indexing from an empty database, `fullIndexOnStartup`, or a missing index), it indexes its realms once per module, into a template database each test starts from, not from scratch before every test. Load the `realm-server-test-setup` skill before writing or copying a module that brings up realms: it says which helper to use, and when to stay uncached.
 - Tests require the realm-server to be running:
   `pnpm start:all`
 - Run full test suite:
@@ -178,6 +185,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+- Every follow-up a PR defers needs a Linear ticket before the PR merges, linked from the PR description. That covers a "Not in this PR" item, a sentence like "a follow-up will…" or "a separate PR then…", and an open decision left for later. A deferral that exists only in a merged PR's description is lost: nothing tracks it, and no rule that fires on a later change will fire for work that never started.
 
 ### Pre-commit autofix hook
 
@@ -205,7 +213,7 @@ Scopes are allowed: `feat(profile): …`. One title covers both packages when a 
 
 A bumpable prefix is necessary but not sufficient: each flow also asks whether the merge changed anything its tarball ships, so a `fix:` touching only tests or CI config publishes nothing.
 
-**Edge case:** bumping `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` regenerates plugin skill content. Use `fix(skills):` (routine refresh) or `feat(skills):` (additive content), never `chore:` — a `chore:` prefix means no `plugin.json` bump, and the marketplace cache won't refresh for users. See `packages/boxel-cli/plugin/README.md` for full surface-scoping rules.
+**Boxel skills pin:** the content of cardstack/boxel-skills reaches users as its own `boxel-skills` plugin, which the `boxel-cli` plugin depends on, at the release tag pinned by the `ref` of the `boxel-skills` entry in `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`. Moving the pin means editing both refs; nothing under `packages/boxel-cli/` changes, so the PR takes a plain title and no `plugin.json` bump (Claude Code keys the boxel-skills plugin on the pinned commit). The monorepo's own readers (the Software Factory and the BXL skill suite) read the same tag from a gitignored clone that `pnpm --filter @cardstack/boxel-cli fetch:skills` makes. See `packages/boxel-cli/plugin/README.md`.
 
 ## Production-safe selectors
 
@@ -253,6 +261,21 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 ## Base realm imports
 
 - Only card definitions (files run through the card loader) can use static ESM imports from `@cardstack/base/*`. Host-side modules must load the module at runtime via `loader.import(`${baseRealm.url}...`)`. Static value imports from the HTTPS specifier inside host code trigger build-time `webpackMissingModule` failures. Type imports are OK using static ESM syntax.
+
+## Catalog-owned definitions
+
+- Some definitions that platform code and tests depend on live in the `cardstack/boxel-catalog` repo, not in this one. Examples are the operation-permission policy cards `RealmPolicy`, `PolicyRule` and `OperationGrant`, and `PolicyPredicateField`. Boxel's tests load them from a pinned revision through `@cardstack/catalog/`. `packages/catalog/test-subset.json` lists every such file.
+- To change one, change it in boxel-catalog, then pin the new revision here. Never add a copy to `packages/base`, and never edit `packages/catalog/test-subset/` (generated from the pin) or `packages/catalog/contents/` (a clone of catalog `main`). Guards fail on each of these.
+- A change here that a catalog-owned definition must adopt (for example a new declaration option the definition should use) is not done until the boxel-catalog PR merges and the pin here is bumped. When that lands after the boxel PR, its ticket names both halves: the boxel-catalog change, and the re-pin here (`pnpm --dir packages/catalog catalog:test-subset --bump`) with the tests that assert the adopted behavior.
+- Load the `catalog-test-subset` skill for the procedure: paired branches, testing a catalog change against boxel's tests, pinning, and merge order.
+- Load `catalog-test-subset` before you move the pin in any way: editing `packages/catalog/test-subset.json`, running the sync (`catalog:test-subset`, with or without `--bump`), or setting `CATALOG_TEST_SUBSET_SOURCE`. The pin a local test needs, the pin a pushed commit needs, and the pin a merge needs are different, and the skill says which is which. A project `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses an edit to the manifest, and any shell command that names it, the sync or the variable, until the session or subagent making the call has loaded the skill.
+
+## Paired boxel / boxel-catalog pull requests
+
+- A boxel pull request and a boxel-catalog pull request that depend on each other declare the pair in **both** descriptions. Each has a line naming the other, keyed by its own merge order: the one that lands first says `Merges before:` and the other pull request, and the one that lands after it says `Merges after:` and the first. Which repository lands first depends on the change. For example, a boxel rename the catalog must follow puts `Merges before: cardstack/boxel-catalog#N` on the boxel pull request and `Merges after: cardstack/boxel#M` on the catalog one. The checks in both repositories read these lines, and a declaration the other side doesn't return fails. Each description opens with a `> [!IMPORTANT]` callout giving the merge order for the people merging, with the pairing line directly below it, outside the callout. A paired pull request targets `main`, or is stacked on an open pull request of its own repository and is retargeted to `main` once that parent merges; the check passes a stacked one with a notice, and fails it on its next run after the parent has merged. Nothing re-runs it when the parent merges, since neither repository deletes a merged branch and GitHub doesn't retarget, so retarget it to `main` then (which re-runs the check) or re-run the check by hand.
+- A change needs a pair when catalog cards must follow a boxel change (a renamed or removed host tool, base export or type they import), or when boxel's tests need a catalog change first. boxel's Lint Catalog fails a change that would leave catalog `main` broken without a paired catalog pull request that is ready to follow it.
+- Load the `catalog-pairing` skill before opening or editing a pull request in either repository that depends on the other, and whenever Lint Catalog fails. The `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses a `gh pr create`/`edit` or GitHub MCP pull request call that opens or edits a boxel-catalog pull request, or writes a `Merges before:`/`Merges after:` line, until the session has loaded the skill.
+- Production gets the catalog only from boxel-catalog's "Deploy to production". Manual Deploy [boxel] to production runs it with the catalog revision boxel pins, before its release and again after it, and anyone can run it by hand to ship catalog `main` ahead of boxel. It refuses while a catalog pull request it would deploy says `Merges after:` a boxel pull request production doesn't run. Load the `catalog-deploy` skill to deploy the catalog, or when that deploy refuses.
 
 ## Linear Ticket Process (Reusable)
 

@@ -18,6 +18,11 @@ import './credit-tracking-test.ts';
 import './user-delegated-realm-server-session-test.ts';
 import './read-realm-file-test.ts';
 import './read-realm-file-fulfillment-test.ts';
+import './read-url-test.ts';
+import './read-url-fulfillment-test.ts';
+import './read-url-approval-test.ts';
+import './bot-tools-test.ts';
 import './chat-completion-request-test.ts';
+import './lenient-json-test.ts';
 
 QUnit.start();

@@ -10,7 +10,7 @@ import {
   newOperationScope,
   paramsFor,
   projectedResult,
-  readShape,
+  readPlan,
   runInputTransform,
   runOperation,
   runOutputTransform,
@@ -78,6 +78,10 @@ function stub(operations?: Definition['operations']): OperationCore {
           ...(operations ? { operations } : {}),
         };
       },
+      async lookupDefinitionEntry(codeRef: CodeRef) {
+        let definition = await this.lookupDefinition(codeRef);
+        return definition ? { definition, types: [] } : undefined;
+      },
     },
     indexQueryEngine: {
       async cardDocument(url: URL) {
@@ -87,7 +91,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           generation: 7,
           indexedAt: 1700,
           deps: [],
-          screenshots: null,
+          captures: null,
           queryBacked: false,
         } as any;
       },
@@ -103,7 +107,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           indexedAt: 1700,
           lastModified: 1699,
           deps: [],
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async file() {
@@ -243,7 +247,7 @@ module(basename(import.meta.filename), function () {
           indexedAt: 1700,
           lastModified: 1699,
           generation: 7,
-          screenshots: null,
+          captures: null,
           deps: [],
         },
         'a projection reshapes the body and not the row behind it',
@@ -466,29 +470,105 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the projection question is answerable without assembling', async function (assert) {
-      assert.strictEqual(
-        await readShape(stub({ read: REDACTING_READ }), new URL(CARD)),
-        'staged',
+      assert.deepEqual(
+        await readPlan(stub({ read: REDACTING_READ }), new URL(CARD)),
+        { shape: 'staged', links: 'full', unshareableFormats: [] },
         'a type that declares an output has a stage to run',
       );
-      assert.strictEqual(
-        await readShape(stub(), new URL(CARD)),
-        'plain',
+      assert.deepEqual(
+        await readPlan(stub(), new URL(CARD)),
+        { shape: 'plain', links: 'full', unshareableFormats: [] },
         'a type that declares nothing does not',
       );
-      assert.strictEqual(
-        await readShape(
+      assert.deepEqual(
+        await readPlan(
           stub({ read: { base: 'read', deterministic: true } }),
           new URL(CARD),
         ),
-        'plain',
+        { shape: 'plain', links: 'full', unshareableFormats: [] },
         'a declared read with no output does not either',
       );
     });
 
+    test('a declared link strategy is answerable without assembling too', async function (assert) {
+      // The validator a conditional request is answered from is built before
+      // anything is assembled, and it has to name the shape the body would
+      // take — so the strategy has to be reachable from the definition alone,
+      // the same way the projection question is.
+      assert.deepEqual(
+        await readPlan(
+          stub({ read: { base: 'read', deterministic: true, links: 'ids' } }),
+          new URL(CARD),
+        ),
+        { shape: 'plain', links: 'ids', unshareableFormats: [] },
+        'a narrowed read is still plain, and says how far it reaches',
+      );
+      // Lowering refuses `none` on a read, so a stored one only ever comes
+      // from an entry that got around it. It is served as `ids`, which still
+      // tells the host what the card links to, so an edit never replaces
+      // links the host was not shown.
+      for (let links of ['none', 'some']) {
+        assert.deepEqual(
+          await readPlan(
+            // What a stored entry holds is JSON, so it is only as good as
+            // whatever wrote it.
+            stub({
+              read: { base: 'read', deterministic: true, links },
+            } as unknown as Definition['operations']),
+            new URL(CARD),
+          ),
+          { shape: 'plain', links: 'ids', unshareableFormats: [] },
+          `a stored read declaring "${links}" names its links`,
+        );
+      }
+      assert.deepEqual(
+        await readPlan(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              links: 'ids',
+              output: { source: '{title:.title}', syntax: 'solidified' },
+            },
+          }),
+          new URL(CARD),
+        ),
+        { shape: 'staged', links: 'ids', unshareableFormats: [] },
+        'the two answers are independent',
+      );
+    });
+
+    test('the formats a read serves data-only are answerable without assembling', async function (assert) {
+      // The single-card HTML read and the host-mode page serve a card's
+      // markup without running its read, so the declaration has to be
+      // reachable from the definition alone.
+      assert.deepEqual(
+        await readPlan(
+          stub({
+            read: {
+              base: 'read',
+              deterministic: true,
+              html: {
+                isolated: 'unshareable',
+                embedded: 'shareable',
+                fitted: 'unshareable',
+              },
+            },
+          }),
+          new URL(CARD),
+        ),
+        {
+          shape: 'plain',
+          links: 'full',
+          unshareableFormats: ['fitted', 'isolated'],
+        },
+        'the unshareable formats, in the realm’s own format order',
+      );
+    });
+
     test('a read that cannot be resolved is answered by assembling, not by a validator', async function (assert) {
-      assert.strictEqual(
-        await readShape(
+      assert.deepEqual(
+        await readPlan(
           stub({
             read: {
               base: 'read',
@@ -506,7 +586,21 @@ module(basename(import.meta.filename), function () {
           }),
           new URL(CARD),
         ),
-        'unresolved',
+        // The widest strategy, which is the one that keeps the caller off
+        // every fast path a narrower answer would have opened — and every
+        // format data-only, since the routes that serve markup without
+        // running the read have no refusal coming to stand in for it.
+        {
+          shape: 'unresolved',
+          links: 'full',
+          unshareableFormats: [
+            'embedded',
+            'fitted',
+            'atom',
+            'head',
+            'isolated',
+          ],
+        },
         'a refusal is coming, and only the full request can report it',
       );
     });

@@ -5,7 +5,31 @@ import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
 
+async function isUnknownToken(response: Response) {
+  try {
+    let json = (await response.clone().json()) as { errcode?: string };
+    return json.errcode === 'M_UNKNOWN_TOKEN';
+  } catch {
+    return false;
+  }
+}
+
 const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
+
+// Every login from this client reuses one device per matrix user. A login
+// without a device_id makes synapse mint a new device, and each new device
+// writes a device-list change row for every room the user has joined, rows
+// synapse never prunes. Server users join a session room per user they
+// authenticate, so fresh devices grow that table with logins × rooms. Logging
+// in to an existing device writes no change rows, and each login still gets
+// its own access token, so concurrent processes sharing the device don't
+// invalidate each other. Logging out, or deleting the device through the
+// admin API, deletes the device and so revokes every process's token at once;
+// nothing logs out with this client's token.
+//
+// Synapse dedupes sends by user, device and transaction id, so processes
+// sharing the device must never reuse a transaction id; see nextTxnId.
+export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -20,6 +44,7 @@ export class MatrixClient {
   private password?: string;
   private seed?: string;
   private loginPromise: Promise<void> | undefined;
+  private readonly txnPrefix = globalThis.crypto.randomUUID();
   private lastTxnTimestamp = 0;
   private txnSequence = 0;
 
@@ -49,6 +74,10 @@ export class MatrixClient {
     return this.access?.userId;
   }
 
+  getDeviceId() {
+    return this.access?.deviceId;
+  }
+
   isLoggedIn() {
     return this.access !== undefined;
   }
@@ -60,18 +89,44 @@ export class MatrixClient {
     includeAuth = true,
   ) {
     options.method = method;
-
-    if (includeAuth) {
-      if (!this.access) {
-        throw new Error(`Missing matrix access token`);
+    let url = `${this.matrixURL.href}${path}`;
+    if (!includeAuth) {
+      return fetch(url, options);
+    }
+    if (!this.access) {
+      throw new Error(`Missing matrix access token`);
+    }
+    let accessToken = this.access.accessToken;
+    let response = await fetch(url, this.withAuth(options, accessToken));
+    if (response.status === 401 && (await isUnknownToken(response))) {
+      // Every process shares one device, so deleting it revokes all of
+      // their tokens at once. Logging in again recreates the device.
+      // A concurrent request may already have logged in again; reuse that.
+      // Otherwise drop the settled login, which login() would return as is.
+      if (this.access?.accessToken === accessToken) {
+        this.access = undefined;
+        this.loginPromise = undefined;
       }
-      options.headers = {
+      if (!this.access) {
+        await this.login();
+      }
+      response = await fetch(
+        url,
+        this.withAuth(options, this.access!.accessToken),
+      );
+    }
+    return response;
+  }
+
+  private withAuth(options: RequestInit, accessToken: string): RequestInit {
+    return {
+      ...options,
+      headers: {
         ...options.headers,
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.access.accessToken}`,
-      };
-    }
-    return fetch(`${this.matrixURL.href}${path}`, options);
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
   }
 
   async login() {
@@ -122,6 +177,7 @@ export class MatrixClient {
           },
           password,
           type: 'm.login.password',
+          device_id: SERVER_MATRIX_DEVICE_ID,
         }),
       },
       false,
@@ -311,6 +367,50 @@ export class MatrixClient {
     return json.chunk;
   }
 
+  // Every event in the room whose `origin_server_ts` is at or after `since`,
+  // newest first. `/messages` answers one page at a time — ten events when no
+  // limit is asked for — so a window holding more than a page is read by
+  // following the `end` token back until a page reaches past `since` or the
+  // room's history runs out. Each page asks for the server's ceiling (Synapse
+  // caps a page at 1000), so a window that fits one page costs one request.
+  async roomMessagesSince(
+    roomId: string,
+    since: number,
+  ): Promise<MatrixEvent[]> {
+    let events: MatrixEvent[] = [];
+    let from: string | undefined;
+    for (;;) {
+      let params = new URLSearchParams({ dir: 'b', limit: '1000' });
+      if (from) {
+        params.set('from', from);
+      }
+      let response = await this.request(
+        `_matrix/client/v3/rooms/${roomId}/messages?${params}`,
+      );
+      if (!response.ok) {
+        throw new Error(
+          `Unable to read messages of room ${roomId}: status ${
+            response.status
+          } - ${await response.text()}`,
+        );
+      }
+      let json = (await response.json()) as {
+        chunk: MatrixEvent[];
+        end?: string;
+      };
+      for (let event of json.chunk) {
+        if (event.origin_server_ts >= since) {
+          events.push(event);
+        }
+      }
+      let oldest = json.chunk[json.chunk.length - 1];
+      if (!json.end || !oldest || oldest.origin_server_ts < since) {
+        return events;
+      }
+      from = json.end;
+    }
+  }
+
   async getOpenIdToken(): Promise<
     | {
         access_token: string;
@@ -431,7 +531,10 @@ export class MatrixClient {
   }
 
   private nextTxnId() {
-    // Ensure unique txn ids even when multiple events are sent in the same millisecond
+    // Unique per client instance, and within it even when several events are
+    // sent in the same millisecond. Every process logs in to the same device,
+    // and synapse answers a repeated (device, transaction id) send with the
+    // earlier event instead of storing the new one.
     let now = Date.now();
     if (now === this.lastTxnTimestamp) {
       this.txnSequence++;
@@ -439,7 +542,7 @@ export class MatrixClient {
       this.lastTxnTimestamp = now;
       this.txnSequence = 0;
     }
-    return `${now}-${this.txnSequence}`;
+    return `${this.txnPrefix}-${now}-${this.txnSequence}`;
   }
 }
 
@@ -493,30 +596,6 @@ export async function passwordFromSeed(username: string, seed: string) {
   return uint8ArrayToHex(await hash.digest());
 }
 
-export async function waitForMatrixMessage(
-  matrixClient: MatrixClient,
-  roomId: string,
-  filter: (m: any) => boolean,
-  waitBetweenChecksMs = 200,
-  timeoutMs = 10000,
-) {
-  let waitedMs = 0;
-
-  let messages = await matrixClient.roomMessages(roomId);
-
-  while (waitedMs < timeoutMs) {
-    let message = messages.find(filter);
-    if (message) {
-      return message;
-    }
-
-    await new Promise((res) => setTimeout(res, waitBetweenChecksMs));
-    waitedMs += waitBetweenChecksMs;
-  }
-
-  return null;
-}
-
 export function userIdFromUsername(username: string, matrixURL: string) {
   let hostname = new URL(matrixURL).hostname;
   // For *.localhost subdomains (environment mode), the Matrix server_name is
@@ -525,6 +604,20 @@ export function userIdFromUsername(username: string, matrixURL: string) {
     ? 'localhost'
     : hostname.split('.').slice(-2).join('.');
   return `@${username}:${host}`;
+}
+
+// Whether the text is a full Matrix user id: `@localpart:server`, the
+// localpart in the character set Synapse registers users with, and the server
+// a hostname or an IP literal with an optional port. For a value someone typed
+// into a setting, where a bare username or a stray space would otherwise name
+// no user and fail somewhere far from the setting.
+export function isMatrixUserId(text: string): boolean {
+  return (
+    text.length <= 255 &&
+    /^@[a-z0-9._=\-/+]+:(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/.test(
+      text,
+    )
+  );
 }
 
 export function ensureFullMatrixUserId(userId: string, matrixURL: string) {

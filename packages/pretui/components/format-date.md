@@ -51,3 +51,5 @@ Where it is thinner: no date ranges, no duration formatting, and no "smart" form
 `@token` swaps to the kit's **Token** treatment; otherwise the element inherits everything from its context.
 
 A date in prose should be prose and a date in a log line should be mono, and those are the only two cases — which is why there is one flag rather than a token surface.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

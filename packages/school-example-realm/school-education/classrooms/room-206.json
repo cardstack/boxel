@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Room 206",
+      "gradeLevel": "Grade 4",
+      "teacherIds": ["@ben:school.example"],
+      "leadTeacherIds": []
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/classroom",
+        "name": "Classroom"
+      }
+    },
+    "relationships": {
+      "teachers.0": {
+        "links": {
+          "self": "../../school-org/StaffMember/ben"
+        }
+      }
+    }
+  }
+}

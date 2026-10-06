@@ -58,10 +58,9 @@ export interface FilterChipsSignature {
 
 // Adopted from Beautiful UI: status chips that filter live data.
 //
-// **Semantics rebuilt 2026-08-13**, with SegmentedControl, for the same
-// reason: `role='tablist'` over plain `<button>`s is invalid ARIA (a
+// **A radiogroup, not a tablist**, like SegmentedControl: `role='tablist'` over plain `<button>`s is invalid ARIA (a
 // tablist's children must be tabs) and the wrong pattern — a filter row picks
-// a value, it does not swap a panel. Single-select is now native
+// a value, it does not swap a panel. Single-select is native
 // `<input type='radio'>` in a `role='radiogroup'`, sharing `RadioGroup`'s
 // foundation and inheriting the whole APG contract for free; multi-select is
 // native `<input type='checkbox'>` in a `role='group'`. The chip dress is
@@ -154,80 +153,82 @@ export class FilterChips extends Component<FilterChipsSignature> {
       {{/each}}
     </div>
     <style scoped>
-      .pretui-filterchips {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex-wrap: wrap;
-      }
-      .pretui-filterchip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        position: relative;
-        height: 26px;
-        border-radius: 13px;
-        padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
-        border: 0;
-        font: inherit;
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        letter-spacing: inherit;
-        color: var(--muted-foreground);
-        background: none;
-        cursor: pointer;
-        flex: none;
-        white-space: nowrap;
-        transition: background 200ms var(--pretui-ease-snap, ease), box-shadow 200ms var(--pretui-ease-snap, ease), color 200ms;
-      }
-      .pretui-filterchip-input {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        margin: 0;
-        opacity: 0;
-        pointer-events: none;
-      }
-      .pretui-filterchip:has(.pretui-filterchip-input:focus-visible) {
-        outline: 2px solid var(--ring);
-        outline-offset: 1px;
-      }
-      .pretui-filterchip:hover {
-        background: var(--hover, var(--boxel-100));
-      }
-      .pretui-filterchip[data-state='active'] {
-        background: var(--card);
-        color: var(--foreground);
-        /* selection is never colour alone: the raised card face + control
-           shadow survive greyscale, and no width changes, so the row never
-           re-flows on a pick */
-        box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
-      }
-      .pretui-filterdot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        flex: none;
-      }
-      /* The slot is rendered whether or not the number has arrived, and it is
-         at least `--pretui-filterchip-count-ch` digits wide, so a row of
-         chips does not re-flow as each count resolves. */
-      .pretui-filterchip-count {
-        border-radius: 4px;
-        padding: 0 4px;
-        min-width: calc(var(--pretui-filterchip-count-ch, 2) * 1ch);
-        text-align: center;
-        font-size: 10.5px;
-        font-variant-numeric: tabular-nums;
-        color: var(--ink-3, var(--boxel-400));
-      }
-      .pretui-filterchip[data-state='active'] .pretui-filterchip-count {
-        background: var(--inset, var(--boxel-100));
-        color: var(--muted-foreground);
-      }
-      @media (any-pointer: coarse) {
+      @layer PretComponent {
+        .pretui-filterchips {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-wrap: wrap;
+        }
         .pretui-filterchip {
-          min-height: 34px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          position: relative;
+          height: 26px;
+          border-radius: 13px;
+          padding: 0 calc(6px * var(--pretui-capsule-base, 1.35) + 13px * var(--pretui-radius-encroach, 0.35));
+          border: 0;
+          font: inherit;
+          font-size: var(--text-ui, 12px);
+          font-weight: 500;
+          letter-spacing: inherit;
+          color: var(--muted-foreground);
+          background: none;
+          cursor: pointer;
+          flex: none;
+          white-space: nowrap;
+          transition: background 200ms var(--pretui-ease-snap, ease), box-shadow 200ms var(--pretui-ease-snap, ease), color 200ms;
+        }
+        .pretui-filterchip-input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .pretui-filterchip:has(.pretui-filterchip-input:focus-visible) {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-filterchip:hover {
+          background: var(--hover, var(--boxel-100));
+        }
+        .pretui-filterchip[data-state='active'] {
+          background: var(--card);
+          color: var(--foreground);
+          /* selection is never colour alone: the raised card face + control
+             shadow survive greyscale, and no width changes, so the row never
+             re-flows on a pick */
+          box-shadow: var(--pretui-shadow-control, 0 0 0 1px var(--border));
+        }
+        .pretui-filterdot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          flex: none;
+        }
+        /* The slot is rendered whether or not the number has arrived, and it is
+           at least `--pretui-filterchip-count-ch` digits wide, so a row of
+           chips does not re-flow as each count resolves. */
+        .pretui-filterchip-count {
+          border-radius: 4px;
+          padding: 0 4px;
+          min-width: calc(var(--pretui-filterchip-count-ch, 2) * 1ch);
+          text-align: center;
+          font-size: 10.5px;
+          font-variant-numeric: tabular-nums;
+          color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-filterchip[data-state='active'] .pretui-filterchip-count {
+          background: var(--inset, var(--boxel-100));
+          color: var(--muted-foreground);
+        }
+        @media (any-pointer: coarse) {
+          .pretui-filterchip {
+            min-height: 34px;
+          }
         }
       }
     </style>

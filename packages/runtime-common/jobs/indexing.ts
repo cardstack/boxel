@@ -246,7 +246,7 @@ export async function unbuiltIndexFailure(
 //
 // Derived from what moves BYTES, not from what the write-path drain happens to
 // wait for. Only a write moves a card's stored file, and a write's indexing is
-// one of these two. A `from-scratch-index` re-derives rows from files nobody
+// an `incremental-index`. A `from-scratch-index` re-derives rows from files nobody
 // changed, so it moves `indexed_at` without moving content — and the one case
 // where it follows a real content change, a realm republish, cannot matter
 // here: a published realm is created with `['read', 'realm-owner']` and
@@ -256,10 +256,7 @@ export async function unbuiltIndexFailure(
 //
 // Narrow on purpose: this list decides who WAITS, and the lane is shared with
 // passes that run fleet-wide for an hour at a time.
-export const CONTENT_MOVING_INDEX_JOB_TYPES = [
-  'incremental-index',
-  'copy-index',
-];
+export const CONTENT_MOVING_INDEX_JOB_TYPES = ['incremental-index'];
 
 // The jobs in a realm's index lane that write the index, which is what a reader
 // asking "is this realm's index behind its source" is waiting on. A superset of
@@ -333,6 +330,33 @@ export interface LaneHolder {
   id: number;
   jobType: string;
   claimed: boolean;
+}
+
+// How far a realm's index is behind its source, as the queue records it: how
+// many passes that write the index are yet to land, and how long the oldest of
+// them has been waiting. A search reads the index, so this is how stale a
+// search's answer can be. The queue is shared by every process, so a pass
+// another replica enqueued counts, and the age is measured on the database's
+// clock, which is the one that stamped it. Undefined where there is no queue
+// to read.
+export async function indexLag(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<{ pending: number; oldestPendingMs?: number } | undefined> {
+  if (dbAdapter.kind !== 'pg') {
+    return undefined;
+  }
+  let [row] = (await query(dbAdapter, [
+    `SELECT COUNT(*) AS pending,`,
+    `FLOOR(EXTRACT(EPOCH FROM (NOW() - MIN(created_at))) * 1000) AS oldest_ms`,
+    `FROM jobs WHERE status = 'unfulfilled' AND`,
+    ...laneFamilyPredicate(indexingConcurrencyGroup(realmURL)),
+    ...jobTypeFilter(INDEX_WRITING_JOB_TYPES),
+  ])) as { pending: number | string; oldest_ms: number | string | null }[];
+  let pending = Number(row?.pending ?? 0);
+  return pending > 0 && row?.oldest_ms != null
+    ? { pending, oldestPendingMs: Math.max(0, Number(row.oldest_ms)) }
+    : { pending };
 }
 
 export async function outstandingIndexJobs(

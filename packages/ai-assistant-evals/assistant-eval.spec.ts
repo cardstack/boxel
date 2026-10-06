@@ -74,12 +74,19 @@ const STUCK_APPLYING_MS = 150_000;
 // stalled request between the ai-bot and the provider; the bot has no timeout
 // of its own for it.
 const STALLED_GENERATION_MS = 180_000;
+
+// One machine-readable line per state change, read by progress-reporter.ts to
+// print how far each model has got. Only changes are printed, so the list
+// reporter's output stays readable.
+function progress(model: string, fields: Record<string, unknown>) {
+  console.log(`[eval-step] ${JSON.stringify({ model, ...fields })}`);
+}
 // If the bot has not started a single reply this long after the prompt, it is
 // not slow: it never saw the message. The usual cause is an invite the ai-bot
 // missed, so it never joined the room.
 const NO_REPLY_MS = 120_000;
-// The bot starts its next message within a second or two of a tool result or
-// a patch landing; the correctness check takes a few seconds more. Idle has
+// The bot starts its next message within a second or two of a tool result
+// landing; the correctness check takes a few seconds more. Idle has
 // to hold this long before it counts.
 const QUIET_WINDOW_MS = 10_000;
 
@@ -288,7 +295,7 @@ async function selectModel(page: Page, requested: string) {
 }
 
 // Put the room in Act mode right after the model is picked. In Ask mode every
-// tool and patch waits for a click nobody makes. The toggle renders only once
+// tool call waits for a click nobody makes. The toggle renders only once
 // the room knows its model, a moment after the pick, so wait for it rather
 // than reading "not there yet" as "not needed"; then confirm the click took.
 async function ensureActMode(page: Page, requestedModel: string) {
@@ -390,13 +397,13 @@ interface Activity {
   // stays flat for minutes is a stalled provider or ai-bot, not a slow model.
   botTextLength: number;
   // Signs that the run has already gone wrong and every further turn is
-  // wasted money: a failed or invalid tool pill, an error alert, or a
-  // SEARCH/REPLACE block in git-conflict syntax (the host cannot apply it).
+  // wasted money: a failed or invalid tool pill, an error alert, or the same
+  // tool call repeated.
   irregularities: string[];
 }
 
 // The host reloads the page whenever a write changes a module the page holds,
-// which is what a `.gts` patch does. A poll that lands in that moment loses its
+// which is what a `.gts` write does. A poll that lands in that moment loses its
 // execution context. That is the app working, not the run failing, so wait for
 // the page to come back and read again.
 const LOST_CONTEXT =
@@ -424,12 +431,11 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
     let actionBar = q('[data-test-ai-assistant-action-bar]');
-    let applying =
-      q('[data-test-apply-state="applying"]') +
-      q('[data-test-apply-state="preparing"]');
-    let loading =
-      q('[data-test-code-patch-loading]') +
-      q('[data-test-session-preparation]');
+    // Only a call the host is running. A call still streaming ("preparing")
+    // is the model writing, which the stall check below watches instead.
+    let applying = q('[data-test-apply-state="applying"]');
+    let preparing = q('[data-test-apply-state="preparing"]');
+    let loading = q('[data-test-session-preparation]');
     let pending = q('[data-test-ai-assistant-message-pending="true"]');
     let generating = q('[data-test-stop-generating]') > 0;
     let irregularities: string[] = [];
@@ -441,7 +447,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     // rounds, each of which can fail once more before it lands. Only a fourth
     // failing turn reads as a run going sideways; stopping at two cut off a
     // Haiku run two seconds before its card appeared. Count turns, not pills:
-    // one fix reply can carry several blocks that all fail together.
+    // one fix reply can carry several calls that all fail together.
     let messagesWithFailures = Array.from(
       document.querySelectorAll('[data-test-message-idx]'),
     ).filter(
@@ -452,20 +458,25 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     ).length;
     if (messagesWithFailures >= 4) {
       irregularities.push(
-        `${messagesWithFailures} turns had a failed or rejected tool call or patch (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+        `${messagesWithFailures} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
       );
     }
-    let gitStyle = Array.from(
-      document.querySelectorAll('[data-test-ai-message-content]'),
-    ).filter((el) => (el.textContent ?? '').includes('<<<<<<< SEARCH')).length;
-    if (gitStyle)
-      irregularities.push(
-        'a block uses git-conflict markers, which the host cannot apply',
+    // A loop: the same tool call, with the same arguments, three times. The
+    // bot's own checkCorrectness is left out: it repeats with the same
+    // arguments on every repair round by design.
+    let toolElements = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-tool-name]'),
+    );
+    let calls = toolElements
+      .filter((el) => el.dataset.toolName !== 'checkCorrectness')
+      .map(
+        (el) =>
+          `${el.dataset.toolName}|${el.dataset.toolArgumentsLength}|${(
+            el.textContent ?? ''
+          )
+            .replace(/\s+/g, ' ')
+            .trim()}`,
       );
-    // A loop: the same tool call, with the same arguments, three times.
-    let calls = Array.from(
-      document.querySelectorAll('[data-test-tool-code-block]'),
-    ).map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim());
     let seen = new Map<string, number>();
     for (let call of calls) seen.set(call, (seen.get(call) ?? 0) + 1);
     if ([...seen.values()].some((n) => n >= 3)) {
@@ -478,6 +489,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
         settled &&
         actionBar === 0 &&
         applying === 0 &&
+        preparing === 0 &&
         loading === 0 &&
         pending === 0,
       // Finished bot turns, not messages: every completed turn renders its
@@ -487,11 +499,18 @@ async function readActivityOnce(page: Page): Promise<Activity> {
       generating,
       errorAlerts,
       irregularities,
-      botTextLength: Array.from(
-        document.querySelectorAll(
-          '[data-test-ai-message-content], [data-test-reasoning]',
+      // Streamed tool arguments count too: a long tool call grows only in its
+      // collapsed box, which shows no text.
+      botTextLength:
+        Array.from(
+          document.querySelectorAll(
+            '[data-test-ai-message-content], [data-test-reasoning]',
+          ),
+        ).reduce((sum, el) => sum + (el.textContent ?? '').length, 0) +
+        toolElements.reduce(
+          (sum, el) => sum + Number(el.dataset.toolArgumentsLength ?? 0),
+          0,
         ),
-      ).reduce((sum, el) => sum + (el.textContent ?? '').length, 0),
     };
   });
 }
@@ -505,7 +524,7 @@ async function stopGeneration(page: Page) {
 
 // Waits for the bot to finish on its own. A run is cut short only when it has
 // clearly gone sideways: a failed or invalid tool call, an error alert, a
-// block the host cannot apply, a repeated identical tool call, a pill stuck
+// repeated identical tool call, a pill stuck
 // past the host's own tool timeout, or the safety wall clock. Long, slow, or
 // expensive runs are not stopped; they are graded afterwards.
 // `botMessagesBefore` is how many finished bot turns the room already had
@@ -514,6 +533,7 @@ async function waitForIdle(
   page: Page,
   deadline: number,
   botMessagesBefore = 0,
+  onActivity?: (activity: Activity) => void,
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
@@ -523,6 +543,7 @@ async function waitForIdle(
   for (;;) {
     let now = Date.now();
     let activity = await readActivity(page);
+    onActivity?.(activity);
     if (
       activity.botMessages <= botMessagesBefore &&
       !activity.generating &&
@@ -724,16 +745,8 @@ function classify(
     );
     return { verdict: 'host-failure', reasons };
   }
-  if (analysis.gitStyleBlocks > 0) {
-    reasons.push(
-      `${analysis.gitStyleBlocks} block(s) used git-style markers instead of the box markers`,
-    );
-  }
-  if (analysis.patchBlocks === 0) {
-    reasons.push('no SEARCH/REPLACE block was written');
-  }
-  if (analysis.patchResults.failed > 0) {
-    reasons.push(`${analysis.patchResults.failed} patch(es) failed to apply`);
+  if (analysis.realmCodeWrites === 0) {
+    reasons.push('no file was written (no applied run-realm-code write)');
   }
   if (!cardId) {
     reasons.push(...cardReasons);
@@ -748,7 +761,7 @@ function classify(
   if (
     cardId &&
     cardReasons.length === 0 &&
-    analysis.patchBlocks > 0 &&
+    analysis.realmCodeWrites > 0 &&
     promptsSent === promptsTotal
   ) {
     return { verdict: 'pass', reasons };
@@ -812,12 +825,16 @@ async function runModel(
   // run ends early.
   let realmClient: RealmClient | undefined;
   let step = 'start';
+  let setStep = (next: string) => {
+    step = next;
+    progress(requestedModel, { state: next });
+  };
   try {
-    step = 'login';
+    setStep('login');
     console.log(`[eval] ${requestedModel} runs as @${username}`);
     credentials = await loginViaLocalStorage(page, username);
     realmClient = new RealmClient(credentials.accessToken, credentials.userId);
-    step = 'read the evaluation';
+    setStep('read the evaluation');
     let { evaluation, prompts } = await loadPrompts();
     result.prompts = prompts;
     result.evalCardUrl = evaluation?.url;
@@ -828,7 +845,7 @@ async function runModel(
     let stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(
       now.getHours(),
     )}:${pad(now.getMinutes())}`;
-    step = 'create workspace';
+    setStep('create workspace');
     let label = evaluation ? `Eval ${slugify(evaluation.name)}` : 'Models';
     result.realmUrl = await createWorkspace(
       page,
@@ -836,7 +853,7 @@ async function runModel(
       workspaceEndpoint(label, slug, stamp),
     );
     if (evaluation) {
-      step = 'copy the initial cards and files into the workspace';
+      setStep('copy the initial cards and files into the workspace');
       let copied = await prepopulate(
         realmClient,
         evaluation,
@@ -846,26 +863,48 @@ async function runModel(
       result.initialCards = copied.cards;
       result.initialFiles = copied.files;
     }
-    step = 'open room';
+    setStep('open room');
     result.roomId = await openRoom(page);
-    step = 'select model';
+    setStep('select model');
     result.modelName = await selectModel(page, requestedModel);
-    step = 'set act mode';
+    setStep('set act mode');
     await ensureActMode(page, requestedModel);
-    step = 'confirm the tab is inside the new workspace';
+    setStep('confirm the tab is inside the new workspace');
     await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
     // One safety clock for the whole run, follow-ups included.
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;
     for (let [index, prompt] of prompts.entries()) {
-      step = index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`;
+      setStep(
+        index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`,
+      );
       await sendPrompt(page, result.roomId, prompt, index + 1);
       result.promptsSent = index + 1;
-      step =
+      setStep(
         index === 0
           ? 'wait for idle'
-          : `wait for idle after prompt ${index + 1}`;
-      let waited = await waitForIdle(page, deadline, botMessagesBefore);
+          : `wait for idle after prompt ${index + 1}`,
+      );
+      let lastActivity = '';
+      let waited = await waitForIdle(
+        page,
+        deadline,
+        botMessagesBefore,
+        (activity) => {
+          let key = `${activity.botMessages}|${activity.generating}|${activity.applying}`;
+          if (key !== lastActivity) {
+            lastActivity = key;
+            progress(requestedModel, {
+              state: activity.applying
+                ? 'tool running'
+                : activity.generating
+                  ? 'bot generating'
+                  : 'waiting',
+              botMessages: activity.botMessages,
+            });
+          }
+        },
+      );
       result.stoppedBy = waited.stoppedBy;
       result.irregularities = waited.irregularities;
       if (waited.stoppedBy !== 'idle') {
@@ -873,7 +912,7 @@ async function runModel(
       }
       botMessagesBefore = (await readActivity(page)).botMessages;
     }
-    step = 'check render';
+    setStep('check render');
 
     let rendered = await findRenderedCard(
       page,
@@ -955,6 +994,12 @@ async function runModel(
       JSON.stringify(result, null, 2),
     );
     let graded = grade(result);
+    progress(requestedModel, {
+      state: 'done',
+      grade: graded.grade,
+      verdict: result.verdict,
+      roomId: result.roomId,
+    });
     console.log(
       `[eval] ${graded.grade} ${requestedModel}: ${result.verdict}` +
         (result.reasons.length ? ` — ${result.reasons.join('; ')}` : '') +
@@ -1051,7 +1096,7 @@ test.afterAll(async () => {
   }
   rows.sort((a, b) => a.requestedModel.localeCompare(b.requestedModel));
   let header =
-    '| Result | Model | Effort | Verdict | Turns | Tool calls | Blocks | Cost | Cache | Time | Card | Notes |\n' +
+    '| Result | Model | Effort | Verdict | Turns | Tool calls | Realm writes | Cost | Cache | Time | Card | Notes |\n' +
     '|---|---|---|---|---|---|---|---|---|---|---|---|\n';
   let body = rows
     .map((r) => {
@@ -1065,12 +1110,10 @@ test.afterAll(async () => {
             )
             .join(', ')
         : '';
-      let blocks = a
-        ? `${a.patchBlocks}${a.gitStyleBlocks ? ` (+${a.gitStyleBlocks} git-style)` : ''}`
-        : '';
+      let writes = a ? `${a.realmCodeWrites}` : '';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
-      } | ${tools} | ${blocks} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
+      } | ${tools} | ${writes} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
         a && a.cacheWindowInputTokens > 0
           ? `${Math.round((100 * a.cacheWindowCachedTokens) / a.cacheWindowInputTokens)}%${
               a.cacheMisses ? ` (${a.cacheMisses} miss)` : ''

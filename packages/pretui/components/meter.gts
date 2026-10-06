@@ -16,17 +16,31 @@ export interface MeterSignature {
 
 export class Meter extends Component<MeterSignature> {
   get bars(): { on: boolean; style: ReturnType<typeof htmlSafe> }[] {
-    let segments = this.args.segments ?? 3;
+    let segments = this.segmentsCount;
     let heights = this.args.heights ?? [6, 10, 14];
     let out = [];
     for (let i = 0; i < segments; i++) {
       let h = heights[i] ?? heights[heights.length - 1];
-      out.push({ on: i < this.args.level, style: htmlSafe(`height: ${h}px`) });
+      out.push({ on: i < this.levelNow, style: htmlSafe(`height: ${h}px`) });
     }
     return out;
   }
+  // `@segments` as a whole number of bars, 3 when omitted. A fraction rounds
+  // up, the way it draws (2.5 draws three bars), and a negative or non-finite
+  // count reads as no bars, so `aria-valuemax` is always the number of bars
+  // drawn and never drops below `aria-valuemin`.
   get segmentsCount() {
-    return this.args.segments ?? 3;
+    let segments = this.args.segments ?? 3;
+    return Number.isFinite(segments) ? Math.max(0, Math.ceil(segments)) : 0;
+  }
+  // `@level` as a whole number of bars in [0, segments], so `aria-valuenow`
+  // always sits between `aria-valuemin` and `aria-valuemax`, and what is
+  // announced is the number of bars a sighted user sees lit. A fraction rounds
+  // up, the way a partly reached step lights in the stepped ProgressBar, so 1.5
+  // lights and announces 2. An unset or non-finite level reads as 0.
+  get levelNow() {
+    let level = Number.isFinite(this.args.level) ? Math.ceil(this.args.level) : 0;
+    return Math.max(0, Math.min(level, this.segmentsCount));
   }
   get style() {
     return hueStyle('--pretui-meter-hue', this.args.hue);
@@ -51,7 +65,7 @@ export class Meter extends Component<MeterSignature> {
       class='pretui-meter'
       style={{this.style}}
       role={{this.meterRole}}
-      aria-valuenow={{@level}}
+      aria-valuenow={{this.levelNow}}
       aria-valuemin='0'
       aria-valuemax={{this.segmentsCount}}
       aria-label={{@label}}
@@ -66,30 +80,32 @@ export class Meter extends Component<MeterSignature> {
       {{#if @label}}<span class='pretui-meter-label'>{{@label}}</span>{{/if}}
     </span>
     <style scoped>
-      .pretui-meter {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 8px;
-      }
-      .pretui-meter-bars {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 2px;
-        height: 14px;
-      }
-      .pretui-meter-bar {
-        width: 4px;
-        border-radius: 2px;
-        background: var(--line-strong, var(--boxel-400));
-      }
-      .pretui-meter-bar[data-on] {
-        background: var(--pretui-meter-hue, var(--primary));
-      }
-      .pretui-meter-label {
-        font-size: var(--text-ui-md, 12.5px);
-        font-weight: 500;
-        color: var(--muted-foreground);
-        line-height: 1;
+      @layer PretComponent {
+        .pretui-meter {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 8px;
+        }
+        .pretui-meter-bars {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 14px;
+        }
+        .pretui-meter-bar {
+          width: 4px;
+          border-radius: 2px;
+          background: var(--line-strong, var(--boxel-400));
+        }
+        .pretui-meter-bar[data-on] {
+          background: var(--pretui-meter-hue, var(--primary));
+        }
+        .pretui-meter-label {
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 500;
+          color: var(--muted-foreground);
+          line-height: 1;
+        }
       }
     </style>
   </template>

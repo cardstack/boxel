@@ -3,16 +3,25 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  dischargePendingDecision,
+  erroredTargetRow,
   isDocumentResult,
   isHeadResult,
   isOperationFailure,
   isSourceResult,
   newOperationScope,
+  pendingWriteFor,
+  policyGateStats,
+  readPlan,
+  resolveFacadeWrite,
+  resolveGatedOperation,
   resolveOperation,
   runOperation,
   scopeCallerFor,
   type OperationCore,
+  type OperationDefinition,
   type OperationError,
+  type OperationScope,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
@@ -46,7 +55,11 @@ const PERSON: CodeRef = {
 
 interface StubOptions {
   // What `cardDocument` answers. `undefined` is a missing row.
-  document?: 'ok' | 'missing' | { errorStatus: number };
+  // An errored row may carry the card's last-known-good isolated markup.
+  document?:
+    | 'ok'
+    | 'missing'
+    | { errorStatus: number; lastKnownGoodHtml?: string };
   // What the row peek answers. `undefined` is a missing row.
   row?: 'ok' | 'missing';
   // The operations the target's type declares.
@@ -80,6 +93,14 @@ interface StubOptions {
   // An adapter offering no bounded read, which leaves the realm no way to
   // fingerprint an unrecorded file short of streaming the whole of it.
   rangelessAdapter?: boolean;
+  // The ref the type entry names itself by, where it is not the ref it was
+  // looked up by, as for a type reached through a module that re-exports it.
+  definitionCodeRef?: CodeRef;
+  // The adoption chain recorded on the type entry. By default the type the
+  // entry names and `CardDef`.
+  definitionTypes?: string[];
+  // What the policy gate reads for a caller the realm ACL declined.
+  policy?: OperationCore['policy'];
 }
 
 interface Stub {
@@ -131,24 +152,42 @@ function stub(opts: StubOptions = {}): Stub {
     storedRangeHash = {},
     sizelessAdapter = false,
     rangelessAdapter = false,
+    definitionCodeRef,
+    definitionTypes,
+    policy,
   } = opts;
+
+  let definitionOf = (codeRef: CodeRef): Definition | undefined =>
+    definitionType === 'unresolvable'
+      ? undefined
+      : {
+          type: definitionType,
+          codeRef: definitionCodeRef ?? codeRef,
+          displayName: 'Person',
+          fields: {},
+          fieldDefs: {},
+          ...(operations ? { operations } : {}),
+        };
 
   let core: OperationCore = {
     realmURL: REALM,
     definitionLookup: {
       async lookupDefinition(codeRef) {
         calls.push('lookupDefinition');
-        if (definitionType === 'unresolvable') {
-          return undefined;
-        }
-        return {
-          type: definitionType,
-          codeRef,
-          displayName: 'Person',
-          fields: {},
-          fieldDefs: {},
-          ...(operations ? { operations } : {}),
-        };
+        return definitionOf(codeRef);
+      },
+      async lookupDefinitionEntry(codeRef) {
+        calls.push('lookupDefinitionEntry');
+        let definition = definitionOf(codeRef);
+        return definition
+          ? {
+              definition,
+              types: definitionTypes ?? [
+                typeKey(definition.codeRef),
+                typeKey(CARD_DEF),
+              ],
+            }
+          : undefined;
       },
     },
     indexQueryEngine: {
@@ -174,7 +213,7 @@ function stub(opts: StubOptions = {}): Stub {
                 message: 'the card could not be built',
               },
               scopedCssUrls: [],
-              lastKnownGoodHtml: null,
+              lastKnownGoodHtml: document.lastKnownGoodHtml ?? null,
               cardTitle: null,
             },
           } as any;
@@ -192,13 +231,29 @@ function stub(opts: StubOptions = {}): Stub {
           generation: 7,
           indexedAt: 1700,
           deps: [],
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async instance(url) {
         calls.push('instance');
         if (row === 'missing' || !isCanonicalKey(url)) {
           return undefined;
+        }
+        // An errored document is read off an errored row: the index answers
+        // both from the one row, so the stub never pairs a healthy peek with
+        // an errored document. The row keeps the adoption chain its last
+        // visit recorded, and no document of its own.
+        if (typeof document === 'object') {
+          return {
+            type: 'instance-error',
+            error: { status: document.errorStatus },
+            instance: null,
+            types: [typeKey(PERSON), typeKey(CARD_DEF)],
+            generation: 7,
+            realmURL: REALM,
+            lastModified: null,
+            resourceCreatedAt: null,
+          } as any;
         }
         return {
           type: 'instance',
@@ -210,7 +265,7 @@ function stub(opts: StubOptions = {}): Stub {
           generation: 7,
           indexedAt: 1700,
           lastModified: 1699,
-          screenshots: null,
+          captures: null,
         } as any;
       },
       async file() {
@@ -220,7 +275,7 @@ function stub(opts: StubOptions = {}): Stub {
               type: 'file',
               lastModified: 1699,
               generation: 4,
-              screenshots: null,
+              captures: null,
               deps: null,
               indexedAt: 1700,
             } as any)
@@ -335,9 +390,60 @@ function stub(opts: StubOptions = {}): Stub {
     unresolveInstanceIds: () => {
       calls.push('unresolveInstanceIds');
     },
+    ...(policy ? { policy } : {}),
   };
   return { core, calls, metaCalls };
 }
+
+function typeKey(ref: CodeRef) {
+  return 'module' in ref ? `${ref.module}/${ref.name}` : JSON.stringify(ref);
+}
+
+// A policy of `rules`, over types keyed as `module/name`. It counts how often
+// it is loaded. `policyCard` is the card the realm's key names, and a chain
+// holding `REALM_POLICY` is a policy card's.
+function policyStub(
+  rules: { targetType: CodeRef; grants: string[] }[],
+  { policyCard }: { policyCard?: string } = {},
+) {
+  let loads = { count: 0 };
+  let access: NonNullable<OperationCore['policy']> = {
+    async compiledPolicy() {
+      loads.count++;
+      return {
+        card: `${REALM}policy`,
+        version: '1',
+        issues: [],
+        rules: rules.map(({ targetType, grants }) => ({
+          targetType,
+          grants: grants.map((operation) => ({ operation })),
+        })),
+      } as any;
+    },
+    async typeKeys(codeRef) {
+      return [typeKey(codeRef)];
+    },
+    resolvedLink: (selfLink) => selfLink,
+    async policyCard() {
+      return policyCard;
+    },
+    isPolicyCard: (types) => types.includes(typeKey(REALM_POLICY)),
+    async compileDraft() {
+      throw new Error('this stub compiles no draft');
+    },
+  };
+  return { access, loads };
+}
+
+const CARD_DEF: CodeRef = {
+  module: 'https://cardstack.com/base/card-api',
+  name: 'CardDef',
+} as CodeRef;
+
+const REALM_POLICY: CodeRef = {
+  module: '@cardstack/catalog/realm-policy/realm-policy',
+  name: 'RealmPolicy',
+} as CodeRef;
 
 const MARKDOWN: CodeRef = {
   module: 'https://cardstack.com/base/markdown-file-def',
@@ -641,6 +747,156 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(nonHttp.status, 500);
     });
+    test('an errored read withholds its salvage markup when its isolated format is unshareable', async function (assert) {
+      // The salvage an errored read carries in place of the card is the card's
+      // last-known-good isolated markup, so a read declaring the isolated
+      // format unshareable carries none — while one declaring another format
+      // unshareable, or nothing, carries it.
+      let salvage = async (operations?: Definition['operations']) => {
+        try {
+          await runOperation(
+            stub({
+              document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+              operations,
+            }).core,
+            invoke(CARD, 'read'),
+          );
+        } catch (err) {
+          if (isOperationFailure(err)) {
+            return erroredTargetRow(err)?.lastKnownGoodHtml;
+          }
+          throw err;
+        }
+        throw new Error('expected the read to be refused');
+      };
+      let read = (html: OperationDefinition['html']) => ({
+        read: { base: 'read' as const, deterministic: true, html },
+      });
+      assert.strictEqual(
+        await salvage(),
+        '<p>Ada</p>',
+        'a read declaring nothing carries the markup',
+      );
+      assert.strictEqual(
+        await salvage(read({ embedded: 'unshareable' })),
+        '<p>Ada</p>',
+        'so does one withholding a different format',
+      );
+      assert.strictEqual(
+        await salvage(read({ isolated: 'unshareable' })),
+        null,
+        'one withholding the isolated format carries none',
+      );
+    });
+
+    test('what a type withholds is read off an errored row too', async function (assert) {
+      // An errored row resolves to the built-in read, since its type is not
+      // on a healthy document, yet it still serves the markup an earlier
+      // render left. The type its visit recorded is what governs that markup.
+      let { core } = stub({
+        document: { errorStatus: 500, lastKnownGoodHtml: '<p>Ada</p>' },
+        operations: {
+          read: {
+            base: 'read',
+            deterministic: true,
+            html: { isolated: 'unshareable', embedded: 'unshareable' },
+          },
+        },
+      });
+      let memo = new Map();
+      let plan = await readPlan(core, new URL(CARD.url), undefined, memo);
+      assert.deepEqual(
+        plan.unshareableFormats,
+        ['embedded', 'isolated'],
+        'the declaration on the errored card’s recorded type is read',
+      );
+      assert.strictEqual(memo.size, 1, 'and it holds until the index moves');
+    });
+
+    test('a read plan the realm cannot settle withholds every format and is not remembered', async function (assert) {
+      let every = ['embedded', 'fitted', 'atom', 'head', 'isolated'];
+
+      let unreadable = new Map();
+      assert.deepEqual(
+        (
+          await readPlan(
+            stub({ definitionType: 'unresolvable' }).core,
+            new URL(CARD.url),
+            undefined,
+            unreadable,
+          )
+        ).unshareableFormats,
+        every,
+        'a card whose type entry cannot be read withholds every format',
+      );
+      assert.strictEqual(
+        unreadable.size,
+        0,
+        'and is asked afresh, since the entry may read on the next ask',
+      );
+
+      let missing = new Map();
+      assert.deepEqual(
+        (
+          await readPlan(
+            stub({ row: 'missing', document: 'missing' }).core,
+            new URL(CARD.url),
+            undefined,
+            missing,
+          )
+        ).unshareableFormats,
+        [],
+        'a path holding no card serves no markup, so withholds none',
+      );
+      assert.strictEqual(
+        missing.size,
+        0,
+        'and takes no memo entry, whatever path a caller names',
+      );
+    });
+
+    test('a type another realm declares is asked afresh rather than remembered', async function (assert) {
+      let read = {
+        read: {
+          base: 'read' as const,
+          deterministic: true,
+          html: { embedded: 'unshareable' as const },
+        },
+      };
+      let own = new Map();
+      await readPlan(
+        stub({ operations: read }).core,
+        new URL(CARD.url),
+        undefined,
+        own,
+      );
+      assert.strictEqual(own.size, 1, 'a type of this realm’s own is kept');
+
+      let foreign = new Map();
+      let plan = await readPlan(
+        stub({
+          operations: read,
+          definitionCodeRef: {
+            module: 'http://example.com/elsewhere/person',
+            name: 'Person',
+          } as CodeRef,
+        }).core,
+        new URL(CARD.url),
+        undefined,
+        foreign,
+      );
+      assert.deepEqual(
+        plan.unshareableFormats,
+        ['embedded'],
+        'another realm’s type is answered as declared',
+      );
+      assert.strictEqual(
+        foreign.size,
+        0,
+        'but not kept, since its declaration changes without this realm’s index moving',
+      );
+    });
+
     test('a read tells a missing card from one still being indexed', async function (assert) {
       let gone = await refusalFrom(() =>
         runOperation(
@@ -811,11 +1067,12 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(fromRow, {
         projected: false,
+        links: 'full',
         type: 'file-meta',
         indexedAt: 1700,
         lastModified: 1699,
         generation: 4,
-        screenshots: null,
+        captures: null,
         deps: null,
       });
       assert.strictEqual(
@@ -832,11 +1089,12 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(fromDisk, {
         projected: false,
+        links: 'full',
         type: 'file-meta',
         indexedAt: null,
         lastModified: 42,
         generation: null,
-        screenshots: null,
+        captures: null,
         deps: null,
       });
     });
@@ -1555,6 +1813,779 @@ module(basename(import.meta.filename), function () {
         calls.filter((call) => call === 'instance').length,
         2,
         'and a fresh scope reads it again, so no row outlives its request',
+      );
+    });
+  });
+
+  // A create names its type in the payload, and the realm resolves that ref
+  // to a definition-cache entry. Here the ref reaches `Person` through another
+  // module, as a re-export does, so the chain recorded on that entry is
+  // `Person`'s. A gate that matched on the ref the caller sent would answer
+  // differently from one that matches on that chain.
+  module('the policy gate on a type target', function () {
+    const CLAIMED: CodeRef = {
+      module: `${REALM}people`,
+      name: 'Claimed',
+    } as CodeRef;
+    const target: OperationTarget = {
+      kind: 'type',
+      codeRef: CLAIMED,
+      realm: REALM,
+    };
+    const reExported = { definitionCodeRef: PERSON };
+    function declined(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@teacher:localhost'),
+        coarseDeclined: 'all',
+      });
+    }
+
+    test('matches rules on the adoption chain recorded for the type the ref resolved to', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core } = stub({ ...reExported, policy: access });
+      let { decision } = await resolveGatedOperation(
+        core,
+        target,
+        'create',
+        declined(core),
+      );
+      assert.strictEqual(decision.kind, 'granted', 'the Person rule admits it');
+    });
+
+    test('a rule on the ref the caller named does not match a type that resolved to another', async function (assert) {
+      let { access } = policyStub([
+        { targetType: CLAIMED, grants: ['create'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, target, 'create', declined(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    test('a rule on an ancestor in the recorded chain applies', async function (assert) {
+      let { access } = policyStub([
+        { targetType: CARD_DEF, grants: ['create'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      let { decision } = await resolveGatedOperation(
+        core,
+        target,
+        'create',
+        declined(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+
+    test('the definition and its chain are read from one entry', async function (assert) {
+      let { access } = policyStub([{ targetType: PERSON, grants: ['create'] }]);
+      let { core, calls } = stub({ ...reExported, policy: access });
+      await resolveGatedOperation(core, target, 'create', declined(core));
+      assert.deepEqual(
+        calls.filter((call) => call.startsWith('lookupDefinition')),
+        ['lookupDefinitionEntry', 'lookupDefinition'],
+        'one read of the entry, and no separate read of its definition: the one definition read is of the ancestor the non-grantable check asks about',
+      );
+    });
+
+    test('a type is matched only for a create', async function (assert) {
+      let { access } = policyStub([
+        { targetType: PERSON, grants: ['read', 'update', 'delete'] },
+      ]);
+      let { core } = stub({ ...reExported, policy: access });
+      for (let name of ['read', 'update', 'delete']) {
+        let failure = await refusalFrom(() =>
+          resolveGatedOperation(core, target, name, declined(core)),
+        );
+        assert.strictEqual(
+          failure.code,
+          'operation-not-permitted',
+          `a ${name} granted on the type is not granted on a type target`,
+        );
+      }
+    });
+
+    test('a caller the realm ACL allowed never loads the policy', async function (assert) {
+      let { access, loads } = policyStub([]);
+      let { core } = stub({ ...reExported, policy: access });
+      let { decision } = await resolveGatedOperation(
+        core,
+        target,
+        'create',
+        newOperationScope(core, {
+          caller: scopeCallerFor('@admin:localhost'),
+          coarseDeclined: 'none',
+        }),
+      );
+      assert.strictEqual(decision.kind, 'coarse');
+      assert.strictEqual(loads.count, 0, 'the policy was not loaded');
+    });
+
+    test('a type target scoped to another realm is refused before its type is looked up', async function (assert) {
+      let { access, loads } = policyStub([
+        { targetType: PERSON, grants: ['create'] },
+      ]);
+      let { core, calls } = stub({ policy: access });
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(
+          core,
+          { kind: 'type', codeRef: PERSON, realm: 'http://example.com/other/' },
+          'create',
+          newOperationScope(core, {
+            caller: scopeCallerFor('@reader:localhost'),
+            coarseDeclined: 'writes',
+          }),
+        ),
+      );
+      assert.strictEqual(failure.code, 'invalid-params');
+      assert.true(
+        /target realm http:\/\/example\.com\/other\/ is not/.test(
+          failure.detail ?? '',
+        ),
+        failure.detail,
+      );
+      assert.deepEqual(calls, [], 'nothing was looked up');
+      assert.strictEqual(loads.count, 0, 'and the policy was not loaded');
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants `update` on
+  // `CardDef` to everyone. The target's row records `Person` and `CardDef`.
+  module('the policy gate on a non-grantable operation', function () {
+    const FLAGGED: Definition['operations'] = {
+      update: { base: 'update', deterministic: true, nonGrantable: true },
+    };
+
+    // Only `Person`'s entry can carry the flag, and only `Person`'s can be
+    // unreadable, so `CardDef` always reads cleanly and flags nothing.
+    function gatedCore(person: 'flagged' | 'unflagged' | 'unreadable') {
+      let { access } = policyStub([
+        { targetType: CARD_DEF, grants: ['update'] },
+      ]);
+      let { core, calls } = stub({ policy: access });
+      let isPerson = (ref: CodeRef) => typeKey(ref) === typeKey(PERSON);
+      let definitionOf = (ref: CodeRef): Definition => {
+        if (isPerson(ref) && person === 'unreadable') {
+          throw new Error('the definition could not be built');
+        }
+        return {
+          type: 'card-def',
+          codeRef: ref,
+          displayName: isPerson(ref) ? 'Person' : 'Card',
+          fields: {},
+          fieldDefs: {},
+          ...(isPerson(ref) && person === 'flagged'
+            ? { operations: FLAGGED }
+            : {}),
+        };
+      };
+      core.definitionLookup = {
+        async lookupDefinition(ref) {
+          calls.push('lookupDefinition');
+          return definitionOf(ref);
+        },
+        async lookupDefinitionEntry(ref) {
+          calls.push('lookupDefinitionEntry');
+          return {
+            definition: definitionOf(ref),
+            types: [typeKey(ref), typeKey(CARD_DEF)],
+          };
+        },
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return { core, calls };
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    test('the flag on the target type refuses a grant that matches', async function (assert) {
+      let { core } = gatedCore('flagged');
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+    });
+
+    test('a target type whose entry cannot be read refuses rather than dropping its flag', async function (assert) {
+      let { core, calls } = gatedCore('unreadable');
+      let failure = await refusalFrom(() =>
+        resolveGatedOperation(core, CARD, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.true(
+        calls.includes('lookupDefinition'),
+        'the chain check asked for the target type again',
+      );
+    });
+
+    test('a target type that declares nothing is granted as before', async function (assert) {
+      let { core } = gatedCore('unflagged');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        declinedWrites(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+  });
+
+  // A card verb carries out the built-in behavior its method names, so a
+  // grant on the name reaches the verb only where the name means that
+  // behavior. A reader declined only writes, with a policy that grants
+  // `update` on `CardDef` to everyone. The target's row records `Person` and
+  // `CardDef`.
+  module('the policy gate on a card verb’s write', function () {
+    function gatedCore(
+      person:
+        | 'declares update'
+        | 'declares update on read'
+        | 'declares nothing',
+    ) {
+      let { access, loads } = policyStub([
+        { targetType: CARD_DEF, grants: ['update'] },
+      ]);
+      let { core } = stub({ policy: access });
+      let isPerson = (ref: CodeRef) => typeKey(ref) === typeKey(PERSON);
+      let definitionOf = (ref: CodeRef): Definition => ({
+        type: 'card-def',
+        codeRef: ref,
+        displayName: isPerson(ref) ? 'Person' : 'Card',
+        fields: {},
+        fieldDefs: {},
+        ...(isPerson(ref) && person === 'declares update'
+          ? {
+              operations: {
+                update: { base: 'update', deterministic: true },
+              },
+            }
+          : {}),
+        ...(isPerson(ref) && person === 'declares update on read'
+          ? {
+              operations: {
+                update: { base: 'read', deterministic: true },
+              },
+            }
+          : {}),
+      });
+      core.definitionLookup = {
+        async lookupDefinition(ref) {
+          return definitionOf(ref);
+        },
+        async lookupDefinitionEntry(ref) {
+          return {
+            definition: definitionOf(ref),
+            types: [typeKey(ref), typeKey(CARD_DEF)],
+          };
+        },
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return { core, loads };
+    }
+
+    function scope(
+      core: OperationCore,
+      coarseDeclined: 'none' | 'writes' = 'writes',
+    ) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined,
+      });
+    }
+
+    test('a grant on the built-in behavior reaches the verb', async function (assert) {
+      let { core } = gatedCore('declares nothing');
+      let decision = await resolveFacadeWrite(
+        core,
+        CARD,
+        'update',
+        scope(core),
+      );
+      assert.strictEqual(decision.kind, 'granted');
+    });
+
+    test('a type that declares the name refuses the verb a grant the envelope would use', async function (assert) {
+      let { core } = gatedCore('declares update');
+      let { decision } = await resolveGatedOperation(
+        core,
+        CARD,
+        'update',
+        scope(core),
+      );
+      assert.strictEqual(
+        decision.kind,
+        'granted',
+        'the grant admits the declared update',
+      );
+      let failure = await refusalFrom(() =>
+        resolveFacadeWrite(core, CARD, 'update', scope(core)),
+      );
+      assert.strictEqual(
+        failure.code,
+        'operation-not-permitted',
+        'and the verb, which would not carry that update out, is refused',
+      );
+    });
+
+    test('a name declared on a base that does not write is refused before the gate judges it as a read', async function (assert) {
+      // The gate judges a declaration by its base, and a reader's reads are the
+      // ACL's to allow, so it would answer that the ACL allowed this one. The
+      // verb would then carry out its built-in write.
+      let { core, loads } = gatedCore('declares update on read');
+      let failure = await refusalFrom(() =>
+        resolveFacadeWrite(core, CARD, 'update', scope(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
+    });
+
+    test('a caller the ACL allowed is not judged, whatever the type declares', async function (assert) {
+      let { core, loads } = gatedCore('declares update');
+      let decision = await resolveFacadeWrite(
+        core,
+        CARD,
+        'update',
+        scope(core, 'none'),
+      );
+      assert.strictEqual(decision.kind, 'coarse');
+      assert.strictEqual(loads.count, 0, 'and no policy was loaded');
+    });
+  });
+
+  // A reader declined only writes, with a policy that grants every write the
+  // cases invoke on `CardDef`. A policy card is one whose chain holds
+  // `REALM_POLICY`, and none of the types these cases declare their writes on
+  // marks any of them non-grantable.
+  module('the policy gate on a policy card', function () {
+    const SCHOOL_POLICY: CodeRef = {
+      module: `${REALM}school-policy`,
+      name: 'SchoolPolicy',
+    } as CodeRef;
+    const MISSING: CodeRef = {
+      module: `${REALM}missing`,
+      name: 'Missing',
+    } as CodeRef;
+    const GRANTED = ['create', 'update', 'setMotto', 'draftPolicy', 'draft'];
+
+    // `rowTypes` is the chain the target's index row records. `operations` is
+    // what every type entry declares, and `MISSING` has no entry at all.
+    function gatedCore({
+      rowTypes = [PERSON, CARD_DEF],
+      policyCard,
+      operations,
+    }: {
+      rowTypes?: CodeRef[];
+      policyCard?: string;
+      operations?: Definition['operations'];
+    } = {}) {
+      let { access } = policyStub([{ targetType: CARD_DEF, grants: GRANTED }], {
+        policyCard,
+      });
+      let { core } = stub({ policy: access, operations });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (ref) =>
+        typeKey(ref) === typeKey(MISSING) ? undefined : await entry(ref);
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row ? ({ ...row, types: rowTypes.map(typeKey) } as any) : row;
+      };
+      return core;
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    function typeTarget(codeRef: CodeRef): OperationTarget {
+      return { kind: 'type', codeRef, realm: REALM };
+    }
+
+    async function decide(
+      core: OperationCore,
+      target: OperationTarget,
+      name: string,
+    ): Promise<string> {
+      try {
+        let { decision } = await resolveGatedOperation(
+          core,
+          target,
+          name,
+          declinedWrites(core),
+        );
+        return decision.kind;
+      } catch (err) {
+        if (isOperationFailure(err)) {
+          return err.error.code;
+        }
+        throw err;
+      }
+    }
+
+    test('the card the realm’s key names is refused by its identity, whatever its type', async function (assert) {
+      assert.strictEqual(
+        await decide(gatedCore({ policyCard: CARD.url }), CARD, 'update'),
+        'operation-not-permitted',
+        'a key naming the card by its id',
+      );
+      assert.strictEqual(
+        await decide(
+          gatedCore({ policyCard: `${CARD.url}.json` }),
+          CARD,
+          'update',
+        ),
+        'operation-not-permitted',
+        'a key naming the card by its stored source',
+      );
+      assert.strictEqual(
+        await decide(
+          gatedCore({ policyCard: `${REALM}someone-else` }),
+          CARD,
+          'update',
+        ),
+        'granted',
+        'while the same grant admits the write when the key names another card',
+      );
+    });
+
+    test('a card whose chain holds RealmPolicy is refused though no key names it, under any name', async function (assert) {
+      let core = gatedCore({
+        rowTypes: [SCHOOL_POLICY, REALM_POLICY, CARD_DEF],
+        operations: {
+          setMotto: { base: 'transform', deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, CARD, 'update'),
+        'operation-not-permitted',
+        'a built-in write',
+      );
+      assert.strictEqual(
+        await decide(core, CARD, 'setMotto'),
+        'operation-not-permitted',
+        'a named write the type declares for itself',
+      );
+    });
+
+    test('a create is judged by the type it mints', async function (assert) {
+      let core = gatedCore({
+        operations: {
+          draftPolicy: {
+            base: 'create',
+            of: REALM_POLICY,
+            deterministic: true,
+          },
+          draft: { base: 'create', of: PERSON, deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, typeTarget(REALM_POLICY), 'create'),
+        'operation-not-permitted',
+        'a plain create of a policy type',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'draftPolicy'),
+        'operation-not-permitted',
+        'a named create declared on an ordinary type that mints a policy card',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(REALM_POLICY), 'draft'),
+        'granted',
+        'a named create declared on a policy type that mints an ordinary card',
+      );
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'create'),
+        'granted',
+        'a plain create of an ordinary type',
+      );
+    });
+
+    test('a named create whose minted type cannot be read is refused', async function (assert) {
+      let core = gatedCore({
+        operations: {
+          draft: { base: 'create', of: MISSING, deterministic: true },
+        },
+      });
+      assert.strictEqual(
+        await decide(core, typeTarget(PERSON), 'draft'),
+        'operation-not-permitted',
+      );
+    });
+  });
+
+  // The gate matches a write's grants on the card's index row, and the write
+  // lock judges the card again from the bytes the write stages against. Here
+  // the row records `Person` and `CardDef`, and a reader declined only writes
+  // holds grants on `CardDef` for every write the cases invoke. Each case
+  // changes what the lock holds: the type the stored bytes name, and the
+  // chain the definition cache records for it.
+  module('the write lock on a card a grant admitted a write to', function () {
+    const PET: CodeRef = { module: `${REALM}pet`, name: 'Pet' } as CodeRef;
+    const TARGET = { kind: 'instance' as const, url: `${REALM}person-1` };
+    const GRANTED = ['read', 'update', 'setMotto', 'draft'];
+    const OPERATIONS: Definition['operations'] = {
+      setMotto: { base: 'transform', deterministic: true },
+      // A named create anchored on the card, which mints a `Pet` and leaves
+      // the card as it is.
+      draft: { base: 'create', of: PET, deterministic: true },
+    };
+
+    // `where` makes every grant rest on that predicate. `personChain` is the
+    // chain the definition cache records for `Person` now, which the row
+    // does not know about.
+    function lockedCore({
+      where,
+      policyCard,
+      personChain = [PERSON, CARD_DEF],
+    }: {
+      where?: string;
+      policyCard?: string;
+      personChain?: CodeRef[];
+    } = {}) {
+      let { access } = policyStub([{ targetType: CARD_DEF, grants: GRANTED }], {
+        policyCard,
+      });
+      if (where) {
+        let compiled = access.compiledPolicy.bind(access);
+        access.compiledPolicy = async () => {
+          let policy = (await compiled())!;
+          return {
+            ...policy,
+            rules: policy.rules.map((rule) => ({
+              ...rule,
+              grants: rule.grants.map((grant) => ({
+                ...grant,
+                where: { source: where, canonical: where, snapshot: false },
+              })),
+            })),
+          };
+        };
+      }
+      let { core } = stub({ policy: access, operations: OPERATIONS });
+      let entry = core.definitionLookup.lookupDefinitionEntry.bind(
+        core.definitionLookup,
+      );
+      core.definitionLookup.lookupDefinitionEntry = async (ref) => {
+        let found = await entry(ref);
+        return found && typeKey(ref) === typeKey(PERSON)
+          ? { ...found, types: personChain.map(typeKey) }
+          : found;
+      };
+      let instance = core.indexQueryEngine.instance.bind(core.indexQueryEngine);
+      core.indexQueryEngine.instance = async (url, instanceOpts) => {
+        let row = await instance(url, instanceOpts);
+        return row
+          ? ({ ...row, types: [typeKey(PERSON), typeKey(CARD_DEF)] } as any)
+          : row;
+      };
+      return core;
+    }
+
+    function declinedWrites(core: OperationCore) {
+      return newOperationScope(core, {
+        caller: scopeCallerFor('@reader:localhost'),
+        coarseDeclined: 'writes',
+      });
+    }
+
+    // What the gate decides about `name` on the card, then what the lock
+    // decides with the card's stored bytes adopting from `storedAs`.
+    // `beneathAppend` hands those bytes over as the lock holds a card that an
+    // earlier entry appended to.
+    async function underLock(
+      core: OperationCore,
+      name: string,
+      storedAs: CodeRef,
+      {
+        scope = declinedWrites(core),
+        beneathAppend = false,
+      }: { scope?: OperationScope; beneathAppend?: boolean } = {},
+    ): Promise<string> {
+      let { decision } = await resolveGatedOperation(core, TARGET, name, scope);
+      let pending = pendingWriteFor(TARGET, name, decision, scope);
+      if (!pending) {
+        return `${decision.kind}, leaving nothing to the lock`;
+      }
+      let source = JSON.stringify({
+        data: {
+          type: 'card',
+          id: TARGET.url,
+          attributes: { title: 'Hi' },
+          meta: { adoptsFrom: storedAs },
+        },
+      });
+      try {
+        await dischargePendingDecision(core, pending, {
+          id: TARGET.url,
+          source,
+          ...(beneathAppend ? { beneathAppend: true as const } : {}),
+        });
+        return `${decision.kind}, then admitted`;
+      } catch (err) {
+        if (isOperationFailure(err)) {
+          return `${decision.kind}, then ${err.error.code}`;
+        }
+        throw err;
+      }
+    }
+
+    test('a write granted outright is refused when its bytes adopt from RealmPolicy', async function (assert) {
+      for (let [policyCard, whose] of [
+        [undefined, 'no key names the card'],
+        [`${REALM}policy`, 'this realm’s key names another card'],
+      ] as const) {
+        let core = lockedCore({ policyCard });
+        for (let name of ['update', 'setMotto', 'draft']) {
+          assert.strictEqual(
+            await underLock(core, name, REALM_POLICY),
+            'granted, then operation-not-permitted',
+            `${name}, where ${whose}`,
+          );
+        }
+      }
+    });
+
+    test('a write granted outright is refused when its bytes adopt from any other type', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PET),
+        'granted, then operation-not-permitted',
+        'the grant on CardDef was matched on a Person, not on a Pet',
+      );
+    });
+
+    test('a write granted outright is admitted while its bytes adopt from the type it was matched on', async function (assert) {
+      let core = lockedCore();
+      for (let name of ['update', 'setMotto', 'draft']) {
+        assert.strictEqual(
+          await underLock(core, name, PERSON),
+          'granted, then admitted',
+          name,
+        );
+      }
+    });
+
+    test('a type that now descends from RealmPolicy makes the card a policy card under the lock', async function (assert) {
+      let core = lockedCore({ personChain: [PERSON, REALM_POLICY, CARD_DEF] });
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON),
+        'granted, then operation-not-permitted',
+        'a write that changes the card',
+      );
+      assert.strictEqual(
+        await underLock(core, 'setMotto', PERSON),
+        'granted, then operation-not-permitted',
+        'a named write that changes the card',
+      );
+      assert.strictEqual(
+        await underLock(core, 'draft', PERSON),
+        'granted, then admitted',
+        'a named create anchored on the card, which mints a Pet and leaves the card as it is',
+      );
+    });
+
+    test('a write resting on a predicate is judged by its bytes before the predicate runs', async function (assert) {
+      let policyNow = lockedCore({
+        where: 'true',
+        personChain: [PERSON, REALM_POLICY, CARD_DEF],
+      });
+      assert.strictEqual(
+        await underLock(policyNow, 'update', PERSON),
+        'pending, then operation-not-permitted',
+        'a card whose type now descends from RealmPolicy',
+      );
+      assert.strictEqual(
+        policyGateStats(policyNow).predicateEvaluations,
+        0,
+        'refused without evaluating the predicate',
+      );
+      let ordinary = lockedCore({ where: 'true' });
+      assert.strictEqual(
+        await underLock(ordinary, 'update', PERSON),
+        'pending, then admitted',
+        'while the same predicate admits an ordinary card',
+      );
+      assert.strictEqual(policyGateStats(ordinary).predicateEvaluations, 1);
+    });
+
+    test('bytes beneath an append judge a write granted outright by their type alone', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'update', PERSON, { beneathAppend: true }),
+        'granted, then admitted',
+        'the type the grant was matched on',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, { beneathAppend: true }),
+        'granted, then operation-not-permitted',
+        'a policy card',
+      );
+      assert.strictEqual(
+        await underLock(lockedCore({ where: 'true' }), 'update', PERSON, {
+          beneathAppend: true,
+        }),
+        'pending, then operation-not-permitted',
+        'while a predicate, which reads what the append changes, judges nothing from them',
+      );
+    });
+
+    test('what leaves nothing to the lock', async function (assert) {
+      let core = lockedCore();
+      assert.strictEqual(
+        await underLock(core, 'read', REALM_POLICY, {
+          scope: newOperationScope(core, {
+            caller: scopeCallerFor('@stranger:localhost'),
+            coarseDeclined: 'all',
+          }),
+        }),
+        'granted, leaving nothing to the lock',
+        'a read, which is decided at the gate',
+      );
+      assert.strictEqual(
+        await underLock(core, 'update', REALM_POLICY, {
+          scope: newOperationScope(core, {
+            caller: scopeCallerFor('@admin:localhost'),
+            coarseDeclined: 'none',
+          }),
+        }),
+        'coarse, leaving nothing to the lock',
+        'a write the realm ACL allows',
+      );
+    });
+
+    test('a caller that carries no decision to a lock is refused a write granted outright', async function (assert) {
+      let core = lockedCore();
+      let failure = await refusalFrom(() =>
+        resolveOperation(core, TARGET, 'update', declinedWrites(core)),
+      );
+      assert.strictEqual(failure.code, 'operation-not-permitted');
+      assert.strictEqual(
+        (await resolveOperation(core, TARGET, 'read', declinedWrites(core)))
+          .base,
+        'read',
+        'while a granted read resolves as before',
       );
     });
   });

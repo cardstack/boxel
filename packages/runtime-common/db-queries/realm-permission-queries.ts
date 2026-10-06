@@ -244,6 +244,37 @@ export async function fetchUserPermissions(
   );
 }
 
+// The active realms whose indexed `realm.json` names a policy card. A realm a
+// caller may not read can still answer them through its policy, so a render
+// made as that caller carries a session for each of these alongside the realms
+// its permissions name (see the capture task). It is read from the index, which
+// lags a write to `realm.json` by an index pass. A pointer of only whitespace
+// names no policy, as `namesNoRealmPolicy` reads it; a realm whose pointer it
+// drops as malformed is listed anyway, and a session there lets its ACL judge
+// the render as it would judge the user.
+//
+// Driven by the realms' permission rows, which every realm has (its owner's),
+// so each realm costs one primary-key probe of its `realm.json` row rather
+// than a pass over the index. Published realms are left out, as
+// `fetchUserPermissions` leaves them out.
+export async function fetchRealmsNamingPolicy(
+  dbAdapter: DBAdapter,
+): Promise<string[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT realms.realm_url
+     FROM (SELECT DISTINCT realm_url FROM realm_user_permissions) realms
+     JOIN boxel_index config
+       ON config.url = realms.realm_url || 'realm.json'
+      AND config.realm_url = realms.realm_url
+      AND config.type = 'instance'
+     WHERE (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+       AND COALESCE(config.search_doc->>'policy', config.pristine_doc->'attributes'->>'policy', '') ~ '[^[:space:]]'
+       AND realms.realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+       AND realms.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)`,
+  ])) as { realm_url: string }[];
+  return rows.map(({ realm_url }) => realm_url);
+}
+
 export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
   // Catalog realms are publicly-readable realms that aren't themselves
   // published snapshots — published rows live in realm_registry with
@@ -285,17 +316,7 @@ export async function fetchAllRealmsWithOwners(
 
   let ownerByRealm = new Map<string, string>();
   for (const [realmUrl, owners] of realmOwners) {
-    let finalOwner = owners[0];
-
-    // If multiple owners, prefer non-bot owner
-    if (owners.length > 1) {
-      const nonBotOwner = owners.find((owner) => !owner.startsWith('@realm/'));
-      if (nonBotOwner) {
-        finalOwner = nonBotOwner;
-      }
-    }
-
-    ownerByRealm.set(realmUrl, getMatrixUsername(finalOwner));
+    ownerByRealm.set(realmUrl, getMatrixUsername(preferredOwner(owners)!));
   }
 
   // Published realms may not have realm_user_permissions entries in older data.
@@ -325,4 +346,55 @@ export async function fetchAllRealmsWithOwners(
     realm_url,
     owner_username,
   }));
+}
+
+// The username the realm at `realmURL` is indexed as, by the rule
+// `fetchAllRealmsWithOwners` applies to every realm: the owner its permissions
+// name, and for a published realm whose permissions name none, its source
+// realm's owner, or failing that the owner its registry row records.
+// Undefined for a realm with no owner either way.
+export async function fetchRealmOwnerUsername(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  let owner = await ownerByPermissions(dbAdapter, realmURL);
+  if (owner) {
+    return getMatrixUsername(owner);
+  }
+  let [published] = (await query(dbAdapter, [
+    `SELECT source_url, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
+    param(realmURL),
+  ])) as { source_url: string | null; owner_username: string | null }[];
+  if (!published) {
+    return undefined;
+  }
+  let sourceOwner = published.source_url
+    ? await ownerByPermissions(dbAdapter, published.source_url)
+    : undefined;
+  if (sourceOwner) {
+    return getMatrixUsername(sourceOwner);
+  }
+  return published.owner_username
+    ? getMatrixUsername(published.owner_username)
+    : undefined;
+}
+
+async function ownerByPermissions(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT username FROM realm_user_permissions WHERE realm_owner = true AND realm_url =`,
+    param(realmURL),
+  ])) as { username: string }[];
+  return preferredOwner(rows.map(({ username }) => username));
+}
+
+// Of the users a realm's permissions name as its owner, the one it is indexed
+// as: its human owner, where the realm's bot owns it too.
+function preferredOwner(owners: string[]): string | undefined {
+  if (owners.length > 1) {
+    return owners.find((owner) => !owner.startsWith('@realm/')) ?? owners[0];
+  }
+  return owners[0];
 }

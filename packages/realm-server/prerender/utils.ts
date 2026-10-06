@@ -5,33 +5,33 @@ import {
   shouldCarryForwardDeclaredEntry,
   delay,
   logger,
-  SCREENSHOT_DEFAULT_BACKGROUND,
-  SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
-  SCREENSHOT_DEFAULT_IMAGE_TYPE,
-  SCREENSHOT_MAX_CAPTURES,
-  SCREENSHOT_MAX_PDF_CAPTURES,
-  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
+  CAPTURE_DEFAULT_BACKGROUND,
+  DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR,
+  DEFAULT_RASTER_OUTPUT_TYPE,
+  CAPTURE_MAX_BATCH_ENTRIES,
+  CAPTURE_MAX_PDF_ENTRIES,
+  CAPTURE_MAX_PHYSICAL_EDGE_PX,
   captureOutputContentType,
   checkPdfCaptureBounds,
   type CaptureOutputType,
   type CaptureContentType,
-  type DeclaredScreenshotCaptureResult,
-  type DeclaredScreenshotError,
-  type DeclaredScreenshotFormat,
-  type DeclaredScreenshotRoster,
-  type DeclaredScreenshotSpecPayload,
-  type DeclaredScreenshotVisitArgs,
-  type DeclaredScreenshotVisitResult,
+  type DeclaredCaptureResult,
+  type DeclaredCaptureError,
+  type DeclaredCaptureFormat,
+  type DeclaredCaptureRoster,
+  type DeclaredCaptureSpecPayload,
+  type DeclaredCaptureVisitArgs,
+  type DeclaredCaptureVisitResult,
   type PrerenderMeta,
-  type ScreenshotCaptureEntry,
-  type ScreenshotCaptureResult,
-  type ScreenshotFormat,
-  type ScreenshotImageType,
+  type CaptureRequestEntry,
+  type CaptureResult,
+  type OnDemandCaptureFormat,
+  type RasterOutputType,
   type PrerenderTypes,
   type RenderError,
   type BuildModelStagesMs,
   type RenderTimeoutDiagnostics,
-  type ScreenshotCaptureSpec,
+  type CaptureRequestSpec,
 } from '@cardstack/runtime-common';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import { getPendingNetworkRequests } from './network-inflight-tracker.ts';
@@ -114,24 +114,24 @@ export interface RenderCapture {
 }
 
 export interface CaptureOptions {
-  expectedId?: string;
+  expectedId: string;
   expectedNonce?: string;
   simulateTimeoutMs?: number;
   timeoutMs?: number;
-  // Screenshot-only: per-capture viewport / scale / fullPage / clip overrides.
+  // Capture-only: per-capture viewport / scale / fullPage / clip overrides.
   // Ignored by the HTML/meta/module capture paths.
-  captureSpec?: ScreenshotCaptureSpec;
-  // Declared-screenshot-only: per-entry (keyed by capture name) encoding and
+  captureSpec?: CaptureRequestSpec;
+  // Declared-capture-only: per-entry (keyed by capture name) encoding and
   // page background for the capture. The on-demand surfaces never set this —
   // their captures are always PNG on the page's own background.
   entryOutput?: Record<string, DeclaredEntryOutput>;
 }
 
-// The output parameters a declared screenshot adds beyond the wire spec's
+// The output parameters a declared capture adds beyond the wire spec's
 // geometry: the encoded image type and the page background painted behind
 // the card ('transparent' captures with alpha).
 export interface DeclaredEntryOutput {
-  type: ScreenshotImageType;
+  type: RasterOutputType;
   background: string;
 }
 
@@ -193,7 +193,7 @@ export async function renderHTML(
   page: Page,
   format: string,
   ancestorLevel: number,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<string | RenderError> {
   log.debug(
     `renderHTML start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
@@ -220,7 +220,7 @@ export async function renderHTML(
     `renderHTML captured format=${format} ancestorLevel=${ancestorLevel} status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.html');
+    return renderCaptureToError(opts, result, 'render.html');
   }
   log.debug(
     `renderHTML success format=${format} ancestorLevel=${ancestorLevel} length=${result.value.length}`,
@@ -232,7 +232,7 @@ export async function renderHTML(
 
 export async function renderIcon(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<string | RenderError> {
   log.debug(`renderIcon start url=${page.url()}`);
   await transitionTo(page, 'render.icon');
@@ -244,7 +244,7 @@ export async function renderIcon(
     `renderIcon captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.icon');
+    return renderCaptureToError(opts, result, 'render.icon');
   }
   log.debug(`renderIcon success length=${result.value.length}`);
   return cleanCapturedHTML(result.value);
@@ -252,7 +252,7 @@ export async function renderIcon(
 
 export async function renderMeta(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<PrerenderMeta | RenderError> {
   log.debug(`renderMeta start url=${page.url()}`);
   await transitionTo(page, 'render.meta');
@@ -264,11 +264,11 @@ export async function renderMeta(
     `renderMeta captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.meta');
+    return renderCaptureToError(opts, result, 'render.meta');
   }
-  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+  if (result.id && result.id !== opts.expectedId) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.meta captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
       { title: 'Stale render response', evict: true },
     );
@@ -279,7 +279,7 @@ export async function renderMeta(
     result.nonce !== opts.expectedNonce
   ) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.meta captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
       { title: 'Stale render response', evict: true },
     );
@@ -294,7 +294,7 @@ export async function renderMeta(
       );
     });
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.meta returned a non-JSON response: ${result.value}`,
       { title: 'Invalid render meta response' },
     );
@@ -309,7 +309,7 @@ export async function renderMeta(
 // on the linksTo / linksToMany fields those renders marked as "used".
 export async function renderTypes(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<PrerenderTypes | RenderError> {
   log.debug(`renderTypes start url=${page.url()}`);
   await transitionTo(page, 'render.types');
@@ -321,11 +321,11 @@ export async function renderTypes(
     `renderTypes captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.types');
+    return renderCaptureToError(opts, result, 'render.types');
   }
-  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+  if (result.id && result.id !== opts.expectedId) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.types captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
       { title: 'Stale render response', evict: true },
     );
@@ -336,7 +336,7 @@ export async function renderTypes(
     result.nonce !== opts.expectedNonce
   ) {
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.types captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
       { title: 'Stale render response', evict: true },
     );
@@ -351,7 +351,7 @@ export async function renderTypes(
       );
     });
     return buildInvalidRenderResponseError(
-      page,
+      opts.expectedId,
       `render.types returned a non-JSON response: ${result.value}`,
       { title: 'Invalid render types response' },
     );
@@ -361,7 +361,7 @@ export async function renderTypes(
 async function waitForRoutePathSuffix(
   page: Page,
   suffix: string,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<void> {
   let waitTimeoutMs = effectiveRouteWaitTimeoutMs(opts);
   log.debug(`waitForRoutePathSuffix start suffix=${suffix} url=${page.url()}`);
@@ -380,7 +380,7 @@ async function waitForRoutePathSuffix(
         // URL up during a loading substate, so the page can be showing the
         // loading screen with none of this render's DOM on it. The waits that
         // follow do not catch it either: the settle hook a previous render
-        // left behind resolves at once, and an absent `data-screenshot-pending`
+        // left behind resolves at once, and an absent `data-capture-pending`
         // reads as ready. So the route is only reached when the path carries
         // this render's own identity, which is what the id and nonce are for.
         // The render route is `/render/:id/:nonce/:options/…`, so the id and
@@ -473,7 +473,7 @@ async function waitForRoutePathSuffix(
     },
     { timeout: waitTimeoutMs },
     suffix,
-    opts?.expectedId ?? null,
+    opts.expectedId,
     opts?.expectedNonce ?? null,
   );
   let matchedByPath = false;
@@ -592,11 +592,38 @@ async function waitForPrerenderSettle(page: Page): Promise<void> {
   );
 }
 
+function stripJsonExtension(id: string): string {
+  return id.replace(/\.json$/, '');
+}
+
 function renderCaptureToError(
-  page: Page,
+  opts: Pick<CaptureOptions, 'expectedId' | 'expectedNonce'>,
   capture: RenderCapture,
   context: string,
 ): RenderError {
+  let renderId = opts.expectedId;
+  // An error the page wrote is only this render's error when the element it
+  // came from belongs to this render. When no element matches, the capture
+  // falls back to whatever result element the tab still holds, which can be a
+  // previous render's error naming that render. Compare the element's own
+  // id and nonce, not the payload's `error.id`, which legitimately names a
+  // failing dependency.
+  let staleBy =
+    capture.id &&
+    stripJsonExtension(capture.id) !== stripJsonExtension(renderId)
+      ? `prerender output for ${capture.id} (expected ${renderId})`
+      : capture.nonce &&
+          opts.expectedNonce &&
+          capture.nonce !== opts.expectedNonce
+        ? `prerender output for nonce ${capture.nonce} (expected ${opts.expectedNonce})`
+        : undefined;
+  if (staleBy) {
+    return buildInvalidRenderResponseError(
+      renderId,
+      `${context} captured a stale error from ${staleBy}`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
   try {
     let error = JSON.parse(capture.value) as RenderError;
     error.evict = capture.status === 'unusable';
@@ -607,7 +634,7 @@ function renderCaptureToError(
         ? 'Invalid render meta response'
         : 'Invalid render response';
     return buildInvalidRenderResponseError(
-      page,
+      renderId,
       `${context} returned an invalid error payload: ${capture.value}`,
       {
         evict: capture.status === 'unusable',
@@ -617,24 +644,22 @@ function renderCaptureToError(
   }
 }
 
+// The error builders below take the id of the card, module, or file the job
+// is rendering — never the tab's address. A pooled tab still shows the
+// previous job's URL until the new route transition completes, so an id read
+// from the page would attribute this job's failure to whatever the tab
+// rendered before it, and the indexer would record that unrelated URL as a
+// dependency of this row.
 function buildInvalidRenderResponseError(
-  page: Page,
+  renderId: string,
   message: string,
   options?: { title?: string; evict?: boolean },
 ): RenderError {
-  let id: string | null = null;
-  try {
-    let pathname = new URL(page.url()).pathname;
-    let match = /\/render\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    id = null;
-  }
-  let deps = fallbackRenderDeps(id);
+  let deps = fallbackRenderDeps(renderId);
   return {
     type: 'instance-error',
     error: {
-      id,
+      id: renderId,
       status: 500,
       title: options?.title ?? 'Invalid render response',
       message,
@@ -645,10 +670,7 @@ function buildInvalidRenderResponseError(
   };
 }
 
-function fallbackRenderDeps(id: string | null): string[] {
-  if (!id) {
-    return [];
-  }
+function fallbackRenderDeps(id: string): string[] {
   let deps = new Set<string>([id]);
   if (id.endsWith('.json')) {
     deps.add(id.replace(/\.json$/, ''));
@@ -659,22 +681,14 @@ function fallbackRenderDeps(id: string | null): string[] {
 }
 
 export function buildInvalidModuleResponseError(
-  page: Page,
+  renderId: string,
   message: string,
   options?: { title?: string; evict?: boolean },
 ): RenderError {
-  let id: string | null = null;
-  try {
-    let pathname = new URL(page.url()).pathname;
-    let match = /\/module\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    id = null;
-  }
   return {
     type: 'module-error',
     error: {
-      id,
+      id: renderId,
       status: 500,
       title: options?.title ?? 'Invalid module response',
       message,
@@ -688,7 +702,7 @@ export async function renderAncestors(
   page: Page,
   format: 'embedded' | 'fitted',
   types: string[],
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<Record<string, string> | RenderError> {
   let ancestors: Record<string, string> = {};
   for (let i = 0; i < types.length; i++) {
@@ -701,7 +715,7 @@ export async function renderAncestors(
 
 export async function captureModule(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<ModuleCapture | RenderError> {
   try {
     await page.waitForFunction(
@@ -732,12 +746,12 @@ export async function captureModule(
         return value.trim().length > 0;
       },
       { timeout: cardRenderTimeout },
-      opts?.expectedId ?? null,
+      opts.expectedId,
       opts?.expectedNonce ?? null,
     );
   } catch (_e) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       'module prerender timed out waiting for module output',
       { title: 'Module capture timeout', evict: true },
     );
@@ -765,22 +779,22 @@ export async function captureModule(
 
   if (!capture) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       'module prerender did not produce output',
       { title: 'Invalid module response' },
     );
   }
 
-  if (opts?.expectedId && capture.id !== opts.expectedId) {
+  if (capture.id !== opts.expectedId) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       `module prerender captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
       { title: 'Stale module response', evict: true },
     );
   }
   if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
     return buildInvalidModuleResponseError(
-      page,
+      opts.expectedId,
       `module prerender captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
       { title: 'Stale module response', evict: true },
     );
@@ -795,7 +809,7 @@ export async function captureModule(
 
 export async function captureFileExtract(
   page: Page,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<FileExtractCapture | RenderError> {
   try {
     await page.waitForFunction(
@@ -826,12 +840,12 @@ export async function captureFileExtract(
         return value.trim().length > 0;
       },
       { timeout: cardRenderTimeout },
-      opts?.expectedId ?? null,
+      opts.expectedId,
       opts?.expectedNonce ?? null,
     );
   } catch (_e) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       'file extract timed out waiting for output',
       { title: 'File extract capture timeout', evict: true },
     );
@@ -859,22 +873,22 @@ export async function captureFileExtract(
 
   if (!capture) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       'file extract did not produce output',
       { title: 'Invalid file extract response' },
     );
   }
 
-  if (opts?.expectedId && capture.id !== opts.expectedId) {
+  if (capture.id !== opts.expectedId) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       `file extract captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
       { title: 'Stale file extract response', evict: true },
     );
   }
   if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
     return buildInvalidFileExtractResponseError(
-      page,
+      opts.expectedId,
       `file extract captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
       { title: 'Stale file extract response', evict: true },
     );
@@ -888,22 +902,14 @@ export async function captureFileExtract(
 }
 
 export function buildInvalidFileExtractResponseError(
-  page: Page,
+  renderId: string,
   message: string,
   options?: { title?: string; evict?: boolean },
 ): RenderError {
-  let id: string | null = null;
-  try {
-    let pathname = new URL(page.url()).pathname;
-    let match = /\/render\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ? decodeURIComponent(match[1]) : null;
-  } catch {
-    id = null;
-  }
   return {
     type: 'file-error',
     error: {
-      id,
+      id: renderId,
       status: 500,
       title: options?.title ?? 'Invalid file extract response',
       message,
@@ -921,7 +927,7 @@ export function buildInvalidFileExtractResponseError(
 export async function captureResult(
   page: Page,
   capture: 'textContent' | 'innerHTML' | 'outerHTML',
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<RenderCapture> {
   const statuses: RenderStatus[] = ['ready', 'error', 'unusable'];
   await page.waitForFunction(
@@ -950,18 +956,11 @@ export async function captureResult(
       if (!expectingRender) {
         targetId = null;
         targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      } else if (!targetNonce) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');
           if (renderIdx !== -1) {
-            if (!targetId && segments[renderIdx + 1]) {
-              let decoded = decodeURIComponent(segments[renderIdx + 1]);
-              if (decoded.endsWith('.json')) {
-                decoded = decoded.slice(0, -5);
-              }
-              targetId = decoded;
-            }
             if (!targetNonce && segments[renderIdx + 2]) {
               targetNonce = segments[renderIdx + 2];
             }
@@ -1027,7 +1026,7 @@ export async function captureResult(
     },
     { timeout: cardRenderTimeout },
     statuses,
-    opts?.expectedId ?? null,
+    opts.expectedId,
     opts?.expectedNonce ?? null,
   );
   let result = await page.evaluate(
@@ -1047,18 +1046,11 @@ export async function captureResult(
       if (!expectingRender) {
         targetId = null;
         targetNonce = null;
-      } else if (!targetId || !targetNonce) {
+      } else if (!targetNonce) {
         try {
           let segments = path.split('/').filter(Boolean);
           let renderIdx = segments.indexOf('render');
           if (renderIdx !== -1) {
-            if (!targetId && segments[renderIdx + 1]) {
-              let decoded = decodeURIComponent(segments[renderIdx + 1]);
-              if (decoded.endsWith('.json')) {
-                decoded = decoded.slice(0, -5);
-              }
-              targetId = decoded;
-            }
             if (!targetNonce && segments[renderIdx + 2]) {
               targetNonce = segments[renderIdx + 2];
             }
@@ -1269,7 +1261,7 @@ export async function captureResult(
     },
     capture,
     statuses,
-    opts?.expectedId ?? null,
+    opts.expectedId,
     opts?.expectedNonce ?? null,
   );
   if (opts?.simulateTimeoutMs) {
@@ -1281,12 +1273,12 @@ export async function captureResult(
 // The engine-side name for one captured image; aliased to the wire type so
 // the two cannot drift — `render-runner.ts` assigns these straight into the
 // response's `captures`.
-export type ScreenshotCaptureItem = ScreenshotCaptureResult;
+export type CaptureRequestItem = CaptureResult;
 
-export interface ScreenshotCapture {
+export interface PrerenderCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
-  captures: ScreenshotCaptureItem[];
+  captures: CaptureRequestItem[];
   // The encoding of every capture in this render: pdf output is singular-only
   // (the shared parse refuses it in batch entries), so a batch is always
   // raster and the response-level contentType stays single-valued.
@@ -1294,38 +1286,38 @@ export interface ScreenshotCapture {
   // Per-step wall-clock across the shared render, for stage telemetry:
   // navigation (route transition + path settle), the prerender settle wait
   // (including any envelope-box wait), the image/font paint wait, and the
-  // capture stage (viewport switches + CDP screenshots). One record per
+  // capture stage (viewport switches + CDP captures). One record per
   // render; a batch whose entries span several envelopes re-renders per
   // envelope, and each stage sums across those re-renders. Together these
   // account for nearly all of the render wall; the remainder is the terminal
   // error probe and dimension reads.
-  stepTimings: ScreenshotStepTimings;
+  stepTimings: CaptureStepTimings;
 }
 
-export interface ScreenshotStepTimings {
+export interface CaptureStepTimings {
   navMs: number;
   settleMs: number;
   imagePaintMs: number;
-  screenshotMs: number;
+  cdpCaptureMs: number;
 }
 
 // Block in the browser context until images, CSS background-image URLs, and
 // fonts have finished loading, then yield one animation frame so the browser
 // actually paints the result. Resolves on `error` events too — we'd rather
-// screenshot a broken-image placeholder than hang the capture. Internal
+// capture a broken-image placeholder than hang the capture. Internal
 // timeout (10s) guards against a slow or auth-failing image stalling the
 // whole flow indefinitely.
 // The full budget for the pre-loop wait that covers the initial resource load.
 const IMAGE_PAINT_WAIT_MS = 10_000;
 // A far tighter budget for the per-viewport-switch re-wait inside a batch. This
-// call runs once per switch (up to `SCREENSHOT_MAX_CAPTURES - 1` times), so a
+// call runs once per switch (up to `CAPTURE_MAX_BATCH_ENTRIES - 1` times), so a
 // single slow or hanging image must not spend the full initial budget here and
 // multiply across entries — that would blow past the render timeout and fail
 // the whole batch instead of returning one stale capture among good ones.
 const VIEWPORT_SWITCH_PAINT_WAIT_MS = 2_000;
 
 // Wait for `<img>` element loads, CSS background-image fetches, and fonts that
-// the settle hook does not track, so the screenshot doesn't race them. The
+// the settle hook does not track, so the capture doesn't race them. The
 // browser-side work (a `document.querySelectorAll('*')` walk to find background
 // URLs, a probe `Image()` per distinct URL, `document.fonts.ready`) runs every
 // call regardless of whether anything is pending, all raced against
@@ -1397,10 +1389,6 @@ async function waitForImagePaint(
 
 // Puppeteer's default launch viewport (no `defaultViewport` override). Used to
 // restore a pooled page when we can't read its prior viewport — the canonical
-// size the indexing HTML-capture path expects. Shared with the capture-spec
-// canonicalizer, which elides a spec spelling out exactly these values.
-const DEFAULT_SCREENSHOT_VIEWPORT = DEFAULT_CAPTURE_VIEWPORT;
-
 interface ResolvedViewport {
   width: number;
   height: number;
@@ -1412,8 +1400,8 @@ interface ResolvedViewport {
 // capture-spec parse); a singular spec becomes a single entry named
 // "default".
 function normalizeCaptureEntries(
-  captureSpec: ScreenshotCaptureSpec | undefined,
-): ScreenshotCaptureEntry[] {
+  captureSpec: CaptureRequestSpec | undefined,
+): CaptureRequestEntry[] {
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
@@ -1443,14 +1431,14 @@ function normalizeCaptureEntries(
 }
 
 // Whether an entry asks for a viewport different from the page default.
-function entryOverridesViewport(entry: ScreenshotCaptureEntry): boolean {
+function entryOverridesViewport(entry: CaptureRequestEntry): boolean {
   return entry.viewport != null || entry.deviceScaleFactor != null;
 }
 
 // Resolve an entry's target viewport, filling unspecified fields from the base
 // (the page's original viewport, or the launch default).
 function resolveViewport(
-  entry: ScreenshotCaptureEntry,
+  entry: CaptureRequestEntry,
   base: ResolvedViewport,
 ): ResolvedViewport {
   return {
@@ -1471,8 +1459,8 @@ function sameViewport(a: ResolvedViewport, b: ResolvedViewport): boolean {
 // Whether an entry renders into a parent-owned envelope box (fitted) rather
 // than filling the viewport (isolated/embedded).
 function entryHasEnvelope(
-  entry: ScreenshotCaptureEntry,
-): entry is ScreenshotCaptureEntry & {
+  entry: CaptureRequestEntry,
+): entry is CaptureRequestEntry & {
   envelope: { width: number; height: number };
 } {
   return entry.envelope != null;
@@ -1489,10 +1477,10 @@ function sameEnvelope(
 
 // The page viewport an entry captures at. An envelope entry pins its box to
 // the viewport origin at the envelope's size, so the viewport IS the envelope
-// and the plain viewport screenshot captures the box whole. A non-envelope
+// and the plain viewport capture captures the box whole. A non-envelope
 // entry uses its resolved viewport override.
 function viewportForEntry(
-  entry: ScreenshotCaptureEntry,
+  entry: CaptureRequestEntry,
   base: ResolvedViewport,
 ): ResolvedViewport {
   if (entryHasEnvelope(entry)) {
@@ -1506,7 +1494,7 @@ function viewportForEntry(
 }
 
 // Surface a terminal prerender error (error/unusable) after a settle so we
-// return it rather than screenshotting a skeleton/error frame. Reuses the
+// return it rather than capturing a skeleton/error frame. Reuses the
 // same data-attribute signaling as the HTML capture path.
 async function detectTerminalPrerenderError(
   page: Page,
@@ -1547,14 +1535,14 @@ async function detectTerminalPrerenderError(
 // to the DOM. The parent render status stays 'ready' across an envelope
 // change, so waitForPrerenderSettle alone can't distinguish the new box from
 // the old one.
-// When `slotName` is given, only an envelope whose `data-render-screenshot`
+// When `slotName` is given, only an envelope whose `data-render-capture`
 // names that slot satisfies the wait — the stale-render guard for
 // consecutive render-based captures whose declared boxes coincide (the box
 // dimensions alone can't tell slot A's settled render from slot B's).
 async function waitForEnvelopeBox(
   page: Page,
   envelope: { width: number; height: number },
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
   slotName?: string,
 ): Promise<void> {
   await page.waitForFunction(
@@ -1565,7 +1553,7 @@ async function waitForEnvelopeBox(
       )) {
         if (
           name === null ||
-          candidate.getAttribute('data-render-screenshot') === name
+          candidate.getAttribute('data-render-capture') === name
         ) {
           el = candidate;
           break;
@@ -1586,23 +1574,23 @@ async function waitForEnvelopeBox(
 // Prove this slot's own render is on the page before a pdf capture. The raster
 // path gets this ordering from waitForEnvelopeBox (it matches the slot's named
 // envelope at its declared size); a pdf slot declares no box, so its template
-// carries a boxless `display: contents` marker (`data-render-screenshot` named
+// carries a boxless `display: contents` marker (`data-render-capture` named
 // for the slot) that this waits on instead. Without it, a fully settled
 // *previous* render already satisfies every other wait on this path — the route
 // path suffix and prerender settle stay ready across a same-card sub-route
 // transition, and the pending-clear wait reads a prior render's absent
-// `data-screenshot-pending` as ready on its first evaluation — so `page.pdf()`
+// `data-capture-pending` as ready on its first evaluation — so `page.pdf()`
 // could paginate the wrong document (the prior pdf slot, or a preceding format
 // group's display-format DOM) into this slot's manifest entry.
 async function waitForRenderSlotMarker(
   page: Page,
   slotName: string,
-  opts?: CaptureOptions,
+  opts: CaptureOptions,
 ): Promise<void> {
   await page.waitForFunction(
     (name: string) => {
-      for (let el of document.querySelectorAll('[data-render-screenshot]')) {
-        if (el.getAttribute('data-render-screenshot') === name) {
+      for (let el of document.querySelectorAll('[data-render-capture]')) {
+        if (el.getAttribute('data-render-capture') === name) {
           return true;
         }
       }
@@ -1628,7 +1616,7 @@ async function waitForReflow(page: Page): Promise<void> {
 // Paint the declared background behind the whole page for the duration of a
 // capture. Inline styles on <html> and <body> win over app CSS and restore
 // cleanly to '' after. 'transparent' pairs with `omitBackground` in the
-// screenshot call — both html and body must be non-opaque or Chromium's
+// capture call — both html and body must be non-opaque or Chromium's
 // compositor paints them over the removed default background.
 async function setCaptureBackground(
   page: Page,
@@ -1644,10 +1632,11 @@ async function setCaptureBackground(
 
 async function captureOneEntry(
   page: Page,
-  entry: ScreenshotCaptureEntry,
+  renderId: string,
+  entry: CaptureRequestEntry,
   deviceScaleFactor: number,
   output?: DeclaredEntryOutput,
-): Promise<ScreenshotCaptureItem | RenderError> {
+): Promise<CaptureRequestItem | RenderError> {
   // A pdf capture paginates the settled render onto paper instead of
   // rasterizing the viewport: same settle sequence and emulated media as a
   // raster capture, but `page.pdf()` lays the document out at the paper's
@@ -1658,18 +1647,18 @@ async function captureOneEntry(
   // late-check pattern.
   if (entry.type === 'pdf') {
     // Defensive: every wire surface (the realm-server request bodies and the
-    // prerender server's /prerender-screenshot route) refuses these
+    // prerender server's /prerender-capture route) refuses these
     // combinations through the shared parse; this guards the in-process
     // callers that assemble capture entries directly.
     if (entry.target || entry.clip || entry.fullPage || entry.viewport) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture "${entry.name}" cannot combine pdf output with target, clip, fullPage, or viewport`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
     // The render already settled under the spec's media (emulated in
-    // `captureScreenshot` so the layout and image-paint wait ran under it).
+    // `runCapture` so the layout and image-paint wait ran under it).
     // `page.pdf()`, though, forces `print` media for the print job whatever
     // the page currently emulates — so a `media=screen` pdf would still
     // paginate the print layout unless screen is emulated first. Pin the
@@ -1677,7 +1666,7 @@ async function captureOneEntry(
     // settle already used, `screen` overrides `page.pdf()`'s print default so
     // the paged document matches the raster path's render. Cleared in
     // `finally` so a reused pooled page carries no media override into the
-    // next capture (the outer `captureScreenshot` restore is idempotent with
+    // next capture (the outer `runCapture` restore is idempotent with
     // this one).
     let media = entry.media ?? 'screen';
     await page.emulateMediaType(media);
@@ -1690,7 +1679,7 @@ async function captureOneEntry(
       });
       let bounds = checkPdfCaptureBounds(entry.name, bytes);
       if (bounds.error !== undefined) {
-        return buildInvalidRenderResponseError(page, bounds.error, {
+        return buildInvalidRenderResponseError(renderId, bounds.error, {
           title: 'PDF capture too large',
         });
       }
@@ -1712,7 +1701,7 @@ async function captureOneEntry(
       }
     }
   }
-  // A `target` is an element-handle screenshot, a capture call distinct from
+  // A `target` is an element-handle capture, a capture call distinct from
   // the page-level one below: it crops to the first match's box and honors no
   // clip/fullPage (rejected above). `page.$` runs the selector through
   // `document.querySelector`, so a selector that matches nothing, or is not a
@@ -1725,16 +1714,16 @@ async function captureOneEntry(
       handle = await page.$(entry.target);
     } catch (err) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture "${entry.name}" target selector is invalid: ${entry.target}`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
     if (!handle) {
       return buildInvalidRenderResponseError(
-        page,
+        renderId,
         `capture "${entry.name}" target matched no element: ${entry.target}`,
-        { title: 'Screenshot target not found' },
+        { title: 'Capture target not found' },
       );
     }
     try {
@@ -1742,7 +1731,7 @@ async function captureOneEntry(
         encoding: 'base64',
         type: 'png',
       })) as string;
-      // The element screenshot's extent is Chromium's, not ours to predict, so
+      // The element capture's extent is Chromium's, not ours to predict, so
       // the reported CSS dims come from the PNG's IHDR (physical px at bytes
       // 16..23) divided back by the scale in effect — report and bytes cannot
       // disagree.
@@ -1774,13 +1763,13 @@ async function captureOneEntry(
       height: document.documentElement.scrollHeight,
     }));
     if (
-      dims.width * deviceScaleFactor > SCREENSHOT_MAX_PHYSICAL_EDGE_PX ||
-      dims.height * deviceScaleFactor > SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      dims.width * deviceScaleFactor > CAPTURE_MAX_PHYSICAL_EDGE_PX ||
+      dims.height * deviceScaleFactor > CAPTURE_MAX_PHYSICAL_EDGE_PX
     ) {
       return buildInvalidRenderResponseError(
-        page,
-        `fullPage capture "${entry.name}" of ${dims.width}x${dims.height} CSS px at ${deviceScaleFactor}x exceeds ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels per edge`,
-        { title: 'Screenshot capture too large' },
+        renderId,
+        `fullPage capture "${entry.name}" of ${dims.width}x${dims.height} CSS px at ${deviceScaleFactor}x exceeds ${CAPTURE_MAX_PHYSICAL_EDGE_PX} physical pixels per edge`,
+        { title: 'Capture too large' },
       );
     }
   } else if (entry.clip) {
@@ -1795,7 +1784,7 @@ async function captureOneEntry(
   // fullPage capture stays PNG regardless of a declared type (declared
   // entries never set fullPage; this is a defensive pin, not a reachable
   // branch).
-  let imageType: ScreenshotImageType = entry.fullPage
+  let imageType: RasterOutputType = entry.fullPage
     ? 'png'
     : (output?.type ?? 'png');
   let transparent = output?.background === 'transparent';
@@ -1814,7 +1803,7 @@ async function captureOneEntry(
       type: imageType,
       // Pinned so the encoder's default can't drift the byte hash of a
       // stable render between puppeteer versions.
-      ...(imageType === 'png' ? {} : { quality: SCREENSHOT_LOSSY_QUALITY }),
+      ...(imageType === 'png' ? {} : { quality: CAPTURE_LOSSY_QUALITY }),
       ...(transparent ? { omitBackground: true } : {}),
       ...(entry.fullPage ? { fullPage: true } : {}),
       ...(entry.clip ? { clip: entry.clip } : {}),
@@ -1850,57 +1839,60 @@ async function captureOneEntry(
 
 // JPEG/WebP encoder quality for declared captures, pinned (see the quality
 // note in captureOneEntry).
-const SCREENSHOT_LOSSY_QUALITY = 90;
+const CAPTURE_LOSSY_QUALITY = 90;
 
-// How long a capture-only component may hold its `data-screenshot-pending`
+// How long a capture-only component may hold its `data-capture-pending`
 // readiness signal before its slot's capture fails. Longer than the image
 // paint budget: this covers real media decode (a video seek, a PDF page
-// paint, a WebGL first frame) that image-paint waiting can't see.
-const SCREENSHOT_PENDING_WAIT_MS = 15_000;
+// paint, a WebGL first frame) that image-paint waiting can't see. Keep it
+// above runtime-common's `SHIM_RESOLVE_DEADLINE_MS`, so a component stalled
+// on a shimmed `import()` fails with the specifier named rather than with
+// this wait's own timeout.
+const CAPTURE_PENDING_WAIT_MS = 15_000;
 
-export async function captureScreenshot(
+export async function runCapture(
   page: Page,
-  // Declared screenshots capture `atom` too; the on-demand surfaces stay on
+  // Declared captures capture `atom` too; the on-demand surfaces stay on
   // the narrower roster their parsers enforce.
-  format: ScreenshotFormat | DeclaredScreenshotFormat,
+  format: OnDemandCaptureFormat | DeclaredCaptureFormat,
   ancestorLevel: number,
-  opts?: CaptureOptions,
-): Promise<ScreenshotCapture | RenderError> {
+  opts: CaptureOptions,
+): Promise<PrerenderCapture | RenderError> {
   let captureSpec = opts?.captureSpec;
   let entries = normalizeCaptureEntries(captureSpec);
   log.debug(
-    `captureScreenshot start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()} captures=${entries.length} captureSpec=${
+    `runCapture start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()} captures=${entries.length} captureSpec=${
       captureSpec ? JSON.stringify(captureSpec) : 'none'
     }`,
   );
 
   // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
-  // fullPage capture ignores a clip, and an element (`target`) screenshot
+  // fullPage capture ignores a clip, and an element (`target`) capture
   // honors neither. Every wire surface (the realm-server request bodies and
-  // the prerender server's /prerender-screenshot route) already 400s these
+  // the prerender server's /prerender-capture route) already 400s these
   // through the shared capture-spec parse; this guards the in-process callers
   // that assemble capture options directly — fail cleanly rather than return
-  // a silently-wrong screenshot.
+  // a silently-wrong capture.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" cannot set both fullPage and clip`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
     if (entry.target && entry.clip) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" cannot set both target and clip`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
     if (entry.target && entry.fullPage) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" cannot set both target and fullPage`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
     // pdf output is singular-only (one contentType per response); every wire
@@ -1908,9 +1900,9 @@ export async function captureScreenshot(
     // the in-process callers that assemble capture options directly.
     if (entry.type === 'pdf' && entries.length > 1) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture "${entry.name}" requests pdf output, which is only valid on a singular capture`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
   }
@@ -1923,9 +1915,9 @@ export async function captureScreenshot(
   for (let entry of entries) {
     if ((entry.media ?? 'screen') !== firstMedia) {
       return buildInvalidRenderResponseError(
-        page,
+        opts.expectedId,
         `capture batch mixes media values (${firstMedia} and ${entry.media ?? 'screen'}); a batch renders under one media`,
-        { title: 'Invalid screenshot capture spec' },
+        { title: 'Invalid capture spec' },
       );
     }
   }
@@ -1945,7 +1937,7 @@ export async function captureScreenshot(
   // page not currently at the default — so every capture starts from the
   // geometry its identity claims.
   let originalViewport = page.viewport();
-  let baseViewport: ResolvedViewport = { ...DEFAULT_SCREENSHOT_VIEWPORT };
+  let baseViewport: ResolvedViewport = { ...DEFAULT_CAPTURE_VIEWPORT };
   let pageAtBase =
     originalViewport != null &&
     sameViewport(
@@ -1954,7 +1946,7 @@ export async function captureScreenshot(
         height: originalViewport.height,
         deviceScaleFactor:
           originalViewport.deviceScaleFactor ??
-          DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
+          DEFAULT_CAPTURE_VIEWPORT.deviceScaleFactor,
       },
       baseViewport,
     );
@@ -1983,12 +1975,12 @@ export async function captureScreenshot(
   // Per-stage wall-clock accumulators for the capture's stepTimings.
   // `renderFor` can run more than once per batch (once per distinct
   // envelope), so the nav/settle/image stages sum across re-renders; the
-  // capture stage sums the viewport switches and CDP screenshots, keeping
+  // capture stage sums the viewport switches and CDP captures, keeping
   // the stages disjoint.
   let navMs = 0;
   let settleMs = 0;
   let imagePaintMs = 0;
-  let screenshotMs = 0;
+  let cdpCaptureMs = 0;
 
   // Transition render.html for the given envelope (undefined =
   // viewport-filling format) and wait for the render to settle. Returns a
@@ -2029,14 +2021,14 @@ export async function captureScreenshot(
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
-        page,
+        opts,
         { status: terminal.status, value: terminal.raw },
-        'render.screenshot',
+        'render.capture',
       );
     }
     // Settle hook only tracks store/loader generation + animation frames; it
     // does NOT wait for `<img>` element loads, CSS background-image fetches,
-    // or fonts. Without this extra wait the screenshot races those resources
+    // or fonts. Without this extra wait the capture races those resources
     // and produces empty avatars / missing thumbnails — and a container query
     // can reveal an image at one envelope size that a smaller one never
     // loaded, so every re-transition waits, not just the first render.
@@ -2073,7 +2065,7 @@ export async function captureScreenshot(
       return firstError;
     }
 
-    let captures: ScreenshotCaptureItem[] = [];
+    let captures: CaptureRequestItem[] = [];
     for (let entry of entries) {
       let entryEnvelope = entry.envelope;
       let entryViewport = viewportForEntry(entry, baseViewport);
@@ -2106,23 +2098,24 @@ export async function captureScreenshot(
         await waitForReflow(page);
         await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
         currentViewport = entryViewport;
-        screenshotMs += Date.now() - switchStart;
+        cdpCaptureMs += Date.now() - switchStart;
       }
       let captureStart = Date.now();
       let item = await captureOneEntry(
         page,
+        opts.expectedId,
         entry,
         currentViewport.deviceScaleFactor,
         opts?.entryOutput?.[entry.name],
       );
-      screenshotMs += Date.now() - captureStart;
+      cdpCaptureMs += Date.now() - captureStart;
       if ('type' in item) {
         return item;
       }
       captures.push(item);
     }
     log.debug(
-      `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} captures=${captures.length} dims=${captures
+      `runCapture success format=${format} ancestorLevel=${ancestorLevel} captures=${captures.length} dims=${captures
         .map(
           (c) =>
             `${c.name}:${c.width ?? '-'}x${c.height ?? '-'}@${c.deviceScaleFactor}`,
@@ -2136,21 +2129,21 @@ export async function captureScreenshot(
       contentType: captureOutputContentType(
         entries.length === 1 ? (entries[0].type ?? 'png') : 'png',
       ),
-      stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
+      stepTimings: { navMs, settleMs, imagePaintMs, cdpCaptureMs },
     };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing
       // HTML-capture path) sees the original viewport, not the caller's.
       try {
-        await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+        await page.setViewport(originalViewport ?? DEFAULT_CAPTURE_VIEWPORT);
       } catch {
         // Page may be closing/evicted; a best-effort restore is enough.
       }
     }
     if (mediaEmulated) {
       // Clear the media override so the next reuse of this pooled page (the
-      // indexing HTML-capture path, a screen-media screenshot) renders under
+      // indexing HTML-capture path, a screen-media capture) renders under
       // screen media, not this capture's print emulation.
       try {
         await page.emulateMediaType();
@@ -2165,7 +2158,7 @@ export async function captureScreenshot(
 // declaration defaults applied plus its capture identity hash.
 interface ResolvedDeclaredEntry {
   name: string;
-  payload: DeclaredScreenshotSpecPayload;
+  payload: DeclaredCaptureSpecPayload;
   specHash: string;
   deviceScaleFactor: number;
   // The encoded output. Raster types (`png`/`jpeg`/`webp`) rasterize a capture
@@ -2176,21 +2169,22 @@ interface ResolvedDeclaredEntry {
 }
 
 function renderErrorMessage(e: RenderError): string {
-  return e.error?.message ?? 'screenshot capture failed';
+  return e.error?.message ?? 'capture failed';
 }
 
 // Wait for the capture-only component's explicit readiness signal: while its
 // async content (media decode, canvas paint) is unready it renders a
-// `data-screenshot-pending` attribute and removes it when painted. No such
+// `data-capture-pending` attribute and removes it when painted. No such
 // element means ready. A component that learns its content can never be
 // ready (a corrupt or encrypted document, an undecodable video) swaps in a
-// `data-screenshot-failed` attribute instead, which fails the slot
+// `data-capture-failed` attribute instead, which fails the slot
 // immediately — a definitive failure shouldn't hold the affinity lane for
 // the full pending budget on every retry. A component that resolves neither
 // signal fails the slot at the timeout — persisting a byte-hashed unready
 // frame would cache the wrong pixels until the next generation.
-async function waitForScreenshotPendingClear(
+async function waitForCapturePendingClear(
   page: Page,
+  renderId: string,
   name: string,
 ): Promise<RenderError | undefined> {
   try {
@@ -2208,15 +2202,34 @@ async function waitForScreenshotPendingClear(
     // produce the mutation in time.
     await page.waitForFunction(
       () =>
-        document.querySelector('[data-screenshot-failed]') != null ||
-        document.querySelector('[data-screenshot-pending]') == null,
-      { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 'mutation' },
+        document.querySelector('[data-capture-failed]') != null ||
+        document.querySelector('[data-capture-pending]') == null,
+      { timeout: CAPTURE_PENDING_WAIT_MS, polling: 'mutation' },
     );
+    // A component still signalling under either attribute's former name
+    // reads here as no signal at all, so the wait above clears at once and
+    // the capture persists whatever frame is on screen — a half-painted one,
+    // or one the component already declared broken — as plausible bytes with
+    // no error anywhere. Fail the slot instead, naming the attribute to
+    // rename.
+    let legacySignal = await page.evaluate(
+      () =>
+        ['data-screenshot-pending', 'data-screenshot-failed'].find(
+          (attribute) => document.querySelector(`[${attribute}]`) != null,
+        ) ?? null,
+    );
+    if (legacySignal) {
+      return buildInvalidRenderResponseError(
+        renderId,
+        `capture-only component for capture "${name}" signals with ${legacySignal}, which is no longer read — rename it to ${legacySignal.replace('screenshot', 'capture')}`,
+        { title: 'Capture render never painted' },
+      );
+    }
   } catch {
     return buildInvalidRenderResponseError(
-      page,
-      `capture-only component for screenshot "${name}" still signals data-screenshot-pending after ${SCREENSHOT_PENDING_WAIT_MS}ms`,
-      { title: 'Screenshot render never painted' },
+      renderId,
+      `capture-only component for capture "${name}" still signals data-capture-pending after ${CAPTURE_PENDING_WAIT_MS}ms`,
+      { title: 'Capture render never painted' },
     );
   }
   // The failure attribute's value carries the component's stated cause into
@@ -2225,29 +2238,29 @@ async function waitForScreenshotPendingClear(
   let failure = await page.evaluate(
     () =>
       document
-        .querySelector('[data-screenshot-failed]')
-        ?.getAttribute('data-screenshot-failed') ?? null,
+        .querySelector('[data-capture-failed]')
+        ?.getAttribute('data-capture-failed') ?? null,
   );
   if (failure != null) {
     return buildInvalidRenderResponseError(
-      page,
-      `capture-only component for screenshot "${name}" signaled data-screenshot-failed${
+      renderId,
+      `capture-only component for capture "${name}" signaled data-capture-failed${
         failure && failure !== 'true' ? `: ${failure}` : ''
       }`,
-      { title: 'Screenshot render reported failure' },
+      { title: 'Capture render reported failure' },
     );
   }
   return undefined;
 }
 
 // Capture one render-based declared entry through the dedicated
-// render.screenshot route (format-based entries batch through
-// captureScreenshot instead). Two output shapes share this route because the
-// component owns the same readiness contract (clearing `data-screenshot-pending`
+// render.capture route (format-based entries batch through
+// runCapture instead). Two output shapes share this route because the
+// component owns the same readiness contract (clearing `data-capture-pending`
 // once painted) either way:
 //   - raster: the route's template renders the capture-only component into a
 //     fixed box sized to the declaration, so the viewport is set to that box
-//     and the plain viewport screenshot captures it whole.
+//     and the plain viewport capture captures it whole.
 //   - pdf: the component renders the full document flow itself (multi-page via
 //     print `break-*`/`@page` rules), so there is no capture box — the render
 //     settles under emulated print media and `page.pdf()` paginates it onto
@@ -2256,8 +2269,8 @@ async function waitForScreenshotPendingClear(
 async function captureRenderBasedEntry(
   page: Page,
   resolved: ResolvedDeclaredEntry,
-  opts?: CaptureOptions,
-): Promise<ScreenshotCaptureItem | RenderError> {
+  opts: CaptureOptions,
+): Promise<CaptureRequestItem | RenderError> {
   let { name, payload, deviceScaleFactor } = resolved;
   let isPdf = resolved.outputType === 'pdf';
   // A raster render-based slot always declares a capture box; a pdf one never
@@ -2270,12 +2283,12 @@ async function captureRenderBasedEntry(
   } else {
     // Emulate print media BEFORE the transition so the component settles — and
     // the image-paint wait probes resources — under it, matching how
-    // captureScreenshot emulates a batch's media.
+    // runCapture emulates a batch's media.
     await page.emulateMediaType('print');
   }
   try {
-    await transitionTo(page, 'render.screenshot', name);
-    await waitForRoutePathSuffix(page, `/screenshot/${name}`, opts);
+    await transitionTo(page, 'render.capture', name);
+    await waitForRoutePathSuffix(page, `/capture/${name}`, opts);
     await waitForPrerenderSettle(page);
     if (box) {
       await waitForEnvelopeBox(page, box, opts, name);
@@ -2287,18 +2300,23 @@ async function captureRenderBasedEntry(
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
-        page,
+        opts,
         { status: terminal.status, value: terminal.raw },
-        'render.screenshot',
+        'render.capture',
       );
     }
     await waitForImagePaint(page);
-    let pendingError = await waitForScreenshotPendingClear(page, name);
+    let pendingError = await waitForCapturePendingClear(
+      page,
+      opts.expectedId,
+      name,
+    );
     if (pendingError) {
       return pendingError;
     }
     return await captureOneEntry(
       page,
+      opts.expectedId,
       isPdf
         ? { name, type: 'pdf', media: 'print' }
         : { name, viewport: box, deviceScaleFactor },
@@ -2308,7 +2326,7 @@ async function captureRenderBasedEntry(
       isPdf
         ? undefined
         : {
-            type: resolved.outputType as ScreenshotImageType,
+            type: resolved.outputType as RasterOutputType,
             background: resolved.background,
           },
     );
@@ -2323,43 +2341,43 @@ async function captureRenderBasedEntry(
   }
 }
 
-// Capture the current rendering's declared screenshots (`static
-// screenshots`) on the same warm tab a prerender-html visit just rendered
+// Capture the current rendering's declared captures (`static
+// captures`) on the same warm tab a prerender-html visit just rendered
 // on. `kind` names which of the URL's renderings is on the page — the card
 // instance or the FileDef family — and selects that row's prior manifest
 // from the shared args for carry-forward. Reads the merged roster from the
-// render.screenshots route, carries forward file-content-keyed slots whose
+// render.captures route, carries forward file-content-keyed slots whose
 // source bytes are unchanged, batches format-based entries per format
-// through captureScreenshot, and renders capture-only components through
-// render.screenshot. Per-slot failures land in `errors` (the broken-links
+// through runCapture, and renders capture-only components through
+// render.capture. Per-slot failures land in `errors` (the broken-links
 // model: the visit publishes normally, the manifest omits the name); only a
 // roster-level failure returns a RenderError.
-export async function captureDeclaredScreenshots(
+export async function captureDeclared(
   page: Page,
-  args: DeclaredScreenshotVisitArgs,
+  args: DeclaredCaptureVisitArgs,
   kind: 'instance' | 'file',
-  opts?: CaptureOptions,
-): Promise<DeclaredScreenshotVisitResult | RenderError> {
+  opts: CaptureOptions,
+): Promise<DeclaredCaptureVisitResult | RenderError> {
   let priorManifest = args.priorManifests?.[kind] ?? null;
-  log.debug(`captureDeclaredScreenshots start url=${page.url()}`);
-  await transitionTo(page, 'render.screenshots');
-  await waitForRoutePathSuffix(page, '/screenshots', opts);
+  log.debug(`captureDeclared start url=${page.url()}`);
+  await transitionTo(page, 'render.captures');
+  await waitForRoutePathSuffix(page, '/captures', opts);
   await waitForPrerenderSettle(page);
   let result = await captureResult(page, 'textContent', opts);
   if (result.status === 'error' || result.status === 'unusable') {
-    return renderCaptureToError(page, result, 'render.screenshots');
+    return renderCaptureToError(opts, result, 'render.captures');
   }
-  let roster: DeclaredScreenshotRoster;
+  let roster: DeclaredCaptureRoster;
   try {
     let parsed = JSON.parse(result.value) as {
-      roster?: DeclaredScreenshotRoster;
+      roster?: DeclaredCaptureRoster;
     } | null;
     roster = parsed?.roster ?? {};
   } catch {
     return buildInvalidRenderResponseError(
-      page,
-      `render.screenshots returned a non-JSON response: ${result.value}`,
-      { title: 'Invalid screenshots roster response' },
+      opts.expectedId,
+      `render.captures returned a non-JSON response: ${result.value}`,
+      { title: 'Invalid captures roster response' },
     );
   }
   let names = Object.keys(roster).sort();
@@ -2367,32 +2385,33 @@ export async function captureDeclaredScreenshots(
     return { entries: [] };
   }
 
-  let entries: DeclaredScreenshotCaptureResult[] = [];
-  let errors: DeclaredScreenshotError[] = [];
+  let entries: DeclaredCaptureResult[] = [];
+  let errors: DeclaredCaptureError[] = [];
 
   // The batch cap protects the visit's time budget the same way it protects
   // the on-demand sync wait; names are sorted, so which slots overflow is
   // deterministic rather than declaration-order-dependent.
-  for (let name of names.slice(SCREENSHOT_MAX_CAPTURES)) {
+  for (let name of names.slice(CAPTURE_MAX_BATCH_ENTRIES)) {
     errors.push({
       name,
-      message: `declared screenshots exceed the capture cap of ${SCREENSHOT_MAX_CAPTURES}; "${name}" was not captured`,
+      message: `declared captures exceed the capture cap of ${CAPTURE_MAX_BATCH_ENTRIES}; "${name}" was not captured`,
     });
   }
 
   let fresh: ResolvedDeclaredEntry[] = [];
-  for (let name of names.slice(0, SCREENSHOT_MAX_CAPTURES)) {
+  for (let name of names.slice(0, CAPTURE_MAX_BATCH_ENTRIES)) {
     let payload = roster[name];
     let specHash = await declaredCaptureSpecHash(name, payload);
-    let outputType = payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE;
+    let outputType = payload.type ?? DEFAULT_RASTER_OUTPUT_TYPE;
     let resolved: ResolvedDeclaredEntry = {
       name,
       payload,
       specHash,
       deviceScaleFactor:
-        payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+        payload.deviceScaleFactor ??
+        DECLARED_CAPTURE_DEFAULT_DEVICE_SCALE_FACTOR,
       outputType,
-      background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+      background: payload.background ?? CAPTURE_DEFAULT_BACKGROUND,
       keyBy: payload.keyBy ?? 'generation',
     };
     if (
@@ -2429,7 +2448,7 @@ export async function captureDeclaredScreenshots(
 
   let finish = (
     resolved: ResolvedDeclaredEntry,
-    item: ScreenshotCaptureItem,
+    item: CaptureRequestItem,
     captureMs: number,
   ) => {
     entries.push({
@@ -2463,14 +2482,14 @@ export async function captureDeclaredScreenshots(
   // Their per-card sub-cap is far lower than the raster batch cap because each
   // is much heavier; name-sorted, so which slots overflow is deterministic.
   let pdfEntries: ResolvedDeclaredEntry[] = [];
-  let byFormat = new Map<DeclaredScreenshotFormat, ResolvedDeclaredEntry[]>();
+  let byFormat = new Map<DeclaredCaptureFormat, ResolvedDeclaredEntry[]>();
   let renderBased: ResolvedDeclaredEntry[] = [];
   for (let resolved of fresh) {
     if (resolved.outputType === 'pdf') {
-      if (pdfEntries.length >= SCREENSHOT_MAX_PDF_CAPTURES) {
+      if (pdfEntries.length >= CAPTURE_MAX_PDF_ENTRIES) {
         errors.push({
           name: resolved.name,
-          message: `declared pdf screenshots exceed the pdf capture cap of ${SCREENSHOT_MAX_PDF_CAPTURES}; "${resolved.name}" was not captured`,
+          message: `declared pdf captures exceed the pdf capture cap of ${CAPTURE_MAX_PDF_ENTRIES}; "${resolved.name}" was not captured`,
         });
         continue;
       }
@@ -2487,7 +2506,7 @@ export async function captureDeclaredScreenshots(
 
   for (let format of [...byFormat.keys()].sort()) {
     let group = byFormat.get(format)!;
-    let captures: ScreenshotCaptureEntry[] = group.map((resolved) =>
+    let captures: CaptureRequestEntry[] = group.map((resolved) =>
       // A format group holds only raster slots (pdf captures on its own path),
       // so every member declares a capture box.
       format === 'fitted'
@@ -2514,7 +2533,7 @@ export async function captureDeclaredScreenshots(
         // pdf slots are captured on their own path below, never in a raster
         // format group, so this output type is always a raster image type.
         {
-          type: resolved.outputType as ScreenshotImageType,
+          type: resolved.outputType as RasterOutputType,
           background: resolved.background,
         },
       ]),
@@ -2524,7 +2543,7 @@ export async function captureDeclaredScreenshots(
     // signal for "this slot's capture is slow" since the member cannot be
     // captured without paying for the group render.
     let groupStart = Date.now();
-    let shot = await captureScreenshot(page, format, 0, {
+    let shot = await runCapture(page, format, 0, {
       ...opts,
       captureSpec: { captures },
       entryOutput,
@@ -2553,8 +2572,8 @@ export async function captureDeclaredScreenshots(
   // Each pdf slot renders and paginates on its own — pdf output is
   // singular-only, so it can't share a batch render — under print media. Its
   // source is either a viewport-filling format (batched through
-  // captureScreenshot, one entry) or a capture-only component (driven through
-  // the render.screenshot route, which emulates print media itself). A per-slot
+  // runCapture, one entry) or a capture-only component (driven through
+  // the render.capture route, which emulates print media itself). A per-slot
   // failure never fails the visit; it records under the broken-links model.
   if (pdfEntries.length > 0) {
     let originalViewport = page.viewport();
@@ -2562,27 +2581,25 @@ export async function captureDeclaredScreenshots(
       for (let resolved of pdfEntries) {
         let entryStart = Date.now();
         try {
-          let outcome: ScreenshotCaptureItem | RenderError;
+          let outcome: CaptureRequestItem | RenderError;
           if (resolved.payload.render) {
             outcome = await captureRenderBasedEntry(page, resolved, opts);
           } else {
-            let entry: ScreenshotCaptureEntry = {
+            let entry: CaptureRequestEntry = {
               name: resolved.name,
               type: 'pdf',
               media: 'print',
             };
-            let shot = await captureScreenshot(
-              page,
-              resolved.payload.format!,
-              0,
-              { ...opts, captureSpec: { captures: [entry] } },
-            );
+            let shot = await runCapture(page, resolved.payload.format!, 0, {
+              ...opts,
+              captureSpec: { captures: [entry] },
+            });
             outcome =
               'type' in shot
                 ? shot
                 : (shot.captures.find((c) => c.name === resolved.name) ??
                   buildInvalidRenderResponseError(
-                    page,
+                    opts.expectedId,
                     `pdf capture "${resolved.name}" produced no document`,
                     { title: 'PDF capture produced no document' },
                   ));
@@ -2605,11 +2622,11 @@ export async function captureDeclaredScreenshots(
         }
       }
     } finally {
-      // A format-based pdf leaves captureScreenshot's own restore in place; a
+      // A format-based pdf leaves runCapture's own restore in place; a
       // render-based one never overrode the viewport. Restore anyway so this
       // loop is self-contained regardless of which path ran.
       try {
-        await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+        await page.setViewport(originalViewport ?? DEFAULT_CAPTURE_VIEWPORT);
       } catch {
         // Page may be closing/evicted; a best-effort restore is enough.
       }
@@ -2644,7 +2661,7 @@ export async function captureDeclaredScreenshots(
       // Restore so the next reuse of this pooled page sees the original
       // viewport, not the last capture box.
       try {
-        await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+        await page.setViewport(originalViewport ?? DEFAULT_CAPTURE_VIEWPORT);
       } catch {
         // Page may be closing/evicted; a best-effort restore is enough.
       }
@@ -2652,7 +2669,7 @@ export async function captureDeclaredScreenshots(
   }
 
   log.debug(
-    `captureDeclaredScreenshots done entries=${entries.length} errors=${errors.length}`,
+    `captureDeclared done entries=${entries.length} errors=${errors.length}`,
   );
   return { entries, ...(errors.length > 0 ? { errors } : {}) };
 }
@@ -2888,6 +2905,10 @@ async function runWithAffinityProfile<T>(
 
 export async function withTimeout<T>(
   page: Page,
+  // The id of the card, module, or file this render is for. A timeout error
+  // carries it as its `id`; see `buildInvalidRenderResponseError` for why the
+  // page's own address can't stand in for it.
+  renderId: string,
   fn: () => Promise<T>,
   timeoutMs = cardRenderTimeout,
   profileContext?: RenderProfileContext,
@@ -2996,9 +3017,6 @@ export async function withTimeout<T>(
     'timeout' in (result as { timeout?: boolean })
   ) {
     let message = `Render timed-out after ${timeoutMs} ms`;
-    let url = new URL(page.url());
-    let [_a, _b, encodedId] = url.pathname.split('/');
-    let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
     // Render-hang discriminators, captured here only on the timeout
     // path — the responsiveness probe and CPU sampling do real work, so
@@ -3161,7 +3179,7 @@ export async function withTimeout<T>(
       .map(([stage, ms]) => `${stage}=${ms}ms`)
       .join(' ');
     log.warn(
-      `render of ${id} timed out after ${timeoutMs}ms` +
+      `render of ${renderId} timed out after ${timeoutMs}ms` +
         ` stage=${richDiagnostics?.renderStage ?? '<unknown>'}` +
         ` stageAgeMs=${richDiagnostics?.stageAgeMs ?? '<unknown>'}` +
         // The model-build stages that closed before the stall, so the
@@ -3288,7 +3306,7 @@ export async function withTimeout<T>(
     let timeoutError: RenderError = {
       type: 'instance-error',
       error: {
-        id,
+        id: renderId,
         status: 504,
         title: 'Render timeout',
         message,

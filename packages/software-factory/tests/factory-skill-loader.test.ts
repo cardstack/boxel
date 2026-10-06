@@ -24,6 +24,7 @@ import {
 } from '../src/factory-skill-loader.ts';
 import { catalogSkills } from '../src/skill-catalog.ts';
 import { SKILL_FRONTMATTER_DESCRIPTION_CASES } from '@cardstack/runtime-common/skill-frontmatter-contract';
+import { ensureBoxelSkills } from '../../boxel-cli/scripts/boxel-skills.mts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -109,6 +110,10 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       'software-factory-operations',
       'boxel-file-structure',
       'boxel-workspace-cardinal-rules',
+      // Reuse has to be front-loaded: a skill the agent must decide to read
+      // is one it reads after it has already started authoring.
+      'catalog-reuse',
+      'boxel-ui-component-discovery',
     ]);
   });
 
@@ -901,21 +906,18 @@ module('factory-skill-loader > re-resolution on new issue', function () {
 });
 
 // ---------------------------------------------------------------------------
-// Curated reference names vs the built boxel skill
+// Curated reference names vs the pinned boxel skill
 // ---------------------------------------------------------------------------
 
 module('factory-skill-loader > curated boxel references', function () {
   // The reference filenames curated in REFERENCE_KEYWORD_MAP and
-  // ALWAYS_LOAD_REFERENCES are owned by a separate repo (boxel-skills,
-  // vendored into packages/boxel-cli/plugin/skills/boxel by build:skills).
-  // An upstream rename would otherwise silently drop a reference from the
-  // factory prompt — filterBoxelRefs only filters what exists on disk.
-  let builtRefsDir = join(
-    import.meta.dirname,
-    '../../boxel-cli/plugin/skills/boxel/references',
-  );
+  // ALWAYS_LOAD_REFERENCES are owned by a separate repo (boxel-skills, read
+  // from the clone of the pinned release). An upstream rename would otherwise
+  // silently drop a reference from the factory prompt — filterBoxelRefs only
+  // filters what exists on disk.
+  let pinnedRefsDir = join(ensureBoxelSkills(), 'boxel', 'references');
 
-  test('every curated reference name resolves in the built boxel skill', function (assert) {
+  test('every curated reference name resolves in the pinned boxel skill', function (assert) {
     let curated = new Set([
       ...Object.keys(REFERENCE_KEYWORD_MAP),
       ...ALWAYS_LOAD_REFERENCES,
@@ -926,8 +928,8 @@ module('factory-skill-loader > curated boxel references', function () {
         continue;
       }
       assert.true(
-        existsSync(join(builtRefsDir, name)),
-        `${name} exists in the built boxel skill's references/`,
+        existsSync(join(pinnedRefsDir, name)),
+        `${name} exists in the pinned boxel skill's references/`,
       );
     }
   });
@@ -940,10 +942,10 @@ module('factory-skill-loader > curated boxel references', function () {
     // every offender at once when something is.
     assert.deepEqual(
       PENDING_BOXEL_REFERENCES.filter((name) =>
-        existsSync(join(builtRefsDir, name)),
+        existsSync(join(pinnedRefsDir, name)),
       ),
       [],
-      'no pending reference has shipped in the built boxel skill yet — once one does, remove it from PENDING_BOXEL_REFERENCES',
+      'no pending reference has shipped in the pinned boxel skill yet — once one does, remove it from PENDING_BOXEL_REFERENCES',
     );
   });
 });
@@ -957,10 +959,8 @@ module('factory-skill-loader > curated boxel references', function () {
 // whose description is authored as a YAML block scalar — the natural form once
 // it is longer than a line — used to advertise itself as the literal `>-`.
 //
-// The cases come from the shared contract so the same inputs are asserted
-// against `parseFrontmatter` in build-skills.test.ts: a reader that drifts
-// from the other fails here rather than surfacing as two descriptions for one
-// skill.
+// The cases come from the shared contract in
+// `@cardstack/runtime-common/skill-frontmatter-contract`.
 module('skill-catalog > descriptions', function () {
   for (let testCase of SKILL_FRONTMATTER_DESCRIPTION_CASES) {
     test(`reads the ${testCase.label} case`, async function (assert) {

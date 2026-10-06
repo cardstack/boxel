@@ -17,44 +17,46 @@ export const Toolbar: TemplateOnlyComponent<ToolbarSignature> = <template>
     <div class='pretui-toolbar-actions'>{{yield}}</div>
   </div>
   <style scoped>
-    .pretui-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-4, 11px);
-      min-height: 44px;
-    }
-    .pretui-toolbar-id {
-      display: grid;
-      gap: 1px;
-      min-width: 0;
-    }
-    .pretui-toolbar-id h2 {
-      margin: 0;
-      font-size: var(--text-heading, 19px);
-      font-weight: var(--weight-heading, 700);
-      letter-spacing: var(--track-heading, -0.02em);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .pretui-eyebrow {
-      font-family: var(--font-mono);
-      font-size: var(--text-ui-xs, 11px);
-      font-weight: 500;
-      letter-spacing: var(--track-eyebrow, 0.08em);
-      text-transform: uppercase;
-      color: var(--muted-foreground);
-    }
-    .pretui-toolbar-meta {
-      font-size: var(--text-ui-sm, 11.5px);
-      color: var(--muted-foreground);
-    }
-    .pretui-toolbar-actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3, 8px);
-      flex: none;
+    @layer PretComponent {
+      .pretui-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4, 11px);
+        min-height: 44px;
+      }
+      .pretui-toolbar-id {
+        display: grid;
+        gap: 1px;
+        min-width: 0;
+      }
+      .pretui-toolbar-id h2 {
+        margin: 0;
+        font-size: var(--text-heading, 19px);
+        font-weight: var(--weight-heading, 700);
+        letter-spacing: var(--track-heading, -0.02em);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pretui-eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-ui-xs, 11px);
+        font-weight: 500;
+        letter-spacing: var(--track-eyebrow, 0.08em);
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .pretui-toolbar-meta {
+        font-size: var(--text-ui-sm, 11.5px);
+        color: var(--muted-foreground);
+      }
+      .pretui-toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3, 8px);
+        flex: none;
+      }
     }
   </style>
 </template>;

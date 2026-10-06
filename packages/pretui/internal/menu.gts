@@ -30,7 +30,7 @@
 // `@items` and `@align` are unchanged and `MenuItemSpec` is now an alias of
 // `CommandNode`, so every existing call site keeps working untouched.
 //
-// ── Deviations from Appendix N, with reasons ─────────────────────────────
+// ── Deviations from the APG menu patterns, with reasons ──────────────────
 // * **Markup is `<menu>`/`<li>`, not `<button>`.** `menuitemcheckbox` and
 //   `menuitemradio` are children-presentational roles, and realm lint's
 //   `require-presentational-children` rejects every descendant that is not a
@@ -48,8 +48,8 @@
 // * **`alt` is `Partial<MenuNodeBase>`**, not `Partial<MenuNode>` — a
 //   partial of a discriminated union cannot express "same kind, different
 //   label", which is the only thing dynamic items are for.
-// * **`CommandPalette` is a combobox, not a menu button.** Appendix N names
-//   the APG menu-button pattern as normative for both. That is right for
+// * **`CommandPalette` is a combobox, not a menu button.** The APG
+//   menu-button pattern looks like it covers both. That is right for
 //   `Menu` and wrong for the palette, whose primary control is a text input
 //   filtering a list — the combobox-with-listbox pattern
 //   (`aria-activedescendant`, `role='option'`). Menu roles there would mean a
@@ -65,8 +65,6 @@
 // belongs to an `OwnedTimers` set that an `ember-modifier` adopts and
 // releases. Nothing here calls `Date.now()` or `Math.random()`.
 //
-// (the menu group)
-
 // Pretui — the menu tree model shared by Menu, MenuPanel, Menubar and
 // CommandPalette: the node taxonomy, shortcut parsing and rendering, and the
 // row model a level is drawn from. Not a component.
@@ -148,6 +146,17 @@ export type MenuNode =
 
 /** A menu's contents: nodes plus `'---'` separators. */
 export type MenuEntry = MenuNode | '---';
+
+/**
+ * Overflow entries with the destructive ones last, below a separator —
+ * `[...safe, '---', ...destructive]`, the order the `destructive` doc asks
+ * for. The separator only appears when both groups are non-empty.
+ */
+export function destructiveLast<T extends { destructive?: boolean }>(entries: readonly T[]): (T | '---')[] {
+  let safe = entries.filter((entry) => !entry.destructive);
+  let risky = entries.filter((entry) => entry.destructive);
+  return safe.length && risky.length ? [...safe, '---', ...risky] : [...safe, ...risky];
+}
 
 /** The pre-rebuild name, kept so every existing call site still compiles. */
 export type MenuItemSpec = CommandNode;

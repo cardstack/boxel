@@ -1,10 +1,15 @@
 import {
   buildSearchErrorResponse,
   baseRealm,
+  DURING_PRERENDER_HEADER,
+  emptySearchEntryDocument,
   ensureTrailingSlash,
+  markPolicyScoped,
   parseRealmsFromPayload,
   parseSearchEntryQueryFromPayload,
   parseSearchRequestPayload,
+  policyScopedQuery,
+  policyScopedRealms,
   SearchRequestError,
   sanitizeLoggingCorrelationId,
   searchEntryRealms,
@@ -12,12 +17,24 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type RealmInfo,
   type EntryCollectionDocument,
+  type PrerenderedHtmlFormat,
   type SearchEntryQuery,
 } from '@cardstack/runtime-common';
 
+import {
+  errorsDocument,
+  isNamedQueryPayload,
+  isOperationFailure,
+  namedQueryRendering,
+  policyQueryScope,
+  resolveNamedQuery,
+  searchInvocation,
+  searchPrincipal,
+} from '@cardstack/runtime-common/card-operations';
 import { makeCardTypeSummaryDoc } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
+import { claimsFromRawToken } from '@cardstack/host/services/realm';
 
 import { getRoomIdForRealmAndUser } from '../mock-matrix/_utils';
 import { createJWT, testRealmSecretSeed } from '../test-auth';
@@ -29,6 +46,7 @@ import {
 import type { TestRealmAdapter } from '../adapter';
 
 import type { RealmServerMockRoute, RealmServerMockState } from './types';
+import type { LinkStrategy } from '@cardstack/base/operations';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
 
@@ -58,6 +76,12 @@ function normalizeRoutePath(path: string): string {
 
 export function registerRealmServerRoute(route: RealmServerMockRoute) {
   realmServerRoutes.set(normalizeRoutePath(route.path), route);
+}
+
+// For a test that stands in one endpoint for its own duration: remove the
+// route when the test is done, so it never answers another test's request.
+export function unregisterRealmServerRoute(path: string) {
+  realmServerRoutes.delete(normalizeRoutePath(path));
 }
 
 export function getRealmServerRoute(
@@ -153,7 +177,7 @@ function unlistedSlugFor(sourceRealmURL: string): string {
 function registerSearchRoutes() {
   registerRealmServerRoute({
     path: '/_federated-search',
-    handler: async (req, _url) => {
+    handler: async (req, _url, state) => {
       let realmList: string[];
       let payload: unknown;
       try {
@@ -164,6 +188,70 @@ function registerSearchRoutes() {
           return buildSearchErrorResponse(e.message);
         }
         throw e;
+      }
+
+      // Mirror the realm-server's `handle-search`: a request naming a
+      // declared query is answered with the realm's own resolution of it,
+      // read through the first realm the request names that is in process,
+      // and its results carry what the declaration's link strategy lets them,
+      // with the formats it declares unshareable served data-only. A render's
+      // search is the exception, as it is there: it keeps each row's stored
+      // links and every format's markup whatever the query declares, because
+      // the render resolves the cards those links name itself, and what it
+      // draws is governed as the embedding card's own markup.
+      let duringRender =
+        (req.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+      let links: LinkStrategy = 'full';
+      let unshareableFormats: PrerenderedHtmlFormat[] = [];
+      let invocation = searchInvocation(payload);
+      let resolvedByServer = isNamedQueryPayload(payload);
+      let requested = realmList;
+      let unresolved = false;
+      if (isNamedQueryPayload(payload)) {
+        let resolvingRealm = realmList
+          .map(
+            (realmURL) =>
+              getTestRealmRegistry().get(ensureTrailingSlash(realmURL))?.realm,
+          )
+          .find(Boolean);
+        if (!resolvingRealm) {
+          // As there, a declaration no realm can be read through searches no
+          // realm, and the result is empty and marked incomplete rather than
+          // refused.
+          unresolved = true;
+          payload = { ...namedQueryRendering(payload), realms: realmList };
+        } else {
+          try {
+            // Only a realm-authority session is a realm-authority principal,
+            // as it is on the realm server: a render a user asked for runs on
+            // their ordinary session.
+            let resolved = await resolveNamedQuery(
+              resolvingRealm.operationCore,
+              payload,
+              {
+                principal: searchPrincipal(
+                  authenticatedUser(req),
+                  realmAuthoritySession(req),
+                ),
+                realms: realmList,
+              },
+            );
+            payload = resolved.query;
+            realmList = resolved.query.realms!;
+            links = duringRender ? 'full' : resolved.links;
+            unshareableFormats = duringRender
+              ? []
+              : resolved.unshareableFormats;
+          } catch (e) {
+            if (isOperationFailure(e)) {
+              return new Response(JSON.stringify(errorsDocument(e.error)), {
+                status: e.error.status,
+                headers: { 'content-type': SupportedMimeType.CardJson },
+              });
+            }
+            throw e;
+          }
+        }
       }
 
       let parsed;
@@ -183,12 +271,73 @@ function registerSearchRoutes() {
       let loggingCorrelationId = sanitizeLoggingCorrelationId(
         req.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
       );
-      let combined = await searchEntryRealms(
-        realmList.map((realmURL) =>
-          getSearchEntrySearchableRealmForURL(realmURL, payload),
+
+      // Mirror the realm-server's `handle-search` for a realm the caller does
+      // not read: its policy's grants for the invoked query, a named one or
+      // `query` on the types an ad-hoc filter targets, are composed into the
+      // query it runs, it contributes no rows where nothing grants the
+      // caller that query, and it answers as a realm that did not answer where
+      // its policy cannot be judged. A render's search reads every realm, as
+      // it runs under realm authority there. The result marks the realms whose
+      // rows were decided by more than the caller's query.
+      let user = authenticatedUser(req);
+      let readable = (realmURL: string) =>
+        duringRender || callerReads(state, realmURL);
+      let scopedQueries = new Map<object, SearchEntryQuery>();
+      let realms = await Promise.all(
+        realmList.map(async (realmURL) => {
+          // A realm the caller reads is one the declaration would have
+          // searched, so it counts as one that did not answer. Every other
+          // realm answers with no rows below: none is in process, so none has
+          // a policy to ask.
+          if (unresolved && readable(realmURL)) {
+            return undefined;
+          }
+          let realm = getSearchEntrySearchableRealmForURL(realmURL, payload);
+          if (readable(realmURL)) {
+            return realm;
+          }
+          let inProcess = getTestRealmRegistry().get(
+            ensureTrailingSlash(realmURL),
+          )?.realm;
+          if (inProcess && invocation && user) {
+            try {
+              let scope = await policyQueryScope(inProcess.operationCore, {
+                ...invocation,
+                principal: { kind: 'user', user },
+              });
+              if (scope.kind === 'scoped') {
+                scopedQueries.set(
+                  inProcess,
+                  policyScopedQuery(parsed, scope.filters),
+                );
+                return inProcess;
+              }
+            } catch {
+              return undefined;
+            }
+          }
+          return {
+            url: realmURL,
+            searchEntries: async (query: SearchEntryQuery) =>
+              emptySearchEntryDocument(query),
+          };
+        }),
+      );
+      let combined = markPolicyScoped(
+        await searchEntryRealms(
+          realms,
+          parsed,
+          {
+            ...(loggingCorrelationId ? { loggingCorrelationId } : {}),
+            ...(links !== 'full' ? { links } : {}),
+            ...(unshareableFormats.length > 0 ? { unshareableFormats } : {}),
+          },
+          scopedQueries.size === 0
+            ? undefined
+            : (realm) => scopedQueries.get(realm) ?? parsed,
         ),
-        parsed,
-        loggingCorrelationId ? { loggingCorrelationId } : undefined,
+        policyScopedRealms({ realms: requested, readable, resolvedByServer }),
       );
 
       return new Response(JSON.stringify(combined), {
@@ -202,7 +351,7 @@ function registerSearchRoutes() {
 function registerInfoRoutes() {
   registerRealmServerRoute({
     path: '/_federated-info',
-    handler: async (req) => {
+    handler: async (req, _url, state) => {
       let payload;
       try {
         payload = await parseSearchRequestPayload(req.clone());
@@ -221,6 +370,23 @@ function registerInfoRoutes() {
           return buildSearchErrorResponse(e.message);
         }
         throw e;
+      }
+
+      // As the realm server's `_federated-info` does, a request naming a
+      // realm the caller does not read is refused whole: one that
+      // authenticated nobody is told to, and a signed-in caller is forbidden.
+      // A realm's policy admits no one here.
+      let unreadable = realmList.filter(
+        (realmURL) => !callerReads(state, realmURL),
+      );
+      if (unreadable.length > 0) {
+        let authenticated = authenticatedUser(req) !== undefined;
+        return new Response(
+          authenticated
+            ? `Insufficient permissions to read realms: ${unreadable.join(', ')}`
+            : `Authorization required for realms: ${unreadable.join(', ')}`,
+          { status: authenticated ? 403 : 401 },
+        );
       }
 
       let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] =
@@ -587,6 +753,35 @@ async function handleArchiveToggle(
       },
     }),
     { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+  );
+}
+
+// Whether the test user reads a realm outright. A realm this mock holds no
+// permissions for is one it does not manage (base, skills, catalog), and is
+// read as it always is.
+function callerReads(state: RealmServerMockState, realmURL: string): boolean {
+  let permissions = state.realmPermissions.get(ensureTrailingSlash(realmURL));
+  return permissions === undefined || permissions.includes('read');
+}
+
+// The user a request's realm-server token names. The mock issues its tokens
+// unsigned, so there is nothing to verify, only a claim to read.
+function authenticatedUser(req: Request): string | undefined {
+  let authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return undefined;
+  }
+  return claimsFromRawToken(authorization.replace(/^Bearer /, '')).user;
+}
+
+function realmAuthoritySession(req: Request): boolean {
+  let authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return false;
+  }
+  return (
+    claimsFromRawToken(authorization.replace(/^Bearer /, '')).realmAuthority ===
+    true
   );
 }
 

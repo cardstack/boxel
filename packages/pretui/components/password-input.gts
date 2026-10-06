@@ -277,50 +277,52 @@ export class PasswordInput extends Component<PasswordInputSignature> {
       {{/if}}
     </div>
     <style scoped>
-      /* Same re-skin channel as EmailInput — see that component's note. */
-      .pretui-boxelwrap {
-        position: relative;
-        width: 100%;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
-        --background: var(--field, var(--boxel-light));
-        --border: var(--input);
-        --ring: var(--primary);
-        --muted-foreground: var(--ink-3, var(--boxel-400));
-        --boxel-form-control-height: var(--control-h, 28px);
-        --boxel-input-height: var(--control-h, 28px);
-        --boxel-form-control-border-radius: var(--radius);
-        --boxel-sp-xs: 5px;
-        --boxel-sp-sm: 9px;
-      }
-      .pretui-reveal {
-        position: absolute;
-        top: calc((var(--control-h, 28px) - 20px) / 2);
-        right: 5px;
-        display: grid;
-        place-items: center;
-        width: 20px;
-        height: 20px;
-        border: 0;
-        padding: 0;
-        border-radius: 6px;
-        background: none;
-        color: var(--muted-foreground);
-        cursor: pointer;
-      }
-      .pretui-reveal:hover:not(:disabled) {
-        background: var(--hover, var(--boxel-100));
-        color: var(--foreground);
-      }
-      .pretui-reveal:disabled {
-        opacity: 0.45;
-        cursor: default;
-      }
-      /* The meter sits under the control inside the same wrapper. It is the
-         only thing that changes the wrapper's height, and only when
-         @strength is on. */
-      .pretui-password-strength {
-        margin-block-start: var(--space-2, 6px);
+      @layer PretComponent {
+        /* Same re-skin channel as EmailInput — see that component's note. */
+        .pretui-boxelwrap {
+          position: relative;
+          width: 100%;
+          font-size: var(--text-ui-md, 12.5px);
+          letter-spacing: var(--track-ui, 0.01em);
+          --background: var(--field, var(--boxel-light));
+          --border: var(--input);
+          --ring: var(--primary);
+          --muted-foreground: var(--ink-3, var(--boxel-400));
+          --boxel-form-control-height: var(--control-h, 28px);
+          --boxel-input-height: var(--control-h, 28px);
+          --boxel-form-control-border-radius: var(--radius);
+          --boxel-sp-xs: 5px;
+          --boxel-sp-sm: 9px;
+        }
+        .pretui-reveal {
+          position: absolute;
+          top: calc((var(--control-h, 28px) - 20px) / 2);
+          right: 5px;
+          display: grid;
+          place-items: center;
+          width: 20px;
+          height: 20px;
+          border: 0;
+          padding: 0;
+          border-radius: 6px;
+          background: none;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-reveal:hover:not(:disabled) {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-reveal:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
+        /* The meter sits under the control inside the same wrapper. It is the
+           only thing that changes the wrapper's height, and only when
+           @strength is on. */
+        .pretui-password-strength {
+          margin-block-start: var(--space-2, 6px);
+        }
       }
     </style>
   </template>

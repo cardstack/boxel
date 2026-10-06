@@ -9,7 +9,7 @@ import type {
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { Query } from './query.ts';
-import type { ScreenshotsMeta } from './capture-spec.ts';
+import type { CapturesMeta } from './capture-spec.ts';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
 // extracted during file prerendering so that file-meta responses can populate
@@ -103,6 +103,15 @@ export type CardResourceMeta = Meta & {
   // the instance and could clobber a correctly-loaded full one). Absence
   // marks the serialization full.
   sparseFields?: string[];
+  // Set on a search item served with its relationships withheld: a row of a
+  // query that declares `links: 'none'`. The item says nothing about what the
+  // card links to, which is not the same as linking to nothing, so like a
+  // sparse item it must never enter the Store as the card's instance — every
+  // link field of an instance built from it would read empty, in every live
+  // view and editor, whatever the card's own `read` declares. It describes the
+  // response rather than the card, so it is stripped from incoming writes and
+  // never persisted into the source file.
+  relationshipsWithheld?: true;
   // The result's error doc, when this serialization stands in for a card that
   // failed to render/index. Present => the live `item` cannot render, so a
   // consumer falls through to the host error component (the terminal rung of
@@ -159,14 +168,14 @@ export type CardResourceMeta = Meta & {
   // a client send it as the base its next write is computed against.
   //
   // Never persisted into the source file and stripped from incoming writes,
-  // like `realmInfo` / `realmURL` / `screenshots`.
+  // like `realmInfo` / `realmURL` / `captures`.
   version?: string;
-  // The instance's declared-screenshot captures, joined at serve time from
-  // the prerendered manifest (`prerendered_html.screenshots`) — never
+  // The instance's declared captures, joined at serve time from
+  // the prerendered manifest (`prerendered_html.captures`) — never
   // persisted into the index or the source file, and stripped from incoming
-  // writes like `realmInfo`/`realmURL`. The `screenshotURLs` getter on
+  // writes like `realmInfo`/`realmURL`. The `captureURLs` getter on
   // CardDef/FileDef reads this.
-  screenshots?: ScreenshotsMeta;
+  captures?: CapturesMeta;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
@@ -183,14 +192,17 @@ export type FileMetaResourceResourceMeta = Meta & {
   // See CardResourceMeta.sparseFields — a file-meta serialization can likewise
   // be field-limited.
   sparseFields?: string[];
+  // See CardResourceMeta.relationshipsWithheld — a file-meta search item is
+  // served without its relationships under the same declaration.
+  relationshipsWithheld?: true;
   // See CardResourceMeta.error — a file-meta serialization can likewise carry
   // the result's error doc when it failed to render.
   error?: ErrorEntry;
-  // See CardResourceMeta.screenshots. Stamped at serve time from the file
+  // See CardResourceMeta.captures. Stamped at serve time from the file
   // row's prerendered manifest — the file-meta GET and linked-file resources
   // join it exactly as a card+json GET joins an instance row's, so FileDef's
-  // `screenshotURLs` getter reads both kinds uniformly.
-  screenshots?: ScreenshotsMeta;
+  // `captureURLs` getter reads both kinds uniformly.
+  captures?: CapturesMeta;
 };
 
 // The single home for how a file's timestamps land in `meta`: the card key
@@ -407,6 +419,7 @@ export {
   isEntryResource,
   isHtmlResource,
   isSparseItemResource,
+  hasWithheldRelationships,
 } from './card-document-shape.ts';
 
 // The map/set key for a JSON:API `(type, id)` identity pair lives in its own

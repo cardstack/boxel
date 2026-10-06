@@ -84,7 +84,7 @@ import {
 } from './handlers/handle-webhook-commands.ts';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver.ts';
 import handleRunCommand from './handlers/handle-run-command.ts';
-import handleScreenshotCard from './handlers/handle-screenshot-card.ts';
+import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
@@ -92,13 +92,13 @@ export type CreateRoutesArgs = {
   serverURL: string;
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
-  // MediaCache object store; absent means the POST screenshot endpoint
+  // MediaCache object store; absent means the POST capture endpoint
   // captures without persisting (and returns no served URL).
   mediaCacheAdapter?: MediaCacheAdapter;
-  // Bounded sync-wait budget for the POST screenshot endpoint. Defaults to
-  // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
+  // Bounded sync-wait budget for the POST capture endpoint. Defaults to
+  // CAPTURE_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the
   // 503 + Retry-After path without holding real time.
-  screenshotSyncWaitMs?: number;
+  captureSyncWaitMs?: number;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
   grafanaSecret: string;
@@ -246,9 +246,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.all(
     '/_federated-search',
-    multiRealmAuthorization(args),
+    multiRealmAuthorization(args, { unreadableRealms: 'carry' }),
     handleSearch({
       reconciler: args.reconciler,
+      realmsRootPath: args.realmsRootPath,
       searchCache,
       dbAdapter: args.dbAdapter,
       virtualNetwork: args.virtualNetwork,
@@ -313,11 +314,18 @@ export function createRoutes(args: CreateRoutesArgs) {
       createPrerenderAuth,
     }),
   );
-  router.post(
-    '/_screenshot-card',
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-    handleScreenshotCard(args),
-  );
+  // Captures a card or a file in a realm (see handle-capture). The
+  // endpoint's former names answer through the same handler: `boxel-cli` is
+  // installed and pinned independently of this server, and a host tab can run
+  // an older build than the server it talks to, so released clients post
+  // there for as long as those versions are in use.
+  for (let path of ['/_capture', '/_capture-card', '/_screenshot-card']) {
+    router.post(
+      path,
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+      handleCapture(args),
+    );
+  }
   router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

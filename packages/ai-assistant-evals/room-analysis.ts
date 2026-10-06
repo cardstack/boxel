@@ -23,9 +23,8 @@ export interface RoomAnalysis {
   failedToolCalls: { name: string; reason: string }[];
   // Requests the host never answered: the signature of a stuck host.
   unansweredToolCalls: number;
-  patchBlocks: number;
-  gitStyleBlocks: number;
-  patchResults: { applied: number; failed: number };
+  // realm.fs writes in run-realm-code calls the host applied.
+  realmCodeWrites: number;
   filesWritten: string[];
   showCardIds: string[];
   lastBotBody: string;
@@ -33,9 +32,9 @@ export interface RoomAnalysis {
 
 const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
-const BOX_SEARCH_MARKER = '╔═══ SEARCH';
-const FENCE_HEADER =
-  /```[a-z]*\n(https?:\/\/[^\s]+|@[a-z0-9-]+\/[^\s]+)(?: \(new\))?\n╔═══ SEARCH/g;
+// Every write call counts; the path is recorded only when it is a literal.
+const REALM_CODE_WRITE =
+  /realm\.fs\.(?:writeText|replace)\(\s*(?:(['"`])([^'"`]+)\1)?/g;
 
 function parseData(content: Record<string, any>): Record<string, any> {
   let data = content.data;
@@ -80,9 +79,7 @@ export function analyzeRoom(
     toolCalls: {},
     failedToolCalls: [],
     unansweredToolCalls: 0,
-    patchBlocks: 0,
-    gitStyleBlocks: 0,
-    patchResults: { applied: 0, failed: 0 },
+    realmCodeWrites: 0,
     filesWritten: [],
     showCardIds: [],
     lastBotBody: '',
@@ -90,6 +87,9 @@ export function analyzeRoom(
 
   // Tool results are keyed by the request id they answer.
   let firstSkillReadTurn: number | undefined;
+  // Turns that read files: a read can add a skill's tools, and tools lead the
+  // cached prefix, so the turn after one is billed cold by design.
+  let readTurns = new Set<number>();
   // Per-turn usage, in turn order. The cache window's first turn depends on
   // which turn first read a skill, and that is not known until the last turn
   // has been seen, so the window accounting runs after this pass rather than
@@ -104,14 +104,6 @@ export function analyzeRoom(
           key: event.content['m.relates_to']?.key ?? 'unknown',
           reason: event.content.failureReason ?? '',
         });
-      }
-    }
-    if (event.type.startsWith('app.boxel.codePatchResult')) {
-      let key = event.content['m.relates_to']?.key;
-      if (key === 'applied') {
-        result.patchResults.applied++;
-      } else {
-        result.patchResults.failed++;
       }
     }
   }
@@ -144,6 +136,9 @@ export function analyzeRoom(
     ) {
       firstSkillReadTurn = result.turns;
     }
+    if (toolNames.includes('readRealmFile')) {
+      readTurns.add(result.turns);
+    }
     turnUsage.push({
       promptTokens: usage.promptTokens ?? 0,
       cachedTokens: usage.cachedTokens ?? 0,
@@ -157,11 +152,6 @@ export function analyzeRoom(
     if (body) {
       result.lastBotBody = body;
     }
-    result.patchBlocks += body.split(BOX_SEARCH_MARKER).length - 1;
-    result.gitStyleBlocks += body.split('<<<<<<< SEARCH').length - 1;
-    for (let match of body.matchAll(FENCE_HEADER)) {
-      result.filesWritten.push(match[1]);
-    }
 
     for (let request of content[TOOL_REQUESTS_KEY] ?? []) {
       let name: string = request.name ?? 'unknown';
@@ -171,6 +161,20 @@ export function analyzeRoom(
         result.unansweredToolCalls++;
       } else if (outcome.key !== 'applied') {
         result.failedToolCalls.push({ name, reason: outcome.reason });
+      }
+      if (name.startsWith('run-realm-code') && outcome?.key === 'applied') {
+        // The host nests top-level fields under `attributes` before it runs a
+        // call, so a model's flat `code` is a real write too.
+        let args = parseArguments(request.arguments);
+        let code = args.attributes?.code ?? args.code;
+        if (typeof code === 'string') {
+          for (let match of code.matchAll(REALM_CODE_WRITE)) {
+            result.realmCodeWrites++;
+            if (match[2]) {
+              result.filesWritten.push(match[2]);
+            }
+          }
+        }
       }
       if (name.startsWith('show-card')) {
         let args = parseArguments(request.arguments);
@@ -188,13 +192,19 @@ export function analyzeRoom(
   let windowStart =
     firstSkillReadTurn === undefined ? 2 : firstSkillReadTurn + 2;
   for (let [index, usage] of turnUsage.entries()) {
-    if (index + 1 < windowStart) {
+    if (index + 1 < windowStart || readTurns.has(index)) {
       continue;
     }
     result.cacheWindowTurns++;
     result.cacheWindowInputTokens += usage.promptTokens;
     result.cacheWindowCachedTokens += usage.cachedTokens;
-    if (usage.cachedTokens < 0.5 * usage.promptTokens) {
+    // A turn's prompt is the previous turn's prompt plus what came back since
+    // (a tool result, skill files just read). A working cache serves that
+    // earlier prompt; the new part is billed fresh by design. So a miss is a
+    // turn that reused less than half of the previous prompt — not one whose
+    // new part happens to be large.
+    let previousPrompt = turnUsage[index - 1]?.promptTokens ?? 0;
+    if (usage.cachedTokens < 0.5 * previousPrompt) {
       result.cacheMisses++;
     }
   }
