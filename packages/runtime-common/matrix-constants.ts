@@ -105,11 +105,6 @@ export function getToolDefinitions<T = unknown>(
 ): T[] | undefined {
   return content?.toolDefinitions ?? content?.commandDefinitions;
 }
-export const APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE =
-  'app.boxel.codePatchResult';
-export const APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE = 'app.boxel.codePatchResult';
-export const APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE =
-  'app.boxel.codePatchAnnotation';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
   'app.boxel.codePatchCorrectness';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =

@@ -252,6 +252,9 @@ export interface OperationDefinitionLookup {
   lookupDefinitionEntry(
     codeRef: ResolvedCodeRef,
   ): Promise<{ definition: Definition; types: string[] } | undefined>;
+  // Moves whenever a definition the lookup serves may have changed. See
+  // `DefinitionLookup.definitionGeneration`.
+  definitionGeneration?(): number;
 }
 
 // `RealmIndexQueryEngine`, narrowed to the reads an operation makes.
