@@ -1,6 +1,6 @@
 ---
 name: operations-diagnosis
-description: Diagnose card operations and operation-permission policies from the realm server's own telemetry — the `boxel:operations` JSON channel (`kind`-less execution lines for operations that run a program, plus `policy-decision`, `policy-search-scope`, `policy-compile`, `policy-snapshot-read` and `capability-check` records), the `realm:policy` warnings (compile issues, predicate faults, withheld policy-card visits), and the "Policy Decisions" Grafana dashboard (uid `boxel-policy-decisions`). Answers the operator's questions rather than a realm owner's: (1) why did this user get a 403, a 404 or a 500 from a realm that has a policy — go from the account's Matrix id to its decision lines and read `outcome` / `reason` / `rules` / `grants` / `coarseDeclined`; (2) "the policy denied" versus "the policy couldn't be evaluated" — a predicate that threw answers a caller who may read the realm 500 `policy-predicate-failed` but a caller who may not the same 404 a denial gets, so the `realm:policy` fault line is the only signal there, and an unloadable policy is 500 `internal-error` for everyone; (3) which realm's policy won't compile and why, by issue code and `rules[i].grants[j].where` path, including a withheld index visit of the policy card that reads as `policy-card-unloadable` until the card is visited again; (4) a realm's grants stopped working after an edit — which `policy-compile` lines show the new policy live, read against the moment the policy card's index visit committed (each task revalidates in the background on that index move, and within five seconds for a move it never hears about); (5) is the gate being reached more than it should be — gate reach, with capability checks excluded on `kind`; (6) which grant is matching everything — allows by grant, unconditional grants, distinct actors per grant, contributing search-lane grants; (7) a federated search silently missing a realm's rows (`meta.incomplete`, search-lane `failed`); (8) an operation built on `transform` refused, slow, or reading nothing — `outcome` / `code` / `totalMs` / read counts by tier / `missing[]`. Carries the traps: the `realm:policy` channel name is not on the line, no record carries a correlation id, a policy refusal never writes an execution line, a pending gate record is not a backlog, and the fault warning is rate-limited. For staging/prod this layers on `aws-access` and `tail-logs`; hand off to `policy-performance` for what a policy costs, to the boxel-skills `realm-policy-authoring` skill (explain / validate) for why one actor may or may not act on one card, to `realm-auth` for a 401 or 403 the gate never saw, and to `indexing-diagnostics` when the policy card itself won't index. Use when someone reports an unexpected 403/404/500 from a realm with a policy, a policy edit that "didn't take", a realm whose grants stopped working, a policy suspected of being wider than intended, a search missing rows, or a transform operation that refused or read stale values.
+description: Diagnose card operations and operation-permission policies from the realm server's own telemetry — the `boxel:operations` JSON channel (`kind`-less execution lines for operations that run a program, plus `policy-decision`, `policy-search-scope`, `policy-compile`, `policy-snapshot-read`, `capability-check` and `anonymous-request` records), the `realm:policy` warnings (compile issues, predicate faults, withheld policy-card visits), and the "Policy Decisions" Grafana dashboard (uid `boxel-policy-decisions`). Answers the operator's questions rather than a realm owner's: (1) why did this user get a 403, a 404 or a 500 from a realm that has a policy — go from the account's Matrix id to its decision lines and read `outcome` / `reason` / `rules` / `grants` / `coarseDeclined`; (2) "the policy denied" versus "the policy couldn't be evaluated" — a predicate that threw answers a caller who may read the realm 500 `policy-predicate-failed` but a caller who may not the same 404 a denial gets, so the `realm:policy` fault line is the only signal there, and an unloadable policy is 500 `internal-error` for everyone; (3) which realm's policy won't compile and why, by issue code and `rules[i].grants[j].where` path, including a withheld index visit of the policy card that reads as `policy-card-unloadable` until the card is visited again; (4) a realm's grants stopped working after an edit — which `policy-compile` lines show the new policy live, read against the moment the policy card's index visit committed (each task revalidates in the background on that index move, and within five seconds for a move it never hears about); (5) is the gate being reached more than it should be — gate reach, with capability checks excluded on `kind`; (6) which grant is matching everything — allows by grant, unconditional grants, distinct actors per grant, contributing search-lane grants; (7) a federated search silently missing a realm's rows (`meta.incomplete`, search-lane `failed`); (8) an operation built on `transform` refused, slow, or reading nothing — `outcome` / `code` / `totalMs` / read counts by tier / `missing[]`. Carries the traps: the `realm:policy` channel name is not on the line, no policy record carries a correlation id, a policy refusal never writes an execution line, a pending gate record is not a backlog, and the fault warning is rate-limited. For staging/prod this layers on `aws-access` and `tail-logs`; hand off to `policy-performance` for what a policy costs, to the boxel-skills `realm-policy-authoring` skill (explain / validate) for why one actor may or may not act on one card, to `realm-auth` for a 401 or 403 the gate never saw, and to `indexing-diagnostics` when the policy card itself won't index. Use when someone reports an unexpected 403/404/500 from a realm with a policy, a policy edit that "didn't take", a realm whose grants stopped working, a policy suspected of being wider than intended, a search missing rows, a transform operation that refused or read stale values, or a caller who isn't signed in being refused, rate-limited (429) or blocked — a public form whose submissions fail, a visitor told "Too many requests", spam to trace to its addresses and block.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -14,7 +14,7 @@ Each of those leaves a record, and this skill is about reading them to answer an
 
 Two places, and they are read differently.
 
-**`boxel:operations`** — one flat JSON object per line, `channel: "boxel:operations"`, the same `| json` convention as `boxel:client-perf` and `boxel:search-shape`. Every shape is defined in `card-operations/telemetry.ts`; its comments are the authority on what a field means. Six shapes share the channel, told apart by `kind`:
+**`boxel:operations`** — one flat JSON object per line, `channel: "boxel:operations"`, the same `| json` convention as `boxel:client-perf` and `boxel:search-shape`. Every shape is defined in `card-operations/telemetry.ts`; its comments are the authority on what a field means. Seven shapes share the channel, told apart by `kind`:
 
 | `kind`                 | one line per                                                                               | emitted from                             |
 | ---------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------- |
@@ -24,6 +24,7 @@ Two places, and they are read differently.
 | `policy-compile`       | read of a realm's policy card by its cache — a compile or a revalidation                   | `policy.ts`                              |
 | `policy-snapshot-read` | evaluation of a predicate annotated `snapshot: true` (judged against the index row)        | `gate.ts`                                |
 | `capability-check`     | successful `POST <realm>/_capabilities` request                                            | `Realm#handleCapabilities` in `realm.ts` |
+| `anonymous-request`    | request from a caller who isn't signed in that reached a realm's anonymous admission       | `anonymous-admission.ts`                 |
 
 **`realm:policy`** — plain-text warnings from the policy compiler and the gate, plus one from the search handler on `realm-server:search`. The logger name is **not printed on the line**: the realm server writes the bare message, so `|= "realm:policy"` matches nothing. Filter on the message text instead:
 
@@ -58,9 +59,9 @@ The gate's reason is the same whoever asked; what the caller is told is not. `re
 
 The bold cell is why a 404 report from a non-reader always warrants a look at the fault lines: a policy fault and a denial are indistinguishable on the wire there. An unloadable policy is a 500 for everyone; for a non-reader it is answered before the target resolves, so the decision line's `base` and `targetType` are null.
 
-### 3. No record carries a correlation id or the target URL
+### 3. No policy record carries a correlation id or the target URL
 
-`policy-decision` names `targetType`, never the card. The join from a user's request to its decision is `realmURL` + `actor` + the timestamp, cross-checked against `operation` and `route`. For the card itself, read the realm server's request lines (`--> <METHOD> <accept> <url>: <status> … dur=<n>ms`) at the same moment, or the fault line, which does name the card it judged. Execution lines do carry `target`.
+The exception is `anonymous-request`, which carries `correlationId` and its `route` (method and path). `policy-decision` names `targetType`, never the card. The join from a user's request to its decision is `realmURL` + `actor` + the timestamp, cross-checked against `operation` and `route`. For the card itself, read the realm server's request lines (`--> <METHOD> <accept> <url>: <status> … dur=<n>ms`) at the same moment, or the fault line, which does name the card it judged. Execution lines do carry `target`.
 
 ### 4. A policy refusal never writes an execution line
 
@@ -302,25 +303,110 @@ sum by (realmURL, grant, outcome, indexed) (count_over_time(<ops> | kind="policy
 
 A user admitted after they should have lost access, on a grant that shows up here, is the window doing what the annotation accepts; the fix is a predicate written against the stored source.
 
+## Callers who aren't signed in
+
+A grant with `anonymous: true` admits a caller who authenticated nobody; the governed realm's `realm.json` sets the limit (`anonymousRateLimit`, falling back to `BOXEL_ANONYMOUS_RATE_LIMIT`, `300/60`) and the blocklist (`anonymousBlocklist`), and a write is made as the user its grant's `actingUser` key names in the realm's `config`. This section is about reading what those callers leave behind.
+
+### The record
+
+An `anonymous-request` line for a request from a caller who isn't signed in that a realm's anonymous admission decided something about, per realm for a federated search: every refusal, block, rate limit and count failure, and every request that was counted. A request admitted but neither counted nor refused leaves no line: a `.json` redirect, a stylesheet, a capability check on a realm anyone may read, and a search no grant scoped. Fields (authority: `AnonymousRequestEvent` in `card-operations/telemetry.ts`):
+
+- `outcome`:
+  - `admitted` — a grant admitted it and it was counted; `count` is the window's count after it.
+  - `infra` — one of the platform's own egress addresses: admitted, never counted or blocked.
+  - `refused` — admitted to the route, but no grant admitted what it asked for; the caller got the 401, or, for a `HEAD`, the realm's 200 discovery answer.
+  - `blocked` — the realm refused the address before any grant was asked; see `blockReason`.
+  - `rate-limited` — the address had used up its budget; nothing ran.
+  - `unavailable` — the realm couldn't read or update the count, so it turned the caller away (503).
+- `blockReason` — `blocklist`, `ip-undetermined` (the realm server couldn't work out an address: more trusted hops configured than `X-Forwarded-For` entries, or an entry that isn't an address), `blocklist-invalid` (an entry in the realm's blocklist isn't an address or range, which closes the realm to every such caller).
+- `clientIP` (canonical, not reduced to its `/64`: an IPv4-mapped address reads as a dotted quad), `rateLimitKey` (what the budget is keyed on: the address, or an IPv6 caller's `/64`), `realmURL`, `operation` (what the route was admitted to, or `*` on `/_operations` and `_capabilities`, which run whatever the request names), `route` (`<METHOD> <path>`), `correlationId` (what the request carried in `x-boxel-logging-correlation-id`, which the host sends and a bot or a third-party page usually doesn't; join on `clientIP`, `route` and the timestamp when it is null).
+- `limit` (`requests`, `windowSeconds`, `from: realm|platform`; `| json` flattens these to `limit_requests`, `limit_windowSeconds`, `limit_from`), `retryAfterSeconds`, `cost` (when a request counted more than one unit: a capability check's pairs, a batch's entries).
+- `actingUsers` — for an admitted write, the users it was made as.
+- `actingUserFailures` — for a refused write, each grant key that named no one who may write the realm, with `key-missing`, `not-a-matrix-id` or `no-write`.
+
+Two plain-text warnings belong with it: `could not count a request to <realm> from a caller who isn't signed in, so it was turned away` (beside every `unavailable` record), and `<realm> could not say whether it admits a search from a caller who isn't signed in, so it admits none` (a federated search's admission that threw).
+
+### Traps
+
+- **A realm whose policy opens nothing to such callers records nothing.** Their 401 never reaches admission. No line is not a missing line.
+- **A realm anyone may read (`'*': ['read']`) records nothing for reads.** Its ACL admits the read; the policy, its limit and its blocklist never see it.
+- **The budget is the realm's and the address's, shared by every grant.** A visitor rate-limited on a search was spending the same budget as their reads and form posts. Realms never share one: a federated search records one line per realm, each with its own `count`.
+- **`refused` and `rate-limited` are not the same caller experience.** A refused caller saw the 401 a missing card gives; a rate-limited one saw 429 `rate-limited` with `Retry-After`. Neither did anything.
+- **The hop configuration shows up two ways.** `ip-undetermined` usually means `BOXEL_TRUSTED_PROXY_HOPS` is set higher than the proxies in front of the realm server. Many visitors sharing one `clientIP` that is the load balancer's address means it is unset: with no trusted hops the address is the socket peer.
+- **`blocklist-invalid` closes the whole realm** to every caller who isn't signed in until the realm's `realm.json` is fixed.
+- **Capability checks count, explains don't.** A page that asks `canInvoke` about many controls spends a unit per pair.
+- **A write's acting user is a real account.** Its index jobs run in that user's writer lane, and its reads wait for them. A realm that names a person who edits it sees their own edits slow down under visitor traffic.
+
+### Recipes
+
+```logql
+# outcomes over time, per realm
+sum by (realmURL, outcome) (count_over_time(<ops> | kind="anonymous-request" [5m]))
+
+# who is being rate-limited, and where
+topk(20, sum by (realmURL, rateLimitKey) (count_over_time(<ops> | kind="anonymous-request" | outcome="rate-limited" [1h])))
+
+# which addresses to consider blocking: refusals and admissions by address
+topk(20, sum by (realmURL, rateLimitKey, clientIP, outcome) (count_over_time(<ops> | kind="anonymous-request" | outcome=~"refused|admitted" [1h])))
+
+# one visitor's trail
+<ops> | kind="anonymous-request" | clientIP="198.51.100.7"
+
+# writes by acting user, and why writes were refused on their acting user;
+# `| json` skips arrays, so name the element to extract
+<ops> | kind="anonymous-request" | outcome="admitted" | json actingUser="actingUsers[0]" | actingUser!=""
+<ops> | kind="anonymous-request" | outcome="refused" | json failure="actingUserFailures[0].failure" | failure!=""
+```
+
+From a laptop, narrow on `anonymous-request` with `tail-logs.sh --filter 'anonymous-request'` and select in `jq` as in "Querying it".
+
+### Investigation: a public form says "Too many requests"
+
+1. Find the realm's `rate-limited` lines for the time; read `limit` and `from`. `from: platform` means the realm sets nothing and the platform default applies.
+2. Count `admitted` lines per `rateLimitKey` for that realm over one `windowSeconds`, since that is what the budget is keyed on (an IPv6 visitor's addresses within one `/64` share it). One address spending the budget alone is a burst or a bot; many visitors sharing one `clientIP` is the hop misconfiguration above.
+3. Check `cost`: a page asking a capability check about many controls, or a batch of many entries, spends more than one unit per request.
+4. The fix is the realm's: raise `anonymousRateLimit` in its `realm.json`, or block the address. Nothing in the policy card changes the limit.
+
+### Investigation: spam submissions — find the source and block it
+
+1. Admitted writes for the realm, grouped by `rateLimitKey` and `clientIP`: select on the acting user (`| json actingUser="actingUsers[0]" | actingUser!=""`) rather than on `operation`, which is `*` for a batch posted to `/_operations`. An IPv6 sender is counted by its `/64`, so block the `/64`.
+2. Add the addresses or ranges to the realm's `anonymousBlocklist`; the next request from them gets the 401 and a `blocked` line with `blockReason: blocklist`.
+3. Confirm no `blocklist-invalid` lines follow the edit: one malformed entry closes the realm to every visitor.
+
+### Investigation: a public form's submissions are refused
+
+1. Find the `refused` lines on the route. `actingUserFailures` names the cause when it is the acting user: `key-missing` (the realm's `config` has no such key), `not-a-matrix-id` (the value isn't a user id), `no-write` (the user lost write on the realm).
+2. With no `actingUserFailures`, no grant admitted the write: the grant doesn't opt in, its `where` doesn't hold for what was sent, or it reads `actor()` (which never admits such a caller). Hand off to explain with an empty `actor`, which judges exactly that.
+
+### Investigation: the public page stopped showing cards
+
+1. `refused` lines on `GET` routes mean the grants stopped admitting the reads; `blocked` lines mean the addresses are refused; no lines at all mean the realm's policy no longer opens `read` to such callers, or its policy pointer changed (see "a realm's grants stopped working after an edit").
+2. A federated search with `meta.incomplete` and `rate-limited` or `unavailable` lines for one realm left that realm's rows out on purpose.
+
 ## The dashboard
 
-**"Policy Decisions"**, uid `boxel-policy-decisions` (`packages/observability/grafanactl/resources/dashboards/boxel-status/policy-decisions.json`). `env` is a hidden constant per deployment, as on the other boards; the **Realm** textbox narrows every panel to realm URLs containing a substring. No panel counts `capability-check` or execution lines. Every query but one filters on one of the four policy kinds, and every one but the compile queries leaves out `hypothetical` records. The exception to both is query B of **Predicate error rate**: a plain `|= "a predicate in the policy of realm"` line filter on the fault warning, with no `kind` and no `hypothetical` filter, so it also counts throws under an explain or a capability check (trap 7).
+**"Policy Decisions"**, uid `boxel-policy-decisions` (`packages/observability/grafanactl/resources/dashboards/boxel-status/policy-decisions.json`). `env` is a hidden constant per deployment, as on the other boards; the **Realm** textbox narrows every panel to realm URLs containing a substring. No panel counts `capability-check` or execution lines. Every query but one filters on one of the four policy kinds or on `anonymous-request`, and every policy-kind query but the compile queries leaves out `hypothetical` records (an `anonymous-request` record is never hypothetical). The exception to both is query B of **Predicate error rate**: a plain `|= "a predicate in the policy of realm"` line filter on the fault warning, with no `kind` and no `hypothetical` filter, so it also counts throws under an explain or a capability check (trap 7).
 
-| row            | panel                                  | answers                                                                                                                           |
-| -------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Overview       | Decisions / Denials (5m)               | real decisions, and denials of any reason, in the last five minutes                                                               |
-|                | Predicate errors (5m)                  | `predicate-threw` decisions whatever the caller was told — the count a 500 tally misses                                           |
-|                | Uncompilable policies (5m)             | compiles that left a policy uncompilable                                                                                          |
-| Decisions      | Decisions by outcome                   | gate decisions by outcome (pending left out), beside search-lane outcomes                                                         |
-|                | Gate reach by realm                    | gate records by realm and `coarseDeclined`, plus search-scope records — the "should be zero" panel                                |
-|                | Denials by rule and grant              | denials by realm, operation, reason, `rules`, `grants`; query B adds searches scoped to nothing                                   |
-|                | Decisions by transport                 | which surface reached the gate                                                                                                    |
-| Faults         | Predicate error rate                   | A: `predicate-threw` decisions; B: the rate-limited fault warning, which also counts explain and capability-check throws (trap 7) |
-|                | Policies failing to compile, per realm | uncompilable compiles, beside `policy-unavailable` decisions                                                                      |
-| Search lane    | Search-lane outcomes                   | `scoped` / `none` / `failed` by transport                                                                                         |
-|                | Contributing grants                    | which grants composed filters into searches                                                                                       |
-| Snapshot reads | by grant / by outcome                  | the snapshot windows above                                                                                                        |
-| Performance    | durations, compiles, compile p95       | `policy-performance`'s territory                                                                                                  |
+| row               | panel                                  | answers                                                                                                                           |
+| ----------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Overview          | Decisions / Denials (5m)               | real decisions, and denials of any reason, in the last five minutes                                                               |
+|                   | Predicate errors (5m)                  | `predicate-threw` decisions whatever the caller was told — the count a 500 tally misses                                           |
+|                   | Uncompilable policies (5m)             | compiles that left a policy uncompilable                                                                                          |
+| Decisions         | Decisions by outcome                   | gate decisions by outcome (pending left out), beside search-lane outcomes                                                         |
+|                   | Gate reach by realm                    | gate records by realm and `coarseDeclined`, plus search-scope records — the "should be zero" panel                                |
+|                   | Denials by rule and grant              | denials by realm, operation, reason, `rules`, `grants`; query B adds searches scoped to nothing                                   |
+|                   | Decisions by transport                 | which surface reached the gate                                                                                                    |
+| Faults            | Predicate error rate                   | A: `predicate-threw` decisions; B: the rate-limited fault warning, which also counts explain and capability-check throws (trap 7) |
+|                   | Policies failing to compile, per realm | uncompilable compiles, beside `policy-unavailable` decisions                                                                      |
+| Search lane       | Search-lane outcomes                   | `scoped` / `none` / `failed` by transport                                                                                         |
+|                   | Contributing grants                    | which grants composed filters into searches                                                                                       |
+| Snapshot reads    | by grant / by outcome                  | the snapshot windows above                                                                                                        |
+| Performance       | durations, compiles, compile p95       | `policy-performance`'s territory                                                                                                  |
+| Anonymous callers | Anonymous outcomes                     | `anonymous-request` lines by realm and outcome                                                                                    |
+|                   | Rate-limited (5m) / Blocked (5m)       | stat counts of `rate-limited` and `blocked` lines                                                                                 |
+|                   | Top addresses by outcome               | the budget keys and addresses behind refusals, rate limits and admissions                                                         |
+|                   | Blocked by reason                      | `blockReason`, which tells a blocklist from a hop misconfiguration                                                                |
+|                   | Anonymous writes by acting user        | admitted writes by `actingUsers`, beside refused writes by `actingUserFailures`                                                   |
 
 ## When explain is the better tool
 
