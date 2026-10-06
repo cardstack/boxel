@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "fullName": "Ben Okafor",
+      "role": "Grade 4 teacher",
+      "matrixUserId": "@ben:school.example"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../school-code/staff-member",
+        "name": "StaffMember"
+      }
+    }
+  }
+}

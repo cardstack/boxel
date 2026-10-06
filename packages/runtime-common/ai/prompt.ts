@@ -297,6 +297,15 @@ function allCodePatchesHaveAResult(
   return indexes.size >= codePatchBlocks.length;
 }
 
+// A user's approval of a call ai-bot holds for approval. It is not the call's
+// outcome: the call stays unanswered — no turn starts, and the prompt shows
+// no result for it — until ai-bot publishes the real result.
+export function isApprovalResult(event: {
+  content?: { 'm.relates_to'?: { key?: string } };
+}): boolean {
+  return event.content?.['m.relates_to']?.key === 'approved';
+}
+
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command or code patch results, it should not respond yet.
   let lastEventExcludingResults = findLast(
@@ -334,6 +343,7 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
           isToolResultEvent(event) &&
           (isToolResultWithOutputMsgtype(event.content.msgtype) ||
             isToolResultWithNoOutputMsgtype(event.content.msgtype)) &&
+          !isApprovalResult(event) &&
           event.content.commandRequestId === toolRequest.id
         );
       });
@@ -1271,6 +1281,7 @@ async function toResultMessages(
           (toolResult) =>
             (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
               isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
+            !isApprovalResult(toolResult) &&
             toolResult.content.commandRequestId === toolRequest.id,
         );
         if (!toolResult) {

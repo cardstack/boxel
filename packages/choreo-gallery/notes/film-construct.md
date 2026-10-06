@@ -683,7 +683,7 @@ clip: {
 
 - **Every state is re-derived from the film time on every frame**
   (`resolveClip` in `clips.ts`, pure, unit-tested in
-  `test-app/tests/unit/film-clips-test.ts`): absent before `start`, active
+  `packages/choreo/tests/unit/film-clips-test.ts`): absent before `start`, active
   inside the window with its source time, then the end policy — removed,
   held on the last sample, or frozen. Nothing is discovered by playing
   from zero, so an exact film scrubs into the middle of a clip and finds

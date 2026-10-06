@@ -9,6 +9,7 @@ import * as CreateListingPRRequestToolModule from './bot-requests/create-listing
 import * as SendBotTriggerEventToolModule from './bot-requests/send-bot-trigger-event';
 import * as CanReadRealmToolModule from './can-read-realm';
 import * as CancelIndexingJobToolModule from './cancel-indexing-job';
+import * as CaptureToolModule from './capture';
 import * as CaptureCardToolModule from './capture-card';
 import * as CheckCorrectnessToolModule from './check-correctness';
 import * as CheckDomainAvailabilityToolModule from './check-domain-availability';
@@ -97,6 +98,7 @@ import * as UpdatePlaygroundSelectionToolModule from './update-playground-select
 import * as UpdateRoomSkillsToolModule from './update-room-skills';
 import * as CommandUtilsModule from './utils';
 import * as ValidateRealmToolModule from './validate-realm';
+import * as ViewVisuallyToolModule from './view-visually';
 import * as WriteBinaryFileToolModule from './write-binary-file';
 import * as WriteTextFileToolModule from './write-text-file';
 
@@ -413,7 +415,10 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     'generate-thumbnail',
     GenerateThumbnailToolModule,
   );
+  shimHostToolModule(virtualNetwork, 'capture', CaptureToolModule);
+  // An alias module name for the capture tool, which realm content imports.
   shimHostToolModule(virtualNetwork, 'capture-card', CaptureCardToolModule);
+  shimHostToolModule(virtualNetwork, 'view-visually', ViewVisuallyToolModule);
   shimHostToolModule(virtualNetwork, 'get-card', GetCardToolModule);
   shimHostToolModule(
     virtualNetwork,
@@ -502,7 +507,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   GenerateExampleCardsToolModule.default,
   GenerateReadmeSpecToolModule.default,
   GenerateThumbnailToolModule.default,
-  CaptureCardToolModule.default,
+  CaptureToolModule.default,
   GetAllRealmMetasToolModule.default,
   GetAvailableRealmIdentifiersToolModule.default,
   GetDefaultWritableRealmToolModule.default,
@@ -577,6 +582,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   UpdateRoomSkillsToolModule.default,
   UseAiAssistantToolModule.default,
   ValidateRealmToolModule.default,
+  ViewVisuallyToolModule.default,
   MigrateSkillToolModule.default,
   WriteBinaryFileToolModule.default,
   WriteTextFileToolModule.default,
