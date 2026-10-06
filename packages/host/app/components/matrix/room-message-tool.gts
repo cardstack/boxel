@@ -375,11 +375,8 @@ export default class RoomMessageTool extends Component<Signature> {
           </Alert>
         {{/if}}
         {{#if this.shouldDisplayResultCard}}
-          {{! The result card is a light surface inside the dark assistant panel.
-              A light theme boundary (as user messages use) sets --background and
-              --foreground together, so the header and body read as one seamless
-              light card and any embedded result keeps readable dark text —
-              overriding only --background would leave light text on white. }}
+          {{! Light scheme island in the dark assistant panel: the header and the
+              embedded result share one light surface and foreground. }}
           <CardContainer
             @displayBoundaries={{false}}
             class='tool-result-card-preview'
