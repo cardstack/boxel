@@ -634,6 +634,12 @@ async function decide(
     core.policy,
     notes ? notes.alongside(trace) : trace,
   );
+  // A caller who isn't signed in is admitted only by a grant that opts in to
+  // them. Every other grant was written for signed-in callers, and admitting
+  // anyone at all through one would widen it past what its author wrote.
+  if (scope.caller.kind === 'anonymous') {
+    matched = matched.filter(({ grant }) => grant.anonymous);
+  }
   if (matched.length === 0) {
     return refuse('no-grant');
   }
@@ -1392,6 +1398,13 @@ async function firstHolding(
     let where = candidate.grant.where;
     if (!where) {
       return candidate;
+    }
+    // A predicate that reads the caller never holds for a caller who has no
+    // actor, so it is not evaluated for one: asked, it would throw for want of
+    // an actor, and turn a grant that doesn't apply into a fault.
+    if (actor === undefined && where.readsActor) {
+      scope.trace?.evaluated(candidate.grant, 'did-not-hold');
+      continue;
     }
     stats.predicateEvaluations++;
     let started = performance.now();

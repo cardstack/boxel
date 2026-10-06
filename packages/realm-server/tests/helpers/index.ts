@@ -1733,6 +1733,7 @@ export async function runTestRealmServerWithRealms({
   liveSearchCache,
   linkShapePolicy,
   mediaCacheAdapter,
+  clientAddress,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1762,6 +1763,11 @@ export async function runTestRealmServerWithRealms({
   // The store every capture surface persists to: the worker's capture task,
   // each realm's `_screenshot/` route, and the server's `_screenshot-card`.
   mediaCacheAdapter?: MediaCacheAdapter;
+  // How the server works out a caller's address. Omit for none in front of
+  // it, which makes every supertest request the same loopback caller; a test
+  // that tells callers apart trusts one hop and names each in
+  // `X-Forwarded-For`.
+  clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1867,6 +1873,7 @@ export async function runTestRealmServerWithRealms({
     liveSearchCache,
     linkShapePolicy,
     mediaCacheAdapter,
+    ...(clientAddress ? { clientAddress } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
@@ -3440,6 +3447,27 @@ export const cardInfo = {
 // `name` under cardInfo.name (matching the CardDef slot); other fields land
 // on attributes directly. Mirrors the host helper so realm-server tests can
 // build the same shape without depending on host.
+// Waits, where needed, until the current anonymous rate-limit window has
+// enough of itself left for a test's requests to land in it together. The
+// limiter counts in fixed windows aligned to multiples of `windowSeconds`, so
+// two requests either side of a boundary are counted in different windows,
+// and a test that expects the second to be refused would see it admitted.
+export async function clearOfRateLimitWindowEdge(
+  limit: unknown,
+  marginSeconds = 30,
+): Promise<void> {
+  let windowSeconds = (limit as { windowSeconds?: unknown } | undefined)
+    ?.windowSeconds;
+  if (typeof windowSeconds !== 'number' || windowSeconds <= 0) {
+    return;
+  }
+  let margin = Math.min(marginSeconds, windowSeconds / 2);
+  let left = windowSeconds - ((Date.now() / 1000) % windowSeconds);
+  if (left < margin) {
+    await new Promise((resolve) => setTimeout(resolve, left * 1000 + 50));
+  }
+}
+
 export function realmConfigCardJSON(
   config: {
     name?: string;

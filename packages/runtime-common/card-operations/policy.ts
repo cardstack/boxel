@@ -258,6 +258,25 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // holds now.
 const NO_OPERATIONS: ReadonlySet<string> = new Set();
 
+// Whether any grant in a policy card's attributes, as stored, opts in to
+// callers who aren't signed in. A card where none does opens nothing to them
+// however it compiles, so this answers for it without compiling. One where
+// some grant does is compiled to find out what that grant opens.
+function opensAnythingToAnonymous(attributes: unknown): boolean {
+  let rules = (attributes as { rules?: unknown } | undefined)?.rules;
+  return (
+    Array.isArray(rules) &&
+    rules.some(
+      (rule) =>
+        Array.isArray(rule?.grants) &&
+        rule.grants.some(
+          (grant: unknown) =>
+            (grant as { anonymous?: unknown } | null)?.anonymous === true,
+        ),
+    )
+  );
+}
+
 export class RealmPolicyCache {
   #env: RealmPolicyCacheEnvironment;
   #current: Compilation | undefined;
@@ -281,7 +300,16 @@ export class RealmPolicyCache {
   #revisit: { card: string; settledAt?: number } | undefined;
   // How often compiling, revalidating and asking for a card's visit actually
   // happen, for tests that assert on it rather than on the result alone.
-  readonly stats = { compiles: 0, revalidations: 0, revisits: 0 };
+  readonly stats = { compiles: 0, revalidations: 0, revisits: 0, peeks: 0 };
+  // Whether the policy card, as the index last held it, opts any grant in to
+  // callers who aren't signed in (see `anonymousAdmission`). Kept as long as
+  // a compiled policy is, and dropped when the card's realm is indexed.
+  #anonymousPeek:
+    | { card: string; opensAnything: boolean; readAt: number }
+    | undefined;
+  // Bumped whenever an index moves, so a read that began before then doesn't
+  // keep what it read.
+  #peekGeneration = 0;
 
   constructor(env: RealmPolicyCacheEnvironment) {
     this.#env = env;
@@ -307,15 +335,35 @@ export class RealmPolicyCache {
     return await this.#refresh(card);
   }
 
-  // The operations the realm's policy opens to callers who aren't signed in,
-  // or none. Read from the compiled policy and nothing else, so answering such
-  // a caller loads no target and evaluates no predicate. A policy that can't
-  // be compiled opens nothing, which leaves that caller with the answer every
-  // other caller who isn't signed in gets, rather than a failure that would
-  // tell them the realm names a policy.
+  // Which operations this realm's policy lets unauthenticated callers run.
+  // Empty if none. Reading this is cheap: it never loads a card or runs a
+  // predicate. If the policy fails to compile, the answer is "none", so an
+  // unauthenticated caller gets the same 401 they'd get from any realm and
+  // can't tell that this one has a policy at all.
+  //
+  // Cost matters here because this runs for every request the ACL rejects
+  // for missing credentials, and the realm's own renders send such requests
+  // while it indexes. So before compiling anything, we read the raw policy
+  // card from the index and look for a grant with `anonymous: true`, and
+  // remember the answer as long as a compile is kept. If there isn't one, we
+  // return "none" without compiling. If a fresh compile is already cached, we
+  // skip that check and use it directly.
   async anonymousAdmission(): Promise<ReadonlySet<string>> {
     let compiled: CompiledRealmPolicy | undefined;
     try {
+      let card = await this.#env.policyCard();
+      if (!card) {
+        return NO_OPERATIONS;
+      }
+      let current = this.#current;
+      let warm =
+        current &&
+        current.compiled.card === card &&
+        !this.#stale &&
+        now() - this.#validatedAt < MAX_UNVALIDATED_MS;
+      if (!warm && !(await this.#opensAnythingToAnonymous(card))) {
+        return NO_OPERATIONS;
+      }
       compiled = await this.get();
     } catch (e: unknown) {
       log.warn(
@@ -330,8 +378,32 @@ export class RealmPolicyCache {
       : new Set(compiled.anonymous.operations);
   }
 
+  async #opensAnythingToAnonymous(card: string): Promise<boolean> {
+    let peek = this.#anonymousPeek;
+    if (
+      peek &&
+      peek.card === card &&
+      now() - peek.readAt < MAX_UNVALIDATED_MS
+    ) {
+      return peek.opensAnything;
+    }
+    this.stats.peeks++;
+    let readAt = now();
+    let generation = this.#peekGeneration;
+    let row = await this.#env.readCard(new URL(card));
+    let opensAnything = opensAnythingToAnonymous(row?.instance?.attributes);
+    if (generation === this.#peekGeneration) {
+      this.#anonymousPeek = { card, opensAnything, readAt };
+    }
+    return opensAnything;
+  }
+
   // The index of the realm at `realmURL` has moved.
   indexMoved(realmURL: string): void {
+    this.#peekGeneration++;
+    if (this.#anonymousPeek?.card.startsWith(realmURL)) {
+      this.#anonymousPeek = undefined;
+    }
     for (let refresh of this.#inFlight) {
       refresh.moved.push(realmURL);
     }
@@ -354,6 +426,8 @@ export class RealmPolicyCache {
   // Drops the cached compilation and zeroes the counts, so a test starts from
   // a cold cache.
   clear(): void {
+    this.#anonymousPeek = undefined;
+    this.#peekGeneration++;
     this.#current = undefined;
     this.#stale = false;
     this.#joinable = undefined;
@@ -361,6 +435,7 @@ export class RealmPolicyCache {
     this.stats.compiles = 0;
     this.stats.revalidations = 0;
     this.stats.revisits = 0;
+    this.stats.peeks = 0;
   }
 
   #refresh(card: string): Promise<CompiledRealmPolicy> {

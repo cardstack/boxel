@@ -308,6 +308,18 @@ export interface RouteOptions {
   // anyway. It records that the route was weighed and left to the ACL, so
   // that a route that says nothing about the policy is one nobody decided.
   aclOnly?: true;
+  // What the route would run for a caller who isn't signed in, where a grant
+  // could admit one: the operations any one of which the realm's policy has to
+  // open to such callers (empty for any at all), and whether a successful
+  // answer counts against the realm's anonymous rate limit. Only a route that
+  // consumes the ACL's outcome can take this. A route without it answers such
+  // a caller as the ACL does.
+  anonymous?: AnonymousRouteOptions;
+}
+
+export interface AnonymousRouteOptions {
+  operations: readonly string[];
+  charged: boolean;
 }
 
 export interface Route {
@@ -318,6 +330,7 @@ export interface Route {
   grantableBytes: boolean;
   operationalEndpoint: boolean;
   aclOnly: boolean;
+  anonymous?: AnonymousRouteOptions;
 }
 
 export interface RouteDescription {
@@ -423,6 +436,7 @@ export class Router {
       grantableBytes: opts.grantableBytes === true,
       operationalEndpoint: opts.operationalEndpoint === true,
       aclOnly: opts.aclOnly === true,
+      ...(opts.anonymous ? { anonymous: opts.anonymous } : {}),
     });
   }
 
