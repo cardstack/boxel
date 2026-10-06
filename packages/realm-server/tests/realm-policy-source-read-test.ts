@@ -726,6 +726,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'no policy load, no predicate, and no definition lookup',
       );
@@ -1350,6 +1352,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'no policy load, no predicate, and no definition lookup',
       );
@@ -1654,6 +1658,8 @@ module(basename(import.meta.filename), function (hooks) {
               pendingDischarges: 0,
               definitionLookups: 0,
               snapshotReads: 0,
+              ancestorDefinitionReads: 0,
+              lockedTypeReads: 0,
             },
             'none of it reaches the gate',
           );

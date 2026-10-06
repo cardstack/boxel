@@ -6,9 +6,6 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import type {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -350,17 +347,6 @@ export interface BotTriggerEvent extends BaseMatrixEvent {
   content: BotTriggerContent;
 }
 
-export interface CodePatchResultEvent extends BaseMatrixEvent {
-  type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
-  content: CodePatchResultContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
 export interface ToolDefinitionSchema {
   codeRef: {
     module: string;
@@ -430,25 +416,6 @@ export interface ToolResultWithNoOutputContent {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-  };
-}
-
-export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
-
-export interface CodePatchResultContent {
-  'm.relates_to': {
-    rel_type: typeof APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE;
-    key: CodePatchStatus;
-    event_id: string;
-  };
-  msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
-  codeBlockIndex: number;
-  failureReason?: string; // only present if status is 'failed'
-  data: {
-    context?: BoxelContext;
-    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
-    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-    lintIssues?: string[];
   };
 }
 
@@ -619,16 +586,12 @@ export interface StopGeneratingEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;
 }
 
-export type MatrixEventWithBoxelContext =
-  | CardMessageEvent
-  | ToolResultEvent
-  | CodePatchResultEvent;
+export type MatrixEventWithBoxelContext = CardMessageEvent | ToolResultEvent;
 
 export type MatrixEvent =
   | ActiveLLMEvent
   | BotTriggerEvent
   | CardMessageEvent
-  | CodePatchResultEvent
   | ToolResultEvent
   | DebugMessageEvent
   | InviteEvent
