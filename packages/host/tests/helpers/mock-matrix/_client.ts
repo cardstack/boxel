@@ -20,7 +20,6 @@ import {
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
@@ -210,8 +209,12 @@ export class MockClient implements ExtendedClient {
     return this.clientOpts.baseUrl;
   }
 
-  downloadContentAsBlob(_file: FileDef): Promise<Blob> {
-    throw new Error('Method not implemented.');
+  async downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob> {
+    let content = this.serverState.getContent(serializedFile.url);
+    if (!content) {
+      throw new Error(`content not found for ${serializedFile.url}`);
+    }
+    return new Blob([content], { type: serializedFile.contentType });
   }
 
   hashMessageWithSecret(_message: string): Promise<string> {
@@ -686,7 +689,6 @@ export class MockClient implements ExtendedClient {
       case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
-      case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
       case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:

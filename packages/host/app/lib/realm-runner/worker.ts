@@ -55,6 +55,7 @@ const BOOTSTRAP = `
       fs: Object.freeze({
         readText: (path) => call('fs.readText', [path]),
         exists: (path) => call('fs.exists', [path]),
+        list: (path) => call('fs.list', [path]),
         replace: (path, search, replacement) =>
           call('fs.replace', [path, search, replacement]),
         writeText: (path, content) => call('fs.writeText', [path, content]),
@@ -117,6 +118,7 @@ function describeScriptError(dumped: unknown, code: string): string {
 const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.readText',
   'fs.exists',
+  'fs.list',
   'fs.replace',
   'fs.writeText',
   'capture',

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { logger, rri } from '@cardstack/runtime-common';
+import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -49,6 +49,13 @@ type WriteFile = (
   expected: string | undefined,
 ) => Promise<string>;
 
+type DirectoryEntry = { name: string; kind: 'file' | 'directory' };
+
+// Lists one directory. `entries` is empty unless `status` is 200.
+type ListDirectory = (
+  url: string,
+) => Promise<{ status: number; entries: DirectoryEntry[] }>;
+
 // The host half of `realm.fs`: every call the script makes lands here, inside
 // one realm. Reads come from the realm on first use. A write saves the file
 // before the call returns, so a script that awaits each write sees each file
@@ -75,6 +82,7 @@ class RealmFsSession {
       url: string,
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
+    private listDirectory: ListDirectory,
     captureURL: CaptureURL,
   ) {
     this.captures = new RealmCaptures(captureURL);
@@ -125,6 +133,24 @@ class RealmFsSession {
       case 'fs.exists': {
         let url = this.resolve(method, args[0]);
         return (await this.load(url)) !== undefined;
+      }
+      // A listing reads no file content, so it does not count toward
+      // MAX_FILES.
+      case 'fs.list': {
+        let url = this.resolveDirectory(args[0]);
+        let listing = await this.listDirectory(url);
+        if (listing.status === 404) {
+          throw new Error(`Directory not found: ${url}`);
+        }
+        if (listing.status !== 200) {
+          throw new Error(`Unable to list ${url}: ${listing.status}`);
+        }
+        let dir = this.relative(url);
+        return listing.entries.map(({ name, kind }) => ({
+          name,
+          path: `${dir}${name}${kind === 'directory' ? '/' : ''}`,
+          kind,
+        }));
       }
       case 'fs.replace': {
         let url = this.resolve(method, args[0]);
@@ -211,6 +237,26 @@ class RealmFsSession {
       throw new Error(`Path is outside this realm: ${path}`);
     }
     return url;
+  }
+
+  // A directory path takes the same forms as a file path, with or without a
+  // trailing slash. No path, or an empty one, is the realm root; a missing
+  // argument arrives as null, since the call's arguments cross as JSON.
+  private resolveDirectory(path: unknown): string {
+    if (path === undefined || path === null || path === '') {
+      return this.realmURL;
+    }
+    if (typeof path === 'string' && /^[a-z][a-z0-9+.-]*:/i.test(path)) {
+      let url = new URL(path).href;
+      if ((url.endsWith('/') ? url : `${url}/`) === this.realmURL) {
+        return this.realmURL;
+      }
+    }
+    let url = this.resolve(
+      'fs.list',
+      typeof path === 'string' && path.endsWith('/') ? path.slice(0, -1) : path,
+    );
+    return url.endsWith('/') ? url : `${url}/`;
   }
 
   private relative(url: string): string {
@@ -310,6 +356,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.cardService.getSource(new URL(url)),
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
+      (url) => this.listDirectory(url),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
     );
@@ -463,6 +510,30 @@ export default class RunRealmCodeTool extends HostBaseTool<
       clientRequestId,
     });
     return content;
+  }
+
+  private async listDirectory(
+    url: string,
+  ): Promise<{ status: number; entries: DirectoryEntry[] }> {
+    let response = await this.network.authedFetch(url, {
+      headers: { Accept: SupportedMimeType.DirectoryListing },
+    });
+    if (!response.ok) {
+      return { status: response.status, entries: [] };
+    }
+    let { data } = (await response.json()) as {
+      data: {
+        relationships?: Record<string, { meta?: { kind?: string } }>;
+      };
+    };
+    // Directory names carry a trailing slash in the listing.
+    return {
+      status: 200,
+      entries: Object.entries(data.relationships ?? {}).map(([name, info]) => ({
+        name: name.replace(/\/$/, ''),
+        kind: info.meta?.kind === 'directory' ? 'directory' : 'file',
+      })),
+    };
   }
 
   // The sandbox resolves relative paths against the realm root, and file URLs

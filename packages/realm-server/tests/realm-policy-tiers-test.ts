@@ -441,7 +441,7 @@ module(basename(import.meta.filename), function () {
       [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[0].where' }],
     );
     assert.true(
-      /a card being created isn't in the index until it's saved/.test(
+      /a card being created isn't in the index until it's saved/i.test(
         tierIssues(policy)[0]?.message ?? '',
       ),
       tierIssues(policy)[0]?.message,
