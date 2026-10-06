@@ -676,6 +676,16 @@ module(basename(import.meta.filename), function () {
         filenameFromContentDisposition('attachment; filename=plain.pdf'),
         'plain.pdf',
       );
+      assert.strictEqual(
+        filenameFromContentDisposition(
+          captureContentDisposition({
+            attachment: true,
+            filename: `a; filename*=UTF-8''evil.pdf`,
+          }),
+        ),
+        `a; filename*=UTF-8''evil.pdf`,
+        'text inside the quoted name is never read as a parameter',
+      );
       assert.strictEqual(filenameFromContentDisposition('inline'), undefined);
       assert.strictEqual(filenameFromContentDisposition(null), undefined);
     });

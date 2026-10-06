@@ -207,27 +207,48 @@ export function captureDispositionURL(
   return target.href;
 }
 
+// One `; name=value` parameter of a header value, the value either a quoted
+// string (escapes intact) or a bare token. Sticky, so parameters are read in
+// sequence and text inside a quoted value is never taken for a parameter.
+const DISPOSITION_PARAM_RE =
+  /\s*;\s*([^\s=;]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/y;
+
 // The filename a `Content-Disposition` header names: the RFC 8187
-// `filename*` when present and decodable, else the quoted or bare
-// `filename`. Undefined when the header names none.
+// `filename*` when present and decodable, else `filename`. Undefined when the
+// header names none.
 export function filenameFromContentDisposition(
   header: string | null | undefined,
 ): string | undefined {
   if (!header) {
     return undefined;
   }
-  let extended = /filename\*\s*=\s*([^']*)'[^']*'([^;]+)/i.exec(header);
-  if (extended && extended[1].trim().toUpperCase() === 'UTF-8') {
-    try {
-      return decodeURIComponent(extended[2].trim());
-    } catch {
-      // Fall through to the plain parameter.
+  let params = new Map<string, string>();
+  DISPOSITION_PARAM_RE.lastIndex = header.indexOf(';');
+  if (DISPOSITION_PARAM_RE.lastIndex === -1) {
+    return undefined;
+  }
+  let match: RegExpExecArray | null;
+  while ((match = DISPOSITION_PARAM_RE.exec(header))) {
+    let name = match[1].toLowerCase();
+    if (!params.has(name)) {
+      params.set(
+        name,
+        match[2] !== undefined
+          ? match[2].replace(/\\(.)/g, '$1')
+          : match[3].trim(),
+      );
     }
   }
-  let quoted = /filename\s*=\s*"((?:[^"\\]|\\.)*)"/i.exec(header);
-  if (quoted) {
-    return quoted[1].replace(/\\(.)/g, '$1');
+  let extended = params.get('filename*');
+  if (extended) {
+    let [charset, , encoded] = extended.split("'");
+    if (charset?.toUpperCase() === 'UTF-8' && encoded !== undefined) {
+      try {
+        return decodeURIComponent(encoded);
+      } catch {
+        // Fall through to the plain parameter.
+      }
+    }
   }
-  let bare = /filename\s*=\s*([^;\s]+)/i.exec(header);
-  return bare ? bare[1] : undefined;
+  return params.get('filename') || undefined;
 }
