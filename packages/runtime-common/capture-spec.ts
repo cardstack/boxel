@@ -1259,8 +1259,8 @@ export function canonicalDeclaredCaptureString(
   // function that turns a payload into a ledger key — instead of being
   // silently dropped from the identity and aliasing two distinct captures onto
   // one hash. `useAsThumbnail`, `keyBy`, and `filename` steer consumption,
-  // invalidation, and serving, not pixels, so they are deliberate discards — a
-  // renamed card keeps its capture; `rest` must stay empty.
+  // invalidation, and serving, not pixels, so they are deliberate discards —
+  // a name change alone is never a new identity; `rest` must stay empty.
   let {
     width,
     height,

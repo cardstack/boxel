@@ -3135,8 +3135,10 @@ type PdfCaptureSpec = {
   // Defaults to the card's `cardTitle` (a FileDef's `name`, minus its
   // extension); a card whose title is still the untitled placeholder serves
   // under its instance id. A function that throws or returns an empty value
-  // falls back to that default. The name steers serving only — it is not part of the
-  // capture's identity, so a renamed card keeps its captured bytes.
+  // falls back to that default. The name steers serving only and is not part
+  // of the capture's identity: a change of name alone never changes the
+  // capture's URL, and a `keyBy: 'file-content'` slot whose bytes are
+  // unchanged carries its capture forward under the new name.
   filename?: string | CaptureFilenameFunction;
 } & CaptureSpecSource;
 
