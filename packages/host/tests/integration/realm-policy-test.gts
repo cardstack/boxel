@@ -756,6 +756,12 @@ module('Integration | realm policy', function (hooks) {
     await renderClassroomPolicy();
 
     assert.dom('[data-test-realm-policy-explain]').exists();
+    assert
+      .dom('[data-test-explain-actor-hint]')
+      .hasText(
+        "Leave this empty to check what someone who isn't signed in can do.",
+        'the person field says how to ask about someone who is not signed in',
+      );
     assert.dom('[data-test-explain-submit]').isDisabled('nothing to ask yet');
     await ask(TEACHER, `${testRealmURL}classrooms/room-204`, 'delete');
 

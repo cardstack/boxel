@@ -83,7 +83,9 @@ export interface CompiledRealmPolicy {
   // The operations some live grant opens to callers who aren't signed in.
   // Absent when no grant does, which is what lets a realm answer such a caller
   // without judging anything: it reads this, and nothing else of the policy.
-  anonymous?: { operations: string[] };
+  // Of those, the ones whose grants open a write, made as the user the grant's
+  // `actingUser` names.
+  anonymous?: { operations: string[]; writes: string[] };
 }
 
 export interface CompiledPolicyRule {
@@ -256,7 +258,19 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // commit moves the index of the realm holding the card, which reaches the
 // cache as any move does, and the refresh that follows compiles what the card
 // holds now.
-const NO_OPERATIONS: ReadonlySet<string> = new Set();
+// What a realm's policy opens to callers who aren't signed in: the operations
+// its live grants open to them, and which of those write, made as the user the
+// grant's `actingUser` names. A capability check asks about a write lane, which
+// a named write opens as much as a base one does.
+export interface AnonymousOpenings {
+  operations: ReadonlySet<string>;
+  writes: ReadonlySet<string>;
+}
+
+const NO_OPERATIONS: AnonymousOpenings = {
+  operations: new Set(),
+  writes: new Set(),
+};
 
 // Whether any grant in a policy card's attributes, as stored, opts in to
 // callers who aren't signed in. A card where none does opens nothing to them
@@ -348,7 +362,7 @@ export class RealmPolicyCache {
   // remember the answer as long as a compile is kept. If there isn't one, we
   // return "none" without compiling. If a fresh compile is already cached, we
   // skip that check and use it directly.
-  async anonymousAdmission(): Promise<ReadonlySet<string>> {
+  async anonymousAdmission(): Promise<AnonymousOpenings> {
     let compiled: CompiledRealmPolicy | undefined;
     try {
       let card = await this.#env.policyCard();
@@ -373,9 +387,13 @@ export class RealmPolicyCache {
       );
       return NO_OPERATIONS;
     }
-    return compiled?.uncompilable || !compiled?.anonymous
-      ? NO_OPERATIONS
-      : new Set(compiled.anonymous.operations);
+    if (compiled?.uncompilable || !compiled?.anonymous) {
+      return NO_OPERATIONS;
+    }
+    return {
+      operations: new Set(compiled.anonymous.operations),
+      writes: new Set(compiled.anonymous.writes),
+    };
   }
 
   async #opensAnythingToAnonymous(card: string): Promise<boolean> {
@@ -1237,8 +1255,12 @@ async function compileDocument(
       }
       let anonymous: CompiledOperationGrant['anonymous'];
       if (grant?.anonymous === true) {
+        // A named query runs a stored query on the search lane, where a
+        // grant's filter is all that scopes it, so it stays a contract for
+        // signed-in callers. Every other operation is one invocation of its
+        // base, and is eligible when its base is.
         if (
-          granted.base !== operation ||
+          (granted.base === 'query' && operation !== 'query') ||
           !ANONYMOUS_ELIGIBLE_OPERATIONS.includes(granted.base)
         ) {
           issue(
@@ -1248,26 +1270,38 @@ async function compileDocument(
               (name) => `\`${name}\``,
             ).join(
               ', ',
-            )} can, under their own names, and a custom operation or a named query can't`,
+            )} can, and an operation a type declares on one of them, but a named query can't`,
           );
           continue;
         }
-        // Used exactly as written, so the key the policy shows is the key the
-        // realm looks up. One that is blank names nothing.
-        let actingUserKey =
-          typeof grant.actingUser === 'string' && grant.actingUser.trim()
-            ? grant.actingUser
-            : undefined;
-        if (isWrite(granted.base) && !actingUserKey) {
+        // An operation whose program, template or output reads `actor()` is
+        // refused to a caller with no actor before it runs, so opening it to
+        // one would admit nobody. The grant still applies to signed-in
+        // callers.
+        if (granted.readsActor) {
           issue(
-            'anonymous-write-without-acting-user',
-            `${grantPath}.actingUser`,
-            `\`${operation}\` writes, so a grant opening it to callers who aren't signed in has to name the setting in the realm's \`realm.json\` whose value is the user those writes are made as, in \`actingUser\``,
+            'anonymous-grant-reads-actor',
+            `${grantPath}.operation`,
+            `this grant opens \`${operation}\` to callers who aren't signed in, but ${resolved.name}'s \`${operation}\` uses \`actor()\`, and a caller who isn't signed in has no actor, so it never admits one. It still applies to signed-in callers. To open it to anyone, declare an operation that doesn't read \`actor()\`; a write such a caller makes is made as the user \`actingUser\` names`,
           );
-          continue;
+        } else {
+          // Used exactly as written, so the key the policy shows is the key the
+          // realm looks up. One that is blank names nothing.
+          let actingUserKey =
+            typeof grant.actingUser === 'string' && grant.actingUser.trim()
+              ? grant.actingUser
+              : undefined;
+          if (isWrite(granted.base) && !actingUserKey) {
+            issue(
+              'anonymous-write-without-acting-user',
+              `${grantPath}.actingUser`,
+              `\`${operation}\` writes, so a grant opening it to callers who aren't signed in has to name the setting in the realm's \`realm.json\` whose value is the user those writes are made as, in \`actingUser\``,
+            );
+            continue;
+          }
+          anonymous =
+            isWrite(granted.base) && actingUserKey ? { actingUserKey } : {};
         }
-        anonymous =
-          isWrite(granted.base) && actingUserKey ? { actingUserKey } : {};
       }
       let where = readPredicate(grant?.where);
       if (where === 'malformed') {
@@ -1624,7 +1658,12 @@ function grantedOperation(
   definition: Definition,
   name: string,
 ):
-  | { base: BaseOperation; nonGrantable: boolean; invalid: boolean }
+  | {
+      base: BaseOperation;
+      nonGrantable: boolean;
+      invalid: boolean;
+      readsActor: boolean;
+    }
   | undefined {
   let declared = isDefinitionFreeBaseOperation(name)
     ? undefined
@@ -1634,10 +1673,16 @@ function grantedOperation(
       base: declared.base,
       nonGrantable: declared.nonGrantable === true,
       invalid: declared.invalid === true,
+      readsActor: declared.readsActor === true,
     };
   }
   return carriesBuiltIn(definition.type, name)
-    ? { base: name as BaseOperation, nonGrantable: false, invalid: false }
+    ? {
+        base: name as BaseOperation,
+        nonGrantable: false,
+        invalid: false,
+        readsActor: false,
+      }
     : undefined;
 }
 
@@ -1671,13 +1716,15 @@ function safeURL(
 }
 
 // The operations the policy's live grants open to callers who aren't signed
-// in, recorded on the compiled policy when there are any. A query grant that
-// has no search filter admits no search, and a grant whose `where` reads the
-// caller admits nobody without one, so neither opens anything.
+// in, and which of those write, recorded on the compiled policy when there
+// are any. A query grant that has no search filter admits no search, and a
+// grant whose `where` reads the caller admits nobody without one, so neither
+// opens anything.
 function anonymousSummary(
   rules: CompiledPolicyRule[],
 ): Pick<CompiledRealmPolicy, 'anonymous'> {
   let operations = new Set<string>();
+  let writes = new Set<string>();
   for (let rule of rules) {
     for (let grant of rule.grants) {
       if (
@@ -1686,11 +1733,19 @@ function anonymousSummary(
         (grant.operation !== 'query' || grant.filter)
       ) {
         operations.add(grant.operation);
+        if (grant.anonymous.actingUserKey) {
+          writes.add(grant.operation);
+        }
       }
     }
   }
   return operations.size > 0
-    ? { anonymous: { operations: [...operations].sort() } }
+    ? {
+        anonymous: {
+          operations: [...operations].sort(),
+          writes: [...writes].sort(),
+        },
+      }
     : {};
 }
 

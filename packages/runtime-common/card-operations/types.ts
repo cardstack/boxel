@@ -551,25 +551,26 @@ export type PolicyIssueCode =
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
   | 'render-reaches-ungranted-type'
   // A grant that opts in to admitting callers who aren't signed in on an
-  // operation that isn't one of `ANONYMOUS_ELIGIBLE_OPERATIONS` invoked under
-  // its own name: a custom operation or a named query. A type's own
-  // declaration under a base operation's name is that operation, and is
-  // eligible. The grant is left out.
+  // operation whose base isn't one of `ANONYMOUS_ELIGIBLE_OPERATIONS`, or on a
+  // named query. An operation a type declares on an eligible base, under its
+  // own name or a base operation's, is eligible. The grant is left out.
   | 'anonymous-not-base-operation'
   // A grant that opts in to admitting callers who aren't signed in on a write,
   // without naming the `realm.json` setting that says which user the write is
   // made as. The grant is left out.
   | 'anonymous-write-without-acting-user'
   // A grant that opts in to admitting callers who aren't signed in, whose
-  // `where` reads `actor()`. The realm doesn't evaluate such a `where` for a
-  // caller with no actor, so the grant never admits one, whatever else its
-  // `where` says. It is kept for signed-in callers.
+  // `where` reads `actor()`, or whose operation's program, template or output
+  // does. The realm evaluates neither for a caller with no actor, so the grant
+  // never admits one. It is kept for signed-in callers.
   | 'anonymous-grant-reads-actor';
 
-// The operations a grant may open to callers who aren't signed in: the
-// grantable base operations, invoked under their own names. A custom operation
-// or a named query is a contract its author wrote for signed-in callers, and
-// stays one.
+// The base operations a grant may open to callers who aren't signed in, under
+// their own names or through an operation a type declares on one of them. Such
+// an operation is one invocation of its base, run with no actor, and a write
+// it makes is made as the user the grant's `actingUser` names. A named query
+// is the exception: it runs a stored query on the search lane, and stays a
+// contract for signed-in callers.
 export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
   'read',
   'readSource',
@@ -1136,6 +1137,10 @@ export type PolicyExplanationReason =
   // caller, so the invocation is answered with a 401 before anything about
   // the target is read.
   | 'actor-required'
+  // A grant opens the operation to a caller who isn't signed in, but the
+  // operation, as the target's type declares it, reads `actor()`, which such
+  // a caller has none of, so the grant doesn't apply to them.
+  | 'reads-actor'
   // The realm names a policy it cannot load.
   | 'policy-unloadable';
 

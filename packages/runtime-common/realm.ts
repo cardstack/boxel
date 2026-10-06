@@ -379,6 +379,7 @@ import {
   noteRealmIndexMoved,
   RealmPolicyCache,
   realmPolicyRef,
+  type AnonymousOpenings,
   type CompiledRealmPolicy,
   type PolicyCompileEnvironment,
 } from './card-operations/policy.ts';
@@ -2392,10 +2393,10 @@ interface RequestDispatch {
   // any other read.
   answersWithoutCredentials?: boolean;
   // What the dispatch would run for a caller who isn't signed in, where a
-  // grant could admit one: the operations, any one of which the realm's
-  // policy has to open to such callers for it to admit them here (empty
-  // means any at all), and how it counts against the realm's anonymous rate
-  // limit. A dispatch without it never admits a caller who isn't signed in.
+  // grant could admit one: what the realm's policy has to open to such
+  // callers for it to admit them here, and how it counts against the realm's
+  // anonymous rate limit (see `AnonymousDispatch`). A dispatch without it
+  // never admits a caller who isn't signed in.
   anonymous?: AnonymousDispatch;
   handle: () => Promise<ResponseWithNodeStream>;
 }
@@ -16011,7 +16012,7 @@ export class Realm {
   // as `RealmPolicyCache.anonymousAdmission()` reads them: empty for a realm
   // that names no policy, and for one whose policy opens none or won't
   // compile.
-  async getAnonymousAdmission(): Promise<ReadonlySet<string>> {
+  async getAnonymousAdmission(): Promise<AnonymousOpenings> {
     return await this.#policyCache.anonymousAdmission();
   }
 

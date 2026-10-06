@@ -655,6 +655,14 @@ async function decide(
   // anyone at all through one would widen it past what its author wrote.
   if (scope.caller.kind === 'anonymous') {
     matched = matched.filter(({ grant }) => grant.anonymous);
+    // An operation whose program, template or output reads `actor()` has no
+    // actor to read for such a caller, and is refused before it runs, so a
+    // grant that opens it to one admits nobody. The definition is the one the
+    // target's own type resolves, which may be a subtype's redeclaration of
+    // what a grant on its parent opened.
+    if (matched.length > 0 && definition.readsActor) {
+      return refuse('reads-actor');
+    }
     // Such a caller's write is made as the user its grant names, so a grant
     // whose acting user doesn't resolve to one who may write the realm admits
     // nothing.
