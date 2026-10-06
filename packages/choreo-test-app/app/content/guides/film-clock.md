@@ -7,7 +7,7 @@
 Install the transport in the application that owns the scene.
 
 ```sh title="Terminal"
-pnpm add choreo-player
+pnpm add @cardstack/choreo-player
 ```
 
 The player needs a function that returns the runs it controls. This function is read again for each operation, which allows a new render pass to replace a run.

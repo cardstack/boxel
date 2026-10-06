@@ -322,7 +322,7 @@ import {
 `choreo-player` is a dependency-free, headless transport for clocking public Choreo runs from outside — a frame-by-frame video renderer, parallel capture workers, a custom scrub surface. It owns runs you hand it (never before an external clock has actually arrived — [docs/demo-recording.md](docs/demo-recording.md) is the field guide for keeping a demo correct both interactively and under capture), and its run contract is structural and five members small:
 
 ```ts
-import { createChoreoPlayer } from 'choreo-player';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 
 const player = createChoreoPlayer({
   duration: 12,
