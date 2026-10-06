@@ -2439,6 +2439,9 @@ export async function captureDeclared(
         outputType,
         keyBy: resolved.keyBy,
         ...(payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
+        ...(payload.filename !== undefined
+          ? { filename: payload.filename }
+          : {}),
         carriedForward: true,
       });
       continue;
@@ -2471,6 +2474,9 @@ export async function captureDeclared(
       outputType: resolved.outputType,
       keyBy: resolved.keyBy,
       ...(resolved.payload.useAsThumbnail ? { useAsThumbnail: true } : {}),
+      ...(resolved.payload.filename !== undefined
+        ? { filename: resolved.payload.filename }
+        : {}),
       base64: item.base64,
       captureMs,
     });

@@ -30,8 +30,15 @@ import {
   asExpressions,
   canonicalCaptureIdentityQuery,
   canonicalCaptureIdentityString,
+  captureContentDisposition,
+  captureDispositionURL,
   captureSpecHash,
   checkPdfCaptureBounds,
+  contentDispositionFor,
+  declaredCaptureSpecHash,
+  filenameFromContentDisposition,
+  sanitizeCaptureFilename,
+  takeCaptureDispositionParams,
   countPdfPages,
   findMediaCacheEntry,
   pdfFilenameFor,
@@ -569,6 +576,204 @@ module(basename(import.meta.filename), function () {
         pdfFilenameFor('http://realm.test/demo/Meeting%20Notes'),
         'Meeting-20Notes.pdf',
         'quoted-string-unsafe characters are collapsed',
+      );
+    });
+
+    test('sanitizeCaptureFilename reduces a requested name to one safe component', function (assert) {
+      assert.strictEqual(
+        sanitizeCaptureFilename('Q3 Statement', 'pdf'),
+        'Q3 Statement.pdf',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('Q3 Statement.PDF', 'pdf'),
+        'Q3 Statement.pdf',
+        'an existing extension is not doubled, whatever its case',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('a\r\nSet-Cookie: x=1', 'pdf'),
+        'a Set-Cookie: x=1.pdf',
+        'CR/LF never survive into a header value',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('../../etc/passwd', 'pdf'),
+        '-..-etc-passwd.pdf',
+        'path separators become dashes and leading dots are dropped',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('Relevé de compte', 'pdf'),
+        'Relevé de compte.pdf',
+        'non-ASCII survives',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('x'.repeat(500), 'pdf'),
+        `${'x'.repeat(120)}.pdf`,
+        'the stem is capped',
+      );
+      assert.strictEqual(sanitizeCaptureFilename('  \n ', 'pdf'), undefined);
+      assert.strictEqual(sanitizeCaptureFilename('.pdf', 'pdf'), undefined);
+    });
+
+    test('captureContentDisposition sends an ASCII fallback and an exact UTF-8 name when they differ', function (assert) {
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: false,
+          filename: 'Q3 Statement.pdf',
+        }),
+        'inline; filename="Q3 Statement.pdf"',
+        'a plain ASCII name needs no filename*',
+      );
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: true,
+          filename: 'Relevé — Q3.pdf',
+        }),
+        `attachment; filename="Releve _ Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20%E2%80%94%20Q3.pdf`,
+      );
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: false,
+          filename: `Bob's "100%" (final).pdf`,
+        }),
+        `inline; filename="Bob's _100__ (final).pdf"; filename*=UTF-8''Bob%27s%20%22100%25%22%20%28final%29.pdf`,
+        'quotes, backslashes and percent signs stay out of the quoted string',
+      );
+    });
+
+    test('filenameFromContentDisposition reads back what captureContentDisposition writes', function (assert) {
+      for (let filename of [
+        'Q3 Statement.pdf',
+        'Relevé — Q3.pdf',
+        `Bob's "100%" (final).pdf`,
+        '報告書.pdf',
+      ]) {
+        assert.strictEqual(
+          filenameFromContentDisposition(
+            captureContentDisposition({ attachment: true, filename }),
+          ),
+          filename,
+        );
+      }
+      assert.strictEqual(
+        filenameFromContentDisposition('attachment; filename=plain.pdf'),
+        'plain.pdf',
+      );
+      assert.strictEqual(filenameFromContentDisposition('inline'), undefined);
+      assert.strictEqual(filenameFromContentDisposition(null), undefined);
+    });
+
+    test('takeCaptureDispositionParams removes the disposition params and reads them', function (assert) {
+      let searchParams = params('name=statement&download&filename=Q3');
+      let parsed = takeCaptureDispositionParams(searchParams);
+      assert.deepEqual(parsed, {
+        disposition: { attachment: true, filename: 'Q3' },
+      });
+      assert.strictEqual(
+        searchParams.toString(),
+        'name=statement',
+        'only the addressing remains',
+      );
+
+      assert.deepEqual(takeCaptureDispositionParams(params('download=0')), {
+        disposition: { attachment: false },
+      });
+      assert.deepEqual(takeCaptureDispositionParams(params('type=pdf')), {
+        disposition: { attachment: false },
+      });
+      let bad = takeCaptureDispositionParams(params('download=yes'));
+      assert.deepEqual(bad, {
+        error: {
+          field: 'download',
+          message: 'download must be "1", "true", "0", or "false"',
+        },
+      });
+      let repeated = takeCaptureDispositionParams(
+        params('filename=a&filename=b'),
+      );
+      assert.deepEqual(repeated, {
+        error: {
+          field: 'filename',
+          message: 'filename may only be given once',
+        },
+      });
+    });
+
+    test('captureDispositionURL sets the disposition params, replacing any already present', function (assert) {
+      assert.strictEqual(
+        captureDispositionURL(
+          'http://realm.test/_capture/card-1?name=statement&filename=old',
+          { attachment: true, filename: ' Q3 Statement ' },
+        ),
+        'http://realm.test/_capture/card-1?name=statement&download=1&filename=Q3+Statement',
+      );
+      assert.strictEqual(
+        captureDispositionURL(
+          'http://realm.test/_capture/card-1?type=pdf&download=1',
+          { attachment: false, filename: '' },
+        ),
+        'http://realm.test/_capture/card-1?type=pdf',
+      );
+    });
+
+    test('contentDispositionFor prefers the request, then the declaration, then the source URL', function (assert) {
+      let pdf = {
+        contentType: 'application/pdf',
+        sourceURL: 'http://realm.test/demo/Statement/4884f71e',
+      };
+      assert.strictEqual(
+        contentDispositionFor({ entry: pdf }),
+        'inline; filename="4884f71e.pdf"',
+      );
+      assert.strictEqual(
+        contentDispositionFor({ entry: pdf, declaredFilename: 'Acme Q3' }),
+        'inline; filename="Acme Q3.pdf"',
+      );
+      assert.strictEqual(
+        contentDispositionFor({
+          entry: pdf,
+          declaredFilename: 'Acme Q3',
+          disposition: { attachment: true, filename: 'Mine' },
+        }),
+        'attachment; filename="Mine.pdf"',
+      );
+      assert.strictEqual(
+        contentDispositionFor({
+          entry: pdf,
+          declaredFilename: 'Acme Q3',
+          disposition: { attachment: false, filename: '\n' },
+        }),
+        'inline; filename="Acme Q3.pdf"',
+        'a requested name that sanitizes to nothing falls through',
+      );
+
+      let png = {
+        contentType: 'image/png',
+        sourceURL: 'http://realm.test/demo/Statement/4884f71e',
+      };
+      assert.strictEqual(
+        contentDispositionFor({ entry: png }),
+        undefined,
+        'an image carries no disposition unless asked',
+      );
+      assert.strictEqual(
+        contentDispositionFor({
+          entry: png,
+          disposition: { attachment: true },
+        }),
+        'attachment; filename="4884f71e.png"',
+      );
+    });
+
+    test('a declared filename is not part of the capture identity', async function (assert) {
+      assert.strictEqual(
+        await declaredCaptureSpecHash('statement', {
+          format: 'isolated',
+          type: 'pdf',
+          filename: 'Acme Q3',
+        }),
+        await declaredCaptureSpecHash('statement', {
+          format: 'isolated',
+          type: 'pdf',
+        }),
       );
     });
 
@@ -1591,6 +1796,194 @@ module(basename(import.meta.filename), function () {
         revalidated.status,
         304,
         'an If-None-Match echo answers as a bodyless 304',
+      );
+    });
+
+    test('a declared pdf serves under its manifest filename, and the request can ask for a download or a different name', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+        sourceGeneration: 1,
+        bytes: PDF_BYTES,
+        contentType: 'application/pdf',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        statement: {
+          specHash: 'declared-statement-spec',
+          objectKey: entry.objectKey,
+          contentType: 'application/pdf',
+          pageCount: 2,
+          byteSize: PDF_BYTES.byteLength,
+          filename: 'Relevé Q3',
+        },
+      });
+
+      let inline = await get('_capture/card-1?name=statement');
+      assert.strictEqual(inline.status, 200);
+      assert.strictEqual(
+        inline.headers.get('content-disposition'),
+        `inline; filename="Releve Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20Q3.pdf`,
+        'the manifest filename names the document',
+      );
+
+      let download = await get('_capture/card-1?name=statement&download=1');
+      assert.strictEqual(download.status, 200);
+      assert.strictEqual(
+        download.headers.get('content-disposition'),
+        `attachment; filename="Releve Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20Q3.pdf`,
+      );
+
+      let renamed = await get(
+        '_capture/card-1?name=statement&download&filename=My%20Statement',
+      );
+      assert.strictEqual(renamed.status, 200);
+      assert.strictEqual(
+        renamed.headers.get('content-disposition'),
+        'attachment; filename="My Statement.pdf"',
+        'the request filename overrides the declared one',
+      );
+      assert.strictEqual(
+        renamed.headers.get('etag'),
+        `"${entry.objectKey}"`,
+        'the same object serves whatever the disposition',
+      );
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(renamed.nodeStream!))],
+        [...PDF_BYTES],
+      );
+      assert.strictEqual(captureCalls, 0, 'disposition never triggers capture');
+    });
+
+    test('a declared pdf whose manifest records no filename serves under the source URL segment', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+        sourceGeneration: 1,
+        bytes: PDF_BYTES,
+        contentType: 'application/pdf',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        statement: {
+          specHash: 'declared-statement-spec',
+          objectKey: entry.objectKey,
+          contentType: 'application/pdf',
+        },
+      });
+
+      let response = await get('_capture/card-1?name=statement');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        response.headers.get('content-disposition'),
+        'inline; filename="card-1.pdf"',
+      );
+    });
+
+    test('a declared image downloads only when asked, under its content type extension', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: entry.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      let plain = await get('_capture/card-1?name=hero');
+      assert.strictEqual(plain.headers.get('content-disposition'), null);
+
+      let download = await get('_capture/card-1?name=hero&download=true');
+      assert.strictEqual(
+        download.headers.get('content-disposition'),
+        'attachment; filename="card-1.png"',
+      );
+    });
+
+    test('a pdf GET honors the disposition params on the capture miss and on the ledger hit', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let rendered = await get(
+        '_capture/card-1?type=pdf&download=1&filename=Q3%20Statement',
+      );
+      assert.strictEqual(rendered.status, 200);
+      assert.strictEqual(
+        rendered.headers.get('content-disposition'),
+        'attachment; filename="Q3 Statement.pdf"',
+      );
+      assert.strictEqual(captureCalls, 1);
+
+      let hit = await get('_capture/card-1?type=pdf&filename=Other');
+      assert.strictEqual(hit.status, 200);
+      assert.strictEqual(
+        hit.headers.get('content-disposition'),
+        'inline; filename="Other.pdf"',
+      );
+      assert.strictEqual(
+        captureCalls,
+        1,
+        'the disposition params are not part of the capture identity',
+      );
+    });
+
+    test('disposition parameter errors are 400s naming the param', async function (assert) {
+      await seedInstanceRow('card-1');
+
+      let badDownload = await get('_capture/card-1?name=hero&download=maybe');
+      assert.strictEqual(badDownload.status, 400);
+      assert.true((await badDownload.text()).includes('download must be'));
+
+      let repeated = await get(
+        '_capture/card-1?type=pdf&filename=a&filename=b',
+      );
+      assert.strictEqual(repeated.status, 400);
+      assert.true(
+        (await repeated.text()).includes('filename may only be given once'),
+      );
+
+      let mixed = await get(
+        '_capture/card-1?name=hero&download=1&format=embedded',
+      );
+      assert.strictEqual(mixed.status, 400);
+      assert.true(
+        (await mixed.text()).includes('name cannot be combined'),
+        'only the disposition params are exempt from name exclusivity',
       );
     });
 

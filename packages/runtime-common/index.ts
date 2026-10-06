@@ -1449,6 +1449,10 @@ export type DeclaredCaptureResult = {
   outputType: CaptureOutputType;
   keyBy: 'generation' | 'file-content';
   useAsThumbnail?: boolean;
+  // The name a pdf slot's document is saved under, as the roster resolved it
+  // against this render's instance. Rides fresh and carried-forward results
+  // alike, so a carried-forward entry still follows a rename.
+  filename?: string;
   base64?: string;
   carriedForward?: boolean;
   // Wall-clock of the render + capture that produced this slot's bytes.
@@ -1875,6 +1879,7 @@ export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
 export * from './capture-perf.ts';
 export * from './capture-spec.ts';
+export * from './capture-disposition.ts';
 export * from './capture-url-token.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';

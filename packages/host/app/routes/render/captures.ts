@@ -46,9 +46,12 @@ export default class RenderCapturesRoute extends Route<Model> {
       return { roster: {} };
     }
     let Klass = getClass(instance);
+    // The instance resolves each pdf slot's save-as filename, which can read
+    // the instance's own fields.
     return {
       roster: api.serializeDeclaredCaptures(
         Klass as typeof CardDef,
+        instance,
       ) as DeclaredCaptureRoster,
     };
   }
