@@ -200,7 +200,7 @@ skips the autofix and is what lets trivial lint errors waste a CI run.
 
 ### Published-package commit prefixes
 
-Two packages publish to npm — `packages/boxel-cli` and `packages/bxl` — and a PR touching either must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per package (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`) enforces it.
+Four packages publish to npm — `packages/boxel-cli`, `packages/bxl`, `packages/glimmer-motion` and `packages/choreo` — and a PR touching any of them must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per flow (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`, `.github/workflows/glimmer-motion-choreo-pr-title.yml`) enforces it. glimmer-motion and choreo are one flow: they release in lockstep, so one bump from the title applies to both, and a change to either publishes both.
 
 | Prefix                                                     | Bump level (per touched surface) |
 | ---------------------------------------------------------- | -------------------------------- |
@@ -209,7 +209,7 @@ Two packages publish to npm — `packages/boxel-cli` and `packages/bxl` — and 
 | `fix:` / `perf:` / `refactor:`                             | patch                            |
 | `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none                             |
 
-Scopes are allowed: `feat(profile): …`. One title covers both packages when a PR touches both; each decides its own bump from it. Every other package in the monorepo is unaffected — a PR whose diff touches neither published package takes a plain descriptive title with no prefix.
+Scopes are allowed: `feat(profile): …`. One title covers every published package a PR touches; each flow decides its own bump from it. Every other package in the monorepo is unaffected — a PR whose diff touches no published package takes a plain descriptive title with no prefix.
 
 A bumpable prefix is necessary but not sufficient: each flow also asks whether the merge changed anything its tarball ships, so a `fix:` touching only tests or CI config publishes nothing.
 
