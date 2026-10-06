@@ -12,7 +12,11 @@
     "gesture",
     "drag"
   ],
-  "repository": "https://github.com/cardstack/choreo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/glimmer-motion"
+  },
   "license": "MIT",
   "author": "Cardstack",
   "exports": {
@@ -70,6 +74,7 @@
     "addon-main.cjs",
     "declarations",
     "dist",
+    "CHANGELOG.md",
     "VENDORED.md"
   ],
   "scripts": {
@@ -91,6 +96,7 @@
     "realm:stage": "node scripts/build-realm-bundle.mjs --no-mirror",
     "start": "rollup --config --watch",
     "test": "vite build --mode=development --out-dir dist-tests && testem --file testem.cjs ci --port 0",
+    "test:release": "node --test scripts/release/release.test.ts",
     "start:test": "vite dev --open /tests/"
   },
   "dependencies": {
@@ -118,6 +124,7 @@
     "@glint/template": "catalog:",
     "@rollup/plugin-babel": "catalog:",
     "@types/qunit": "catalog:",
+    "@types/semver": "^7.7.0",
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
     "ember-modifier": "^4.3.0",
@@ -135,6 +142,7 @@
     "qunit": "catalog:",
     "qunit-dom": "catalog:",
     "rollup": "catalog:",
+    "semver": "^7.7.0",
     "testem": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
