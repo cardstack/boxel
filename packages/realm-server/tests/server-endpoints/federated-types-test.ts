@@ -22,6 +22,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   realmConfigCardJSON,
+  setupTestDatabaseTemplate,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -129,7 +130,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       resetCatalogRealms();
     }
 
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await startTypesRealmServer(args);
+        return stopTypesRealmServer;
+      },
+    });
+
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
         await startTypesRealmServer({ dbAdapter, publisher, runner });

@@ -11,9 +11,12 @@ import {
   DEFAULT_PERMISSIONS,
   rri,
   SupportedMimeType,
+  type QueuePublisher,
+  type QueueRunner,
   type Realm,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
@@ -25,6 +28,7 @@ import {
   realmSecretSeed,
   runTestRealmServer,
   setupDB,
+  setupTestDatabaseTemplate,
   waitUntil,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
@@ -44,36 +48,62 @@ module(basename(import.meta.filename), function (hooks) {
   let dir: DirResult;
   let ownerUserId = '@mango:localhost';
 
+  // Each call writes the realm into its own directory: the template build
+  // runs before any test, and every test starts from a copy of its database
+  // with a fresh directory.
+  async function start({
+    dbAdapter,
+    publisher,
+    runner,
+  }: {
+    dbAdapter: PgAdapter;
+    publisher: QueuePublisher;
+    runner: QueueRunner;
+  }) {
+    dir = dirSync();
+    let realmsRootPath = join(dir.name, 'realm_server_3');
+    let testRealmDir = join(realmsRootPath, 'test');
+    ensureDirSync(testRealmDir);
+    copySync(fixtureDir('blank'), testRealmDir);
+    ({ testRealmServer, testRealmHttpServer } = await runTestRealmServer({
+      virtualNetwork: createVirtualNetwork(),
+      testRealmDir,
+      realmsRootPath,
+      realmURL: new URL(testRealm2URL),
+      dbAdapter,
+      publisher,
+      runner,
+      matrixURL,
+      permissions: {
+        '*': ['read'],
+        [ownerUserId]: DEFAULT_PERMISSIONS,
+      },
+      domainsForPublishedRealms: {
+        boxelSpace: 'localhost',
+        boxelSite: 'localhost:4445',
+      },
+    }));
+    request = supertest(testRealmHttpServer);
+  }
+
+  async function stop() {
+    await closeServer(testRealmHttpServer);
+  }
+
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
+    templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
-      dir = dirSync();
-      let realmsRootPath = join(dir.name, 'realm_server_3');
-      let testRealmDir = join(realmsRootPath, 'test');
-      ensureDirSync(testRealmDir);
-      copySync(fixtureDir('blank'), testRealmDir);
-      ({ testRealmServer, testRealmHttpServer } = await runTestRealmServer({
-        virtualNetwork: createVirtualNetwork(),
-        testRealmDir,
-        realmsRootPath,
-        realmURL: new URL(testRealm2URL),
-        dbAdapter,
-        publisher,
-        runner,
-        matrixURL,
-        permissions: {
-          '*': ['read'],
-          [ownerUserId]: DEFAULT_PERMISSIONS,
-        },
-        domainsForPublishedRealms: {
-          boxelSpace: 'localhost',
-          boxelSite: 'localhost:4445',
-        },
-      }));
-      request = supertest(testRealmHttpServer);
+      await start({ dbAdapter, publisher, runner });
     },
-    afterEach: async () => {
-      await closeServer(testRealmHttpServer);
-    },
+    afterEach: stop,
   });
 
   // A source realm whose policy lets any signed-in caller create a card of

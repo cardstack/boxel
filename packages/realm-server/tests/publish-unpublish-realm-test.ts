@@ -26,6 +26,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupDB,
   setupPermissionedRealmCached,
+  setupTestDatabaseTemplate,
   runTestRealmServer,
   closeServer,
   createVirtualNetwork,
@@ -49,8 +50,6 @@ module(basename(import.meta.filename), function () {
       ReturnType<typeof runTestRealmServer>
     >['testRealmServer'];
     let dbAdapter: PgAdapter;
-    let publisher: QueuePublisher;
-    let runner: QueueRunner;
     let request: SuperTest<Test>;
     let testRealmDir: string;
     let virtualNetwork: VirtualNetwork;
@@ -66,16 +65,23 @@ module(basename(import.meta.filename), function () {
       onRealmSetup: async () => {},
     });
 
-    hooks.beforeEach(async function () {
+    // Each call writes the realm into its own directory: the template build
+    // runs before any test's `beforeEach`, and every test starts from a copy
+    // of its database with a fresh directory.
+    async function startRealmServer({
+      dbAdapter,
+      publisher,
+      runner,
+    }: {
+      dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+    }) {
       dir = dirSync();
       copySync(fixtureDir('simple'), dir.name);
-    });
-
-    async function startRealmServer(
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) {
+      testRealmDir = join(dir.name, 'realm_server_3', 'test');
+      ensureDirSync(testRealmDir);
+      copySync(fixtureDir('simple'), testRealmDir);
       virtualNetwork = createVirtualNetwork();
       ({
         testRealm: testRealm,
@@ -102,19 +108,25 @@ module(basename(import.meta.filename), function () {
       request = supertest(testRealmHttpServer);
     }
 
+    async function stopRealmServer() {
+      await closeServer(testRealmHttpServer);
+    }
+
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await startRealmServer(args);
+        return stopRealmServer;
+      },
+    });
+
     setupDB(hooks, {
-      beforeEach: async (_dbAdapter, _publisher, _runner) => {
+      templateDatabase,
+      beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
-        publisher = _publisher;
-        runner = _runner;
-        testRealmDir = join(dir.name, 'realm_server_3', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-        await startRealmServer(dbAdapter, publisher, runner);
+        await startRealmServer({ dbAdapter, publisher, runner });
       },
-      afterEach: async () => {
-        await closeServer(testRealmHttpServer);
-      },
+      afterEach: stopRealmServer,
     });
 
     test('POST /_publish-realm cannot publish a realm that is not publishable', async function (assert) {

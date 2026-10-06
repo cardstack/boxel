@@ -5,11 +5,12 @@ import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { dirSync, type DirResult } from 'tmp';
+import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 import {
   setupDB,
+  setupTestDatabaseTemplate,
   runTestRealmServer,
   closeServer,
   fixtureDir,
@@ -37,15 +38,8 @@ module(basename(import.meta.filename), function () {
       let publisher: any;
       let runner: any;
       let request: SuperTest<Test>;
-      let testRealmDir: string;
-      let dir: DirResult;
 
       let virtualNetwork = createVirtualNetwork();
-
-      hooks.beforeEach(async function () {
-        dir = dirSync();
-        copySync(fixtureDir('simple'), dir.name);
-      });
 
       async function startRealmServer(
         dbAdapter: any,
@@ -55,6 +49,11 @@ module(basename(import.meta.filename), function () {
         if (testRealm) {
           virtualNetwork.unmount(testRealm.handle);
         }
+
+        let dir = dirSync();
+        let testRealmDir = join(dir.name, 'realm_server_2', 'test');
+        ensureDirSync(testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
 
         ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
           virtualNetwork,
@@ -69,14 +68,28 @@ module(basename(import.meta.filename), function () {
         request = supertest(testRealmHttpServer);
       }
 
+      async function stopRealmServer() {
+        AllowedProxyDestinations.reset();
+        await closeServer(testRealmHttpServer);
+      }
+
+      // The realm `startRealmServer` brings up is indexed once, into a
+      // template database each test starts from, rather than from scratch
+      // before each test.
+      let templateDatabase = setupTestDatabaseTemplate(hooks, {
+        key: import.meta.filename,
+        build: async ({ dbAdapter, publisher, runner }) => {
+          await startRealmServer(dbAdapter, publisher, runner);
+          return stopRealmServer;
+        },
+      });
+
       setupDB(hooks, {
+        templateDatabase,
         beforeEach: async (_dbAdapter, _publisher, _runner) => {
           dbAdapter = _dbAdapter;
           publisher = _publisher;
           runner = _runner;
-          testRealmDir = join(dir.name, 'realm_server_2', 'test');
-          ensureDirSync(testRealmDir);
-          copySync(fixtureDir('simple'), testRealmDir);
 
           // Whitelist OpenRouter chat completions so the passthrough handler
           // can resolve a destination config + credit strategy.
@@ -116,10 +129,7 @@ module(basename(import.meta.filename), function () {
             });
           }
         },
-        afterEach: async () => {
-          AllowedProxyDestinations.reset();
-          await closeServer(testRealmHttpServer);
-        },
+        afterEach: stopRealmServer,
       });
 
       test('forwards a verbatim OpenAI body to OpenRouter and deducts credits', async function (assert) {

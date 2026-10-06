@@ -42,6 +42,7 @@ import {
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
+  setupTestDatabaseTemplate,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
@@ -188,7 +189,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       resetCatalogRealms();
     }
 
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await startSearchRealmServer(args);
+        return stopSearchRealmServer;
+      },
+    });
+
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, _publisher, _runner) => {
         dbAdapter = _dbAdapter;
         publisher = _publisher;

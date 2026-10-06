@@ -2,7 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
-import type { User } from '@cardstack/runtime-common';
+import type {
+  QueuePublisher,
+  QueueRunner,
+  User,
+} from '@cardstack/runtime-common';
 import {
   query,
   insert,
@@ -11,6 +15,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   setupDB,
+  setupTestDatabaseTemplate,
   insertUser,
   runTestRealmServer,
   createVirtualNetwork,
@@ -24,7 +29,7 @@ import { realmSecretSeed } from './helpers/index.ts';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { dirSync, type DirResult } from 'tmp';
+import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 
@@ -34,38 +39,61 @@ module(basename(import.meta.filename), function () {
   module('delete boxel claimed domain endpoint', function (hooks) {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
     let dbAdapter: PgAdapter;
     let user: User;
     let otherUser: User;
     let boxelSiteDomain = 'boxel.site';
     let defaultToken: RealmServerTokenClaim;
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
+    async function start({
+      dbAdapter,
+      publisher,
+      runner,
+    }: {
+      dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+    }) {
+      let realmsRootPath = join(dirSync().name, 'realm_server_5');
+      let testRealmDir = join(realmsRootPath, 'test');
+      ensureDirSync(testRealmDir);
+      copySync(fixtureDir('simple'), testRealmDir);
+
+      testRealmServer = (
+        await runTestRealmServer({
+          virtualNetwork: createVirtualNetwork(),
+          testRealmDir,
+          realmsRootPath,
+          realmURL: testRealmURL,
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+          domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+        })
+      ).testRealmHttpServer;
+      request = supertest(testRealmServer);
+    }
+
+    async function stop() {
+      await closeServer(testRealmServer);
+    }
+
+    // The realm `start` brings up is indexed once, into a template database
+    // each test starts from, rather than from scratch before each test.
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await start(args);
+        return stop;
+      },
     });
 
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
-        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_5'),
-            realmURL: testRealmURL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-            domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
+        await start({ dbAdapter, publisher, runner });
 
         user = await insertUser(
           dbAdapter,
@@ -84,9 +112,7 @@ module(basename(import.meta.filename), function () {
           sessionRoom: 'test-session',
         };
       },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
-      },
+      afterEach: stop,
     });
 
     async function makeDeleteRequest(
