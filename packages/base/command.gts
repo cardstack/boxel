@@ -1,6 +1,8 @@
+import { modifier } from 'ember-modifier';
 import {
   CardDef,
   Component,
+  type CardContext,
   FieldDef,
   StringField,
   contains,
@@ -397,6 +399,62 @@ export class LintAndFixResult extends CardDef {
   @field lintWarnings = containsMany(StringField); // severity 1 only
 }
 
+// Shows an image a tool uploaded to the room. Room media loads only through
+// the host's `loadRoomMedia`, which answers with an object URL this releases
+// once the image is gone; without it (outside the assistant's chat) the URL
+// is used as it is.
+const roomMediaSrc = modifier(
+  (
+    img: HTMLImageElement,
+    [url, loadRoomMedia]: [
+      string | undefined,
+      CardContext['loadRoomMedia'] | undefined,
+    ],
+  ) => {
+    if (!url) {
+      img.removeAttribute('src');
+      return;
+    }
+    if (!loadRoomMedia) {
+      img.src = url;
+      return;
+    }
+    let isTornDown = false;
+    let src: string | undefined;
+    loadRoomMedia(url).then(
+      (loaded) => {
+        if (isTornDown) {
+          URL.revokeObjectURL(loaded);
+          return;
+        }
+        src = loaded;
+        img.src = loaded;
+      },
+      () => {
+        // The image stays empty, and its alt text names what it was.
+      },
+    );
+    return () => {
+      isTornDown = true;
+      if (src) {
+        URL.revokeObjectURL(src);
+      }
+    };
+  },
+);
+
+function lastPathSegment(url: string | undefined): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  try {
+    let segments = new URL(url).pathname.split('/').filter(Boolean);
+    return decodeURIComponent(segments.pop() ?? url);
+  } catch {
+    return url;
+  }
+}
+
 export class RunRealmCodeInput extends CardDef {
   @field code = contains(StringField);
   @field realm = contains(StringField);
@@ -424,11 +482,92 @@ export class AttachedImageField extends FieldDef {
 }
 
 export class RunRealmCodeResult extends CardDef {
+  static displayName = 'Realm Code Result';
+
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
   // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
+
+  // What the run changed and what it looked at. The script's own result is
+  // for the model and stays out of the chat.
+  static embedded = class Embedded extends Component<
+    typeof RunRealmCodeResult
+  > {
+    <template>
+      <div class='realm-code-result'>
+        {{#if @model.files.length}}
+          <ul class='files'>
+            {{#each @model.files as |file|}}
+              <li class='file' data-test-realm-code-file={{file.fileUrl}}>
+                <span class='status'>{{file.status}}</span>
+                <a href={{file.fileUrl}}>{{file.fileUrl}}</a>
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='no-files'>No files were changed.</p>
+        {{/if}}
+        {{#if @model.captures.length}}
+          <div class='captures'>
+            {{#each @model.captures as |capture|}}
+              <img
+                class='capture'
+                alt={{capture.name}}
+                title={{capture.name}}
+                {{roomMediaSrc capture.url @context.loadRoomMedia}}
+                data-test-realm-code-capture
+              />
+            {{/each}}
+          </div>
+        {{/if}}
+      </div>
+      <style scoped>
+        .realm-code-result {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-sm);
+          font: var(--boxel-font-sm);
+        }
+        .files {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxxs);
+        }
+        .file {
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          word-break: break-all;
+        }
+        .status {
+          flex-shrink: 0;
+          color: var(--boxel-450);
+          text-transform: capitalize;
+        }
+        .no-files {
+          margin: 0;
+          color: var(--boxel-450);
+        }
+        .captures {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+        }
+        .capture {
+          max-width: 8rem;
+          max-height: 8rem;
+          object-fit: contain;
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+        }
+      </style>
+    </template>
+  };
 }
 
 export class ViewVisuallyInput extends CardDef {
@@ -442,6 +581,8 @@ export class ViewVisuallyInput extends CardDef {
 }
 
 export class ViewVisuallyResult extends CardDef {
+  static displayName = 'View Visually Result';
+
   @field sourceUrl = contains(StringField);
   @field kind = contains(StringField); // 'card' | 'file'
   @field format = contains(StringField);
@@ -449,6 +590,64 @@ export class ViewVisuallyResult extends CardDef {
   // capture cut to its top).
   @field note = contains(StringField);
   @field attachedImages = containsMany(AttachedImageField);
+
+  // What the assistant saw: the captured image, and what it is an image of.
+  static embedded = class Embedded extends Component<
+    typeof ViewVisuallyResult
+  > {
+    get title() {
+      return `View of ${lastPathSegment(this.args.model.sourceUrl) ?? 'capture'}`;
+    }
+    get image() {
+      return this.args.model.attachedImages?.[0];
+    }
+    <template>
+      <figure class='view-visually-result'>
+        <h3 class='title' data-test-view-visually-title>{{this.title}}</h3>
+        {{#if this.image.url}}
+          <img
+            alt={{this.title}}
+            {{roomMediaSrc this.image.url @context.loadRoomMedia}}
+            data-test-view-visually-image
+          />
+        {{/if}}
+        <figcaption>
+          {{#if @model.sourceUrl}}
+            <a href={{@model.sourceUrl}}>{{@model.sourceUrl}}</a>
+          {{/if}}
+          {{#if @model.note}}
+            <p class='note'>{{@model.note}}</p>
+          {{/if}}
+        </figcaption>
+      </figure>
+      <style scoped>
+        .view-visually-result {
+          margin: 0;
+          padding: var(--boxel-sp-sm);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+        .title {
+          margin: 0;
+          font: 600 var(--boxel-font-sm);
+        }
+        img {
+          max-width: 100%;
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+        }
+        figcaption {
+          font: var(--boxel-font-xs);
+          word-break: break-all;
+        }
+        .note {
+          margin: var(--boxel-sp-xxxs) 0 0;
+          color: var(--boxel-450);
+        }
+      </style>
+    </template>
+  };
 }
 
 // Aliases: a stored capture-card tool result adopts from `CaptureCardOutput`,

@@ -663,11 +663,41 @@ export function getReader(
     return response;
   };
 
+  // Whether the response serves the file at the requested path. The realm
+  // answers a source request for a path with no file of its own by redirecting
+  // to the file it stands for, such as a card's id to the card's `.json`.
+  // Following that redirect would read another file's bytes under this path,
+  // so the indexer would record a file at a URL where none exists, one that
+  // shares its id with the card. A response redirected to a different path
+  // therefore reads as no file, like a 404. A redirect that keeps the path,
+  // such as a scheme upgrade in front of the realm, still serves this file.
+  let servesFileAt = (url: URL, response: Response): boolean => {
+    if (!response.ok) {
+      return false;
+    }
+    if (!response.redirected || !response.url) {
+      return true;
+    }
+    return new URL(response.url).pathname === url.pathname;
+  };
+
+  // Release the body of a response the reader won't read, so a native fetch
+  // gives its connection back instead of holding it until the body is
+  // consumed.
+  let releaseBody = async (response: ResponseWithNodeStream): Promise<void> => {
+    if (response.nodeStream) {
+      response.nodeStream.destroy();
+      return;
+    }
+    await response.body?.cancel().catch(() => undefined);
+  };
+
   return {
     readFile: (url: URL) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
-        if (!response.ok) {
+        if (!servesFileAt(url, response)) {
+          await releaseBody(response);
           return undefined;
         }
         let content: string;
@@ -735,7 +765,8 @@ export function getReader(
       withRetries('readStream', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
         watchdog.stop();
-        if (!response.ok) {
+        if (!servesFileAt(url, response)) {
+          await releaseBody(response);
           return undefined;
         }
 

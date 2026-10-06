@@ -102,6 +102,9 @@ const educationPolicy = policyDocument([
   },
 ]);
 
+// The character a policy issue's message marks its code spans with.
+const BACKTICK = '`';
+
 // A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
 // hold ahead of the one that admitted the delete.
@@ -358,6 +361,37 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-operation-grant-operation]')
       .hasText('read', 'grants are listed by operation name');
     assert.dom('[data-test-policy-predicate-snapshot]').exists({ count: 1 });
+  });
+
+  test('a grant opened to callers who are not signed in says so, and a write names the setting it acts as', async function (assert) {
+    await setupPolicyRealm({
+      'policies/public.json': policyDocument([
+        {
+          targetType: { module: '../classroom', name: 'Classroom' },
+          grants: [
+            { operation: 'read', anonymous: true },
+            {
+              operation: 'update',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+            },
+            { operation: 'delete' },
+          ],
+        },
+      ]),
+    });
+    let policy = await loadPolicy('policies/public');
+    await renderCard(loader, policy, 'embedded');
+
+    assert.dom('[data-test-operation-grant]').exists({ count: 3 });
+    assert
+      .dom('[data-test-operation-grant-anonymous]')
+      .exists({ count: 2 }, 'only the grants that opt in are marked')
+      .hasText('anyone');
+    assert
+      .dom('[data-test-operation-grant-acting-user]')
+      .exists({ count: 1 }, 'only the write names who it acts as')
+      .hasText('config.feedbackWriter');
   });
 
   test('a policy with no rules says it grants nothing', async function (assert) {
@@ -972,6 +1006,37 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-policy-issue-message]')
       .includesText('no rule lets anyone read Student cards');
+
+    // The compiler marks the identifiers in a message as code with backticks,
+    // as markdown does. The card renders each one as code, so no backtick
+    // shows, in the issue list and in the grant's warning alike.
+    assert
+      .dom('[data-test-policy-issue-message] code')
+      .exists('the identifiers in the message render as code')
+      .hasText('read', 'the first is the grant’s operation');
+    assert
+      .dom('[data-test-policy-issue-message] .message-paragraph')
+      .exists(
+        { count: 4 },
+        'the message is laid out one idea per paragraph, as the compiler writes it',
+      );
+    assert
+      .dom('[data-test-policy-issue-message]')
+      .doesNotIncludeText(BACKTICK, 'and no backtick shows')
+      .includesText(
+        'read on Roster sends',
+        'and the text reads on across a span, spaces kept',
+      );
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"] code',
+      )
+      .exists('the grant’s warning renders them as code too');
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="grant-reaches-ungranted-type"]',
+      )
+      .doesNotIncludeText(BACKTICK);
   });
 
   test('a policy whose issues only leave grants inactive marks no warning', async function (assert) {

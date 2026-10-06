@@ -213,8 +213,11 @@ export default class MessageTool {
   // instance everywhere it is rendered, and its autosave would then write the
   // stale state back over the newer file. Render the live instance instead,
   // and fall back to an id-less ephemeral copy only when the live card can no
-  // longer be loaded (for example, it was deleted since).
-  async getCommandResultCard(): Promise<CardDef | undefined> {
+  // longer be loaded (for example, it was deleted since). `isRealmCard` says
+  // whether the result names a realm card, which stays true for that copy.
+  async getCommandResultCard(): Promise<
+    { card: CardDef; isRealmCard: boolean } | undefined
+  > {
     let cardDoc = await this.commandResultCardDoc();
     if (!cardDoc) {
       return undefined;
@@ -223,12 +226,13 @@ export default class MessageTool {
     if (id) {
       let live = await this.store.get(id);
       if (isCardInstance(live)) {
-        return live;
+        return { card: live, isRealmCard: true };
       }
     }
     let { id: _id, ...resource } = cardDoc.data;
     let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
-    return (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
+    let card = (await this.store.addWithoutPersisting(ephemeralDoc)) as CardDef;
+    return { card, isRealmCard: !!id };
   }
 }
 
