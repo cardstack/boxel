@@ -921,9 +921,7 @@ The codes are `unknown-operation`, `operation-not-allowed`,
 `target-not-indexed`, `target-errored`, `assertion-failed`, `version-conflict`,
 `precondition-unverifiable`, `actor-required`, `operation-not-permitted`,
 `policy-predicate-failed`, `payload-too-large`, `wrong-entry-point`,
-`conflicting-targets`, `rate-limited`, `rate-limit-unavailable` and
-`internal-error`. The two rate codes reach only a caller who isn't signed in
-(see [Callers who aren't signed in](#callers-who-arent-signed-in)).
+`conflicting-targets` and `internal-error`.
 
 Four worth recognizing:
 
@@ -1401,120 +1399,6 @@ Some things worth knowing before you read one:
   whatever is or is not there. The other realms compiling read are judged as
   a validate of the policy card judges them. A policy card whose latest index
   visit failed outright renders its index error, as any card does.
-
-## Callers who aren't signed in
-
-A realm's policy can admit a caller who authenticated nobody, such as a visitor
-to a public page or someone filling in a public form, without opening the whole
-realm to everyone the way `'*': ['read']` in its permissions does. A grant opts
-in with `anonymous: true`. Every other grant was written for signed-in callers
-and never admits one who isn't.
-
-### Which grants can opt in
-
-Only a grant on a base operation can: `read`, `readSource`, `query`, `create`,
-`update`, `delete`, `transform`, `appendContainsMany` and `appendLine`. A named
-operation, a named query, `explain` and `validate` can't, and a grant that tries
-is inactive, with the issue `anonymous-not-base-operation`. A grant whose `where`
-reads `actor()` compiles, with the warning `anonymous-grant-reads-actor`, and
-never admits such a caller, since there is nobody for `actor()` to stand for.
-Scope it by what the card holds (`.status == "published"`) instead.
-
-### Writes are made as a user the realm names
-
-A grant that opts a write in names `actingUser`: a key in the governed realm's
-`realm.json` `config`, whose value is a Matrix user id. A write such a grant
-admits is made as that user. Without a key the grant is inactive, with the
-issue `anonymous-write-without-acting-user`.
-
-```json
-{ "operation": "create", "anonymous": true, "actingUser": "submitter" }
-```
-
-```json
-"config": { "submitter": "@site-submissions:example.com" }
-```
-
-The key is read when each write is decided, not when the policy compiles. So
-changing the value, removing the key, or the user losing `write` on the realm
-takes effect on the next write, without touching the policy card. A grant whose
-key is missing, holds something that isn't a Matrix user id, or names a user
-without `write` admits nothing: the caller is refused as though the grant
-weren't there. The governed realm names the user, not the policy card, because
-one policy card can govern several realms, and each decides who writes to it.
-
-A write is attributed to the acting user: its index job is initiated by that
-user, and so it shares the user's writer lane, and the user's own reads wait
-for it as for their own writes. Name a dedicated account, such as a site
-submissions user, rather than a person who edits the realm.
-
-The caller's own `actor` stays empty, so `actor()` in a program still refuses.
-
-### What such a caller can reach
-
-- **Reads**: a `card+json` `GET` or `HEAD` (`read`), and a card's or data file's
-  stored bytes (`readSource`), along with the scoped stylesheets of markup they
-  may see.
-- **Searches**: a realm's own `_search`, and `_federated-search` across realms.
-  Each realm a federated search names that the caller can't read answers for
-  itself: one whose policy opens `query` to such callers serves the rows its
-  grants admit, and one that doesn't serves none. A search no realm admits is
-  told to authenticate. A federated search may name only as many such realms as
-  a search may fan out to (two by default), and archived realms are never asked.
-  A named query is never opened to such callers.
-- **Writes**: `card+json` `POST`, `PATCH` and `DELETE`, and `/_operations`. The
-  realm mints the id of every card such a caller creates. `card+source` writes
-  and `/_atomic` stay on the realm's own permissions.
-- **Capability checks** answer such a caller as the call would.
-
-A row a grant admits is served with its whole link closure, to a caller who
-isn't signed in as to anyone, so opening a type to them also shows them every
-card its cards link to.
-
-Every refusal such a caller meets, including a card that isn't there, is the
-same 401 `actor-required` every request that authenticated nobody gets.
-
-### Limits and blocking, owned by the governed realm
-
-The governed realm, not the policy card, controls traffic from callers who
-aren't signed in, in its `realm.json`:
-
-```json
-"anonymousRateLimit": { "requests": 120, "windowSeconds": 60 },
-"anonymousBlocklist": ["198.51.100.0/24", "2001:db8::/32"]
-```
-
-- **The limit** is per realm and per address. Realms never share a budget, so a
-  visitor's calls to one realm cost nothing in another, and a federated search
-  is counted by each realm it reads rows from. A realm that sets nothing gets
-  the platform's default (`BOXEL_ANONYMOUS_RATE_LIMIT`, as `requests/seconds`,
-  `300/60` when unset). A malformed limit falls back to that default. An IPv6
-  caller is counted by its `/64`.
-- **What counts**: a read or a search, once it has served something; a
-  capability check, one unit per pair it asks about, before any is checked; a
-  write, one unit per entry, once the whole batch is admitted and before
-  anything is written. A refusal, a redirect and an empty batch cost nothing,
-  and stylesheets never count.
-- **Over the limit**, the answer is 429 `rate-limited` with `Retry-After` and
-  `meta.retryAfterSeconds`, and nothing is done. A batch that doesn't fit is
-  refused whole. A realm that can't read its count answers 503
-  `rate-limit-unavailable` rather than let a call through uncounted.
-- **The blocklist** takes addresses and CIDR ranges, IPv4 and IPv6. A blocked
-  address is told to authenticate, whatever the grants say. A blocklist entry
-  that isn't an address or a range closes the realm to every caller who isn't
-  signed in until it is fixed. Signed-in callers are never limited or blocked.
-
-The address is the one the realm server's load balancer saw, read from the last
-entry of `X-Forwarded-For` (`BOXEL_TRUSTED_PROXY_HOPS`); entries a caller wrote
-before it are ignored. The platform's own services, identified by their egress
-addresses (`BOXEL_INFRA_EGRESS_IPS`), are measured but never limited or blocked,
-and still need a grant.
-
-### Asking about such a caller
-
-`explain` with an empty `actor` judges the question as a caller who isn't signed
-in: by the grants that opt in, with the acting-user check for a write. It answers
-`actor-required` where the policy opens the operation to no such caller.
 
 ## Where to look next
 

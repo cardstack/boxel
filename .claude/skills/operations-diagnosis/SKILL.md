@@ -305,7 +305,7 @@ A user admitted after they should have lost access, on a grant that shows up her
 
 ## Callers who aren't signed in
 
-A grant with `anonymous: true` admits a caller who authenticated nobody; the governed realm's `realm.json` sets the limit (`anonymousRateLimit`, falling back to `BOXEL_ANONYMOUS_RATE_LIMIT`, `300/60`) and the blocklist (`anonymousBlocklist`), and a write is made as the user its grant's `actingUser` key names in the realm's `config`. `docs/card-operations.md` ("Callers who aren't signed in") is the contract; this section is about reading what it leaves behind.
+A grant with `anonymous: true` admits a caller who authenticated nobody; the governed realm's `realm.json` sets the limit (`anonymousRateLimit`, falling back to `BOXEL_ANONYMOUS_RATE_LIMIT`, `300/60`) and the blocklist (`anonymousBlocklist`), and a write is made as the user its grant's `actingUser` key names in the realm's `config`. This section is about reading what those callers leave behind.
 
 ### The record
 
