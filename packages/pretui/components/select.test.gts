@@ -10,7 +10,7 @@ const OPTIONS = [
 ];
 
 function trigger(): HTMLElement {
-  return document.querySelector('.pretui-selecttrigger') as HTMLElement;
+  return document.querySelector('[data-test-pretui-select-trigger]') as HTMLElement;
 }
 
 module('Pretui | components/select', function (hooks) {

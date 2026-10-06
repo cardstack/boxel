@@ -146,9 +146,10 @@ module('Pretui | React-dialect aliases — controls', function (hooks) {
     await render(<template>
       <Select @items={{OPTS}} @onChange={{sink.take}} />
     </template>);
-    await click('[data-test-pretui-select] .pretui-selecttrigger');
+    await click('[data-test-pretui-select] [data-test-pretui-select-trigger]');
+    // the listbox renders in the dropdown wormhole, outside the Select
     let opts = document.querySelectorAll(
-      '[data-test-pretui-select] .ember-power-select-option',
+      "[role='listbox'] [data-test-pretui-select-option]",
     );
     assert.strictEqual(opts.length, 2, '@items populated the listbox');
     await click(opts[1] as HTMLElement);
