@@ -200,7 +200,7 @@ skips the autofix and is what lets trivial lint errors waste a CI run.
 
 ### Published-package commit prefixes
 
-Four packages publish to npm — `packages/boxel-cli`, `packages/bxl`, `packages/glimmer-motion` and `packages/choreo` — and a PR touching any of them must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per flow (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`, `.github/workflows/glimmer-motion-choreo-pr-title.yml`) enforces it. glimmer-motion and choreo are one flow: they release in lockstep, so one bump from the title applies to both, and a change to either publishes both.
+Five packages publish to npm — `packages/boxel-cli`, `packages/bxl`, `packages/glimmer-motion`, `packages/choreo` and `packages/choreo-player` — and a PR touching any of them must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflows read the PR title via `gh api`). A path-scoped PR-title check per flow (`.github/workflows/boxel-cli-pr-title.yml`, `.github/workflows/bxl-pr-title.yml`, `.github/workflows/glimmer-motion-choreo-pr-title.yml`, `.github/workflows/choreo-player-pr-title.yml`) enforces it. glimmer-motion and choreo are one flow: they release in lockstep, so one bump from the title applies to both, and a change to either publishes both.
 
 | Prefix                                                     | Bump level (per touched surface) |
 | ---------------------------------------------------------- | -------------------------------- |

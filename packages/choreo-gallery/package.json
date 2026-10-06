@@ -53,8 +53,8 @@
   },
   "dependencies": {
     "@cardstack/choreo": "workspace:*",
+    "@cardstack/choreo-player": "workspace:*",
     "@chenglou/pretext": "^0.0.8",
-    "choreo-player": "workspace:*",
     "decorator-transforms": "catalog:",
     "dialkit": "^2.0.0",
     "ember-modifier": "^4.3.0",
