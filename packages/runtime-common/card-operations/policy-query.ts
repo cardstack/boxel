@@ -415,12 +415,11 @@ function ownDeclaration(
 }
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
-// engine runs. For a caller with no actor, one who isn't signed in, only a
-// grant that opts in to such callers matches, and never one whose filter reads
-// the caller, which has no one to stand for.
-//
-// Each filter is in the grammar the engine runs, each comparison in it kept from judging a card whose type reads
-// the compared path differently from the rule's type.
+// engine runs, each comparison in it kept from judging a card whose type reads
+// the compared path differently from the rule's type. For a caller with no
+// actor, one who isn't signed in, only a grant that opts in to such callers
+// matches, and never one whose filter reads the caller, which has no one to
+// stand for.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query

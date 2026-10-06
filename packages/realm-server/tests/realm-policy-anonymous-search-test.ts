@@ -5,6 +5,8 @@ import type { Test, SuperTest, Response } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import {
+  archiveRealm,
+  MAX_REALMS_PER_SEARCH_REQUEST,
   parseAddressRanges,
   rri,
   SupportedMimeType,
@@ -41,6 +43,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
 const GAZETTE = 'http://127.0.0.1:4444/gazette/';
 const LIBRARY = 'http://127.0.0.1:4444/library/';
+// A realm anyone may read, which a search reads outright.
+const WIRE = 'http://127.0.0.1:4444/wire/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const NEWSROOM_POLICY = `${ORG}policies/newsroom`;
 const GAZETTE_POLICY = `${ORG}policies/gazette`;
@@ -136,7 +140,9 @@ module(basename(import.meta.filename), function (hooks) {
   let newsroom: Realm;
   let gazette: Realm;
   let library: Realm;
+  let wire: Realm;
   let org: Realm;
+  let db: PgAdapter;
   let request: SuperTest<Test>;
   let server: Server;
   let records: AnonymousRequestEvent[];
@@ -164,6 +170,15 @@ module(basename(import.meta.filename), function (hooks) {
         governedRealm(GAZETTE, 'Gazette', GAZETTE_POLICY),
         governedRealm(LIBRARY, 'Library', LIBRARY_POLICY),
         {
+          realmURL: new URL(WIRE),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({ name: 'Wire' }),
+            'article.gts': ARTICLE_MODULE,
+            'articles/published.json': article('Wire published', 'published'),
+          },
+          permissions: { '*': ['read'], [EDITOR]: ['read', 'write'] },
+        },
+        {
           realmURL: new URL(ORG),
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
@@ -186,11 +201,12 @@ module(basename(import.meta.filename), function (hooks) {
     newsroom = realm(NEWSROOM);
     gazette = realm(GAZETTE);
     library = realm(LIBRARY);
+    wire = realm(WIRE);
     org = realm(ORG);
   }
 
   async function stop() {
-    for (let realm of [newsroom, gazette, library, org]) {
+    for (let realm of [newsroom, gazette, library, wire, org]) {
       realm.__testOnlyClearCaches();
       realm.unsubscribe();
     }
@@ -209,6 +225,7 @@ module(basename(import.meta.filename), function (hooks) {
   setupDB(hooks, {
     templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
+      db = dbAdapter;
       await start({ dbAdapter, publisher, runner });
       records = [];
       setAnonymousRequestSink((record) => records.push(record));
@@ -235,7 +252,11 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // A search across `realms` on the realm server, of each one's articles.
-  function federatedSearch(realms: string[], from: string = VISITOR) {
+  function federatedSearch(
+    realms: string[],
+    from: string = VISITOR,
+    extra: Record<string, unknown> = {},
+  ) {
     return request
       .post('/_federated-search')
       .set('Accept', SupportedMimeType.CardJson)
@@ -244,9 +265,12 @@ module(basename(import.meta.filename), function (hooks) {
       .set('X-Forwarded-For', from)
       .send({
         filter: {
-          any: realms.map((realm) => ({ 'item.on': articleType(realm) })),
+          any: [...new Set(realms)].map((realm) => ({
+            'item.on': articleType(realm),
+          })),
         },
         realms,
+        ...extra,
       });
   }
 
@@ -324,11 +348,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a search across realms answers such a caller with what each realm admits, and nothing from one that admits nothing', async function (assert) {
-    let response = await federatedSearch([NEWSROOM, GAZETTE, LIBRARY]);
+  test('a search across realms answers such a caller with what each realm admits, alongside a realm anyone reads', async function (assert) {
+    let response = await federatedSearch([NEWSROOM, GAZETTE, WIRE]);
     assert.deepEqual(ids(response), [
       `${GAZETTE}articles/published`,
       `${NEWSROOM}articles/published`,
+      `${WIRE}articles/published`,
     ]);
     assert.notOk(response.body.meta?.incomplete, 'nothing failed');
     let counted = records
@@ -341,8 +366,85 @@ module(basename(import.meta.filename), function (hooks) {
         [GAZETTE, 'admitted'],
         [NEWSROOM, 'admitted'],
       ],
-      'each realm that answered counted it, against its own budget',
+      'each realm searched through its policy counted it, against its own budget',
     );
+  });
+
+  test('a realm that admits nothing contributes no rows to a search another realm admits', async function (assert) {
+    let response = await federatedSearch([NEWSROOM, LIBRARY]);
+    assert.deepEqual(ids(response), [`${NEWSROOM}articles/published`]);
+    assert.notOk(response.body.meta?.incomplete);
+  });
+
+  test('a search naming more realms than a search may fan out to is told to authenticate, and no realm is asked', async function (assert) {
+    let realms = [NEWSROOM, GAZETTE, LIBRARY];
+    assert.true(
+      realms.length > MAX_REALMS_PER_SEARCH_REQUEST,
+      'precondition: more private realms than a search may fan out to',
+    );
+    unauthenticated(await federatedSearch(realms), 'too many realms', assert);
+    assert.deepEqual(records, [], 'no realm was asked');
+  });
+
+  test('a realm named twice is counted once', async function (assert) {
+    let response = await federatedSearch([NEWSROOM, NEWSROOM]);
+    assert.strictEqual(response.status, 200, response.text);
+    assert.strictEqual(
+      records.filter((r) => r.outcome === 'admitted').length,
+      1,
+    );
+  });
+
+  test('an archived realm admits nobody to a search', async function (assert) {
+    await archiveRealm(db, new URL(NEWSROOM));
+    unauthenticated(
+      await federatedSearch([NEWSROOM]),
+      'only an archived realm',
+      assert,
+    );
+    let response = await federatedSearch([NEWSROOM, GAZETTE]);
+    assert.deepEqual(ids(response), [`${GAZETTE}articles/published`]);
+    assert.deepEqual(
+      records.map((r) => r.realmURL),
+      [GAZETTE],
+      'the archived realm was never asked',
+    );
+  });
+
+  test('a malformed search is refused before any realm counts it', async function (assert) {
+    await setLimit(newsroom, 1);
+    let response = await federatedSearch([NEWSROOM], VISITOR, {
+      page: { size: 'many' },
+    });
+    assert.strictEqual(response.status, 400, response.text);
+    assert.strictEqual(
+      (await realmSearch(NEWSROOM)).status,
+      200,
+      'the budget is untouched',
+    );
+  });
+
+  test('an endpoint that refuses realms a caller cannot read still tells such a caller to authenticate', async function (assert) {
+    let response = await request
+      .post('/_federated-info')
+      .set('Accept', SupportedMimeType.JSONAPI)
+      .set('Content-Type', 'application/json')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('X-Forwarded-For', VISITOR)
+      .send({ realms: [NEWSROOM] });
+    unauthenticated(response, '_federated-info', assert);
+    assert.deepEqual(records, [], 'no realm was asked');
+  });
+
+  test("a named query on a realm's own search tells such a caller to authenticate", async function (assert) {
+    let response = await request
+      .post(`${new URL(NEWSROOM).pathname}_search`)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('Content-Type', 'application/json')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('X-Forwarded-For', VISITOR)
+      .send({ operation: 'listMine', on: articleType(NEWSROOM) });
+    unauthenticated(response, 'a named query', assert);
   });
 
   test('a search across realms none of which admits such a caller tells them to authenticate', async function (assert) {

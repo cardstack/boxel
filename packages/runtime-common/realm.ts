@@ -14783,6 +14783,12 @@ export class Realm {
     let declaredLinks: LinkStrategy | undefined;
     let unshareableFormats: PrerenderedHtmlFormat[] = [];
     if (isNamedQueryPayload(payload)) {
+      // A named query is granted by its own name, which no grant opens to a
+      // caller who isn't signed in, so one is told to authenticate before the
+      // declaration is read.
+      if (requestContext.anonymousCaller) {
+        return this.#authenticationRequired(requestContext);
+      }
       // A named query searches this realm and no other, so this realm is the
       // whole of the scope it may resolve to.
       try {
