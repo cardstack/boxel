@@ -503,6 +503,103 @@ module('Integration | realm policy', function (hooks) {
       );
   });
 
+  // The line each grant's editor opens with, as a reader sees it.
+  function grantLinesInEditor() {
+    return [
+      ...document.querySelectorAll(
+        '[data-test-policy-rule-grant] [data-test-operation-grant]',
+      ),
+    ].map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
+  }
+
+  function ruleEditor(index: number) {
+    return `[data-test-contains-many="rules"] [data-test-item="${index}"]`;
+  }
+
+  test('editing a policy shows each grant as its view does, and adds, changes and removes grants', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+    let permissions: Permissions = { canWrite: true, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, policy, 'edit');
+
+    assert.dom('[data-test-policy-rule-edit]').exists({ count: 2 });
+    assert.deepEqual(
+      grantLinesInEditor(),
+      [
+        'read always',
+        `appendActivity where ${teacherPredicate.trim()}`,
+        `read where ${rosterPredicate} snapshot`,
+        `listMySchedules where ${providerPredicate}`,
+      ],
+      'each grant is shown by its operation and condition, in order',
+    );
+    assert.false(
+      document.body.textContent?.includes('Untitled'),
+      'no grant is shown as an untitled field',
+    );
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-policy-predicate-input]')
+      .exists({ count: 4 }, "every grant's condition can be edited");
+
+    let studentPredicate = '.studentIds | any(. == actor())';
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="1"] [data-test-policy-predicate-input]`,
+      studentPredicate,
+    );
+    await click(`${ruleEditor(0)} [data-test-policy-rule-add-grant]`);
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="operation"] input`,
+      'update',
+    );
+    await click(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`);
+
+    assert.deepEqual(
+      grantLinesInEditor(),
+      [
+        'read always',
+        `appendActivity where ${studentPredicate}`,
+        'update always',
+        `listMySchedules where ${providerPredicate}`,
+      ],
+      'each grant reads as it now stands',
+    );
+
+    let rules = serializeCard(policy).data.attributes?.rules as {
+      grants: { operation: string; where: unknown }[];
+    }[];
+    assert.deepEqual(
+      rules.map((rule) =>
+        rule.grants.map(({ operation, where }) => ({ operation, where })),
+      ),
+      [
+        [
+          { operation: 'read', where: null },
+          { operation: 'appendActivity', where: studentPredicate },
+          { operation: 'update', where: null },
+        ],
+        [{ operation: 'listMySchedules', where: providerPredicate }],
+      ],
+      'the saved policy holds the added, changed and remaining grants',
+    );
+  });
+
+  test('a policy edited without write permission shows its grants but cannot add or remove them', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+    let permissions: Permissions = { canWrite: false, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, policy, 'edit');
+
+    assert.strictEqual(
+      grantLinesInEditor().length,
+      4,
+      'every grant is still shown',
+    );
+    assert.dom('[data-test-policy-rule-add-grant]').doesNotExist();
+    assert.dom('[data-test-policy-rule-remove-grant]').doesNotExist();
+  });
+
   test('a document shape assigned in code is refused rather than read as a predicate', async function (assert) {
     await setupPolicyRealm({ 'policies/education.json': educationPolicy });
     let policy = await loadPolicy('policies/education');
