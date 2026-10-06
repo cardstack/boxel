@@ -349,6 +349,7 @@ import {
 } from './card-operations/named-query.ts';
 import { settledWithin, STAGING_WIDTH } from './card-operations/coordinator.ts';
 import {
+  ANONYMOUS_ELIGIBLE_OPERATIONS,
   effectiveLinkStrategy,
   OperationFailure,
   isDocumentResult,
@@ -2111,8 +2112,10 @@ export interface WriteOptions {
   // endpoints can scope their read-your-writes drain to this user's own
   // reads. Absent for system-originated writes. A write by a caller who isn't
   // signed in is initiated by the acting user it is made as (see
-  // `CommitBatchOptions.actingUser`), whose job no reader waits on: such a
-  // caller has no read-your-writes claim (see `drainRequestersOwnIndexing`).
+  // `CommitBatchOptions.actingUser`), so it shares that user's writer lane,
+  // and that user's reads wait for it as for their own writes. A realm's
+  // config names a dedicated account for that reason, not a person who edits
+  // the realm.
   initiatingUser?: string | null;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
@@ -2529,6 +2532,12 @@ const ANONYMOUS_CARD_UPDATE: AnonymousDispatch = {
 const ANONYMOUS_CARD_DELETE: AnonymousDispatch = {
   operations: ['delete'],
   counted: 'by-handler',
+};
+// The write lane of a capability check from a caller whose read the realm's
+// ACL allowed: the check invokes nothing, so it counts for nothing.
+const ANONYMOUS_WRITE_CHECK: AnonymousDispatch = {
+  operations: ANONYMOUS_ELIGIBLE_OPERATIONS.filter(isWrite),
+  counted: 'never',
 };
 // The operations envelope runs whatever its entries name, each judged by the
 // gate on its own, so it admits a caller wherever the policy opens anything to
@@ -6815,12 +6824,18 @@ export class Realm {
       return { coarseDeclined: readAllowed ? 'none' : 'all' };
     }
     let coarseDeclined: CoarseDeclined = readAllowed ? 'writes' : 'all';
-    // A caller the realm admitted without a session writes as the grant's
-    // acting user, so the gate judges their writes as it judges a reader's:
-    // what a grant opts in to them, made as a user who may write the realm.
+    // A caller who isn't signed in writes as the grant's acting user, so the
+    // gate judges their writes as it judges a reader's: what a grant opts in
+    // to them, made as a user who may write the realm. That holds whether the
+    // realm admitted them to this check through its policy or its ACL let
+    // anyone read it, as long as the policy opens a write to such callers and
+    // the realm doesn't refuse their address.
     if (
       (await this.#policyJudges(write.refusal, requestContext)) ||
-      requestContext.anonymousCaller
+      requestContext.anonymousCaller ||
+      (write.refusal instanceof CoarseAuthenticationRequired &&
+        !requestContext.authenticatedUser &&
+        (await this.#anonymousCallerFor(request, ANONYMOUS_WRITE_CHECK)))
     ) {
       return { coarseDeclined };
     }
@@ -8654,18 +8669,27 @@ export class Realm {
     if (!caller) {
       return {};
     }
+    // Counted once for the request, however many times its batch commits: a
+    // write the realm commits again to reserialize what it wrote is one write.
+    // A batch with nothing in it costs nothing.
+    let counting: Promise<void> | undefined;
+    let count = async () => {
+      let units = cost();
+      if (units < 1) {
+        return;
+      }
+      let counted = await this.#chargeCaller(request, caller, units, {
+        actingUsers: scope.actingUsers.admitted,
+      });
+      if (counted.kind !== 'counted') {
+        let refusal = anonymousCountRefusal(counted);
+        caller.retryAfterSeconds = refusal.meta!.retryAfterSeconds as number;
+        throw new OperationFailure(refusal);
+      }
+    };
     return {
       actingUser: () => scope.actingUsers.admitted[0],
-      beforeCommit: async () => {
-        let counted = await this.#chargeCaller(request, caller, cost(), {
-          actingUsers: scope.actingUsers.admitted,
-        });
-        if (counted.kind !== 'counted') {
-          let refusal = anonymousCountRefusal(counted);
-          caller.retryAfterSeconds = refusal.meta!.retryAfterSeconds as number;
-          throw new OperationFailure(refusal);
-        }
-      },
+      beforeCommit: () => (counting ??= count()),
     };
   }
 

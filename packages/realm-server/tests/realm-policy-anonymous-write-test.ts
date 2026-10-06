@@ -36,6 +36,10 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // `realm.json` names, and opts in a few writes whose acting users don't
 // resolve to anyone who may write the newsroom.
 const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
+// A board anyone may read, and only a signed-in writer may write without a
+// grant; its policy lets visitors post feedback as its own submitter.
+const BOARD = 'http://127.0.0.1:4444/board/';
+const BOARD_POLICY = 'http://127.0.0.1:4444/org/policies/board';
 const ORG = 'http://127.0.0.1:4444/org/';
 const NEWSROOM_POLICY = `${ORG}policies/newsroom`;
 const EDITOR = '@editor:localhost';
@@ -88,6 +92,7 @@ const NOTE = type('Note');
 const TIP = type('Tip');
 
 const OPEN_DRAFT = `${NEWSROOM}articles/open`;
+const SPAM = `${NEWSROOM}articles/spam`;
 const CLOSED_DRAFT = `${NEWSROOM}articles/closed`;
 const MISSING = `${NEWSROOM}articles/nowhere`;
 
@@ -138,6 +143,12 @@ const POLICY = JSON.stringify({
             actingUser: 'submitter',
             where: '.authorIds | any(. == actor())',
           },
+          {
+            operation: 'delete',
+            anonymous: true,
+            actingUser: 'submitter',
+            where: '.status == "spam"',
+          },
           { operation: 'read', anonymous: true, where: '.status == "open"' },
         ]),
         // Acting users who may not write the newsroom, or who aren't users.
@@ -158,6 +169,7 @@ const POLICY = JSON.stringify({
 
 module(basename(import.meta.filename), function (hooks) {
   let newsroom: Realm;
+  let board: Realm;
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
@@ -190,6 +202,7 @@ module(basename(import.meta.filename), function (hooks) {
             'newsroom.gts': NEWSROOM_MODULE,
             'articles/open.json': article('Polls open', 'open', [SUBMITTER]),
             'articles/closed.json': article('Polls close', 'closed'),
+            'articles/spam.json': article('Buy now', 'spam'),
           },
           permissions: {
             [EDITOR]: ['read', 'write', 'realm-owner'],
@@ -199,10 +212,43 @@ module(basename(import.meta.filename), function (hooks) {
           },
         },
         {
+          realmURL: new URL(BOARD),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({
+              name: 'Board',
+              policy: BOARD_POLICY,
+              config: { submitter: SUBMITTER },
+            }),
+            'newsroom.gts': NEWSROOM_MODULE,
+          },
+          permissions: {
+            '*': ['read'],
+            [EDITOR]: ['read', 'write', 'realm-owner'],
+            [SUBMITTER]: ['read', 'write'],
+          },
+        },
+        {
           realmURL: new URL(ORG),
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/newsroom.json': POLICY,
+            'policies/board.json': JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {
+                  rules: [
+                    rule({ module: `${BOARD}newsroom`, name: 'Feedback' }, [
+                      {
+                        operation: 'create',
+                        anonymous: true,
+                        actingUser: 'submitter',
+                      },
+                    ]),
+                  ],
+                },
+                meta: { adoptsFrom: REALM_POLICY },
+              },
+            }),
           },
           permissions: { [ORG_ADMIN]: ['read', 'write', 'realm-owner'] },
         },
@@ -215,11 +261,12 @@ module(basename(import.meta.filename), function (hooks) {
     server = result.testRealmHttpServer;
     request = supertest(server);
     newsroom = result.realms.find((realm) => realm.url === NEWSROOM)!;
+    board = result.realms.find((realm) => realm.url === BOARD)!;
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
   async function stop() {
-    for (let realm of [newsroom, org]) {
+    for (let realm of [newsroom, board, org]) {
       realm.__testOnlyClearCaches();
       realm.unsubscribe();
     }
@@ -283,8 +330,18 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   function operations(...entries: Record<string, unknown>[]) {
-    return request
-      .post(`${new URL(NEWSROOM).pathname}_operations`)
+    return operationsAs('POST', ...entries);
+  }
+
+  function operationsAs(
+    method: 'POST' | 'QUERY',
+    ...entries: Record<string, unknown>[]
+  ) {
+    let req = request.post(`${new URL(NEWSROOM).pathname}_operations`);
+    if (method === 'QUERY') {
+      req = req.set('X-HTTP-Method-Override', 'QUERY');
+    }
+    return req
       .set('Accept', SupportedMimeType.BoxelOperations)
       .set('Content-Type', SupportedMimeType.BoxelOperations)
       .set('X-Forwarded-For', VISITOR)
@@ -583,5 +640,120 @@ module(basename(import.meta.filename), function (hooks) {
       );
     assert.strictEqual(response.status, 200, response.text);
     assert.deepEqual(records, [], 'and is no anonymous caller');
+  });
+
+  test('a create gets an id the realm mints, whatever id it names', async function (assert) {
+    let doc = newCard('Feedback', { message: 'Pick my id' });
+    let response = await request
+      .post(new URL(NEWSROOM).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR)
+      .send(JSON.stringify({ data: { ...doc.data, lid: 'chosen-by-me' } }));
+    assert.strictEqual(response.status, 201, response.text);
+    let id = (response.body as { data: { id: string } }).data.id;
+    assert.notOk(id.includes('chosen-by-me'), `minted: ${id}`);
+  });
+
+  test('a write that side-loads another card is refused, and nothing is written', async function (assert) {
+    let doc = newCard('Feedback', { message: 'With a friend' });
+    let response = await request
+      .post(new URL(NEWSROOM).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR)
+      .send(
+        JSON.stringify({
+          ...doc,
+          included: [
+            {
+              type: 'card',
+              lid: 'friend',
+              attributes: { message: 'Side-loaded' },
+              meta: { adoptsFrom: adoptsFrom('Feedback') },
+            },
+          ],
+        }),
+      );
+    unauthenticated(response, 'a side-load', assert);
+    assert.strictEqual(await feedbackCount(), 0, 'nothing was written');
+  });
+
+  test('an envelope update gives the same 401 for a closed draft and a missing one', async function (assert) {
+    let update = (href: string) =>
+      operations({
+        op: 'invoke',
+        'boxel:name': 'update',
+        href,
+        data: {
+          type: 'card',
+          attributes: { headline: 'Rewritten', status: 'open' },
+          meta: { adoptsFrom: adoptsFrom('Article') },
+        },
+      });
+    let closed = await update(CLOSED_DRAFT);
+    let missing = await update(MISSING);
+    unauthenticated(closed, 'a closed draft', assert);
+    unauthenticated(missing, 'a missing draft', assert);
+    assert.strictEqual(closed.text, missing.text, 'byte-identical');
+  });
+
+  test('a batch that only reads is counted one unit per entry once its reads have run', async function (assert) {
+    await setNewsroom({
+      anonymousRateLimit: { requests: 2, windowSeconds: 600 },
+    });
+    let read = { op: 'invoke', 'boxel:name': 'read', href: OPEN_DRAFT };
+    let two = await operationsAs('QUERY', read, read);
+    assert.strictEqual(two.status, 200, two.text);
+    let over = await operationsAs('QUERY', read);
+    assert.strictEqual(over.status, 429, 'the budget is spent');
+    let [record] = records.filter((r) => r.outcome === 'admitted');
+    assert.strictEqual(record?.cost, 2, 'counted as two');
+  });
+
+  test('an empty batch is answered as it is for anyone, and costs nothing', async function (assert) {
+    let response = await operations();
+    assert.strictEqual(response.status, 200, response.text);
+    assert.deepEqual(
+      records.filter((r) => r.outcome !== 'refused'),
+      [],
+      'nothing was counted',
+    );
+  });
+
+  test('a delete is admitted where its grant holds', async function (assert) {
+    let response = await request
+      .delete(new URL(SPAM).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR);
+    assert.true(response.status < 300, `${response.status} ${response.text}`);
+    assert.notOk(await stored(SPAM), 'the spam is gone');
+  });
+
+  test('a realm anyone may read answers a capability check about a write it opens to such callers', async function (assert) {
+    let feedback = { module: `${BOARD}newsroom`, name: 'Feedback' };
+    let response = await request
+      .post(`${new URL(BOARD).pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR)
+      .send({ checks: [{ target: feedback, operation: 'create' }] });
+    assert.strictEqual(response.status, 200, response.text);
+    assert.true(response.body.checks[0].allowed, 'the form may be shown');
+    let created = await request
+      .post(new URL(BOARD).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', VISITOR)
+      .send(
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { message: 'Hello board' },
+            meta: {
+              adoptsFrom: { module: rri(`${BOARD}newsroom`), name: 'Feedback' },
+            },
+          },
+        }),
+      );
+    assert.strictEqual(created.status, 201, created.text);
+    assert.ok(board, 'the board realm is up');
   });
 });
