@@ -211,12 +211,14 @@ const GONE_DOTTED_CARD = `${EDUCATION}classrooms/room.v9`;
 const DOTTED_MODULE = `${EDUCATION}classroom.v2`;
 const GONE_DOTTED_MODULE = `${EDUCATION}classroom.v9`;
 // A dot-file, which has no extension and so is typed as `FileDef`, and paths
-// the realm ignores: one under `.git/`, one under `node_modules`, and one its
-// `.gitignore` names. Each ignored file has a missing path of the same length
+// the realm ignores: one under `.git/`, one in a repository nested below the
+// root, one under `node_modules`, and one its `.gitignore` names. Each ignored file has a missing path of the same length
 // beside it, outside anything ignored.
 const GITIGNORE = `${EDUCATION}.gitignore`;
 const GIT_CONFIG = `${EDUCATION}.git/config`;
 const GONE_GIT_CONFIG = `${EDUCATION}.gix/config`;
+const NESTED_GIT_CONFIG = `${EDUCATION}vendor/lib/.git/config`;
+const GONE_NESTED_GIT_CONFIG = `${EDUCATION}vendor/lib/.gix/config`;
 const DRAFT_PDF = `${EDUCATION}drafts/plan.pdf`;
 const GONE_DRAFT_PDF = `${EDUCATION}public/gone.pdf`;
 const PACKAGE_README = `${EDUCATION}node_modules/pkg/README.md`;
@@ -292,6 +294,7 @@ module(basename(import.meta.filename), function (hooks) {
               { title: 'Draft', teacherIds: [TEACHER], announcements: [] },
             ),
             'node_modules/pkg/README.md': 'a dependency',
+            'vendor/lib/.git/config': '[core]\n\tbare = true\n',
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -489,6 +492,7 @@ module(basename(import.meta.filename), function (hooks) {
       await refused(assert, GIT_CONFIG, 'a file under .git/');
       await refused(assert, DRAFT_PDF, 'a file the .gitignore names');
       await refused(assert, PACKAGE_README, 'a file under node_modules');
+      await refused(assert, NESTED_GIT_CONFIG, "a nested repository's .git/");
       await policy('classroomSource');
       await refused(
         assert,
@@ -983,6 +987,7 @@ module(basename(import.meta.filename), function (hooks) {
           [GIT_CONFIG, GONE_GIT_CONFIG],
           [DRAFT_PDF, GONE_DRAFT_PDF],
           [PACKAGE_README, GONE_PACKAGE_README],
+          [NESTED_GIT_CONFIG, GONE_NESTED_GIT_CONFIG],
         ] as [string, string][]) {
           let response = await get(url, accept, AS.teacher());
           assert.strictEqual(response.status, 404, `${label}: ${nameOf(url)}`);
@@ -1010,6 +1015,7 @@ module(basename(import.meta.filename), function (hooks) {
           [GIT_CONFIG, '[core]\n\tbare = false\n'],
           [DRAFT_PDF, '%PDF-1.4 the draft plan'],
           [PACKAGE_README, 'a dependency'],
+          [NESTED_GIT_CONFIG, '[core]\n\tbare = true\n'],
         ] as [string, string][]) {
           let response = await get(url, accept, AS.reader());
           assert.strictEqual(response.status, 200, `${label}: ${nameOf(url)}`);

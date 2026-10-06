@@ -695,9 +695,14 @@ export function isIgnored(
   if (url.href === realmURL.href) {
     return false; // you can't ignore the entire realm
   }
+  let local = url.href.startsWith(realmURL.href)
+    ? url.href.slice(realmURL.href.length)
+    : url.pathname;
   if (
     [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
-    url.href.startsWith(`${realmURL.href}.git/`) ||
+    // A git repository's metadata, at the realm's root or in a repository
+    // nested anywhere below it.
+    local.split('/').includes('.git') ||
     // A file the realm is part-way through writing, or one left behind by a
     // write that died. It is no part of the realm either way.
     isPartialWritePath(url.href)
