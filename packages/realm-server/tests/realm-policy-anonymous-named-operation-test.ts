@@ -519,8 +519,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(explained.decision, 'denied', 'explain agrees');
     assert.strictEqual(
       explained.reason,
-      'actor-required',
-      'and says the caller would have to sign in, rather than that no grant names the operation',
+      'reads-actor',
+      'and says why, rather than that no grant names the operation',
     );
     unauthenticated(await sign(LOCAL, 'Ada'), 'the subtype', assert);
     assert.notOk(

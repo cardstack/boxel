@@ -1135,10 +1135,12 @@ export type PolicyExplanationReason =
   // The actor presented no credentials, and the ACL does not allow an
   // anonymous caller this lane. The policy admits only an authenticated
   // caller, so the invocation is answered with a 401 before anything about
-  // the target is read. Also the answer where a grant opens the operation to
-  // such a caller but the operation, as the target's type declares it, reads
-  // `actor()`.
+  // the target is read.
   | 'actor-required'
+  // A grant opens the operation to a caller who isn't signed in, but the
+  // operation, as the target's type declares it, reads `actor()`, which such
+  // a caller has none of, so the grant doesn't apply to them.
+  | 'reads-actor'
   // The realm names a policy it cannot load.
   | 'policy-unloadable';
 

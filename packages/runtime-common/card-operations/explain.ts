@@ -865,7 +865,7 @@ function refusalReason(
     case 'no-grant':
       return 'no-grant';
     case 'reads-actor':
-      return 'actor-required';
+      return 'reads-actor';
     default:
       return trace.rules.some(({ grants }) => grants.length > 0)
         ? 'predicate-false'
