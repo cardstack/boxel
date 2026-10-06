@@ -473,6 +473,9 @@ export default class StoreService extends Service implements StoreInterface {
   // we can't compare against a stored Promise.
   private searchCacheGeneration = 0;
   private store: CardStore;
+  // Counts the identity maps this service has created, so a log line can say
+  // which one an operation started in and which one it finished against.
+  #identityMapSerial = 0;
   protected isRenderStore = false;
 
   // This is used for tests
@@ -618,7 +621,9 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
-    storeLogger.debug('resetting store cache');
+    storeLogger.info(
+      `resetting store cache; replacing identity map #${this.#identityMapSerial}`,
+    );
     if (!opts?.preserveReferences) {
       this.referenceCount = new Map();
     }
@@ -2378,6 +2383,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private createCardStore(): CardStore {
+    this.#identityMapSerial++;
     return new CardStore(
       this.referenceCount,
       this.network.authedFetch,
@@ -3148,10 +3154,22 @@ export default class StoreService extends Service implements StoreInterface {
       let reloadTracker = this.startTrackingCardLoad(instance.id);
       let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
       let isDelete = false;
+      // The reload belongs to the identity map that held the instance when it
+      // started. A `resetCache` while the read is in flight replaces that map
+      // (an in-browser index pass does so on its first visit), and the
+      // replacement may already hold its own instance for this id under a
+      // different local id. Writing this one into it would give one remote id
+      // two local ids, so a superseded reload finishes against the map it
+      // started in and leaves the replacement alone.
+      let identityMap = this.store;
+      let identityMapSerial = this.#identityMapSerial;
 
       try {
         try {
-          maybeReloadedInstance = await this.reloadInstance(instance);
+          maybeReloadedInstance = await this.reloadInstance(
+            instance,
+            identityMap,
+          );
         } catch (err: any) {
           let cardError = processCardError(instance.id, err).errors[0];
           if (cardError?.awaitingIndex) {
@@ -3170,6 +3188,12 @@ export default class StoreService extends Service implements StoreInterface {
           } else {
             maybeReloadedInstance = cardError;
           }
+        }
+        if (this.store !== identityMap) {
+          storeLogger.info(
+            `dropping reload of ${instance.id}: it started in identity map #${identityMapSerial}, which was replaced by #${this.#identityMapSerial} while the reload was in flight`,
+          );
+          return;
         }
         // Detach the original instance's autosave subscription when it's been
         // superseded: either the reload errored, or the card's type changed and
@@ -4537,7 +4561,10 @@ export default class StoreService extends Service implements StoreInterface {
   // Returns the refreshed instance. Usually this is the same object as the
   // one passed in (updated in place), but when the card's type changed it is a
   // freshly-built instance of the new type — see below.
-  private async reloadInstance(instance: CardDef): Promise<CardDef> {
+  private async reloadInstance(
+    instance: CardDef,
+    identityMap: CardStore,
+  ): Promise<CardDef> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     let waiterLabel = `reloadInstance ${instance.id}`;
@@ -4610,7 +4637,7 @@ export default class StoreService extends Service implements StoreInterface {
         await api.updateFromSerialized<typeof CardDef>(
           rebuilt,
           incomingDoc,
-          this.store,
+          identityMap,
         );
         return rebuilt;
       }
@@ -4622,7 +4649,7 @@ export default class StoreService extends Service implements StoreInterface {
       await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
-        this.store,
+        identityMap,
         undefined,
         (fieldName) => {
           let keep =

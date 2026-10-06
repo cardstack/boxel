@@ -4293,6 +4293,80 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('a reload still in flight when the store is reset leaves the replacement identity map alone', async function (assert) {
+    // An in-browser index pass resets the store on its first visit, and the
+    // realm holds a reload's read until the reader's own pending indexing
+    // settles — so a reload begun from one pass's event routinely resumes
+    // after the next pass has replaced the identity map and loaded its own
+    // instance of the same card. The resumed reload must not bring its
+    // pre-reset instance into the replacement, where it would be a second
+    // local id for a remote id that already has one.
+    let url = `${testRealmURL}Person/reset-mid-reload`;
+    let events = interceptRealmEvents();
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let readHeld = new Deferred<void>();
+    let releaseRead = new Deferred<void>();
+    let holding = false;
+    try {
+      await writePerson('Person/reset-mid-reload.json', 'Before Reset');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+      let preReset = storeService.peek(url) as CardDefType;
+
+      await writePerson('Person/reset-mid-reload.json', 'After Reset');
+      let event = await events.nextEventFor(url);
+
+      holding = true;
+      cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+        if (
+          holding &&
+          String(fetchUrl).includes('Person/reset-mid-reload') &&
+          (args?.method ?? 'GET') === 'GET'
+        ) {
+          holding = false;
+          readHeld.fulfill();
+          await releaseRead.promise;
+        }
+        return originalFetchJSON(fetchUrl, args);
+      };
+      events.deliver(event);
+      await readHeld.promise;
+
+      storeService.resetCache();
+      let replacement = (await storeService.get(url)) as CardDefType;
+      assert.notStrictEqual(
+        replacement[localId],
+        preReset[localId],
+        'the replacement identity map loads its own instance of the card',
+      );
+
+      releaseRead.fulfill();
+      await settled();
+
+      assert.strictEqual(
+        storeService.peek(url),
+        replacement,
+        'the resumed reload leaves the replacement instance in place',
+      );
+      assert.strictEqual(
+        storeService.peekError(url)?.message,
+        undefined,
+        'and records no error for the card',
+      );
+      assert.strictEqual(
+        (replacement as any).name,
+        'After Reset',
+        'the replacement holds the state the realm wrote',
+      );
+    } finally {
+      releaseRead.fulfill();
+      delete cardService.fetchJSON;
+      events.restore();
+    }
+  });
+
   // Holds the in-browser queue on a job of its own, so index publishes that
   // arrive meanwhile fold into one pending pass — how concurrent writers' saves
   // meet in a realm under load.
