@@ -233,13 +233,20 @@ export default class RoomMessageTool extends Component<Signature> {
   // Most result cards are data a tool hands back to the model, with nothing
   // in them for the user to look at. The chat shows one only when it is a
   // realm card the user may want to open, or when its type has a view of its
-  // own; the tool's status row stands for the rest.
+  // own and this result has something in it for that view to show; the
+  // tool's status row stands for the rest.
   private get shouldDisplayResultCard() {
     let { card, isRealmCard } = this.toolResultCard;
     if (!card) {
       return false;
     }
-    return isRealmCard || hasOwnEmbeddedView(card);
+    if (isRealmCard) {
+      return true;
+    }
+    return (
+      hasOwnEmbeddedView(card) &&
+      !(card as CardDef & { hasNothingToShow?: boolean }).hasNothingToShow
+    );
   }
 
   private get didFailCorrectnessCheck() {

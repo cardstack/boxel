@@ -490,6 +490,12 @@ export class RunRealmCodeResult extends CardDef {
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
 
+  // A run that only read saved no files and took no captures, so the chat
+  // has nothing of it to show.
+  get hasNothingToShow() {
+    return !this.files?.length && !this.captures?.length;
+  }
+
   // What the run changed and what it looked at. The script's own result is
   // for the model and stays out of the chat.
   static embedded = class Embedded extends Component<
@@ -506,8 +512,6 @@ export class RunRealmCodeResult extends CardDef {
               </li>
             {{/each}}
           </ul>
-        {{else}}
-          <p class='no-files'>No files were changed.</p>
         {{/if}}
         {{#if @model.captures.length}}
           <div class='captures'>
@@ -548,10 +552,6 @@ export class RunRealmCodeResult extends CardDef {
           flex-shrink: 0;
           color: var(--boxel-450);
           text-transform: capitalize;
-        }
-        .no-files {
-          margin: 0;
-          color: var(--boxel-450);
         }
         .captures {
           display: flex;

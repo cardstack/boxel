@@ -2879,4 +2879,28 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         "the script's own result stays out of the chat",
       );
   });
+
+  test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-read-only',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: 'the file contents',
+        captures: [],
+      }),
+    });
+
+    await waitFor('[data-test-message-idx="0"] [data-test-apply-state]');
+    await settled();
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists('the tool row shows the call as applied');
+    assert
+      .dom('[data-test-tool-result-container]')
+      .doesNotExist('the read-only run has no result card');
+  });
 });
