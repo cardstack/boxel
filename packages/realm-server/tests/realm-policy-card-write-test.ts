@@ -597,8 +597,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 3,
           definitionLookups: 0,
           snapshotReads: 0,
-          ancestorDefinitionReads: 0,
-          lockedTypeReads: 0,
+          ancestorDefinitionReads: 5,
+          lockedTypeReads: 4,
         },
         'each write’s predicate was evaluated once, under the lock',
       );

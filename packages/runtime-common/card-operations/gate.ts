@@ -2078,8 +2078,19 @@ async function lockedCard(
   if (!storedType) {
     return undefined;
   }
+  // The chain comes from the definition cache rather than the row, which lags
+  // a module edit the way it lags a card's: a type that now extends
+  // `RealmPolicy` makes its cards policy cards before they are indexed again.
+  // It is read beside the type keys rather than after them, since the lock is
+  // held for both.
+  let stats = policyGateStats(core);
+  stats.lockedTypeReads++;
+  let chainRead: Promise<string[] | undefined> | undefined;
+  if (check.changesCard) {
+    stats.lockedTypeReads++;
+    chainRead = recordedChain(core, storedType);
+  }
   let keys: string[];
-  policyGateStats(core).lockedTypeReads++;
   try {
     keys = await core.policy.typeKeys(storedType);
   } catch {
@@ -2088,13 +2099,8 @@ async function lockedCard(
   if (!keys.includes(check.matchedType)) {
     return undefined;
   }
-  if (check.changesCard) {
-    // The chain comes from the definition cache rather than the row, which
-    // lags a module edit the way it lags a card's: a type that now extends
-    // `RealmPolicy` makes its cards policy cards before they are indexed
-    // again.
-    policyGateStats(core).lockedTypeReads++;
-    let chain = await recordedChain(core, storedType);
+  if (chainRead) {
+    let chain = await chainRead;
     if (!chain || core.policy.isPolicyCard(chain)) {
       return undefined;
     }
