@@ -1156,6 +1156,10 @@ export type PolicyExplanationReason =
   // operation, as the target's type declares it, reads `actor()`, which such
   // a caller has none of, so the grant doesn't apply to them.
   | 'reads-actor'
+  // The caller isn't signed in, and the target realm's `anonymousBlocklist`
+  // has an entry that is neither an address nor a range, which closes the
+  // realm to every such caller whatever the policy grants.
+  | 'blocklist-invalid'
   // The realm names a policy it cannot load.
   | 'policy-unloadable';
 

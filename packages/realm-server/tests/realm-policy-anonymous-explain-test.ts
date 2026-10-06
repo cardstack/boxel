@@ -99,6 +99,13 @@ function policyCard(realm: string) {
               { operation: 'update', anonymous: true, actingUser: 'missing' },
               { operation: 'read', anonymous: true },
               { operation: 'claim', anonymous: true, actingUser: 'submitter' },
+              // Signed-in grants that put a warned grant at index 10, whose
+              // path `rules[0].grants[1]` is a string prefix of.
+              { operation: 'delete' },
+              { operation: 'delete' },
+              { operation: 'delete' },
+              { operation: 'delete' },
+              { operation: 'claim', anonymous: true, actingUser: 'reader' },
             ],
           },
         ],
@@ -330,12 +337,31 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(explanation.anonymous?.invalidBlocklistEntries, [
       'not an address',
     ]);
+    assert.strictEqual(
+      explanation.decision,
+      'denied',
+      'the grant that would admit such a caller does not, since the realm turns them away first',
+    );
+    assert.strictEqual(explanation.reason, 'blocklist-invalid');
+    assert.deepEqual(explanation.refusal, {
+      status: 401,
+      code: 'actor-required',
+    });
+    assert.strictEqual(explanation.admittedBy, undefined);
+    let signedIn = await explain(BOARD_POLICY, READER, NOTICE, 'read');
+    assert.strictEqual(
+      signedIn.reason,
+      'acl',
+      'a signed-in caller is answered by the realm as before',
+    );
   });
 
   test('a grant listed carries what compiling the policy recorded against it', async function (assert) {
     let explanation = await explain(BOARD_POLICY, READER, NOTICE, 'claim');
-    let [claim] = grantsOf(explanation);
-    assert.strictEqual(claim?.path, 'rules[0].grants[5]');
+    let claim = grantsOf(explanation).find(
+      ({ path }) => path === 'rules[0].grants[5]',
+    );
+    assert.ok(claim, 'the claim grant is listed');
     assert.deepEqual(
       claim?.issues?.map(({ code, path, severity }) => ({
         code,
@@ -354,7 +380,7 @@ module(basename(import.meta.filename), function (hooks) {
       grantsOf(await explain(BOARD_POLICY, READER, NOTICE, 'update')).some(
         ({ issues }) => issues,
       ),
-      'a grant with nothing recorded against it carries no issues',
+      "a grant with nothing recorded against it carries no issues, not even rules[0].grants[10]'s",
     );
   });
 });
