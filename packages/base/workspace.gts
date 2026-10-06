@@ -3541,22 +3541,26 @@ class Isolated extends Component<typeof Workspace> {
     if (!realm) {
       return;
     }
-    let response = await fetch(`${realm}_types`, {
-      headers: {
-        Accept: SupportedMimeType.CardTypeSummary,
-      },
-    });
+    // Nothing awaits this task, so a failure thrown here would surface as an
+    // unhandled rejection. Keep the current rail and warn instead, as
+    // `searchRealm` does for the panel searches.
+    let response: Response;
+    try {
+      response = await fetch(`${realm}_types`, {
+        headers: {
+          Accept: SupportedMimeType.CardTypeSummary,
+        },
+      });
+    } catch (e) {
+      console.warn(`Workspace could not load the type list for ${realm}`, e);
+      return;
+    }
     if (!response.ok) {
       let responseText = await response.text();
-      let err = new Error(
-        `status: ${response.status} -
-          ${response.statusText}. ${responseText}`,
-      ) as Error & { status?: number; responseText?: string };
-
-      err.status = response.status;
-      err.responseText = responseText;
-
-      throw err;
+      console.warn(
+        `Workspace could not load the type list for ${realm}: status ${response.status} ${response.statusText}. ${responseText}`,
+      );
+      return;
     }
     let cardTypeSummaries = (await response.json()).data as {
       id: string;
