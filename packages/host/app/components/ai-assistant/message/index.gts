@@ -24,7 +24,6 @@ import {
 
 import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
-import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -50,9 +49,7 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
-    isLastAssistantMessage: boolean;
     isMostRecentMessage?: boolean;
-    userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -463,8 +460,6 @@ export default class AiAssistantMessage extends Component<Signature> {
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
-              @isLastAssistantMessage={{@isLastAssistantMessage}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @reasoning={{if
                 @reasoningContent
                 (hash

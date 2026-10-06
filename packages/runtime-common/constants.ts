@@ -123,10 +123,6 @@ export interface Permissions {
   readonly canWrite: boolean;
 }
 
-export const SEARCH_MARKER: string = '╔═══ SEARCH ════╗';
-export const SEPARATOR_MARKER: string = '╠═══════════════╣';
-export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';
-
 export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;
 
 // Default max card payload size, in bytes.
