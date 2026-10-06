@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "776baef8ccd1bc4c370711797374a79905c4e965",
+  "revision": "708a03324f6c0d3b8dceda9a200f4244e07bef5a",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -21,6 +21,7 @@
     "realmServer": [
       "catalog-test-subset-test",
       "realm-policy-activation-test",
+      "realm-policy-anonymous-explain-test",
       "realm-policy-anonymous-named-operation-test",
       "realm-policy-anonymous-read-test",
       "realm-policy-anonymous-search-test",

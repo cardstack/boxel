@@ -1032,6 +1032,21 @@ export interface PolicyExplanation {
   // Present for a question asked about a search: what the target realm's
   // policy composes into it.
   search?: ExplainedSearch;
+  // Present for a question asked about a caller who isn't signed in: how the
+  // target realm limits and blocks such callers, from its `realm.json`.
+  anonymous?: ExplainedAnonymousAccess;
+}
+
+// How a realm treats callers who aren't signed in, as an explain reports it.
+export interface ExplainedAnonymousAccess {
+  // How many requests one address may make in a window, and whether that is
+  // the realm's own setting (`anonymousRateLimit`) or the platform's default.
+  limit: { requests: number; windowSeconds: number };
+  limitFrom: 'realm' | 'platform';
+  // `anonymousBlocklist` entries that are neither an address nor a range, as
+  // written. While there is any, the realm admits no caller who isn't signed
+  // in at all.
+  invalidBlocklistEntries: string[];
 }
 
 // ============================================================================
@@ -1141,6 +1156,10 @@ export type PolicyExplanationReason =
   // operation, as the target's type declares it, reads `actor()`, which such
   // a caller has none of, so the grant doesn't apply to them.
   | 'reads-actor'
+  // The caller isn't signed in, and the target realm's `anonymousBlocklist`
+  // has an entry that is neither an address nor a range, which closes the
+  // realm to every such caller whatever the policy grants.
+  | 'blocklist-invalid'
   // The realm names a policy it cannot load.
   | 'policy-unloadable';
 
@@ -1172,6 +1191,19 @@ export interface ExplainedGrant {
   // is what it composes into the search. One whose predicate has none admits
   // no search (`policy-not-filterable`). Absent on the direct lane.
   filterable?: boolean;
+  // Present where the grant opts in to callers who aren't signed in. For one
+  // on a write, the `realm.json` `config` key its writes are made under, and
+  // either the user that key names or why it names no one who may write the
+  // realm, in which case the grant admits no such caller.
+  anonymous?: {
+    actingUserKey?: string;
+    actingUser?: string;
+    actingUserFailure?: 'key-missing' | 'not-a-matrix-id' | 'no-write';
+  };
+  // What compiling the policy recorded against this grant: the warnings it
+  // still applies under. A grant an issue left out of the policy isn't here
+  // to carry it, and appears only in the policy's own issues.
+  issues?: PolicyIssue[];
 }
 
 export type ExplainedGrantOutcome =

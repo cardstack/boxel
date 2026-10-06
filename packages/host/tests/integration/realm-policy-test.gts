@@ -752,6 +752,77 @@ module('Integration | realm policy', function (hooks) {
     );
   }
 
+  test('an explanation for someone who is not signed in shows the limit, the blocklist, and who each grant opened to them writes as', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      permissions: {
+        '*': ['read'],
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/classrooms`,
+          config: { submitter: '@testuser:localhost' },
+          anonymousRateLimit: { requests: 7, windowSeconds: 30 },
+          anonymousBlocklist: ['not an address'],
+        }),
+        'classroom.gts': classroomModule,
+        'classrooms/room-204.json': classroom([TEACHER]),
+        'policies/classrooms.json': policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [
+              { operation: 'update', anonymous: true, actingUser: 'submitter' },
+              { operation: 'update', anonymous: true, actingUser: 'missing' },
+              // Reads the caller, so it is warned about.
+              {
+                operation: 'update',
+                anonymous: true,
+                actingUser: 'submitter',
+                where: teachesPredicate,
+              },
+            ],
+          },
+        ]),
+      },
+    });
+    await getService('realm').login(testRealmURL);
+    getService('operations');
+    let policy = await loadPolicy('policies/classrooms');
+    await renderCard(loader, policy, 'isolated');
+
+    await ask('', `${testRealmURL}classrooms/room-204`, 'update');
+    assert.dom('[data-test-explanation-actor]').hasText('not signed in');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText(
+        "This realm's blocklist has an entry that isn't an address or a range, so it turns away everyone who isn't signed in before the policy is checked.",
+      );
+    assert
+      .dom('[data-test-explanation-anonymous-limit]')
+      .hasText('7 requests per 30 seconds from one address, set by this realm');
+    assert
+      .dom('[data-test-explanation-anonymous-blocklist]')
+      .includesText('"not an address"', 'names the entry to fix');
+    assert.deepEqual(
+      [
+        ...document.querySelectorAll('[data-test-explanation-grant-anonymous]'),
+      ].map((el) => el.textContent?.trim()),
+      [
+        'Open to people who aren\'t signed in; their writes are made as @testuser:localhost (this realm\'s "submitter" setting).',
+        'Open to people who aren\'t signed in, but this realm\'s settings have no "missing", so this grant admits none of them.',
+        'Open to people who aren\'t signed in; their writes are made as @testuser:localhost (this realm\'s "submitter" setting).',
+      ],
+    );
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-explanation-grant-issue]')].map(
+        (el) => el.getAttribute('data-test-explanation-grant-issue'),
+      ),
+      ['anonymous-grant-reads-actor'],
+      'the grant whose condition reads the caller carries its warning',
+    );
+  });
+
   test('the policy explains what it decides for one caller, one card and one operation', async function (assert) {
     await renderClassroomPolicy();
 

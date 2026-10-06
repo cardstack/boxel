@@ -14,6 +14,7 @@ import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { ActingUserResolution } from './acting-users.ts';
+import type { AnonymousAccessSettings } from '../anonymous-access.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
 import type {
   GateTrace,
@@ -189,6 +190,9 @@ export interface OperationPolicyAccess {
   // `ActingUsers`). A realm without it admits no write by a caller who isn't
   // signed in.
   actingUser?(key: string): Promise<ActingUserResolution>;
+  // How the realm limits and blocks callers who aren't signed in, from its
+  // `realm.json` and the platform default. An explain reports it.
+  anonymousAccess?(): Promise<AnonymousAccessSettings>;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and
