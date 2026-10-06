@@ -1018,12 +1018,6 @@ export class EvaluationReportCard extends CardDef {
           background: var(--sunken);
           color: var(--ink-soft);
         }
-        .tier-unscored {
-          background: transparent;
-          border: 1px dashed var(--line);
-          color: var(--ink-soft);
-          font-style: italic;
-        }
 
         .results {
           display: flex;
