@@ -1457,12 +1457,14 @@ module('Acceptance | Tools tests', function (hooks) {
     // "applied" is the end of a chain that settled() does not track: the
     // tool queue drains on a debounce, waits out any in-flight room
     // processing, validates, runs the tool in an ember-concurrency task,
-    // sends the result event through the mock homeserver's setTimeout
-    // delivery, and only then does room processing fold the result in. That
-    // takes 500-600ms on an idle machine, too close to waitFor's 1s default for
-    // a loaded CI runner, so the wait gets a budget sized for the whole
-    // chain. Each phase's first sighting is recorded so the log shows where
-    // the time went (or which phase never happened).
+    // refreshes the room's skills and the AI context, sends the result event
+    // through the mock homeserver's setTimeout delivery, and only then does
+    // room processing fold the result in. That takes 0.5-1.2s locally, at or
+    // past waitFor's 1s default, so the wait gets a budget sized for the
+    // whole chain. Each phase's first sighting is recorded so the log shows
+    // where the time went (or which phase never happened): "executed" is
+    // the tool body returning, "resultSent" is its result event reaching the
+    // room, "applied" is that result folded in and rendered.
     let toolService = getService('tool-service');
     let phaseReachedAt: Record<string, number> = {};
     let notePhase = (phase: string, reached: boolean) => {
@@ -1484,6 +1486,12 @@ module('Acceptance | Tools tests', function (hooks) {
           notePhase(
             'executed',
             toolService.executedToolRequestIds.has(toolCallId),
+          );
+          notePhase(
+            'resultSent',
+            getRoomEvents(roomId).some(
+              (event: any) => event.content?.commandRequestId === toolCallId,
+            ),
           );
           let applied = Boolean(
             find(
