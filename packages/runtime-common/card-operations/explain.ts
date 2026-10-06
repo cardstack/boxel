@@ -43,7 +43,6 @@ import {
   isOperationFailure,
   isWrite,
   refusalForNonReader,
-  type BaseOperation,
   type ExplainedGrantOutcome,
   type ExplainedIndexLag,
   type ExplainedRule,
@@ -648,11 +647,6 @@ async function opensToAnonymous(
   core: OperationCore,
   operation: string,
 ): Promise<boolean> {
-  // No route admits a caller who isn't signed in to a write, whatever the
-  // policy opens, so explain answers such a caller's write as the route does.
-  if (isWrite(operation as BaseOperation)) {
-    return false;
-  }
   let policy = await core.policy?.compiledPolicy();
   return (
     !policy?.uncompilable &&

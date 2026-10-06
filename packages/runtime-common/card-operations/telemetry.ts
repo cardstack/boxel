@@ -1,3 +1,4 @@
+import type { ActingUserFailure } from './acting-users.ts';
 import { logger } from '../log.ts';
 import type { BaseOperation, OperationErrorCode } from './types.ts';
 
@@ -554,6 +555,12 @@ export interface AnonymousRequestEvent {
   // How many units the request was counted as, where it was more than one:
   // a capability check counts one for each pair it asks about.
   cost?: number;
+  // For a write, the users it was made as: the acting user each admitting
+  // grant names, first admitted first.
+  actingUsers?: string[];
+  // For a write a grant would otherwise have admitted, why its acting-user
+  // key named no one who may write the realm.
+  actingUserFailures?: { key: string; failure: ActingUserFailure }[];
   retryAfterSeconds?: number;
   correlationId: string | null;
 }
