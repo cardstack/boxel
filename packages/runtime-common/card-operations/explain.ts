@@ -44,6 +44,7 @@ import {
   isOperationFailure,
   isWrite,
   refusalForNonReader,
+  refusalSeenBy,
   type ExplainedGrant,
   type ExplainedGrantOutcome,
   type ExplainedIndexLag,
@@ -867,7 +868,7 @@ async function explain(
       refused(
         base,
         refusalReason(trace, error.status),
-        seenBy(coarseDeclined, error),
+        seenBy(actor, coarseDeclined, error),
         error.status >= 500 ? 'failed' : 'denied',
       ),
       trace,
@@ -907,7 +908,7 @@ async function explain(
     return refused(
       explained,
       refusalReason(trace, refusal.status),
-      seenBy(coarseDeclined, refusal),
+      seenBy(actor, coarseDeclined, refusal),
       threw ? 'failed' : 'denied',
     );
   }
@@ -960,13 +961,16 @@ function refused(
   return { ...explanation, decision, reason, refusal };
 }
 
-// The refusal as the actor would receive it. A caller who may not read the
-// realm is told that a card they were refused is not there.
+// The refusal as the actor would receive it (see `refusalSeenBy`).
 function seenBy(
+  actor: ScopeCaller,
   coarseDeclined: CoarseDeclined,
   error: OperationError,
 ): { status: number; code: OperationError['code'] } {
-  let seen = coarseDeclined === 'all' ? refusalForNonReader(error) : error;
+  let seen = refusalSeenBy(error, {
+    readDeclined: coarseDeclined === 'all',
+    signedIn: actor.kind === 'user',
+  });
   return { status: seen.status, code: seen.code };
 }
 
