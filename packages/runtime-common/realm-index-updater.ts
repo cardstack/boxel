@@ -675,9 +675,12 @@ export class RealmIndexUpdater {
     // should provide a default ignore list. But really we should decouple the
     // realm's consumption of this from the search index so that the realm can
     // figure out what files are ignored before indexing has happened.
-    if (
-      ['node_modules'].includes(url.href.replace(/\/$/, '').split('/').pop()!)
-    ) {
+    // A `node_modules` directory and everything beneath it. A directory walk
+    // asks about the directory and skips it, but a read names a file inside.
+    let local = url.href.startsWith(this.realmURL.href)
+      ? url.href.slice(this.realmURL.href.length)
+      : url.pathname;
+    if (local.split('/').includes('node_modules')) {
       return true;
     }
     return isIgnored(this.realmURL, this.ignoreMap, url);
