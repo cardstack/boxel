@@ -12,14 +12,20 @@ to copy from.
 
 ## Operations are not access control
 
-**This is the most important thing on this page.** Operations are
-_identity-aware_ and _not access-enforced_. The realm checks its own read/write
-permissions and nothing else:
+**This is the most important thing on this page.** A declaration is
+_identity-aware_ and _not access-enforced_. Who may invoke an operation is
+decided outside it, by the realm's permissions and the realm's policy, and
+nothing an operation declares changes that:
 
 - Anyone who can write a realm can invoke any mutating operation on any card in
   it. Anyone who can read it can invoke any read.
+- A realm's policy can admit a caller the realm's permissions decline, to the
+  operations its grants name, on the cards its predicates hold for. It only
+  widens: nothing in a policy takes away what the permissions grant (see
+  [The card routes and a realm's policy](#the-card-routes-and-a-realms-policy)).
 - `actor()` tells a declaration who is calling, so an operation can **record**
-  who acted. It never decides whether they may.
+  who acted. Inside the declaration it never decides whether they may. A
+  policy's predicate is where `actor()` decides.
 - `assert(…)` is a precondition on the **state of the data**, not on identity.
   A failed assertion means the data was not in the shape the operation needs.
 - An `output` projection decides the shape of one operation's answer and
@@ -27,9 +33,12 @@ permissions and nothing else:
   plain read, its stored source, or a search. Leave a value out because the
   consumer does not need it, never because the caller may not have it.
 
-Enforcement at the operation level is a separate project. Until it ships, treat
-every operation's result as reachable by any caller permitted to use the realm,
-and do not build a security boundary out of any of the above.
+So treat every operation's result as reachable by any caller who may read the
+realm, and by any caller a policy grant admits to it, and do not build a
+security boundary out of any of the above. A policy has limits of its own,
+each deliberate, and they are on a page of their own:
+[What a realm's policy does not do](realm-policy-limits.md). Read it before
+relying on a policy for anything that matters.
 
 ## No card code runs on an operation's path
 
@@ -104,11 +113,16 @@ Naming a base the def does not carry is the authoring error `base-not-carried`:
 `appendLine` belongs to files and `appendContainsMany` to cards, and neither is
 available on the other.
 
-Two name rules the decorator enforces at class-definition time. `readSource` is
-reserved: the realm answers a stored-bytes read without reading a definition,
-so a declaration under that name would never be reached. And `atomic`, `on`,
-`find`, `parallel` and `serial` belong to the invocation surface, so a
-declaration under one of those names could never be called either. `create` is
+Three name rules the decorator enforces at class-definition time. `readSource`
+is reserved: the realm answers a stored-bytes read without reading a
+definition, so a declaration under that name would never be reached. `atomic`,
+`on`, `find`, `parallel` and `serial` belong to the invocation surface, so a
+declaration under one of those names could never be called either. And `query`
+belongs to search: an ad-hoc search is invoked as `query` on the type it
+targets, and a policy grants it by that name, so a saved search declared as
+`query` would let a caller granted it drop its filter and write any other. The
+`query` base is declarable, since every saved search builds on it; only the
+name is taken. `create` is
 deliberately _not_ reserved — specializing it is normal.
 
 The name a caller invokes and the base that carries it out are read separately.
@@ -615,6 +629,17 @@ The client applies an eligible write to its local copy before the realm
 answers. Eligibility is detected automatically; `optimistic: false` opts an
 operation out, and `optimistic: true` opts one in.
 
+### `nonGrantable`
+
+`nonGrantable: true` keeps an operation out of every realm policy's reach: only
+a caller the realm's own permissions allow may invoke it, whatever a policy
+grants. It is for the operations that edit or disclose authorization itself,
+such as one that writes the ids a grant's predicate reads, where a grant on it
+could be made into every grant. It holds on every subclass, including one that
+redeclares the operation without it. A policy grant naming such an operation
+records `grants-authorization-infrastructure` and is inactive. The `explain`
+and `validate` bases require it.
+
 ## Invoking operations
 
 ```ts
@@ -896,9 +921,11 @@ The codes are `unknown-field`, `not-a-collection`, `undeclared-param`,
 `computed-write`, `read-only-write`, `link-collection-replace`,
 `path-crosses-collection`, `link-requires-identity`, `write-through-link`,
 `unsearchable-read`, `unsnapshotted-assert`, `unresolved-type`,
-`actor-not-a-card`, `invalid-program`, `invalid-query`, `reserved-name`,
-`base-not-carried`, `unrunnable-program`, `incomplete-append` and
-`instance-out-of-scope`.
+`actor-not-a-card`, `links-without-assembly`, `invalid-link-strategy`,
+`html-without-rendering`, `invalid-html-declaration`, `invalid-program`,
+`invalid-query`, `reserved-name`, `base-not-carried`, `unrunnable-program`,
+`incomplete-append`, `instance-out-of-scope` and `lowering-failed`, the last
+for a declaration lowering could not finish at all.
 
 ## Failure at invocation
 
@@ -949,6 +976,15 @@ Four worth recognizing:
   kind of error, and quotes neither the predicate nor anything the card
   stores. Write predicates that cannot throw on any value the card can store.
 
+A realm whose policy does not compile at all, because the card its pointer
+names is missing, cannot be loaded or is not a `RealmPolicy`, or holds no list
+of `rules`, answers every caller its permissions decline with a 500, code
+`internal-error` and title "Policy unavailable". A caller who may not read the
+realm is answered so before anything about the target is resolved. A caller the permissions allow never loads the policy and
+is answered as usual. An explain reports the same state as
+`policy-unloadable`, and the realm's config card says why the policy is not in
+force (see [Checking what a policy puts in force](#checking-what-a-policy-puts-in-force)).
+
 ## The card routes and a realm's policy
 
 A realm's policy can admit a caller the realm's own permissions decline. The
@@ -959,6 +995,14 @@ under the write lock, against the card as it stands when the write runs. A
 refusal follows the same rules on both: a caller who may read the realm gets a
 403, and one who may not gets the 404 a card that does not exist gets. The
 card+json body carries no `code`, so there the status is the whole answer.
+
+A request that authenticated nobody, to a realm that names a policy, is told to
+authenticate: a 401 with code `actor-required` and title "Authentication
+required", on every route that would otherwise consult the policy, before the
+target is resolved. So an invented card
+gets the same answer as a real one, and the policy is not loaded. A grant
+admits a signed-in caller, and a predicate compares `actor()` with what the
+card stores, so an anonymous caller has nothing to be judged by.
 
 A caller who may not read the realm doesn't choose where a card they create
 lands. A create mints a card where nothing is stored and is refused where a card
@@ -1358,9 +1402,14 @@ Some things worth knowing before you read one:
   type in a realm the server has not mounted, such as one another realm server
   serves, is read by each realm as its own owner. And a query grant whose
   filter compares a field is checked against the descendants of its rule's type
-  that the compiling realm holds cards of. A validate compiles in the card's own
+  that the compiling realm holds cards of. A descendant that declares the
+  compared field differently is kept out of the filter (see
+  [Search leaves out a subtype that redeclares a compared field](realm-policy-limits.md#search-leaves-out-a-subtype-that-redeclares-a-compared-field)),
+  and one a search filter cannot name at all leaves the grant scoping no search,
+  recorded as `policy-not-filterable`. A validate compiles in the card's own
   realm, so a realm naming the card that holds a descendant the card's realm
-  does not can record `policy-not-filterable` where a validate does not.
+  does not can compile that grant differently, and can record
+  `policy-not-filterable` where a validate does not.
 - **It is live, and nothing is cached.** A fix shows on the next validate after
   the card, or a realm in `realms`, reindexes. A realm naming the card revalidates its own compiled
   policy within five seconds of any change to the card or to a type its rules

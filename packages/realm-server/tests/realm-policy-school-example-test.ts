@@ -769,6 +769,96 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  // Pins the documented posture "Search is not a prompt revocation boundary"
+  // in docs/realm-policy-limits.md. It asserts the behavior as it is, the
+  // lagging search included: a change that makes search revoke promptly
+  // changes that section too.
+  module('a provider is taken off a schedule', function () {
+    // Work that holds the Education realm's index lane and never completes:
+    // a job a worker has claimed and not finished, which nothing runs. Every
+    // pass in the lane queues behind it until the returned function lets it
+    // go.
+    async function holdIndexLane() {
+      let [{ id: jobId }] = (await db.execute(
+        `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout, initiated_by)
+         VALUES ('incremental-index', $1, '{}'::jsonb, 'unfulfilled', 7200, $2)
+         RETURNING id`,
+        {
+          bind: [
+            `indexing:${EDUCATION}`,
+            JSON.stringify(['@elsewhere:localhost']),
+          ],
+        },
+      )) as unknown as { id: string }[];
+      await db.execute(
+        `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+         VALUES ($1, 'school-example-test-worker', NOW() + INTERVAL '7200 seconds')`,
+        { bind: [jobId] },
+      );
+      return async () => {
+        await db.execute('DELETE FROM job_reservations WHERE job_id = $1', {
+          bind: [jobId],
+        });
+        await db.execute('DELETE FROM jobs WHERE id = $1', { bind: [jobId] });
+        // Removing a job wakes no worker, so the queue is told there is work,
+        // as publishing one tells it.
+        await db.execute('NOTIFY jobs');
+      };
+    }
+
+    function listedIds(response: Response) {
+      return (response.body.data as { id: string }[]).map((entry) => entry.id);
+    }
+
+    test('the direct read refuses her at once, and search lists the schedule until it is reindexed', async function (assert) {
+      assert.deepEqual(
+        listedIds(await listMySchedules(CARMEN)),
+        [SPEECH_JORDAN, SPEECH_MAYA],
+        'Carmen provides both speech-therapy schedules',
+      );
+
+      let release = await holdIndexLane();
+      try {
+        // Jordan's schedule passes to Ben. The bytes are stored now, and the
+        // pass that indexes them waits behind the held lane.
+        let shipped = readFileSync(
+          join(
+            EXAMPLE_ROOT,
+            'school-education',
+            'schedules',
+            'speech-jordan.json',
+          ),
+          'utf8',
+        );
+        let handedOver = shipped.replace(CARMEN, BEN);
+        assert.notStrictEqual(handedOver, shipped, 'the provider id changed');
+        await education.write('schedules/speech-jordan.json', handedOver, {
+          waitForIndex: false,
+        });
+
+        assert.strictEqual(
+          (await getCard(SPEECH_JORDAN, onEducation(CARMEN))).status,
+          404,
+          'the direct read judges the stored provider id, and refuses her on the next request',
+        );
+        assert.deepEqual(
+          listedIds(await listMySchedules(CARMEN)),
+          [SPEECH_JORDAN, SPEECH_MAYA],
+          'while search answers from the index, which still names her',
+        );
+      } finally {
+        await release();
+      }
+      await education.incrementalIndexing();
+
+      assert.deepEqual(
+        listedIds(await listMySchedules(CARMEN)),
+        [SPEECH_MAYA],
+        'once the schedule is reindexed, search stops listing it',
+      );
+    });
+  });
+
   module('an anonymous visitor tries any of the above', function () {
     test('they are asked to sign in before anything about the target is resolved', async function (assert) {
       let answers: Response[] = [];
