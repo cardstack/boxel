@@ -262,8 +262,8 @@ async function createResultCard(
           `grade ${graded.grade}`,
           ...result.reasons,
           ...graded.misses,
-          ...(a && a.realmCodeWrites
-            ? [`${a.realmCodeWrites} realm write(s)`]
+          ...(a && a.realmCodeWrites + a.toolWrites
+            ? [`${a.realmCodeWrites + a.toolWrites} realm write(s)`]
             : []),
           ...(result.cardRendered
             ? [`rendered ${result.cardRendered} in the ${result.renderedIn}`]

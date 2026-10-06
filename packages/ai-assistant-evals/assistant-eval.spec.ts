@@ -548,23 +548,33 @@ async function stopGeneration(page: Page) {
 // conversation carries on in its own room, but the panel no longer shows it,
 // so everything read from the page would describe the wrong room. When the
 // panel is on another room, reopen the evaluation's room from past sessions.
-// Returns true when it had to switch back.
+// Returns true when it switched back. It runs on every poll, so reading the
+// current room never waits, and a switch that fails (the past-sessions button
+// disabled, the host reloading) returns false for the next poll to retry
+// rather than failing the run.
 async function returnToRoom(page: Page, roomId: string): Promise<boolean> {
   let current = await page
-    .locator('[data-test-room]')
-    .first()
-    .getAttribute('data-test-room', { timeout: 5_000 })
-    .catch(() => undefined);
+    .evaluate(
+      () =>
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room') ?? null,
+    )
+    .catch(() => null);
   if (!current || current === roomId) {
     return false;
   }
-  await page.locator('[data-test-past-sessions-button]').click();
-  await page.locator(`[data-test-enter-room="${roomId}"]`).click();
-  await page
-    .locator(`[data-test-room="${roomId}"]`)
-    .waitFor({ timeout: 60_000 });
-  await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
-  return true;
+  try {
+    await page.locator('[data-test-past-sessions-button]').click();
+    await page.locator(`[data-test-enter-room="${roomId}"]`).click();
+    await page
+      .locator(`[data-test-room="${roomId}"]`)
+      .waitFor({ timeout: 60_000 });
+    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function waitForIdle(
@@ -932,10 +942,17 @@ async function runModel(
         index + 1,
       );
       // The bot answers the command itself, without the model; its reply
-      // carries no usage, so it is not counted as a turn.
-      await expect(
-        page.getByText(`${feature} is now enabled`).first(),
-      ).toBeVisible({ timeout: 60_000 });
+      // carries no usage, so it is not counted as a turn. A name the bot
+      // does not know gets "There is no feature named …" instead, which ends
+      // the run straight away rather than at the timeout.
+      let enabled = page.getByText(`${feature} is now enabled`).first();
+      let unknown = page.getByText('There is no feature named').first();
+      await expect(enabled.or(unknown)).toBeVisible({ timeout: NO_REPLY_MS });
+      if (await unknown.isVisible()) {
+        throw new Error(
+          `The ai-bot has no skill feature named "${feature}"; check the evaluation's skillFeatures and EVAL_SKILL_FEATURES.`,
+        );
+      }
     }
     result.skillFeatures = skillFeatures;
     // One safety clock for the whole run, follow-ups included.
@@ -1021,7 +1038,8 @@ async function runModel(
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
     // An enabled feature whose skill the model never opened means the run
-    // did not exercise it, whatever the verdict says.
+    // did not exercise it, whatever the verdict says. This assumes each
+    // feature's skill lives in a skills/<feature name>/SKILL.md directory.
     for (let feature of result.skillFeatures) {
       let read = result.analysis.filesRead.some((url) =>
         url.endsWith(`/skills/${feature}/SKILL.md`),
@@ -1201,7 +1219,7 @@ test.afterAll(async () => {
             )
             .join(', ')
         : '';
-      let writes = a ? `${a.realmCodeWrites}` : '';
+      let writes = a ? `${a.realmCodeWrites + a.toolWrites}` : '';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
       } | ${tools} | ${writes} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
