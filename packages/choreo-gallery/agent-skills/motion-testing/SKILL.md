@@ -71,10 +71,12 @@ module('the inbox', function (hooks) {
   reason goes inline next to it.
 - Run: the Motion ports with `pnpm test` in `packages/glimmer-motion` (runs
   the suite in headless Chrome, compiled from source), or `pnpm start:test`
-  there for interactive runs. The Choreo suites run with `pnpm test` in
-  test-app (builds the suite, runs it in Chrome), or
+  there for interactive runs. The Choreo and film suites run the same way in
+  `packages/choreo`, compiling choreo and glimmer-motion from source. The
+  tests that render gallery demos run with `pnpm test` in test-app (builds the
+  suite, runs it in Chrome), or
   `pnpm --filter test-app exec vite --port 4202 --strictPort` + `/tests` for
   interactive runs.
 
-Reference suites: `test-app/tests/integration/choreo/` (the Choreo contract
-suite) and the upstream ports under `packages/glimmer-motion/tests/`.
+Reference suites: `packages/choreo/tests/integration/choreo/` (the Choreo
+contract suite) and the upstream ports under `packages/glimmer-motion/tests/`.

@@ -11,6 +11,7 @@
  * away; a dev server compiling the source serves the whole module, so
  * `glimmerMotionSource()` answers that import with a stub.
  */
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, sep } from 'node:path';
 
@@ -76,6 +77,66 @@ export function glimmerMotionSource() {
         code: ' '.repeat('"use client";'.length) + code.slice(13),
         map: null,
       };
+    },
+  };
+}
+
+/** The `developing:choreo` target an exports map gives a subpath, else null. */
+function sourceExport(exports, subpath) {
+  const target = (entry, star) => {
+    const path = entry?.['developing:choreo'];
+    return path && star !== undefined
+      ? path.replace('*', star)
+      : (path ?? null);
+  };
+  if (subpath in exports) {
+    return target(exports[subpath]);
+  }
+  for (const [key, entry] of Object.entries(exports)) {
+    const star = key.indexOf('*');
+    if (star < 0) {
+      continue;
+    }
+    const prefix = key.slice(0, star);
+    const suffix = key.slice(star + 1);
+    if (
+      subpath.length >= prefix.length + suffix.length &&
+      subpath.startsWith(prefix) &&
+      subpath.endsWith(suffix)
+    ) {
+      return target(
+        entry,
+        subpath.slice(prefix.length, subpath.length - suffix.length),
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * A Vite plugin that resolves a package's imports of itself (its test suite
+ * importing it by name) through its `developing:choreo` exports, for a
+ * harness that compiles the package from source.
+ *
+ * Embroider's resolver answers a v2 addon's self-references from the
+ * addon's own package.json and does not apply `resolve.conditions`: it
+ * serves `dist/` whenever a build exists, and the suite would silently test
+ * that instead of the source. A harness running against the built output
+ * leaves this plugin out.
+ */
+export function selfReferenceSource(packageDir) {
+  const pkg = JSON.parse(
+    readFileSync(join(packageDir, 'package.json'), 'utf8'),
+  );
+  return {
+    name: `${pkg.name}-self-reference-source`,
+    enforce: 'pre',
+    resolveId(id) {
+      if (id !== pkg.name && !id.startsWith(`${pkg.name}/`)) {
+        return null;
+      }
+      const target = sourceExport(pkg.exports, `.${id.slice(pkg.name.length)}`);
+      return target ? join(packageDir, target) : null;
     },
   };
 }
