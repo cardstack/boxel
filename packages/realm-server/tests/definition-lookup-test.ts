@@ -461,6 +461,66 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // An answer derived from definitions is kept while the generation holds
+    // the value it had before the definitions were read. The generation moves
+    // before an invalidation's delete, and again once it has committed: a
+    // reader between the two can still read the row being removed, and what
+    // it derives must not outlive the delete.
+    test('the definition generation moves before and after each invalidation’s delete', async function (assert) {
+      let lookup: CachingDefinitionLookup;
+      let atDelete: number[] = [];
+      let observed = new Proxy(dbAdapter, {
+        get(target, property) {
+          if (property === 'execute') {
+            return async (...args: Parameters<PgAdapter['execute']>) => {
+              let result = await target.execute(...args);
+              if (/DELETE FROM\s+modules/i.test(args[0])) {
+                atDelete.push(lookup.definitionGeneration());
+              }
+              return result;
+            };
+          }
+          let value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      lookup = new CachingDefinitionLookup(
+        observed,
+        mockRemotePrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let invalidations: [string, () => Promise<unknown>][] = [
+        ['invalidate', () => lookup.invalidate(`${realmURL}person.gts`)],
+        ['clearRealmDefinitions', () => lookup.clearRealmDefinitions(realmURL)],
+        ['clearAllDefinitions', () => lookup.clearAllDefinitions()],
+      ];
+      for (let [name, invalidation] of invalidations) {
+        atDelete = [];
+        let before = lookup.definitionGeneration();
+        await invalidation();
+        assert.true(atDelete.length > 0, `${name} deletes rows`);
+        assert.true(
+          atDelete[0] > before,
+          `${name} moves the generation before its delete`,
+        );
+        assert.true(
+          lookup.definitionGeneration() > atDelete[atDelete.length - 1],
+          `${name} moves it again once its delete has committed`,
+        );
+      }
+    });
+
     test('invalidates module cache entries without file extensions', async function (assert) {
       // Start from a cold modules cache; see lookupDefinition above.
       await dbAdapter.execute('DELETE FROM modules');
