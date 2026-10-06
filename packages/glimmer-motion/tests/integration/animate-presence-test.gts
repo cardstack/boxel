@@ -12,7 +12,12 @@ import LayoutGroup from 'glimmer-motion/layout-group';
 import motion from 'glimmer-motion/motion';
 import Presence from 'glimmer-motion/presence';
 import { setupMotion } from 'glimmer-motion/test-support';
-import { frame, motionValue, type Variants } from 'motion-dom';
+import {
+  frame,
+  type MotionValue,
+  motionValue,
+  type Variants,
+} from 'motion-dom';
 import { module, test } from 'qunit';
 
 import { nextFrame, sleep } from '../helpers/motion';
@@ -29,6 +34,31 @@ const waitFor = async (pred: () => boolean, timeout = 1000) => {
     }
     await sleep(16);
   }
+};
+
+/**
+ * Every value a motion value takes from now on, stamped with the ms since
+ * recording began.
+ *
+ * An exit test asserts on this trail rather than on one value read by a timer
+ * partway through: the timer's clock starts only once `settled()` returns, after
+ * the exit has already begun, so one slow frame or late timer on a loaded runner
+ * lands the read after the animation has finished. The trail also goes into each
+ * assertion message, so a failure shows when every value arrived.
+ */
+const recordValues = (mv: MotionValue<number>) => {
+  const t0 = performance.now();
+  const samples: [ms: number, value: number][] = [];
+  const stop = mv.on('change', (v) =>
+    samples.push([Math.round(performance.now() - t0), v]),
+  );
+  return {
+    stop,
+    passedBetween: (from: number, to: number) =>
+      samples.some(([, v]) => v > Math.min(from, to) && v < Math.max(from, to)),
+    describe: () =>
+      `[ms, value] since the exit began: ${JSON.stringify(samples)}`,
+  };
 };
 
 class P {
@@ -157,17 +187,21 @@ module('Integration | motion | AnimatePresence', function (hooks) {
             ></div></Presence></div>
       </template>,
     );
+    const exiting = recordValues(opacity);
     p.isVisible = false;
     await settled();
-    await new Promise<void>((resolve) => {
-      setTimeout(() => {
-        assert.notStrictEqual(opacity.get(), 1);
-        assert.notStrictEqual(opacity.get(), 0);
-      }, 50);
-      setTimeout(resolve, 150);
-    });
-    await settled();
-    assert.strictEqual(root().childElementCount, 0);
+    await waitFor(() => root().childElementCount === 0).catch(() => {});
+    exiting.stop();
+    assert.true(
+      exiting.passedBetween(1, 0),
+      `opacity animated out rather than snapping: ${exiting.describe()}`,
+    );
+    assert.strictEqual(opacity.get(), 0, exiting.describe());
+    assert.strictEqual(
+      root().childElementCount,
+      0,
+      `the exited element is removed: ${exiting.describe()}`,
+    );
   });
 
   test('Allows nested exit animations', async function (assert) {
@@ -269,17 +303,21 @@ module('Integration | motion | AnimatePresence', function (hooks) {
     await settled();
     p.isVisible = true;
     await settled();
+    const exiting = recordValues(opacity);
     p.isVisible = false;
     await settled();
-    await new Promise<void>((resolve) => {
-      setTimeout(() => {
-        assert.notStrictEqual(opacity.get(), 1);
-        assert.notStrictEqual(opacity.get(), 0);
-      }, 50);
-      setTimeout(resolve, 300);
-    });
-    await settled();
-    assert.strictEqual(root().childElementCount, 0);
+    await waitFor(() => root().childElementCount === 0).catch(() => {});
+    exiting.stop();
+    assert.true(
+      exiting.passedBetween(1, 0),
+      `opacity animated out rather than snapping: ${exiting.describe()}`,
+    );
+    assert.strictEqual(opacity.get(), 0, exiting.describe());
+    assert.strictEqual(
+      root().childElementCount,
+      0,
+      `the exited element is removed: ${exiting.describe()}`,
+    );
   });
 
   test('Removes a child with no animations', async function (assert) {
@@ -714,17 +752,21 @@ module(
                 ></div></div></Presence></div>
         </template>,
       );
+      const exiting = recordValues(opacity);
       p.isVisible = false;
       await settled();
-      await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          assert.notStrictEqual(opacity.get(), 1);
-          assert.notStrictEqual(opacity.get(), 0);
-        }, 50);
-        setTimeout(resolve, 150);
-      });
-      await settled();
-      assert.strictEqual(root().childElementCount, 0);
+      await waitFor(() => root().childElementCount === 0).catch(() => {});
+      exiting.stop();
+      assert.true(
+        exiting.passedBetween(1, 0),
+        `opacity animated out rather than snapping: ${exiting.describe()}`,
+      );
+      assert.strictEqual(opacity.get(), 0, exiting.describe());
+      assert.strictEqual(
+        root().childElementCount,
+        0,
+        `the exited element is removed: ${exiting.describe()}`,
+      );
     });
 
     test('Can cycle through multiple components', async function (assert) {
