@@ -400,9 +400,12 @@ export default class RoomMessageTool extends Component<Signature> {
           </Alert>
         {{/if}}
         {{#if this.shouldDisplayResultCard}}
+          {{! Light scheme island in the dark assistant panel: the header and the
+              embedded result share one light surface and foreground. }}
           <CardContainer
             @displayBoundaries={{false}}
             class='tool-result-card-preview'
+            data-theme='light'
             data-test-tool-result-container
           >
             <CardHeader
