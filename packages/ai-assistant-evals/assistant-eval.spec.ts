@@ -70,14 +70,6 @@ const MAX_MINUTES = Number(process.env.EVAL_MAX_MINUTES ?? 15);
 // A pill that stays in "applying" this long is a stuck host, not a slow tool:
 // the host's own tool timeout is two minutes.
 const STUCK_APPLYING_MS = 150_000;
-// A host tool can be left unclaimed with its pill spinning in "applying"
-// although nothing is running it: the host's tool drain read the message
-// before every tool had been built, and never looks at it again. Clicking the
-// pill runs the tool and posts its result. The page shows the same spinner
-// for a tool that is really running, so the runner waits past the host's own
-// 120 s execute timeout, after which a running tool has failed or finished,
-// and only then clicks each pill still spinning, once, and records it.
-const RECOVER_APPLYING_MS = 125_000;
 // A turn that shows "Generating results" with no new text for this long is a
 // stalled request between the ai-bot and the provider; the bot has no timeout
 // of its own for it.
@@ -551,41 +543,6 @@ async function stopGeneration(page: Page) {
 // expensive runs are not stopped; they are graded afterwards.
 // `botMessagesBefore` is how many finished bot turns the room already had
 // when the prompt went out; a follow-up prompt waits for a new one.
-// Clicks every tool pill still spinning in "applying" that has not been
-// clicked before, and returns how many it clicked. See RECOVER_APPLYING_MS.
-async function recoverStuckPills(
-  page: Page,
-  recoveredTools: string[],
-): Promise<number> {
-  let ids = await page.locator('[data-test-tool-call-id]').evaluateAll((els) =>
-    els
-      .filter(
-        (el) =>
-          // The host's own correctness check is slow by design and is not
-          // left unclaimed the way a model's tool call can be.
-          el.getAttribute('data-tool-name') !== 'checkCorrectness' &&
-          el.querySelector('[data-test-tool-call-apply="applying"]'),
-      )
-      .map((el) => el.getAttribute('data-test-tool-call-id') ?? ''),
-  );
-  let clicked = 0;
-  for (let id of ids) {
-    if (!id || recoveredTools.includes(id)) {
-      continue;
-    }
-    recoveredTools.push(id);
-    await page
-      .locator(
-        `[data-test-tool-call-id="${id}"] [data-test-tool-call-apply="applying"]`,
-      )
-      .first()
-      .click({ timeout: 5_000 })
-      .catch(() => undefined);
-    clicked++;
-  }
-  return clicked;
-}
-
 // Some tools open a room of their own and move the assistant panel to it:
 // `listing-remix`, for one, starts a "Remixing …" session. The evaluation's
 // conversation carries on in its own room, but the panel no longer shows it,
@@ -615,7 +572,6 @@ async function waitForIdle(
   deadline: number,
   botMessagesBefore = 0,
   onActivity?: (activity: Activity) => void,
-  recoveredTools: string[] = [],
   roomId?: string,
   roomReturns: { count: number } = { count: 0 },
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
@@ -650,12 +606,7 @@ async function waitForIdle(
     lastTextLength = activity.botTextLength;
     if (activity.applying > 0) {
       applyingSince ??= now;
-      if (
-        now - applyingSince > RECOVER_APPLYING_MS &&
-        (await recoverStuckPills(page, recoveredTools)) > 0
-      ) {
-        applyingSince = now;
-      } else if (now - applyingSince > STUCK_APPLYING_MS) {
+      if (now - applyingSince > STUCK_APPLYING_MS) {
         return { stoppedBy: 'stuck', irregularities: [] };
       }
     } else {
@@ -909,7 +860,6 @@ async function runModel(
     initialFiles: [],
     skillsUsed: [],
     skillFeatures: [],
-    recoveredTools: [],
     roomReturns: 0,
     username,
     stoppedBy: 'error',
@@ -1027,7 +977,6 @@ async function runModel(
             });
           }
         },
-        result.recoveredTools,
         result.roomId,
         roomReturns,
       );

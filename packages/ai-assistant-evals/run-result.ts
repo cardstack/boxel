@@ -49,9 +49,6 @@ export interface RunResult {
     | 'irregularity'
     | 'error';
   irregularities: string[];
-  // Tool calls whose pill sat in "applying" with nothing running them, and
-  // which the runner clicked to run (RECOVER_APPLYING_MS in the spec).
-  recoveredTools: string[];
   // How often a tool (listing-remix, for one) moved the assistant panel to a
   // room of its own and the runner reopened the evaluation's room.
   roomReturns: number;
