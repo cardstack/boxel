@@ -33,7 +33,11 @@ export type GateTraceRefusal =
   // to match, which is what module source and an empty path are.
   | 'unmatchable-target'
   // No rule governing the target's type has a grant for the operation.
-  | 'no-grant';
+  | 'no-grant'
+  // A grant opens the operation to a caller who isn't signed in, but the
+  // operation as the target's type resolves it reads `actor()`, which such a
+  // caller has none of, so it is refused before it runs.
+  | 'reads-actor';
 
 // What a predicate said when the gate evaluated it.
 export type GateTraceOutcome = 'held' | 'did-not-hold' | 'threw';

@@ -1,11 +1,18 @@
 import type Koa from 'koa';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import type {
+  AnonymousCaller,
+  DBAdapter,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import {
   archivedRealmURLs,
   ensureTrailingSlash,
   fetchRealmPermissions,
   fetchUserPermissions,
   isSessionRevoked,
+  logger,
+  MAX_REALMS_PER_SEARCH_REQUEST,
   param,
   parseRealmsFromPayload,
   parseSearchRequestPayload,
@@ -19,12 +26,16 @@ import {
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
 import {
+  isNamedQueryPayload,
+  searchInvocation,
   searchPrincipal,
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import {
   retrieveTokenClaim,
   type RealmServerTokenClaim,
@@ -59,12 +70,19 @@ export type MultiRealmAuthorizationState = {
   grantCandidates: string[];
   // Who the request's token was verified for: the user it names, or a
   // realm-authority principal — a session a realm renders its own cards
-  // under. Absent on a request that carried no token, which reached here only
-  // because every realm it names is publicly readable.
+  // under. For a request that carried no token, an anonymous principal where
+  // a realm it names admitted it through its policy (see `anonymousCallers`),
+  // and absent where every realm it names is publicly readable.
   principal?: SearchPrincipal;
+  // For a request that carried no token, the caller each realm it may search
+  // only through its policy admitted (see `Realm.admitAnonymousSearch`). Each
+  // counts the search against that caller's budget. These are the request's
+  // only grant candidates.
+  anonymousCallers?: Map<string, AnonymousCaller>;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
+const log = logger('realm-server:multi-realm-authorization');
 const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 
 export function multiRealmAuthorization(
@@ -74,12 +92,16 @@ export function multiRealmAuthorization(
     realmSecretSeed,
     realms,
     reconciler,
+    realmsRootPath,
+    virtualNetwork,
   }: {
     dbAdapter: DBAdapter;
     matrixClient: MatrixClient;
     realmSecretSeed: string;
     realms: Realm[];
     reconciler: RealmRegistryReconciler;
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
   },
   {
     unreadableRealms = 'refuse',
@@ -161,6 +183,7 @@ export function multiRealmAuthorization(
 
     let readableRealms = new Set<string>();
     let principal: SearchPrincipal | undefined;
+    let anonymousCallers: Map<string, AnonymousCaller> | undefined;
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
       let publicPermissions = await fetchUserPermissions(dbAdapter, {
@@ -174,18 +197,38 @@ export function multiRealmAuthorization(
 
       // Authentication comes before authorization, and a request that named
       // nobody is told to say who it is rather than answered for nobody. A
-      // policy grants by who is asking, so there is no grant for this request
-      // to be judged by either — which is why this refuses where an
-      // authenticated caller without permission does not.
+      // policy grants by who is asking, so such a request is judged only by
+      // the grants that opt in to callers who aren't signed in. On an endpoint
+      // that carries the realms a caller can't read, each such realm whose
+      // policy opens `query` to these callers, and that doesn't refuse the
+      // caller's address, is searched through its policy, and the rest
+      // contribute no rows, as they would for a signed-in caller. A named
+      // query is granted by its own name, which no grant opens to these
+      // callers. A request no realm admits is refused, which is why this
+      // refuses where an authenticated caller without permission does not.
       let realmsRequiringAuth = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
       if (realmsRequiringAuth.length > 0) {
-        await sendResponseForUnauthorizedRequest(
-          ctxt,
-          `Authorization required for realms: ${realmsRequiringAuth.join(', ')}`,
-        );
-        return;
+        let payload = (ctxt.state as Record<string, unknown>)[
+          SEARCH_REQUEST_PAYLOAD_STATE
+        ];
+        anonymousCallers =
+          unreadableRealms === 'carry' && opensToAnonymousSearch(payload)
+            ? await admitAnonymousSearch(
+                await notArchived(dbAdapter, realmsRequiringAuth),
+                request,
+                { reconciler, realmsRootPath, virtualNetwork },
+              )
+            : new Map();
+        if (anonymousCallers.size === 0) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            `Authorization required for realms: ${realmsRequiringAuth.join(', ')}`,
+          );
+          return;
+        }
+        principal = { kind: 'anonymous' };
       }
     } else {
       let token: RealmServerTokenClaim & { iat: number; exp: number };
@@ -301,7 +344,9 @@ export function multiRealmAuthorization(
     if (principal?.kind !== 'realm-authority') {
       let archived = await archivedRealmURLs(dbAdapter, unreadable);
       grantCandidates = unreadable.filter(
-        (realmURL) => !archived.has(realmURL),
+        (realmURL) =>
+          !archived.has(realmURL) &&
+          (!anonymousCallers || anonymousCallers.has(realmURL)),
       );
     }
 
@@ -309,10 +354,82 @@ export function multiRealmAuthorization(
       realmList: readable,
       grantCandidates,
       ...(principal === undefined ? {} : { principal }),
+      ...(anonymousCallers ? { anonymousCallers } : {}),
     } satisfies MultiRealmAuthorizationState;
 
     await next();
   };
+}
+
+// Whether a search could be opened to a request that authenticated nobody at
+// all, judged before any realm is asked: an ad-hoc search, since a named query
+// is granted by its own name, which no grant opens to such callers, that names
+// a type some grant could be on.
+function opensToAnonymousSearch(payload: unknown): boolean {
+  return (
+    !isNamedQueryPayload(payload) &&
+    (searchInvocation(payload as Parameters<typeof searchInvocation>[0])?.types
+      .length ?? 0) > 0
+  );
+}
+
+// The realms among `urls` that are not archived. An archived realm is
+// sealed and serves no rows to anyone, so it is never asked to admit anyone.
+async function notArchived(
+  dbAdapter: DBAdapter,
+  urls: string[],
+): Promise<string[]> {
+  let archived = await archivedRealmURLs(dbAdapter, urls);
+  return urls.filter((url) => !archived.has(url));
+}
+
+// The realms among `urls` that admit a request that authenticated nobody to a
+// search, each with the caller it admitted. A request naming more realms than
+// a search may fan out to admits none, so the realms a caller who isn't signed
+// in can have the server mount and ask are bounded as a client's search is. A
+// realm whose `realm.json` names no policy is not mounted to ask: with no
+// policy there is nothing that could admit the caller. A realm that won't
+// mount, or can't answer, admits nobody, and the others still answer.
+async function admitAnonymousSearch(
+  urls: string[],
+  request: Request,
+  locate: {
+    reconciler: RealmRegistryReconciler;
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+  },
+): Promise<Map<string, AnonymousCaller>> {
+  let admitted = new Map<string, AnonymousCaller>();
+  urls = [...new Set(urls)];
+  if (urls.length > MAX_REALMS_PER_SEARCH_REQUEST) {
+    return admitted;
+  }
+  let named = await Promise.all(
+    urls.map((url) => mayNameRealmPolicy(url, locate)),
+  );
+  let asked = urls.filter((_url, index) => named[index]);
+  let mounted = await resolveRealmsForFederatedRequest(
+    locate.reconciler,
+    asked,
+  );
+  await Promise.all(
+    mounted.map(async (realm, index) => {
+      let caller: AnonymousCaller | undefined;
+      try {
+        caller = await realm?.admitAnonymousSearch(request);
+      } catch (e) {
+        log.warn(
+          `${asked[index]} could not say whether it admits a search from a caller who isn't signed in, so it admits none`,
+          e,
+        );
+        return;
+      }
+      if (caller) {
+        admitted.set(asked[index], caller);
+      }
+    }),
+  );
+  return admitted;
 }
 
 // Whether a realm lets a user read it, judged as the realm judges a session

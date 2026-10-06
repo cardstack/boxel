@@ -6,9 +6,15 @@
 // unchanged.
 import GlimmerComponent from '@glimmer/component';
 
+import {
+  fileContentRevision,
+  urlAtRevision,
+  type FileRevisionLike,
+} from './file-revision';
+
 // A structural contract rather than `FileDef` itself, so callers can pass a
 // plain object (a test fixture, a serialized file) as well as a real instance.
-export interface FileResourceLike {
+export interface FileResourceLike extends FileRevisionLike {
   id?: string | URL | null;
   url?: string | URL | null;
   sourceUrl?: string | URL | null;
@@ -34,6 +40,21 @@ export function fileResourceURL(
   );
 }
 
+// The URL a primitive's native element loads. A URL resolved from the FileDef
+// carries the file's content revision, so the element reloads when the file is
+// written; an explicit URL is the caller's to version and passes through as
+// given.
+export function fileElementURL(
+  file?: FileResourceLike | null,
+  explicitURL?: string | URL | null,
+): string {
+  let explicit = stringValue(explicitURL);
+  if (explicit) {
+    return explicit;
+  }
+  return urlAtRevision(fileResourceURL(file), fileContentRevision(file));
+}
+
 interface FileImageSignature {
   Args: {
     file?: FileResourceLike | null;
@@ -51,7 +72,7 @@ interface FileImageSignature {
 // `...attributes`.
 export class FileImage extends GlimmerComponent<FileImageSignature> {
   get src() {
-    return fileResourceURL(this.args.file, this.args.src ?? this.args.url);
+    return fileElementURL(this.args.file, this.args.src ?? this.args.url);
   }
   get alt() {
     return this.args.alt ?? this.args.name ?? this.args.file?.name ?? '';

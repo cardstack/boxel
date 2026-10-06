@@ -202,6 +202,8 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/file-presentation'),
   'file-formats/file-preview-stage': () =>
     import('@cardstack/base/file-formats/file-preview-stage'),
+  'file-formats/file-revision': () =>
+    import('@cardstack/base/file-formats/file-revision'),
   'file-formats/file-shell-atom': () =>
     import('@cardstack/base/file-formats/file-shell-atom'),
   'file-formats/file-shell-embedded': () =>
