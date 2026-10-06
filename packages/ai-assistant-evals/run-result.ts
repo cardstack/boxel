@@ -36,6 +36,9 @@ export interface RunResult {
   initialFiles: string[];
   // Source URLs of the skill files the room had enabled.
   skillsUsed: string[];
+  // Skill features enabled in the room before the first prompt
+  // (EVAL_SKILL_FEATURES).
+  skillFeatures: string[];
   username: string;
   stoppedBy:
     | 'idle'
@@ -46,6 +49,12 @@ export interface RunResult {
     | 'irregularity'
     | 'error';
   irregularities: string[];
+  // Tool calls whose pill sat in "applying" with nothing running them, and
+  // which the runner clicked to run (RECOVER_APPLYING_MS in the spec).
+  recoveredTools: string[];
+  // How often a tool (listing-remix, for one) moved the assistant panel to a
+  // room of its own and the runner reopened the evaluation's room.
+  roomReturns: number;
   // File name, next to this result, of what the workspace held when the run
   // ended: every source file and every indexed card document.
   workspaceSnapshot?: string;

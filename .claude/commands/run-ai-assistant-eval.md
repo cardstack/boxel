@@ -182,9 +182,14 @@ evidence, whether each holds. Then score:
   number of criteria), rounded to a whole number. A criterion that is half met
   (the field exists but is not shown, the edit landed but broke another view)
   counts as failed.
-- **0**: the verdict is not `pass`, or no card of the asked-for kind exists
+- **0**: the verdict is `model-failure`, or no card of the asked-for kind exists
   in the test workspace. A pass with the wrong card (a placeholder, an
   unrelated card, only the pre-copied card untouched) is also 0.
+- **Not scored**: the verdict is `host-failure`, `bot-failure` or
+  `runner-failure`. The run says nothing about the model, so the result card
+  leaves it out of the scores (tier `unscored`) whatever score is recorded.
+  Record `--score 0` with an analysis that names the failure, and judge what
+  the model did up to that point in the analysis.
 
 Write the analysis as markdown: a checklist of the criteria with ✓ or ✗ and
 one line of evidence each; then, for anything that failed or looked rough,

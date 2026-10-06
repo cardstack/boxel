@@ -12,7 +12,8 @@
         "summary": "One realistic brief with eight catalog reuse opportunities across card, field, command and component \u2014 graded on the ratio taken, not a single decision.",
         "notes": "Timing targets do not apply to this card. It is a multi-part build with a follow-up, so the <=8 turn and <=120s targets will report ROUGH as a matter of course; that is not a finding. Judge it on the reuse ratio and the must-not-hand-roll list.\n\nThe service-desk domain carries no Listing, so this card exercises the Spec/parts path only. Install and remix of a whole bundle are deliberately unmeasured here.\n\nDomain chosen because no other evaluation touches it, keeping eval vocabulary disjoint from the skill's own examples.",
         "cardThumbnailURL": null
-      }
+      },
+      "skillFeatures": ["catalog-reuse"]
     },
     "relationships": {
       "cardInfo.theme": {
