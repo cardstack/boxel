@@ -7,9 +7,6 @@ import {
 } from '../lib/set-title.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import {
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -21,11 +18,6 @@ import type { IEvent, IRoomEvent, IStateEvent } from 'matrix-js-sdk';
 import { EventStatus, type MatrixClient, MatrixEvent } from 'matrix-js-sdk';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import type OpenAI from 'openai';
-import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-} from '@cardstack/runtime-common';
 import { constructHistory } from '@cardstack/runtime-common/ai';
 
 module('shouldSetRoomTitle', () => {
@@ -462,69 +454,6 @@ module('shouldSetRoomTitle', () => {
         eventLog,
         '@aibot:localhost',
         new MatrixEvent(patchCommandResultEvent),
-      ),
-    );
-  });
-
-  test('Set a title if the user applied a code patch', () => {
-    let codePatchResultEvent: Partial<IEvent> = {
-      type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-      content: {
-        'm.relates_to': {
-          event_id: '2',
-          key: 'applied',
-          rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-        },
-        msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
-        codeBlockIndex: 0,
-      },
-    };
-    let codeBlock = `\`\`\`
-http://test-realm/test/hello.txt
-${SEARCH_MARKER}
-Hello, world!
-${SEPARATOR_MARKER}
-Hi, world!
-${REPLACE_MARKER}\n\`\`\``;
-    const eventLog: IRoomEvent[] = [
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          body: 'Hey please improve the code',
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 1000,
-          transaction_id: '1',
-        },
-      },
-      {
-        type: 'm.room.message',
-        event_id: '2',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-          format: 'org.matrix.custom.html',
-          body: `I will apply TypeScript best practices:\n${codeBlock}`,
-        },
-        sender: '@aibot:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 1000,
-          transaction_id: '2',
-        },
-      },
-    ];
-    assert.true(
-      shouldSetRoomTitle(
-        eventLog,
-        '@aibot:localhost',
-        new MatrixEvent(codePatchResultEvent),
       ),
     );
   });

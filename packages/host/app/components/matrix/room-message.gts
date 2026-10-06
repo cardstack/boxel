@@ -151,22 +151,6 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
-  private get userMessageThisMessageIsRespondingTo() {
-    if (!this.isFromAssistant) {
-      return undefined;
-    }
-
-    // Going backwards, find the first message that is not from the assistant
-    for (let i = this.args.index - 1; i >= 0; i--) {
-      let message = this.args.roomResource.messages[i];
-      if (message.author.userId !== aiBotUserId) {
-        return message;
-      }
-    }
-
-    return undefined;
-  }
-
   // A call ai-bot holds for approval is "run" by approving it; ai-bot then
   // runs it. Every other call runs on the host.
   private run = task(async (command: MessageTool) => {
@@ -248,9 +232,7 @@ export default class RoomMessage extends Component<Signature> {
         @roomId={{this.message.roomId}}
         @eventId={{this.message.eventId}}
         @index={{@index}}
-        @isLastAssistantMessage={{this.isLastAssistantMessage}}
         @isMostRecentMessage={{@isMostRecentMessage}}
-        @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @unregisterScroller={{@unregisterScroller}}
         @isFromAssistant={{this.isFromAssistant}}

@@ -8,12 +8,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-} from '@cardstack/runtime-common';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -253,8 +248,6 @@ export default class MyComponent extends Component {
       .dom('[data-test-code-block-index="0"] [data-test-boxel-copy-button]')
       .exists('the copy code to clipboard button exists');
 
-    assert.dom('[data-test-apply-code-button]').doesNotExist(); // no apply for code that is not a search/replace block
-
     // the chrome security model prevents the clipboard API
     // from working when tests are run in a headless mode, so we are unable to
     // assert the button actually copies contents to the clipboard
@@ -357,11 +350,8 @@ const data = {
 \`\`\`
 
 \`\`\`typescript
-  ${SEARCH_MARKER}
-    let a = 1;
-    let c = 3;
-  ${SEPARATOR_MARKER}
-    let a = 2;
+let a = 1;
+let c = 3;
 \`\`\`
 
 These examples show different ways to use the \`<pre>\` tag:
@@ -437,25 +427,27 @@ const data = {
 
     // Monaco paints its virtualized `view-lines` asynchronously and outside
     // Ember's settledness tracking, so the second editor's container can be in
-    // the DOM while only its first line ("// existing code ... ") has rendered.
-    // Wait for that container to exist, then best-effort for all of its lines
-    // to paint; if painting stalls, fall through so the assertion below reports
-    // whatever did render instead of throwing on a missing element.
+    // the DOM while only some of its lines have rendered. Wait for that
+    // container to exist, then best-effort for all of its lines to paint; if
+    // painting stalls, fall through so the assertion below reports whatever
+    // did render instead of throwing on a missing element.
     await waitUntil(
       () => document.getElementsByClassName('view-lines').length > 1,
     );
     try {
       await waitUntil(() => {
         let secondEditor = document.getElementsByClassName('view-lines')[1];
-        return secondEditor.querySelectorAll('.view-line').length > 4;
+        return secondEditor.querySelectorAll('.view-line').length > 1;
       });
     } catch {
       // best-effort — the assertion below surfaces a partial render
     }
+    // Monaco paints spaces as non-breaking spaces.
     assert.strictEqual(
-      (document.getElementsByClassName('view-lines')[1] as HTMLElement)
-        .innerText,
-      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
+      (
+        document.getElementsByClassName('view-lines')[1] as HTMLElement
+      ).innerText.replace(/\u00a0/g, ' '),
+      'let a = 1;\nlet c = 3;',
     );
 
     assert.dom('ol li').exists({ count: 4 }, 'Should have 4 list items');
@@ -603,107 +595,5 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     });
 
     await percySnapshot(assert);
-  });
-
-  test('it will render diff editor', async function (assert) {
-    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
-
-\`\`\`gts
-https://example.com/component.gts
-${SEARCH_MARKER}
-import Component from '@glimmer/component';
-
-export default class MyComponent extends Component {
-  a = 1;
-  b = 2;
-
-  <template>
-    <div>
-      <p>Value of a: {{this.a}}</p>
-      <p>Value of b: {{this.b}}</p>
-    </div>
-  </template>
-}
-${SEPARATOR_MARKER}
-import Component from '@glimmer/component';
-
-export default class MyComponent extends Component {
-  a = 3;
-  b = 4;
-
-  <template>
-    <div>
-      <h1>Updated Component</h1>
-      <p>New value of a: {{this.a}}</p>
-      <p>New value of b: {{this.b}}</p>
-    </div>
-  </template>
-}
-${REPLACE_MARKER}
-\`\`\`
-
-Above code blocks are now complete`;
-
-    simulateRemoteMessage(
-      roomId,
-      '@aibot:localhost',
-      {
-        body: messageWithSearchAndReplaceBlock,
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-      },
-      {
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      },
-    );
-
-    await waitFor('.code-block-diff .monaco-diff-editor', { timeout: 20000 });
-    await waitFor('.code-block-diff .editor.original', { timeout: 20000 });
-    await waitFor('.code-block-diff .editor.modified', { timeout: 20000 });
-
-    assert.dom('.code-block-diff .monaco-diff-editor').exists();
-    assert.dom('.code-block-diff .editor.original').exists();
-    assert.dom('.code-block-diff .editor.modified').exists();
-  });
-
-  test('it will render diff editor for a blank file', async function (assert) {
-    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
-
-\`\`\`txt
-https://example.com/blank.txt
-${SEARCH_MARKER}
-${SEPARATOR_MARKER}
-hello
-${REPLACE_MARKER}
-\`\`\`
-
-Above code blocks are now complete`;
-
-    simulateRemoteMessage(
-      roomId,
-      '@aibot:localhost',
-      {
-        body: messageWithSearchAndReplaceBlock,
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        format: 'org.matrix.custom.html',
-        isStreamingFinished: true,
-      },
-      {
-        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
-      },
-    );
-
-    await waitUntil(
-      () =>
-        document.querySelectorAll('.code-block-diff .cdr.line-delete')
-          .length === 1,
-    );
-    await waitFor('.code-block-diff .cdr.line-insert');
-
-    assert.dom('.cdr.line-delete').exists({ count: 1 });
-    assert.dom('.cdr.line-insert').exists({ count: 1 });
   });
 });

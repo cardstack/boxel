@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import sinon from 'sinon';
 import { isResolvedCodeRef, rri } from '@cardstack/runtime-common';
 import type {
   CodeRef,
@@ -19,7 +20,10 @@ import {
   type OperationDefinition,
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
-import { nonGrantableInChain } from '@cardstack/runtime-common/card-operations/gate';
+import {
+  MAX_REMEMBERED_MS,
+  nonGrantableInChain,
+} from '@cardstack/runtime-common/card-operations/gate';
 import type { Definition } from '@cardstack/runtime-common/definitions';
 
 // ============================================================================
@@ -182,11 +186,15 @@ function stubCore(
     ruleOn = SCHEDULE,
     uncompilable,
     lookups = [],
+    generation,
   }: {
     reads?: { policy: number };
     ruleOn?: ResolvedCodeRef;
     uncompilable?: true;
     lookups?: string[];
+    // The lookup's definition generation. A lookup without one offers its
+    // answers no lifetime, so nothing it serves is remembered.
+    generation?: () => number;
   } = {},
 ): OperationCore {
   let policy: CompiledRealmPolicy = {
@@ -220,6 +228,7 @@ function stubCore(
           types: CHAINS.get(key(ref)),
         };
       },
+      ...(generation ? { definitionGeneration: generation } : {}),
     },
     policy: {
       compiledPolicy: async () => {
@@ -585,5 +594,72 @@ module(basename(import.meta.filename), function () {
       ),
       'a first key under a `fields/` directory is read as the type it names',
     );
+  });
+  module('a remembered answer', function (hooks) {
+    let clock: sinon.SinonFakeTimers;
+    hooks.beforeEach(function () {
+      clock = sinon.useFakeTimers({ toFake: ['Date'], now: 0 });
+    });
+    hooks.afterEach(function () {
+      clock.restore();
+    });
+
+    const CHAIN = () => [key(RATED), key(RATED_BASE)];
+
+    test('a repeat asks no definition while the generation holds', async function (assert) {
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups, generation: () => 1 });
+      assert.false(await nonGrantableInChain(core, CHAIN(), 'listOpen'));
+      let read = lookups.length;
+      assert.true(read > 0, 'the first answer reads the chain');
+      assert.false(await nonGrantableInChain(core, CHAIN(), 'listOpen'));
+      assert.strictEqual(lookups.length, read, 'the repeat reads none of it');
+    });
+
+    test('a moved generation reads the chain again', async function (assert) {
+      let lookups: string[] = [];
+      let generation = 1;
+      let core = stubCore([], { lookups, generation: () => generation });
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      let read = lookups.length;
+      generation++;
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      assert.strictEqual(lookups.length, read * 2);
+    });
+
+    test('an answer older than its age bound is read again, though the generation holds', async function (assert) {
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups, generation: () => 1 });
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      let read = lookups.length;
+      clock.tick(MAX_REMEMBERED_MS - 1);
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      assert.strictEqual(lookups.length, read, 'within the bound it is kept');
+      clock.tick(1);
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      assert.strictEqual(lookups.length, read * 2, 'at the bound it is not');
+    });
+
+    test('an answer that rests on a type it could not read is never remembered', async function (assert) {
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups, generation: () => 1 });
+      let chain = [LOCAL_ANCESTOR_KEY, key(BASE_SCHEDULE)];
+      assert.true(await nonGrantableInChain(core, chain, 'listOpen'));
+      let read = lookups.length;
+      assert.true(
+        await nonGrantableInChain(core, chain, 'listOpen'),
+        'it refuses again',
+      );
+      assert.strictEqual(lookups.length, read * 2, 'from a fresh reading');
+    });
+
+    test('a lookup without a generation reads every time', async function (assert) {
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups });
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      let read = lookups.length;
+      await nonGrantableInChain(core, CHAIN(), 'listOpen');
+      assert.strictEqual(lookups.length, read * 2);
+    });
   });
 });

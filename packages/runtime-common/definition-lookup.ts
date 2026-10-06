@@ -384,6 +384,12 @@ export interface DefinitionLookup {
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmDefinitions(resolvedRealmURL: string): Promise<void>;
   clearAllDefinitions(): Promise<void>;
+  // A counter that moves whenever any definition this lookup serves may have
+  // changed, here or in a peer process. A caller that derives an answer from
+  // definitions alone can keep it for as long as the counter holds the value
+  // it read before it started reading. A lookup without one offers no such
+  // guarantee, and its callers read afresh each time.
+  definitionGeneration?(): number;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
   getCachedDefinitions(
@@ -513,6 +519,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #moduleGenerations = new Map<string, number>();
   #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
+  // What `definitionGeneration` reports. It moves with every bump above, and
+  // again once an invalidation's delete has committed: between the bump and
+  // the delete a reader can still read the row being removed, and an answer
+  // derived from that row must not outlive the delete.
+  #definitionGeneration = 0;
   // Remote-realm visibility probes. `#probeInFlight` shares one request among
   // concurrent probes of the same module and requesting user;
   // `#unreachableOrigins` maps an origin whose transport failed to the
@@ -959,6 +970,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // For a `fileSerialization` that is a failed card write for a module sitting
   // readable on disk.
   bumpModuleGeneration(resolvedRealmURL: string, moduleURL: string): void {
+    this.#definitionGeneration++;
     let key = moduleGenerationKey(resolvedRealmURL, moduleURL);
     this.#moduleGenerations.set(
       key,
@@ -968,6 +980,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   bumpRealmGeneration(resolvedRealmURL: string): void {
+    this.#definitionGeneration++;
     this.#realmGenerations.set(
       resolvedRealmURL,
       (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
@@ -976,6 +989,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   bumpGlobalGeneration(): void {
+    this.#definitionGeneration++;
     this.#globalGeneration += 1;
     this.#inFlight.clear();
   }
@@ -1209,6 +1223,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       this.bumpModuleGeneration(resolvedRealmURL, invalidatedURL);
     }
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    this.#definitionGeneration++;
     await this.notifyDefinitionCacheInvalidations(
       resolvedRealmURL,
       uniqueInvalidations,
@@ -1228,12 +1243,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['resolved_realm_url =', param(resolvedRealmURL)],
       ]) as Expression),
     ]);
+    this.#definitionGeneration++;
     await this.notifyRealmDefinitionCacheInvalidation(resolvedRealmURL);
   }
 
   async clearAllDefinitions(): Promise<void> {
     this.bumpGlobalGeneration();
     await this.query(['DELETE FROM', MODULES_TABLE]);
+    this.#definitionGeneration++;
     await this.notifyGlobalDefinitionCacheInvalidation();
   }
 
@@ -1365,6 +1382,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         this.#inFlight.delete(key);
       }
     }
+  }
+
+  definitionGeneration(): number {
+    return this.#definitionGeneration;
   }
 
   registerRealm(realm: LocalRealm): void {
@@ -2314,6 +2335,10 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async clearAllDefinitions(): Promise<void> {
     await this.#inner.clearAllDefinitions();
+  }
+
+  definitionGeneration(): number {
+    return this.#inner.definitionGeneration();
   }
 
   registerRealm(realm: LocalRealm): void {
