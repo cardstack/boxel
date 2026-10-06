@@ -397,9 +397,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
           performance.now() - startedAt,
         )}ms; messages=${
           document.querySelectorAll('[data-test-message-idx]').length
-        }; applyStates=${JSON.stringify(applyButtons)}; resultContainers=${
-          document.querySelectorAll('[data-test-tool-result-container]').length
-        }`,
+        }; applyStates=${JSON.stringify(applyButtons)} (a tool that reached "applied" points at the result card load; see any [tool-result-card] lines)`,
       );
       throw e;
     }
