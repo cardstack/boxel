@@ -111,12 +111,12 @@ async function seedRealm(
           'anthropic/claude-sonnet-4.6',
           '$$$',
         ),
-        'OpenRouterModel/flash.json': openRouterModelInstance(
-          'google/gemini-3-flash-preview',
+        'OpenRouterModel/luna.json': openRouterModelInstance(
+          'openai/gpt-6-luna',
           '$',
         ),
-        'OpenRouterModel/gpt.json': openRouterModelInstance(
-          'openai/gpt-5.4',
+        'OpenRouterModel/sol.json': openRouterModelInstance(
+          'openai/gpt-5.6-sol',
           'Free',
         ),
         '.realm.json': `{ "name": "${realmName}" }`,
@@ -182,12 +182,12 @@ module(
         'a $6/M blended model reads as $$$',
       );
       assert.strictEqual(
-        costBadge('google/gemini-3-flash-preview'),
+        costBadge('openai/gpt-6-luna'),
         '$',
         'a sub-$1/M blended model reads as $',
       );
       assert.strictEqual(
-        costBadge('openai/gpt-5.4'),
+        costBadge('openai/gpt-5.6-sol'),
         'Free',
         'a zero-priced model reads as Free',
       );
@@ -196,14 +196,14 @@ module(
     test('picker omits the badge for a model absent from the catalog', async function (assert) {
       await openPicker();
 
-      // 'anthropic/claude-opus-4.7' is a curated fallback row but has no
+      // 'anthropic/claude-opus-5.5' is a curated fallback row but has no
       // matching OpenRouterModel fixture, so it carries no badge.
       await waitUntil(() => costBadge('anthropic/claude-sonnet-4.6'));
       assert
-        .dom('[data-test-llm-select-item="anthropic/claude-opus-4.7"]')
+        .dom('[data-test-llm-select-item="anthropic/claude-opus-5.5"]')
         .exists('the uncatalogued model is still listed');
       assert.strictEqual(
-        costBadge('anthropic/claude-opus-4.7'),
+        costBadge('anthropic/claude-opus-5.5'),
         undefined,
         'no cost badge when the model is not in the catalog',
       );
