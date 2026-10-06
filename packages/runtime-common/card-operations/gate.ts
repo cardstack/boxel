@@ -1482,12 +1482,14 @@ export async function authorizationCardIds(
 // having no definition; any other failure to read one answers yes as well.
 //
 // The answer depends on the chain's definitions alone, so it is remembered
-// for as long as the lookup's definition generation holds the value it had
-// before the definitions were read. Any change to a definition moves it, so an
-// ancestor whose flag a module edit changes is read afresh by the next
-// invocation after that edit. An answer that rests on a type it could not
-// read is never remembered: it refuses now, and the next invocation reads
-// again.
+// while the lookup's definition generation holds the value it had before the
+// definitions were read, and for at most `MAX_REMEMBERED_MS`. An edit in this
+// process moves the generation, so the next invocation after it reads the
+// ancestors afresh. An edit in a peer process moves it when that process's
+// invalidation notice arrives, and a notice can be lost. The age bound is
+// what keeps a lost notice from leaving a flag unread indefinitely. An answer
+// that rests on a type it could not read is never remembered: it refuses
+// now, and the next invocation reads again.
 export async function nonGrantableInChain(
   core: OperationCore,
   types: string[],
@@ -1501,9 +1503,14 @@ export async function nonGrantableInChain(
     generation === undefined
       ? undefined
       : nonGrantableAnswers.get(lookup)?.get(key);
-  if (remembered && remembered.generation === generation) {
+  if (
+    remembered &&
+    remembered.generation === generation &&
+    Date.now() - remembered.at < MAX_REMEMBERED_MS
+  ) {
     return remembered.nonGrantable;
   }
+  let at = Date.now();
   let relativeTo = new URL(core.realmURL);
   let read = async (codeRef: ResolvedCodeRef) => {
     let resolved = core.resolveCodeRef(codeRef, relativeTo);
@@ -1543,20 +1550,27 @@ export async function nonGrantableInChain(
       remembering = new Map();
       nonGrantableAnswers.set(lookup, remembering);
     }
-    remembering.set(key, { generation, nonGrantable });
+    remembering.set(key, { generation, at, nonGrantable });
   }
   return nonGrantable;
 }
 
 // What `nonGrantableInChain` last answered for a realm, an operation and a
-// chain, per definition lookup, with the definition generation it read under.
-// A lookup's map starts over once it holds `MAX_REMEMBERED_ANSWERS`, which
-// bounds it without tracking which answers are still asked for.
+// chain, per definition lookup, with the definition generation it read under
+// and when it began reading. A lookup's map starts over once it holds
+// `MAX_REMEMBERED_ANSWERS`, which bounds it without tracking which answers are
+// still asked for.
 const nonGrantableAnswers = new WeakMap<
   OperationCore['definitionLookup'],
-  Map<string, { generation: number; nonGrantable: boolean }>
+  Map<string, { generation: number; at: number; nonGrantable: boolean }>
 >();
 const MAX_REMEMBERED_ANSWERS = 10_000;
+
+// How long a remembered answer holds whatever the generation says. It is the
+// five seconds the compiled-policy cache allows an entry between
+// revalidations, for the same reason: it bounds how stale a missed
+// invalidation notice can leave the answer.
+export const MAX_REMEMBERED_MS = 5_000;
 
 // Whether an operation would reach a policy card: read one, read its stored
 // bytes, change one, or mint one. `types` is the target's adoption chain: a
