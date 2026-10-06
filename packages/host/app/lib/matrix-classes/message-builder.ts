@@ -321,11 +321,15 @@ export default class MessageBuilder {
         if (messageTool) {
           messageTool.toolCallStatus = event.content['m.relates_to']
             .key as ToolCallStatus;
-          messageTool.toolResultFileDef = isToolResultWithOutputContent(
-            event.content,
-          )
+          let toolResultFileDef = isToolResultWithOutputContent(event.content)
             ? event.content.data.card
             : undefined;
+          // Room processing replays every event on each pass. Assigning the
+          // same result file again would still invalidate the tracked field
+          // and restart the result card's load, so assign only a new file.
+          if (messageTool.toolResultFileDef?.url !== toolResultFileDef?.url) {
+            messageTool.toolResultFileDef = toolResultFileDef;
+          }
           messageTool.failureReason = event.content.failureReason;
         }
       }

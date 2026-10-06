@@ -1,5 +1,6 @@
 import { array, hash } from '@ember/helper';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
@@ -167,14 +168,30 @@ export default class RoomMessageTool extends Component<Signature> {
     let state = new TrackedObject(initialState);
     let referencedId: string | undefined;
     let isTornDown = false;
+    let isLoading = false;
     on.cleanup(() => {
       isTornDown = true;
+      if (isLoading && isTesting()) {
+        // Every re-run of this resource starts the result card's load over,
+        // so a run torn down mid-load delays the card. Logged so a test that
+        // times out waiting for the card shows whether loads kept restarting.
+        console.log(
+          `[tool-result-card] discarded an in-flight result card load for tool call ${this.args.messageTool.toolRequest.id}`,
+        );
+      }
       if (referencedId) {
         this.store.dropReference(referencedId);
       }
     });
     if (this.args.messageTool.toolResultFileDef) {
+      isLoading = true;
       this.args.messageTool.getCommandResultCard().then((result) => {
+        isLoading = false;
+        if (!result && isTesting()) {
+          console.log(
+            `[tool-result-card] result card load for tool call ${this.args.messageTool.toolRequest.id} produced no card`,
+          );
+        }
         if (isTornDown || !result) {
           return;
         }
