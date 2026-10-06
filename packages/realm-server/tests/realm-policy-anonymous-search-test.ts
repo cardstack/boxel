@@ -25,6 +25,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
+  clearOfRateLimitWindowEdge,
   closeServer,
   createJWT,
   createVirtualNetwork,
@@ -295,6 +296,7 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     );
     await realm.indexing();
+    await clearOfRateLimitWindowEdge({ windowSeconds: 600 });
   }
 
   function unauthenticated(response: Response, label: string, assert: Assert) {
