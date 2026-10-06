@@ -1,0 +1,566 @@
+import QUnit from 'qunit';
+const { module, test } = QUnit;
+import supertest from 'supertest';
+import type { Test, SuperTest, Response } from 'supertest';
+import { basename, join } from 'path';
+import { dirSync } from 'tmp';
+import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import type {
+  LocalPath,
+  QueuePublisher,
+  QueueRunner,
+  Realm,
+} from '@cardstack/runtime-common';
+import {
+  setAnonymousRequestSink,
+  type AnonymousRequestEvent,
+} from '@cardstack/runtime-common/card-operations/telemetry';
+import type { PgAdapter } from '@cardstack/postgres';
+import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
+import type { RealmHttpServer as Server } from '../server.ts';
+import {
+  closeServer,
+  createJWT,
+  createVirtualNetwork,
+  matrixURL,
+  realmConfigCardJSON,
+  runTestRealmServerWithRealms,
+  setupDB,
+  setupTestDatabaseTemplate,
+} from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+
+// A civic realm nobody may read or write without signing in, governed by a
+// policy card in an Org realm. Its policy opens two operations its types
+// declare to callers who aren't signed in: signing an open petition, and
+// registering for updates. Both are made as the submitter the realm's own
+// `realm.json` names. Closing a petition is opened to signed-in callers only,
+// and `claim`, which reads the caller, is opened to everyone but admits only
+// signed-in callers.
+const CIVIC = 'http://127.0.0.1:4444/civic/';
+// A board anyone may read, whose policy opens only a declared write, `sign`,
+// to callers who aren't signed in.
+const BOARD = 'http://127.0.0.1:4444/board/';
+const ORG = 'http://127.0.0.1:4444/org/';
+const CIVIC_POLICY = `${ORG}policies/civic`;
+const BOARD_POLICY = `${ORG}policies/board`;
+const EDITOR = '@editor:localhost';
+const SUBMITTER = '@submitter:localhost';
+const ORG_ADMIN = '@org-admin:localhost';
+
+// Callers' addresses come from the ranges reserved for documentation.
+const VISITOR = '192.0.2.10';
+
+const REALM_POLICY = {
+  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+  name: 'RealmPolicy',
+};
+
+const CIVIC_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation, params, actor } from "@cardstack/base/operations";
+  export class Petition extends CardDef {
+    @field title = contains(StringField);
+    @field status = contains(StringField);
+    @field signature = contains(StringField);
+
+    @operation static sign = {
+      base: 'transform',
+      params: { name: StringField },
+      set: { signature: params('name') },
+    };
+    @operation static close = {
+      base: 'transform',
+      set: { status: 'closed' },
+    };
+    @operation static claim = {
+      base: 'transform',
+      set: { signature: actor() },
+    };
+  }
+  export class Signup extends CardDef {
+    @field email = contains(StringField);
+    @field source = contains(StringField);
+
+    @operation static register = {
+      base: 'create',
+      of: () => Signup,
+      params: { email: StringField },
+      fill: { email: params('email'), source: 'form' },
+    };
+  }
+`;
+
+function type(realm: string, name: string) {
+  return { module: `${realm}civic`, name };
+}
+
+const PETITION = type(CIVIC, 'Petition');
+const SIGNUP = type(CIVIC, 'Signup');
+
+const OPEN = `${CIVIC}petitions/open`;
+const CLOSED = `${CIVIC}petitions/closed`;
+const MISSING = `${CIVIC}petitions/nowhere`;
+const BOARD_PETITION = `${BOARD}petitions/open`;
+
+function petition(title: string, status: string) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { title, status },
+      meta: { adoptsFrom: { module: '../civic', name: 'Petition' } },
+    },
+  });
+}
+
+function rule(
+  targetType: { module: string; name: string },
+  grants: Record<string, unknown>[],
+) {
+  return { targetType, grants };
+}
+
+function policyCard(rules: unknown[]) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { rules },
+      meta: { adoptsFrom: REALM_POLICY },
+    },
+  });
+}
+
+const POLICY = policyCard([
+  rule(PETITION, [
+    {
+      operation: 'sign',
+      anonymous: true,
+      actingUser: 'submitter',
+      where: '.status == "open"',
+    },
+    { operation: 'close' },
+    { operation: 'claim', anonymous: true, actingUser: 'submitter' },
+  ]),
+  rule(SIGNUP, [
+    { operation: 'register', anonymous: true, actingUser: 'submitter' },
+  ]),
+]);
+
+module(basename(import.meta.filename), function (hooks) {
+  let civic: Realm;
+  let board: Realm;
+  let org: Realm;
+  let request: SuperTest<Test>;
+  let server: Server;
+  let records: AnonymousRequestEvent[];
+
+  setupCatalogTestSubset(hooks);
+
+  async function start({
+    dbAdapter,
+    publisher,
+    runner,
+  }: {
+    dbAdapter: PgAdapter;
+    publisher: QueuePublisher;
+    runner: QueueRunner;
+  }) {
+    let result = await runTestRealmServerWithRealms({
+      virtualNetwork: createVirtualNetwork(),
+      realmsRootPath: join(dirSync().name, 'realm_server_1'),
+      clientAddress: { trustedProxyHops: 1, infraAddresses: [] },
+      realms: [
+        {
+          realmURL: new URL(CIVIC),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({
+              name: 'Civic',
+              policy: CIVIC_POLICY,
+              config: { submitter: SUBMITTER },
+            }),
+            'civic.gts': CIVIC_MODULE,
+            'petitions/open.json': petition('Fix the park', 'open'),
+            'petitions/closed.json': petition('Move the library', 'closed'),
+          },
+          permissions: {
+            [EDITOR]: ['read', 'write', 'realm-owner'],
+            [SUBMITTER]: ['read', 'write'],
+            [ORG_ADMIN]: ['read'],
+          },
+        },
+        {
+          realmURL: new URL(BOARD),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({
+              name: 'Board',
+              policy: BOARD_POLICY,
+              config: { submitter: SUBMITTER },
+            }),
+            'civic.gts': CIVIC_MODULE,
+            'petitions/open.json': petition('Paint the fence', 'open'),
+          },
+          permissions: {
+            '*': ['read'],
+            [EDITOR]: ['read', 'write', 'realm-owner'],
+            [SUBMITTER]: ['read', 'write'],
+          },
+        },
+        {
+          realmURL: new URL(ORG),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({ name: 'Org' }),
+            'policies/civic.json': POLICY,
+            'policies/board.json': policyCard([
+              rule(type(BOARD, 'Petition'), [
+                { operation: 'sign', anonymous: true, actingUser: 'submitter' },
+              ]),
+            ]),
+          },
+          permissions: { [ORG_ADMIN]: ['read', 'write', 'realm-owner'] },
+        },
+      ],
+      dbAdapter,
+      publisher,
+      runner,
+      matrixURL,
+    });
+    server = result.testRealmHttpServer;
+    request = supertest(server);
+    civic = result.realms.find((realm) => realm.url === CIVIC)!;
+    board = result.realms.find((realm) => realm.url === BOARD)!;
+    org = result.realms.find((realm) => realm.url === ORG)!;
+  }
+
+  async function stop() {
+    for (let realm of [civic, board, org]) {
+      realm.__testOnlyClearCaches();
+      realm.unsubscribe();
+    }
+    await closeServer(server);
+    resetCatalogRealms();
+  }
+
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
+  setupDB(hooks, {
+    templateDatabase,
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      await start({ dbAdapter, publisher, runner });
+      records = [];
+      setAnonymousRequestSink((record) => records.push(record));
+    },
+    afterEach: async () => {
+      setAnonymousRequestSink(undefined);
+      await stop();
+    },
+  });
+
+  function invoke(
+    name: string,
+    rest: { href?: string; data?: unknown } = {},
+  ): Record<string, unknown> {
+    return { op: 'invoke', 'boxel:name': name, ...rest };
+  }
+
+  function operations(
+    realm: string,
+    entries: Record<string, unknown>[],
+    authorization?: string,
+  ) {
+    let req = request
+      .post(`${new URL(realm).pathname}_operations`)
+      .set('Accept', SupportedMimeType.BoxelOperations)
+      .set('Content-Type', SupportedMimeType.BoxelOperations)
+      .set('X-Forwarded-For', VISITOR);
+    if (authorization) {
+      req = req.set('Authorization', authorization);
+    }
+    return req.send(JSON.stringify({ 'boxel:operations': entries }));
+  }
+
+  function sign(url: string, name: string) {
+    return operations(CIVIC, [invoke('sign', { href: url, data: { name } })]);
+  }
+
+  function register(email: string) {
+    return operations(CIVIC, [
+      invoke('register', {
+        data: {
+          email,
+          meta: {
+            adoptsFrom: { module: rri(`${CIVIC}civic`), name: 'Signup' },
+          },
+        },
+      }),
+    ]);
+  }
+
+  async function stored(realm: Realm, url: string) {
+    let content = await realm.operationCore.readFileAsText(
+      `${new URL(url).pathname.slice(new URL(realm.url).pathname.length)}.json` as LocalPath,
+    );
+    return content === undefined
+      ? undefined
+      : (
+          JSON.parse(content) as {
+            data: { attributes: Record<string, unknown> };
+          }
+        ).data.attributes;
+  }
+
+  async function setCivic(fields: { anonymousRateLimit?: unknown }) {
+    await civic.write(
+      'realm.json',
+      realmConfigCardJSON({
+        name: 'Civic',
+        policy: CIVIC_POLICY,
+        config: { submitter: SUBMITTER },
+        ...fields,
+      }),
+    );
+    await civic.indexing();
+  }
+
+  function unauthenticated(response: Response, label: string, assert: Assert) {
+    assert.strictEqual(response.status, 401, `${label}: 401 ${response.text}`);
+    assert.strictEqual(
+      response.body?.errors?.[0]?.code,
+      'actor-required',
+      `${label}: told to authenticate`,
+    );
+  }
+
+  function editor() {
+    return `Bearer ${createJWT(civic, EDITOR, ['read', 'write', 'realm-owner'])}`;
+  }
+
+  test('a caller who is not signed in signs an open petition through the operation its type declares, made as the user the realm names', async function (assert) {
+    let response = await sign(OPEN, 'Ada');
+    assert.strictEqual(response.status, 200, response.text);
+    assert.deepEqual(
+      await stored(civic, OPEN),
+      { title: 'Fix the park', status: 'open', signature: 'Ada' },
+      'the operation set only what it declares',
+    );
+    let [record] = records.filter((r) => r.outcome === 'admitted');
+    assert.deepEqual(record?.actingUsers, [SUBMITTER], 'made as the submitter');
+    assert.strictEqual(record?.clientIP, VISITOR);
+  });
+
+  test('a declared write is admitted only where its grant holds, and every refusal is the same 401', async function (assert) {
+    let closed = await sign(CLOSED, 'Ada');
+    let missing = await sign(MISSING, 'Ada');
+    unauthenticated(closed, 'a closed petition', assert);
+    unauthenticated(missing, 'a missing petition', assert);
+    assert.strictEqual(
+      closed.text,
+      missing.text,
+      'a closed petition and a missing one are refused alike',
+    );
+    assert.notOk(
+      (await stored(civic, CLOSED))?.signature,
+      'the closed petition is unsigned',
+    );
+  });
+
+  test('a grant on a declared write opens nothing else, and an operation opened only to signed-in callers stays closed', async function (assert) {
+    unauthenticated(
+      await operations(CIVIC, [invoke('close', { href: OPEN })]),
+      'an operation no grant opens to such callers',
+      assert,
+    );
+    unauthenticated(
+      await operations(CIVIC, [
+        invoke('update', {
+          href: OPEN,
+          data: {
+            type: 'card',
+            attributes: { signature: 'Mallory' },
+            meta: {
+              adoptsFrom: { module: rri(`${CIVIC}civic`), name: 'Petition' },
+            },
+          },
+        }),
+      ]),
+      'the base operation the declared one is built on',
+      assert,
+    );
+    assert.deepEqual(
+      await stored(civic, OPEN),
+      { title: 'Fix the park', status: 'open' },
+      'nothing was written',
+    );
+    let closedBy = await operations(
+      CIVIC,
+      [invoke('close', { href: OPEN })],
+      editor(),
+    );
+    assert.strictEqual(closedBy.status, 200, closedBy.text);
+    assert.strictEqual(
+      (await stored(civic, OPEN))?.status,
+      'closed',
+      'a signed-in caller the policy admits still closes it',
+    );
+  });
+
+  test('a declared create gets an id the realm mints, filled as its template says', async function (assert) {
+    let response = await register('ada@example.com');
+    assert.strictEqual(response.status, 200, response.text);
+    let id = (
+      response.body as { 'atomic:results': { data: { id: string } }[] }
+    )['atomic:results'][0].data.id;
+    assert.true(id.startsWith(CIVIC), `minted in the realm: ${id}`);
+    assert.deepEqual(
+      await stored(civic, id),
+      { email: 'ada@example.com', source: 'form' },
+      'the card holds what the template fills',
+    );
+    let [record] = records.filter((r) => r.outcome === 'admitted');
+    assert.deepEqual(record?.actingUsers, [SUBMITTER], 'made as the submitter');
+  });
+
+  test('a declared operation that reads the caller is warned about, and admits no caller who is not signed in', async function (assert) {
+    let policy = await civic.getCompiledPolicy();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path, severity }) => ({
+        code,
+        path,
+        severity,
+      })),
+      [
+        {
+          code: 'anonymous-grant-reads-actor',
+          path: 'rules[0].grants[2].operation',
+          severity: 'warning',
+        },
+      ],
+    );
+    assert.deepEqual(
+      policy?.anonymous,
+      { operations: ['register', 'sign'] },
+      'it opens nothing to such callers',
+    );
+    unauthenticated(
+      await operations(CIVIC, [invoke('claim', { href: OPEN })]),
+      'claim',
+      assert,
+    );
+    assert.notOk((await stored(civic, OPEN))?.signature, 'nothing was written');
+  });
+
+  test('a declared write is counted one unit, and one over the limit gets 429 and writes nothing', async function (assert) {
+    await setCivic({ anonymousRateLimit: { requests: 1, windowSeconds: 60 } });
+    assert.strictEqual((await sign(OPEN, 'Ada')).status, 200);
+    let over = await sign(OPEN, 'Grace');
+    assert.strictEqual(over.status, 429, over.text);
+    assert.strictEqual(over.body?.errors?.[0]?.code, 'rate-limited');
+    assert.ok(over.headers['retry-after'], 'says when to retry');
+    assert.strictEqual(
+      (await stored(civic, OPEN))?.signature,
+      'Ada',
+      'the second signature was not written',
+    );
+  });
+
+  test('a capability check answers such a caller about declared operations as the gate would', async function (assert) {
+    let response = await request
+      .post(`${new URL(CIVIC).pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR)
+      .send({
+        checks: [
+          { target: OPEN, operation: 'sign' },
+          { target: CLOSED, operation: 'sign' },
+          { target: OPEN, operation: 'close' },
+          { target: OPEN, operation: 'claim' },
+          { target: SIGNUP, operation: 'register' },
+        ],
+      });
+    assert.strictEqual(response.status, 200, response.text);
+    assert.deepEqual(
+      (response.body.checks as { allowed: boolean }[]).map(
+        (check) => check.allowed,
+      ),
+      [true, false, false, false, true],
+    );
+  });
+
+  test('a realm anyone may read answers a capability check about a declared write it opens to such callers', async function (assert) {
+    let response = await request
+      .post(`${new URL(BOARD).pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR)
+      .send({
+        checks: [
+          { target: BOARD_PETITION, operation: 'sign' },
+          { target: BOARD_PETITION, operation: 'update' },
+        ],
+      });
+    assert.strictEqual(response.status, 200, response.text);
+    assert.deepEqual(
+      (response.body.checks as { allowed: boolean }[]).map(
+        (check) => check.allowed,
+      ),
+      [true, false],
+      'the signature form may be shown, and editing may not',
+    );
+    let signed = await operations(BOARD, [
+      invoke('sign', { href: BOARD_PETITION, data: { name: 'Ada' } }),
+    ]);
+    assert.strictEqual(signed.status, 200, signed.text);
+    assert.strictEqual(
+      (await stored(board, BOARD_PETITION))?.signature,
+      'Ada',
+      'and the petition is signed',
+    );
+  });
+
+  test('explain judges such a caller’s declared write by the grants that opt in to them', async function (assert) {
+    let explain = async (target: string, operation: string) => {
+      let response = await request
+        .post(`${new URL(ORG).pathname}_operations`)
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', SupportedMimeType.BoxelOperations)
+        .set('Content-Type', SupportedMimeType.BoxelOperations)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(org, ORG_ADMIN, ['read', 'write', 'realm-owner'])}`,
+        )
+        .send(
+          JSON.stringify({
+            'boxel:operations': [
+              invoke('explain', {
+                href: CIVIC_POLICY,
+                data: { actor: '', target, operation },
+              }),
+            ],
+          }),
+        );
+      if (response.status !== 200) {
+        throw new Error(
+          `explain answered ${response.status}: ${response.text}`,
+        );
+      }
+      return response.body['atomic:results'][0];
+    };
+    assert.strictEqual(
+      (await explain(OPEN, 'sign')).decision,
+      'allowed',
+      'an open petition',
+    );
+    assert.strictEqual(
+      (await explain(CLOSED, 'sign')).decision,
+      'denied',
+      'a closed petition',
+    );
+  });
+});

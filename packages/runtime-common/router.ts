@@ -310,7 +310,7 @@ export interface RouteOptions {
   aclOnly?: true;
   // What the route would run for a caller who isn't signed in, where a grant
   // could admit one: the operations any one of which the realm's policy has to
-  // open to such callers (empty for any at all), and how the request counts
+  // open to such callers (`any` for any at all), and how the request counts
   // against the realm's anonymous rate limit. Only a route that
   // consumes the ACL's outcome can take this. A route without it answers such
   // a caller as the ACL does.
@@ -318,7 +318,7 @@ export interface RouteOptions {
 }
 
 export interface AnonymousRouteOptions {
-  operations: readonly string[];
+  operations: readonly string[] | 'any' | 'any-write';
   counted: 'once-served' | 'by-handler' | 'never';
 }
 

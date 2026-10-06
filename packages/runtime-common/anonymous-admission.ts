@@ -24,10 +24,9 @@ import {
 } from './card-operations/acting-users.ts';
 import type { CommitBatchOptions } from './card-operations/coordinator.ts';
 import type { OperationScope } from './card-operations/dispatch.ts';
+import type { AnonymousOpenings } from './card-operations/policy.ts';
 import {
-  ANONYMOUS_ELIGIBLE_OPERATIONS,
   OperationFailure,
-  isWrite,
   type OperationError,
 } from './card-operations/types.ts';
 import { createResponse } from './create-response.ts';
@@ -59,7 +58,11 @@ import type { ResponseWithNodeStream } from './virtual-network.ts';
 // one there (empty means any at all), and how it counts against the realm's
 // anonymous rate limit.
 export interface AnonymousDispatch {
-  operations: readonly string[];
+  // The operations the route invokes, any one of which the policy has to open
+  // to such callers. `any` is a route that runs whatever its request names,
+  // admitted wherever the policy opens anything; `any-write`, wherever it
+  // opens a write, whether a base operation or one a type declares.
+  operations: readonly string[] | 'any' | 'any-write';
   // - `once-served`: one unit once the request serves what it asked for
   //   (see `AnonymousCaller.served`).
   // - `by-handler`: the handler counts what the request costs, before it does
@@ -134,7 +137,7 @@ export const ANONYMOUS_STYLESHEET: AnonymousDispatch = {
 // one. It is counted by the handler, one unit for each pair it asks about,
 // before any is checked (see `AnonymousAdmission.count`).
 export const ANONYMOUS_CAPABILITY_CHECK: AnonymousDispatch = {
-  operations: [],
+  operations: 'any',
   counted: 'by-handler',
 };
 // A card+json write, made as the user the admitting grant names. Counted one
@@ -154,7 +157,7 @@ export const ANONYMOUS_CARD_DELETE: AnonymousDispatch = {
 // The write lane of a capability check from a caller whose read the realm's
 // ACL allowed: the check invokes nothing, so it counts for nothing.
 export const ANONYMOUS_WRITE_CHECK: AnonymousDispatch = {
-  operations: ANONYMOUS_ELIGIBLE_OPERATIONS.filter(isWrite),
+  operations: 'any-write',
   counted: 'never',
 };
 // The operations envelope runs whatever its entries name, each judged by the
@@ -163,7 +166,7 @@ export const ANONYMOUS_WRITE_CHECK: AnonymousDispatch = {
 // admitted, and one that only reads, one unit per entry once its reads have
 // run.
 export const ANONYMOUS_OPERATIONS: AnonymousDispatch = {
-  operations: [],
+  operations: 'any',
   counted: 'by-handler',
 };
 
@@ -178,8 +181,8 @@ export interface AnonymousAdmissionEnvironment {
   limiter: AnonymousRateLimiter;
   // Whether the realm names a policy at all.
   hasPolicy(): Promise<boolean>;
-  // The operations the realm's policy opens to such callers.
-  openedOperations(): Promise<ReadonlySet<string>>;
+  // What the realm's policy opens to such callers.
+  openedOperations(): Promise<AnonymousOpenings>;
   // The realm's limit and blocklist for such callers.
   access(): Promise<AnonymousAccessSettings>;
   // Who an acting-user key names in the realm's current `realm.json`
@@ -223,13 +226,14 @@ export class AnonymousAdmission {
     }
     let opened = await this.#env.openedOperations();
     // A route that runs whatever its request names is admitted wherever the
-    // policy opens anything to such callers, and recorded as `*`.
+    // policy opens anything of that kind to such callers, and recorded as `*`.
+    let wanted = dispatch.operations;
     let operation =
-      dispatch.operations.length === 0
-        ? opened.size > 0
+      wanted === 'any' || wanted === 'any-write'
+        ? (wanted === 'any' ? opened.operations : opened.writes).size > 0
           ? '*'
           : undefined
-        : dispatch.operations.find((name) => opened.has(name));
+        : wanted.find((name) => opened.operations.has(name));
     if (operation === undefined) {
       return undefined;
     }

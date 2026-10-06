@@ -49,7 +49,7 @@ function classroomModule(rosterField: string) {
   return `
     import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
     import StringField from "@cardstack/base/string";
-    import { operation } from "@cardstack/base/operations";
+    import { operation, actor } from "@cardstack/base/operations";
     export class Classroom extends CardDef {
       @field ${rosterField} = containsMany(StringField);
       @field status = contains(StringField);
@@ -75,6 +75,10 @@ function classroomModule(rosterField: string) {
         base: 'transform',
         set: { status: 'locked' },
         nonGrantable: true,
+      };
+      @operation static claim = {
+        base: 'transform',
+        set: { status: actor() },
       };
       @operation static listOpen = {
         base: 'query',
@@ -834,7 +838,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.notOk(policy?.uncompilable, 'the policy as a whole compiled');
   });
 
-  test('a grant opens a base operation to callers who are not signed in, and a write names who it is made as', async function (assert) {
+  test('a grant opens a base operation, or one a type declares, to callers who are not signed in, and a write names who it is made as', async function (assert) {
     const OPEN_CLASSROOM = {
       module: `${EDUCATION}classroom`,
       name: 'OpenClassroom',
@@ -847,8 +851,12 @@ module(basename(import.meta.filename), function (hooks) {
           targetType: CLASSROOM,
           grants: [
             { operation: 'read', anonymous: true },
-            // A custom operation, built on a base one.
-            { operation: 'appendActivity', anonymous: true },
+            // An operation the type declares, built on a base one.
+            {
+              operation: 'appendActivity',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+            },
             // A named query.
             { operation: 'listOpen', anonymous: true },
             // A write that names nobody to make it as, and one whose key is
@@ -865,6 +873,12 @@ module(basename(import.meta.filename), function (hooks) {
             { operation: 'query', anonymous: true, where: '.status == "open"' },
             // Opened to signed-in callers only.
             { operation: 'delete' },
+            // A declared operation that reads the caller.
+            {
+              operation: 'claim',
+              anonymous: true,
+              actingUser: 'feedbackWriter',
+            },
           ],
         },
         {
@@ -891,11 +905,6 @@ module(basename(import.meta.filename), function (hooks) {
       [
         {
           code: 'anonymous-not-base-operation',
-          path: 'rules[0].grants[1].anonymous',
-          severity: 'inactive',
-        },
-        {
-          code: 'anonymous-not-base-operation',
           path: 'rules[0].grants[2].anonymous',
           severity: 'inactive',
         },
@@ -911,11 +920,16 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           code: 'anonymous-grant-reads-actor',
+          path: 'rules[0].grants[9].operation',
+          severity: 'warning',
+        },
+        {
+          code: 'anonymous-grant-reads-actor',
           path: 'rules[1].grants[0].where',
           severity: 'warning',
         },
       ],
-      'a custom operation, a named query and a write with no acting user are refused; a grant that reads the caller is warned about and kept',
+      'a named query and a write with no acting user are refused; a grant that reads the caller, in its condition or its operation, is warned about and kept',
     );
     let grants = policy?.rules[0]?.grants ?? [];
     assert.deepEqual(
@@ -923,34 +937,53 @@ module(basename(import.meta.filename), function (hooks) {
       [
         { path: 'rules[0].grants[0]', anonymous: {} },
         {
+          path: 'rules[0].grants[1]',
+          anonymous: { actingUserKey: 'feedbackWriter' },
+        },
+        {
           path: 'rules[0].grants[5]',
           anonymous: { actingUserKey: 'feedbackWriter' },
         },
         { path: 'rules[0].grants[6]', anonymous: {} },
         { path: 'rules[0].grants[7]', anonymous: {} },
         { path: 'rules[0].grants[8]', anonymous: undefined },
+        { path: 'rules[0].grants[9]', anonymous: undefined },
       ],
-      'the refused grants are left out, only the grants that opt in carry the opt-in, and only a write names who it is made as',
+      'the refused grants are left out, only the grants that opt in carry the opt-in, only a write names who it is made as, and a declared operation that reads the caller applies only to signed-in callers',
     );
-    assert.ok(grants[3]?.filter, 'the anonymous query grant has a filter');
+    assert.ok(grants[4]?.filter, 'the anonymous query grant has a filter');
     let readsCaller = policy?.rules[1]?.grants[0];
     assert.true(
       readsCaller?.where?.readsActor,
       'a predicate that reads the caller says so',
     );
     assert.notOk(
-      grants[3]?.where?.readsActor,
+      grants[4]?.where?.readsActor,
       'and one that reads only the card does not',
     );
     assert.deepEqual(
       policy?.anonymous,
-      { operations: ['query', 'read', 'readSource', 'transform'] },
+      {
+        operations: [
+          'appendActivity',
+          'query',
+          'read',
+          'readSource',
+          'transform',
+        ],
+      },
       'the operations opened to callers who are not signed in, leaving out the one whose only grant reads the caller',
     );
+    let opened = await education.getAnonymousAdmission();
     assert.deepEqual(
-      [...(await education.getAnonymousAdmission())].sort(),
-      ['query', 'read', 'readSource', 'transform'],
+      [...opened.operations].sort(),
+      ['appendActivity', 'query', 'read', 'readSource', 'transform'],
       'and the realm reads them from the compiled policy',
+    );
+    assert.deepEqual(
+      [...opened.writes].sort(),
+      ['appendActivity', 'transform'],
+      'along with which of them write',
     );
   });
 
@@ -973,7 +1006,10 @@ module(basename(import.meta.filename), function (hooks) {
       ['policy-not-filterable'],
     );
     assert.strictEqual(policy?.anonymous, undefined);
-    assert.strictEqual((await education.getAnonymousAdmission()).size, 0);
+    assert.strictEqual(
+      (await education.getAnonymousAdmission()).operations.size,
+      0,
+    );
   });
 
   test('a policy that opens nothing, or that does not compile, opens nothing to callers who are not signed in', async function (assert) {
@@ -983,7 +1019,10 @@ module(basename(import.meta.filename), function (hooks) {
       undefined,
       'a policy that opens nothing records nothing',
     );
-    assert.strictEqual((await education.getAnonymousAdmission()).size, 0);
+    assert.strictEqual(
+      (await education.getAnonymousAdmission()).operations.size,
+      0,
+    );
 
     await writeTo(
       org,
@@ -998,7 +1037,7 @@ module(basename(import.meta.filename), function (hooks) {
       'the policy does not compile',
     );
     assert.strictEqual(
-      (await education.getAnonymousAdmission()).size,
+      (await education.getAnonymousAdmission()).operations.size,
       0,
       'and opens nothing',
     );

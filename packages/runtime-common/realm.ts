@@ -379,6 +379,7 @@ import {
   noteRealmIndexMoved,
   RealmPolicyCache,
   realmPolicyRef,
+  type AnonymousOpenings,
   type CompiledRealmPolicy,
   type PolicyCompileEnvironment,
 } from './card-operations/policy.ts';
@@ -16011,7 +16012,7 @@ export class Realm {
   // as `RealmPolicyCache.anonymousAdmission()` reads them: empty for a realm
   // that names no policy, and for one whose policy opens none or won't
   // compile.
-  async getAnonymousAdmission(): Promise<ReadonlySet<string>> {
+  async getAnonymousAdmission(): Promise<AnonymousOpenings> {
     return await this.#policyCache.anonymousAdmission();
   }
 
