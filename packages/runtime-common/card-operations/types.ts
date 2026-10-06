@@ -549,12 +549,44 @@ export type PolicyIssueCode =
   // draws the card's links whatever strategy the grant's document is served
   // under, so this is recorded independently of
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
-  | 'render-reaches-ungranted-type';
+  | 'render-reaches-ungranted-type'
+  // A grant that opts in to admitting callers who aren't signed in on an
+  // operation that isn't one of `ANONYMOUS_ELIGIBLE_OPERATIONS` invoked under
+  // its own name: a custom operation or a named query. A type's own
+  // declaration under a base operation's name is that operation, and is
+  // eligible. The grant is left out.
+  | 'anonymous-not-base-operation'
+  // A grant that opts in to admitting callers who aren't signed in on a write,
+  // without naming the `realm.json` setting that says which user the write is
+  // made as. The grant is left out.
+  | 'anonymous-write-without-acting-user'
+  // A grant that opts in to admitting callers who aren't signed in, whose
+  // `where` reads `actor()`. The realm doesn't evaluate such a `where` for a
+  // caller with no actor, so the grant never admits one, whatever else its
+  // `where` says. It is kept for signed-in callers.
+  | 'anonymous-grant-reads-actor';
+
+// The operations a grant may open to callers who aren't signed in: the
+// grantable base operations, invoked under their own names. A custom operation
+// or a named query is a contract its author wrote for signed-in callers, and
+// stays one.
+export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
+  'read',
+  'readSource',
+  'query',
+  'create',
+  'update',
+  'delete',
+  'transform',
+  'appendContainsMany',
+  'appendLine',
+];
 
 // The codes that leave the part of the policy they are recorded against live.
 export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'grant-reaches-ungranted-type',
   'render-reaches-ungranted-type',
+  'anonymous-grant-reads-actor',
 ]);
 
 export type PolicyIssueSeverity = 'inactive' | 'warning';
