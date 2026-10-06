@@ -2916,4 +2916,41 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         "the script's own result stays out of the chat",
       );
   });
+
+  test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    // The chat makes the result card asynchronously; wait for that card, so
+    // the assertion below runs after the chat has decided whether to show it.
+    let store = getService('store');
+    let addWithoutPersisting = store.addWithoutPersisting.bind(store);
+    let resultCardMade = new Promise<void>((resolve) => {
+      store.addWithoutPersisting = (async (
+        ...args: Parameters<typeof addWithoutPersisting>
+      ) => {
+        let card = await addWithoutPersisting(...args);
+        resolve();
+        return card;
+      }) as typeof store.addWithoutPersisting;
+    });
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-read-only',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: 'the file contents',
+        captures: [],
+      }),
+    });
+
+    await resultCardMade;
+    await settled();
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists('the tool row shows the call as applied');
+    assert
+      .dom('[data-test-tool-result-container]')
+      .doesNotExist('the read-only run has no result card');
+  });
 });

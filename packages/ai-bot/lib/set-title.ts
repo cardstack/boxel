@@ -6,13 +6,11 @@ import type {
   ToolResultWithOutputContent,
   ToolResultWithNoOutputContent,
   EncodedToolRequest,
-  CodePatchResultContent,
   CardMessageContent,
 } from '@cardstack/base/matrix-event';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import {
   type OpenAIPromptMessage,
-  isCodePatchResultStatusApplied,
   isToolResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
@@ -107,8 +105,7 @@ export const getLatestResultMessage = (
   }
   let eventContent = event.getContent() as
     | ToolResultWithOutputContent
-    | ToolResultWithNoOutputContent
-    | CodePatchResultContent;
+    | ToolResultWithNoOutputContent;
   let messageRelation: IEventRelation | undefined =
     eventContent['m.relates_to'];
   let eventId = messageRelation?.event_id;
@@ -121,9 +118,7 @@ export const getLatestResultMessage = (
     aiBotUserId,
   );
 
-  let commandRequestId = (
-    eventContent as ToolResultWithOutputContent | ToolResultWithNoOutputContent
-  ).commandRequestId;
+  let commandRequestId = eventContent.commandRequestId;
   if (commandRequestId) {
     let toolRequests = getToolRequests<Partial<EncodedToolRequest>>(
       resultSourceEvent.content as CardMessageContent,
@@ -145,18 +140,6 @@ export const getLatestResultMessage = (
         },
       ];
     }
-  }
-
-  if (isCodePatchResultStatusApplied(event)) {
-    return [
-      {
-        role: 'user',
-        content: `File(s) updated via code patch. Cards shared are: ${attachedCardsToMessage(
-          mostRecentlyAttachedCard,
-          attachedCards,
-        )}`,
-      },
-    ];
   }
   return [];
 };
@@ -187,7 +170,6 @@ export function shouldSetRoomTitle(
 ) {
   return (
     (isToolResultStatusApplied(event) ||
-      isCodePatchResultStatusApplied(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)
   );

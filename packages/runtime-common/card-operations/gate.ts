@@ -345,12 +345,23 @@ export interface StoredCardCheck {
 //
 // `snapshotReads` counts the index rows read to judge a predicate against the
 // snapshot. A predicate that reads the stored source alone reads none.
+//
+// `ancestorDefinitionReads` counts the definitions read to learn whether a
+// type in a target's adoption chain declares an operation `nonGrantable`, at
+// the gate and in the search lane alike. A chain whose answer is remembered
+// reads none.
+//
+// `lockedTypeReads` counts the definition reads that type a stored card under
+// the write lock: the type keys its bytes name, and the adoption chain the
+// policy-card rule judges.
 export interface PolicyGateStats {
   policyLoads: number;
   predicateEvaluations: number;
   pendingDischarges: number;
   definitionLookups: number;
   snapshotReads: number;
+  ancestorDefinitionReads: number;
+  lockedTypeReads: number;
 }
 
 const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
@@ -364,6 +375,8 @@ export function policyGateStats(core: OperationCore): PolicyGateStats {
       pendingDischarges: 0,
       definitionLookups: 0,
       snapshotReads: 0,
+      ancestorDefinitionReads: 0,
+      lockedTypeReads: 0,
     };
     statsByCore.set(core, stats);
   }
@@ -1529,20 +1542,46 @@ export async function authorizationCardIds(
 // subclass that redeclares one of its operations would drop a flag nothing
 // else records. Only the lookup's own "no such type" counts as the realm
 // having no definition; any other failure to read one answers yes as well.
+//
+// The answer depends on the chain's definitions alone, so it is remembered
+// while the lookup's definition generation holds the value it had before the
+// definitions were read, and for at most `MAX_REMEMBERED_MS`. An edit in this
+// process moves the generation, so the next invocation after it reads the
+// ancestors afresh. An edit in a peer process moves it when that process's
+// invalidation notice arrives, and a notice can be lost. The age bound is
+// what keeps a lost notice from leaving a flag unread indefinitely. An answer
+// that rests on a type it could not read is never remembered: it refuses
+// now, and the next invocation reads again.
 export async function nonGrantableInChain(
   core: OperationCore,
   types: string[],
   name: string,
   from = 0,
 ): Promise<boolean> {
+  let lookup = core.definitionLookup;
+  let generation = lookup.definitionGeneration?.();
+  let key = [core.realmURL, name, from, ...types].join('\n');
+  let remembered =
+    generation === undefined
+      ? undefined
+      : nonGrantableAnswers.get(lookup)?.get(key);
+  if (
+    remembered &&
+    remembered.generation === generation &&
+    Date.now() - remembered.at < MAX_REMEMBERED_MS
+  ) {
+    return remembered.nonGrantable;
+  }
+  let at = Date.now();
   let relativeTo = new URL(core.realmURL);
   let read = async (codeRef: ResolvedCodeRef) => {
     let resolved = core.resolveCodeRef(codeRef, relativeTo);
     if (!resolved) {
       return undefined;
     }
+    policyGateStats(core).ancestorDefinitionReads++;
     try {
-      return await core.definitionLookup.lookupDefinition(resolved);
+      return await lookup.lookupDefinition(resolved);
     } catch (e: unknown) {
       if (isFilterRefersToNonexistentTypeError(e)) {
         return undefined;
@@ -1556,7 +1595,7 @@ export async function nonGrantableInChain(
         () => undefined,
       );
       if (!type) {
-        return true;
+        return 'unreadable' as const;
       }
       let operations = type.definition.operations;
       return Boolean(
@@ -1566,8 +1605,34 @@ export async function nonGrantableInChain(
       );
     }),
   );
-  return answers.includes(true);
+  let nonGrantable = answers.some((answer) => answer !== false);
+  if (generation !== undefined && !answers.includes('unreadable')) {
+    let remembering = nonGrantableAnswers.get(lookup);
+    if (!remembering || remembering.size >= MAX_REMEMBERED_ANSWERS) {
+      remembering = new Map();
+      nonGrantableAnswers.set(lookup, remembering);
+    }
+    remembering.set(key, { generation, at, nonGrantable });
+  }
+  return nonGrantable;
 }
+
+// What `nonGrantableInChain` last answered for a realm, an operation and a
+// chain, per definition lookup, with the definition generation it read under
+// and when it began reading. A lookup's map starts over once it holds
+// `MAX_REMEMBERED_ANSWERS`, which bounds it without tracking which answers are
+// still asked for.
+const nonGrantableAnswers = new WeakMap<
+  OperationCore['definitionLookup'],
+  Map<string, { generation: number; at: number; nonGrantable: boolean }>
+>();
+const MAX_REMEMBERED_ANSWERS = 10_000;
+
+// How long a remembered answer holds whatever the generation says. It is the
+// five seconds the compiled-policy cache allows an entry between
+// revalidations, for the same reason: it bounds how stale a missed
+// invalidation notice can leave the answer.
+export const MAX_REMEMBERED_MS = 5_000;
 
 // Whether an operation would reach a policy card: read one, read its stored
 // bytes, change one, or mint one. `types` is the target's adoption chain: a
@@ -2089,6 +2154,18 @@ async function lockedCard(
   if (!storedType) {
     return undefined;
   }
+  // The chain comes from the definition cache rather than the row, which lags
+  // a module edit the way it lags a card's: a type that now extends
+  // `RealmPolicy` makes its cards policy cards before they are indexed again.
+  // It is read beside the type keys rather than after them, since the lock is
+  // held for both.
+  let stats = policyGateStats(core);
+  stats.lockedTypeReads++;
+  let chainRead: Promise<string[] | undefined> | undefined;
+  if (check.changesCard) {
+    stats.lockedTypeReads++;
+    chainRead = recordedChain(core, storedType);
+  }
   let keys: string[];
   try {
     keys = await core.policy.typeKeys(storedType);
@@ -2098,12 +2175,8 @@ async function lockedCard(
   if (!keys.includes(check.matchedType)) {
     return undefined;
   }
-  if (check.changesCard) {
-    // The chain comes from the definition cache rather than the row, which
-    // lags a module edit the way it lags a card's: a type that now extends
-    // `RealmPolicy` makes its cards policy cards before they are indexed
-    // again.
-    let chain = await recordedChain(core, storedType);
+  if (chainRead) {
+    let chain = await chainRead;
     if (!chain || core.policy.isPolicyCard(chain)) {
       return undefined;
     }

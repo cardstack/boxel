@@ -75,16 +75,11 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       let newCode = code ?? '';
 
       if (!newCode.startsWith(currentCode)) {
-        // This is a safety net for rare cases where the new code streamed in
-        // does not begin with the current code. This can happen when streaming
-        // in code with search/replace diff markers and the diff marker in chunk
-        // is incomplete, for example "<<<<<<< SEAR" instead of
-        // "<<<<<<< SEARCH". In this case the code diff parsing logic
-        // in parseCodeContent will not recognize the diff marker and it will
-        // display "<<<<<<< SEAR" for a brief moment in the editor, before getting
-        // a chunk with a complete diff marker. In this case we need to reset
-        // the data otherwise the appending delta will be incorrect and we'll
-        // see mangled code in the editor (syntax errors with incomplete diff markers).
+        // The new code does not extend the current code, so appending a delta
+        // would mangle it. This happens when the content is replaced rather
+        // than extended, for example when a tool call preview switches from
+        // the raw streamed arguments to pretty-printed JSON. Reset the model
+        // to the new value instead.
         model.setValue(newCode);
       } else {
         let codeDelta = newCode.slice(currentCode.length);
