@@ -13,3 +13,9 @@ Pre-1.0 caveat: the public API is intentionally unstable. Minor and patch
 versions may change behavior until `1.0.0`.
 
 ## [Unreleased]
+
+### Fixed
+
+- **`LICENSE` carries Motion's MIT notice.** The files adapted or ported from
+  Motion (listed in `VENDORED.md`) ship under Framer B.V.'s copyright as well
+  as Cardstack's.
