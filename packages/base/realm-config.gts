@@ -85,6 +85,7 @@ import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
+import { isLiveRender } from './render-context';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -903,13 +904,6 @@ export class RealmSettingsField extends JsonField {
   static edit = RealmSettingsEdit;
 }
 
-// A render for the indexer rather than for someone looking at the card. Base
-// cards read this global to tell the two apart.
-function isLiveRender(): boolean {
-  return !(globalThis as { __boxelRenderContext?: unknown })
-    .__boxelRenderContext;
-}
-
 // A pointer written as an absolute http(s) URL, as the realm resolves one.
 function httpURL(pointer: string): string | undefined {
   try {
@@ -953,9 +947,6 @@ interface StandingAnswer {
 // policy card, or to a type its rules name, lands.
 class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   @tracked private answer: StandingAnswer | undefined;
-  // Read once, as the card renders: a render for the indexer asks nothing,
-  // however long the card stays up afterwards.
-  #live = isLiveRender();
   #subscriptions = new Map<string, () => void>();
 
   constructor(owner: Owner, args: PolicyStandingSignature['Args']) {
@@ -1050,8 +1041,11 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
     return [...realms];
   }
 
-  private ask = modifier((_element, [realm]: [string | undefined]) => {
-    if (realm && this.#live) {
+  // Asked, and subscribed below, only from a live render. Whether this is one
+  // is read from where the element sits, since the host can be rendering a
+  // card for its own index in the same tab at the same moment.
+  private ask = modifier((element, [realm]: [string | undefined]) => {
+    if (realm && isLiveRender(element)) {
       this.load.perform();
     }
   });
@@ -1059,8 +1053,8 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   // Subscribes to each realm the answer depends on, and unsubscribes from
   // each one it no longer does. Every answer runs this again, and one that
   // names the realms already watched changes nothing.
-  private listen = modifier((_element, [watched]: [string[]]) => {
-    if (!this.#live) {
+  private listen = modifier((element, [watched]: [string[]]) => {
+    if (!isLiveRender(element)) {
       return;
     }
     let wanted = new Set(watched);
@@ -1276,10 +1270,9 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
   @consume(CardCrudFunctionsContextName)
   declare private cardCrudFunctions: CardCrudFunctions | undefined;
   @tracked private settled: string | undefined;
-  #live = isLiveRender();
 
   private get readable(): boolean | undefined {
-    if (this.args.busy || !this.settled || !this.#live) {
+    if (this.args.busy || !this.settled) {
       return undefined;
     }
     return this.args.context?.canInvoke?.('read', this.settled);
@@ -1322,8 +1315,10 @@ class PolicyCard extends GlimmerComponent<PolicyCardSignature> {
     return this.failed ? 'failed' : undefined;
   }
 
-  private follow = modifier((_element, [pointer]: [string]) => {
-    if (this.#live) {
+  // Only a live render settles a pointer, so a render for the indexer never
+  // reads or loads the card.
+  private follow = modifier((element, [pointer]: [string]) => {
+    if (isLiveRender(element)) {
       this.settle.perform(pointer);
     }
   });
