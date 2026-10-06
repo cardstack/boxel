@@ -8,9 +8,9 @@
  * job of making the drag useless on its own. If a change ever breaks the
  * join, these fail while every rule test still passes.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { module, test } from 'qunit';
 import { Hang, RUNWAY } from 'test-app/components/examples/hang';
 

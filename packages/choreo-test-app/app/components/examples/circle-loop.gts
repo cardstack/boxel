@@ -1,7 +1,8 @@
+import { Choreo } from '@cardstack/choreo';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { Choreo, motion, styles } from 'glimmer-motion';
+import { motion, styles } from 'glimmer-motion';
 import { tuneNumber } from 'test-app/lib/demo-tuning';
 
 const ID = 'circle-loop';

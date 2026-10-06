@@ -6,14 +6,15 @@ import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-d
 import {
   executeReadRealmFile,
   readRealmFileTool,
-  classifyToolCalls,
   fileLabelFromUrl,
   readFilesLabel,
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
   selectReadRealmFileUrls,
   urlsFromReadRealmFileArguments,
-} from '../lib/read-realm-file.ts';
+} from '../lib/bot-tools/read-realm-file/read.ts';
+import { READ_URL_TOOL_NAME } from '../lib/bot-tools/read-url/read.ts';
+import { classifyToolCalls } from '../lib/bot-tools/index.ts';
 
 const ON_BEHALF_OF = '@user:localhost';
 const REALM = 'https://localhost:4201/user/jane/';
@@ -735,6 +736,24 @@ module('classifyToolCalls', () => {
       hostToolCalls.map((c) => c.id),
       ['c2'],
       'a host command and a read coexist — neither is dropped',
+    );
+  });
+
+  test('readUrl is a bot tool too', () => {
+    let { botToolCalls, hostToolCalls } = classifyToolCalls(
+      assistantMessage([
+        fnCall('c1', READ_URL_TOOL_NAME, { url: 'https://example.com' }),
+        fnCall('c2', READ_REALM_FILE_TOOL_NAME, { urls: [FILE_URL] }),
+        fnCall('c3', 'SomeHostCommand'),
+      ]),
+    );
+    assert.deepEqual(
+      botToolCalls.map((c) => c.id),
+      ['c1', 'c2'],
+    );
+    assert.deepEqual(
+      hostToolCalls.map((c) => c.id),
+      ['c3'],
     );
   });
 

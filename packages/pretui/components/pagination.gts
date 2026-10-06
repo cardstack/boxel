@@ -25,8 +25,13 @@ export class Pagination extends Component<PaginationSignature> {
     }
     return out;
   }
+  // A request for the page already showing reports nothing. That covers a
+  // press on the current page and a press on an edge arrow, which is
+  // aria-disabled rather than natively disabled so it stays in the tab order
+  // and still receives clicks.
   go = (v: number) => {
     let n = Math.max(1, Math.min(this.args.pages, v));
+    if (n === this.page) return;
     if (this.args.page === undefined) {
       this.internal = n;
     }
@@ -44,7 +49,7 @@ export class Pagination extends Component<PaginationSignature> {
   isActive = (n: number | '…') => n === this.page;
   <template>
     <nav class='pretui-pagination' aria-label='Pagination' data-test-pretui-pagination ...attributes>
-      <button type='button' class='pretui-page' disabled={{this.atStart}} aria-label='Previous' {{on 'click' this.prev}}>‹</button>
+      <button type='button' class='pretui-page' aria-disabled={{if this.atStart 'true'}} aria-label='Previous' {{on 'click' this.prev}}>‹</button>
       {{#each this.list as |n|}}
         {{#if (this.isGap n)}}
           <span class='pretui-gap'>…</span>
@@ -58,7 +63,7 @@ export class Pagination extends Component<PaginationSignature> {
           >{{n}}</button>
         {{/if}}
       {{/each}}
-      <button type='button' class='pretui-page' disabled={{this.atEnd}} aria-label='Next' {{on 'click' this.next}}>›</button>
+      <button type='button' class='pretui-page' aria-disabled={{if this.atEnd 'true'}} aria-label='Next' {{on 'click' this.next}}>›</button>
     </nav>
     <style scoped>
       @layer PretComponent {
@@ -81,7 +86,7 @@ export class Pagination extends Component<PaginationSignature> {
           letter-spacing: inherit;
           font-variant-numeric: tabular-nums;
         }
-        .pretui-page:hover:not(:disabled) {
+        .pretui-page:hover:not([aria-disabled='true']) {
           background: var(--hover, var(--boxel-100));
           color: var(--foreground);
         }
@@ -91,8 +96,12 @@ export class Pagination extends Component<PaginationSignature> {
           font-weight: 600;
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
-        .pretui-page:disabled {
-          opacity: 0.45;
+        .pretui-page:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-page[aria-disabled='true'] {
+          color: var(--subtle-foreground);
           cursor: default;
         }
         .pretui-gap {

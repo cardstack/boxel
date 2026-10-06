@@ -6,8 +6,8 @@
  * not laid out by the browser, so the assertions have to check the numbers
  * the demo computed rather than trusting that flow got it right.
  */
+import { setupChoreo } from '@cardstack/choreo/test-support';
 import { click, fillIn, find, render } from '@ember/test-helpers';
-import { setupChoreo } from 'glimmer-motion/choreo/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { InlineEdit } from 'test-app/components/examples/inline-edit';

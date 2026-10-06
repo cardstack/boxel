@@ -30,7 +30,7 @@ Verify a cold start, a paused midpoint, a direct seek, and an interrupted target
 
 ## API Coverage
 
-**glimmer-motion**: `Camera3DState`.
+**@cardstack/choreo**: `Camera3DState`.
 
 **ChoreoContext**: `c.Camera3D`.
 

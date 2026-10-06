@@ -1,0 +1,308 @@
+import { logger } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import type { MatrixClient } from 'matrix-js-sdk';
+import type { ChatCompletionMessageToolCall } from 'openai/resources';
+import {
+  executeReadRealmFile,
+  fileLabelFromUrl,
+  READ_REALM_FILE_MAX_URLS,
+  selectReadRealmFileUrls,
+  type ReadRealmFileTool,
+} from './read.ts';
+import { publishToolResult, uploadToMatrix } from '../results.ts';
+import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
+import type { DelegatedUserRealmSessionManager } from '../../user-delegated-realm-server-session.ts';
+
+let log = logger('ai-bot:read-realm-file');
+
+// The contentType the fetched file is attached under. It must be text-based so
+// the prompt builder downloads and inlines the content (rather than treating it
+// as opaque media); 'text/plain' satisfies that for any source we read.
+const READ_FILE_CONTENT_TYPE = 'text/plain';
+
+export interface ReadRealmFileFulfillmentDeps {
+  client: MatrixClient;
+  roomId: string;
+  // The bot message that carried the readRealmFile command requests. Result
+  // events relate back to it; pairing is ultimately by commandRequestId, so
+  // this only needs to be the anchoring bot message.
+  requestEventId: string;
+  agentId: string | undefined;
+  onBehalfOf: string;
+  delegatedUserRealmSessions: Pick<
+    DelegatedUserRealmSessionManager,
+    'getToken' | 'invalidate'
+  >;
+  fetch?: typeof globalThis.fetch;
+  // Injectable for tests; defaults to uploading to the Matrix media repo.
+  uploadText?: (content: string, contentType: string) => Promise<string>;
+}
+
+export interface ReadRealmFileFulfillmentOutcome {
+  commandRequestId: string;
+  // True only when every requested file was read and attached; a partial read
+  // reports ok: false with `error` naming the files that failed or were
+  // dropped past the per-call cap, even though the successful ones were
+  // still attached.
+  ok: boolean;
+  error?: string;
+  // Whether the call's result reached the room.
+  published: boolean;
+}
+
+// Runs each readRealmFile tool call ai-bot owns and publishes its outcome as a
+// command-result event — the same shape a host command result takes, so the
+// existing prompt reconstruction pairs it with the request and feeds it back on
+// the next turn. A call names any number of files; they are fetched
+// concurrently (as are the calls themselves) and every file that was read is
+// uploaded to Matrix and attached to the call's single result event
+// (data.attachedFiles); the model receives their content via the same
+// attachment-download path host-read files use. Files that could not be read
+// are named in the result's failureReason: the result stays `applied` while at
+// least one file came back (so the successful content isn't thrown away), and
+// resolves as invalid only when nothing did — either way a partial or failed
+// read never reads as a clean one. failureReason also names any skill tools
+// that were declared but couldn't be offered (no usable indexed definition),
+// so a degraded skill read never looks like a tool-less one. Returns one
+// outcome per call; never throws (a publish failure is logged so the turn
+// still settles).
+export async function fulfillReadRealmFileCalls(
+  botToolCalls: ChatCompletionMessageToolCall[],
+  deps: ReadRealmFileFulfillmentDeps,
+): Promise<ReadRealmFileFulfillmentOutcome[]> {
+  let upload =
+    deps.uploadText ??
+    ((content: string, contentType: string) =>
+      uploadToMatrix(deps.client, content, contentType));
+  // One call at a time, on purpose. Every published result re-triggers the
+  // bot, and that handler decides whether the turn is complete by fetching
+  // the room history from the server and splicing in the one result it was
+  // triggered by. When several results are published at once, a handler can
+  // run while a sibling's send is still in flight: the sibling is missing
+  // from the fetch, the turn looks unfinished, and no handler ever starts
+  // the next turn. Publishing in sequence means that by the time result N
+  // triggers its handler, results 1..N-1 are on the server.
+  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
+  for (let call of botToolCalls) {
+    if (call.type !== 'function') {
+      continue;
+    }
+    outcomes.push(await fulfillOne(call, deps, upload));
+  }
+  return outcomes;
+}
+
+type FileRead =
+  | {
+      url: string;
+      attachment: Record<string, unknown>;
+      // Definitions of the tools the read file's indexed frontmatter
+      // declares, when the file is a skill whose index row carries usable
+      // (schema-stamped) entries.
+      discoveredTools?: DiscoveredToolDefinition[];
+      // Present when the file declares tools that could not be offered
+      // (no usable stamped definition in the index); rides the result's
+      // failureReason so the model learns the skill's tools are unavailable
+      // and why, instead of hunting for a tool that will never appear.
+      degradedToolsNote?: string;
+    }
+  | { url: string; error: string };
+
+// The read's tool entries that are usable as LLM tool definitions, tagged
+// with the skill file they came from. Entries without a well-formed
+// definition (e.g. a skill indexed before schema enrichment) are dropped
+// here — the prompt can only offer a tool it has a definition for.
+function discoveredToolDefinitions(
+  url: string,
+  tools: ReadRealmFileTool[] | undefined,
+): DiscoveredToolDefinition[] {
+  return (tools ?? [])
+    .filter(
+      (tool) =>
+        tool.definition?.type === 'function' &&
+        typeof tool.definition.function?.name === 'string' &&
+        tool.definition.function.name.length > 0,
+    )
+    .map((tool) => ({
+      sourceSkillUrl: url,
+      ...(tool.codeRef ? { codeRef: tool.codeRef } : {}),
+      ...(typeof tool.functionName === 'string'
+        ? { functionName: tool.functionName }
+        : {}),
+      ...(typeof tool.requiresApproval === 'boolean'
+        ? { requiresApproval: tool.requiresApproval }
+        : {}),
+      definition: tool.definition as DiscoveredToolDefinition['definition'],
+    }));
+}
+
+// Reads and uploads a single file of a call. An upload failure is folded into
+// the same shape as a read failure so the caller reports both alike.
+async function readAndUpload(
+  url: string,
+  deps: ReadRealmFileFulfillmentDeps,
+  upload: (content: string, contentType: string) => Promise<string>,
+): Promise<FileRead> {
+  let result = await executeReadRealmFile(url, {
+    onBehalfOf: deps.onBehalfOf,
+    delegatedUserRealmSessions: deps.delegatedUserRealmSessions,
+    fetch: deps.fetch,
+  });
+  if (!result.ok) {
+    return { url, error: result.error };
+  }
+  let fileUrl: string;
+  try {
+    fileUrl = await upload(result.content, READ_FILE_CONTENT_TYPE);
+  } catch (e: any) {
+    log.error(`readRealmFile: upload failed for ${url}: ${e?.message ?? e}`);
+    return { url, error: `could not store ${url} for reading` };
+  }
+  let declaredToolCount = result.tools?.length ?? 0;
+  let discoveredTools = discoveredToolDefinitions(url, result.tools);
+  let degradedToolCount = declaredToolCount - discoveredTools.length;
+  let degradedToolsNote =
+    degradedToolCount > 0
+      ? `${url}: ${degradedToolCount} of ${declaredToolCount} tools declared by this skill lack a usable definition in the realm's index, so they cannot be offered as callable tools. This usually means the realm's index is stale — suggest that the user reindex the realm.`
+      : undefined;
+  return {
+    url,
+    attachment: {
+      sourceUrl: url,
+      url: fileUrl,
+      name: fileLabelFromUrl(url) ?? url,
+      contentType: READ_FILE_CONTENT_TYPE,
+      contentSize: Buffer.byteLength(result.content),
+    },
+    ...(discoveredTools.length ? { discoveredTools } : {}),
+    ...(degradedToolsNote ? { degradedToolsNote } : {}),
+  };
+}
+
+async function fulfillOne(
+  call: ChatCompletionMessageToolCall & { type: 'function' },
+  deps: ReadRealmFileFulfillmentDeps,
+  upload: (content: string, contentType: string) => Promise<string>,
+): Promise<ReadRealmFileFulfillmentOutcome> {
+  // Deduplicated within the call so a repeated URL doesn't attach (and inline
+  // into every later prompt) twice; capped so a call that ignores the
+  // schema's limit cannot fetch and inline an unbounded number of files;
+  // recovered from the raw text when the arguments were cut off before the
+  // JSON closed.
+  let { urls, dropped } = selectReadRealmFileUrls(call.function.arguments);
+  if (urls.length === 0) {
+    return await publishFailure(
+      call.id,
+      'readRealmFile needs a non-empty list of urls.',
+      deps,
+    );
+  }
+
+  let reads = await Promise.all(
+    urls.map((url) => readAndUpload(url, deps, upload)),
+  );
+  let successfulReads = reads.filter(
+    (read): read is Extract<FileRead, { attachment: object }> =>
+      'attachment' in read,
+  );
+  let attachedFiles = successfulReads.map((read) => read.attachment);
+  // Tool definitions the read skills contributed ride the result event next
+  // to the attachments, so prompt assembly can offer them on later turns
+  // from room events alone. Kept out of attachedFiles: those entries are
+  // SerializedFileDefs consumed by the attachment-download path (and the
+  // timeline), which must not change shape.
+  let discoveredTools = successfulReads.flatMap(
+    (read) => read.discoveredTools ?? [],
+  );
+  let readFailures = reads
+    .filter(
+      (read): read is Extract<FileRead, { error: string }> => 'error' in read,
+    )
+    // Most read errors already name the file; prefix the ones (e.g. realm
+    // access errors) that don't, so the model knows which URL to retry.
+    .map((read) =>
+      read.error.includes(read.url) ? read.error : `${read.url}: ${read.error}`,
+    );
+  // Degraded-tool notes share failureReason with read failures: it is the
+  // one channel prompt assembly already folds into the model-visible tool
+  // message, on failed and applied results alike. They stay out of the
+  // outcome's ok/error, which report file reads only.
+  let degradedToolsNotes = successfulReads
+    .map((read) => read.degradedToolsNote)
+    .filter((note): note is string => Boolean(note));
+  // Urls past the cap were not read at all. Say so in the same channel, so
+  // the model learns it got the first files rather than believing it read
+  // them all and moving on without the rest.
+  let droppedNote =
+    dropped.length > 0
+      ? `${dropped.length} of the ${urls.length + dropped.length} urls in this call were not read: readRealmFile reads at most ${READ_REALM_FILE_MAX_URLS} files per call. Request these on a later turn if you still need them:\n${dropped.join('\n')}`
+      : undefined;
+  let failureReason =
+    [
+      ...readFailures,
+      ...(droppedNote ? [droppedNote] : []),
+      ...degradedToolsNotes,
+    ].join('\n') || undefined;
+
+  if (attachedFiles.length === 0) {
+    return await publishFailure(call.id, failureReason!, deps);
+  }
+
+  let published = await publish(deps, {
+    msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+    commandRequestId: call.id,
+    'm.relates_to': {
+      rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+      key: 'applied',
+      event_id: deps.requestEventId,
+    },
+    ...(failureReason ? { failureReason } : {}),
+    data: {
+      context: { agentId: deps.agentId },
+      attachedFiles,
+      ...(discoveredTools.length ? { discoveredTools } : {}),
+    },
+  });
+  let errors = [...readFailures, ...(droppedNote ? [droppedNote] : [])];
+  return {
+    commandRequestId: call.id,
+    ok: errors.length === 0,
+    ...(errors.length ? { error: errors.join('\n') } : {}),
+    published,
+  };
+}
+
+async function publishFailure(
+  commandRequestId: string,
+  error: string,
+  deps: ReadRealmFileFulfillmentDeps,
+): Promise<ReadRealmFileFulfillmentOutcome> {
+  let published = await publish(deps, {
+    msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    commandRequestId,
+    failureReason: error,
+    'm.relates_to': {
+      rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+      key: 'invalid',
+      event_id: deps.requestEventId,
+    },
+    data: { context: { agentId: deps.agentId } },
+  });
+  return { commandRequestId, ok: false, error, published };
+}
+
+async function publish(
+  deps: ReadRealmFileFulfillmentDeps,
+  content: Record<string, any>,
+): Promise<boolean> {
+  return await publishToolResult(
+    deps.client,
+    deps.roomId,
+    content,
+    'readRealmFile',
+  );
+}

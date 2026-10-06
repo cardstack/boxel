@@ -436,16 +436,40 @@ export async function findLiveInstanceGeneration(
   dbAdapter: DBAdapter,
   { realmURL, instanceURL }: { realmURL: string; instanceURL: string },
 ): Promise<number | undefined> {
+  return await findLiveRowGeneration(dbAdapter, {
+    realmURL,
+    url: instanceURL,
+    type: 'instance',
+  });
+}
+
+// The generation of a live index row of either type: an instance (see
+// `findLiveInstanceGeneration`) or a file's own row, which is what keys an
+// on-demand capture of a workspace file. Otherwise the predicate is the
+// query engine's `#liveRowConditions` for the same type. An instance is
+// addressable by its `file_alias` (the extensionless id) as well as its URL,
+// but a file only by its own URL: a file row's alias drops `.json` and
+// executable extensions, so matching it would let an extensionless file
+// request land on the row of `<that>.json` or `<that>.gts` and key its
+// capture exactly as a card capture of that id is keyed.
+export async function findLiveRowGeneration(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    url,
+    type,
+  }: { realmURL: string; url: string; type: 'instance' | 'file' },
+): Promise<number | undefined> {
   let rows = (await query(dbAdapter, [
     `SELECT i.generation FROM boxel_index AS i ${prerenderedJoin()}
      WHERE (i.url =`,
-    param(instanceURL),
-    `OR i.file_alias =`,
-    param(instanceURL),
+    param(url),
+    ...(type === 'instance' ? [`OR i.file_alias =`, param(url)] : []),
     `) AND i.realm_url =`,
     param(realmURL),
-    `AND i.type = 'instance'
-      AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
+    `AND i.type =`,
+    param(type),
+    `AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
       AND NOT ${effectiveHasError()}
      LIMIT 1`,
   ] as Expression)) as { generation: number | string }[];

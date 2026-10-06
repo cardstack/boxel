@@ -24,11 +24,33 @@ export interface ProgressBarSignature {
 // and is hidden from assistive tech, which hears the name and value from the
 // ARIA attributes instead.
 export class ProgressBar extends Component<ProgressBarSignature> {
+  // A negative or non-finite `@max` reads as an empty range, so `aria-valuemax`
+  // never drops below `aria-valuemin` and the stepped track is always a finite
+  // row.
   get max() {
-    return this.args.max ?? 100;
+    let max = this.args.max ?? 100;
+    return Number.isFinite(max) ? Math.max(0, max) : 0;
   }
+  // `@value` clamped into [0, max], with an unset or non-finite value read as
+  // 0, so `aria-valuenow` always sits between `aria-valuemin` and
+  // `aria-valuemax`. It is also what a sighted user sees: a continuous bar's
+  // fill paints the exact value, and a stepped bar lights a partly reached step
+  // whole, so with a whole-number `@max` the value there rounds up to the
+  // number of lit steps (2.5 of 6 lights and announces 3), as Meter does with a
+  // fractional level. Stepped mode is for small discrete totals, so a
+  // fractional `@max` isn't meant to be used there: it draws `Math.ceil(max)`
+  // steps against the raw max, and the outer `Math.min` (a no-op for a
+  // whole-number `@max`) keeps the value within `aria-valuemax` rather than
+  // matching the lit steps.
+  get valueNow() {
+    let value = Number.isFinite(this.args.value) ? this.args.value : 0;
+    let clamped = Math.max(0, Math.min(value, this.max));
+    return this.stepped ? Math.min(Math.ceil(clamped), this.max) : clamped;
+  }
+  // A zero `@max` has no fraction to show, so any value against it reads as an
+  // empty bar at 0%, with no division by zero.
   get pct() {
-    return Math.max(0, Math.min(100, (this.args.value / this.max) * 100));
+    return this.max > 0 ? (this.valueNow / this.max) * 100 : 0;
   }
   get stepped() {
     return this.args.steps ?? (this.args.count !== undefined && this.max <= 12);
@@ -42,7 +64,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
   get stepList(): { on: boolean }[] {
     let out = [];
     for (let i = 0; i < this.max; i++) {
-      out.push({ on: i < this.args.value });
+      out.push({ on: i < this.valueNow });
     }
     return out;
   }
@@ -73,7 +95,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       role='progressbar'
       aria-label={{this.accessibleLabel}}
       aria-valuemin='0'
-      aria-valuenow={{@value}}
+      aria-valuenow={{this.valueNow}}
       aria-valuemax={{this.max}}
       aria-valuetext={{this.valueText}}
       style={{this.style}}

@@ -29,9 +29,7 @@ Review a shot in context with its predecessor and successor. A close-up can look
 
 ## API Coverage
 
-**glimmer-motion**: `FilmBeat`, `FilmCam`.
-
-**glimmer-motion/film**: `Eye`, `Shot`, `To`, `Beat`, `Cam`, `Pt3`, `ShotState`.
+**@cardstack/choreo/film**: `Eye`, `Shot`, `To`, `Beat`, `Cam`, `Pt3`, `ShotState`.
 
 **FilmVocabulary**: `f.Eye`, `f.Shot`, `f.To`.
 

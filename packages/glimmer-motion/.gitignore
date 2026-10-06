@@ -1,4 +1,5 @@
 dist/
+dist-tests/
 dist-realm/
 declarations/
 tmp/

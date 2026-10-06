@@ -134,15 +134,15 @@ A run also prints the table at the end.
    until the bot is idle: no message streaming, no
    tool pill applying or waiting for approval, no pending Accept. The run is cut
    short only when it has clearly gone wrong (a failed or invalid tool call, an
-   error alert, a patch the host cannot apply, the same call repeated three
+   error alert, the same call repeated three
    times, a pill stuck past the host's tool timeout) or after the safety wall
    clock.
 4. Looks for a rendered card in the stack that is not the workspace index and
    has no error state; screenshots the page.
 5. Reads the room's Matrix events: turns, tokens, cost, tool calls and their
-   outcomes, SEARCH/REPLACE blocks and their marker style, files written.
+   outcomes, run-realm-code writes, files written.
 6. Classifies: `pass` (card rendered), `model` failure (never wrote, wrong
-   markers, wrong tool, gave up), or `host` failure (a pill stuck applying, a
+   tool, gave up), or `host` failure (a pill stuck applying, a
    tool with no result, the tab left the workspace). Keeps the room id so the
    room can be inspected afterwards.
 

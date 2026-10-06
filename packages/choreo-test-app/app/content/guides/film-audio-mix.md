@@ -32,7 +32,7 @@ Listen at ordinary device volume and confirm the guide remains intelligible over
 
 ## API Coverage
 
-**glimmer-motion/film**: `Mix`, `SOUND`, `Voice`.
+**@cardstack/choreo/film**: `Mix`, `SOUND`, `Voice`.
 
 **FilmVocabulary**: `f.Voice`, `f.sound`.
 

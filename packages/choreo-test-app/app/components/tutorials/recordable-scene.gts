@@ -1,9 +1,10 @@
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { createChoreoPlayer } from 'choreo-player';
 import { modifier } from 'ember-modifier';
-import { Choreo, type ChoreoContext, motion, styles } from 'glimmer-motion';
+import { motion, styles } from 'glimmer-motion';
 
 export class RecordableScene extends Component {
   @tracked armed = false;

@@ -22,7 +22,15 @@ import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 
-type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid' | 'failed';
+// 'approved' is the user's approval of a call ai-bot holds for approval; the
+// call is then running (see `status`) until ai-bot's result lands.
+type ToolCallStatus =
+  | 'applied'
+  | 'ready'
+  | 'applying'
+  | 'invalid'
+  | 'failed'
+  | 'approved';
 
 // 'read-file-for-ai-assistant_a831' -> 'Read file for ai assistant',
 // 'patchCardInstance' -> 'Patch card instance'. Tool names are a kebab or
@@ -150,12 +158,28 @@ export default class MessageTool {
     );
   }
 
-  get status() {
+  // ai-bot runs this call itself, but only once the user approves it (the
+  // bot tool marked it `approvalRequired`). Until an answer lands the call
+  // shows the full request with Approve / Decline rather than a status
+  // indicator.
+  get awaitsApproval() {
+    return (
+      this.isBotExecuted &&
+      this.toolRequest.approvalRequired === true &&
+      this.toolCallStatus === 'applying' &&
+      !this.toolService.answeredApprovalIds.has(this.id!)
+    );
+  }
+
+  get status(): Exclude<ToolCallStatus, 'approved'> | undefined {
     if (this.toolService.currentlyExecutingToolRequestIds.has(this.id!)) {
       return 'applying';
     }
-
-    return this.toolCallStatus;
+    if (this.awaitsApproval) {
+      return 'ready';
+    }
+    let status = this.toolCallStatus;
+    return status === 'approved' ? 'applying' : status;
   }
 
   async commandResultCardDoc() {

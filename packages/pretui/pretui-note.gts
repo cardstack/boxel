@@ -24,6 +24,7 @@ import {
   field,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { on } from '@ember/modifier';
@@ -79,7 +80,7 @@ export class PretuiNote extends CardDef {
     private openTarget = () => {
       let id = this.args.model.target?.id;
       if (!id) return;
-      this.args.viewCard?.(new URL(id), 'isolated');
+      this.args.viewCard?.(id as RealmResourceIdentifier, 'isolated');
     };
 
     get addressed() {

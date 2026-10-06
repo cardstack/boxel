@@ -161,10 +161,25 @@ export async function readSourceOperation(
   // stranding the headers-only mode exists to avoid, reintroduced on the mode
   // that does read bytes. A caller that sends the body touches this once and
   // gets exactly what the other mode never opened.
+  let openContent = file.openContent;
   return {
     ...result,
     get body() {
       return file.content;
     },
+    ...(openContent
+      ? {
+          openBody: () => {
+            let opened = openContent();
+            return {
+              body: opened.content,
+              ...(opened.size != null ? { size: opened.size } : {}),
+              ...(opened.lastModifiedMs != null
+                ? { lastModifiedMs: opened.lastModifiedMs }
+                : {}),
+            };
+          },
+        }
+      : {}),
   };
 }

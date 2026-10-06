@@ -3,7 +3,9 @@ import {
   waitUntil,
   click,
   fillIn,
+  focus,
   triggerEvent,
+  triggerKeyEvent,
 } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
@@ -209,6 +211,236 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
         `[data-test-attached-file="${testRealmURL}person.gts"][data-test-file-upload-status]`,
       )
       .exists('file pill should have an upload status attribute');
+  });
+
+  test('can attach several workspace files in one pick', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+
+    assert
+      .dom('[data-test-choose-file-modal] [data-test-boxel-header-title]')
+      .hasText('Choose Files', 'the modal title is plural');
+
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="pet.gts"]');
+    assert
+      .dom('[data-test-file="person.gts"]')
+      .hasAttribute('aria-pressed', 'true');
+    assert
+      .dom('[data-test-file="pet.gts"]')
+      .hasAttribute('aria-pressed', 'true');
+    assert
+      .dom('[data-test-choose-file-modal-add-button]')
+      .hasText('Add 2 Files');
+
+    await click('[data-test-file="pet.gts"]');
+    assert
+      .dom('[data-test-file="pet.gts"]')
+      .hasAttribute('aria-pressed', 'false', 'clicking again deselects');
+    assert
+      .dom('[data-test-choose-file-modal-selection-status]')
+      .hasText(
+        'pet.gts deselected, 1 file selected',
+        'the toggle is announced to screen readers',
+      );
+    assert
+      .dom('[data-test-file="person.gts"]')
+      .hasAttribute('aria-pressed', 'true', 'other selection is kept');
+    assert
+      .dom('[data-test-choose-file-modal-add-button]')
+      .hasText('Add 1 File');
+
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    assert.dom('[data-test-choose-file-modal]').doesNotExist();
+    await waitFor(`[data-test-attached-file="${testRealmURL}pet.gts"]`);
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
+      .exists('first chosen file is attached');
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .exists('second chosen file is attached');
+  });
+
+  test('in the multi-select file chooser, arrow keys move the cursor, Space toggles, and Enter adds the selection', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await focus('[data-test-file-tree-nav]');
+
+    for (let key of ['p', 'e', 't']) {
+      await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key });
+    }
+    assert.dom('[data-test-file="pet.gts"]').hasClass('cursor');
+    assert
+      .dom('[data-test-file="pet.gts"]')
+      .hasAttribute('aria-pressed', 'false', 'type-ahead does not select');
+
+    await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key: ' ' });
+    assert
+      .dom('[data-test-file="pet.gts"]')
+      .hasAttribute('aria-pressed', 'true', 'Space selects the cursor file');
+
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowDown');
+    assert.dom('[data-test-file="realm.json"]').hasClass('cursor');
+    assert
+      .dom('[data-test-file="realm.json"]')
+      .hasAttribute('aria-pressed', 'false', 'ArrowDown does not select');
+    assert
+      .dom('[data-test-file="pet.gts"]')
+      .hasAttribute('aria-pressed', 'true', 'ArrowDown keeps the selection');
+
+    await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key: ' ' });
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'Enter');
+
+    await waitFor(`[data-test-attached-file="${testRealmURL}realm.json"]`);
+    assert.dom('[data-test-choose-file-modal]').doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .exists('Space-selected file is attached');
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}realm.json"]`)
+      .exists('second Space-selected file is attached');
+  });
+
+  test('a selected file that can no longer be loaded is dropped from a multi-select pick and named', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="pet.gts"]');
+
+    await getTestRealmRegistry().get(testRealmURL)!.realm.delete('pet.gts');
+    await click('[data-test-choose-file-modal-add-button]');
+
+    await waitFor('[data-test-choose-file-modal-pick-error]');
+    assert
+      .dom('[data-test-choose-file-modal-pick-error]')
+      .hasText("Couldn't load pet.gts, so it was removed from the selection.");
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('the chooser stays open');
+    assert
+      .dom('[data-test-choose-file-modal-add-button]')
+      .hasText('Add 1 File', 'the file that loaded stays selected');
+
+    await click('[data-test-choose-file-modal-add-button]');
+    await waitFor(`[data-test-attached-file="${testRealmURL}person.gts"]`);
+    assert.dom('[data-test-choose-file-modal]').doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .doesNotExist();
+  });
+
+  test('an upload in the multi-select file chooser keeps the files already selected', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await click('[data-test-file="pet.gts"]');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+    await waitUntil(() => fileUploadService.activeUploads.length > 0);
+    fileUploadService.activeUploads[0]!.__provideFileForTesting(
+      new File(['hello upload'], 'uploaded.txt', { type: 'text/plain' }),
+    );
+
+    await waitFor(`[data-test-attached-file="${testRealmURL}uploaded.txt"]`, {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-choose-file-modal]').doesNotExist();
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .exists('the file selected before the upload is attached');
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}uploaded.txt"]`)
+      .exists('the uploaded file is attached');
+  });
+
+  test('files selected in another workspace while an upload runs resolve in that workspace', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await openAiAssistant();
+
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-workspace-file-btn]');
+    await waitFor('[data-test-file="pet.gts"]');
+
+    await click('[data-test-choose-file-modal-upload-button]');
+    await waitUntil(() => fileUploadService.activeUploads.length > 0);
+
+    await click('[data-test-choose-file-modal-realm-chooser]');
+    let otherRealm = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-test-realm-dropdown-menu] [data-test-boxel-menu-item-text]',
+      ),
+    ].find((item) => item.textContent?.trim() !== realmName);
+    if (!otherRealm) {
+      throw new Error('expected a second workspace in the realm dropdown');
+    }
+    await click(otherRealm);
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-file="pet.gts"]') &&
+        document.querySelector('[data-test-file]'),
+      { timeout: 10000 },
+    );
+    let otherFile = document.querySelector<HTMLElement>('[data-test-file]')!;
+    let otherPath = otherFile.dataset.path!;
+    await click(otherFile);
+
+    fileUploadService.activeUploads[0]!.__provideFileForTesting(
+      new File(['hello upload'], 'uploaded.txt', { type: 'text/plain' }),
+    );
+
+    await waitFor(`[data-test-attached-file="${testRealmURL}uploaded.txt"]`, {
+      timeout: 10000,
+    });
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}${otherPath}"]`)
+      .doesNotExist(
+        'the other workspace path is not looked up in the upload realm',
+      );
+    assert
+      .dom(`[data-test-attached-file$="/${otherPath}"]`)
+      .exists('the file selected in the other workspace is attached');
   });
 
   test('attach menu shows card, workspace file, and local file options', async function (assert) {

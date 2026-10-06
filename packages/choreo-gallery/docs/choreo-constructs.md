@@ -514,7 +514,7 @@ import {
   type StepArgs,
   type TimelineNode,
   toMs,
-} from 'glimmer-motion';
+} from '@cardstack/choreo';
 
 export class Reveal extends StepComponent<StepArgs & { rise?: number }> {
   node(): TimelineNode {

@@ -1,16 +1,10 @@
+import { Choreo, type ChoreoContext, createArming } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import {
-  Choreo,
-  type ChoreoContext,
-  createArming,
-  motion,
-  styles,
-  to,
-} from 'glimmer-motion';
+import { motion, styles, to } from 'glimmer-motion';
 import config from 'test-app/config/environment';
 import { tuneMotion, tuneNumber } from 'test-app/lib/demo-tuning';
 import { factor } from 'test-app/lib/tempo';

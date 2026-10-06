@@ -4,17 +4,17 @@ Choose the boundary before choosing a demo. Read only the row needed for the tas
 Guide paths below are under `test-app/app/content/guides/`; implementation exports
 remain the authority for accepted arguments.
 
-| Intent                                 | Read                                                 | Minimal source reference                                                |
-| -------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------- |
-| Frame or pan across DOM                | spatial-frame.md                                     | examples/camera.gts; long-take/board.gts                                |
-| Relative pose or coordinate conversion | spatial-relative.md; spatial-coordinates.md          | `packages/glimmer-motion/src/choreo.gts` vocabulary; `app/lib/css3d.ts` |
-| 3D camera path and look target         | spatial-camera3d.md; spatial-paths.md                | examples/mockup.gts; examples/long-take.gts                             |
-| Place live DOM on a mesh plane         | spatial-dom.md; spatial-compositing.md               | examples/mockup.gts; `docs/dom-in-3d.md`                                |
-| Film graph, shots and picture actor    | film-graph.md; film-picture.md                       | tower-film.gts; sagrada-film.gts                                        |
-| Seek, pause or capture                 | film-transport.md; film-schedule.md                  | `docs/demo-recording.md`; `packages/choreo-player/src/`                 |
-| Joins and readiness                    | film-joins.md; film-seam-readiness.md                | `packages/glimmer-motion/src/film/`                                     |
-| Separate clips, audio and captions     | film-audio.md; film-audio-mix.md; film-typography.md | `app/lib/widget-narration.ts`; `glimmer-motion/film` exports            |
-| World labels and adjustments           | film-world-annotations.md; film-adjustments.md       | picture capability implementation and its Film score                    |
+| Intent                                 | Read                                                 | Minimal source reference                                        |
+| -------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| Frame or pan across DOM                | spatial-frame.md                                     | examples/camera.gts; long-take/board.gts                        |
+| Relative pose or coordinate conversion | spatial-relative.md; spatial-coordinates.md          | `packages/choreo/src/choreo.gts` vocabulary; `app/lib/css3d.ts` |
+| 3D camera path and look target         | spatial-camera3d.md; spatial-paths.md                | examples/mockup.gts; examples/long-take.gts                     |
+| Place live DOM on a mesh plane         | spatial-dom.md; spatial-compositing.md               | examples/mockup.gts; `docs/dom-in-3d.md`                        |
+| Film graph, shots and picture actor    | film-graph.md; film-picture.md                       | tower-film.gts; sagrada-film.gts                                |
+| Seek, pause or capture                 | film-transport.md; film-schedule.md                  | `docs/demo-recording.md`; `packages/choreo-player/src/`         |
+| Joins and readiness                    | film-joins.md; film-seam-readiness.md                | `packages/choreo/src/film/`                                     |
+| Separate clips, audio and captions     | film-audio.md; film-audio-mix.md; film-typography.md | `app/lib/widget-narration.ts`; `@cardstack/choreo/film` exports |
+| World labels and adjustments           | film-world-annotations.md; film-adjustments.md       | picture capability implementation and its Film score            |
 
 Component paths are relative to `test-app/app/components/`; `app/` paths are
 relative to `test-app/`. Other paths are repository-relative. Use the catalog

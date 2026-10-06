@@ -175,6 +175,8 @@ export class FormContext {
 
   private claims = new ClaimSet();
   private summaries: string[] = [];
+  /** a summary that was asked for focus before it had rendered */
+  private pendingSummaryFocus = false;
   private sections = new Map<string, () => void>();
 
   /** Snapshot of every path a rendered field has claimed. */
@@ -272,12 +274,29 @@ export class FormContext {
     if (this.focusOnInvalid === 'none') {
       return;
     }
-    let preferred =
-      this.focusOnInvalid === 'summary' ? null : this.firstInvalidElement();
-    let target =
-      preferred ?? this.summaryElement() ?? this.firstInvalidElement();
+    if (this.focusOnInvalid === 'summary') {
+      let summary = this.summaryElement();
+      if (summary) {
+        this.reveal(summary);
+        return;
+      }
+      // In submit mode the summary renders only once submitAttempted is set,
+      // which is this same tick: it takes the focus as it inserts.
+      if (this.summaries.length > 0) {
+        this.pendingSummaryFocus = true;
+        return;
+      }
+    }
+    let target = this.firstInvalidElement() ?? this.summaryElement();
     this.reveal(target);
   };
+
+  /** True once, for the summary that renders after a focus was requested. */
+  takeSummaryFocus(): boolean {
+    let pending = this.pendingSummaryFocus;
+    this.pendingSummaryFocus = false;
+    return pending;
+  }
 
   /** Move focus to one specific path — the ErrorSummary row action. */
   focusPath = (path: string): void => {

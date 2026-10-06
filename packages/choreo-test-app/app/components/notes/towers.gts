@@ -1,7 +1,7 @@
+import type { Join } from '@cardstack/choreo/film';
 import type { TOC } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import type { Join } from 'glimmer-motion/film';
 
 /**
  * Deep dive for the Towers film — the wall plate under the exhibit.

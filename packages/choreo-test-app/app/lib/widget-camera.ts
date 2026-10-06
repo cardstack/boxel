@@ -1,7 +1,11 @@
-import type { Camera3DState, Camera3DWaypoint, Sprite } from 'glimmer-motion';
-import Changeset from 'glimmer-motion/choreo/changeset';
-import compile from 'glimmer-motion/choreo/compile';
-import { ChoreoRun } from 'glimmer-motion/choreo/run';
+import type {
+  Camera3DState,
+  Camera3DWaypoint,
+  Sprite,
+} from '@cardstack/choreo';
+import Changeset from '@cardstack/choreo/changeset';
+import compile from '@cardstack/choreo/compile';
+import { ChoreoRun } from '@cardstack/choreo/run';
 
 import { bakeCameraChase } from './widget-camera-chase';
 

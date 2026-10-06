@@ -1,3 +1,5 @@
+import type { DeriveContext } from '@cardstack/choreo';
+import { beacon, Choreo } from '@cardstack/choreo';
 import { array, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
@@ -5,8 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { DialConfig } from 'dialkit/store';
 import { modifier } from 'ember-modifier';
-import type { DeriveContext } from 'glimmer-motion';
-import { beacon, Choreo, motion } from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import { DialPanel } from 'test-app/components/dial-panel';
 import { tuneNumber, tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { Dial } from 'test-app/lib/dial';

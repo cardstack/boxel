@@ -16,7 +16,8 @@ its region, computes the changeset — inserted / removed / kept participants
 with bounds before and after — and plays your declared timeline over it.
 
 ```gts
-import { Choreo, motion, spring } from 'glimmer-motion';
+import { Choreo } from '@cardstack/choreo';
+import { motion, spring } from 'glimmer-motion';
 
 <Choreo as |c|>
   {{#each @rows key='id' as |row|}}

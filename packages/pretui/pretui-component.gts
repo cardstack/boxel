@@ -13,6 +13,7 @@ import {
   containsMany,
   field,
   linksTo,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
@@ -330,7 +331,7 @@ export class PretUISpec extends Spec {
     }
     // the same five facets, handed to the kit's StepList as an ordered
     // pipeline: it owns the list semantics, the per-step state text and the
-    // '5 of 5 complete' summary (which used to be a floating span here)
+    // '5 of 5 complete' summary
     get provenanceSteps(): StepItem[] {
       return this.facetPills.map((f) => ({
         label: f.label,
@@ -394,9 +395,10 @@ export class PretUISpec extends Spec {
         };
       },
       () => {
-        let id = this.args.model.id;
-        // instance id .../pretui/components/<kebab>-spec → realm root
-        return id ? [new URL('../', id).href] : undefined;
+        // the card id may be prefix-form (@cardstack/catalog/…), which is
+        // not a URL base, so the realm comes from the card itself
+        let realm = this.args.model[realmURL];
+        return realm ? [realm.href] : undefined;
       },
     );
 
@@ -423,7 +425,7 @@ export class PretUISpec extends Spec {
 
     openNote = (id: string | undefined) => {
       if (!id) return;
-      this.args.viewCard?.(new URL(id), 'isolated');
+      this.args.viewCard?.(id as RealmResourceIdentifier, 'isolated');
     };
 
     // The composer is a popover, so leaving a note never takes you off the
@@ -432,9 +434,9 @@ export class PretUISpec extends Spec {
     // strew empty notes through the realm.
     saveNote = (close: () => void, body: string) => {
       let id = this.args.model.id;
+      let realm = this.args.model[realmURL];
       let create = createCardAction(this.args.context);
-      if (!id || !create || !body) return;
-      let realmURL = new URL('../', id);
+      if (!id || !realm || !create || !body) return;
       let ref = NOTE_REF;
       // The timestamp is stamped HERE, in an event handler, not in a getter.
       // The no-clock rule exists so that RENDER is deterministic (the same
@@ -442,8 +444,8 @@ export class PretUISpec extends Spec {
       // is data capture at the moment of a user action, which is exactly
       // what a timestamp is for.
       let noted = new Date().toISOString().slice(0, 10);
-      create(ref, realmURL, {
-        realmURL,
+      create(ref, realm, {
+        realmURL: realm,
         doc: {
           data: {
             type: 'card',

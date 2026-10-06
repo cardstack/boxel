@@ -1,7 +1,8 @@
 // Pretui — semantics proof for the feedback territory's status and progress
 // components (Toast, ProgressRadial, Spinner, BrokenLink, LoadingState) and
 // the shared `resolvePixelSize` helper. Alert's own contract is asserted in
-// controls.test.gts, and ProgressBar's in components/progress-bar.test.gts.
+// components/alert.test.gts and its React-dialect aliases in controls.test.gts;
+// ProgressBar's contract is asserted in components/progress-bar.test.gts.
 //
 // No assertion reads a computed style: the components' own `<style scoped>` is
 // inert in this harness (the scoped-css attribute is stamped, the rules are not
@@ -118,7 +119,7 @@ module('Pretui | feedback', function (hooks) {
       all('[data-test-pretui-radial]').map((e) => px(e, '--pretui-radial-pct')),
       ['75', '100'],
     );
-    // KNOWN GAP (same defect as ProgressBar): the announced value is raw.
+    // KNOWN GAP: ProgressRadial clamps its fill but announces the raw value.
     assert.deepEqual(
       all('[data-test-pretui-radial]').map((e) => e.getAttribute('aria-valuenow')),
       ['3', '9'],

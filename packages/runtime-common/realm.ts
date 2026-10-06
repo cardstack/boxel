@@ -1,4 +1,10 @@
 import { Deferred } from './deferred.ts';
+import {
+  isUnsetLimit,
+  resolveAnonymousAccess,
+  type AnonymousAccessSettings,
+  type AnonymousRateLimit,
+} from './anonymous-access.ts';
 import { resolveRangeHeader } from './http-range.ts';
 import {
   awaitRealmIndexSettled,
@@ -434,10 +440,10 @@ import {
   MEDIA_CACHE_MAX_AGE_SECONDS,
 } from './media-cache-serving.ts';
 import {
-  enqueueCaptureCardJob,
+  enqueueCaptureJob,
   estimateCaptureQueueWait,
   CAPTURE_SYNC_WAIT_BUDGET_MS,
-} from './jobs/capture-card.ts';
+} from './jobs/capture.ts';
 import {
   emitCapturePerf,
   type CaptureRequestPerfEvent,
@@ -730,6 +736,15 @@ export type RealmInfo = {
   // on, and whose existence is not this realm's to announce on each of them.
   // `getRealmPolicy()` is where the realm reads it.
   policy?: RealmPolicyReference;
+  // How the realm's `realm.json` limits and blocks callers its policy admits
+  // without a session, as written. Assigned by the file overlay and handed
+  // back apart from the served info, as `policy` is. The realm stamps its info
+  // on every card response, including those it serves to callers a policy
+  // admits, who can't read `realm.json` and have no business learning which
+  // addresses it keeps out. Readers of the realm see both settings on the
+  // `realm.json` card itself. `getAnonymousAccess()` is where the realm reads
+  // it, resolved against the platform default.
+  anonymousAccess?: { rateLimit?: JsonValue; blocklist?: JsonValue };
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -864,6 +879,19 @@ export interface FileRef {
     start: number,
     end: number,
   ) => ReadableStream<Uint8Array> | Readable;
+  // Open `content` and report the byte length of exactly what it delivers,
+  // for an adapter whose `size` can disagree with the bytes it streams (a
+  // path stat on a network filesystem can describe a version of the file
+  // another host has since replaced). The returned content is the same stream
+  // `content` yields. `size` is absent when the adapter could not measure the
+  // opened content. `lastModifiedMs` is the opened content's modification
+  // time, at the same precision as the ref's own `lastModifiedMs`, so the two
+  // can be compared to tell whether the ref's stat described these bytes.
+  openContent?: () => {
+    content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
+    size?: number;
+    lastModifiedMs?: number;
+  };
 
   [key: symbol]: object;
 }
@@ -2189,6 +2217,9 @@ export interface RealmAdapter {
 }
 
 interface Options {
+  // The rate limit a realm's anonymous callers get when its `realm.json` sets
+  // none. Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`.
+  anonymousRateLimit?: AnonymousRateLimit;
   // Decides how much of a card's link graph each live read carries — the whole
   // transitive closure side-loaded into `included[]`, or the relationships
   // alone with the consumer fetching what it displays. Unset, every live read
@@ -2541,6 +2572,10 @@ export class Realm {
   // what says a parse has been memoized: this one is undefined both before a
   // parse and for a realm with no policy.
   #cachedRealmPolicy: RealmPolicyReference | undefined;
+  // The `anonymousAccess` part, resolved. Written and cleared with
+  // `#cachedRealmConfig`, like the policy pointer.
+  #cachedAnonymousAccess: AnonymousAccessSettings | undefined;
+  #platformAnonymousRateLimit: AnonymousRateLimit | undefined;
   // Bumped by every invalidation, and captured by a parse before it starts.
   // A parse that reads the realm's state and then has an index swap land
   // underneath it is holding values the realm has already moved past, so it
@@ -2564,6 +2599,7 @@ export class Realm {
         info: RealmInfo;
         config: Record<string, JsonValue>;
         policy: RealmPolicyReference | undefined;
+        anonymousAccess: AnonymousAccessSettings;
       }>
     | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
@@ -2761,6 +2797,7 @@ export class Realm {
       opts?.captureSyncWaitMs ?? CAPTURE_SYNC_WAIT_BUDGET_MS;
     this.#readIndexDrainBudgetMs =
       opts?.readIndexDrainBudgetMs ?? READ_INDEX_DRAIN_BUDGET_MS;
+    this.#platformAnonymousRateLimit = opts?.anonymousRateLimit;
     let owner: string | undefined;
     let _fetch = fetcher(
       virtualNetwork.fetch,
@@ -9621,7 +9658,7 @@ export class Realm {
     );
     let precheckMs = Date.now() - precheckStart;
     // A request whose capture is already queued or rendering coalesces onto
-    // that job (see `chooseCaptureCardCoalesceDecision`) and costs no new
+    // that job (see `chooseCaptureCoalesceDecision`) and costs no new
     // Chrome work, so the lane's depth is not its wait — only a genuinely new
     // capture faces the congestion gate. Without this, the second viewer of a
     // card that is mid-render is 503'd against a wait it would never incur.
@@ -9638,12 +9675,13 @@ export class Realm {
     }
 
     let enqueueStart = Date.now();
-    let job = await enqueueCaptureCardJob(
+    let job = await enqueueCaptureJob(
       {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
         cardId: entryKey.sourceURL,
+        sourceKind: 'card',
         format: spec.format,
         // The spec's geometry overrides (viewport / dsf / fullPage / clip)
         // ride to the capture engine; the entry key's `captureSpecHash`
@@ -9978,6 +10016,22 @@ export class Realm {
       ...(handle.createRangeStream
         ? { createRangeStream: handle.createRangeStream }
         : {}),
+      // The length a whole-body response declares comes with the bytes, from
+      // the operation that opens them, rather than from either stat.
+      ...(source.openBody
+        ? {
+            openContent: () => {
+              let opened = source.openBody!();
+              return {
+                content: opened.body as FileRef['content'],
+                ...(opened.size != null ? { size: opened.size } : {}),
+                ...(opened.lastModifiedMs != null
+                  ? { lastModifiedMs: opened.lastModifiedMs }
+                  : {}),
+              };
+            },
+          }
+        : {}),
     };
     // A shimmed module is not stored content at all, and the response says so
     // in a header of its own; the marker rides on the handle.
@@ -10167,13 +10221,43 @@ export class Realm {
       });
     }
 
+    // Everything that reaches here sends the whole file, including a `GET`
+    // whose `Range` was set aside. Where the adapter can measure what it
+    // opens, the declared length is taken from the opened content rather than
+    // from the size the ranges were judged against: that size can describe a
+    // version of the file the stream does not read, and a declared length
+    // larger than the body leaves the client waiting for bytes that never
+    // arrive, one that is smaller cuts the body short.
+    let openedContent =
+      request.method === 'GET' ? ref.openContent?.() : undefined;
+    if (openedContent) {
+      if (openedContent.size != null) {
+        headers['content-length'] = String(openedContent.size);
+      } else {
+        delete headers['content-length'];
+      }
+      // The validators were built from the same stat, so when the opened
+      // content has a different modification time they describe another
+      // version of the file. Sending them would let a client store these bytes
+      // under that version's validator; the response carries none instead,
+      // and the next request is answered from whatever the file is then.
+      if (
+        openedContent.lastModifiedMs != null &&
+        ref.lastModifiedMs != null &&
+        openedContent.lastModifiedMs !== ref.lastModifiedMs
+      ) {
+        delete headers['etag'];
+        delete headers['last-modified'];
+      }
+    }
+    let content = openedContent?.content ?? ref.content;
     if (
-      ref.content instanceof ReadableStream ||
-      ref.content instanceof Uint8Array ||
-      typeof ref.content === 'string'
+      content instanceof ReadableStream ||
+      content instanceof Uint8Array ||
+      typeof content === 'string'
     ) {
       return createResponse({
-        body: ref.content as BodyInit,
+        body: content as BodyInit,
         init: { headers },
         requestContext,
       });
@@ -10190,7 +10274,7 @@ export class Realm {
       requestContext,
     }) as ResponseWithNodeStream;
 
-    response.nodeStream = ref.content;
+    response.nodeStream = content;
     return response;
   }
 
@@ -15567,6 +15651,22 @@ export class Realm {
     return policy ? { ...policy } : undefined;
   }
 
+  // How this realm limits and blocks the callers its policy admits without a
+  // session: the limit its `realm.json` sets, or the platform's when it sets
+  // none or sets one that isn't a limit, and the addresses it keeps out. Read
+  // from the file on disk, which is authoritative for it the way it is for the
+  // policy pointer, so a newly blocked address is kept out from the write on
+  // rather than from the next index pass.
+  async getAnonymousAccess(): Promise<AnonymousAccessSettings> {
+    let { anonymousAccess } = await this.#parsedRealmInfo();
+    return {
+      ...anonymousAccess,
+      limit: { ...anonymousAccess.limit },
+      blocklist: anonymousAccess.blocklist.map((range) => ({ ...range })),
+      invalidBlocklistEntries: [...anonymousAccess.invalidBlocklistEntries],
+    };
+  }
+
   // The realm's policy, compiled: the card its pointer names, loaded on the
   // realm server's own authority and compiled once, then answered from memory
   // until an index moves under the card or under a type its rules name, and
@@ -15716,6 +15816,34 @@ export class Realm {
     return types.includes(this.#policyTypeKey);
   }
 
+  // The anonymous-access settings as written, resolved against the platform
+  // default. A malformed limit falls back to that default, which is still a
+  // limit. A malformed blocklist entry closes the realm to anonymous callers
+  // (see `AnonymousAccessSettings`). Either says what it was in the log.
+  #resolveAnonymousAccess(
+    written: RealmInfo['anonymousAccess'],
+  ): AnonymousAccessSettings {
+    let access = resolveAnonymousAccess(
+      { rateLimit: written?.rateLimit, blocklist: written?.blocklist },
+      this.#platformAnonymousRateLimit,
+    );
+    if (access.limitFrom === 'platform' && !isUnsetLimit(written?.rateLimit)) {
+      this.#log.warn(
+        `ignoring the RealmConfig card's \`anonymousRateLimit\`, ${JSON.stringify(
+          written?.rateLimit,
+        )}, which is not a whole number of requests per whole number of seconds; anonymous callers get the platform's limit`,
+      );
+    }
+    if (access.invalidBlocklistEntries.length > 0) {
+      this.#log.warn(
+        `the RealmConfig card's \`anonymousBlocklist\` has entries that are not an IP address or CIDR range (${access.invalidBlocklistEntries.join(
+          ', ',
+        )}), so the realm admits no anonymous caller until they are fixed`,
+      );
+    }
+    return access;
+  }
+
   // Every part of one parse, which is why they are read together rather than
   // each through its own accessor: `clearRealmIndexCaches()` nulls the cache
   // on every index swap, so a settings read that primed the cache and then
@@ -15725,12 +15853,18 @@ export class Realm {
     info: RealmInfo;
     config: Record<string, JsonValue>;
     policy: RealmPolicyReference | undefined;
+    anonymousAccess: AnonymousAccessSettings;
   }> {
-    if (this.#cachedRealmInfo && this.#cachedRealmConfig) {
+    if (
+      this.#cachedRealmInfo &&
+      this.#cachedRealmConfig &&
+      this.#cachedAnonymousAccess
+    ) {
       return {
         info: this.#cachedRealmInfo,
         config: this.#cachedRealmConfig,
         policy: this.#cachedRealmPolicy,
+        anonymousAccess: this.#cachedAnonymousAccess,
       };
     }
     if (!this.#realmInfoPromise) {
@@ -15743,19 +15877,27 @@ export class Realm {
         // bytes a response carries — so editing a setting or the policy
         // pointer does not invalidate every card's cached representation in
         // the realm.
-        let { info, config, policy } = await this.parseRealmInfo();
+        let { info, config, policy, anonymousAccess } =
+          await this.parseRealmInfo();
         let settings = config ?? {};
+        let access = this.#resolveAnonymousAccess(anonymousAccess);
         if (generation === this.#realmInfoGeneration) {
           this.#cachedRealmInfo = info;
           this.#cachedRealmConfig = settings;
           this.#cachedRealmPolicy = policy;
+          this.#cachedAnonymousAccess = access;
           this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
         }
         // Answered either way: this is the realm as the caller asking for it
         // found it, which is what every reader of a memoized parse gets. What
         // the check above prevents is that reading outliving the request, by
         // becoming the answer given to everyone after it.
-        return { info, config: settings, policy };
+        return {
+          info,
+          config: settings,
+          policy,
+          anonymousAccess: access,
+        };
       })();
       this.#realmInfoPromise = parse;
       // Clears the slot only while this parse still owns it. An invalidation
@@ -15794,6 +15936,7 @@ export class Realm {
     this.#cachedRealmInfo = null;
     this.#cachedRealmConfig = null;
     this.#cachedRealmPolicy = undefined;
+    this.#cachedAnonymousAccess = undefined;
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
@@ -15819,6 +15962,7 @@ export class Realm {
     info: RealmInfo;
     config: Record<string, JsonValue> | undefined;
     policy: RealmPolicyReference | undefined;
+    anonymousAccess: RealmInfo['anonymousAccess'];
   }> {
     let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
@@ -15900,6 +16044,12 @@ export class Realm {
             this.#log,
           );
         }
+        if ('anonymousRateLimit' in attrs || 'anonymousBlocklist' in attrs) {
+          realmInfo.anonymousAccess = {
+            rateLimit: attrs.anonymousRateLimit as JsonValue,
+            blocklist: attrs.anonymousBlocklist as JsonValue,
+          };
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -15951,8 +16101,8 @@ export class Realm {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
     }
 
-    let { config, policy, ...info } = realmInfo;
-    return { info, config, policy };
+    let { config, policy, anonymousAccess, ...info } = realmInfo;
+    return { info, config, policy, anonymousAccess };
   }
 
   // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch

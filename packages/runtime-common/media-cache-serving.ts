@@ -201,7 +201,7 @@ export const MEDIA_CACHE_TOUCH_THROTTLE_MS = 60 * 60 * 1000;
 // on-demand capture looking idle to the GC one sweep early, and a later
 // serve re-marks it. Exported (as `touchMediaCacheEntryOnHit`) so every
 // surface that answers from the ledger — this route and the POST
-// `_capture-card` fast path — marks use through the one guard.
+// `POST /_capture` fast path — marks use through the one guard.
 async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
   if (entry.lane !== 'on-demand') {
     return;

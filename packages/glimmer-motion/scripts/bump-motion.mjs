@@ -36,7 +36,13 @@ import { parseArgs } from 'node:util';
 const packageDir = new URL('..', import.meta.url).pathname;
 const repoRoot = join(packageDir, '..', '..');
 const workspaceFile = join(repoRoot, 'pnpm-workspace.yaml');
-const packageJsonFile = join(packageDir, 'package.json');
+// The packages whose motion-dom / motion-utils peer ranges follow the catalog.
+// @cardstack/choreo imports motion-dom directly and must resolve the same copy
+// as glimmer-motion, so their ranges stay identical.
+const peerPackages = [
+  ['glimmer-motion', join(packageDir, 'package.json')],
+  ['@cardstack/choreo', join(repoRoot, 'packages', 'choreo', 'package.json')],
+];
 const internalsFile = join(packageDir, 'src', 'framer-motion-internals.ts');
 const vendoredFile = join(packageDir, 'VENDORED.md');
 const registry = 'https://registry.npmjs.org';
@@ -261,6 +267,31 @@ function tarballsFor(framerMotion, from, to) {
 }
 
 function writePins(release) {
+  // A peer range keeps its operator (`^`, `~` or none) and moves its version.
+  // Every package's ranges are checked, and checked to agree, before any file
+  // is written.
+  const pkgs = peerPackages.map(([label, file]) => ({
+    label,
+    file,
+    pkg: JSON.parse(readFileSync(file, 'utf8')),
+  }));
+  for (const name of ['motion-dom', 'motion-utils']) {
+    const ranges = pkgs.map(({ label, pkg }) => {
+      const range = pkg.peerDependencies?.[name];
+      if (!range?.match(/^[~^]?\d+\.\d+\.\d+$/)) {
+        throw new Error(
+          `${label}'s ${name} peer range is ${range ?? '(missing)'}; expected ^x.y.z, ~x.y.z or x.y.z`,
+        );
+      }
+      return range;
+    });
+    if (new Set(ranges).size > 1) {
+      throw new Error(
+        `The ${name} peer ranges differ (${pkgs.map(({ label }, i) => `${label}: ${ranges[i]}`).join(', ')}); they must match so both packages resolve one engine`,
+      );
+    }
+  }
+
   let yaml = readFileSync(workspaceFile, 'utf8');
   for (const [name, version] of Object.entries(release)) {
     yaml = yaml.replace(
@@ -270,18 +301,13 @@ function writePins(release) {
   }
   writeFileSync(workspaceFile, yaml);
 
-  // A peer range keeps its operator (`^`, `~` or none) and moves its version.
-  const pkg = JSON.parse(readFileSync(packageJsonFile, 'utf8'));
-  for (const name of ['motion-dom', 'motion-utils']) {
-    const m = pkg.peerDependencies[name]?.match(/^([~^]?)\d+\.\d+\.\d+$/);
-    if (!m) {
-      throw new Error(
-        `glimmer-motion's ${name} peer range is ${pkg.peerDependencies[name] ?? '(missing)'}; expected ^x.y.z, ~x.y.z or x.y.z`,
-      );
+  for (const { file, pkg } of pkgs) {
+    for (const name of ['motion-dom', 'motion-utils']) {
+      const [, operator] = pkg.peerDependencies[name].match(/^([~^]?)/);
+      pkg.peerDependencies[name] = `${operator}${release[name]}`;
     }
-    pkg.peerDependencies[name] = `${m[1]}${release[name]}`;
+    writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
   }
-  writeFileSync(packageJsonFile, JSON.stringify(pkg, null, 2) + '\n');
 }
 
 async function unpack(url, dir) {
@@ -464,7 +490,7 @@ ${Object.entries(release)
   .map(([name, version]) => `| \`${name}\` | ${pins[name]} | ${version} |`)
   .join('\n')}
 
-glimmer-motion's \`motion-dom\` and \`motion-utils\` peer ranges follow. The root \`overrides\` resolve framer-motion, motion-dom and motion-utils through the catalog, so the lockfile keeps one copy of each and the page runs one Motion engine.
+glimmer-motion's and @cardstack/choreo's \`motion-dom\` and \`motion-utils\` peer ranges follow, together. The root \`overrides\` resolve framer-motion, motion-dom and motion-utils through the catalog, so the lockfile keeps one copy of each and the page runs one Motion engine.
 
 Upstream: [${from}…${to}](${repo}/compare/v${from}...v${to}), [CHANGELOG](${repo}/blob/v${to}/CHANGELOG.md).${major ? `\n\n**This crosses a major version.** Read upstream's breaking changes before anything else.` : ''}
 
@@ -472,7 +498,7 @@ Upstream: [${from}…${to}](${repo}/compare/v${from}...v${to}), [CHANGELOG](${re
 
 \`packages/glimmer-motion/VENDORED.md\` has the procedure. In short:
 
-- **CI.** The Choreo Tests and Choreo Test App Tests jobs run the fidelity suites; Lint runs \`ember-tsc\` over the choreo packages. glimmer-motion's build fails if an inlined module starts importing React or another framer-motion path.
+- **CI.** The Glimmer Motion Tests job runs the fidelity suites, and the Choreo Tests and Choreo Test App Tests jobs run the choreo suites; Lint runs \`ember-tsc\` over the choreo packages. glimmer-motion's build fails if an inlined module starts importing React or another framer-motion path.
 - **Declarations.** \`src/framer-motion-internals.ts\` declares the surface of the inlined entry modules by hand, and the subclasses in \`src/gestures/drag-gesture.ts\` override their methods. A signature change in an entry module below compiles silently against the old declaration, so read those diffs against both files.
 - **Adapted code.** Carry a change in an adapted source into the file it names by hand.
 - **Ported code.** The Glimmer re-implementations port React modules by hand. Read each diff below against the file it names, and port what applies to Glimmer.

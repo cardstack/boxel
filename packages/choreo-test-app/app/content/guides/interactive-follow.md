@@ -7,7 +7,7 @@ A badge that stays attached to a moving card needs more than a target calculated
 `@of` selects the follower and `@to` selects its sources. `@read` receives a `DeriveContext` and returns the properties to write. `@rest` declares what those properties are when the step is not driving them, allowing measurement to temporarily restore the participant's real layout state.
 
 ```ts title="Component logic excerpt"
-import type { DeriveContext } from 'glimmer-motion';
+import type { DeriveContext } from '@cardstack/choreo';
 
 const corner = ({ rest, sources }: DeriveContext) => {
   const card = sources[0];
@@ -40,7 +40,7 @@ Test the relationship throughout the flight and after interruption. Checking onl
 
 ## API Coverage
 
-**glimmer-motion**: `DeriveContext`, `FollowSource`.
+**@cardstack/choreo**: `DeriveContext`, `FollowSource`.
 
 **ChoreoContext**: `c.Follow`.
 

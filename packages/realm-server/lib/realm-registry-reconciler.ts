@@ -37,6 +37,9 @@ export interface ReconcilerDeps {
   unmount: (realm: Realm) => Promise<void>;
   // Optional for tests — poll interval in ms (default 30s).
   pollIntervalMs?: number;
+  // Bootstrap realm URLs in CLI --path order. Pinned realms start in this
+  // order; the registry query has no order of its own.
+  bootstrapOrder?: string[];
 }
 
 // Reconciles a process's in-memory realm state against realm_registry.
@@ -209,11 +212,19 @@ export class RealmRegistryReconciler {
     // through a single worker process anyway, so parallelism here
     // doesn't reduce wall-clock time but does increase memory and
     // contention. Sequential matches Phase 2's tested behavior.
+    let rank = new Map(
+      (this.#deps.bootstrapOrder ?? []).map((url, index) => [url, index]),
+    );
+    let pinnedRows = [...nextKnown.values()]
+      .filter((row) => row.pinned)
+      .sort(
+        (a, b) =>
+          (rank.get(a.url) ?? Number.MAX_SAFE_INTEGER) -
+          (rank.get(b.url) ?? Number.MAX_SAFE_INTEGER),
+      );
     let toStart: Realm[] = [];
-    for (const [url, row] of nextKnown) {
-      if (!row.pinned) {
-        continue;
-      }
+    for (const row of pinnedRows) {
+      let url = row.url;
       if (this.mounted.has(url)) {
         continue;
       }

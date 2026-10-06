@@ -1,11 +1,11 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadRealmFileCalls } from '../lib/read-realm-file-fulfillment.ts';
+import { fulfillReadRealmFileCalls } from '../lib/bot-tools/read-realm-file/fulfillment.ts';
 import {
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
-} from '../lib/read-realm-file.ts';
+} from '../lib/bot-tools/read-realm-file/read.ts';
 import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -137,7 +137,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     let data = dataOf(sent[0]);
     assert.strictEqual(
       data.attachedFiles.length,
@@ -172,7 +174,7 @@ module('fulfillReadRealmFileCalls', () => {
 
     assert.deepEqual(
       outcomes,
-      [{ commandRequestId: 'c1', ok: true }],
+      [{ commandRequestId: 'c1', ok: true, published: true }],
       'a degraded skill read is still a successful file read',
     );
     let { content } = sent[0];
@@ -253,7 +255,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1, 'one command-result event posted');
     let { eventType, content } = sent[0];
     assert.strictEqual(eventType, APP_BOXEL_TOOL_RESULT_EVENT_TYPE);
@@ -297,7 +301,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(sent.length, 1, 'all files ride one result event');
     let { content } = sent[0];
     assert.strictEqual(
@@ -444,7 +450,9 @@ module('fulfillReadRealmFileCalls', () => {
       }),
     );
 
-    assert.deepEqual(outcomes, [{ commandRequestId: 'c1', ok: true }]);
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
     assert.strictEqual(
       fetched.filter((url) => url === rawUrl).length,
       1,

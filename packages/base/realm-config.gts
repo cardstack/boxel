@@ -410,6 +410,34 @@ export class RoutingRuleField extends FieldDef {
   static edit = RoutingRuleEdit;
 }
 
+class AnonymousRateLimitAtom extends Component<typeof AnonymousRateLimitField> {
+  <template>
+    {{#if @model.requests}}
+      {{@model.requests}}
+      per
+      {{@model.windowSeconds}}s
+    {{/if}}
+  </template>
+}
+
+// How many invocations a caller who is not signed in may make against the
+// realm per window, counted per caller address.
+export class AnonymousRateLimitField extends FieldDef {
+  static displayName = 'Anonymous Rate Limit';
+
+  @field requests = contains(NumberField, {
+    description:
+      'Invocations a caller who is not signed in may make against this realm in one window, counted per caller address',
+  });
+
+  @field windowSeconds = contains(NumberField, {
+    description: 'The length of the window, in seconds',
+  });
+
+  static atom = AnonymousRateLimitAtom;
+  static embedded = AnonymousRateLimitAtom;
+}
+
 // The JSON spelling of one setting's value, which is what the table shows and
 // what the editor reads back. A string is shown bare so an id or a path reads
 // as itself, and quoted wherever reading the bare form back would produce
@@ -1948,6 +1976,26 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         {{/if}}
         <PolicyStanding @config={{this.config}} />
       </section>
+
+      <section class='section' data-test-realm-config-anonymous>
+        <h2 class='section-title'>Callers who aren't signed in</h2>
+        <p class='anonymous-limit' data-test-realm-config-anonymous-limit>
+          {{#if @model.anonymousRateLimit.requests}}
+            Limited to
+            <@fields.anonymousRateLimit @format='atom' />
+            per address.
+          {{else}}
+            Limited by the platform's default rate.
+          {{/if}}
+        </p>
+        {{#if @model.anonymousBlocklist.length}}
+          <ul class='rules' data-test-realm-config-anonymous-blocklist>
+            {{#each @model.anonymousBlocklist as |entry|}}
+              <li class='rule'>{{entry}}</li>
+            {{/each}}
+          </ul>
+        {{/if}}
+      </section>
     </article>
     <style scoped>
       .realm-config-isolated {
@@ -1987,6 +2035,9 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
       .empty {
         color: var(--boxel-450);
       }
+      .anonymous-limit {
+        margin: 0 0 var(--boxel-sp-xs);
+      }
       .policy {
         display: grid;
         gap: var(--boxel-sp-xs);
@@ -2025,7 +2076,7 @@ export class RealmConfig extends CardDef {
   // unless the realm turns it on; the gate blocks Chrome work only, never
   // serving — any capture whose canonical spec already has a MediaCache
   // ledger entry streams regardless, including one a write-holder published
-  // via POST /_capture-card (which persists under the same canonical
+  // via POST /_capture (which persists under the same canonical
   // identity the GET resolves). Read from the realm's indexed config at
   // request time, so editing this takes effect with the index update, no
   // restart.
@@ -2056,6 +2107,21 @@ export class RealmConfig extends CardDef {
   @field policy = contains(StringField, {
     description:
       'The RealmPolicy card that governs this realm, by its URL or realm-prefixed id. Absent for a realm with no policy. Only the pointer lives here; the rules live on the card it names',
+  });
+
+  // How hard callers this realm's policy admits without a session may use it,
+  // and which of them it keeps out. They live here, on the realm, rather than
+  // on the policy, because the policy can live in another realm, and the
+  // writers of that card must not decide how this realm is protected. Writing
+  // this card takes the realm's own write permission, which no policy grants.
+  @field anonymousRateLimit = contains(AnonymousRateLimitField, {
+    description:
+      "Overrides the platform's rate limit for callers this realm's policy admits without signing in. Counted per caller address, for this realm alone. Absent, the platform's limit applies",
+  });
+
+  @field anonymousBlocklist = containsMany(StringField, {
+    description:
+      "IP addresses and CIDR ranges (192.0.2.7, 198.51.100.0/24, 2001:db8::/32) this realm refuses to admit without signing in, whatever its policy grants. An entry that is neither closes the realm to every caller who isn't signed in until it is fixed",
   });
 
   // What the policy this realm names compiles to, as the realm compiles it:

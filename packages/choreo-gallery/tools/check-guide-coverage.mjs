@@ -17,16 +17,16 @@ const inventory = JSON.parse(
 );
 const files = {
   'glimmer-motion': 'packages/glimmer-motion/src/index.ts',
-  'glimmer-motion/film': 'packages/glimmer-motion/src/film/index.ts',
   'glimmer-motion/test-support':
     'packages/glimmer-motion/src/test-support/index.ts',
-  'glimmer-motion/choreo/test-support':
-    'packages/glimmer-motion/src/choreo/test-support/index.ts',
+  '@cardstack/choreo': 'packages/choreo/src/index.ts',
+  '@cardstack/choreo/film': 'packages/choreo/src/film/index.ts',
+  '@cardstack/choreo/test-support': 'packages/choreo/src/test-support/index.ts',
   'choreo-player': 'packages/choreo-player/src/index.ts',
 };
 const contexts = {
-  ChoreoContext: ['packages/glimmer-motion/src/choreo.gts', 'c.'],
-  FilmVocabulary: ['packages/glimmer-motion/src/film/graph/host.gts', 'f.'],
+  ChoreoContext: ['packages/choreo/src/choreo.gts', 'c.'],
+  FilmVocabulary: ['packages/choreo/src/film/graph/host.gts', 'f.'],
 };
 const actual = new Set();
 function source(file) {

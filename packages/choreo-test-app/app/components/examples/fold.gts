@@ -1,15 +1,11 @@
+import { Choreo, type ChoreoRun, type PerformCommand } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import {
-  Choreo,
-  type ChoreoRun,
-  motion,
-  type PerformCommand,
-} from 'glimmer-motion';
+import { motion } from 'glimmer-motion';
 import config from 'test-app/config/environment';
 import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';

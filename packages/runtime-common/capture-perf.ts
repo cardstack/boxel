@@ -10,7 +10,7 @@
 //
 //   - `request` — emitted by a serving surface (the GET `_capture/`
 //     route in `realm.ts` — `get-dsl` for capture-spec params, `get-named`
-//     for `?name=` manifest addressing — or `POST /_capture-card`) when a
+//     for `?name=` manifest addressing — or `POST /_capture`) when a
 //     capture-relevant request completes: what the caller experienced
 //     (ledger hit / rendered / 503 / 403) and where its wall-clock went.
 //     Plain uncaptured-miss 404s and request-shape 400s do not emit — they
@@ -18,7 +18,7 @@
 //     `generationLookupMs` slot carries the manifest lookup (its liveness
 //     read plays the same role).
 //
-//   - `capture` — emitted by the worker's `capture-card` task when a job
+//   - `capture` — emitted by the worker's `capture` task when a job
 //     finishes: queue wait, the prerender stage breakdown, and the persist
 //     leg. The same record is persisted onto the capture's
 //     `media_cache_ledger.diagnostics` row, so a completed capture's

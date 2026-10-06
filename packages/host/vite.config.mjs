@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
 import {
   extensions as _extensions,
   classicEmberSupport,
@@ -15,6 +15,7 @@ import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { bundledBaseScopedCSS } from './lib/bundled-base-scoped-css.mjs';
 import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
 import { versionStableShellReferencesPlugin } from './lib/build/version-stable-shell-references.mjs';
+import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
 
 // Local HTTPS dev access: the realm-server speaks HTTPS+HTTP/2 in local
 // dev (see `infra:ensure-dev-cert`), and the browser hits both Vite and
@@ -340,6 +341,10 @@ export default defineConfig(({ mode }) => ({
     },
   },
   resolve: {
+    // glimmer-motion and @cardstack/choreo compile from their source through
+    // the `developing:choreo` export condition, so neither needs building
+    // first. npm consumers, which don't set it, get their built output.
+    conditions: ['developing:choreo', ...defaultClientConditions],
     alias: [
       ...hostToolAliases(),
       // Bundled base modules import host library modules as
@@ -358,6 +363,7 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   plugins: [
+    glimmerMotionSource(),
     bundledBaseScopedCSS(),
     scopedCSS(),
     classicEmberSupport(),

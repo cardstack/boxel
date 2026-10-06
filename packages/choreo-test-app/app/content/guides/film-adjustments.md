@@ -32,9 +32,7 @@ Review atmosphere changes with a fixed camera as well as in the full edit. That 
 
 ## API Coverage
 
-**glimmer-motion**: `FilmGrade`.
-
-**glimmer-motion/film**: `ClipLook`, `Build`, `IFRAME_PICTURE`, `Light`, `Look`, `Set`, `Sun`, `Weather`, `Winter`, `FilmGrade`, `LookFx`.
+**@cardstack/choreo/film**: `ClipLook`, `Build`, `IFRAME_PICTURE`, `Light`, `Look`, `Set`, `Sun`, `Weather`, `Winter`, `FilmGrade`, `LookFx`.
 
 **FilmVocabulary**: `f.clip`, `f.picture`.
 

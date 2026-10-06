@@ -58,17 +58,12 @@
 // target), which is what actually produces the lag fan under continuous
 // retargeting. `transition-delay` is still correct for one-shot moves.
 //
-// Appendix F contract in force throughout: no dark-mode branches; every
+// Theming contract throughout: no dark-mode branches; every
 // color is var(--token, lightFallback); decorative layers are
 // aria-hidden + pointer-events: none so nothing underneath is ever
 // blocked; prefers-reduced-motion collapses each effect to its END state
 // (never a frozen midpoint).
 //
-// Every component here lives in its own module under components/; this
-// module re-exports them so existing imports keep working.
-//
-// (the motion-pointer group)
-
 // Pretui — pointerField, the shared pointer-to-custom-property modifier behind the pointer effects.
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint can't
 // see it here (accepted parse baseline)
