@@ -46,7 +46,6 @@ import {
   getToolDefinitions,
   getToolRequests,
   isToolResultEventType,
-  isToolResultRelType,
   isToolResultWithNoOutputMsgtype,
   isToolResultWithOutputContent,
   isToolResultWithOutputMsgtype,
@@ -1540,11 +1539,10 @@ export async function buildPromptForModel(
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
+    // Tool results have their own event types, so this also skips them;
+    // they ride in with the tool calls they answer.
     if (event.type !== 'm.room.message') {
       continue;
-    }
-    if (isToolResult(event)) {
-      continue; // we'll include these with the tool calls
     }
     if (
       'isStreamingFinished' in event.content &&
@@ -1555,6 +1553,10 @@ export async function buildPromptForModel(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
+      // Past assistant messages ride in history verbatim, code blocks
+      // included. Rewriting or eliding already-sent messages breaks the
+      // prompt-cache prefix, and models imitate an elision placeholder in
+      // place of real code.
       let content = body;
       let toolCalls = toToolCalls(event as CardMessageEvent);
       if (content || toolCalls.length) {
@@ -1720,12 +1722,6 @@ function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
-  // If the latest bot message has unresolved source or card edits, defer
-  // correctness entirely until all are applied/failed.
-  if (hasUnresolvedCodeEdits(history, aiBotUserId)) {
-    return undefined;
-  }
-
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
@@ -1735,43 +1731,20 @@ function collectPendingCodePatchCorrectnessCheck(
     ) {
       continue;
     }
-
-    // Only consider messages that contain source or card edits.
-    let content = event.content as CardMessageContent;
-    let toolRequests = (
-      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-    ).map((request) => decodeToolRequest(request));
-    let relevantTools = toolRequests.filter((request) =>
-      isCodeEditingTool(request.name),
-    );
-    if (relevantTools.length === 0) {
+    let edits = resolveCodeEdits(event as CardMessageEvent, history);
+    // Only messages with source or card edits count, and a cancelled one
+    // counts only if some of its edits landed.
+    if (!edits || edits.cancelledWithoutChanges) {
       continue;
     }
-
-    let toolResults = getToolResults(event as CardMessageEvent, history);
-    let isCancelled =
-      content.isCanceled || (event as any).status === 'cancelled';
-    let appliedChanges = hasAppliedChanges(relevantTools, toolResults);
-    if (isCancelled && !appliedChanges) {
-      continue;
-    }
-
-    let allRelevantToolsResolved =
-      relevantTools.length === 0 ||
-      relevantTools.every((request) =>
-        toolResults.some(
-          (result) => result.content.commandRequestId === request.id,
-        ),
-      );
-
-    // If the most recent message with edits isn't resolved yet, don't walk
-    // back to earlier messages—wait for the current one to finish.
-    if (!allRelevantToolsResolved) {
+    // Wait for the most recent message with edits to finish before checking
+    // it, and do not walk back to older messages meanwhile.
+    if (!edits.allResolved) {
       return undefined;
     }
-
     let correctnessCheck = buildCodePatchCorrectnessMessage(
       event as CardMessageEvent,
+      edits,
       history,
     );
     if (correctnessCheck) {
@@ -1781,93 +1754,56 @@ function collectPendingCodePatchCorrectnessCheck(
   return undefined;
 }
 
-function hasUnresolvedCodeEdits(
+interface ResolvedCodeEdits {
+  content: CardMessageContent;
+  relevantTools: ReturnType<typeof decodeToolRequest>[];
+  toolResults: ReturnType<typeof getToolResults>;
+  cancelledWithoutChanges: boolean;
+  allResolved: boolean;
+}
+
+// The source and card edits a bot message requested, with their results.
+// Undefined when the message requested none.
+function resolveCodeEdits(
+  messageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): boolean {
-  // Consider only the most recent relevant bot message; older unresolved
-  // commands should not block correctness for newer changes.
-  for (let index = history.length - 1; index >= 0; index--) {
-    let event = history[index];
-    if (
-      event.type !== 'm.room.message' ||
-      event.sender !== aiBotUserId ||
-      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
-    ) {
-      continue;
-    }
-    let content = event.content as CardMessageContent;
-    let toolRequests = (
-      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-    ).map((request) => decodeToolRequest(request));
-    let relevantTools = toolRequests.filter((request) =>
-      isCodeEditingTool(request.name),
-    );
-    if (relevantTools.length === 0) {
-      continue;
-    }
-
-    let toolResults = getToolResults(event as CardMessageEvent, history);
-    let isCancelled =
-      content.isCanceled || (event as any).status === 'cancelled';
-    let appliedChanges = hasAppliedChanges(relevantTools, toolResults);
-    if (isCancelled && !appliedChanges) {
-      return false;
-    }
-    let allRelevantToolsResolved =
-      relevantTools.length === 0 ||
-      relevantTools.every((request) =>
-        toolResults.some(
-          (result) => result.content.commandRequestId === request.id,
-        ),
-      );
-
-    return !allRelevantToolsResolved;
+): ResolvedCodeEdits | undefined {
+  let content = messageEvent.content as CardMessageContent;
+  let relevantTools = (
+    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+  )
+    .map((request) => decodeToolRequest(request))
+    .filter((request) => isCodeEditingTool(request.name));
+  if (relevantTools.length === 0) {
+    return undefined;
   }
-  return false;
+  let toolResults = getToolResults(messageEvent, history);
+  let isCancelled =
+    content.isCanceled || (messageEvent as any).status === 'cancelled';
+  return {
+    content,
+    relevantTools,
+    toolResults,
+    cancelledWithoutChanges:
+      isCancelled && !hasAppliedChanges(relevantTools, toolResults),
+    allResolved: relevantTools.every((request) =>
+      toolResults.some(
+        (result) => result.content.commandRequestId === request.id,
+      ),
+    ),
+  };
 }
 
 function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
+  { content, relevantTools, toolResults }: ResolvedCodeEdits,
   history: DiscreteMatrixEvent[],
 ): PendingCodePatchCorrectnessCheck | undefined {
-  let content = messageEvent.content as CardMessageContent;
-  let toolRequests = (
-    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-  ).map((request) => decodeToolRequest(request));
-  let relevantTools = toolRequests.filter((request) =>
-    isCodeEditingTool(request.name),
-  );
-
-  if (relevantTools.length === 0) {
-    return undefined;
-  }
-
   if (
     history.some((event) =>
       isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
     )
   ) {
-    return undefined;
-  }
-
-  let toolResults = getToolResults(messageEvent, history);
-  let isCancelled =
-    content.isCanceled || (messageEvent as any).status === 'cancelled';
-  let appliedChanges = hasAppliedChanges(relevantTools, toolResults);
-  if (isCancelled && !appliedChanges) {
-    return undefined;
-  }
-
-  let allRelevantToolsResolved =
-    relevantTools.length === 0 ||
-    relevantTools.every((request) =>
-      toolResults.some(
-        (result) => result.content.commandRequestId === request.id,
-      ),
-    );
-
-  if (!allRelevantToolsResolved) {
     return undefined;
   }
 
@@ -2090,17 +2026,14 @@ export const buildAttachmentsMessagePart = async (
 };
 
 // A message a human sent — the event that starts a turn. Tool results are
-// excluded even when a human's client published them: they continue the
-// turn the bot's tool calls belong to.
+// not messages (they have their own event types), so a human's client that
+// publishes one does not start a turn: it continues the turn the bot's tool
+// calls belong to.
 function isHumanMessage(
   event: DiscreteMatrixEvent,
   aiBotUserId: string,
 ): boolean {
-  return (
-    event.sender !== aiBotUserId &&
-    event.type === 'm.room.message' &&
-    !isToolResult(event)
-  );
+  return event.sender !== aiBotUserId && event.type === 'm.room.message';
 }
 
 // Limits on the tool-result media one turn embeds. Every request of the turn
@@ -2739,15 +2672,7 @@ function normalizeReasoningEffort(
 export function isToolResultEvent(
   event?: DiscreteMatrixEvent,
 ): event is ToolResultEvent {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    isToolResultEventType(event.type) &&
-    isToolResultRelType(
-      (event as ToolResultEvent).content['m.relates_to']?.rel_type,
-    )
-  );
+  return event !== undefined && isToolResult(event);
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {

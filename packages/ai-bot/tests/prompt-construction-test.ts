@@ -3634,6 +3634,83 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
+  test('Keeps past code blocks verbatim in the prompt', async () => {
+    // Rewriting or eliding an already-sent assistant message breaks the
+    // prompt-cache prefix, and models imitate an elision placeholder in place
+    // of real code. Past code blocks stay verbatim.
+    const longCode = Array.from(
+      { length: 200 },
+      (_, i) => `  let value${i} = ${i};`,
+    ).join('\n');
+    const botBody = `Here is the component:\n\n\`\`\`gts\n${longCode}\n\`\`\`\n`;
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Write me a component',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: botBody,
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '2' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3000,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Thanks',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '3' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let assistantMessage = result.find((m) => m.role === 'assistant');
+    assert.ok(assistantMessage, 'the past bot message is in the prompt');
+    assert.equal(messageText(assistantMessage!), botBody);
+    assert.false(
+      messageText(assistantMessage!).includes('[Omitting'),
+      'no elision placeholder appears in the prompt',
+    );
+  });
+
   test('Correctly handles server-side aggregations', async () => {
     // This test uses the /messages api with a filter removing
     // m.replace messages, relying on server side aggregation
@@ -8325,14 +8402,14 @@ module('markdown skills', () => {
 
   test('parseMarkdownSkill strips frontmatter and takes title from name', (assert) => {
     let content =
-      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nUse SEARCH/REPLACE blocks.\n';
+      '---\nname: "Source Code Editing"\ndescription: edits\nboxel:\n  kind: skill\n---\n\n# Source Code Editing\n\nEdit source with run-realm-code.\n';
     let { title, body, kind } = parseMarkdownSkill(content, {
       sourceUrl: 'https://r/skills/source-code-editing/SKILL.md',
     } as any);
     assert.strictEqual(title, 'Source Code Editing');
     assert.strictEqual(
       body,
-      '# Source Code Editing\n\nUse SEARCH/REPLACE blocks.',
+      '# Source Code Editing\n\nEdit source with run-realm-code.',
     );
     assert.strictEqual(kind, 'skill');
     assert.notOk(body.includes('kind: skill'), 'frontmatter is stripped');

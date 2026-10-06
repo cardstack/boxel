@@ -12,6 +12,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   isToolResultEventType,
+  isToolResultRelType,
 } from '../matrix-constants.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import type { MatrixEvent } from 'matrix-js-sdk';
@@ -401,12 +402,22 @@ export async function downloadFileAsBase64DataUrl(
   return `data:${contentType};base64,${base64}`;
 }
 
+// A tool result: a tool-result event type that relates to its request with a
+// tool-result relation. Accepts both the discrete event shape and a
+// matrix-js-sdk MatrixEvent.
 export function isToolResult(
   event: MatrixEvent | DiscreteMatrixEvent,
 ): boolean {
   let type =
     (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
-  return isToolResultEventType(type);
+  let content = ((event as DiscreteMatrixEvent).content ??
+    (event as MatrixEvent).getContent?.()) as
+    | { 'm.relates_to'?: { rel_type?: string } }
+    | undefined;
+  return (
+    isToolResultEventType(type) &&
+    isToolResultRelType(content?.['m.relates_to']?.rel_type)
+  );
 }
 
 // Normalize a Matrix media URL (HTTP download URL or mxc://) into a canonical key.

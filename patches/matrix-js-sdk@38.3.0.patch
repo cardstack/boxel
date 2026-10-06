@@ -116,7 +116,7 @@ index 6e4d0ddff19d8798ee537c36ac9cf14d44ed7bad..07727ab2cbf3243ae32b6b2af457d1ab
  }
  
  /**
-@@ -375,6 +384,14 @@ export interface StateEvents {
+@@ -375,6 +383,14 @@ export interface StateEvents {
  
      // MSC3672
      [M_BEACON_INFO.name]: MBeaconInfoEventContent;
@@ -131,7 +131,7 @@ index 6e4d0ddff19d8798ee537c36ac9cf14d44ed7bad..07727ab2cbf3243ae32b6b2af457d1ab
  }
  
  /**
-@@ -395,6 +412,13 @@ export interface AccountDataEvents extends SecretStorageAccountDataEvents {
+@@ -395,6 +411,13 @@ export interface AccountDataEvents extends SecretStorageAccountDataEvents {
      // Invites-ignorer events
      [POLICIES_ACCOUNT_EVENT_TYPE.name]: { [key: string]: any };
      [POLICIES_ACCOUNT_EVENT_TYPE.altName]: { [key: string]: any };
