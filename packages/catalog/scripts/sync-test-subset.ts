@@ -6,8 +6,12 @@
 //   node scripts/sync-test-subset.ts --into-clone    also merge into contents/
 //   node scripts/sync-test-subset.ts --remove-from-clone
 //   node scripts/sync-test-subset.ts --bump          re-pin to catalog main
-//   node scripts/sync-test-subset.ts --check-pin     fail unless every subset file at the pin
-//                                                    matches catalog main
+//   node scripts/sync-test-subset.ts --check-pin [--pairing=<file>]
+//                                                    fail unless every subset file at the pin
+//                                                    matches catalog main, or the pin is the
+//                                                    head of the approved catalog pull request
+//                                                    this change merges before (<file> is
+//                                                    scripts/pairing.ts's resolution)
 //   node scripts/sync-test-subset.ts --check-no-copies=<dir>
 //                                                    fail when <dir> holds a copy of a
 //                                                    subset definition
@@ -39,6 +43,8 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { pinVerdict, type Resolution } from './pairing.ts';
 
 const catalogDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(catalogDir, '..', '..');
@@ -95,6 +101,17 @@ function readManifest(): Manifest {
     }
   }
   return manifest;
+}
+
+// The pairing scripts/pairing.ts resolved for the pull request under check.
+// It may be missing when the pairing couldn't be read; the pin then waits on
+// any open catalog pull request it comes from.
+function readPairing(path: string): Resolution | undefined {
+  if (!existsSync(path)) {
+    return undefined;
+  }
+  let text = readFileSync(path, 'utf8').trim();
+  return text ? (JSON.parse(text) as Resolution) : undefined;
 }
 
 function fail(message: string): never {
@@ -765,8 +782,10 @@ function currentBranch() {
 // doesn't matter. A commit from a catalog pull request passes once that pull
 // request merges, whether it merged as a merge commit, a squash or a rebase,
 // and fails while the pull request is open or once main changes a subset file
-// again.
-async function checkPin(manifest: Manifest) {
+// again. The one open pull request a pin may come from is the head of the
+// catalog pull request this change merges before, while it is approved to
+// merge right after this change (pinVerdict in pairing.ts).
+async function checkPin(manifest: Manifest, pairing?: Resolution) {
   let headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
   };
@@ -846,6 +865,19 @@ async function checkPin(manifest: Manifest) {
       waitingFiles.length === 100 ||
       waitingFiles.some(({ filename }) => changed.includes(filename)))
   ) {
+    // A change that merges before the catalog pull request fixing what it
+    // breaks pins that pull request's head, so the pin may wait on it while it
+    // is ready to merge right after this change (pairing.ts).
+    let verdict = pairing
+      ? pinVerdict(pairing, waitingOn.number, manifest.revision)
+      : undefined;
+    if (verdict?.passes) {
+      log(`${differ}. ${verdict.message}`);
+      return;
+    }
+    if (verdict) {
+      fail(`${differ}. ${verdict.message}`);
+    }
     fail(
       `${differ}, because the pin is a commit in ${waitingOn.html_url}, which hasn't merged: ` +
         `waiting on ${manifest.repository}#${waitingOn.number} to merge. ` +
@@ -899,7 +931,11 @@ async function main() {
   let args = new Set(process.argv.slice(2));
   let noCopiesArg = [...args].find((a) => a.startsWith('--check-no-copies='));
   if (args.has('--check-pin')) {
-    await checkPin(readManifest());
+    let pairingArg = [...args].find((a) => a.startsWith('--pairing='));
+    let pairing = pairingArg
+      ? readPairing(resolve(pairingArg.slice('--pairing='.length)))
+      : undefined;
+    await checkPin(readManifest(), pairing);
     return;
   }
   if (args.has('--remove-from-clone')) {

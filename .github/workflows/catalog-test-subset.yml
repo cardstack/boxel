@@ -12,9 +12,15 @@ name: Catalog Test Subset
 # without checking the catalog. Otherwise a catalog change to a subset file
 # would turn every open boxel PR red until someone re-pinned. A change to the
 # host's shimmed modules re-runs only the closure check, which reads them.
+#
+# The pin may also be the head of an open catalog pull request this change
+# merges before, while that pull request is approved to merge right after it
+# (pinVerdict in scripts/pairing.ts). The pairing is declared in the
+# description, so editing the description re-runs this.
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -32,6 +38,7 @@ jobs:
           sparse-checkout: |
             packages/catalog/test-subset.json
             packages/catalog/scripts/sync-test-subset.ts
+            packages/catalog/scripts/pairing.ts
             packages/host/app/lib/externals.ts
           sparse-checkout-cone-mode: false
 
@@ -41,6 +48,7 @@ jobs:
           pin_paths=(
             packages/catalog/test-subset.json
             packages/catalog/scripts/sync-test-subset.ts
+            packages/catalog/scripts/pairing.ts
             .github/workflows/catalog-test-subset.yml
           )
           if git diff-tree -r --quiet HEAD^1 HEAD -- "${pin_paths[@]}"; then
@@ -61,9 +69,27 @@ jobs:
         with:
           node-version: "24"
 
+      # Lint Catalog reports a malformed or one-sided pairing, so a pairing
+      # problem doesn't fail this job; without a resolution, the pin waits on
+      # any open catalog pull request it comes from.
+      - name: Read the catalog pairing
+        if: steps.touched.outputs.pin == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node packages/catalog/scripts/pairing.ts \
+            --repository="$GITHUB_REPOSITORY" \
+            --number="$PR_NUMBER" \
+            --base="$PR_BASE" \
+            --counterpart=cardstack/boxel-catalog \
+            --out="$RUNNER_TEMP/catalog-pairing.json" || true
+
       - name: Pinned subset files match boxel-catalog main
         if: steps.touched.outputs.pin == 'true'
-        run: node packages/catalog/scripts/sync-test-subset.ts --check-pin
+        run: node packages/catalog/scripts/sync-test-subset.ts --check-pin --pairing="$RUNNER_TEMP/catalog-pairing.json"
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
