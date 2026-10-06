@@ -655,6 +655,81 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a second granted read of the same type reads no ancestor definition', async function (assert) {
+      let ancestorReads = () =>
+        school.__testOnlyPolicyGateStats().ancestorDefinitionReads;
+      let read = () =>
+        operations(AUTH.stranger(), invoke('read', { href: LEDGER_1 }));
+
+      let before = ancestorReads();
+      assert.strictEqual((await read()).status, 200, 'the grant admits it');
+      assert.true(
+        ancestorReads() > before,
+        'the first read reads the ancestors’ definitions',
+      );
+
+      before = ancestorReads();
+      assert.strictEqual((await read()).status, 200, 'and admits it again');
+      assert.strictEqual(
+        ancestorReads(),
+        before,
+        'the second reads none of them',
+      );
+    });
+
+    test('an ancestor’s flag set by a module edit is honored on the next invocation', async function (assert) {
+      let annotate = () =>
+        operations(
+          AUTH.reader(),
+          invoke('annotate', {
+            href: OPEN_LEDGER_1,
+            data: { note: 'checked' },
+          }),
+        );
+      assert.strictEqual(
+        (await annotate()).status,
+        200,
+        'the inherited ordinary operation is granted',
+      );
+      let before = school.__testOnlyPolicyGateStats().ancestorDefinitionReads;
+      assert.strictEqual((await annotate()).status, 200, 'and granted again');
+      assert.strictEqual(
+        school.__testOnlyPolicyGateStats().ancestorDefinitionReads,
+        before,
+        'from the remembered answer',
+      );
+
+      // `Ledger` now keeps `annotate` out of reach, and `OpenLedger`
+      // redeclares it without the flag, so only `Ledger`'s definition says
+      // it is kept.
+      await school.write(
+        'ledger.gts',
+        LEDGER_MODULE.replace(
+          `set: { note: params('note') },
+    };`,
+          `set: { note: params('note') },
+      nonGrantable: true,
+    };`,
+        ).replace(
+          `export class OpenLedger extends Ledger {`,
+          `export class OpenLedger extends Ledger {
+    @operation static annotate = {
+      base: 'transform',
+      params: { note: StringField },
+      set: { note: params('note') },
+    };
+`,
+        ),
+      );
+      await school.indexing();
+
+      assertNotPermitted(
+        assert,
+        await annotate(),
+        'the next invocation reads the flag',
+      );
+    });
+
     test('an operation is grantable unless its declaration says otherwise', async function (assert) {
       let core = school.operationCore;
       let resolve = (url: string, name: string) =>

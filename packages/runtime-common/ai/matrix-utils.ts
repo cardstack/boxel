@@ -1,6 +1,5 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
-import { findSearchReplaceBlock } from '../search-replace-markers.ts';
 import { uint8ArrayToBase64 } from '../base64.ts';
 import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
@@ -12,8 +11,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   isToolResultEventType,
+  isToolResultRelType,
 } from '../matrix-constants.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import type { MatrixEvent } from 'matrix-js-sdk';
@@ -403,28 +402,22 @@ export async function downloadFileAsBase64DataUrl(
   return `data:${contentType};base64,${base64}`;
 }
 
-export function isToolOrCodePatchResult(
+// A tool result: a tool-result event type that relates to its request with a
+// tool-result relation. Accepts both the discrete event shape and a
+// matrix-js-sdk MatrixEvent.
+export function isToolResult(
   event: MatrixEvent | DiscreteMatrixEvent,
 ): boolean {
   let type =
     (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
+  let content = ((event as DiscreteMatrixEvent).content ??
+    (event as MatrixEvent).getContent?.()) as
+    | { 'm.relates_to'?: { rel_type?: string } }
+    | undefined;
   return (
-    isToolResultEventType(type) ||
-    type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+    isToolResultEventType(type) &&
+    isToolResultRelType(content?.['m.relates_to']?.rel_type)
   );
-}
-
-export function extractCodePatchBlocks(s: string) {
-  let blocks: string[] = [];
-  let from = 0;
-  for (;;) {
-    let block = findSearchReplaceBlock(s, from);
-    if (!block) {
-      return blocks;
-    }
-    blocks.push(s.substring(block.start, block.end));
-    from = block.end;
-  }
 }
 
 // Normalize a Matrix media URL (HTTP download URL or mxc://) into a canonical key.

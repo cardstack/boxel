@@ -3,6 +3,7 @@ import { getOwner, setOwner } from '@ember/owner';
 import {
   click,
   waitFor,
+  find,
   findAll,
   waitUntil,
   settled,
@@ -1421,6 +1422,8 @@ module('Acceptance | Tools tests', function (hooks) {
     // instead of being auto-applied.
     await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
     await waitForNewRoomSkillsLoaded(roomId);
+    let toolCallId = '1554f297-e9f2-43fe-8b95-55b29251444d';
+    let dispatchedAt = performance.now();
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1428,7 +1431,7 @@ module('Acceptance | Tools tests', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          id: toolCallId,
           name: showCardToolName,
           arguments: JSON.stringify({
             description:
@@ -1449,10 +1452,59 @@ module('Acceptance | Tools tests', function (hooks) {
     await waitFor('[data-test-message-idx="0"]');
 
     // Note: you don't have to click on apply button, because command on Skill
-    // has requireApproval set to false
+    // has requireApproval set to false.
+    //
+    // "applied" is the end of a chain that settled() does not track: the
+    // tool queue drains on a debounce, waits out any in-flight room
+    // processing, validates, runs the tool in an ember-concurrency task,
+    // refreshes the room's skills and the AI context, sends the result event
+    // through the mock homeserver's setTimeout delivery, and only then does
+    // room processing fold the result in. That takes 0.5-1.2s locally, at or
+    // past waitFor's 1s default, so the wait gets a budget sized for the
+    // whole chain. Each phase's first sighting is recorded so the log shows
+    // where the time went (or which phase never happened): "executed" is
+    // the tool body returning, "resultSent" is its result event reaching the
+    // room, "applied" is that result folded in and rendered.
+    let toolService = getService('tool-service');
+    let phaseReachedAt: Record<string, number> = {};
+    let notePhase = (phase: string, reached: boolean) => {
+      if (reached && phaseReachedAt[phase] === undefined) {
+        phaseReachedAt[phase] = Math.round(performance.now() - dispatchedAt);
+      }
+    };
     try {
-      await waitFor(
-        '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+      await waitUntil(
+        () => {
+          notePhase(
+            'claimed',
+            toolService.claimedToolRequestIds.has(toolCallId),
+          );
+          notePhase(
+            'executing',
+            toolService.currentlyExecutingToolRequestIds.has(toolCallId),
+          );
+          notePhase(
+            'executed',
+            toolService.executedToolRequestIds.has(toolCallId),
+          );
+          notePhase(
+            'resultSent',
+            getRoomEvents(roomId).some(
+              (event: any) => event.content?.commandRequestId === toolCallId,
+            ),
+          );
+          let applied = Boolean(
+            find(
+              '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+            ),
+          );
+          notePhase('applied', applied);
+          return applied;
+        },
+        { timeout: 10_000 },
+      );
+      console.log(
+        `[commands-test/show-card-auto-apply] phases reached (ms after the bot message): ${JSON.stringify(phaseReachedAt)}`,
       );
     } catch (err) {
       let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
@@ -1469,6 +1521,7 @@ module('Acceptance | Tools tests', function (hooks) {
       );
       let roomData = getService('matrix-service').getRoomData(roomId);
       let roomResource = getService('matrix-service').roomResources.get(roomId);
+      let message = roomResource?.messages[0];
       console.error(
         '[commands-test/show-card-auto-apply] timed out waiting for applied state. Diagnostic:',
         JSON.stringify(
@@ -1482,6 +1535,25 @@ module('Acceptance | Tools tests', function (hooks) {
                 (f) => f.sourceUrl,
               ) ?? null,
             roomResourceCommandCount: roomResource?.tools?.length ?? null,
+            elapsedMs: Math.round(performance.now() - dispatchedAt),
+            phaseReachedAt,
+            roomIsProcessing: roomResource?.isProcessing ?? null,
+            messageIsStreamingFinished: message?.isStreamingFinished ?? null,
+            messageAgentId: message?.agentId ?? null,
+            sessionAgentId: getService('matrix-service').agentId,
+            messageTools:
+              message?.tools.map((tool) => ({
+                id: tool.id,
+                name: tool.name,
+                status: tool.status,
+                hasCodeRef: Boolean(tool.codeRef),
+                requiresApproval: tool.requiresApproval,
+                claimed: toolService.claimedToolRequestIds.has(tool.id!),
+                executing: toolService.currentlyExecutingToolRequestIds.has(
+                  tool.id!,
+                ),
+                executed: toolService.executedToolRequestIds.has(tool.id!),
+              })) ?? null,
           },
           null,
           2,
