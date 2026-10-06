@@ -51,6 +51,9 @@ jobs:
       # The catalog change a pull request depends on, or that follows it, is
       # the one its description pairs it with (scripts/pairing.ts). Lint that
       # pull request's head in place of main, and catalog main as well below.
+      # Production deploys the catalog at the revision boxel pins, so a catalog
+      # pull request this change merges after must be in the pin once it has
+      # merged.
       - name: Read the catalog pairing
         id: pairing
         if: github.event_name == 'pull_request'
@@ -65,6 +68,7 @@ jobs:
             --number="$PR_NUMBER" \
             --base="$PR_BASE" \
             --counterpart=cardstack/boxel-catalog \
+            --pin=packages/catalog/test-subset.json \
             --out="$RUNNER_TEMP/catalog-pairing.json"
           # An open pair this change merges after is what it builds on, and
           # lands first; otherwise an open pair it merges before is the
