@@ -79,6 +79,14 @@ const CIVIC_MODULE = `
       set: { signature: actor() },
     };
   }
+  // Redeclares \`sign\` to read the caller, so a grant on Petition that opens
+  // \`sign\` admits no caller who isn't signed in to one of these.
+  export class LocalPetition extends Petition {
+    @operation static sign = {
+      base: 'transform',
+      set: { signature: actor() },
+    };
+  }
   export class Signup extends CardDef {
     @field email = contains(StringField);
     @field source = contains(StringField);
@@ -100,16 +108,17 @@ const PETITION = type(CIVIC, 'Petition');
 const SIGNUP = type(CIVIC, 'Signup');
 
 const OPEN = `${CIVIC}petitions/open`;
+const LOCAL = `${CIVIC}petitions/local`;
 const CLOSED = `${CIVIC}petitions/closed`;
 const MISSING = `${CIVIC}petitions/nowhere`;
 const BOARD_PETITION = `${BOARD}petitions/open`;
 
-function petition(title: string, status: string) {
+function petition(title: string, status: string, name = 'Petition') {
   return JSON.stringify({
     data: {
       type: 'card',
       attributes: { title, status },
-      meta: { adoptsFrom: { module: '../civic', name: 'Petition' } },
+      meta: { adoptsFrom: { module: '../civic', name } },
     },
   });
 }
@@ -182,6 +191,11 @@ module(basename(import.meta.filename), function (hooks) {
             'civic.gts': CIVIC_MODULE,
             'petitions/open.json': petition('Fix the park', 'open'),
             'petitions/closed.json': petition('Move the library', 'closed'),
+            'petitions/local.json': petition(
+              'Light the square',
+              'open',
+              'LocalPetition',
+            ),
           },
           permissions: {
             [EDITOR]: ['read', 'write', 'realm-owner'],
@@ -341,6 +355,32 @@ module(basename(import.meta.filename), function (hooks) {
     return `Bearer ${createJWT(civic, EDITOR, ['read', 'write', 'realm-owner'])}`;
   }
 
+  async function explain(target: string, operation: string) {
+    let response = await request
+      .post(`${new URL(ORG).pathname}_operations`)
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('Accept', SupportedMimeType.BoxelOperations)
+      .set('Content-Type', SupportedMimeType.BoxelOperations)
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(org, ORG_ADMIN, ['read', 'write', 'realm-owner'])}`,
+      )
+      .send(
+        JSON.stringify({
+          'boxel:operations': [
+            invoke('explain', {
+              href: CIVIC_POLICY,
+              data: { actor: '', target, operation },
+            }),
+          ],
+        }),
+      );
+    if (response.status !== 200) {
+      throw new Error(`explain answered ${response.status}: ${response.text}`);
+    }
+    return response.body['atomic:results'][0];
+  }
+
   test('a caller who is not signed in signs an open petition through the operation its type declares, made as the user the realm names', async function (assert) {
     let response = await sign(OPEN, 'Ada');
     assert.strictEqual(response.status, 200, response.text);
@@ -444,7 +484,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       policy?.anonymous,
-      { operations: ['register', 'sign'] },
+      { operations: ['register', 'sign'], writes: ['register', 'sign'] },
       'it opens nothing to such callers',
     );
     unauthenticated(
@@ -453,6 +493,38 @@ module(basename(import.meta.filename), function (hooks) {
       assert,
     );
     assert.notOk((await stored(civic, OPEN))?.signature, 'nothing was written');
+  });
+
+  test('a subtype that redeclares an opened operation to read the caller admits no caller who is not signed in, and capability checks and explain say so', async function (assert) {
+    let capabilities = await request
+      .post(`${new URL(CIVIC).pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR)
+      .send({
+        checks: [
+          { target: OPEN, operation: 'sign' },
+          { target: LOCAL, operation: 'sign' },
+        ],
+      });
+    assert.strictEqual(capabilities.status, 200, capabilities.text);
+    assert.deepEqual(
+      (capabilities.body.checks as { allowed: boolean }[]).map(
+        (check) => check.allowed,
+      ),
+      [true, false],
+      "the parent's petition may be signed, and the subtype's may not",
+    );
+    assert.strictEqual(
+      (await explain(LOCAL, 'sign')).decision,
+      'denied',
+      'explain agrees',
+    );
+    unauthenticated(await sign(LOCAL, 'Ada'), 'the subtype', assert);
+    assert.notOk(
+      (await stored(civic, LOCAL))?.signature,
+      'nothing was written',
+    );
   });
 
   test('a declared write is counted one unit, and one over the limit gets 429 and writes nothing', async function (assert) {
@@ -525,33 +597,6 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('explain judges such a caller’s declared write by the grants that opt in to them', async function (assert) {
-    let explain = async (target: string, operation: string) => {
-      let response = await request
-        .post(`${new URL(ORG).pathname}_operations`)
-        .set('X-HTTP-Method-Override', 'QUERY')
-        .set('Accept', SupportedMimeType.BoxelOperations)
-        .set('Content-Type', SupportedMimeType.BoxelOperations)
-        .set(
-          'Authorization',
-          `Bearer ${createJWT(org, ORG_ADMIN, ['read', 'write', 'realm-owner'])}`,
-        )
-        .send(
-          JSON.stringify({
-            'boxel:operations': [
-              invoke('explain', {
-                href: CIVIC_POLICY,
-                data: { actor: '', target, operation },
-              }),
-            ],
-          }),
-        );
-      if (response.status !== 200) {
-        throw new Error(
-          `explain answered ${response.status}: ${response.text}`,
-        );
-      }
-      return response.body['atomic:results'][0];
-    };
     assert.strictEqual(
       (await explain(OPEN, 'sign')).decision,
       'allowed',

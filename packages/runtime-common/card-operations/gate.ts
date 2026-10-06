@@ -649,8 +649,15 @@ async function decide(
   // A caller who isn't signed in is admitted only by a grant that opts in to
   // them. Every other grant was written for signed-in callers, and admitting
   // anyone at all through one would widen it past what its author wrote.
+  // An operation whose program, template or output reads `actor()` has no
+  // actor to read for such a caller, and is refused before it runs, so no
+  // grant admits one to it. The definition is the one the target's own type
+  // resolves, which may be a subtype's redeclaration of what a grant on its
+  // parent opened.
   if (scope.caller.kind === 'anonymous') {
-    matched = matched.filter(({ grant }) => grant.anonymous);
+    matched = definition.readsActor
+      ? []
+      : matched.filter(({ grant }) => grant.anonymous);
     // Such a caller's write is made as the user its grant names, so a grant
     // whose acting user doesn't resolve to one who may write the realm admits
     // nothing.

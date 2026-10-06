@@ -83,7 +83,9 @@ export interface CompiledRealmPolicy {
   // The operations some live grant opens to callers who aren't signed in.
   // Absent when no grant does, which is what lets a realm answer such a caller
   // without judging anything: it reads this, and nothing else of the policy.
-  anonymous?: { operations: string[] };
+  // Of those, the ones whose grants open a write, made as the user the grant's
+  // `actingUser` names.
+  anonymous?: { operations: string[]; writes: string[] };
 }
 
 export interface CompiledPolicyRule {
@@ -388,16 +390,10 @@ export class RealmPolicyCache {
     if (compiled?.uncompilable || !compiled?.anonymous) {
       return NO_OPERATIONS;
     }
-    let operations = new Set(compiled.anonymous.operations);
-    let writes = new Set<string>();
-    for (let rule of compiled.rules) {
-      for (let grant of rule.grants) {
-        if (grant.anonymous?.actingUserKey && operations.has(grant.operation)) {
-          writes.add(grant.operation);
-        }
-      }
-    }
-    return { operations, writes };
+    return {
+      operations: new Set(compiled.anonymous.operations),
+      writes: new Set(compiled.anonymous.writes),
+    };
   }
 
   async #opensAnythingToAnonymous(card: string): Promise<boolean> {
@@ -1720,13 +1716,15 @@ function safeURL(
 }
 
 // The operations the policy's live grants open to callers who aren't signed
-// in, recorded on the compiled policy when there are any. A query grant that
-// has no search filter admits no search, and a grant whose `where` reads the
-// caller admits nobody without one, so neither opens anything.
+// in, and which of those write, recorded on the compiled policy when there
+// are any. A query grant that has no search filter admits no search, and a
+// grant whose `where` reads the caller admits nobody without one, so neither
+// opens anything.
 function anonymousSummary(
   rules: CompiledPolicyRule[],
 ): Pick<CompiledRealmPolicy, 'anonymous'> {
   let operations = new Set<string>();
+  let writes = new Set<string>();
   for (let rule of rules) {
     for (let grant of rule.grants) {
       if (
@@ -1735,11 +1733,19 @@ function anonymousSummary(
         (grant.operation !== 'query' || grant.filter)
       ) {
         operations.add(grant.operation);
+        if (grant.anonymous.actingUserKey) {
+          writes.add(grant.operation);
+        }
       }
     }
   }
   return operations.size > 0
-    ? { anonymous: { operations: [...operations].sort() } }
+    ? {
+        anonymous: {
+          operations: [...operations].sort(),
+          writes: [...writes].sort(),
+        },
+      }
     : {};
 }
 

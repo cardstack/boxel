@@ -971,8 +971,9 @@ module(basename(import.meta.filename), function (hooks) {
           'readSource',
           'transform',
         ],
+        writes: ['appendActivity', 'transform'],
       },
-      'the operations opened to callers who are not signed in, leaving out the one whose only grant reads the caller',
+      'the operations opened to callers who are not signed in, and which of them write, leaving out the one whose only grant reads the caller',
     );
     let opened = await education.getAnonymousAdmission();
     assert.deepEqual(
