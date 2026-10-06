@@ -4367,6 +4367,76 @@ module('Integration | Store', function (hooks) {
     }
   });
 
+  test('a reload still in flight when a code change resets identity in place leaves the re-established instance alone', async function (assert) {
+    // The interactive app resets identity for a code change without replacing
+    // the identity map: it clears the map and re-establishes every referenced
+    // card as a fresh instance. A reload whose read straddles that must not
+    // bring its pre-reset instance back alongside the re-established one.
+    let url = `${testRealmURL}Person/code-change-mid-reload`;
+    let events = interceptRealmEvents();
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let readHeld = new Deferred<void>();
+    let releaseRead = new Deferred<void>();
+    let holding = false;
+    try {
+      await writePerson('Person/code-change-mid-reload.json', 'Before Reset');
+      await events.nextEventFor(url);
+      storeService.addReference(url);
+      await storeService.flush();
+      let preReset = storeService.peek(url) as CardDefType;
+
+      await writePerson('Person/code-change-mid-reload.json', 'After Reset');
+      let event = await events.nextEventFor(url);
+
+      holding = true;
+      cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+        if (
+          holding &&
+          String(fetchUrl).includes('Person/code-change-mid-reload') &&
+          (args?.method ?? 'GET') === 'GET'
+        ) {
+          holding = false;
+          readHeld.fulfill();
+          await releaseRead.promise;
+        }
+        return originalFetchJSON(fetchUrl, args);
+      };
+      events.deliver(event);
+      await readHeld.promise;
+
+      storeService.refreshReferencesForCodeChange('test code change');
+      await waitUntil(() => {
+        let current = storeService.peek(url) as CardDefType | undefined;
+        return current !== undefined && current[localId] !== preReset[localId];
+      });
+      let reestablished = storeService.peek(url) as CardDefType;
+
+      releaseRead.fulfill();
+      await settled();
+
+      assert.strictEqual(
+        storeService.peek(url),
+        reestablished,
+        'the resumed reload leaves the re-established instance in place',
+      );
+      assert.strictEqual(
+        storeService.peekError(url)?.message,
+        undefined,
+        'and records no error for the card',
+      );
+      assert.strictEqual(
+        (reestablished as any).name,
+        'After Reset',
+        'the re-established instance holds the state the realm wrote',
+      );
+    } finally {
+      releaseRead.fulfill();
+      delete cardService.fetchJSON;
+      events.restore();
+    }
+  });
+
   // Holds the in-browser queue on a job of its own, so index publishes that
   // arrive meanwhile fold into one pending pass — how concurrent writers' saves
   // meet in a realm under load.

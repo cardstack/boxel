@@ -473,9 +473,12 @@ export default class StoreService extends Service implements StoreInterface {
   // we can't compare against a stored Promise.
   private searchCacheGeneration = 0;
   private store: CardStore;
-  // Counts the identity maps this service has created, so a log line can say
-  // which one an operation started in and which one it finished against.
-  #identityMapSerial = 0;
+  // Advances on every reset of card identity: when the identity map is
+  // replaced (`resetCache`, `resetState`) and when it is cleared in place for
+  // a code change. An operation that captured an epoch and finds it moved is
+  // holding instances from a superseded identity, and the epochs it logs say
+  // which identity it started in and which one it finished against.
+  #identityEpoch = 0;
   protected isRenderStore = false;
 
   // This is used for tests
@@ -622,7 +625,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   resetCache(opts?: { preserveReferences?: boolean }) {
     storeLogger.info(
-      `resetting store cache; replacing identity map #${this.#identityMapSerial}`,
+      `resetting store cache; leaving identity epoch #${this.#identityEpoch}`,
     );
     if (!opts?.preserveReferences) {
       this.referenceCount = new Map();
@@ -645,6 +648,11 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
+  #resetIdentityInPlace() {
+    this.#identityEpoch++;
+    this.store.reset();
+  }
+
   refreshReferencesForCodeChange(
     reason?: string,
     opts?: { triggerModule?: string; realm?: string },
@@ -653,7 +661,7 @@ export default class StoreService extends Service implements StoreInterface {
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
     let telemetry = this.#clientTelemetry();
     let start = telemetry?.isEnabled ? performance.now() : undefined;
-    this.store.reset();
+    this.#resetIdentityInPlace();
     let refetch = this.reestablishReferences.perform();
     if (telemetry?.isEnabled && start !== undefined) {
       let triggerModules = opts?.triggerModule ? [opts.triggerModule] : [];
@@ -2383,7 +2391,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private createCardStore(): CardStore {
-    this.#identityMapSerial++;
+    this.#identityEpoch++;
     return new CardStore(
       this.referenceCount,
       this.network.authedFetch,
@@ -3125,7 +3133,7 @@ export default class StoreService extends Service implements StoreInterface {
     // records against the new loader, so the invalidation still to come for
     // that write finds them.
     this.loaderService.resetLoader();
-    this.store.reset();
+    this.#resetIdentityInPlace();
     let cardsReloaded: number | undefined;
     try {
       cardsReloaded = await this.reestablishReferences.perform();
@@ -3154,21 +3162,22 @@ export default class StoreService extends Service implements StoreInterface {
       let reloadTracker = this.startTrackingCardLoad(instance.id);
       let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
       let isDelete = false;
-      // The reload belongs to the identity map that held the instance when it
-      // started. A `resetCache` while the read is in flight replaces that map
-      // (an in-browser index pass does so on its first visit), and the
-      // replacement may already hold its own instance for this id under a
-      // different local id. Writing this one into it would give one remote id
-      // two local ids, so a superseded reload finishes against the map it
-      // started in and leaves the replacement alone.
+      // The reload belongs to the card identity the instance had when it
+      // started. A reset while the read is in flight supersedes it — an
+      // in-browser index pass replaces the identity map on its first visit,
+      // and a code change clears it in place — and what follows the reset may
+      // already hold its own instance for this id under a different local id.
+      // Writing this one in would give one remote id two local ids, so a
+      // superseded reload stops short of touching the current identity.
       let identityMap = this.store;
-      let identityMapSerial = this.#identityMapSerial;
+      let identityEpoch = this.#identityEpoch;
 
       try {
         try {
           maybeReloadedInstance = await this.reloadInstance(
             instance,
             identityMap,
+            identityEpoch,
           );
         } catch (err: any) {
           let cardError = processCardError(instance.id, err).errors[0];
@@ -3189,9 +3198,9 @@ export default class StoreService extends Service implements StoreInterface {
             maybeReloadedInstance = cardError;
           }
         }
-        if (this.store !== identityMap) {
+        if (this.#identityEpoch !== identityEpoch) {
           storeLogger.info(
-            `dropping reload of ${instance.id}: it started in identity map #${identityMapSerial}, which was replaced by #${this.#identityMapSerial} while the reload was in flight`,
+            `dropping reload of ${instance.id}: it started in identity epoch #${identityEpoch}, which was superseded by #${this.#identityEpoch} while the reload was in flight`,
           );
           return;
         }
@@ -4561,10 +4570,14 @@ export default class StoreService extends Service implements StoreInterface {
   // Returns the refreshed instance. Usually this is the same object as the
   // one passed in (updated in place), but when the card's type changed it is a
   // freshly-built instance of the new type — see below.
+  // Resolves to undefined when a reset supersedes `identityEpoch` before the
+  // reload writes anything: the instance no longer belongs to the store's
+  // current identity, so it is left as it was.
   private async reloadInstance(
     instance: CardDef,
     identityMap: CardStore,
-  ): Promise<CardDef> {
+    identityEpoch: number,
+  ): Promise<CardDef | undefined> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     let waiterLabel = `reloadInstance ${instance.id}`;
@@ -4618,6 +4631,10 @@ export default class StoreService extends Service implements StoreInterface {
         throw err;
       }
 
+      if (this.#identityEpoch !== identityEpoch) {
+        return undefined;
+      }
+
       let currentDef = Reflect.getPrototypeOf(instance)?.constructor as
         | typeof BaseDef
         | undefined;
@@ -4664,6 +4681,12 @@ export default class StoreService extends Service implements StoreInterface {
           return keep;
         },
       );
+      if (this.#identityEpoch !== identityEpoch) {
+        // A reset landed while this deserialized. Saving now would resolve the
+        // card through the current identity and write that instance's state,
+        // not the merge this reload just made.
+        return undefined;
+      }
       if (kept.size > 0) {
         realmEventsLogger.debug(
           `reload of ${instance.id} keeps local edits to ${[...kept].join(', ')}`,
