@@ -23,8 +23,10 @@
     "test:theater-sizing": "node scripts/test-theater-sizing.mjs"
   },
   "devDependencies": {
+    "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/choreo": "workspace:*",
+    "@cardstack/choreo-player": "workspace:*",
     "@cardstack/choreo-eslint-config": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",

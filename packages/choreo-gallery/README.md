@@ -23,6 +23,7 @@ The rest of the package is tooling and source material that is not served:
 | `notes/`            | Each demo's long-form notes (its Deep Dive).                                                                                  |
 | `asset/`            | Media the demos load: the films' narration, looks, textures, picture pages, vendored three.js and posters.                    |
 | `film-app/`         | The films' own app, built from `packages/choreo-film-app` and committed. Never edited by hand.                                |
+| `reel/`             | The feature reel: three demos, live, in one camera'd world under a title, brand and timecode plane. `feature-reel.json`.      |
 | `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`. |
 | `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.              |
 | `*.test.gts`        | The gallery's tests, run by `boxel test`.                                                                                     |
@@ -58,8 +59,8 @@ After editing the film app, rebuild it into the realm and commit the result:
 pnpm --filter choreo-film-app build:realm
 ```
 
-CI runs `pnpm --filter choreo-film-app check:realm`, which fails when the
-committed build is not the build of the sources.
+The film app's lint (`pnpm --filter choreo-film-app lint:realm`) fails when
+the committed build is not the build of the sources.
 
 The film documents load their scripts and media with plain requests, without
 the viewer's realm session, so the films play only from a realm everyone can
@@ -116,6 +117,11 @@ against the libraries it documents:
 
 The guides themselves, and the guide pages that embed the demos, are still
 `choreo-test-app` sources; the check reads them from there.
+
+Tests that load the gallery's cards from their realm source run in the host
+suite, `packages/host/tests/integration/choreo-*-test.gts`, through
+`tests/helpers/choreo-gallery.ts`: the films' faces and theater, and the
+feature reel under an external clock.
 
 `pnpm test:theater-sizing` checks the film theater's sizing rules in
 `choreo-test-app`'s stylesheet.
