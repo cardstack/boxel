@@ -11,6 +11,7 @@ import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
 import type { ComponentLike } from '@glint/template';
 
+import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
 import { DemoStage } from './shell/demo-stage';
@@ -31,6 +32,26 @@ export const GROUPS = [
 ] as const;
 
 export type DemoGroup = (typeof GROUPS)[number];
+
+/** what a demo's stage is told about where it is rendering */
+export interface StageSignature {
+  Args: {
+    /** `tile` in the gallery grid and summaries; `stage` on the demo page */
+    face?: 'stage' | 'tile';
+    /** opens the demo's page in theater, from a tile */
+    open?: () => void;
+    /** the demo page's theater, for a film stage to enter and leave */
+    theater?: Theater;
+  };
+}
+
+/**
+ * The shape of the demo page's well, for a stage composed for a particular
+ * frame: `wide` is a film composed about sixteen by nine, `tall` a film whose
+ * subject runs to the top of the frame. The default well suits a demo that
+ * fills its width.
+ */
+export type StageWell = 'tall' | 'wide';
 
 /** One step of a demo's walkthrough: a sentence of why, then the code. */
 export class WalkthroughStep extends FieldDef {
@@ -56,6 +77,8 @@ export class DemoLesson extends FieldDef {
 }
 
 class Isolated extends Component<typeof GalleryDemo> {
+  readonly theater = new Theater();
+
   get demo() {
     return this.args.model as GalleryDemo;
   }
@@ -63,7 +86,7 @@ class Isolated extends Component<typeof GalleryDemo> {
   <template>
     <ChoreoRoot class='standalone'>
       <div class='page'>
-        <DemoPage @demo={{this.demo}} />
+        <DemoPage @demo={{this.demo}} @theater={{this.theater}} />
       </div>
     </ChoreoRoot>
     <style scoped>
@@ -88,7 +111,7 @@ class Embedded extends Component<typeof GalleryDemo> {
   <template>
     <ChoreoRoot class='tile'>
       <div class='tile-stage'>
-        <DemoStage @demo={{this.demo}} />
+        <DemoStage @demo={{this.demo}} @face='tile' />
       </div>
       <div class='tile-meta'>
         <span class='tile-group'>{{@model.group}}</span>
@@ -191,7 +214,9 @@ export class GalleryDemo extends CardDef {
   static prefersWideFormat = true;
 
   /** the live demo; undefined until the demo has a stage of its own */
-  static stage: ComponentLike | undefined;
+  static stage: ComponentLike<StageSignature> | undefined;
+  /** the shape of the demo page's well, when the stage needs its own */
+  static well: StageWell | undefined;
   /** how the demo works, rendered under the usage example (a Deep Dive) */
   static notes: ComponentLike | undefined;
 
@@ -211,7 +236,7 @@ export class GalleryDemo extends CardDef {
    * imperative `animate()` call has no transition to scale, so those opt out.
    */
   @field slowmo = contains(BooleanField);
-  /** whether the stage is a film, with a theater to enter */
+  /** whether the stage has a theater to enter: the films and Sylva's world */
   @field theater = contains(BooleanField);
   /** the data that drives the demo, quoted under the usage example */
   @field walkthrough = containsMany(WalkthroughStep);

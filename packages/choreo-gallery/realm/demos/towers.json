@@ -50,8 +50,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../demo",
-        "name": "GalleryDemo"
+        "module": "../stages/towers",
+        "name": "TowersDemo"
       }
     }
   }
