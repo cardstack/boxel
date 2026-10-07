@@ -490,7 +490,8 @@ export default class ToolService extends Service {
         // Requeue until the Message reports the finalized state — chain-aware,
         // so a head whose continuation is still streaming or building keeps
         // waiting; bounded so a message that never catches up still falls
-        // through and resolves with a real (terminal) validation result.
+        // through and validates whatever tools have built, each with a real
+        // (terminal) result, instead of requeuing forever.
         if (
           !message ||
           ((message.isStreamingFinished !== true ||

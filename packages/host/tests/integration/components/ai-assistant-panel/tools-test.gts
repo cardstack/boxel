@@ -2637,6 +2637,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .doesNotExist('no tool is left spinning in the applying state');
   });
 
+  // Pins the decision to keep isStreamingFinished a synchronous content flag
+  // rather than deferring it until the tools are built: the preview guards in
+  // RoomResource.hydrateResponseStreamPreview / applyResponseStreamPreview
+  // read it to drop a stale preview, so holding it open across a tool build's
+  // network latency would let a straggler preview overwrite the finalized
+  // body. This guards that content-flag contract — it passes whether or not
+  // the tool-build tracking is present — not the restart race the sibling test
+  // covers.
   test('a response-stream preview that arrives while the final edit builds its tools does not overwrite it', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
