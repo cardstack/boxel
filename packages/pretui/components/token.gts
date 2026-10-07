@@ -13,7 +13,7 @@ export interface TokenSignature {
   Args: {
     value?: string;
     hue?: string;
-    /** house scale xs|s|m|l|xl; omitted or 'default', the size follows `--text-body` */
+    /** house scale xs|s|m|l|xl; omitted or 'default', Chip's size */
     size?: PretuiSizeArg;
     /** let a long value wrap instead of overflowing on one line */
     wrap?: boolean;
@@ -146,22 +146,23 @@ export class Token extends Component<TokenSignature> {
     </code>
     <style scoped>
       @layer PretComponent {
+        /* Chip's radius, padding and height, so the two line up side by side,
+           but outlined on --card where Chip is filled with --muted: a value,
+           not a label. --pretui-token-hue is the text color; callers set it on
+           the Token or an ancestor, so it is read with a fallback rather than
+           declared here. */
         .pretui-token {
-          --_th: var(--pretui-token-hue, var(--pretui-primary-ink, var(--primary)));
           display: inline-block;
           margin-inline: 0.35ch;
           vertical-align: baseline;
           font-family: var(--font-mono);
-          font-size: var(
-            --pretui-token-font-size,
-            calc(var(--text-body, 15px) - 3.5px)
-          );
-          line-height: 1.5;
-          padding: 0 5px;
-          border-radius: 4px;
-          background: color-mix(in oklch, var(--_th) 8%, var(--card));
-          color: color-mix(in oklch, var(--foreground) 26%, var(--_th));
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--_th) 30%, var(--border));
+          font-size: var(--pretui-token-font-size, var(--boxel-font-size-2xs));
+          line-height: 1.125rem;
+          padding: 0 var(--boxel-sp-2xs);
+          border-radius: var(--boxel-border-radius-xs);
+          background-color: var(--card);
+          color: var(--pretui-token-hue, var(--card-foreground));
+          box-shadow: inset 0 0 0 1px var(--border);
           white-space: nowrap;
           font-variant-numeric: tabular-nums;
         }
@@ -174,12 +175,15 @@ export class Token extends Component<TokenSignature> {
         }
         .pretui-token[data-size='m'] {
           font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          line-height: 1.5;
         }
         .pretui-token[data-size='l'] {
           font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          line-height: 1.5;
         }
         .pretui-token[data-size='xl'] {
           font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          line-height: 1.5;
         }
         .pretui-token[data-wrap] {
           white-space: normal;
