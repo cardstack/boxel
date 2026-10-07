@@ -5,11 +5,11 @@ import { FreestyleUsage } from './freestyle-usage';
 import { Token } from './token';
 import { PRETUI_SIZES, type PretuiSize } from '../pretui-primitives';
 
-// The size knob's choices: the default size plus the house scale.
+// The size knob's choices: the --text-body default plus the house scale.
 const BODY_SIZE = 'body';
 const SIZES = [BODY_SIZE, ...PRETUI_SIZES];
 // The hue knob's choices: the default plus the contract's muted and state hues.
-const DEFAULT_HUE = 'var(--primary-ink)';
+const DEFAULT_HUE = 'var(--pretui-primary-ink, var(--primary))';
 const HUES = [
   DEFAULT_HUE,
   'var(--muted-foreground)',
@@ -78,7 +78,7 @@ class TokenUsage extends Component {
           @value={{this.size}}
           @options={{SIZES}}
           @defaultValue={{BODY_SIZE}}
-          @description='House scale xs|s|m|l|xl, the same steps as Button; sets the font-size only. Omitted, the size is --boxel-font-size-xs, or --pretui-token-font-size when that is set (Pretui addition).'
+          @description='House scale xs|s|m|l|xl, the same steps as Button; sets the font-size only. Omitted, the size follows --text-body, or --pretui-token-font-size when that is set (Pretui addition).'
           @onInput={{this.setSize}}
         />
         <Args.String
@@ -86,7 +86,7 @@ class TokenUsage extends Component {
           @value={{this.hue}}
           @options={{HUES}}
           @defaultValue={{DEFAULT_HUE}}
-          @description='Validated CSS color for the fill and hairline. Sets --pretui-token-hue, and stays set when the caller also passes a style attribute.'
+          @description='Validated CSS colour for the fill, ink and hairline. Sets --pretui-token-hue, and stays set when the caller also passes a style attribute.'
           @onInput={{this.setHue}}
         />
         <Args.Bool
@@ -105,14 +105,14 @@ class TokenUsage extends Component {
         <Css.Basic
           @name='pretui-token-hue'
           @type='color'
-          @description='Color the fill and hairline are mixed from. Set on the Token or any ancestor, or through @hue.'
-          @defaultValue='var(--primary-ink)'
+          @description='Colour the fill, ink and hairline are mixed from. Set on the Token or any ancestor, or through @hue.'
+          @defaultValue='var(--pretui-primary-ink, var(--primary))'
         />
         <Css.Basic
           @name='pretui-token-font-size'
           @type='dimension'
           @description='Exact font-size for a Token with no @size, such as var(--boxel-font-size-xs). Set on the Token or any ancestor; @size wins over it.'
-          @defaultValue='var(--boxel-font-size-xs)'
+          @defaultValue='calc(var(--text-body, 15px) - 3.5px)'
         />
       </:cssVars>
     </FreestyleUsage>
