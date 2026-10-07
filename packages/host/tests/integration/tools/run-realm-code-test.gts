@@ -461,4 +461,64 @@ return found;`,
       /Directory not found/,
     );
   });
+
+  // The realm-server mock has no realm-creation endpoint, so `createRealm` is
+  // stubbed to hand back the URL the server would mint for the endpoint, and
+  // the realm-info fetch for the unmounted new realm is skipped.
+  function stubWorkspaceCreation() {
+    let calls: { endpoint: string; name: string }[] = [];
+    let realmServer = getService('realm-server');
+    realmServer.createRealm = async (args) => {
+      calls.push(args);
+      return new URL(`http://test-realm/testuser/${args.endpoint}/`);
+    };
+    getService('realm').ensureRealmMeta = async () => {};
+    return calls;
+  }
+
+  test('realm.workspaces.create creates a workspace, returns its URL, and opens it after the run', async function (assert) {
+    let createRealmCalls = stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let created = await realm.workspaces.create({ name: 'Sales Pipeline' });
+return { created, realmAfterCreate: realm.current.url };`,
+    });
+
+    assert.deepEqual(
+      createRealmCalls.map(({ endpoint, name }) => ({ endpoint, name })),
+      [{ endpoint: 'sales-pipeline', name: 'Sales Pipeline' }],
+      'the endpoint is derived from the name, as the create-workspace tool does',
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      created: {
+        url: 'http://test-realm/testuser/sales-pipeline/',
+        name: 'Sales Pipeline',
+      },
+      realmAfterCreate: testRealmURL,
+    });
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      'http://test-realm/testuser/sales-pipeline/index',
+      'the new workspace is opened once the run ends',
+    );
+  });
+
+  test('realm.workspaces.create refuses options that are not strings', async function (assert) {
+    let createRealmCalls = stubWorkspaceCreation();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.create({ name: 42 });`,
+      }),
+      /expects name to be a string/,
+    );
+    assert.strictEqual(createRealmCalls.length, 0, 'no realm is created');
+  });
 });

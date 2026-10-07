@@ -13,6 +13,7 @@ import {
   type ViewedImage,
   type ViewOptions,
 } from '../lib/visual-capture';
+import { createWorkspace } from '../lib/workspaces';
 
 import LintAndFixTool from './lint-and-fix';
 
@@ -32,6 +33,8 @@ const log = logger('tools:run-realm-code');
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
+// A script that loops by mistake must not fill the user's workspace list.
+const MAX_WORKSPACES = 5;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -56,6 +59,12 @@ type ListDirectory = (
   url: string,
 ) => Promise<{ status: number; entries: DirectoryEntry[] }>;
 
+// Creates a workspace owned by the current user and returns its URL and name.
+type CreateWorkspace = (input: {
+  name?: string;
+  endpoint?: string;
+}) => Promise<{ url: string; name: string }>;
+
 // The host half of `realm.fs`: every call the script makes lands here, inside
 // one realm. Reads come from the realm on first use. A write saves the file
 // before the call returns, so a script that awaits each write sees each file
@@ -66,6 +75,8 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
+  // Workspaces created by this run, in order.
+  readonly createdWorkspaces: string[] = [];
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // Calls and saves refused because the run had already ended.
@@ -84,6 +95,7 @@ class RealmFsSession {
     private writeFile: WriteFile,
     private listDirectory: ListDirectory,
     captureURL: CaptureURL,
+    private createWorkspace: CreateWorkspace,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -206,6 +218,39 @@ class RealmFsSession {
       case 'capture': {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
+      }
+      // A new workspace is its own realm: this run cannot write to it. The
+      // script gets its URL, to run more realm code in it.
+      case 'workspaces.create': {
+        let options = args[0] ?? {};
+        if (typeof options !== 'object' || Array.isArray(options)) {
+          throw new TypeError(
+            'realm.workspaces.create expects an options object: { name, endpoint }',
+          );
+        }
+        let { name, endpoint } = options as Record<string, unknown>;
+        for (let [key, value] of Object.entries({ name, endpoint })) {
+          if (
+            value !== undefined &&
+            value !== null &&
+            typeof value !== 'string'
+          ) {
+            throw new TypeError(
+              `realm.workspaces.create expects ${key} to be a string`,
+            );
+          }
+        }
+        if (this.createdWorkspaces.length >= MAX_WORKSPACES) {
+          throw new Error(
+            `Realm code may create at most ${MAX_WORKSPACES} workspaces`,
+          );
+        }
+        let created = await this.createWorkspace({
+          name: (name as string | null) ?? undefined,
+          endpoint: (endpoint as string | null) ?? undefined,
+        });
+        this.createdWorkspaces.push(created.url);
+        return created;
       }
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
@@ -359,6 +404,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.listDirectory(url),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
+      (workspaceInput) =>
+        createWorkspace(
+          { matrixService: this.matrixService, realm: this.realm },
+          workspaceInput,
+        ),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -394,6 +444,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       await session.idle();
       // Writes are saved as they happen, so a failed run can have saved some
       // files already. Name them, so the model knows what state it left.
+      await this.openCreatedWorkspace(session);
       let message = error instanceof Error ? error.message : String(error);
       let saved = [...session.saved];
       // A call the script did not await either finished before the session
@@ -412,6 +463,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     clearTimeout(deadlineTimer);
     session.close();
     await session.idle();
+    await this.openCreatedWorkspace(session);
     let commandModule = await this.loadToolModule();
     return new commandModule.RunRealmCodeResult({
       files: [...session.saved].map(
@@ -450,6 +502,16 @@ export default class RunRealmCodeTool extends HostBaseTool<
         : [],
     );
     return [...saved, ...uploadedImages(result.captures)];
+  }
+
+  // Opens the last workspace the run created, as the create-workspace tool
+  // does. It runs once the script has ended, so the script's own realm calls
+  // never race a workspace switch.
+  private async openCreatedWorkspace(session: RealmFsSession) {
+    let url = session.createdWorkspaces.at(-1);
+    if (url) {
+      await this.operatorModeStateService.openWorkspace(url);
+    }
   }
 
   private async captureURL(
