@@ -7,6 +7,10 @@ name: Lint Catalog
 # including the ones it would leave catalog main with behind a paired catalog
 # pull request that isn't ready to follow it. See packages/catalog/README.md.
 #
+# Production deploys a boxel commit with the catalog at the revision it pins in
+# packages/catalog/test-subset.json, so this also lints the whole catalog at
+# the pin against each change, and fails on every error the change adds there.
+#
 # A pull request declares its catalog pair in its description, so editing the
 # description re-runs this.
 on:
@@ -137,19 +141,51 @@ jobs:
           echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-main-lint-head.json")" >> "$GITHUB_OUTPUT"
           git -C contents checkout --quiet --detach "$paired"
 
+      # Production deploys this boxel with the catalog at its pin, so the
+      # whole catalog at the pin has to work with the change, not only the
+      # subset files boxel's tests load. When the pin is a revision a step
+      # above already linted against the change, that recording is reused.
+      # It is still reported again below, as the pin, against the base
+      # branch's pin: the reports above compare a revision only with itself.
+      - name: Lint the catalog at this change's pin
+        id: pin
+        working-directory: packages/catalog
+        env:
+          MAIN_REVISION: ${{ steps.main.outputs.revision }}
+        run: |
+          pin=$(jq -r .revision test-subset.json)
+          linted=$(git -C contents rev-parse HEAD)
+          echo "revision=$pin" >> "$GITHUB_OUTPUT"
+          if [ "$pin" = "$linted" ]; then
+            cp "$RUNNER_TEMP/catalog-lint-head.json" "$RUNNER_TEMP/catalog-pin-lint-head.json"
+          elif [ "$pin" = "$MAIN_REVISION" ]; then
+            cp "$RUNNER_TEMP/catalog-main-lint-head.json" "$RUNNER_TEMP/catalog-pin-lint-head.json"
+          else
+            git -C contents fetch --quiet --depth=1 origin "$pin"
+            git -C contents checkout --quiet --detach FETCH_HEAD
+            node scripts/lint-sweep.ts --record="$RUNNER_TEMP/catalog-pin-lint-head.json"
+            git -C contents checkout --quiet --detach "$linted"
+          fi
+          echo "errors=$(jq '.diagnostics | length' "$RUNNER_TEMP/catalog-pin-lint-head.json")" >> "$GITHUB_OUTPUT"
+
       # Errors the catalog also has against the base branch are not this
       # change's doing: the catalog may already be broken against boxel main.
       # So when this change's lint finds errors, lint the same catalog revision
       # against the base branch, and the report counts only the difference.
-      # Catalog main, when it was linted above, gets the same comparison.
+      # Catalog main, when it was linted above, gets the same comparison. The
+      # catalog at the pin is compared with the base branch's own pin linted
+      # against the base branch, since a change that moves the pin is answerable
+      # for the errors the new pin brings too.
       # A push to main has no base to compare with, so every error counts.
       - name: Lint the catalog against the base branch
         id: base
-        if: github.event_name == 'pull_request' && (steps.head.outputs.errors != '0' || (steps.main.outputs.errors || '0') != '0')
+        if: github.event_name == 'pull_request' && (steps.head.outputs.errors != '0' || (steps.main.outputs.errors || '0') != '0' || (steps.pin.outputs.errors || '0') != '0')
         env:
           HEAD_ERRORS: ${{ steps.head.outputs.errors }}
           MAIN_ERRORS: ${{ steps.main.outputs.errors || '0' }}
           MAIN_REVISION: ${{ steps.main.outputs.revision }}
+          PIN_ERRORS: ${{ steps.pin.outputs.errors || '0' }}
+          PIN_REVISION: ${{ steps.pin.outputs.revision }}
         run: |
           head=$(git rev-parse HEAD)
           git checkout --detach HEAD^1
@@ -167,6 +203,12 @@ jobs:
             git -C contents checkout --quiet --detach "$MAIN_REVISION"
             node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-main-lint-base.json"
           fi
+          if [ "$PIN_ERRORS" != 0 ]; then
+            base_pin=$(jq -r '.revision // empty' test-subset.json 2>/dev/null || true)
+            git -C contents fetch --quiet --depth=1 origin "${base_pin:-$PIN_REVISION}"
+            git -C contents checkout --quiet --detach FETCH_HEAD
+            node "$RUNNER_TEMP/lint-sweep.ts" --record="$RUNNER_TEMP/catalog-pin-lint-base.json"
+          fi
 
       # Unpaired, this is catalog main, and errors the change adds to it fail
       # with how to declare a pair. Paired, this is the catalog pull request's
@@ -174,7 +216,7 @@ jobs:
       # main lint skips the base step, and without its baseline this report
       # would count errors the catalog already has as new ones.
       - name: Report catalog lint errors
-        if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.main.outcome != 'failure' && steps.base.outcome != 'failure' }}
+        if: ${{ !cancelled() && steps.head.outcome == 'success' && steps.main.outcome != 'failure' && steps.pin.outcome != 'failure' && steps.base.outcome != 'failure' }}
         run: |
           args=(--report="$RUNNER_TEMP/catalog-lint-head.json")
           if [ -f "$RUNNER_TEMP/catalog-lint-base.json" ]; then
@@ -190,11 +232,26 @@ jobs:
       # pull request this change merges before is approved, to merge right
       # after it.
       - name: Report what this change does to catalog main
-        if: ${{ !cancelled() && steps.main.outcome == 'success' && steps.base.outcome != 'failure' }}
+        if: ${{ !cancelled() && steps.main.outcome == 'success' && steps.pin.outcome != 'failure' && steps.base.outcome != 'failure' }}
         run: |
           args=(--report="$RUNNER_TEMP/catalog-main-lint-head.json" --pairing="$RUNNER_TEMP/catalog-pairing.json")
           if [ -f "$RUNNER_TEMP/catalog-main-lint-base.json" ]; then
             args+=(--baseline="$RUNNER_TEMP/catalog-main-lint-base.json")
+          fi
+          node "$RUNNER_TEMP/lint-sweep.ts" "${args[@]}"
+
+      # Every error the change adds to the catalog at its pin fails, paired or
+      # not: production deploys this boxel with that catalog. A pairing only
+      # names the catalog revision to pin instead.
+      - name: Report what this change does to the catalog at its pin
+        if: ${{ !cancelled() && steps.pin.outcome == 'success' && steps.base.outcome != 'failure' }}
+        run: |
+          args=(--report="$RUNNER_TEMP/catalog-pin-lint-head.json" --pinned)
+          if [ -f "$RUNNER_TEMP/catalog-pin-lint-base.json" ]; then
+            args+=(--baseline="$RUNNER_TEMP/catalog-pin-lint-base.json")
+          fi
+          if [ -f "$RUNNER_TEMP/catalog-pairing.json" ]; then
+            args+=(--pairing="$RUNNER_TEMP/catalog-pairing.json")
           fi
           node "$RUNNER_TEMP/lint-sweep.ts" "${args[@]}"
 

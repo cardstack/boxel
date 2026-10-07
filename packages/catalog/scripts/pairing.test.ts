@@ -7,6 +7,7 @@ import { after, before, beforeEach, test } from 'node:test';
 
 import {
   mainVerdict,
+  openPinVerdict,
   pinVerdict,
   resolvePairing,
   type Resolution,
@@ -602,5 +603,80 @@ test('the catalog-main gate refuses a pair this change merges before when the pa
   assert.match(
     verdict.message,
     /cardstack\/boxel-catalog#791 is stacked on cardstack\/boxel-catalog#780, so it can't land on catalog main right after this change/,
+  );
+});
+
+test('the pin may wait on the head of an approved pair this change merges before', () => {
+  let verdict = openPinVerdict(
+    { repository: BOXEL, number: 6454, pairs: [openBefore()] },
+    791,
+    '791'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, true);
+  assert.match(
+    verdict!.message,
+    /Merge cardstack\/boxel-catalog#791 right after this change/,
+  );
+});
+
+test('the pin may not wait on a commit of that pair other than its head', () => {
+  let verdict = openPinVerdict(
+    { repository: BOXEL, number: 6454, pairs: [openBefore()] },
+    791,
+    'abc'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, false);
+  assert.match(verdict!.message, /not its head \(7910+\)/);
+});
+
+test('the pin may not wait on a pair this change merges before until it is approved', () => {
+  let verdict = openPinVerdict(
+    {
+      repository: BOXEL,
+      number: 6454,
+      pairs: [openBefore({ approved: false })],
+    },
+    791,
+    '791'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, false);
+  assert.match(
+    verdict!.message,
+    /cardstack\/boxel-catalog#791 is not approved yet/,
+  );
+});
+
+test('the pin may not wait on a pair this change merges before while this change is stacked', () => {
+  let verdict = openPinVerdict(
+    {
+      repository: BOXEL,
+      number: 6454,
+      stackedOn: 'cardstack/boxel#6417',
+      pairs: [openBefore()],
+    },
+    791,
+    '791'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, false);
+  assert.match(verdict!.message, /stacked on cardstack\/boxel#6417/);
+});
+
+test('the pin has no say over a catalog pull request this change does not merge before', () => {
+  let resolution: Resolution = {
+    repository: BOXEL,
+    number: 6454,
+    pairs: [openBefore({ key: 'merges-after' })],
+  };
+  assert.equal(
+    openPinVerdict(resolution, 791, '791'.padEnd(40, '0')),
+    undefined,
+  );
+  assert.equal(
+    openPinVerdict(
+      { repository: BOXEL, number: 6454, pairs: [openBefore()] },
+      792,
+      '792'.padEnd(40, '0'),
+    ),
+    undefined,
   );
 });
