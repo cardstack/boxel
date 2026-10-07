@@ -37,27 +37,27 @@ export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
     <span class='proprow-control'>{{yield}}</span>
   </div>
   <style scoped>
-    @layer PretComponent {
-      /* workbench inspector row: label rail left, control right */
-      .proprow {
-        display: grid;
-        grid-template-columns: 76px minmax(0, 1fr);
-        gap: 10px;
-        align-items: center;
-        padding: 4px 0;
-      }
-      .proprow-label {
-        font-family: var(--font-mono);
-        font-size: var(--text-ui, 12px);
-        color: var(--muted-foreground);
-        overflow-wrap: anywhere;
-      }
-      .proprow-req {
-        color: var(--pretui-destructive-ink, var(--boxel-danger));
-      }
-      .proprow-control {
-        min-width: 0;
-      }
+    /* workbench inspector row: label rail left, control right */
+    .proprow {
+      --proprow-label-w: 8rem;
+
+      display: grid;
+      grid-template-columns: var(--proprow-label-w) minmax(0, 1fr);
+      gap: var(--boxel-sp-xs);
+      align-items: center;
+      padding-block: var(--boxel-sp-3xs);
+    }
+    .proprow-label {
+      font-family: var(--font-mono);
+      font-size: var(--boxel-font-size-xs);
+      color: var(--muted-foreground);
+      overflow-wrap: break-word;
+    }
+    .proprow-req {
+      color: var(--destructive-ink);
+    }
+    .proprow-control {
+      min-width: 0;
     }
   </style>
 </template>;
@@ -67,22 +67,24 @@ interface PropReadOnlySignature {
   Element: HTMLSpanElement;
 }
 
-export const PropReadOnly: TemplateOnlyComponent<PropReadOnlySignature> = <template>
-  <span class='proprow-readonly' data-test-pretui-prop-readonly>{{@value}}</span>
-  <style scoped>
-    @layer PretComponent {
+export const PropReadOnly: TemplateOnlyComponent<PropReadOnlySignature> =
+  <template>
+    <span
+      class='proprow-readonly'
+      data-test-pretui-prop-readonly
+    >{{@value}}</span>
+    <style scoped>
       .proprow-readonly {
         display: block;
         min-width: 0;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         color: var(--muted-foreground);
         font-family: var(--font-mono);
-        font-size: var(--text-ui-sm, 11.5px);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.4;
       }
-    }
-  </style>
-</template>;
+    </style>
+  </template>;
 // ── Action / Yield / Component presets (doc-only rows) ───────────────────
 export interface UsagePresetSignature {
   Args: {

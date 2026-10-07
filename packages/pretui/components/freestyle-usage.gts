@@ -50,23 +50,23 @@ export interface FreestyleUsageSignature {
 
 export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
   <template>
-    <div class='FreestyleUsage' data-test-pretui-usage ...attributes>
+    <div class='pretui-usage' data-test-pretui-usage ...attributes>
       {{! identity lives in the page header (breadcrumb) — no h2 here; one
           compact description line, then straight to the artboard }}
       {{#if (has-block 'description')}}
         <p
-          class='FreestyleUsage-description'
+          class='pretui-usage-description'
           data-test-pretui-usage-description
         >{{yield to='description'}}</p>
       {{else if @description}}
         <p
-          class='FreestyleUsage-description'
+          class='pretui-usage-description'
           data-test-pretui-usage-description
         >{{@description}}</p>
       {{/if}}
 
-      <div class='FreestyleUsage-stage'>
-        <div class='FreestyleUsage-previewCol'>
+      <div class='pretui-usage-stage'>
+        <div class='pretui-usage-preview-col'>
           <div class='wb-panel'>
             <Viewport @defaultMode={{@viewportMode}} @label={{@name}}>
               {{yield to='example'}}
@@ -87,11 +87,14 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
           </div>
         </div>
         {{#if (has-block 'api')}}
-          <aside class='FreestyleUsage-props' data-test-pretui-usage-props>
-            <h3
-              class='FreestyleUsage-sectionTitle'
+          <aside
+            class='pretui-usage-props wb-panel'
+            data-test-pretui-usage-props
+          >
+            <h2
+              class='pretui-usage-section-title'
               data-test-pretui-usage-section-title
-            >Properties</h3>
+            >Properties</h2>
             {{yield
               (hash
                 Action=(component UsageAction mode='prop')
@@ -117,14 +120,14 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       </div>
 
       {{#if (has-block 'api')}}
-        <div class='FreestyleUsage-api wb-panel' data-test-pretui-usage-api>
+        <div class='pretui-usage-api wb-panel' data-test-pretui-usage-api>
           <div class='wb-panel-h'>
-            <h3
-              class='FreestyleUsage-sectionTitle wb-cap'
+            <h2
+              class='pretui-usage-section-title wb-cap'
               data-test-pretui-usage-section-title
-            >API</h3>
+            >API</h2>
           </div>
-          <Table>
+          <Table @framed={{false}}>
             <:head>
               <tr>
                 <th>Argument</th>
@@ -154,14 +157,14 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       {{/if}}
 
       {{#if (has-block 'cssVars')}}
-        <div class='FreestyleUsage-api wb-panel' data-test-pretui-usage-css-vars>
+        <div class='pretui-usage-api wb-panel' data-test-pretui-usage-css-vars>
           <div class='wb-panel-h'>
-            <h3
-              class='FreestyleUsage-sectionTitle wb-cap'
+            <h2
+              class='pretui-usage-section-title wb-cap'
               data-test-pretui-usage-section-title
-            >CSS Variables</h3>
+            >CSS Variables</h2>
           </div>
-          <Table>
+          <Table @framed={{false}}>
             <:head>
               <tr>
                 <th>Variable</th>
@@ -181,112 +184,106 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       {{/if}}
     </div>
     <style scoped>
-      @layer PretComponent {
-        .FreestyleUsage {
-          display: grid;
-          gap: var(--space-3, 8px);
-          align-content: start;
-          min-width: 0;
-          max-width: 100%;
-        }
-        .FreestyleUsage-description {
-          margin: 0;
-          max-width: 78ch;
-          font-size: var(--text-ui-md, 12.5px);
-          color: var(--muted-foreground);
-          line-height: 1.5;
-        }
-        .FreestyleUsage-stage {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 280px;
-          gap: var(--space-5, 14px);
-          align-items: start;
-        }
-        @media (max-width: 900px) {
-          .FreestyleUsage-stage {
-            grid-template-columns: minmax(0, 1fr);
-          }
-        }
-        .FreestyleUsage-previewCol {
-          display: grid;
-          gap: var(--space-3, 8px);
-          min-width: 0;
-        }
-        /* workbench panel chrome: bordered card, header row, clipped body */
-        .wb-panel {
-          background: var(--card);
-          border-radius: 6px;
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          overflow: hidden;
-          min-width: 0;
-        }
-        .wb-panel-h {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-height: 36px;
-          padding: 8px var(--space-4, 11px);
-          box-shadow: inset 0 -1px 0 var(--border);
-        }
-        h3.wb-cap {
-          margin: 0;
-        }
-        .wb-th-right {
-          text-align: right;
-        }
-        .wb-codestrip {
-          display: flex;
-          align-items: center;
-          gap: var(--space-4, 11px);
-          padding: 6px var(--space-4, 11px);
-          box-shadow: inset 0 1px 0 var(--border);
-          background: var(--card);
-          overflow-x: auto;
-        }
-        .wb-code {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          color: var(--muted-foreground);
-          white-space: pre;
-          flex: 1;
-        }
-        .wb-codestrip > :last-child {
-          flex: none;
-          margin-left: auto;
-        }
-        .FreestyleUsage-props {
-          background: var(--card);
-          border-radius: 6px;
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          padding: var(--space-4, 11px) var(--space-5, 14px)
-            var(--space-5, 14px);
-          min-width: 0;
-          align-self: start;
-          position: sticky;
-          top: 52px;
-        }
-        /* THE caps treatment — panel and group headers only */
-        .FreestyleUsage-sectionTitle {
-          margin: 0 0 var(--space-3, 8px);
-          font-size: var(--text-ui-xs, 11px);
-          font-weight: 600;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: var(--muted-foreground);
-        }
-        .FreestyleUsage-api {
-          min-width: 0;
-        }
-        .FreestyleUsage-source {
-          margin: 0;
-          font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
-          background: var(--inset, var(--boxel-100));
-          border-radius: var(--radius);
-          box-shadow: inset 0 0 0 1px var(--border);
-          padding: var(--space-4, 11px);
-          overflow-x: auto;
-        }
+      .pretui-usage {
+        --pretui-usage-props-w: 22rem;
+        --pretui-usage-panel-h: 2.25rem;
+        --pretui-usage-description-max-w: 64rem;
+
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        align-content: start;
+        min-width: 0;
+        max-width: 100%;
+      }
+      .pretui-usage-description {
+        max-inline-size: var(--pretui-usage-description-max-w);
+        color: var(--muted-foreground);
+      }
+      /* the Properties rail wraps under the preview when the preview would
+         drop below 60% of the row, so it needs no viewport or container
+         query (a container would also capture the examples' fixed popups) */
+      .pretui-usage-stage {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp);
+        /* the props panel is at least as tall as the preview beside it */
+        align-items: stretch;
+      }
+      .pretui-usage-stage > .pretui-usage-preview-col {
+        flex: 999 1 0;
+        min-inline-size: 60%;
+        align-self: start;
+      }
+      /* never narrower than its width: the row stacks first */
+      .pretui-usage-stage > .pretui-usage-props {
+        flex: 1 1 var(--pretui-usage-props-w);
+        /* capped at the row, so a stacked panel on a narrow screen still fits */
+        min-inline-size: min(var(--pretui-usage-props-w), 100%);
+      }
+      .pretui-usage-preview-col {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
+      /* workbench panel chrome: bordered card, header row, clipped body */
+      .wb-panel {
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: 0 0 0 1px var(--border);
+        overflow: hidden;
+        min-width: 0;
+      }
+      .wb-panel-h {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        min-height: var(--pretui-usage-panel-h);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        box-shadow: inset 0 -1px 0 var(--border);
+      }
+      .wb-th-right {
+        text-align: end;
+      }
+      .wb-codestrip {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
+        box-shadow: inset 0 1px 0 var(--border);
+        overflow-x: auto;
+      }
+      .wb-code {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+        white-space: pre;
+        flex: 1;
+      }
+      .wb-codestrip > :last-child {
+        flex: none;
+        margin-inline-start: auto;
+      }
+      /* a wb-panel that keeps its controls' focus rings and menus unclipped */
+      .pretui-usage-props {
+        padding: var(--boxel-sp-sm) var(--boxel-sp) var(--boxel-sp);
+        overflow: visible;
+      }
+      /* THE caps treatment — panel and group headers only */
+      .pretui-usage-section-title {
+        margin-block-end: var(--boxel-sp-xs);
+        font-family: var(--boxel-eyebrow-font-family);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .wb-cap {
+        margin-block-end: 0;
+      }
+      .pretui-usage-api {
+        min-width: 0;
       }
     </style>
   </template>;

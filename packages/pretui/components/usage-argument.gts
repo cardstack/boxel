@@ -44,20 +44,20 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
   }
   <template>
     {{#if this.isDoc}}
-      <tr class='FreestyleUsageArgument' data-test-pretui-usage-arg>
-        <td class='FreestyleUsageArgument-name'>
-          <span class='u-sig'>{{this.sigilPre}}</span>{{#if @name}}{{@name}}{{/if}}<span
-            class='u-sig'
-          >{{this.sigilPost}}</span>
+      <tr class='pretui-usage-arg' data-test-pretui-usage-arg>
+        <td class='pretui-usage-arg-name'>
+          <span class='u-sig'>{{this.sigilPre}}</span>{{#if
+            @name
+          }}{{@name}}{{/if}}<span class='u-sig'>{{this.sigilPost}}</span>
           {{#if @required}}<span
               class='u-req'
               title='Required'
               data-test-pretui-usage-arg-required
             >*</span>{{/if}}
         </td>
-        <td class='FreestyleUsageArgument-type'>{{this.typeLabel}}</td>
-        <td class='FreestyleUsageArgument-description'>{{@description}}</td>
-        <td class='FreestyleUsageArgument-default'>
+        <td class='pretui-usage-arg-type'>{{this.typeLabel}}</td>
+        <td class='pretui-usage-arg-description'>{{@description}}</td>
+        <td class='pretui-usage-arg-default'>
           {{#if this.shouldRenderDefaultValue}}
             {{this.defaultText}}
           {{else}}
@@ -67,42 +67,43 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
       </tr>
     {{/if}}
     <style scoped>
-      @layer PretComponent {
-        .FreestyleUsageArgument-name {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          white-space: nowrap;
-          width: 1%;
-        }
-        .u-sig {
-          color: var(--ink-3, var(--boxel-400));
-        }
-        .u-req {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
-        }
-        .FreestyleUsageArgument-type {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          color: var(--muted-foreground);
-          white-space: nowrap;
-          width: 1%;
-          text-transform: lowercase;
-        }
-        .FreestyleUsageArgument-description {
-          color: var(--foreground);
-          max-width: 520px;
-        }
-        .FreestyleUsageArgument-default {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          color: var(--muted-foreground);
-          text-align: right;
-          white-space: nowrap;
-          width: 1%;
-        }
-        .u-none {
-          color: var(--ink-3, var(--boxel-400));
-        }
+      .pretui-usage-arg {
+        --pretui-usage-arg-description-max-w: 32.5rem;
+      }
+      .pretui-usage-arg-name {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        white-space: nowrap;
+        width: 1%;
+      }
+      .u-sig {
+        color: var(--muted-foreground);
+      }
+      .u-req {
+        color: var(--destructive-ink);
+      }
+      .pretui-usage-arg-type {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        width: 1%;
+        text-transform: lowercase;
+      }
+      .pretui-usage-arg-description {
+        color: var(--foreground);
+        max-width: var(--pretui-usage-arg-description-max-w);
+      }
+      .pretui-usage-arg-default {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+        text-align: end;
+        white-space: nowrap;
+        width: 1%;
+      }
+      .u-none {
+        color: var(--muted-foreground);
       }
     </style>
   </template>

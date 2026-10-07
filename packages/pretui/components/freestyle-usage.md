@@ -35,7 +35,7 @@ No pattern governs it; it is a page composed of the kit's own components, and it
 
 Gaps worth knowing, because a documentation surface is read by exactly the people who care about these:
 
-- **The page's regions have no landmark or heading structure of their own.** Description, example, knobs, API table and source are four or five regions with no `role`, no `aria-label` and — verify — possibly no headings. A screen-reader user cannot jump between "the example" and "the API table". For a docs page that is the single most useful thing to add.
+- **Only part of the page has heading structure.** Properties, API and CSS Variables are headed by `h2`s, so heading navigation reaches the knobs and the tables, and Properties is an `<aside>`. The description and the example have no heading, and no region carries an `aria-label`, so a screen-reader user cannot jump to "the example", and landmark navigation finds an unnamed complementary region.
 - **`@name` is not necessarily a heading**, and if it is, its level is fixed — the kit-wide problem (**Panel**, **Toolbar**, **EmptyState**, **Stat**, **FittedCard** all share it).
 - **The knobs and the API table describe the same arguments and are not linked.** A user reading a row in the docs table has no route to the control that changes it.
 - **The `<pre>` source block** needs `tabindex="0"` if it scrolls, or a keyboard user cannot reach the end of a long line (**WCAG 2.1.1**), and it has no language annotation.
@@ -47,5 +47,3 @@ Gaps worth knowing, because a documentation surface is read by exactly the peopl
 Composes **Viewport**, **Table**, **Select**, **Input**, **Switch**, **Slider**, **SegmentedControl**, **CopyButton** and **Popover**, so it consumes their token sets rather than defining many of its own. Page structure uses `--card`, `--inset`, `--border`, `--foreground`, `--muted-foreground` and the type scale; the property list and API table pick up **Label**'s eyebrow voice.
 
 The whole page renders inside the theme island, so a season change re-dresses both the documentation chrome _and_ the example — which is the point, and is what **ThemeFrame** exists to drive.
-
-The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

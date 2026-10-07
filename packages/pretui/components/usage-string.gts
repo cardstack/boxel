@@ -52,6 +52,7 @@ export class UsageString extends Component<UsageStringSignature> {
                 @options={{this.selectOptions}}
                 @value={{this.valueStr}}
                 @onValueChange={{this.callOnInput}}
+                @label={{@name}}
               />
             {{else}}
               <Input
