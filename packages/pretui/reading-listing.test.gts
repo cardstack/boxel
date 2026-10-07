@@ -628,7 +628,7 @@ module('Pretui | reading-listing', function (hooks) {
       );
     assert
       .dom(
-        '[data-test-pretui-pagination] button:not([data-state="active"]):not([aria-label])',
+        '[data-test-pretui-pagination] button[aria-label^="Page "]:not([data-state="active"])',
       )
       .doesNotHaveAttribute(
         'aria-current',

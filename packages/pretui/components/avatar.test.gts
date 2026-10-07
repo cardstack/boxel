@@ -22,6 +22,9 @@ function hue(el: HTMLElement): string {
   return el.style.getPropertyValue('--pretui-chip-hue').trim();
 }
 // Caller styles as a card would pass them: a bound SafeString.
+// A 1x1 GIF, so the image loads and the photo markup stays.
+const LOADABLE_PHOTO =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const RING_STYLE = htmlSafe('--status-ring: var(--chart-2); margin: 2px');
 const CALLER_HUE_STYLE = htmlSafe('--pretui-chip-hue: var(--muted-foreground)');
 const CALLER_SIZE_STYLE = htmlSafe('--pretui-avatar-size: 3rem');
@@ -36,7 +39,7 @@ module('Pretui | components/avatar', function (hooks) {
     await render(
       <template>
         <Avatar @name='Ada Lovelace' data-test-initials />
-        <Avatar @name='Ada Lovelace' @src='/photo.png' data-test-photo />
+        <Avatar @name='Ada Lovelace' @src={{LOADABLE_PHOTO}} data-test-photo />
       </template>,
     );
     let initials = q('[data-test-initials]');
