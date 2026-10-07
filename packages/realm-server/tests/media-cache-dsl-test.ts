@@ -845,6 +845,9 @@ module(basename(import.meta.filename), function () {
     // The captureSpec each stub render received, so tests can assert the
     // parsed geometry actually reaches the capture engine.
     let capturedSpecs: unknown[];
+    // The renderOptions each stub render received, so tests can assert which
+    // rendering (card or file) a capture went through.
+    let capturedRenderOptions: unknown[];
     // When set, in-flight captures park on it — the lever for the sync-wait
     // timeout test.
     let captureGate: Deferred<void> | undefined;
@@ -875,6 +878,7 @@ module(basename(import.meta.filename), function () {
         adapter = new FakeMediaCacheAdapter();
         captureCalls = 0;
         capturedSpecs = [];
+        capturedRenderOptions = [];
         captureGate = undefined;
         captureFailure = undefined;
         virtualNetwork = new VirtualNetwork();
@@ -910,9 +914,11 @@ module(basename(import.meta.filename), function () {
       let prerenderer = {
         prerenderCapture: async (args: {
           captureSpec?: unknown;
+          renderOptions?: unknown;
         }): Promise<CapturePrerenderResponse> => {
           captureCalls++;
           capturedSpecs.push(args.captureSpec ?? null);
+          capturedRenderOptions.push(args.renderOptions ?? null);
           if (captureGate) {
             await captureGate.promise;
           }
@@ -997,6 +1003,32 @@ module(basename(import.meta.filename), function () {
           file_alias: `${REALM_URL}${localPath}`,
           realm_url: REALM_URL,
           type: 'instance',
+          generation,
+          last_modified: Date.now(),
+          resource_created_at: Date.now(),
+          is_deleted: false,
+          pristine_doc: { attributes: {} },
+        },
+        { jsonFields: ['pristine_doc'] },
+      );
+      await query(
+        dbAdapter,
+        insert('boxel_index', nameExpressions, valueExpressions),
+      );
+    }
+
+    // A file's own index row, keyed by its extension-intact URL. `alias`
+    // defaults to that URL; a `.json` file's row carries the extensionless id.
+    async function seedFileRow(
+      localPath: string,
+      { generation = 1, alias }: { generation?: number; alias?: string } = {},
+    ) {
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          url: `${REALM_URL}${localPath}`,
+          file_alias: alias ?? `${REALM_URL}${localPath}`,
+          realm_url: REALM_URL,
+          type: 'file',
           generation,
           last_modified: Date.now(),
           resource_created_at: Date.now(),
@@ -2356,6 +2388,196 @@ module(basename(import.meta.filename), function () {
         "another reader isn't served it, and the closed gate renders nothing new for them",
       );
       assert.strictEqual(captureCalls, 1, 'nothing rendered for them either');
+    });
+
+    test('a POSTed file capture serves back to its requester on its GET URL, and to no other reader', async function (assert) {
+      await seedFileRow('brand/guide.html');
+      await startWorker();
+
+      let response = await postCapture({
+        realmURL: REALM_URL,
+        fileURL: `${REALM_URL}brand/guide.html`,
+        format: 'isolated',
+      });
+      assert.strictEqual(response.status, 201);
+      assert.strictEqual(captureCalls, 1);
+      let served = response.body.data.attributes.captures?.[0]?.url as string;
+      assert.strictEqual(
+        served,
+        `${REALM_URL}_capture/brand/guide.html`,
+        "the served URL keeps the file's extension",
+      );
+
+      let getResponse = await get(served.slice(REALM_URL.length), 'GET', {
+        Authorization: `Bearer ${realmSession(OWNER)}`,
+      });
+      assert.strictEqual(getResponse.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(getResponse.nodeStream!))],
+        [...PNG_BYTES],
+      );
+      assert.strictEqual(
+        captureCalls,
+        1,
+        "the requester's GET is a pure ledger hit on the POSTed capture",
+      );
+      assert.true(
+        getResponse.headers.get('cache-control')?.startsWith('private,'),
+        `no shared cache may hold one reader's capture: ${getResponse.headers.get('cache-control')}`,
+      );
+
+      let anonymous = await get(served.slice(REALM_URL.length));
+      assert.strictEqual(
+        anonymous.status,
+        403,
+        "another reader isn't served it, and the closed gate renders nothing new for them",
+      );
+      assert.strictEqual(captureCalls, 1, 'nothing rendered for them either');
+    });
+
+    test('an open realm captures a file on demand through its file rendering, keyed by the file row', async function (assert) {
+      await seedFileRow('brand/guide.html', { generation: 4 });
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_capture/brand/guide.html');
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(response.nodeStream!))],
+        [...PNG_BYTES],
+      );
+      assert.strictEqual(captureCalls, 1);
+      assert.true(
+        (capturedRenderOptions[0] as { fileRender?: boolean } | null)
+          ?.fileRender,
+        'the capture renders the file, not a card',
+      );
+      let entry = await findMediaCacheEntry(dbAdapter, {
+        servedTo: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}brand/guide.html`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 4,
+      });
+      assert.strictEqual(entry?.lane, 'on-demand');
+
+      let second = await get('_capture/brand/guide.html');
+      assert.strictEqual(second.status, 200);
+      assert.strictEqual(captureCalls, 1, 'the second request is a pure hit');
+
+      // An edit bumps the file row's generation, which is part of the key.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET generation = 5 WHERE url = '${REALM_URL}brand/guide.html'`,
+      ]);
+      let edited = await get('_capture/brand/guide.html');
+      assert.strictEqual(edited.status, 200);
+      assert.strictEqual(captureCalls, 2, 'the edited file re-captured');
+    });
+
+    test('a deleted file stops serving its captures', async function (assert) {
+      await seedFileRow('brand/guide.html');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}brand/guide.html`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      assert.strictEqual(
+        (await get('_capture/brand/guide.html')).status,
+        200,
+        'the live file serves its capture',
+      );
+
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET is_deleted = TRUE WHERE url = '${REALM_URL}brand/guide.html'`,
+      ]);
+
+      assert.strictEqual((await get('_capture/brand/guide.html')).status, 404);
+    });
+
+    test("a card's .json spelling addresses its file row, and the extensionless id its instance", async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedFileRow('card-1.json', { alias: `${REALM_URL}card-1` });
+      let isolated = await captureSpecHash({ format: 'isolated' });
+      let fileBytes = new TextEncoder().encode('file-capture-bytes');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: isolated,
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1.json`,
+        captureSpecHash: isolated,
+        sourceGeneration: 1,
+        bytes: fileBytes,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+
+      let card = await get('_capture/card-1');
+      assert.strictEqual(card.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(card.nodeStream!))],
+        [...PNG_BYTES],
+        'the extensionless id serves the card capture',
+      );
+      let file = await get('_capture/card-1.json');
+      assert.strictEqual(file.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(file.nodeStream!))],
+        [...fileBytes],
+        'the extension spelling serves the file capture',
+      );
+    });
+
+    test('a .json path with no live file row still addresses the instance', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedCaptureDrawnAs(ANONYMOUS_RENDER);
+
+      let response = await get('_capture/card-1.json');
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(response.nodeStream!))],
+        [...PNG_BYTES],
+      );
+    });
+
+    test('an extensionless file is never captured through the GET route', async function (assert) {
+      // `notes` is spelled like a card id, so its capture would key as a card
+      // capture of `notes`.
+      await seedFileRow('notes');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_capture/notes');
+      assert.strictEqual(response.status, 404);
+      assert.strictEqual(captureCalls, 0);
+    });
+
+    test('a file path does not land on another file row by its alias', async function (assert) {
+      // A file row's alias drops `.json`, so `guide.html.json`'s row carries
+      // `guide.html` as its alias. A request for `guide.html` names a
+      // different file, which that row must not answer for.
+      await seedFileRow('guide.html.json', {
+        alias: `${REALM_URL}guide.html`,
+      });
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_capture/guide.html');
+      assert.strictEqual(response.status, 404);
+      assert.strictEqual(captureCalls, 0);
     });
 
     test('a timed-out custom-spec POST persists anyway; the retry answers from the ledger', async function (assert) {

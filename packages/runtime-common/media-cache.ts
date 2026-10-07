@@ -445,7 +445,9 @@ export async function findLiveInstanceGeneration(
 
 // The generation of a live index row of either type: an instance (see
 // `findLiveInstanceGeneration`) or a file's own row, which is what keys an
-// on-demand capture of a workspace file. Otherwise the predicate is the
+// on-demand capture of a workspace file — on `POST /_capture` and on the
+// GET `_capture/` route alike, so a file capture one persists resolves on
+// the other. Otherwise the predicate is the
 // query engine's `#liveRowConditions` for the same type. An instance is
 // addressable by its `file_alias` (the extensionless id) as well as its URL,
 // but a file only by its own URL: a file row's alias drops `.json` and

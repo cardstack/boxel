@@ -1370,19 +1370,22 @@ export function shouldCarryForwardDeclaredEntry({
   );
 }
 
-// The durable served URL for one capture of one instance: the platform's
-// only public capture URL form. A re-capture changes what this URL
-// serves, never the URL itself.
+// The durable served URL for one capture of one instance or file: the
+// platform's only public capture URL form. `localPath` is the source's
+// ledger spelling within its realm — an instance's extensionless id, a
+// file's path with its extension intact — which is how the GET route tells
+// the two apart. A re-capture changes what this URL serves, never the URL
+// itself.
 export function captureURLFor({
   realmURL,
-  instanceLocalPath,
+  localPath,
   spec,
 }: {
   realmURL: string;
-  instanceLocalPath: string;
+  localPath: string;
   spec: CaptureIdentity;
 }): string {
-  return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}${canonicalCaptureIdentityQuery(
+  return `${realmURL}${CAPTURE_SERVING_PREFIX}${localPath}${canonicalCaptureIdentityQuery(
     spec,
   )}`;
 }

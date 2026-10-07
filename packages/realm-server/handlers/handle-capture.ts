@@ -102,18 +102,19 @@ interface CaptureResult {
  * response. `url` is the durable served URL when the capture persisted under
  * its ledger identity — any singular spec on a capture format, custom
  * geometry and pdf output included — and null when nothing persists (a
- * batch, a `target` capture, a non-capture format such as fitted, a card
- * the index doesn't know, a server without a MediaCache store, or a caller
- * without realm read) — embed the `base64` in that case.
+ * batch, a `target` capture, a non-capture format such as fitted, a card or
+ * file the index doesn't know, a server without a MediaCache store, or a
+ * caller without realm read) — embed the `base64` in that case.
  *
  * A file capture renders the file's FileDef the way indexing renders it (the
  * tab extracts the file's resource, then renders it in the requested format),
  * so any file the index knows — HTML, markdown, an image, a PDF — can be
  * captured. It persists under the file row's generation like a card capture
  * persists under its instance's, which keeps coalescing and the 503-retry
- * ledger hit, but its `url` is always null: the GET `_capture/` route
- * resolves instances, not files, so a file capture is consumed through its
- * `base64`.
+ * ledger hit, and its `url` is the file's own GET `_capture/` URL — the
+ * file's path with its extension intact, which that route resolves to the
+ * file row. A file whose name carries no registered extension is spelled
+ * like a card id, so it never persists and its `url` is null.
  *
  * Request body (JSON:API):
  * ```json
@@ -280,10 +281,10 @@ export default function handleCapture({
     // card capture's key whenever the two rows carry one generation. Such a
     // file is captured but never persisted.
     let persistable = kind === 'card' || urlNamesFile(new URL(sourceURL));
-    // The durable served URL exists only for an instance: the GET
-    // `_capture/` route resolves instances, not files.
-    let servedLocalPath =
-      kind === 'card' ? sourceURL.slice(normalizedRealmURL.length) : null;
+    // The durable served URL hangs off the source's ledger spelling within
+    // its realm, which is how the GET `_capture/` route tells an instance
+    // (extensionless id) from a file (extension intact).
+    let servedLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
     let captureSpecParse = parseCaptureRequestSpec(attrs.captureSpec, format);
     if (captureSpecParse.error) {
@@ -606,21 +607,18 @@ function captureResult({
   deviceScaleFactor?: number | null;
   pageCount?: number;
   normalizedRealmURL: string;
-  // The instance's path within its realm, which its served URL hangs off;
-  // null for a file capture, which has no served URL.
-  servedLocalPath: string | null;
+  // The source's ledger spelling within its realm, which its served URL
+  // hangs off.
+  servedLocalPath: string;
   spec: CaptureIdentity;
 }): CaptureResult {
   return {
     name: null,
-    url:
-      servedLocalPath === null
-        ? null
-        : captureURLFor({
-            realmURL: normalizedRealmURL,
-            instanceLocalPath: servedLocalPath,
-            spec,
-          }),
+    url: captureURLFor({
+      realmURL: normalizedRealmURL,
+      localPath: servedLocalPath,
+      spec,
+    }),
     width,
     height,
     // The effective scale: the engine-reported factor when the capture just
@@ -651,7 +649,7 @@ async function respondFromLedger({
   entry: MediaCacheEntry;
   withBase64: boolean;
   normalizedRealmURL: string;
-  servedLocalPath: string | null;
+  servedLocalPath: string;
   spec: CaptureIdentity;
   mediaCacheAdapter: NonNullable<CreateRoutesArgs['mediaCacheAdapter']>;
   dbAdapter: DBAdapter;
