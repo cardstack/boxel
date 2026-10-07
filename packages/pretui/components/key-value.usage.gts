@@ -65,7 +65,7 @@ class KeyValueUsage extends Component {
           @value={{this.labelStyle}}
           @options={{LABEL_STYLES}}
           @defaultValue='default'
-          @description="'eyebrow' sets the keys in the theme's eyebrow role (--boxel-eyebrow-*), or the kit's mono eyebrow outside a themed card. The --pretui-kv-label-* properties still win (Pretui addition)."
+          @description="'eyebrow' sets the keys in the theme's eyebrow role (--boxel-eyebrow-*), read directly with no fallback. The --pretui-kv-label-* properties still win (Pretui addition)."
           @onInput={{this.setLabelStyle}}
         />
         <Args.Yield
@@ -89,7 +89,7 @@ class KeyValueUsage extends Component {
           @name='pretui-kv-label-font-size'
           @type='dimension'
           @description='Key font size.'
-          @defaultValue='var(--text-ui, 0.75rem)'
+          @defaultValue='var(--boxel-font-size-xs)'
         />
         <Css.Basic
           @name='pretui-kv-label-font-weight'
@@ -99,7 +99,7 @@ class KeyValueUsage extends Component {
         <Css.Basic
           @name='pretui-kv-label-line-height'
           @type='dimension'
-          @description='Key line height.'
+          @description='Key line height. Unset, it reads --pretui-kv-line-height (1.125rem, declared on the list).'
           @defaultValue='1.125rem'
         />
         <Css.Basic

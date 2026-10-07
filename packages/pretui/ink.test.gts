@@ -3,7 +3,7 @@
 //
 // Nothing here asserts a computed style: the components' own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
-// not applied), so every colour and size reads as its initial value. What the ink components actually promise is inline custom
+// not applied), so every color and size reads as its initial value. What the ink components actually promise is inline custom
 // properties, derived text, ARIA and the hue allowlist — all real DOM.
 import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
@@ -273,7 +273,7 @@ module('Pretui | ink', function (hooks) {
     );
     assert.true(
       el.getAttribute('style')?.includes(statusHue('Mei Ling Chen')),
-      'the hue is derived from the name, so the same person keeps the same colour',
+      'the hue is derived from the name, so the same person keeps the same color',
     );
   });
 

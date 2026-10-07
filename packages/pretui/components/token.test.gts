@@ -15,7 +15,7 @@ function q(sel: string): HTMLElement {
   return document.querySelector(sel) as HTMLElement;
 }
 // Caller styles as a card would pass them: a bound SafeString.
-const WRAP_AND_BODY_STYLE = htmlSafe('white-space: normal; --text-body: 14px');
+const WRAP_AND_SIZE_STYLE = htmlSafe('white-space: normal; --pretui-token-font-size: 14px');
 const MUTED_HUE_STYLE = htmlSafe('--pretui-token-hue: var(--muted-foreground)');
 const WRAP_STYLE = htmlSafe('white-space: normal');
 
@@ -58,7 +58,7 @@ module('Pretui | components/token', function (hooks) {
     );
     assert.false(
       q('[data-test-default]').hasAttribute('data-size'),
-      'with no @size the size still follows --text-body',
+      'with no @size the size is the default one',
     );
     assert.strictEqual(q('[data-test-xs]').dataset.size, 'xs');
     assert.strictEqual(q('[data-test-sm]').dataset.size, 's');
@@ -83,13 +83,13 @@ module('Pretui | components/token', function (hooks) {
   test("@hue survives a caller's style, which keeps its own declarations", async function (assert) {
     await render(
       <template>
-        <Token @value='POL-7' @hue='var(--chart-3)' @size='xs' style={{WRAP_AND_BODY_STYLE}} />
+        <Token @value='POL-7' @hue='var(--chart-3)' @size='xs' style={{WRAP_AND_SIZE_STYLE}} />
       </template>,
     );
     let el = q('[data-test-pretui-token]');
     assert.strictEqual(hue(el), 'var(--chart-3)', 'the hue is still on the element');
     assert.strictEqual(el.style.whiteSpace, 'normal', "the caller's declarations are kept");
-    assert.strictEqual(el.style.getPropertyValue('--text-body').trim(), '14px');
+    assert.strictEqual(el.style.getPropertyValue('--pretui-token-font-size').trim(), '14px');
     assert.strictEqual(el.dataset.size, 'xs', 'the size does not depend on the style attribute at all');
   });
 

@@ -6,7 +6,7 @@ What a region shows when it has nothing to show: a title, an optional message, a
 
 ```
 @title: string   (required)
-@message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm')
+@message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm'), @headingLevel? (1-6, default 2)
 <:default>   — the message with markup in it; wins over @message
 <:action>  <:altAction>
 Element: HTMLDivElement
@@ -16,11 +16,13 @@ Element: HTMLDivElement
 
 **This is the one place texture lives.** The kit's Law 6 says decoration is confined, and an EmptyState is where it is allowed: a radial gradient at 8% `--primary` centred slightly above the middle. `@texture={{false}}` turns it off for dense contexts. Everything else in the kit is flat, and that is what makes this read as a deliberate pause rather than as ornament.
 
-**The message takes markup through `<:default>`.** `@message` is plain text. When the message needs a **Token**, a link or emphasis, pass the message as the block; it renders in the same place with the same type, colour and measure. A block wins over its arg, as on **Notification**, **AlertDialog** and **Card**: if both are given, the block renders and `@message` does not.
+**The message takes markup through `<:default>`.** `@message` is plain text. When the message needs a **Token**, a link or emphasis, pass the message as the block; it renders in the same place with the same type, colour and measure. The `@message` arg renders in a `<p>`; the block renders in a `<div>`, because the caller's markup may contain block elements. A block wins over its arg, as on **Notification**, **AlertDialog** and **Card**: if both are given, the block renders and `@message` does not.
 
-**`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `1rem` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
+**`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `--boxel-sp` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
+
+**`@headingLevel`** sets the title's `aria-level` (1 to 6, default 2). An empty state does not know its host's outline, so the caller picks the level that fits where it is placed.
 
 The title is set in `--font-serif`. That is the only serif in the control and structure territories, and it is the signal that this is a moment of address rather than a label.
 
@@ -28,7 +30,7 @@ The title is set in `--font-serif`. That is the only serif in the control and st
 
 **React Spectrum `IllustratedMessage`** is the closest match — an illustration slot, `Heading`, `Content`, and it is what Spectrum's tables render via `renderEmptyState`. **shadcn** ships no empty state; it is a documentation recipe. **Web Awesome** has none. **SLDS** has an `illustration` blueprint with a fixed set of SVGs.
 
-Pretui differs on the illustration question, and it is the interesting one: Spectrum and SLDS both centre the pattern on an **illustration**, which means every product must commission or choose art, and most ship the same three stock SVGs everywhere. Pretui substitutes a **generated texture** — a tinted radial that picks up the season's `--primary` — so an empty state looks intentional and on-brand with zero assets. That is a genuinely better default for a system where cards are authored quickly.
+Pretui differs on the illustration question, and it is the interesting one: Spectrum and SLDS both centre the pattern on an **illustration**, which means every product must commission or choose art, and most ship the same three stock SVGs everywhere. Pretui substitutes a **generated texture** — a tinted radial that picks up the theme's `--primary` — so an empty state looks intentional and on-brand with zero assets. That is a genuinely better default for a system where cards are authored quickly.
 
 The other improvement: **`@title` being required**. Spectrum's `Heading` is optional.
 
@@ -40,7 +42,7 @@ No APG pattern. Relevant criteria: WCAG **1.3.1**, **2.4.6 Headings and Labels**
 
 Gaps, and the first two are the real ones:
 
-- **The title is a `<div>`, not a heading.** `.pretui-empty-title` is styled to look like one (serif, `--text-heading`) but carries no `<h*>` and no `role="heading"`, so it does not appear in a screen reader's heading list and does not structure the region. Given that **Panel** and **Toolbar** in this same territory hard-code `<h2>`, the inconsistency is striking — and the right answer for all three is the same authorable `@headingLevel` that **ErrorSummary** already has.
+- **The title is a heading by role.** `.pretui-empty-title` carries `role="heading"` and an `aria-level` from `@headingLevel` (default 2), the same authorable level **ErrorSummary** has, so it appears in a screen reader's heading list. It is a styled `<div>` rather than an `<h*>`, so it brings no default margins or weight. Set the level to fit the host page's outline.
 - **Nothing announces the transition to empty.** When a filter reduces a table to nothing, the empty state replaces the rows silently. A `role="status"` on the container would announce "No matching records" — and would have to exist before the change to work, which is the usual live-region caveat. This is the single most useful addition.
 - **The texture layer has no `aria-hidden`**, though it is an empty `<div>` with no content, so nothing is announced — correct by accident rather than by declaration.
 - **The empty state does not replace a table's semantics.** If you render it _instead of_ a `<tbody>`, screen-reader users lose the table's structure and get a bare region. React Spectrum's `renderEmptyState` renders inside the grid for exactly this reason. Placement is the caller's responsibility here.
@@ -49,9 +51,11 @@ Gaps, and the first two are the real ones:
 
 ## Theming
 
-`--canvas` (the surface — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--primary` (the texture tint, at 8%), `--font-serif` and `--text-heading` (title), `--muted-foreground` and `--text-ui-md` (message), `--radius-surface`, `--space-2/3/6/9`. At `@size='s'` the padding is a fixed `1rem` and the title reads `--boxel-font-size`, so `--space-6/9` and `--text-heading` no longer apply.
+`--canvas` with its paired `--foreground` (the surface and the ink for the title, message and separator — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--border` (the separator rules), `--primary` (the texture tint, at 8%), `--font-serif`, `--boxel-heading-font-size` and `--boxel-heading-font-weight` (title), `--boxel-font-size-xs` (message), `--boxel-font-size-2xs` (separator), `--radius`, and `--boxel-sp-2xs/xs/sm/lg/3xl` for the gaps and padding. At `@size='s'` the padding is `--boxel-sp` and the title reads `--boxel-font-size`, so `--boxel-sp-lg/3xl` padding and `--boxel-heading-font-size` no longer apply.
 
-A season **must** define `--font-serif`; it is used almost nowhere else, so a season that omits it falls back to Georgia and the one moment of typographic voice in the kit lands on a system font. A season must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
+The message and separator are set in `--foreground`, at the smaller size, because the contract guarantees `--muted-foreground` only on `--background`, `--card` and `--muted`, not on the neutral `--canvas`.
+
+A theme **must** define `--font-serif`; it is used almost nowhere else, so a season that omits it falls back to Georgia and the one moment of typographic voice in the kit lands on a system font. A theme must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

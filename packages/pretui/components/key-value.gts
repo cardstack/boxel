@@ -63,13 +63,14 @@ export class KeyValue extends Component<KeyValueSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-kv {
+          --pretui-kv-line-height: 1.125rem;
           display: grid;
           grid-template-columns: max-content 1fr;
-          column-gap: var(--space-6, 1.1875rem);
-          row-gap: 0.4375rem;
-          font-size: var(--text-ui-md, 0.78125rem);
+          column-gap: var(--boxel-sp-lg);
+          row-gap: var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-xs);
           align-content: start;
-          align-items: center;
+          align-items: first baseline;
           margin: 0;
         }
         /* Key typography knobs. The four without a fallback inherit while
@@ -77,49 +78,57 @@ export class KeyValue extends Component<KeyValueSignature> {
         .pretui-kv dt {
           color: var(--pretui-kv-label-color, var(--muted-foreground));
           font-family: var(--pretui-kv-label-font-family);
-          font-size: var(--pretui-kv-label-font-size, var(--text-ui, 0.75rem));
+          font-size: var(
+            --pretui-kv-label-font-size,
+            var(--boxel-font-size-xs)
+          );
           font-weight: var(--pretui-kv-label-font-weight);
-          line-height: var(--pretui-kv-label-line-height, 1.125rem);
+          line-height: var(
+            --pretui-kv-label-line-height,
+            var(--pretui-kv-line-height)
+          );
           letter-spacing: var(--pretui-kv-label-letter-spacing);
           text-transform: var(--pretui-kv-label-text-transform);
         }
-        /* The theme's eyebrow role (--boxel-eyebrow-*, set inside a card),
-           else the kit's own mono eyebrow. The knobs above still win. */
+        /* The theme's eyebrow role (--boxel-eyebrow-*). The knobs above
+           still win. */
         .pretui-kv[data-label-style='eyebrow'] dt {
           font-family: var(
             --pretui-kv-label-font-family,
-            var(--boxel-eyebrow-font-family, var(--font-mono))
+            var(--boxel-eyebrow-font-family)
           );
           font-size: var(
             --pretui-kv-label-font-size,
-            var(--boxel-eyebrow-font-size, var(--text-ui-xs, 0.6875rem))
+            var(--boxel-eyebrow-font-size)
           );
           font-weight: var(
             --pretui-kv-label-font-weight,
-            var(--boxel-eyebrow-font-weight, 500)
+            var(--boxel-eyebrow-font-weight)
           );
           line-height: var(
             --pretui-kv-label-line-height,
-            var(--boxel-eyebrow-line-height, 1.125rem)
+            var(--boxel-eyebrow-line-height)
           );
           letter-spacing: var(
             --pretui-kv-label-letter-spacing,
-            var(--boxel-eyebrow-letter-spacing, var(--track-eyebrow, 0.08em))
+            var(--boxel-eyebrow-letter-spacing)
           );
           text-transform: var(--pretui-kv-label-text-transform, uppercase);
         }
         .pretui-kv dd {
           margin: 0;
+          min-width: 0;
+          overflow-wrap: break-word;
           display: flex;
           align-items: center;
-          gap: 0.375rem;
+          gap: var(--boxel-sp-2xs);
         }
         .pretui-kv[data-layout='stacked'] {
           grid-template-columns: minmax(0, 1fr);
-          row-gap: 0.125rem;
+          row-gap: var(--boxel-sp-6xs);
         }
         .pretui-kv[data-layout='stacked'] dt:not(:first-child) {
-          margin-block-start: 0.5rem;
+          margin-block-start: var(--boxel-sp-xs);
         }
         .pretui-kv[data-layout='inline'] {
           display: flex;
@@ -128,8 +137,8 @@ export class KeyValue extends Component<KeyValueSignature> {
         }
         .pretui-kv-pair {
           display: flex;
-          align-items: center;
-          gap: 0.375rem;
+          align-items: baseline;
+          gap: var(--boxel-sp-2xs);
           min-inline-size: 0;
         }
       }

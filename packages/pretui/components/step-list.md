@@ -37,9 +37,9 @@ Where it is thinner: no branching, no per-step actions, and no vertical variant 
 
 - **It is an ordered list**, so position and count come from the markup rather than from a rendered "3 of 5".
 - **`@announce` is the component's most considered decision.** A progress rail is the definitional case of a state change happening away from the reader's attention, and defaulting the live region on — while staying silent on mount — is the right trade. The polite `role="status"` region is persistent and starts empty, the pattern React Aria and Web Awesome use, because a region mounted together with its text is often not announced at all.
-- **State is text, not colour.** Complete, current and upcoming are announced as such.
+- **State is text, not color.** Complete, current and upcoming are announced as such.
 - **`@summary` is wired to the list**, so "3 of 5 complete" is associated rather than floating above it.
-- **`@summaryFormat` exists for localisation**, since the default sentence is English word order.
+- **`@summaryFormat` exists for localization**, since the default sentence is English word order.
 
 ## Theming
 

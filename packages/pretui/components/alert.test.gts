@@ -40,9 +40,23 @@ module('Pretui | components/alert', function (hooks) {
     );
     let glyphs = alerts().map((el) => el.querySelector('.pretui-alert-glyph'));
     assert.deepEqual(
+      glyphs.map((g) => g?.querySelector('svg')?.getAttribute('class')),
+      [
+        'lucide lucide-info',
+        'lucide lucide-check',
+        'lucide lucide-alert-triangle',
+        'lucide lucide-x',
+      ],
+      'each tone paints its own icon, and no text glyph',
+    );
+    assert.deepEqual(
       glyphs.map((g) => g?.textContent?.trim()),
-      ['i', '✓', '!', '✕'],
-      'each tone still paints its glyph',
+      ['', '', '', ''],
+      'the glyph carries no text',
+    );
+    assert.true(
+      glyphs.every((g) => g?.querySelector('svg')?.hasAttribute('width') && g?.querySelector('svg')?.hasAttribute('height')),
+      'the icons are sized by attribute, not CSS',
     );
     assert.deepEqual(
       glyphs.map((g) => g?.getAttribute('aria-hidden')),

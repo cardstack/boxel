@@ -31,6 +31,32 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.strictEqual(el.dataset.size, 'm', 'the default size is emitted as m');
   });
 
+  test('the title is a heading, level 2 unless @headingLevel says otherwise', async function (assert) {
+    await render(
+      <template>
+        <EmptyState @title='a' data-test-default />
+        <EmptyState @title='b' @headingLevel={{4}} data-test-four />
+        <EmptyState @title='c' @headingLevel={{9}} data-test-clamped />
+      </template>,
+    );
+    let title = (sel: string) => q(sel).querySelector('.pretui-empty-title');
+    assert.strictEqual(title('[data-test-default]')?.getAttribute('role'), 'heading');
+    assert.strictEqual(title('[data-test-default]')?.getAttribute('aria-level'), '2');
+    assert.strictEqual(title('[data-test-four]')?.getAttribute('aria-level'), '4');
+    assert.strictEqual(title('[data-test-clamped]')?.getAttribute('aria-level'), '6', 'out-of-range levels are clamped');
+  });
+
+  test('@message renders in a paragraph and the block in a div', async function (assert) {
+    await render(
+      <template>
+        <EmptyState @title='a' @message='plain' data-test-arg />
+        <EmptyState @title='b' data-test-block>rich <em>text</em></EmptyState>
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-arg] .pretui-empty-msg')?.tagName, 'P');
+    assert.strictEqual(q('[data-test-block] .pretui-empty-msg')?.tagName, 'DIV');
+  });
+
   test('EmptyState drops the texture on request', async function (assert) {
     await render(<template><EmptyState @title='Nothing here' @texture={{false}} /></template>);
     assert.notOk(q('.pretui-empty-texture'));

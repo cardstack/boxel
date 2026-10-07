@@ -9,6 +9,7 @@ export interface MeterSignature {
     segments?: number;
     label: string; // Law 4: segments always ship a text label
     hue?: string;
+    /** bar heights in px, written as rem (÷ 16) so they follow the root font size */
     heights?: number[];
   };
   Element: HTMLSpanElement;
@@ -21,7 +22,7 @@ export class Meter extends Component<MeterSignature> {
     let out = [];
     for (let i = 0; i < segments; i++) {
       let h = heights[i] ?? heights[heights.length - 1];
-      out.push({ on: i < this.levelNow, style: htmlSafe(`height: ${h}px`) });
+      out.push({ on: i < this.levelNow, style: htmlSafe(`height: ${h / 16}rem`) });
     }
     return out;
   }
@@ -84,24 +85,24 @@ export class Meter extends Component<MeterSignature> {
         .pretui-meter {
           display: inline-flex;
           align-items: flex-end;
-          gap: 8px;
+          gap: var(--boxel-sp-xs);
         }
         .pretui-meter-bars {
           display: inline-flex;
           align-items: flex-end;
-          gap: 2px;
-          height: 14px;
+          gap: var(--boxel-sp-6xs);
+          height: 0.875rem;
         }
         .pretui-meter-bar {
-          width: 4px;
-          border-radius: 2px;
-          background: var(--line-strong, var(--boxel-400));
+          width: 0.25rem;
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: var(--border-strong);
         }
         .pretui-meter-bar[data-on] {
-          background: var(--pretui-meter-hue, var(--primary));
+          background-color: var(--pretui-meter-hue, var(--primary));
         }
         .pretui-meter-label {
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground);
           line-height: 1;

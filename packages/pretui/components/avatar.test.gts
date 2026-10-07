@@ -32,6 +32,26 @@ const CALLER_IMPORTANT_STYLE = htmlSafe(
 module('Pretui | components/avatar', function (hooks) {
   setupCardTest(hooks);
 
+  test('the initials case is an image with the name as its label; the photo case leaves that to the img alt', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Ada Lovelace' data-test-initials />
+        <Avatar @name='Ada Lovelace' @src='/photo.png' data-test-photo />
+      </template>,
+    );
+    let initials = q('[data-test-initials]');
+    assert.strictEqual(initials.getAttribute('role'), 'img');
+    assert.strictEqual(initials.getAttribute('aria-label'), 'Ada Lovelace');
+    assert.strictEqual(initials.textContent?.trim(), 'AL');
+    assert.notOk(initials.hasAttribute('data-has-image'));
+
+    let photo = q('[data-test-photo]');
+    assert.notOk(photo.hasAttribute('role'), 'no role on the root with a photo');
+    assert.notOk(photo.hasAttribute('aria-label'), 'no label on the root with a photo');
+    assert.strictEqual(photo.getAttribute('data-has-image'), 'true');
+    assert.strictEqual(photo.querySelector('img')?.getAttribute('alt'), 'Ada Lovelace', 'the img alt carries the name');
+  });
+
   test('@size is written as rem, and no size is written without it', async function (assert) {
     await render(
       <template>

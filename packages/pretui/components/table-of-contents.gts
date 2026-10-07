@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
+import { element } from '@cardstack/boxel-ui/helpers';
 import { modifier } from 'ember-modifier';
 
 // ── TableOfContents ──────────────────────────────────────────────────────
@@ -126,6 +127,9 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
   get links(): boolean {
     return this.args.links ?? true;
   }
+  get rowTag(): 'a' | 'button' {
+    return this.links ? 'a' : 'button';
+  }
   get spy(): boolean {
     return this.args.spy ?? this.links;
   }
@@ -245,12 +249,13 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         {{! role='list' is not redundant: list-style:none strips list
             semantics in Safari/VoiceOver, and the lint rule allows ol+list }}
         <ol class='pretui-toc-list' role='list'>
-          {{#each this.rows key='item.id' as |row index|}}
-            <li class='pretui-toc-row' style={{row.style}}>
-              {{#if this.links}}
-                <a
+          {{#let (element this.rowTag) as |Row|}}
+            {{#each this.rows key='item.id' as |row index|}}
+              <li class='pretui-toc-row' style={{row.style}}>
+                <Row
                   class='pretui-toc-link'
-                  href={{this.hrefFor row}}
+                  href={{if this.links (this.hrefFor row)}}
+                  type={{unless this.links 'button'}}
                   data-toc-id={{row.item.id}}
                   data-active={{if (this.isActive row) 'true'}}
                   aria-current={{if (this.isActive row) 'location'}}
@@ -261,25 +266,10 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
                   {{else}}
                     {{row.item.label}}
                   {{/if}}
-                </a>
-              {{else}}
-                <button
-                  type='button'
-                  class='pretui-toc-link'
-                  data-toc-id={{row.item.id}}
-                  data-active={{if (this.isActive row) 'true'}}
-                  aria-current={{if (this.isActive row) 'location'}}
-                  {{on 'click' (fn this.activate row.item.id)}}
-                >
-                  {{#if (has-block 'item')}}
-                    {{yield row.item (this.isActive row) index to='item'}}
-                  {{else}}
-                    {{row.item.label}}
-                  {{/if}}
-                </button>
-              {{/if}}
-            </li>
-          {{/each}}
+                </Row>
+              </li>
+            {{/each}}
+          {{/let}}
         </ol>
       </div>
     </nav>
@@ -287,11 +277,11 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
       @layer PretComponent {
         .pretui-toc {
           min-width: 0;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-toc-track {
           position: relative;
-          padding-left: var(--pretui-toc-rail-gap, 11px);
+          padding-left: var(--pretui-toc-rail-gap, var(--boxel-sp-sm));
         }
         /* the rail the marker travels down */
         .pretui-toc-track::before {
@@ -301,23 +291,23 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
           top: 0;
           bottom: 0;
           width: 1px;
-          background: var(--border);
+          background-color: var(--border);
         }
         .pretui-toc-list {
           list-style: none;
           margin: 0;
           padding: 0;
           display: grid;
-          gap: 1px;
+          gap: var(--boxel-sp-6xs);
         }
         .pretui-toc-marker {
           position: absolute;
           left: 0;
           width: 2px;
           border-radius: 1px;
-          background: var(--pretui-primary-ink, var(--primary));
-          top: var(--pretui-toc-marker-top, 0px);
-          height: var(--pretui-toc-marker-height, 0px);
+          background-color: var(--primary-ink);
+          top: var(--pretui-toc-marker-top, 0);
+          height: var(--pretui-toc-marker-height, 0);
           opacity: var(--pretui-toc-marker-opacity, 0);
           transition:
             top 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1)),
@@ -325,33 +315,36 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         }
         .pretui-toc-row {
           padding-left: calc(
-            var(--pretui-toc-indent, 11px) * (var(--_level, 1) - 1)
+            var(--pretui-toc-indent, var(--boxel-sp-sm)) * (var(--_level, 1) - 1)
           );
           min-width: 0;
         }
         .pretui-toc-link {
           display: block;
-          padding: 3px 6px;
-          border-radius: var(--radius-chip, 6px);
+          padding: var(--boxel-sp-3xs) var(--boxel-sp-2xs);
+          border-radius: var(--boxel-border-radius-sm);
           color: var(--muted-foreground);
           text-decoration: none;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          transition: color 140ms var(--pretui-ease-snap, ease);
+          transition-property: color, background-color;
+          transition-duration: 140ms;
+          transition-timing-function: var(--pretui-ease-snap, ease);
         }
         /* button mode: the same row, without the button's own chrome */
         button.pretui-toc-link {
           width: 100%;
           border: 0;
-          background: transparent;
-          font: inherit;
+          background-color: transparent;
+          font-family: inherit;
+          font-size: inherit;
+          line-height: inherit;
           text-align: start;
-          cursor: pointer;
         }
         .pretui-toc-link:hover {
           color: var(--foreground);
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-toc-link[data-active='true'] {
           color: var(--foreground);
@@ -361,8 +354,8 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
         }
-        /* Law 5 — reduced motion keeps the END state (the marker is already
-           parked on the active row), it just stops travelling */
+        /* reduced motion keeps the END state (the marker is already parked on
+           the active row), it just stops travelling */
         @media (prefers-reduced-motion: reduce) {
           .pretui-toc-marker,
           .pretui-toc-link {
