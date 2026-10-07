@@ -80,6 +80,14 @@ import {
   waitForPendingCreditTracking,
   scheduleFallbackCostTracking,
 } from './lib/credit-tracking.ts';
+import {
+  compactRoomHistory,
+  isContextLengthExceededError,
+} from './lib/compaction.ts';
+import {
+  compactingStatusMessage,
+  contextLengthExceededErrorMessage,
+} from './constants.ts';
 
 let log = logger('ai-bot');
 
@@ -151,6 +159,16 @@ class Assistant {
     );
   }
 
+  async compactHistory(
+    opts: Omit<Parameters<typeof compactRoomHistory>[0], 'openai' | 'client'>,
+  ) {
+    return compactRoomHistory({
+      ...opts,
+      openai: this.openai,
+      client: this.client,
+    });
+  }
+
   async setTitle(
     roomId: string,
     history: DiscreteMatrixEvent[],
@@ -167,6 +185,41 @@ class Assistant {
       senderMatrixUserId,
     );
   }
+}
+
+// Debits a generation's cost under the per-user cost lock, so the next
+// same-user credit gate observes it.
+async function debitUsageCost(
+  senderMatrixUserId: string,
+  costInUsd: number | undefined,
+  generationId: string | undefined,
+) {
+  await assistant.pgAdapter.withUserCostLock(senderMatrixUserId, async () => {
+    if (
+      typeof costInUsd === 'number' &&
+      Number.isFinite(costInUsd) &&
+      costInUsd > 0
+    ) {
+      await spendUsageCost(assistant.pgAdapter, senderMatrixUserId, costInUsd);
+    } else if (generationId) {
+      // No inline cost: fall back to the slow generation-cost API. Register
+      // it in the tracking map here (inside the lock) so the next same-user
+      // request's waitForPendingCreditTracking observes it, but let the
+      // fetch + debit run detached — its backoff can take up to 10 minutes
+      // and must not pin the lock's connection that long.
+      scheduleFallbackCostTracking({
+        dbAdapter: assistant.pgAdapter,
+        matrixUserId: senderMatrixUserId,
+        generationId,
+        openRouterApiKey: process.env.OPENROUTER_API_KEY!,
+        trackAiUsageCostPromises,
+      });
+    } else {
+      log.warn(
+        `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
+      );
+    }
+  });
 }
 
 let startTime = Date.now();
@@ -662,204 +715,268 @@ Common issues are:
             return;
           }
 
-          log.info(
-            `[${eventId}] Starting generation with model %s`,
-            promptParts.model,
-          );
-          const requestStart = Date.now();
-          let firstChunkAt: number | undefined;
-          if (profEnabled()) {
-            profNote(eventId, 'llm:request:start', {
-              model: promptParts.model,
-            });
-          }
-          try {
-            let roundCostInUsd: number | undefined;
-            const runner = assistant
-              .getResponse(
-                promptParts,
-                senderMatrixUserId,
-                botTools.map((tool) => tool.definition),
-              )
-              .on('chunk', async (chunk, snapshot) => {
-                log.info(`[${eventId}] Received chunk %s`, chunk.id);
-                if (profEnabled() && firstChunkAt == null) {
-                  firstChunkAt = Date.now();
-                  profNote(eventId, 'llm:ttft', {
-                    ms: firstChunkAt - requestStart,
-                    model: promptParts.model,
-                  });
-                }
-                generationId = chunk.id;
-                if (chunk.usage && (chunk.usage as any).cost != null) {
-                  roundCostInUsd = (chunk.usage as any).cost;
-                }
-                let activeGeneration = activeGenerations.get(room.roomId);
-                if (activeGeneration) {
-                  activeGeneration.lastGeneratedChunkId = generationId;
-                }
-
-                let chunkProcessingResult = await profTime(
-                  eventId,
-                  'llm:chunk:onChunk',
-                  async () => responder.onChunk(chunk, snapshot),
-                );
-                let chunkProcessingResultError = chunkProcessingResult.find(
-                  (promiseResult) =>
-                    promiseResult &&
-                    'errorMessage' in promiseResult &&
-                    promiseResult.errorMessage != null,
-                ) as { errorMessage: string } | undefined;
-
-                if (chunkProcessingResultError) {
-                  chunkHandlingError = chunkProcessingResultError.errorMessage;
-
-                  // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
-                  // then we want to stop accepting more chunks by aborting the runner. This will throw an error
-                  // where the await responder.finalize() is called (the catch block below will handle this)
-                  runner.abort();
-                }
-              })
-              .on('error', async (error) => {
-                await responder.onError(error);
-              });
-
-            activeGenerations.set(room.roomId, {
-              responder,
-              runner,
-              lastGeneratedChunkId: generationId,
-              completionPromise: generationCompletionPromise,
-            });
-
-            let completion = await profTime(
-              eventId,
-              'llm:finalChatCompletion',
-              async () => runner.finalChatCompletion(),
-            );
-            if (typeof roundCostInUsd === 'number') {
-              costInUsd = (costInUsd ?? 0) + roundCostInUsd;
-            }
-
-            log.info(`[${eventId}] Generation complete`);
-            await profTime(eventId, 'response:finalize', async () =>
-              responder.finalize(),
-            );
-            log.info(`[${eventId}] Response finalized`);
-
-            // Bot tools are fulfilled by ai-bot itself. The answer has
-            // already streamed (with their calls surfaced as executedBy:
-            // 'ai-bot' command requests); now each tool runs its calls and
-            // publishes their command-result events, and the normal
-            // command-result path
-            // drive the continuation on a later turn — exactly as a host
-            // command result would. Because reads now resolve next-turn like
-            // host commands, an answer may freely mix the two; the host
-            // fulfills its commands, we fulfill ours, and getShouldRespond
-            // waits for all of them before generating again.
-            let message = completion.choices?.[0]?.message;
-            let { botToolCalls } = message
-              ? classifyToolCalls(message)
-              : { botToolCalls: [] };
-            // Only the bot tools this room was offered are run, and a call
-            // held for the user's approval waits for it.
-            botToolCalls = botToolCalls.filter(
-              (call) =>
-                call.type === 'function' &&
-                botToolTurns
-                  .get(call.function.name)
-                  ?.needsApproval(call.function.arguments) === false,
-            );
-            if (botToolCalls.length > 0 && responder.responseEventId) {
-              // Defer fulfillment until after the room lock is released
-              // (see the finally below): fulfilling posts a result event
-              // that re-triggers the bot, and that re-trigger needs the
-              // room lock this handler still holds here.
-              pendingFulfillBotToolCalls = botToolCalls;
-              pendingFulfillRequestEventId = responder.responseEventId;
-              pendingFulfillAgentId = agentId;
-            }
-          } catch (error) {
-            // Aborting the runner always surfaces as APIUserAbortError, but
-            // the user is not the only one who aborts it: the chunk handler
-            // does too when publishing a chunk fails, and that failure is
-            // the answer being cut off rather than withdrawn. Telling them
-            // apart by `chunkHandlingError` keeps a send failure from being
-            // recorded as a cancellation — which reads to the user as an
-            // answer that simply stops mid-sentence, with no error to act on
-            // and nothing in the log but "canceled by user".
-            if (error instanceof APIUserAbortError && chunkHandlingError) {
-              log.error(
-                `[${eventId}] Generation aborted after a chunk could not be published`,
-              );
-              log.error(chunkHandlingError);
-              await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-            } else if (error instanceof APIUserAbortError) {
-              log.info(`[${eventId}] Generation was canceled by user`);
-              await responder.finalize({ isCanceled: true });
-            } else {
-              log.error(`[${eventId}] Error during generation or finalization`);
-              log.error(error);
-              if (chunkHandlingError) {
-                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
-              } else {
-                await responder.onError(error as OpenAIError);
-              }
-            }
-          } finally {
-            // Debit the inline cost under the per-user lock so the next
-            // same-user gate observes it before validating. This path has the
-            // best data (both costInUsd from inline chunks and
-            // generationId). The user-facing response is already
-            // finalized, so a billing-write failure here must not skip the
-            // activeGenerations cleanup below (a stale entry would make a
-            // later message abort an already-finished run); swallow and log
-            // it, and let the next request surface any billing error via
-            // validateAICredits / waitForPendingCreditTracking.
+          // Summarizes the room so its prompt fits the model again. Returns
+          // the event list with the compaction event, or undefined when
+          // nothing could be compacted.
+          let compactForRetry = async (): Promise<
+            DiscreteMatrixEvent[] | undefined
+          > => {
+            await responder.showStatus(compactingStatusMessage);
             try {
-              await assistant.pgAdapter.withUserCostLock(
-                senderMatrixUserId,
-                async () => {
-                  if (
-                    typeof costInUsd === 'number' &&
-                    Number.isFinite(costInUsd) &&
-                    costInUsd > 0
-                  ) {
-                    await spendUsageCost(
-                      assistant.pgAdapter,
-                      senderMatrixUserId,
-                      costInUsd,
-                    );
-                  } else if (generationId) {
-                    // No inline cost: fall back to the slow generation-cost
-                    // API. Register it in the tracking map here (inside the
-                    // lock) so the next same-user request's
-                    // waitForPendingCreditTracking observes it, but let the
-                    // fetch + debit run detached — its backoff can take up to
-                    // 10 minutes and must not pin the lock's connection that
-                    // long.
-                    scheduleFallbackCostTracking({
-                      dbAdapter: assistant.pgAdapter,
-                      matrixUserId: senderMatrixUserId,
-                      generationId,
-                      openRouterApiKey: process.env.OPENROUTER_API_KEY!,
-                      trackAiUsageCostPromises,
-                    });
-                  } else {
-                    log.warn(
-                      `No usage cost and no generation ID for user ${senderMatrixUserId}, skipping credit deduction`,
-                    );
-                  }
-                },
+              let result = await profTime(
+                eventId,
+                'history:compact',
+                async () =>
+                  assistant.compactHistory({
+                    roomId: room.roomId,
+                    aiBotUserId,
+                    eventList,
+                    history: promptParts.history,
+                    senderMatrixUserId,
+                    botTools: botTools.map((tool) => tool.definition),
+                    recordCost: (cost, costGenerationId) =>
+                      debitUsageCost(
+                        senderMatrixUserId,
+                        cost,
+                        costGenerationId,
+                      ),
+                  }),
               );
-            } catch (costError) {
-              log.error(`[${eventId}] Failed to record AI usage cost`);
-              log.error(costError);
-              Sentry.captureException(costError, {
+              if (!result.compacted) {
+                log.warn(
+                  `[${eventId}] Could not compact the room history: ${result.reason}`,
+                );
+                return undefined;
+              }
+              log.info(`[${eventId}] Compacted the room history`);
+              return result.eventList;
+            } catch (compactionError) {
+              log.error(`[${eventId}] Error compacting the room history`);
+              log.error(compactionError);
+              Sentry.captureException(compactionError, {
                 extra: { roomId: room.roomId, eventId },
               });
+              return undefined;
             }
-            activeGenerations.delete(room.roomId);
-          }
+          };
+
+          // A prompt the provider rejects as too long for the model is
+          // compacted once (see lib/compaction.ts) and the turn runs again.
+          let compactionAttempted = false;
+          let retryAfterCompaction: boolean;
+          do {
+            retryAfterCompaction = false;
+            log.info(
+              `[${eventId}] Starting generation with model %s`,
+              promptParts.model,
+            );
+            const requestStart = Date.now();
+            let firstChunkAt: number | undefined;
+            if (profEnabled()) {
+              profNote(eventId, 'llm:request:start', {
+                model: promptParts.model,
+              });
+            }
+            try {
+              let roundCostInUsd: number | undefined;
+              const runner = assistant
+                .getResponse(
+                  promptParts,
+                  senderMatrixUserId,
+                  botTools.map((tool) => tool.definition),
+                )
+                .on('chunk', async (chunk, snapshot) => {
+                  log.info(`[${eventId}] Received chunk %s`, chunk.id);
+                  if (profEnabled() && firstChunkAt == null) {
+                    firstChunkAt = Date.now();
+                    profNote(eventId, 'llm:ttft', {
+                      ms: firstChunkAt - requestStart,
+                      model: promptParts.model,
+                    });
+                  }
+                  generationId = chunk.id;
+                  if (chunk.usage && (chunk.usage as any).cost != null) {
+                    roundCostInUsd = (chunk.usage as any).cost;
+                  }
+                  let activeGeneration = activeGenerations.get(room.roomId);
+                  if (activeGeneration) {
+                    activeGeneration.lastGeneratedChunkId = generationId;
+                  }
+
+                  let chunkProcessingResult = await profTime(
+                    eventId,
+                    'llm:chunk:onChunk',
+                    async () => responder.onChunk(chunk, snapshot),
+                  );
+                  let chunkProcessingResultError = chunkProcessingResult.find(
+                    (promiseResult) =>
+                      promiseResult &&
+                      'errorMessage' in promiseResult &&
+                      promiseResult.errorMessage != null,
+                  ) as { errorMessage: string } | undefined;
+
+                  if (chunkProcessingResultError) {
+                    chunkHandlingError =
+                      chunkProcessingResultError.errorMessage;
+
+                    // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+                    // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+                    // where the await responder.finalize() is called (the catch block below will handle this)
+                    runner.abort();
+                  }
+                })
+                .on('error', async (error) => {
+                  // Handled where the generation's promise rejects, below.
+                  if (isContextLengthExceededError(error)) {
+                    return;
+                  }
+                  await responder.onError(error);
+                });
+
+              activeGenerations.set(room.roomId, {
+                responder,
+                runner,
+                lastGeneratedChunkId: generationId,
+                completionPromise: generationCompletionPromise,
+              });
+
+              let completion = await profTime(
+                eventId,
+                'llm:finalChatCompletion',
+                async () => runner.finalChatCompletion(),
+              );
+              if (typeof roundCostInUsd === 'number') {
+                costInUsd = (costInUsd ?? 0) + roundCostInUsd;
+              }
+
+              log.info(`[${eventId}] Generation complete`);
+              await profTime(eventId, 'response:finalize', async () =>
+                responder.finalize(),
+              );
+              log.info(`[${eventId}] Response finalized`);
+
+              // Bot tools are fulfilled by ai-bot itself. The answer has
+              // already streamed (with their calls surfaced as executedBy:
+              // 'ai-bot' command requests); now each tool runs its calls and
+              // publishes their command-result events, and the normal
+              // command-result path
+              // drive the continuation on a later turn — exactly as a host
+              // command result would. Because reads now resolve next-turn like
+              // host commands, an answer may freely mix the two; the host
+              // fulfills its commands, we fulfill ours, and getShouldRespond
+              // waits for all of them before generating again.
+              let message = completion.choices?.[0]?.message;
+              let { botToolCalls } = message
+                ? classifyToolCalls(message)
+                : { botToolCalls: [] };
+              // Only the bot tools this room was offered are run, and a call
+              // held for the user's approval waits for it.
+              botToolCalls = botToolCalls.filter(
+                (call) =>
+                  call.type === 'function' &&
+                  botToolTurns
+                    .get(call.function.name)
+                    ?.needsApproval(call.function.arguments) === false,
+              );
+              if (botToolCalls.length > 0 && responder.responseEventId) {
+                // Defer fulfillment until after the room lock is released
+                // (see the finally below): fulfilling posts a result event
+                // that re-triggers the bot, and that re-trigger needs the
+                // room lock this handler still holds here.
+                pendingFulfillBotToolCalls = botToolCalls;
+                pendingFulfillRequestEventId = responder.responseEventId;
+                pendingFulfillAgentId = agentId;
+              }
+            } catch (error) {
+              // Aborting the runner always surfaces as APIUserAbortError, but
+              // the user is not the only one who aborts it: the chunk handler
+              // does too when publishing a chunk fails, and that failure is
+              // the answer being cut off rather than withdrawn. Telling them
+              // apart by `chunkHandlingError` keeps a send failure from being
+              // recorded as a cancellation — which reads to the user as an
+              // answer that simply stops mid-sentence, with no error to act on
+              // and nothing in the log but "canceled by user".
+              if (error instanceof APIUserAbortError && chunkHandlingError) {
+                log.error(
+                  `[${eventId}] Generation aborted after a chunk could not be published`,
+                );
+                log.error(chunkHandlingError);
+                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+              } else if (isContextLengthExceededError(error)) {
+                log.info(
+                  `[${eventId}] The prompt is too long for model %s`,
+                  promptParts.model,
+                );
+                let compactedEventList: DiscreteMatrixEvent[] | undefined;
+                // Only a request that streamed nothing is tried again, and
+                // only once: a second rejection means the prompt is too long
+                // even without the history a summary can replace.
+                if (!compactionAttempted && !generationId) {
+                  compactionAttempted = true;
+                  compactedEventList = await compactForRetry();
+                }
+                let compactedPromptParts: PromptParts | undefined;
+                if (compactedEventList) {
+                  try {
+                    compactedPromptParts = await getPromptParts(
+                      compactedEventList,
+                      aiBotUserId,
+                      client,
+                    );
+                  } catch (promptError) {
+                    log.error(
+                      `[${eventId}] Error building the prompt after compaction`,
+                    );
+                    log.error(promptError);
+                  }
+                }
+                if (compactedEventList && compactedPromptParts) {
+                  eventList = compactedEventList;
+                  promptParts = compactedPromptParts;
+                  retryAfterCompaction = true;
+                } else {
+                  await responder.onError(contextLengthExceededErrorMessage);
+                }
+              } else if (error instanceof APIUserAbortError) {
+                log.info(`[${eventId}] Generation was canceled by user`);
+                await responder.finalize({ isCanceled: true });
+              } else {
+                log.error(
+                  `[${eventId}] Error during generation or finalization`,
+                );
+                log.error(error);
+                if (chunkHandlingError) {
+                  await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+                } else {
+                  await responder.onError(error as OpenAIError);
+                }
+              }
+            } finally {
+              // Debit the inline cost under the per-user lock so the next
+              // same-user gate observes it before validating. This path has the
+              // best data (both costInUsd from inline chunks and
+              // generationId). The user-facing response is already
+              // finalized, so a billing-write failure here must not skip the
+              // activeGenerations cleanup below (a stale entry would make a
+              // later message abort an already-finished run); swallow and log
+              // it, and let the next request surface any billing error via
+              // validateAICredits / waitForPendingCreditTracking.
+              try {
+                await debitUsageCost(
+                  senderMatrixUserId,
+                  costInUsd,
+                  generationId,
+                );
+              } catch (costError) {
+                log.error(`[${eventId}] Failed to record AI usage cost`);
+                log.error(costError);
+                Sentry.captureException(costError, {
+                  extra: { roomId: room.roomId, eventId },
+                });
+              }
+              activeGenerations.delete(room.roomId);
+            }
+          } while (retryAfterCompaction);
           generationCompleted = true;
 
           if (

@@ -35,6 +35,23 @@ export default class ResponseState {
     }
   }
 
+  // A status (such as "Summarizing earlier conversation...") shown in place
+  // of reasoning until the generation produces its own.
+  private statusReasoning: string | undefined;
+
+  setStatus(status: string) {
+    this.statusReasoning = status;
+    this.latestReasoning = status;
+  }
+
+  private isPlaceholderReasoning() {
+    return (
+      this.latestReasoning === thinkingMessage ||
+      (this.statusReasoning !== undefined &&
+        this.latestReasoning === this.statusReasoning)
+    );
+  }
+
   setAllowedToolNames(names: Iterable<string> | undefined) {
     this.allowedToolNames = names ? new Set(names) : undefined;
   }
@@ -81,6 +98,9 @@ export default class ResponseState {
       });
       let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
       if (this.toolCallsJson !== latestToolCallsJson) {
+        if (this.isPlaceholderReasoning()) {
+          this.latestReasoning = '';
+        }
         this.toolCalls = toolCallsSnapshot;
         this.toolCallsJson = latestToolCallsJson;
         return true;
@@ -93,7 +113,7 @@ export default class ResponseState {
     if (contentSnapshot?.length) {
       contentSnapshot = cleanContent(contentSnapshot);
       if (this.latestContent !== contentSnapshot) {
-        if (this.latestReasoning === thinkingMessage) {
+        if (this.isPlaceholderReasoning()) {
           this.latestReasoning = '';
         }
         this.latestContent = contentSnapshot;
@@ -105,7 +125,7 @@ export default class ResponseState {
 
   private updateReasoning(newReasoningContent: string | undefined) {
     if (newReasoningContent?.length) {
-      if (this.latestReasoning === thinkingMessage) {
+      if (this.isPlaceholderReasoning()) {
         this.latestReasoning = '';
       }
       this.latestReasoning = this.latestReasoning + newReasoningContent;

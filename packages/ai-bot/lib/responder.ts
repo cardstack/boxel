@@ -139,6 +139,14 @@ export class Responder {
     await this.matrixResponsePublisher.ensureThinkingMessageSent();
   }
 
+  // Replaces the thinking placeholder with a status until the generation
+  // streams its own reasoning or content.
+  async showStatus(status: string) {
+    await this.ensureThinkingMessageSent();
+    this.responseState.setStatus(status);
+    await this.sendMessageEvent();
+  }
+
   sendMessageEventWithThrottling = () => {
     if (this.needsMessageSend) {
       return; // already scheduled

@@ -76,6 +76,12 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
+import {
+  compactionSummaryMessage,
+  getLatestCompaction,
+  historyAfterCompaction,
+  type CompactionContent,
+} from './compaction.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
@@ -256,6 +262,7 @@ export async function getPromptParts(
     client,
     inputModalities,
     sessionSkillFeatures(eventList, aiBotUserId),
+    getLatestCompaction(eventList, aiBotUserId),
   );
   return {
     shouldRespond,
@@ -1529,6 +1536,7 @@ export async function buildPromptForModel(
   client: MatrixClient,
   inputModalities?: string[],
   enabledSkillFeatures: string[] = [],
+  compaction?: CompactionContent,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1538,7 +1546,9 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
-  for (let event of history) {
+  // History through the compaction's cut point is replaced by its summary,
+  // which leads the history. Single messages are never shortened or edited.
+  for (let event of historyAfterCompaction(history, compaction)) {
     // Tool results have their own event types, so this also skips them;
     // they ride in with the tool calls they answer.
     if (event.type !== 'm.room.message') {
@@ -1628,6 +1638,14 @@ export async function buildPromptForModel(
       }),
     },
   ];
+  if (compaction) {
+    // A user message, not part of the system message: the summary is a
+    // record of the conversation, not instructions.
+    messages.push({
+      role: 'user',
+      content: compactionSummaryMessage(compaction.summary),
+    });
+  }
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
     history,

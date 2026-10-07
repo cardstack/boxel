@@ -1,5 +1,14 @@
 export const thinkingMessage = 'Thinking...';
 
+// Shown while ai-bot summarizes a room whose prompt is too long for the
+// model, before it tries the turn again.
+export const compactingStatusMessage = 'Summarizing earlier conversation...';
+
+// Shown when a prompt is still too long after compaction, or when nothing
+// can be compacted.
+export const contextLengthExceededErrorMessage =
+  'This conversation is too long for the context window of the model, even after summarizing earlier messages. Start a new session, or select a model with a larger context window.';
+
 // Shown when the provider stops a generation at its maximum output-token
 // limit (finish_reason 'length'): the answer is cut off, not withdrawn, so
 // the partial content stays in the room and this rides alongside it.
