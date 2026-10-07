@@ -2,6 +2,7 @@ import {
   currentURL,
   click,
   fillIn,
+  find,
   focus,
   triggerKeyEvent,
   triggerEvent,
@@ -181,6 +182,62 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       await settled();
 
       assert.dom('[data-test-pet-title]').containsText('Renamed via UI');
+    });
+
+    test('clicking the visible header of a buried card closes the cards above it', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      let buriedHeader = find(
+        '[data-test-stack-card-index="0"] [data-test-stack-card-header]',
+      );
+      let topCard = find('[data-test-stack-card-index="1"]');
+      if (!buriedHeader || !topCard) {
+        throw new Error('expected a buried card header and a top card');
+      }
+
+      // Aim the way a pointer would: at the middle of the strip of the
+      // buried header that shows above the top card, and click whatever
+      // element is hit there.
+      let headerRect = buriedHeader.getBoundingClientRect();
+      let visibleBottom = Math.min(
+        headerRect.bottom,
+        topCard.getBoundingClientRect().top,
+      );
+      assert.ok(
+        visibleBottom > headerRect.top,
+        'part of the buried header shows above the top card',
+      );
+      let target = document.elementFromPoint(
+        headerRect.left + headerRect.width / 2,
+        (headerRect.top + visibleBottom) / 2,
+      );
+      if (!target) {
+        throw new Error('no element is hit over the buried header');
+      }
+      assert.ok(
+        buriedHeader.contains(target),
+        `the buried header receives the pointer (hit: ${target.tagName}.${target.getAttribute('class')})`,
+      );
+
+      await click(target);
+
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the clicked card is now the top of the stack');
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {
