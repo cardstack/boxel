@@ -7,9 +7,10 @@ A **Chip** whose colour is derived from the value rather than chosen. Pass `@val
 ```
 @value: string   (required)
 @hue?            — override; the exception, not the norm
+@tone?           — Chip's tone (default neutral)
 ```
 
-Two args, and the second one you should rarely reach for.
+Three args, and the last two you should rarely reach for. A toned StatusChip is outlined in that tone and its dot takes the tone, so `@tone` is for a status whose meaning is fixed, like `live`; the hash hue stays on a neutral chip.
 
 **The hue is a hash, and the hash is the point.** `statusHue()` runs a 32-bit polynomial rolling hash (`h * 31 + charCode`, unsigned) over the string and takes `h % 5` to index `--chart-1` … `--chart-5`. Deterministic, dependency-free, and — the property that matters — **stable across cards, realms and sessions**. No registry, no config, no design review to add a status.
 
@@ -34,7 +35,7 @@ No APG pattern; it is text with a background and carries no role — correct.
 Everything **Chip** says applies, and one thing more, which is the important one:
 
 - **Colour conveys nothing here, and that is a feature.** Because the hue is a hash, it is _not_ meaningful, so a user who cannot perceive it loses nothing that the label does not already carry. That makes StatusChip trivially **WCAG 1.4.1** compliant in a way that a semantic-colour chip is not — the label is always the message.
-- **But contrast still applies.** Ink is `color-mix(--foreground 34%, hue)` on a `color-mix(hue 20%, --card)` fill at **11px, weight 500**. All five `--chart-*` hues must clear **WCAG 1.4.3** at that size, in every season, in both modes — and unlike Chip, you cannot avoid a bad hue by not using it, because the hash will eventually pick it. Testing one chart hue is not enough; test all five.
+- **Contrast does not depend on the hue.** The text is Chip's `--foreground` on `--muted` (or a tone's `-ink` on `--card`), at **11px, weight 500**; the hash hue only colors the dot, so no `--chart-*` value can make the label illegible.
 - **The dot inherits from Chip and is on by default**, giving each hue a saturated anchor. Since the hues are arbitrary, the dot is doing less work here than it does on a semantic Chip — but it still helps distinguish adjacent chips whose fills are close.
 - **The chip has no relationship to the field it describes.** "In Review" announced next to a record name is loose text; put it in a **KeyValue** row or a **FormField** static block if the property name matters.
 - **No `aria-label` and no title.** The value is the visible text and the accessible text, which is right.
@@ -42,6 +43,6 @@ Everything **Chip** says applies, and one thing more, which is the important one
 
 ## Theming
 
-Inherits **Chip**'s entire token set: `--pretui-chip-hue` (set here from the hash), `--pretui-chip-mix` (20%), `--pretui-ink-mix` (34%), `--card`, `--foreground`, `--border`, `--radius-chip`, `--text-ui-xs`, `--track-ui`.
+Inherits **Chip**'s entire token set; `--pretui-chip-hue` is set here from the hash.
 
-The palette a season must define is `--chart-1` through `--chart-5`, and this component is the reason those five need to work as a _set_ rather than individually: they will appear side by side in a list, assigned arbitrarily, so they must be mutually distinguishable at 18px and each legible as an ink/fill pair. A season that tunes its chart palette for line charts — where hues sit apart and at full saturation — and does not re-check it at 20% tint behind 11px text will get a status list that is either muddy or illegible. This is the single most common season failure in the ink territory.
+The theme's `--chart-1` through `--chart-5` color the dots, and this component is the reason those five need to work as a _set_: they appear side by side in a list, assigned arbitrarily, so they must be mutually distinguishable as small dots on `--muted`.
