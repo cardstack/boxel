@@ -42,7 +42,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import { Message } from './message';
-import MessageTool from './message-tool';
+import MessageTool, { type NeverAutoExecutesFor } from './message-tool';
 
 import type { RoomMember } from './member';
 import type { ToolCallStatus } from '@cardstack/base/command';
@@ -533,15 +533,24 @@ export default class MessageBuilder {
 
     let actionVerb = 'Apply';
     let neverAutoExecutes = false;
+    let neverAutoExecutesFor: NeverAutoExecutesFor | undefined;
     if (skillTool?.codeRef) {
       let CommandKlass = (await getClass(
         skillTool?.codeRef,
         this.loaderService.loader,
-      )) as { actionVerb?: string; neverAutoExecutes?: boolean };
+      )) as {
+        actionVerb?: string;
+        neverAutoExecutes?: boolean;
+        neverAutoExecutesFor?: NeverAutoExecutesFor;
+      };
       if (CommandKlass?.actionVerb) {
         actionVerb = CommandKlass.actionVerb;
       }
       neverAutoExecutes = CommandKlass?.neverAutoExecutes === true;
+      if (typeof CommandKlass?.neverAutoExecutesFor === 'function') {
+        neverAutoExecutesFor =
+          CommandKlass.neverAutoExecutesFor.bind(CommandKlass);
+      }
     }
 
     let requiresApproval = skillTool?.requiresApproval ?? true;
@@ -564,6 +573,7 @@ export default class MessageBuilder {
       getOwner(this)!,
       toolResultEvent?.content.failureReason,
       neverAutoExecutes,
+      neverAutoExecutesFor,
     );
     return messageTool;
   }
