@@ -473,7 +473,9 @@ export class RealmIndexUpdater {
     try {
       await completed;
     } catch (e: any) {
-      this.#log.error(`Error running from-scratch-index: ${e.message}`);
+      this.#log.error(
+        `Realm ${this.realmURL.href} failed indexing: error running from-scratch-index: ${e.message}`,
+      );
       // Preserve the historical fullIndex() behavior for fire-and-forget
       // callers such as startup.
     }

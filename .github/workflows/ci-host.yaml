@@ -515,7 +515,7 @@ jobs:
           retention-days: 30
       - name: Realm boot index times
         if: ${{ !cancelled() }}
-        run: mise run ci:realm-index-times /tmp/server.log
+        run: mise run ci:realm-index-times /tmp/server.log "live tests"
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
@@ -979,7 +979,7 @@ jobs:
           retention-days: 30
       - name: Realm boot index times
         if: ${{ !cancelled() }}
-        run: mise run ci:realm-index-times /tmp/server.log
+        run: mise run ci:realm-index-times /tmp/server.log "shard ${{ matrix.shardIndex }}"
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
