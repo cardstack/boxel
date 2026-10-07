@@ -10,6 +10,7 @@ It was added for the freestyle dogfood pass, when composite tables like the Comp
 @caption?   — the table's name, rendered as a real <caption>
 @labelledBy? — id of an on-screen element that names the table (aria-labelledby on the <table>)
 @label?     — the name when it is nowhere on screen (aria-label on the <table>)
+@framed?    — false drops the radius and hairline, for a table inside a panel (default true)
 <:caption>  — a rich caption; wins over @caption
 <:head>   <:body>
 Element: HTMLDivElement
@@ -19,7 +20,7 @@ Element: HTMLDivElement
 
 **`@label` and `@labelledBy` name the `<table>`, which deliberately differs from DataTable.** DataTable's `@label` names its scroll region (a `role='region'` box with a tab stop) and sits alongside its caption: the caption names the table, the label names the region. Table has no such region — its wrapper is a plain `<div>` — so the only thing left to name is the `<table>`, and a caption already does that. Hence `@label` and `@labelledBy` here are the caption's stand-ins rather than a second name, and are dropped when a caption renders.
 
-The one non-obvious thing: **the yielded cells are styled partly through `:deep()`.** The component renders `<thead>` and `<tbody>` itself, so the inherited properties sit on those two elements and flow into your cells: the mono header voice, its ink and `nowrap` on `thead`, and top alignment on `tbody`. What the browser's `th` rule overrides (weight, alignment) and what doesn't inherit (padding, height, backgrounds, row rules, the sticky position) has to reach into content the component did not render, so `.pretui-table :deep(thead th)`, `:deep(td)`, `:deep(tbody th)`, `:deep(tbody tr:nth-child(even) td)` and `:deep(tbody tr:hover td)` (and their `th` twins) do that work. This is a legitimate, narrow use of the escape hatch — the alternative would be a `<Table.Row>`/`<Table.Cell>` component pair, which buys type safety at the cost of the "just write a table" affordance the component exists to provide.
+The one non-obvious thing: **the yielded cells are styled partly through `:deep()`.** The component renders `<thead>` and `<tbody>` itself, so the inherited properties sit on those two elements and flow into your cells: the mono header voice, its ink and `nowrap` on `thead`, and top alignment on `tbody`. What the browser's `th` rule overrides (weight, alignment) and what doesn't inherit (padding, height, backgrounds, row rules, the sticky position) has to reach into content the component did not render, so `.pretui-table :deep(thead th)`, `:deep(td)`, `:deep(tbody th)`, `:deep(tbody tr:nth-child(even))`, `:deep(tbody tr:hover)` and `:deep(tbody tr:last-child td)` (with its `th` twin, which drops the last row rule where the frame already draws the edge) do that work. Zebra and hover paint the row, beneath its cells, so a caller's own cell background still shows. This is a legitimate, narrow use of the escape hatch — the alternative would be a `<Table.Row>`/`<Table.Cell>` component pair, which buys type safety at the cost of the "just write a table" affordance the component exists to provide.
 
 **The header band is scoped to `thead`.** Only the column headers in `<:head>` get the sticky mono band; the header voice is set on `thead`, so it never reaches the body. A row header — `<th scope='row'>` in `<:body>` — wears the body-cell rules instead: the cell padding, the row rule, zebra and hover, top alignment and start alignment, keeping the browser's bold `th` weight. So a matrix with row headers needs no override to undo the band.
 
@@ -33,7 +34,7 @@ Pretui differs from shadcn on one axis and it is the interesting one: **shadcn g
 
 The improvement over both: it **reads the boxel theme contract**, so a hand-built table follows whatever theme the card wears — surface, header band, zebra, hover, type roles and spacing ladder — with no season tokens and no literal fallbacks. DataGrid still reads the Pret season tokens and fixed metrics for the same parts, so the two differ outside a season: Table's header is set in the label role at the label size, DataGrid's in a fixed 10px eyebrow.
 
-The cost, stated plainly: no sorting, no selection, no virtualisation, no column definitions, and no way to add them without switching components.
+The cost, stated plainly: no sorting, no selection, no virtualization, no column definitions, and no way to add them without switching components.
 
 ## Accessibility
 

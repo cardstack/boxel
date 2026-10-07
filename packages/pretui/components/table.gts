@@ -1,5 +1,6 @@
 // Pretui — Table: the DataGrid shell as a yieldable primitive for custom tables.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 // Table — the DataGrid shell as a yieldable primitive (added for the
 // freestyle dogfood pass: composite tables that need custom cell content —
@@ -15,6 +16,9 @@ export interface TableSignature {
     /** id of an on-screen element (a heading) that names the table; lands as
      * `aria-labelledby` on the `<table>` and is dropped when a caption renders */
     labelledBy?: string;
+    /** false drops the table's own radius and hairline, for a table seated
+     * inside a panel that already draws them (default true) */
+    framed?: boolean;
   };
   Blocks: { caption: []; head: []; body: [] };
   Element: HTMLDivElement;
@@ -25,7 +29,12 @@ export interface TableSignature {
 // @labelledBy and @label only land when neither renders, and @labelledBy wins
 // over @label, as aria-labelledby does over aria-label.
 export const Table: TemplateOnlyComponent<TableSignature> = <template>
-  <div class='pretui-tablewrap' data-test-pretui-table ...attributes>
+  <div
+    class='pretui-tablewrap'
+    data-framed={{if (eq @framed false) 'false'}}
+    data-test-pretui-table
+    ...attributes
+  >
     <table
       class='pretui-table'
       aria-labelledby={{if
@@ -59,10 +68,14 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         min-width: 0;
         max-width: 100%;
         max-height: var(--pretui-table-max-height, none);
-        border-radius: var(--radius);
+        border-radius: var(--boxel-border-radius);
         box-shadow: 0 0 0 1px var(--border);
         background-color: var(--card);
         color: var(--card-foreground);
+      }
+      .pretui-tablewrap[data-framed='false'] {
+        border-radius: 0;
+        box-shadow: none;
       }
       .pretui-table {
         --pretui-table-head-height: 1.875rem;
@@ -110,19 +123,25 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         box-shadow: inset 0 -1px 0 var(--border);
       }
+      /* the frame (Table's own ring, or the panel a frameless table sits in)
+         already draws the bottom edge */
+      .pretui-table :deep(tbody tr:last-child td),
+      .pretui-table :deep(tbody tr:last-child th) {
+        box-shadow: none;
+      }
       /* Kept off td: at this specificity it would beat a caller's own td
          alignment in the same layer, such as UsageArgument's right-aligned
          Default column. */
       .pretui-table :deep(tbody th) {
         text-align: start;
       }
-      .pretui-table :deep(tbody tr:nth-child(even) td),
-      .pretui-table :deep(tbody tr:nth-child(even) th) {
+      /* zebra and hover paint the row, beneath its cells, so a caller's
+         own cell background still shows */
+      .pretui-table :deep(tbody tr:nth-child(even)) {
         background-color: var(--stripe);
       }
       @media (hover: hover) {
-        .pretui-table :deep(tbody tr:hover td),
-        .pretui-table :deep(tbody tr:hover th) {
+        .pretui-table :deep(tbody tr:hover) {
           background-color: var(--hover);
         }
       }
