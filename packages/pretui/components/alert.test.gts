@@ -39,13 +39,13 @@ module('Pretui | components/alert', function (hooks) {
       </template>,
     );
     let glyphs = alerts().map((el) => el.querySelector('.pretui-alert-glyph'));
-    let classes = glyphs.map((g) => g?.querySelector('svg')?.getAttribute('class'));
+    let icons = glyphs.map((g) => g?.querySelector('svg')?.innerHTML);
     assert.true(
-      classes.every((c) => Boolean(c)),
-      `each tone paints an svg icon; got ${JSON.stringify(classes)} from ${JSON.stringify(glyphs.map((g) => g?.innerHTML.slice(0, 160)))}`,
+      icons.every((markup) => Boolean(markup)),
+      'each tone paints an svg icon',
     );
     assert.strictEqual(
-      new Set(classes).size,
+      new Set(icons).size,
       4,
       'each tone paints its own icon, and no text glyph',
     );

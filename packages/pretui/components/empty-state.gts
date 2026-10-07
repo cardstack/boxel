@@ -22,8 +22,6 @@ export interface EmptyStateSignature {
     separator?: string;
     /** 's' is the compact well for an empty note inside a card section; 'm' (default) sizes for a page section */
     size?: PretuiSizeArg;
-    /** aria-level of the title heading (1-6, default 2). An empty state does not know its host's outline, so the caller sets the level that fits where it is placed. */
-    headingLevel?: number;
   };
   Blocks: {
     /** The message with markup in it (a Token, a link, emphasis); wins over @message when both are given. */
@@ -53,10 +51,6 @@ export class EmptyState extends Component<EmptyStateSignature> {
   get size(): EmptyStateSize {
     return EMPTY_STATE_SIZES[resolveSize(this.args.size)] ?? 'm';
   }
-  get headingLevel(): string {
-    let level = Math.round(this.args.headingLevel ?? 2);
-    return String(Math.min(6, Math.max(1, level)));
-  }
   <template>
     <div
       class='pretui-empty'
@@ -65,11 +59,7 @@ export class EmptyState extends Component<EmptyStateSignature> {
       ...attributes
     >
       {{#if this.showTexture}}<div class='pretui-empty-texture'></div>{{/if}}
-      <div
-        class='pretui-empty-title'
-        role='heading'
-        aria-level={{this.headingLevel}}
-      >{{@title}}</div>
+      <div class='pretui-empty-title'>{{@title}}</div>
       {{#if (has-block)}}
         {{! A div, not a p: the caller's markup may contain block elements. }}
         <div class='pretui-empty-msg'>{{yield}}</div>

@@ -6,7 +6,7 @@ What a region shows when it has nothing to show: a title, an optional message, a
 
 ```
 @title: string   (required)
-@message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm'), @headingLevel? (1-6, default 2)
+@message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm')
 <:default>   — the message with markup in it; wins over @message
 <:action>  <:altAction>
 Element: HTMLDivElement
@@ -21,8 +21,6 @@ Element: HTMLDivElement
 **`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `--boxel-sp` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
-
-**`@headingLevel`** sets the title's `aria-level` (1 to 6, default 2). An empty state does not know its host's outline, so the caller picks the level that fits where it is placed.
 
 The title is set in `--font-serif`. That is the only serif in the control and structure territories, and it is the signal that this is a moment of address rather than a label.
 
@@ -42,7 +40,7 @@ No APG pattern. Relevant criteria: WCAG **1.3.1**, **2.4.6 Headings and Labels**
 
 Gaps, and the first two are the real ones:
 
-- **The title is a heading by role.** `.pretui-empty-title` carries `role="heading"` and an `aria-level` from `@headingLevel` (default 2), the same authorable level **ErrorSummary** has, so it appears in a screen reader's heading list. It is a styled `<div>` rather than an `<h*>`, so it brings no default margins or weight. Set the level to fit the host page's outline.
+- **The title is a `<div>`, not a heading.** `.pretui-empty-title` is styled to look like one (serif, `--text-heading`) but carries no `<h*>` and no `role="heading"`, so it does not appear in a screen reader's heading list and does not structure the region. Given that **Panel** and **Toolbar** in this same territory hard-code `<h2>`, the inconsistency is striking — and the right answer for all three is the same authorable `@headingLevel` that **ErrorSummary** already has.
 - **Nothing announces the transition to empty.** When a filter reduces a table to nothing, the empty state replaces the rows silently. A `role="status"` on the container would announce "No matching records" — and would have to exist before the change to work, which is the usual live-region caveat. This is the single most useful addition.
 - **The texture layer has no `aria-hidden`**, though it is an empty `<div>` with no content, so nothing is announced — correct by accident rather than by declaration.
 - **The empty state does not replace a table's semantics.** If you render it _instead of_ a `<tbody>`, screen-reader users lose the table's structure and get a bare region. React Spectrum's `renderEmptyState` renders inside the grid for exactly this reason. Placement is the caller's responsibility here.

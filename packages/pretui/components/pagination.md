@@ -38,7 +38,7 @@ Gaps, in order:
 
 - **Page changes are not announced.** After clicking "3" the table content changes and nothing says so; focus stays on the button, which is right, but a polite live region ("Page 3 of 12") is what Web Awesome adds.
 - **Target size**: the buttons are `min-width: 1.625rem; height: 1.625rem` with a gap of about 2px — **below WCAG 2.5.8's 24×24 minimum once you account for the fact that 26px is the outer box and the gap is only 2px**, so adjacent targets effectively touch. Technically 26 ≥ 24 so the criterion passes, but only just, and this is the most-tapped small control in the kit.
-- The arrows render `ChevronLeft` / `ChevronRight` icons with `aria-hidden`, inside buttons that carry `aria-label`; the icons are mirrored under `[dir='rtl']`.
+- The arrows render `ChevronLeft` / `ChevronRight` icons with `aria-hidden`, inside buttons that carry `aria-label`.
 - The `…` gap is a `<span>` with no role, announced as "horizontal ellipsis" or skipped. Harmless.
 
 ## Theming

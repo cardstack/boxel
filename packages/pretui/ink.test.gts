@@ -3,7 +3,7 @@
 //
 // Nothing here asserts a computed style: the components' own `<style scoped>`
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
-// not applied), so every color and size reads as its initial value. What the ink components actually promise is inline custom
+// not applied), so every colour and size reads as its initial value. What the ink components actually promise is inline custom
 // properties, derived text, ARIA and the hue allowlist — all real DOM.
 import { module, test } from 'qunit';
 import { render, settled } from '@ember/test-helpers';
@@ -254,7 +254,7 @@ module('Pretui | ink', function (hooks) {
     );
     assert.deepEqual(
       all('.pretui-meter-bar').map((b) => b.style.getPropertyValue('height')),
-      ['0.25rem', '0.5rem', '0.5rem', '0.5rem'],
+      ['4px', '8px', '8px', '8px'],
       'a short, non-empty heights array does not produce undefined-height bars (an empty array would: heights[-1])',
     );
   });
@@ -273,7 +273,7 @@ module('Pretui | ink', function (hooks) {
     );
     assert.true(
       el.getAttribute('style')?.includes(statusHue('Mei Ling Chen')),
-      'the hue is derived from the name, so the same person keeps the same color',
+      'the hue is derived from the name, so the same person keeps the same colour',
     );
   });
 

@@ -13,11 +13,9 @@ class EmptyStateUsage extends Component {
   @tracked message = '';
   @tracked texture = true;
   @tracked size: EmptyStateSize = 'm';
-  @tracked headingLevel = 2;
   setTitle = (v: string) => (this.title = v);
   setMessage = (v: string) => (this.message = v);
   toggleTexture = (v: boolean) => (this.texture = v);
-  setHeadingLevel = (v: number) => (this.headingLevel = v);
   setSize = (v: string) => (this.size = v as EmptyStateSize);
   get messageVal() {
     return this.message || undefined;
@@ -29,9 +27,6 @@ class EmptyStateUsage extends Component {
     }
     if (this.size !== 'm') {
       bits.push(`@size='${this.size}'`);
-    }
-    if (this.headingLevel !== 2) {
-      bits.push(`@headingLevel={{${this.headingLevel}}}`);
     }
     if (!this.texture) {
       bits.push('@texture={{false}}');
@@ -55,7 +50,6 @@ class EmptyStateUsage extends Component {
             @message={{this.messageVal}}
             @texture={{this.texture}}
             @size={{this.size}}
-            @headingLevel={{this.headingLevel}}
           >
             <:action><Button @variant='secondary'>Clear filters</Button></:action>
           </EmptyState>
@@ -64,7 +58,6 @@ class EmptyStateUsage extends Component {
             @title={{this.title}}
             @texture={{this.texture}}
             @size={{this.size}}
-            @headingLevel={{this.headingLevel}}
           >
             <:default>Try clearing the
               <Token @value='origin' />
@@ -100,15 +93,6 @@ class EmptyStateUsage extends Component {
           @defaultValue='m'
           @description="House scale. 's' is the compact well for an empty note inside a card section (--boxel-sp padding, the title at --boxel-font-size); 'm' sizes for a page section. xs lands on s, l and xl on m (Pretui addition)."
           @onInput={{this.setSize}}
-        />
-        <Args.Number
-          @name='headingLevel'
-          @value={{this.headingLevel}}
-          @defaultValue={{2}}
-          @min={{1}}
-          @max={{6}}
-          @description="aria-level of the title heading. An empty state does not know its host's outline, so set the level that fits where it is placed (Pretui addition)."
-          @onInput={{this.setHeadingLevel}}
         />
         <Args.Yield
           @name='default'

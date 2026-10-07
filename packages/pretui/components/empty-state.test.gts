@@ -31,21 +31,6 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.strictEqual(el.dataset.size, 'm', 'the default size is emitted as m');
   });
 
-  test('the title is a heading, level 2 unless @headingLevel says otherwise', async function (assert) {
-    await render(
-      <template>
-        <EmptyState @title='a' data-test-default />
-        <EmptyState @title='b' @headingLevel={{4}} data-test-four />
-        <EmptyState @title='c' @headingLevel={{9}} data-test-clamped />
-      </template>,
-    );
-    let title = (sel: string) => q(sel).querySelector('.pretui-empty-title');
-    assert.strictEqual(title('[data-test-default]')?.getAttribute('role'), 'heading');
-    assert.strictEqual(title('[data-test-default]')?.getAttribute('aria-level'), '2');
-    assert.strictEqual(title('[data-test-four]')?.getAttribute('aria-level'), '4');
-    assert.strictEqual(title('[data-test-clamped]')?.getAttribute('aria-level'), '6', 'out-of-range levels are clamped');
-  });
-
   test('@message renders in a paragraph and the block in a div', async function (assert) {
     await render(
       <template>

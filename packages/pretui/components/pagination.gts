@@ -114,7 +114,6 @@ export class Pagination extends Component<PaginationSignature> {
           color: var(--primary-ink);
           font-weight: 600;
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          cursor: default;
         }
         .pretui-page:focus-visible {
           outline: 2px solid var(--ring);
@@ -126,9 +125,6 @@ export class Pagination extends Component<PaginationSignature> {
         }
         /* SVG icons do not mirror with the writing direction the way the
            text glyphs did. */
-        [dir='rtl'] .pretui-chevron {
-          scale: -1 1;
-        }
         .pretui-gap {
           color: var(--subtle-foreground);
           padding: 0 var(--boxel-sp-3xs);
