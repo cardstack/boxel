@@ -177,6 +177,3 @@ operation was invoked, so `requestConsult` writes to `ConsultRequest/` at the
 realm root. Remove it with `rm -rf packages/experiments-realm/ConsultRequest`.
 Close the card in the browser before restoring either one, or the open tab
 writes its copy back over you.
-
-The authoring guide for everything used here is `docs/card-operations.md` at
-the root of this repository.

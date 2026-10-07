@@ -230,6 +230,8 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/file-preview-stage'),
   'file-formats/file-resources': () =>
     import('@cardstack/base/file-formats/file-resources'),
+  'file-formats/file-revision': () =>
+    import('@cardstack/base/file-formats/file-revision'),
   'file-formats/file-shell-atom': () =>
     import('@cardstack/base/file-formats/file-shell-atom'),
   'file-formats/file-shell-embedded': () =>
@@ -409,6 +411,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'ts-highlight': () => import('@cardstack/base/ts-highlight'),
   'ttf-font-def': () => import('@cardstack/base/ttf-font-def'),
   typography: () => import('@cardstack/base/typography'),
+  'untitled-card-title': () => import('@cardstack/base/untitled-card-title'),
   url: () => import('@cardstack/base/url'),
   'video-file-def': () => import('@cardstack/base/video-file-def'),
   'video-metadata': () => import('@cardstack/base/video-metadata'),

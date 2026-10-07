@@ -22,7 +22,7 @@ const files = {
   '@cardstack/choreo': 'packages/choreo/src/index.ts',
   '@cardstack/choreo/film': 'packages/choreo/src/film/index.ts',
   '@cardstack/choreo/test-support': 'packages/choreo/src/test-support/index.ts',
-  'choreo-player': 'packages/choreo-player/src/index.ts',
+  '@cardstack/choreo-player': 'packages/choreo-player/src/index.ts',
 };
 const contexts = {
   ChoreoContext: ['packages/choreo/src/choreo.gts', 'c.'],

@@ -1,6 +1,6 @@
 {
   "name": "glimmer-motion",
-  "version": "0.0.0",
+  "version": "0.1.0-unstable.0",
   "description": "The Motion engine for Ember: Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.",
   "keywords": [
     "ember-addon",
@@ -12,7 +12,11 @@
     "gesture",
     "drag"
   ],
-  "repository": "https://github.com/cardstack/choreo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/glimmer-motion"
+  },
   "license": "MIT",
   "author": "Cardstack",
   "exports": {
@@ -70,6 +74,7 @@
     "addon-main.cjs",
     "declarations",
     "dist",
+    "CHANGELOG.md",
     "VENDORED.md"
   ],
   "scripts": {
@@ -86,11 +91,9 @@
     "lint:exports": "node scripts/check-exports.mjs --source",
     "lint:types": "ember-tsc --noEmit",
     "prepack": "rollup --config && node scripts/fix-declarations.mjs",
-    "realm": "node scripts/build-realm-bundle.mjs",
-    "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",
-    "realm:stage": "node scripts/build-realm-bundle.mjs --no-mirror",
     "start": "rollup --config --watch",
     "test": "vite build --mode=development --out-dir dist-tests && testem --file testem.cjs ci --port 0",
+    "test:release": "node --test scripts/release/release.test.ts",
     "start:test": "vite dev --open /tests/"
   },
   "dependencies": {
@@ -118,6 +121,7 @@
     "@glint/template": "catalog:",
     "@rollup/plugin-babel": "catalog:",
     "@types/qunit": "catalog:",
+    "@types/semver": "^7.7.0",
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
     "ember-modifier": "^4.3.0",
@@ -125,7 +129,6 @@
     "ember-source": "catalog:",
     "ember-strict-application-resolver": "^0.1.0",
     "ember-template-lint": "catalog:",
-    "esbuild": "^0.25.0",
     "eslint": "^9.39.4",
     "motion": "catalog:",
     "motion-dom": "catalog:",
@@ -135,6 +138,7 @@
     "qunit": "catalog:",
     "qunit-dom": "catalog:",
     "rollup": "catalog:",
+    "semver": "^7.7.0",
     "testem": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"

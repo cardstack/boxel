@@ -503,6 +503,172 @@ module('Integration | realm policy', function (hooks) {
       );
   });
 
+  // The line each grant's editor opens with, as a reader sees it.
+  function grantLinesInEditor() {
+    return [
+      ...document.querySelectorAll(
+        '[data-test-policy-rule-grant] [data-test-operation-grant]',
+      ),
+    ].map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
+  }
+
+  function ruleEditor(index: number) {
+    return `[data-test-contains-many="rules"] [data-test-item="${index}"]`;
+  }
+
+  test('editing a policy shows each grant as its view does, and adds, changes and removes grants', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+    let permissions: Permissions = { canWrite: true, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, policy, 'edit');
+
+    assert.dom('[data-test-policy-rule-edit]').exists({ count: 2 });
+    assert.deepEqual(
+      grantLinesInEditor(),
+      [
+        'read always',
+        `appendActivity where ${teacherPredicate.trim()}`,
+        `read where ${rosterPredicate} snapshot`,
+        `listMySchedules where ${providerPredicate}`,
+      ],
+      'each grant is shown by its operation and condition, in order',
+    );
+    assert
+      .dom('[data-test-contains-many="rules"]')
+      .doesNotIncludeText('Untitled', 'no grant is shown as an untitled field');
+    assert
+      .dom('[data-test-policy-rule-target-type] input')
+      .exists({ count: 2 }, "every rule's target type can be edited");
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-policy-predicate-input]')
+      .exists({ count: 4 }, "every grant's condition can be edited");
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-field="anonymous"]')
+      .exists(
+        { count: 4 },
+        'every grant can be opened to callers who are not signed in',
+      );
+    assert
+      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"]')
+      .doesNotExist(
+        'a grant only for signed-in callers asks for no realm.json setting',
+      );
+    assert
+      .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
+      .hasAttribute(
+        'aria-label',
+        'Remove grant 1 (read)',
+        'each remove button names the grant it removes',
+      );
+
+    let studentPredicate = '.studentIds | any(. == actor())';
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="1"] [data-test-policy-predicate-input]`,
+      studentPredicate,
+    );
+    await click(`${ruleEditor(0)} [data-test-policy-rule-add-grant]`);
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="operation"] input`,
+      'update',
+    );
+    await click(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`);
+
+    // The radio group lists false, then true.
+    let [, allowAnonymous] = document.querySelectorAll(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="anonymous"] input[type="radio"]`,
+    );
+    await click(allowAnonymous);
+    assert
+      .dom(
+        `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
+      )
+      .exists(
+        "a grant opened to callers who aren't signed in asks for the realm.json setting its writes are made as",
+      );
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
+      'feedbackWriter',
+    );
+
+    assert.deepEqual(
+      grantLinesInEditor(),
+      [
+        'read always',
+        `appendActivity where ${studentPredicate}`,
+        'update always anyone as config.feedbackWriter',
+        `listMySchedules where ${providerPredicate}`,
+      ],
+      'each grant reads as it now stands',
+    );
+
+    let rules = serializeCard(policy).data.attributes?.rules as {
+      grants: {
+        operation: string;
+        where: unknown;
+        anonymous?: boolean | null;
+        actingUser?: string | null;
+      }[];
+    }[];
+    assert.deepEqual(
+      rules.map((rule) =>
+        rule.grants.map(({ operation, where, anonymous, actingUser }) => ({
+          operation,
+          where,
+          anonymous: anonymous ?? false,
+          actingUser: actingUser ?? null,
+        })),
+      ),
+      [
+        [
+          {
+            operation: 'read',
+            where: null,
+            anonymous: false,
+            actingUser: null,
+          },
+          {
+            operation: 'appendActivity',
+            where: studentPredicate,
+            anonymous: false,
+            actingUser: null,
+          },
+          {
+            operation: 'update',
+            where: null,
+            anonymous: true,
+            actingUser: 'feedbackWriter',
+          },
+        ],
+        [
+          {
+            operation: 'listMySchedules',
+            where: providerPredicate,
+            anonymous: false,
+            actingUser: null,
+          },
+        ],
+      ],
+      'the saved policy holds the added, changed and remaining grants',
+    );
+  });
+
+  test('a policy edited without write permission shows its grants but cannot add or remove them', async function (assert) {
+    await setupPolicyRealm({ 'policies/education.json': educationPolicy });
+    let policy = await loadPolicy('policies/education');
+    let permissions: Permissions = { canWrite: false, canRead: true };
+    provideConsumeContext(PermissionsContextName, permissions);
+    await renderCard(loader, policy, 'edit');
+
+    assert.strictEqual(
+      grantLinesInEditor().length,
+      4,
+      'every grant is still shown',
+    );
+    assert.dom('[data-test-policy-rule-add-grant]').doesNotExist();
+    assert.dom('[data-test-policy-rule-remove-grant]').doesNotExist();
+  });
+
   test('a document shape assigned in code is refused rather than read as a predicate', async function (assert) {
     await setupPolicyRealm({ 'policies/education.json': educationPolicy });
     let policy = await loadPolicy('policies/education');
@@ -586,10 +752,87 @@ module('Integration | realm policy', function (hooks) {
     );
   }
 
+  test('an explanation for someone who is not signed in shows the limit, the blocklist, and who each grant opened to them writes as', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      permissions: {
+        '*': ['read'],
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/classrooms`,
+          config: { submitter: '@testuser:localhost' },
+          anonymousRateLimit: { requests: 7, windowSeconds: 30 },
+          anonymousBlocklist: ['not an address'],
+        }),
+        'classroom.gts': classroomModule,
+        'classrooms/room-204.json': classroom([TEACHER]),
+        'policies/classrooms.json': policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [
+              { operation: 'update', anonymous: true, actingUser: 'submitter' },
+              { operation: 'update', anonymous: true, actingUser: 'missing' },
+              // Reads the caller, so it is warned about.
+              {
+                operation: 'update',
+                anonymous: true,
+                actingUser: 'submitter',
+                where: teachesPredicate,
+              },
+            ],
+          },
+        ]),
+      },
+    });
+    await getService('realm').login(testRealmURL);
+    getService('operations');
+    let policy = await loadPolicy('policies/classrooms');
+    await renderCard(loader, policy, 'isolated');
+
+    await ask('', `${testRealmURL}classrooms/room-204`, 'update');
+    assert.dom('[data-test-explanation-actor]').hasText('not signed in');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .hasText(
+        "This realm's blocklist has an entry that isn't an address or a range, so it turns away everyone who isn't signed in before the policy is checked.",
+      );
+    assert
+      .dom('[data-test-explanation-anonymous-limit]')
+      .hasText('7 requests per 30 seconds from one address, set by this realm');
+    assert
+      .dom('[data-test-explanation-anonymous-blocklist]')
+      .includesText('"not an address"', 'names the entry to fix');
+    assert.deepEqual(
+      [
+        ...document.querySelectorAll('[data-test-explanation-grant-anonymous]'),
+      ].map((el) => el.textContent?.trim()),
+      [
+        'Open to people who aren\'t signed in; their writes are made as @testuser:localhost (this realm\'s "submitter" setting).',
+        'Open to people who aren\'t signed in, but this realm\'s settings have no "missing", so this grant admits none of them.',
+        'Open to people who aren\'t signed in; their writes are made as @testuser:localhost (this realm\'s "submitter" setting).',
+      ],
+    );
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-test-explanation-grant-issue]')].map(
+        (el) => el.getAttribute('data-test-explanation-grant-issue'),
+      ),
+      ['anonymous-grant-reads-actor'],
+      'the grant whose condition reads the caller carries its warning',
+    );
+  });
+
   test('the policy explains what it decides for one caller, one card and one operation', async function (assert) {
     await renderClassroomPolicy();
 
     assert.dom('[data-test-realm-policy-explain]').exists();
+    assert
+      .dom('[data-test-explain-actor-hint]')
+      .hasText(
+        "Leave this empty to check what someone who isn't signed in can do.",
+        'the person field says how to ask about someone who is not signed in',
+      );
     assert.dom('[data-test-explain-submit]').isDisabled('nothing to ask yet');
     await ask(TEACHER, `${testRealmURL}classrooms/room-204`, 'delete');
 

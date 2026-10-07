@@ -1,3 +1,8 @@
+export {
+  ActingUsers,
+  type ActingUserFailure,
+  type ActingUserResolution,
+} from './acting-users.ts';
 export { lowerOperationDeclarations } from './lowering.ts';
 export {
   noteRealmIndexMoved,

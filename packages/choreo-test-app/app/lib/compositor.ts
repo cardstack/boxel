@@ -19,7 +19,7 @@
  * planes registry, no clips, no journal. Those arrive only after a
  * composition demonstrates the need.
  */
-import { createChoreoPlayer } from 'choreo-player';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 
 /** The structural run contract the player drives (a public ChoreoRun fits). */
 export interface CompositorRun {

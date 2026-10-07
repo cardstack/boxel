@@ -929,7 +929,7 @@ export class RealmServer {
           // outcome is legible to a browser caller (host DevTools, client
           // telemetry), not just to server-side supertest/curl.
           exposeHeaders:
-            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, X-Boxel-Live-Search-Cache',
+            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
