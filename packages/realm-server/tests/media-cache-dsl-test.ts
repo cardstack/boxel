@@ -2541,16 +2541,69 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a .json path with no live file row still addresses the instance', async function (assert) {
+    test("a .json path never stands in for the card's extensionless id", async function (assert) {
+      // The `.json` spelling names the file; a card's captures key on its id.
       await seedInstanceRow('card-1');
       await seedCaptureDrawnAs(ANONYMOUS_RENDER);
 
       let response = await get('_capture/card-1.json');
-      assert.strictEqual(response.status, 200);
-      assert.deepEqual(
-        [...(await nodeStreamToBuffer(response.nodeStream!))],
-        [...PNG_BYTES],
+      assert.strictEqual(response.status, 404);
+    });
+
+    test('a card id ending in a registered extension serves on that spelling when no file shares it', async function (assert) {
+      // The card `notes.md.json` has the id `notes.md`.
+      await seedInstanceRow('notes.md');
+      await startWorker();
+
+      let response = await postCapture({
+        realmURL: REALM_URL,
+        cardId: `${REALM_URL}notes.md`,
+        format: 'isolated',
+      });
+      assert.strictEqual(response.status, 201);
+      let served = response.body.data.attributes.captures?.[0]?.url as string;
+      assert.strictEqual(served, `${REALM_URL}_capture/notes.md`);
+
+      let getResponse = await get(served.slice(REALM_URL.length), 'GET', {
+        Authorization: `Bearer ${realmSession(OWNER)}`,
+      });
+      assert.strictEqual(getResponse.status, 200);
+      assert.strictEqual(captureCalls, 1, 'the GET is a ledger hit');
+      assert.notOk(
+        (capturedRenderOptions[0] as { fileRender?: boolean } | null)
+          ?.fileRender,
+        'the capture rendered the card',
       );
+    });
+
+    test('a spelling a live card and a live file share names neither, on either surface', async function (assert) {
+      await seedInstanceRow('notes.md');
+      await seedFileRow('notes.md');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      for (let attributes of [
+        { cardId: `${REALM_URL}notes.md` },
+        { fileURL: `${REALM_URL}notes.md` },
+      ]) {
+        let response = await postCapture({
+          realmURL: REALM_URL,
+          format: 'isolated',
+          ...attributes,
+        });
+        assert.strictEqual(response.status, 201);
+        let served = response.body.data.attributes.captures?.[0]?.url;
+        assert.notOk(served, `${Object.keys(attributes)[0]}: no served URL`);
+      }
+      assert.strictEqual(captureCalls, 2, 'both captures still rendered');
+      let rows = (await query(dbAdapter, [
+        `SELECT 1 FROM media_cache_ledger WHERE source_url = '${REALM_URL}notes.md'`,
+      ])) as unknown[];
+      assert.strictEqual(rows.length, 0, 'and neither persisted');
+
+      let getResponse = await get('_capture/notes.md');
+      assert.strictEqual(getResponse.status, 404);
+      assert.strictEqual(captureCalls, 2, 'the GET rendered nothing');
     });
 
     test('an extensionless file is never captured through the GET route', async function (assert) {

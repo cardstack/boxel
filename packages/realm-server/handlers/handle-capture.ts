@@ -7,8 +7,7 @@ import {
   captureLedgerSourceURL,
   ensureTrailingSlash,
   fetchRealmPermissions,
-  findLiveRowGeneration,
-  urlNamesFile,
+  resolveOnDemandCaptureSource,
   findMediaCacheEntry,
   isCanonicalCaptureFormat,
   isOnDemandCaptureFormat,
@@ -114,7 +113,9 @@ interface CaptureResult {
  * ledger hit, and its `url` is the file's own GET `_capture/` URL — the
  * file's path with its extension intact, which that route resolves to the
  * file row. A file whose name carries no registered extension is spelled
- * like a card id, so it never persists and its `url` is null.
+ * like a card id, and a card id can end in a registered extension beside a
+ * file of that name; a capture whose spelling doesn't name it alone never
+ * persists, and its `url` is null.
  *
  * Request body (JSON:API):
  * ```json
@@ -276,11 +277,6 @@ export default function handleCapture({
       normalizedTarget,
       kind === 'file' ? 'file' : 'instance',
     );
-    // A file without a registered extension shares its spelling with a card
-    // id — `X` beside the instance `X.json` — so its ledger key would be the
-    // card capture's key whenever the two rows carry one generation. Such a
-    // file is captured but never persisted.
-    let persistable = kind === 'card' || urlNamesFile(new URL(sourceURL));
     // The durable served URL hangs off the source's ledger spelling within
     // its realm, which is how the GET `_capture/` route tells an instance
     // (extensionless id) from a file (extension intact).
@@ -329,7 +325,7 @@ export default function handleCapture({
       let entryKey: MediaCacheCaptureKey | undefined;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
-      if (mediaCacheAdapter && spec && persistable) {
+      if (mediaCacheAdapter && spec) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -347,19 +343,27 @@ export default function handleCapture({
           matrixClient,
         ).can(userId, 'read');
         if (mayRead) {
+          // A capture persists only under the source its spelling names —
+          // the rule the GET `_capture/` route serves by — so its served URL
+          // always resolves to it. A file without a registered extension is
+          // spelled like a card id, and a card id ending in one can be
+          // spelled like a file beside it; neither names this capture
+          // unambiguously, so either is captured but never persisted.
           let generationLookupStart = Date.now();
-          let generation = await findLiveRowGeneration(dbAdapter, {
+          let source = await resolveOnDemandCaptureSource(dbAdapter, {
             realmURL: normalizedRealmURL,
             url: sourceURL,
-            type: kind === 'file' ? 'file' : 'instance',
           });
           generationLookupMs = Date.now() - generationLookupStart;
-          if (generation !== undefined) {
+          if (
+            source &&
+            source.kind === (kind === 'file' ? 'file' : 'instance')
+          ) {
             entryKey = {
               realmURL: normalizedRealmURL,
               sourceURL,
               captureSpecHash: await captureSpecHash(spec),
-              sourceGeneration: generation,
+              sourceGeneration: source.generation,
             };
           }
         }

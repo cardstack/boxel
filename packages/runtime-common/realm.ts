@@ -460,9 +460,9 @@ import {
 } from './capture-disposition.ts';
 import {
   ANONYMOUS_RENDER,
-  findLiveRowGeneration,
   findMediaCacheEntry,
   putMedia,
+  resolveOnDemandCaptureSource,
   type MediaCacheAdapter,
   type MediaCacheCaptureKey,
 } from './media-cache.ts';
@@ -9698,41 +9698,23 @@ export class Realm {
       return response;
     }
 
-    // One narrow read is both the liveness gate and the cache key's
-    // generation: undefined means the source is missing, deleted, or
-    // errored — an uncaptured miss — and otherwise it pins the generation an
-    // edit bumps, without hydrating the row.
-    //
-    // The path's spelling says which row it addresses, the same way the two
-    // ledger keys are spelled: a path naming a file by a registered extension
-    // addresses that file's own row (keyed by its extension-intact URL),
-    // falling back to the instance when no live file row matches; any other
-    // path addresses the instance (keyed by its extensionless id). The file
-    // row is read with the probe `POST /_capture` keys a file capture by, so
-    // the URL that endpoint answers with resolves to the row its capture
-    // persisted under. An extensionless file is never resolved here: its
-    // URL is spelled like a card id, so it would key its capture as that
-    // card's, and that endpoint never persists one.
-    let rawFileURL = this.paths.fileURL(instanceLocalPath);
+    // The source resolution is both the liveness gate and the cache key's
+    // generation, from narrow reads that never hydrate a row: undefined means
+    // the path names no single live source (missing, deleted, errored, or
+    // spelled alike by a live card and a live file) — an uncaptured miss —
+    // and otherwise it pins the generation an edit bumps. Which source a path
+    // names is the rule `POST /_capture` persists by (see
+    // `resolveOnDemandCaptureSource`), so a URL that endpoint answers with
+    // resolves to the capture it persisted.
+    let sourceURL = this.paths.fileURL(instanceLocalPath).href;
     let generationLookupStart = Date.now();
-    let sourceKind: CaptureSourceKind = 'card';
-    let sourceURL = instanceURL.href;
-    let sourceGeneration: number | undefined;
-    if (urlNamesFile(rawFileURL)) {
-      sourceGeneration = await findLiveRowGeneration(this.#dbAdapter, {
-        realmURL: this.url,
-        url: rawFileURL.href,
-        type: 'file',
-      });
-      if (sourceGeneration !== undefined) {
-        sourceKind = 'file';
-        sourceURL = captureLedgerSourceURL(rawFileURL.href, 'file');
-      }
-    }
-    if (sourceGeneration === undefined) {
-      sourceGeneration =
-        await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
-    }
+    let source = await resolveOnDemandCaptureSource(this.#dbAdapter, {
+      realmURL: this.url,
+      url: sourceURL,
+    });
+    let sourceKind: CaptureSourceKind =
+      source?.kind === 'file' ? 'file' : 'card';
+    let sourceGeneration = source?.generation;
     let generationLookupMs = Date.now() - generationLookupStart;
     if (sourceGeneration === undefined) {
       return mediaCacheMissResponse({ requestContext });
