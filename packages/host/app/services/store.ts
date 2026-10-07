@@ -1327,6 +1327,7 @@ export default class StoreService extends Service implements StoreInterface {
         (instance as any)[field] = value;
       }
     }
+    let api = await this.cardService.getAPI();
     let doc = await this.cardService.serializeCard(instance, {
       omitQueryFields: true,
     });
@@ -1336,6 +1337,14 @@ export default class StoreService extends Service implements StoreInterface {
         patch.attributes,
         (_dest, src) => (Array.isArray(src) ? src : undefined),
       );
+      if (doc.data.attributes) {
+        replacePrimitiveValues(
+          api,
+          doc.data.attributes,
+          patch.attributes,
+          instance,
+        );
+      }
       clearReplacedArrayFieldMeta(doc.data.meta, patch.attributes);
     }
     if (patch.relationships) {
@@ -1350,7 +1359,6 @@ export default class StoreService extends Service implements StoreInterface {
     if (patch.meta) {
       doc.data.meta = merge(doc.data.meta, patch.meta);
     }
-    let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.store);
     let shouldPersist = !opts?.doNotPersist;
     let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
@@ -4869,6 +4877,47 @@ function notFoundError(
     title,
     message: `The ${noun} ${url} does not exist`,
   };
+}
+
+// A primitive field's value is one value, however it is shaped, so where a
+// patch gives one an object, that object replaces the instance's value rather
+// than merging into it — a key the patch leaves out is a key the field no
+// longer has. Compound `contains` fields still merge key by key; this walks
+// into them by the class of the value the instance holds, which is the
+// polymorphic type where there is one. The realm applies the same rule when it
+// merges a patch onto the stored file.
+function replacePrimitiveValues(
+  api: typeof CardAPI,
+  merged: Record<string, unknown>,
+  patch: Record<string, unknown>,
+  owner: BaseDef,
+): void {
+  let fields: Record<string, { card: typeof BaseDef; fieldType: string }> =
+    api.getFields(owner, { includeComputeds: true });
+  for (let [name, source] of Object.entries(patch)) {
+    if (!isPlainRecord(source) || !Object.hasOwn(fields, name)) {
+      continue;
+    }
+    let field = fields[name];
+    if (api.primitive in field.card) {
+      merged[name] = cloneDeep(source);
+      continue;
+    }
+    let target = merged[name];
+    let value = (owner as unknown as Record<string, unknown>)[name];
+    if (
+      field.fieldType !== 'contains' ||
+      !isPlainRecord(target) ||
+      !(value instanceof api.BaseDef)
+    ) {
+      continue;
+    }
+    replacePrimitiveValues(api, target, source, value);
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function needsServerStateMerge(

@@ -305,6 +305,38 @@ module('Integration | realm-config | settings', function (hooks) {
     );
   });
 
+  test('a name still being typed is written when the editor goes away', async function (assert) {
+    let { adapter } = await renderRealmConfig(
+      { approver: '@mae:localhost' },
+      'edit',
+    );
+    let stored = async () => {
+      let file = await adapter.openFile('realm.json');
+      return JSON.parse(file!.content as string).data.attributes.config;
+    };
+
+    // Typed but never left, so no change event ever fires for it.
+    let key = document.querySelector(
+      '[data-test-setting-key="0"]',
+    ) as HTMLInputElement;
+    key.value = 'approvers';
+    await triggerEvent(key, 'input');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}realm"] [data-test-edit-button]`,
+    );
+    assert
+      .dom('[data-test-realm-settings-edit]')
+      .doesNotExist('the editor is gone');
+
+    await waitUntil(async () => 'approvers' in ((await stored()) ?? {}));
+    assert.deepEqual(
+      await stored(),
+      { approvers: '@mae:localhost' },
+      'the name the author was typing is the one the file holds',
+    );
+  });
+
   // The realm's policy pointer sits beside the settings as the id of the card
   // that holds the policy. It is chosen from the card chooser, and shows the
   // id it stores beside a control to remove it.

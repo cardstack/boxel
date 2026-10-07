@@ -903,8 +903,13 @@ export async function stageUpdate(
 // Compound `contains` fields still merge key by key, which is what lets a
 // patch name only the nested fields it changes; this walks into them, by the
 // type the card's `meta.fields` names for a polymorphic value or else the
-// declared one, to find the primitives inside. A type whose definition cannot
-// be read keeps the plain merge for its part of the document.
+// declared one, to find the primitives inside.
+//
+// Only a patch value that is an object needs the type at all, so a patch with
+// none never reads a definition. One that does, against a type whose
+// definition cannot be read, is refused: the plain merge would keep every key
+// the patch removed and could report the card unchanged, acknowledging a
+// removal that never happened.
 async function replacePrimitiveValues(
   merged: Record<string, unknown>,
   patch: Record<string, unknown>,
@@ -913,7 +918,7 @@ async function replacePrimitiveValues(
   url: URL,
   ctx: StagingContext,
 ): Promise<void> {
-  if (!adoptsFrom) {
+  if (!adoptsFrom || !Object.values(patch).some(isPlainRecord)) {
     return;
   }
   let definition: Definition | undefined;
@@ -923,7 +928,13 @@ async function replacePrimitiveValues(
     definition = undefined;
   }
   if (!definition) {
-    return;
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Unknown type',
+      detail: `no definition for ${JSON.stringify(adoptsFrom)}, so the patch cannot be merged`,
+    });
   }
   for (let [name, source] of Object.entries(patch)) {
     if (!isPlainRecord(source)) {
