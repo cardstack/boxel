@@ -2921,28 +2921,36 @@ export default class StoreService extends Service implements StoreInterface {
 
   // Re-reads a card the store holds as an error or an awaiting-index
   // placeholder. A realm event is what usually starts it, so the test waiter is
-  // what lets `settled()` after a realm write cover the card coming back.
+  // what lets `settled()` after a realm write cover the card coming back. The
+  // token is held in the task body itself rather than through
+  // `withTestWaiters`, so cancelling the task stops the re-read and still
+  // releases the token.
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(idOrDoc, this.network.virtualNetwork);
-      let waiterLabel = `loadInstance ${url ?? 'new card document'}`;
-      await this.withTestWaiters(waiterLabel, async () => {
-        let reloadTracker = this.startTrackingCardLoad(url);
-        try {
-          let oldInstance = url ? this.store.getCard(url) : undefined;
-          let instanceOrError = await this.getCardInstance({
-            idOrDoc,
-            opts: { noCache: true },
-          });
-          if (oldInstance) {
-            await this.stopAutoSaving(oldInstance);
-          }
-          this.setIdentityContext(instanceOrError);
-          await this.startAutoSaving(instanceOrError);
-        } finally {
-          this.finishTrackingCardLoad(url, reloadTracker);
+      let token = waiter.beginAsync(
+        undefined,
+        `loadInstance ${url ?? 'new card document'}`,
+      );
+      let reloadTracker = this.startTrackingCardLoad(url);
+      try {
+        let oldInstance = url ? this.store.getCard(url) : undefined;
+        let instanceOrError = await this.getCardInstance({
+          idOrDoc,
+          opts: { noCache: true },
+        });
+        if (oldInstance) {
+          await this.stopAutoSaving(oldInstance);
         }
-      });
+        this.setIdentityContext(instanceOrError);
+        await this.startAutoSaving(instanceOrError);
+        if (isTesting()) {
+          await this.cardService.cardsSettled();
+        }
+      } finally {
+        this.finishTrackingCardLoad(url, reloadTracker);
+        waiter.endAsync(token);
+      }
     },
   );
 

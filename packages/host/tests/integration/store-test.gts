@@ -3589,7 +3589,11 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitFor('[data-test-card-error]');
+    // Each write reaches the stack through the realm's index event, and
+    // settling covers that event's delivery and the store's re-read of the
+    // card rather than racing them against a clock.
+    await settled();
+    assert.dom('[data-test-card-error]').exists('the card error is shown');
     assert
       .dom('[data-test-error-message]')
       .containsText('intentional error thrown');
@@ -3616,7 +3620,7 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitFor('[data-test-card-error]', { count: 0 });
+    await settled();
     assert.dom('[data-test-card-error]').doesNotExist('the error is dismissed');
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
@@ -3683,6 +3687,7 @@ module('Integration | Store', function (hooks) {
         .getRoomIds()
         .flatMap((roomId) => mockMatrixUtils.getRoomEvents(roomId))
         .filter((event) => event.type === APP_BOXEL_REALM_EVENT_TYPE)
+        .sort((a, b) => a.origin_server_ts - b.origin_server_ts)
         .slice(-5)
         .map((event) => event.content);
       console.warn(
