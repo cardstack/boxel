@@ -91,6 +91,9 @@ export class Pagination extends Component<PaginationSignature> {
           font-family: inherit;
           font-size: inherit;
           font-weight: inherit;
+          font-style: inherit;
+          font-stretch: inherit;
+          font-variant: inherit;
           line-height: inherit;
           letter-spacing: inherit;
           font-variant-numeric: tabular-nums;
@@ -128,8 +131,6 @@ export class Pagination extends Component<PaginationSignature> {
           color: var(--subtle-foreground);
           cursor: default;
         }
-        /* SVG icons do not mirror with the writing direction the way the
-           text glyphs did. */
         .pretui-gap {
           color: var(--subtle-foreground);
           padding: 0 var(--boxel-sp-3xs);

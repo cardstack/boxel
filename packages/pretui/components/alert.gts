@@ -3,8 +3,9 @@ import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CheckIcon from '@cardstack/boxel-icons/check';
-import InfoIcon from '@cardstack/boxel-icons/info';
+import InfoIcon from '@cardstack/boxel-icons/info-small';
 import XIcon from '@cardstack/boxel-icons/x';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
 import { resolveTone } from '../pretui-primitives';
 import type { PretuiToneArg } from '../pretui-primitives';
 import { VisuallyHidden } from './visually-hidden';
@@ -99,6 +100,17 @@ export class Alert extends Component<AlertSignature> {
       `--pretui-alert-hue: ${hue}; --pretui-alert-ink: ${ink}; --pretui-alert-on-hue: ${onHue}`,
     );
   }
+  // The same properties again, kept on top of a caller's `style`: a caller's
+  // `style` attribute replaces the component's own, and the tint, ink and
+  // glyph disc all read these properties.
+  get keptStyle(): KeptProperty[] {
+    let { hue, ink, onHue } = ALERT_COLORS[this.tone];
+    return [
+      { property: '--pretui-alert-hue', value: hue, strength: 'arg' },
+      { property: '--pretui-alert-ink', value: ink, strength: 'arg' },
+      { property: '--pretui-alert-on-hue', value: onHue, strength: 'arg' },
+    ];
+  }
   get Glyph() {
     return ALERT_ICONS[this.tone];
   }
@@ -106,7 +118,7 @@ export class Alert extends Component<AlertSignature> {
     return `${this.args.toneLabel ?? ALERT_TONE_LABELS[this.tone]}:`;
   }
   <template>
-    <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} data-test-pretui-alert ...attributes>
+    <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} {{keepStyle this.keptStyle}} data-test-pretui-alert ...attributes>
       <span class='pretui-alert-glyph' aria-hidden='true'>
         <this.Glyph width='12' height='12' />
       </span>

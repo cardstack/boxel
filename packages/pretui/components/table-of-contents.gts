@@ -1,11 +1,25 @@
 // Pretui — TableOfContents: a scroll-spy table of contents with one IntersectionObserver and a travelling marker.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
-import { element } from '@cardstack/boxel-ui/helpers';
 import { modifier } from 'ember-modifier';
+
+// The row's link or button: the caller's attributes land once, on whichever
+// element renders, so the two modes cannot drift apart.
+const TocLink: TemplateOnlyComponent<{
+  Args: { asLink: boolean; href?: string };
+  Blocks: { default: [] };
+  Element: HTMLAnchorElement | HTMLButtonElement;
+}> = <template>
+  {{#if @asLink}}
+    <a href={{@href}} ...attributes>{{yield}}</a>
+  {{else}}
+    <button type='button' ...attributes>{{yield}}</button>
+  {{/if}}
+</template>;
 
 // ── TableOfContents ──────────────────────────────────────────────────────
 // Document navigation with a marker that TRAVELS between sections.
@@ -127,9 +141,6 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
   get links(): boolean {
     return this.args.links ?? true;
   }
-  get rowTag(): 'a' | 'button' {
-    return this.links ? 'a' : 'button';
-  }
   get spy(): boolean {
     return this.args.spy ?? this.links;
   }
@@ -249,27 +260,25 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         {{! role='list' is not redundant: list-style:none strips list
             semantics in Safari/VoiceOver, and the lint rule allows ol+list }}
         <ol class='pretui-toc-list' role='list'>
-          {{#let (element this.rowTag) as |Row|}}
-            {{#each this.rows key='item.id' as |row index|}}
-              <li class='pretui-toc-row' style={{row.style}}>
-                <Row
-                  class='pretui-toc-link'
-                  href={{if this.links (this.hrefFor row)}}
-                  type={{unless this.links 'button'}}
-                  data-toc-id={{row.item.id}}
-                  data-active={{if (this.isActive row) 'true'}}
-                  aria-current={{if (this.isActive row) 'location'}}
-                  {{on 'click' (fn this.activate row.item.id)}}
-                >
-                  {{#if (has-block 'item')}}
-                    {{yield row.item (this.isActive row) index to='item'}}
-                  {{else}}
-                    {{row.item.label}}
-                  {{/if}}
-                </Row>
-              </li>
-            {{/each}}
-          {{/let}}
+          {{#each this.rows key='item.id' as |row index|}}
+            <li class='pretui-toc-row' style={{row.style}}>
+              <TocLink
+                @asLink={{this.links}}
+                @href={{if this.links (this.hrefFor row)}}
+                class='pretui-toc-link'
+                data-toc-id={{row.item.id}}
+                data-active={{if (this.isActive row) 'true'}}
+                aria-current={{if (this.isActive row) 'location'}}
+                {{on 'click' (fn this.activate row.item.id)}}
+              >
+                {{#if (has-block 'item')}}
+                  {{yield row.item (this.isActive row) index to='item'}}
+                {{else}}
+                  {{row.item.label}}
+                {{/if}}
+              </TocLink>
+            </li>
+          {{/each}}
         </ol>
       </div>
     </nav>
@@ -339,7 +348,10 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
           background-color: transparent;
           font-family: inherit;
           font-size: inherit;
+          font-weight: inherit;
+          font-style: inherit;
           line-height: inherit;
+          letter-spacing: inherit;
           text-align: start;
         }
         .pretui-toc-link:hover {

@@ -253,18 +253,18 @@ export class StepList extends Component<StepListSignature> {
             {{/if}}
             <span class='pretui-step-marker' aria-hidden='true'>
               {{#if step.isComplete}}
-                <CheckIcon width='9' height='9' />
+                <CheckIcon width='9' height='9' stroke-width='4' />
               {{else if step.isError}}
-                <ExclamationMarkIcon width='9' height='9' />
+                <ExclamationMarkIcon width='9' height='9' stroke-width='4' />
               {{else if step.isBlocked}}
                 {{!-- a bar across the marker — "the way through is shut", and
                     unmistakably not the error exclamation beside it --}}
-                <MinusIcon width='9' height='9' />
+                <MinusIcon width='9' height='9' stroke-width='4' />
               {{else if step.isRunning}}
                 {{!-- a play triangle — "the machine is working on this one".
                     Static on purpose: a spinning marker would be motion that
                     encodes nothing the tone and the state text do not --}}
-                <PlayerPlayIcon width='9' height='9' />
+                <PlayerPlayIcon width='9' height='9' stroke-width='4' fill='currentColor' />
               {{else}}
                 {{step.number}}
               {{/if}}

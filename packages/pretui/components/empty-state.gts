@@ -115,6 +115,7 @@ export class EmptyState extends Component<EmptyStateSignature> {
         }
         .pretui-empty-msg {
           position: relative;
+          margin: 0;
           font-size: var(--boxel-font-size-xs);
           max-width: 34ch;
         }

@@ -5,8 +5,11 @@
 // Run with `boxel test`.
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
+import { htmlSafe } from '@ember/template';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Alert } from './alert';
+
+const CALLER_STYLE = htmlSafe('margin: 2px');
 
 function alerts(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('[data-test-pretui-alert]')];
@@ -113,5 +116,19 @@ module('Pretui | components/alert', function (hooks) {
       'Warning: Low credit',
       'Avertissement: Crédit faible',
     ]);
+  });
+
+  test("a caller's style keeps the tone's hue, ink and on-hue properties", async function (assert) {
+    await render(
+      <template><Alert @tone='success' @title='Saved' style={{CALLER_STYLE}} /></template>,
+    );
+    let el = alerts()[0];
+    assert.strictEqual(el.style.getPropertyValue('--pretui-alert-hue').trim(), 'var(--success)');
+    assert.strictEqual(el.style.getPropertyValue('--pretui-alert-ink').trim(), 'var(--success-ink)');
+    assert.strictEqual(
+      el.style.getPropertyValue('--pretui-alert-on-hue').trim(),
+      'var(--success-foreground)',
+    );
+    assert.strictEqual(el.style.margin, '2px', "the caller's own declarations are kept");
   });
 });

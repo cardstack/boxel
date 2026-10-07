@@ -13,7 +13,7 @@ One arg. Three render branches per item, in priority order: **the last item is a
 
 That last-item rule is the whole opinion. The current location is not a link even if you gave it one, because linking to where you already are is a dead affordance — and making it structurally impossible means no call site has to remember. The `<span>` branch exists for intermediate ancestors that are real but unreachable (a folder you cannot open, a realm you cannot read), which is a genuine Boxel case.
 
-Separators are `/` characters rendered between items, styled `--subtle-foreground`. Each carries `data-test-pretui-breadcrumb-sep`.
+Separators are `/` characters rendered between items, styled `--subtle-foreground`.
 
 ## Prior art
 

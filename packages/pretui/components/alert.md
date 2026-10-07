@@ -44,7 +44,7 @@ Gaps, and one is significant:
 
 ## Theming
 
-`--info`, `--success`, `--warning`, `--destructive` (the four tone hues); `--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink` (text); `--info-foreground`, `--success-foreground`, `--warning-foreground`, `--destructive-foreground` (the glyph's ink on its disc); `--card` (the mix base), `--border` (mixed into the hairline), and the `--boxel-sp-*`, `--boxel-border-radius` and `--boxel-font-size-xs` tokens for geometry and type. The 20% tint strength is the component's own `--pretui-alert-mix`, set on `.pretui-alert`; a caller can override it per instance.
+`--info`, `--success`, `--warning`, `--destructive` (the four tone hues); `--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink` (text); `--info-foreground`, `--success-foreground`, `--warning-foreground`, `--destructive-foreground` (the glyph's ink on its disc); `--card` (the mix base), `--border` (mixed into the hairline), and the `--boxel-sp-*`, `--boxel-border-radius` and `--boxel-font-size-xs` tokens for geometry and type. The 20% tint strength is the component's own `--pretui-alert-mix`, set on `.pretui-alert`; a caller can override it per instance. A caller's `style` attribute does not remove the tone's hue, ink and on-hue properties: they are written again on top of it.
 
 A theme retunes the entire component by retuning those four hues. Because every derived colour is a mix against `--card`, a dark theme gets correct dark treatments automatically, but it **must** define the four hues at a luminance that survives a 20% mix against a dark `--card`, or all four alerts converge on the same near-black rectangle.
 
