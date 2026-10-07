@@ -1,18 +1,23 @@
-// Enforces the one rule `BUNDLED_BASE_MODULES` rests on: the set is closed
-// under imports. Nothing else in the build can see this, because the bundler
-// resolves a bundled module's imports inside its chunk and the loader is never
-// asked for them.
+// Enforces the two rules `BUNDLED_BASE_MODULES` rests on. Nothing else in the
+// build can see either, and neither fails loudly when broken.
 //
-// It does not fail loudly when broken. A module reachable from a bundled one
-// but missing from the table is compiled into that chunk AND served by the
-// realm, leaving two copies of each class it declares, which disagree only
-// where something compares them.
+// The set is closed under imports. The bundler resolves a bundled module's
+// imports inside its chunk and the loader is never asked for them, so a module
+// reachable from a bundled one but missing from the table is compiled into
+// that chunk AND served by the realm, leaving two copies of each class it
+// declares, which disagree only where something compares them.
 //
-// Attribution used to need rules here too — which module a class's code ref
-// names depended on what the loader happened to be asked for first. It does
-// not any more: a bundled module publishes the classes it declares as it is
-// evaluated, and the loader reads that before its own record, so a class is
-// named by its declarer whatever the serving order.
+// A bundled module uses nothing only the loader provides. The loader's
+// transform rewrites a served module's bare `fetch(...)` and `import(...)` to
+// go through the loader, and gives it its realm URL as `import.meta.url`. A
+// bundled copy gets none of that: its `fetch` skips the virtual network, its
+// `import()` belongs to the bundler, and its `import.meta.url` is the chunk's
+// URL under the host's assets. Reach the loader with `loaderForModule`, and
+// build code refs from `baseRealmRRI`.
+//
+// Attribution needs no rule: a bundled module publishes the classes it
+// declares as it is evaluated, and the loader reads that before its own
+// record, so a class is named by its declarer whatever the serving order.
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -145,6 +150,51 @@ const IMPORT_STATEMENT =
 const RUNTIME_IMPORT =
   /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^;'"]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
 
+// Constructs the loader's transform rewrites only in modules it serves. A
+// preceding `.` or identifier character means a method or another name
+// (`loader.fetch(`, `prefetch(`), which the transform leaves alone too.
+const LOADER_ONLY = {
+  'bare fetch': /(^|[^.\w$])fetch\s*\(/,
+  'dynamic import': /(^|[^.\w$])import\s*\(/,
+  'import.meta.url': /import\.meta[^;\n]{0,24}\.url\b/,
+};
+
+// Uses of a loader-only construct a bundled module keeps, each with the
+// reason it is safe. Keyed by module, then construct, so a new use of a
+// different construct in the same module is still reported.
+const LOADER_ONLY_ALLOWED = {
+  'file-formats/model3d-preview': {
+    'dynamic import':
+      'imports three.js from absolute esm.sh URLs, which the loader has no ' +
+      'mapping for, so the native import resolves them the same way',
+    'bare fetch':
+      "fetches the file's own content URL; moving it to the loader's fetch " +
+      'is pending',
+  },
+  'file-formats/file-resources': {
+    'bare fetch':
+      "fetches a file's content URL; moving it to the loader's fetch is " +
+      'pending',
+  },
+  'file-formats/html-preview': {
+    'bare fetch':
+      "fetches the file's source URL; moving it to the loader's fetch is " +
+      'pending',
+  },
+  'file-formats/model3d-captures': {
+    'bare fetch':
+      "fetches the model's URL; moving it to the loader's fetch is pending",
+  },
+  'file-formats/pdf-captures': {
+    'bare fetch':
+      "fetches the PDF's URL; moving it to the loader's fetch is pending",
+  },
+  'file-formats/pdf-viewer': {
+    'bare fetch':
+      "fetches the PDF's URL; moving it to the loader's fetch is pending",
+  },
+};
+
 // Which base module each imported name comes from, keyed by the local name and
 // carrying the name the declaring module exports it under — `import { X as Y }`
 // is looked up in the declarer as X, not Y.
@@ -187,6 +237,7 @@ function importOrigins(code, file) {
 function main() {
   let table = readTable();
   let closureViolations = [];
+  let loaderOnlyViolations = [];
 
   for (let name of table) {
     let file = fileFor(name);
@@ -203,13 +254,29 @@ function main() {
       }
       closureViolations.push(`${name} imports ${target}`);
     }
+
+    let lines = code.split('\n');
+    for (let [construct, pattern] of Object.entries(LOADER_ONLY)) {
+      if (LOADER_ONLY_ALLOWED[name]?.[construct]) {
+        continue;
+      }
+      lines.forEach((line, index) => {
+        if (pattern.test(line)) {
+          loaderOnlyViolations.push(
+            `${name}:${index + 1} uses ${construct}: ${line.trim()}`,
+          );
+        }
+      });
+    }
   }
 
   let closure = [...new Set(closureViolations)].sort();
+  let loaderOnly = loaderOnlyViolations.sort();
 
-  if (closure.length === 0) {
+  if (closure.length === 0 && loaderOnly.length === 0) {
     console.log(
-      `ok: ${table.size} bundled base modules are closed under imports`,
+      `ok: ${table.size} bundled base modules are closed under imports ` +
+        `and use nothing only the loader provides`,
     );
     return;
   }
@@ -223,6 +290,20 @@ function main() {
         `Add it to the table.\n`,
     );
     for (let line of closure) {
+      console.error(`  ${line}`);
+    }
+  }
+
+  if (loaderOnly.length > 0) {
+    console.error(
+      `\n${loaderOnly.length} use(s) of a construct only the loader provides, in a bundled module.\n` +
+        `The loader's transform rewrites these only in modules it serves, so the ` +
+        `bundled copy fetches past the virtual network, imports through the ` +
+        `bundler, or reads the chunk's URL as its own.\n` +
+        `Use loaderForModule(import.meta).fetch / .import, build code refs from ` +
+        `baseRealmRRI, or list the use in LOADER_ONLY_ALLOWED with its reason.\n`,
+    );
+    for (let line of loaderOnly) {
       console.error(`  ${line}`);
     }
   }

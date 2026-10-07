@@ -100,12 +100,12 @@ module('Integration | bundled base modules', function (hooks) {
     );
   });
 
-  // A module that re-exports a class it does not declare is bundled like any
-  // other now. It used to be fetched, because the loader credited the first
-  // module it served that exposed a name, and a bundled re-exporter served
-  // before the declarer took the credit — which an adoption-chain walk reached
-  // as a filter referring to a nonexistent type. The declarer publishes the
-  // class itself, so asking only for the re-exporter still names the declarer.
+  // A bundled module publishes the classes it declares as it is evaluated, and
+  // the loader reads that before its own record, so a class is named by its
+  // declarer whatever the serving order. Asking only for a module that
+  // re-exports a class must still name the module that declares it; naming
+  // the re-exporter would make an adoption-chain walk read the type as one
+  // that does not exist.
   test('a re-exporter credits the class to its declarer', async function (assert) {
     let loader = getService('loader-service').loader;
     // Only the re-exporter is asked for, which is what a card importing just
