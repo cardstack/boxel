@@ -2539,9 +2539,10 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
 
       // The preview updates through the realm's index event: the mock
-      // homeserver's dispatch, the matrix service's timeline drain, the store's
-      // reload of the card and the re-render. Each hop holds a test waiter, so
-      // settling covers the whole chain rather than racing it against a clock.
+      // homeserver's dispatch (a test waiter), the matrix service's debounced
+      // timeline drain (a runloop timer), the store's reload of the card (a
+      // test waiter) and the re-render. Settling covers that whole chain
+      // rather than racing it against a clock.
       await settled();
       let previewText = () =>
         document.querySelector('[data-test-code-mode-card-renderer-body]')
@@ -2681,7 +2682,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitFor('[data-test-card-error]');
+      // Each write reaches the preview through the realm's index event, which
+      // settling waits out; see 'card preview live updates when index changes'.
+      await settled();
       assert
         .dom('[data-test-card-error]')
         .exists('card error state is displayed');
@@ -2701,7 +2704,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitFor('[data-test-card-error]', { count: 0 });
+      await settled();
       assert
         .dom('[data-test-card-error]')
         .doesNotExist('card error state is not displayed');
