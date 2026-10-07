@@ -364,6 +364,8 @@ import {
   isSourceResult,
   isWrite,
   refusalForNonReader,
+  refusalSeenBy,
+  AUTHENTICATION_REQUIRED,
   type EntryPosition,
   type OperationError,
   type OperationRequest,
@@ -2404,15 +2406,6 @@ interface RequestDispatch {
   anonymous?: AnonymousDispatch;
   handle: () => Promise<ResponseWithNodeStream>;
 }
-
-// What a realm with a policy tells a request that authenticated nobody, wherever
-// nothing admits it: to authenticate.
-const AUTHENTICATION_REQUIRED: OperationError = {
-  status: 401,
-  code: 'actor-required',
-  title: 'Authentication required',
-  detail: AuthenticationErrorMessages.MissingAuthHeader,
-};
 
 // A route as `Realm.routeDescriptions` lists it: a router route, the hashed
 // stylesheet serve under its path prefix, or the fallback file and module
@@ -7317,16 +7310,10 @@ export class Realm {
     error: OperationError,
     requestContext: RequestContext,
   ): OperationError {
-    if (this.#coarseDeclined(requestContext) !== 'all') {
-      return error;
-    }
-    let seen = refusalForNonReader(error);
-    // A caller who isn't signed in is told to authenticate wherever a caller
-    // who may not read the realm is told nothing is there, so the answer is
-    // the one every request that authenticated nobody gets.
-    return requestContext.anonymousCaller && seen.code === 'target-not-found'
-      ? AUTHENTICATION_REQUIRED
-      : seen;
+    return refusalSeenBy(error, {
+      readDeclined: this.#coarseDeclined(requestContext) === 'all',
+      signedIn: !requestContext.anonymousCaller,
+    });
   }
 
   // Who an operation dispatched from an HTTP request is running for. The actor

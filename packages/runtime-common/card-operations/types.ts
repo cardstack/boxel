@@ -1565,3 +1565,41 @@ export function refusalForNonReader(error: OperationError): OperationError {
     ...(entry !== undefined ? { meta: { entry } } : {}),
   };
 }
+
+// What a realm with a policy tells a request that authenticated nobody,
+// wherever nothing admits it: to authenticate. The detail is the realm's
+// missing-credentials message (`AuthenticationErrorMessages.MissingAuthHeader`).
+export const AUTHENTICATION_REQUIRED: OperationError = {
+  status: 401,
+  code: 'actor-required',
+  title: 'Authentication required',
+  detail: 'Missing Authorization header',
+};
+
+// An operation's refusal as its caller is told it. A caller the realm ACL
+// would not let read the realm is never told which cards exist (see
+// `refusalForNonReader`), and one of them who isn't signed in is told to
+// authenticate wherever such a caller is told nothing is there, since that is
+// the answer every request that authenticated nobody gets. A caller the ACL
+// lets read the realm is told the refusal as it is, where the realm asks: it
+// asks whether a caller it declined a write could read only of a signed-in
+// caller, so a visitor's refused write is told as a non-reader's even on a
+// realm anyone may read.
+//
+// The operations envelope and the card+json writes answer their callers with
+// this, and an explain reports it as the refusal its actor would receive. The
+// card+json read and HEAD and the byte serves apply `refusalForNonReader`
+// themselves, and give a caller who isn't signed in the same answer by their
+// own route.
+export function refusalSeenBy(
+  error: OperationError,
+  caller: { readDeclined: boolean; signedIn: boolean },
+): OperationError {
+  if (!caller.readDeclined) {
+    return error;
+  }
+  let seen = refusalForNonReader(error);
+  return !caller.signedIn && seen.code === 'target-not-found'
+    ? AUTHENTICATION_REQUIRED
+    : seen;
+}

@@ -37,10 +37,11 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // registering for updates. Both are made as the submitter the realm's own
 // `realm.json` names. Closing a petition is opened to signed-in callers only,
 // and `claim`, which reads the caller, is opened to everyone but admits only
-// signed-in callers.
+// signed-in callers. A notice declares `sign` too and no grant names it, and a
+// ballot's only grant is made as a key the realm's config doesn't hold.
 const CIVIC = 'http://127.0.0.1:4444/civic/';
-// A board anyone may read, whose policy opens only a declared write, `sign`,
-// to callers who aren't signed in.
+// A board anyone may read, whose policy opens only a declared write, `sign` of
+// an open petition, to callers who aren't signed in.
 const BOARD = 'http://127.0.0.1:4444/board/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const CIVIC_POLICY = `${ORG}policies/civic`;
@@ -88,6 +89,18 @@ const CIVIC_MODULE = `
       set: { signature: actor() },
     };
   }
+  export class Notice extends CardDef {
+    @field title = contains(StringField);
+    @field status = contains(StringField);
+    @field signature = contains(StringField);
+
+    @operation static sign = {
+      base: 'transform',
+      params: { name: StringField },
+      set: { signature: params('name') },
+    };
+  }
+  export class Ballot extends Notice {}
   export class Signup extends CardDef {
     @field email = contains(StringField);
     @field source = contains(StringField);
@@ -111,8 +124,11 @@ const SIGNUP = type(CIVIC, 'Signup');
 const OPEN = `${CIVIC}petitions/open`;
 const LOCAL = `${CIVIC}petitions/local`;
 const CLOSED = `${CIVIC}petitions/closed`;
+const NOTICE = `${CIVIC}notices/open`;
+const BALLOT = `${CIVIC}ballots/open`;
 const MISSING = `${CIVIC}petitions/nowhere`;
 const BOARD_PETITION = `${BOARD}petitions/open`;
+const BOARD_CLOSED = `${BOARD}petitions/closed`;
 
 function petition(title: string, status: string, name = 'Petition') {
   return JSON.stringify({
@@ -154,6 +170,9 @@ const POLICY = policyCard([
   ]),
   rule(SIGNUP, [
     { operation: 'register', anonymous: true, actingUser: 'submitter' },
+  ]),
+  rule(type(CIVIC, 'Ballot'), [
+    { operation: 'sign', anonymous: true, actingUser: 'missing' },
   ]),
 ]);
 
@@ -197,6 +216,8 @@ module(basename(import.meta.filename), function (hooks) {
               'open',
               'LocalPetition',
             ),
+            'notices/open.json': petition('Quiet hours', 'open', 'Notice'),
+            'ballots/open.json': petition('Name the park', 'open', 'Ballot'),
           },
           permissions: {
             [EDITOR]: ['read', 'write', 'realm-owner'],
@@ -214,6 +235,7 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'civic.gts': CIVIC_MODULE,
             'petitions/open.json': petition('Paint the fence', 'open'),
+            'petitions/closed.json': petition('Fix the gate', 'closed'),
           },
           permissions: {
             '*': ['read'],
@@ -228,7 +250,12 @@ module(basename(import.meta.filename), function (hooks) {
             'policies/civic.json': POLICY,
             'policies/board.json': policyCard([
               rule(type(BOARD, 'Petition'), [
-                { operation: 'sign', anonymous: true, actingUser: 'submitter' },
+                {
+                  operation: 'sign',
+                  anonymous: true,
+                  actingUser: 'submitter',
+                  where: '.status == "open"',
+                },
               ]),
             ]),
           },
@@ -357,7 +384,11 @@ module(basename(import.meta.filename), function (hooks) {
     return `Bearer ${createJWT(civic, EDITOR, ['read', 'write', 'realm-owner'])}`;
   }
 
-  async function explain(target: string, operation: string) {
+  async function explain(
+    target: string,
+    operation: string,
+    policy = CIVIC_POLICY,
+  ) {
     let response = await request
       .post(`${new URL(ORG).pathname}_operations`)
       .set('X-HTTP-Method-Override', 'QUERY')
@@ -371,7 +402,7 @@ module(basename(import.meta.filename), function (hooks) {
         JSON.stringify({
           'boxel:operations': [
             invoke('explain', {
-              href: CIVIC_POLICY,
+              href: policy,
               data: { actor: '', target, operation },
             }),
           ],
@@ -610,6 +641,42 @@ module(basename(import.meta.filename), function (hooks) {
       (await explain(CLOSED, 'sign')).decision,
       'denied',
       'a closed petition',
+    );
+  });
+
+  test('explain reports a refusal as the caller who is not signed in receives it', async function (assert) {
+    let refusals: [string, string, string][] = [
+      ['a predicate that does not hold', CLOSED, 'predicate-false'],
+      ['an operation that reads the caller', LOCAL, 'reads-actor'],
+      ['a type no grant names', NOTICE, 'no-grant'],
+      ['a grant whose acting user is not in the config', BALLOT, 'no-grant'],
+    ];
+    for (let [label, target, reason] of refusals) {
+      let explained = await explain(target, 'sign');
+      assert.strictEqual(explained.reason, reason, `${label}: ${reason}`);
+      let response = await sign(target, 'Ada');
+      unauthenticated(response, label, assert);
+      assert.deepEqual(
+        explained.refusal,
+        { status: 401, code: 'actor-required' },
+        `${label}: explain reports the 401 the realm sends`,
+      );
+    }
+    // A realm anyone may read tells such a caller to authenticate for a write
+    // it refused too, and explain says the same.
+    let explained = await explain(BOARD_CLOSED, 'sign', BOARD_POLICY);
+    assert.strictEqual(explained.reason, 'predicate-false');
+    unauthenticated(
+      await operations(BOARD, [
+        invoke('sign', { href: BOARD_CLOSED, data: { name: 'Ada' } }),
+      ]),
+      'a realm anyone may read',
+      assert,
+    );
+    assert.deepEqual(
+      explained.refusal,
+      { status: 401, code: 'actor-required' },
+      'a realm anyone may read: explain reports the 401 the realm sends',
     );
   });
 });

@@ -245,7 +245,9 @@ export {
   linkStrategyOf,
   readLinkStrategyOf,
   refusalForNonReader,
+  refusalSeenBy,
   unshareableFormatsOf,
+  AUTHENTICATION_REQUIRED,
 } from './types.ts';
 export type {
   BaseOperation,
