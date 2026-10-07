@@ -153,8 +153,9 @@ module('Integration | glimmer-motion and Choreo in cards', function (hooks) {
   });
 
   test('cards get the host’s own module objects', async function (assert) {
-    // One row per glimmer-motion and Choreo id `shimExternals` registers,
-    // sync and async alike, each paired with the host's own import of it.
+    // One row per glimmer-motion, Choreo and choreo-player id `shimExternals`
+    // registers, sync and async alike, each paired with the host's own import
+    // of it.
     let shims: [string, () => Promise<object>][] = [
       ['glimmer-motion', () => import('glimmer-motion')],
       [
@@ -234,6 +235,7 @@ module('Integration | glimmer-motion and Choreo in cards', function (hooks) {
         '@cardstack/choreo/film/titles',
         () => import('@cardstack/choreo/film/titles'),
       ],
+      ['@cardstack/choreo-player', () => import('@cardstack/choreo-player')],
     ];
     for (let [specifier, importFromHost] of shims) {
       let cardModule: Record<string, unknown> = await loader.import(specifier);

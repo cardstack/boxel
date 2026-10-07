@@ -51,6 +51,7 @@ const RESOLVED_BY_PATH_ALIAS = [
   '@cardstack/boxel-ui',
   '@cardstack/bxl',
   '@cardstack/choreo',
+  '@cardstack/choreo-player',
   '@cardstack/host',
   '@cardstack/runtime-common',
   'glimmer-motion',
@@ -291,13 +292,13 @@ describe('card-facing packages the host shims', () => {
     ).toEqual([]);
   });
 
-  it('alias exactly the glimmer-motion and Choreo ids the host shims', () => {
+  it('alias exactly the glimmer-motion, Choreo and choreo-player ids the host shims', () => {
     // parse aliases these entry points one by one rather than with a `/*`
     // pattern, so that a subpath no shim serves fails to resolve. That only
     // holds while the list and the shims agree: a shim missing from the list
     // rejects valid card code, and an extra entry passes code that can't load.
     let shimmed = readShimmedSpecifiers().filter((specifier) =>
-      ['glimmer-motion', '@cardstack/choreo'].some(
+      ['glimmer-motion', '@cardstack/choreo', '@cardstack/choreo-player'].some(
         (name) => specifier === name || specifier.startsWith(`${name}/`),
       ),
     );

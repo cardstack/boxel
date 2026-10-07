@@ -21,10 +21,12 @@
   "sideEffects": false,
   "exports": {
     ".": {
+      "developing:choreo": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./hyperframes": {
+      "developing:choreo": "./src/hyperframes.ts",
       "types": "./dist/hyperframes.d.ts",
       "default": "./dist/hyperframes.js"
     }
