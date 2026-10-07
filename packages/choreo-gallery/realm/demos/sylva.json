@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "sylva",
+      "title": "Sylva",
+      "group": "3D",
+      "lede": "A moss world, live cards punched into it, toured by a camera that never stops.",
+      "apis": ["@through", "@look", "c.Perform", "@at / @delay"],
+      "sample": "{{! ONE STEP IS THE WHOLE LAP: a title drift, eight reading\n    waypoints and the way home, splined by @through on a single clock —\n    the camera crosses every pose with continuous velocity, and the aim\n    rides in the waypoints via @look. The ease is linear on purpose: the\n    spline is the shape. }}\n<c.Sequence @name={{this.lapName}}>\n  <c.Camera3D @name='lap' @through={{this.lapPath}}\n    @duration={{this.lapSeconds}} @ease='linear' />\n\n  {{! presents, CLIPPED into the path: each open fires just before its\n      card's waypoint is crossed, mid-flight — and each open SWAPS the\n      cards, so the leaver and the arrival cross-fade while the camera\n      is still travelling }}\n  {{#each this.presents as |present|}}\n    <c.Perform @at={{at 'lap'}} @delay={{present.open}}\n      @action='open' @target={{present.id}} />\n  {{/each}}\n\n  {{! the last card lets go partway into the pull-out }}\n  <c.Perform @at={{at 'lap'}} @delay={{this.lapClose}} @action='close' />\n  <c.Perform @action='lap' />\n</c.Sequence>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "spatial-paths",
+        "concept": "A camera path and its response are different things",
+        "why": "The tour supplies desired framing while cascaded camera and aim responses shape how it reaches that framing. The host renders the scene; its chase model is not a replacement for a Choreo score.",
+        "experiment": "Compare Dream glide and Brisk tracking around a change of direction. Watch whether position and aim arrive together and whether the subject remains readable.",
+        "pitfall": "Calling a history-dependent chased frame an exact seek is misleading; recording needs a defined reconstruction policy.",
+        "combine": "Combine with Film transport only after defining how camera state is reconstructed at a requested timestamp."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

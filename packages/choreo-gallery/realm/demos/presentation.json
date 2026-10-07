@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "presentation",
+      "title": "Presentation",
+      "group": "Timeline",
+      "lede": "The clock waits for you.",
+      "apis": ["c.Gate", "c.advance", "Presence", "nested Choreo"],
+      "sample": "// A presentation is a run that parks. The click does not start an\n// animation — it opens a gate in a score that is already compiled.\n// Linger and the next beat has not begun. Mash mid-build and the\n// segment completes instantly (Keynote's click-through), then parks.\n<c.Sequence>\n  <c.Tween @of={{c.id 'title'}} @opacity={{array 0 1}}\n    @x={{array -18 0}} @duration={{0.48}} @ease='easeOut' />\n  <c.Gate @delay={{0.72}} />   {{! the kicker writes itself — you did not click }}\n  <c.Tween @of={{c.id 'kicker'}} @opacity={{array 0 1}} @duration={{0.36}} />\n  <c.Gate />\n  <c.Parallel>\n    <c.Move @of={{c.id 'hull'}} @from={{c.beacon 'approach'}}\n      @path={{APPROACH}} @rotate='auto' @duration={{1.28}} />\n    <c.Tween @of={{c.id 'fairway'}} @pathLength={{array 0 1}} @duration={{1.28}} />\n  </c.Parallel>\n  <c.Gate />\n  <c.Tween @of={{c.id 'stamp'}}\n    @opacity={{array 0 1 1}} @scale={{array 0.86 1.08 1}} @duration={{0.46}} />\n</c.Sequence>\n\n// advance() is the only verb. play() would unpause a paused clock;\n// a gate is a named still. Replay is the only reverse — the cursor\n// only ever moves forward through one pass.",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-gates",
+        "concept": "One click can express one thought",
+        "why": "Gates divide a score into semantic advances. Parallel work and small offsets let related pieces appear together rather than making the presenter click once per element.",
+        "experiment": "Advance a gate, reverse, and advance again. Check that related elements form one beat and that already revealed content remains coherent.",
+        "pitfall": "Replacing gates with timeouts divorces the presenter from the score and makes pause or reverse unreliable.",
+        "combine": "Combine with slides for section changes and build-order for named dependencies inside each beat."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "grid",
+      "title": "Reorder grid",
+      "group": "Drag",
+      "lede": "Drag one cover anywhere in the grid.",
+      "apis": ["ReorderGroup", "axis=\"xy\""],
+      "sample": "{{! axis='xy' frees both axes, so a cover can displace diagonally. The drop\n    target is found by NEAREST CENTRE rather than by crossing an edge —\n    which is the only thing that works once a row can wrap. }}\n<ReorderGroup\n  @values={{this.items}}\n  @onReorder={{this.setItems}}\n  @axis='xy'\n  as |group|\n>\n  {{#each this.items as |album|}}\n    <ReorderItem\n      @group={{group}}\n      @value={{album}}\n      @transition={{snap}}\n      @whileDrag={{to scale=1.06 zIndex=4}}\n    >{{album.label}}</ReorderItem>\n  {{/each}}\n</ReorderGroup>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-reorder-grid",
+        "concept": "Reordering preserves a tile while neighbours move",
+        "why": "ReorderGroup owns the ordered values and each item owns a stable value. The grabbed cover stays under the pointer while projection moves the other covers into their new places.",
+        "experiment": "Drag diagonally across a row boundary, reverse, and release. Compare Playful pickup and Precise pickup while following one cover's colour.",
+        "pitfall": "Index keys make identity follow a position rather than a cover, causing state to jump between items.",
+        "combine": "Combine with presence for removal, keeping data identity stable through both reorder and exit."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

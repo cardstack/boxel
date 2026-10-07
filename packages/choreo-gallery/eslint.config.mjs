@@ -8,12 +8,6 @@ import globals from 'globals';
 
 export default defineConfig([
   globalIgnores([
-    // Boxel copies are generated from the already-linted gallery sources.
-    'public/**',
-    'src/components/**/*',
-    '!src/components/{gallery-site,site-frame,demo-stage,special-stages,host-link,raw-document-frame}.gts',
-    'src/lib/**/*',
-    '!src/lib/{theme,host-navigation}.ts',
     // the film-graph sketches are proposals written in a syntax that does
     // not exist yet (f.Spine, f.Attach, f.picture.*): read them, don't lint them
     'docs/film-graph/**/*.gts',
@@ -21,6 +15,12 @@ export default defineConfig([
     'out/**',
   ]),
   base,
+  {
+    // realm test files run under `boxel test`, which serves them the test
+    // helpers alongside the cards they test
+    files: ['realm/**/*.test.gts'],
+    rules: { 'ember/no-test-support-import': 'off' },
+  },
   {
     // Node browser checks contain functions evaluated in the page.
     files: ['tools/*widget*.mjs', 'tools/sagrada-model-review.mjs'],

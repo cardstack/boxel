@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "lists",
+      "title": "Lists",
+      "group": "Choreo",
+      "lede": "One name, two lists, one move.",
+      "apis": ["Choreo", "Move", "counterpart"],
+      "sample": "{{! A name that moves lists is REMOVED from one column and INSERTED into the\n    other — two different elements. Matching ids makes the new one carry the\n    old one as its counterpart, so it flies from where the old one stood\n    instead of appearing. }}\n<Choreo as |c|>\n  <div {{motion id='crew' role='column'}}>\n    {{#each this.crew key='@identity' as |name|}}\n      <button {{motion id=name role='name'}}>{{name}}</button>\n    {{/each}}\n  </div>\n  <div {{motion id='bench' role='column'}}>\n    {{#each this.bench key='@identity' as |name|}}\n      <button {{motion id=name role='name'}}>{{name}}</button>\n    {{/each}}\n  </div>\n\n  <c.Parallel>\n    {{! @size={{false}} — the names only translate. Without it a Move would\n        also animate width and height, and a name would visibly squash as it\n        crossed between two columns of different widths. }}\n    <c.Move @of={{c.kept 'name'}} @spring={{quick}} @size={{false}} />\n    {{! the columns only change height — they never move }}\n    <c.Move @of={{c.moved 'column'}} @spring={{quick}} />\n    {{! the old copy vanishes at once; its counterpart is already flying }}\n    <c.Hold @of={{c.removed 'name'}} @opacity={{0}} />\n  </c.Parallel>\n</Choreo>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-regions",
+        "concept": "A transfer also reshapes its surroundings",
+        "why": "A counterpart match carries the moved name across lists while the containing columns resize on the same spring. The choreography expresses the transfer and its effects as one pass.",
+        "experiment": "Transfer a name, then move another before the first lands. Follow the arriving name and both column boundaries.",
+        "pitfall": "Animating the flyer alone leaves the rest of the interface jumping abruptly around it.",
+        "combine": "Combine with inbox beacons for actions whose endpoints are outside either list."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

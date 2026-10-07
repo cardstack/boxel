@@ -9,10 +9,7 @@ const browser = await chromium.launch({
   args: ['--mute-audio'],
 });
 try {
-  for (const path of [
-    '../../choreo-test-app/app/styles/app.css',
-    '../styles/app.scoped.css',
-  ]) {
+  for (const path of ['../../choreo-test-app/app/styles/app.css']) {
     const css = readFileSync(new URL(path, import.meta.url), 'utf8');
     const page = await browser.newPage();
     await page.setContent(`<style>${css}</style>

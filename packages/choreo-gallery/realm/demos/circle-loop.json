@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "circle-loop",
+      "title": "Circle continuity",
+      "group": "Choreo",
+      "lede": "One mounted cast, two coordinate levels, one repeating score.",
+      "apis": ["Choreo", "c.Tween", "c.Parallel", "@times", "@repeat"],
+      "sample": "<c.Tween @of={{c.id 'dot'}}\n  @x={{array 0 0 100 0 0}}\n  @times={{array 0 0.15 0.5 0.85 1}}\n  @duration={{8}} @repeat={{this.forever}} />",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-circle-loop",
+        "concept": "Two coordinate levels, one loop",
+        "why": "Stable circles retain their identity as a parent zoom and local rearrangements combine.",
+        "experiment": "Change grid spacing first, then zoom. Compare the local spacing with its magnified screen distance.",
+        "pitfall": "Repeating a tween does not repeat its enclosing sequence. Every track here contains a complete cycle.",
+        "combine": "Use the same parent-and-child separation to connect a data overview with a detail view."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

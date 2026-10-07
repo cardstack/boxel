@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "drift",
+      "title": "Drift",
+      "group": "Choreo",
+      "lede": "A car you tune while you are driving it.",
+      "apis": ["c.inserted", "c.moved", "c.removed", "c.beacon", "c.still"],
+      "sample": "// Two halves, and the point of the stage is which is which.\n//\n// The DRIVING is not a score. Motion's springs are scalar interpolators\n// toward a target — right for the wheel returning to centre, the chassis\n// lagging the nose and the camera settling, and wrong for the part that\n// makes it a drift game. Lateral slide is a velocity decomposition with a\n// friction coefficient on the sideways half, so lib/drift.ts integrates it\n// by hand. The order of these three lines IS the model: recompose in the\n// frame the car was pointing in, and turn the heading only afterwards.\n// Turn first and the velocity rotates with the nose every frame, for free,\n// and the car can never slide at all.\nvf += throttle * power * dt;              // the engine, along the nose\nvr *= Math.exp(-(sliding ? bite * 0.16 : bite) * dt);   // grip, not a spring\ncar.vx = fx * vf + rx * vr;               // recompose in the OLD frame...\ncar.vy = fy * vf + ry * vr;\ncar.heading += car.steer * TURN * bite * dt;            // ...then turn\n\n// The LAP BOARD is a score, and this is the whole of it. One tracked write\n// per lap; nothing below is told where to go. The region reads the change\n// out of the DOM — an entry appeared, the rows under it moved because it\n// pushed them, and the slowest lap left because the board holds five.\n<c.Parallel>\n  <c.Move @of={{c.inserted 'lap'}} @from={{c.beacon 'clock'}}\n    @spring={{ARRIVE}} @size={{false}} />\n\n  {{! a different spring, because being shoved down is not arriving }}\n  <c.Move @of={{c.moved 'lap'}} @spring={{SHUFFLE}} @size={{false}} />\n\n  {{! pushed off the bottom: claimed by nobody, so it needs a place }}\n  <c.Move @of={{c.removed 'lap'}} @to={{c.beacon 'bin'}} @spring={{DROP}} />\n\n  {{! and a lap that beat nothing moves one row. Dimming the rest is what\n      makes that legible — frozen, you cannot tell the list reordered. }}\n  <c.Hold @of={{c.still 'lap'}} @opacity={{0.42}} @duration={{0.5}} />\n</c.Parallel>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-drift",
+        "concept": "A simulation and a transition have different responsibilities",
+        "why": "The car's continuous driving model owns steering, grip and velocity. Choreo handles discrete changes around that world, such as arrival and rearrangement; a spring preset does not replace the driving loop.",
+        "experiment": "Hold the pointer on the track, change the car's own grip controls, and drive again. Use Bouncy parking and Precision parking to compare the surrounding transitions separately.",
+        "pitfall": "Calling a transition duration the car's handling parameter confuses the simulation with its presentation.",
+        "combine": "Combine with a guided explanation that pauses at a reproducible driving condition rather than pretending a fresh throw is identical."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

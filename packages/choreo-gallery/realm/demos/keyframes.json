@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "keyframes",
+      "title": "Keyframes",
+      "group": "Animate",
+      "lede": "A path through values.",
+      "apis": ["animate", "keyframes"],
+      "sample": "// An array is a PATH of waypoints, not a from/to: one tween eases\n// through all four in order. rotate and scale have the same number of stops,\n// so they hit their waypoints together — mismatched lengths would drift.\nconst morph = {\n  rotate: [0, 90, 210, 360],\n  scale: [1, 0.82, 1.14, 1],\n  borderRadius: ['34%', '50%', '28%', '34%'],\n};\n// the glow rides the same clock, so its pulse cannot drift out of phase\nconst glow = { opacity: [0.35, 0.7, 0.3, 0.35], scale: [1, 1.25, 0.9, 1] };\nconst transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };\n\n<div {{motion animate=glow transition=transition}}></div>\n<div {{motion animate=morph transition=transition}}></div>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-tweens",
+        "concept": "Intermediate values are part of the design",
+        "why": "The morph follows explicit rotation, scale and lift arrays. An easing curve controls progress through those targets; changing duration alone should retime the same running loop.",
+        "experiment": "Compare Helicopter and Moon hop. Change lift while the loop runs and watch the existing shape rather than a reset copy.",
+        "pitfall": "A multi-target keyframe animation cannot simply be switched to a two-target spring generator.",
+        "combine": "Combine with SVG path drawing for a synchronized shape and line treatment."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

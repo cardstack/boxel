@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "drag",
+      "title": "Drag",
+      "group": "Drag",
+      "lede": "Throw it. It coasts, then settles.",
+      "apis": ["drag", "dragConstraints", "dragElastic", "dragTransition"],
+      "sample": "{{! constraints are the crop frame's box — pass the element itself, no ref\n    object needed. dragElastic is how far past the edge the still may be\n    pulled; dragTransition is the throw AFTER release, so a flick coasts\n    and settles instead of stopping dead under the finger. }}\n<div class='crop' {{this.bindFrame}}>\n  <div\n    {{motion\n      drag=true\n      dragConstraints=this.frame\n      dragElastic=0.12\n      dragDirectionLock=this.lock\n      dragTransition=(inertia bounceStiffness=280 bounceDamping=34 power=0.28)\n      onDragStart=this.grab\n      onDragEnd=this.release\n    }}\n  ></div>\n</div>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-drag",
+        "concept": "Constraints and momentum answer different questions",
+        "why": "Constraints define the permitted area, elasticity controls how the edge feels, and the release transition shapes the return or continuation. These are separate variables rather than one generic spring.",
+        "experiment": "Pull beyond an edge with Rubber tether, then repeat with Magnetic well. Release at different velocities and compare the edge response.",
+        "pitfall": "Changing visual styling alone does not tune a drag interaction; tune the values consumed by the drag session.",
+        "combine": "Combine with grip when interactive content requires a dedicated handle to start dragging."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

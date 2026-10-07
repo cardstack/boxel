@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "sheet",
+      "title": "Sheet",
+      "group": "Drag",
+      "lede": "The finger lets go. The spring takes the same value.",
+      "apis": ["drag=\"y\"", "dragConstraints", "onDragEnd", "animate"],
+      "sample": "{{! While the finger is down, drag='y' owns y. On release the gesture hands\n    that value back and animate carries it to the detent that won — same\n    element, same value, no remount and no jump.\n\n    dragMomentum is off because the detent IS the destination; inertia would\n    be a second opinion about where the sheet should end up. }}\n{{! pose is {y: DETENTS[this.mode]}; limits are plain px, {top: 0, bottom: 262} }}\n<div\n  {{motion\n    animate=this.pose\n    transition=settle\n    drag='y'\n    dragConstraints=this.limits\n    dragElastic=0.05\n    dragMomentum=false\n    onDragStart=this.grab\n    onDragEnd=this.land\n  }}\n></div>\n\n// Which detent wins is not the one nearest where the finger STOPPED — it is\n// the one nearest where the throw was GOING. onDragEnd hands you the velocity;\n// project a sixth of a second of it past the release point and pick from there.\nland = (event, info) => {\n  const released = this.startedAt + info.offset.y;\n  const projected = released + info.velocity.y * 0.16;\n  this.detent = nearest(projected);\n};",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-drag",
+        "concept": "A detent can be an interface mode",
+        "why": "The sheet's release chooses among detents, and each detent changes how a share target is presented. The throw predicts intent while shared identity connects the different representations.",
+        "experiment": "Release at similar positions with different velocities. Check which mode wins and whether the same target remains recognizable after the sheet settles.",
+        "pitfall": "Choosing a detent only from the final pointer position ignores release velocity; excessive prediction makes the sheet feel uncontrollable.",
+        "combine": "Combine with presence and layout to retain departing modes until their transitions complete."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}
