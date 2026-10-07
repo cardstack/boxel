@@ -42,7 +42,7 @@ module('Pretui | components/alert', function (hooks) {
     let classes = glyphs.map((g) => g?.querySelector('svg')?.getAttribute('class'));
     assert.true(
       classes.every((c) => Boolean(c)),
-      'each tone paints an svg icon',
+      `each tone paints an svg icon; got ${JSON.stringify(classes)} from ${JSON.stringify(glyphs.map((g) => g?.innerHTML.slice(0, 160)))}`,
     );
     assert.strictEqual(
       new Set(classes).size,
