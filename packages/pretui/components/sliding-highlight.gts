@@ -206,13 +206,13 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
             var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1))
           );
         }
+        /* a strong edge, so the pill reads even when its track blends into
+           the surface behind it */
         .pretui-highlight[data-variant='pill'] {
-          background: var(--card);
-          box-shadow: var(
-            --pretui-shadow-control,
-            0 0 0 1px var(--border),
-            0 1px 2px rgb(16 24 40 / 0.1)
-          );
+          background-color: var(--card);
+          box-shadow:
+            0 0 0 1px var(--border-strong),
+            var(--shadow-sm);
         }
         .pretui-highlight[data-variant='soft'] {
           background: color-mix(

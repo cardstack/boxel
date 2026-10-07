@@ -102,7 +102,10 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             {{on 'change' (fn this.pick option)}}
             data-test-pretui-segmented-option={{option.value}}
           />
-          {{option.label}}
+          <span
+            class='pretui-seg-text'
+            data-text={{option.label}}
+          >{{option.label}}</span>
         </label>
       {{/each}}
     </div>
@@ -162,6 +165,19 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
              SlidingHighlight in its pill cut — identical treatment, one
              element, and it travels */
           color: var(--foreground);
+          font-weight: 600;
+        }
+        /* a hidden bold copy under the label holds every segment at its bold
+           width, so selecting one never shifts its neighbors or the pill */
+        .pretui-seg-text {
+          display: inline-grid;
+        }
+        .pretui-seg-text::after {
+          content: attr(data-text);
+          height: 0;
+          overflow: hidden;
+          visibility: hidden;
+          font-weight: 600;
         }
         /* coarse pointers get a real hit target without moving the fine one */
         @media (any-pointer: coarse) {
