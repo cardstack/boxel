@@ -11,6 +11,12 @@ const REALM_STARTERS = new Set([
   'runTestRealmServerWithRealms',
 ]);
 
+// Calls that build a realm without starting it. The realm indexes when its
+// `start()` runs, so a `start()` on one of these realms counts as a starter.
+const REALM_FACTORIES = new Set(['createRealm']);
+
+const SETUP_DB = new Set(['setupDB']);
+
 // Setup helpers that register their own `setupDB` hooks. Without
 // `mode: 'before'` they bring up their realms before every test, on a database
 // with no template.
@@ -30,6 +36,35 @@ function propertyName(property) {
     return String(property.key.value);
   }
   return undefined;
+}
+
+// `templateDatabase: undefined` passes no template, so it counts as absent.
+function isUndefined(node) {
+  return (
+    (node.type === 'Identifier' && node.name === 'undefined') ||
+    (node.type === 'UnaryExpression' && node.operator === 'void')
+  );
+}
+
+// Whether a reference sits in a type position, such as
+// `ReturnType<typeof runTestRealmServer>`. A type never runs.
+function isTypeOnly(reference) {
+  if (reference.isTypeReference && !reference.isValueReference) {
+    return true;
+  }
+  for (let node = reference.identifier.parent; node; node = node.parent) {
+    if (
+      node.type === 'TSTypeQuery' ||
+      node.type === 'TSTypeAnnotation' ||
+      node.type === 'TSTypeReference'
+    ) {
+      return true;
+    }
+    if (isFunction(node)) {
+      return false;
+    }
+  }
+  return false;
 }
 
 function isFunction(node) {
@@ -135,6 +170,43 @@ module.exports = {
       );
     }
 
+    // The factory that built the realm, when a reference is the object of a
+    // `.start()` call on a realm some factory returned:
+    // `({ realm } = await createRealm(...))` and later `realm.start()`.
+    function startedRealmFactory(reference) {
+      const member = reference.identifier.parent;
+      if (
+        !member ||
+        member.type !== 'MemberExpression' ||
+        member.object !== reference.identifier ||
+        member.computed ||
+        member.property.type !== 'Identifier' ||
+        member.property.name !== 'start' ||
+        !member.parent ||
+        member.parent.type !== 'CallExpression' ||
+        member.parent.callee !== member
+      ) {
+        return undefined;
+      }
+      const variable = reference.resolved;
+      if (!variable) {
+        return undefined;
+      }
+      for (const write of variable.references) {
+        let value = write.writeExpr;
+        while (value && value.type === 'AwaitExpression') {
+          value = value.argument;
+        }
+        if (value && value.type === 'CallExpression') {
+          const factory = helperCalledBy(value, REALM_FACTORIES);
+          if (factory) {
+            return factory;
+          }
+        }
+      }
+      return undefined;
+    }
+
     // The name of the first realm starter `fn` reaches, directly or through
     // functions declared in the same file, or undefined if it reaches none.
     function realmStarterReachedFrom(fn, visited = new Set()) {
@@ -144,7 +216,12 @@ module.exports = {
       visited.add(fn);
       for (const scope of scopesWithin(fn)) {
         for (const reference of scope.references) {
-          const starter = helperNamedBy(reference, REALM_STARTERS);
+          if (isTypeOnly(reference)) {
+            continue;
+          }
+          const starter =
+            helperNamedBy(reference, REALM_STARTERS) ??
+            startedRealmFactory(reference);
           if (starter) {
             return starter;
           }
@@ -189,9 +266,9 @@ module.exports = {
         : context.getScope();
     }
 
-    // The uncached setup helper a call invokes, if any: `helper(...)` or
-    // `namespace.helper(...)`.
-    function uncachedSetupCalledBy(node) {
+    // The helper in `names` a call invokes, if any: `helper(...)`,
+    // `alias(...)` or `namespace.helper(...)`.
+    function helperCalledBy(node, names) {
       const callee = node.callee;
       let identifier;
       if (callee.type === 'Identifier') {
@@ -205,7 +282,7 @@ module.exports = {
         return undefined;
       }
       const reference = findReference(scopeOf(node), identifier);
-      return reference && helperNamedBy(reference, UNCACHED_SETUPS);
+      return reference && helperNamedBy(reference, names);
     }
 
     // Reports a call to an uncached setup helper unless its options say
@@ -243,15 +320,12 @@ module.exports = {
 
     return {
       CallExpression(node) {
-        const helper = uncachedSetupCalledBy(node);
+        const helper = helperCalledBy(node, UNCACHED_SETUPS);
         if (helper) {
           checkUncachedSetup(node, helper);
           return;
         }
-        if (
-          node.callee.type !== 'Identifier' ||
-          node.callee.name !== 'setupDB'
-        ) {
+        if (!helperCalledBy(node, SETUP_DB)) {
           return;
         }
         const options = node.arguments[1];
@@ -262,8 +336,12 @@ module.exports = {
         if (options.properties.some((p) => p.type === 'SpreadElement')) {
           return;
         }
+        // Only the presence of a template is checked, not what it holds.
         if (
-          options.properties.some((p) => propertyName(p) === 'templateDatabase')
+          options.properties.some(
+            (p) =>
+              propertyName(p) === 'templateDatabase' && !isUndefined(p.value),
+          )
         ) {
           return;
         }

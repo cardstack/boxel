@@ -12,16 +12,23 @@ This rule reports two forms:
 
 - A `setupDB(hooks, { beforeEach })` call that passes no `templateDatabase`
   when its `beforeEach` brings up realms. It does so when it calls
-  `runTestRealmServer` or `runTestRealmServerWithRealms`, either directly or
-  through functions declared in the same file. The rule does not follow
-  imports.
+  `runTestRealmServer` or `runTestRealmServerWithRealms`, or calls `start()` on
+  a realm that `createRealm` returned, either directly or through functions
+  declared in the same file. The rule does not follow imports, and it ignores
+  a starter named only in a type.
 - A call to `setupPermissionedRealm` or `setupPermissionedRealms` without
   `mode: 'before'`. Both default to `mode: 'beforeEach'` with no template. Use
   the `Cached` variant of the same helper instead.
 
 An import is matched by the name it imports, so an alias or a namespace member
-counts. The rule leaves alone options it cannot read: a variable, a spread, or
-a `mode` that is not a string literal.
+counts, for `setupDB` as for the starters. The rule leaves alone options it
+cannot read: a variable, a spread, or a `mode` that is not a string literal.
+
+The rule checks only that a `templateDatabase` is there (and is not
+`undefined`), not what the template holds. A template that holds only some of
+the module's realms, such as one with only the base realm, passes the rule
+while the other realms still index before every test. `build` must bring up
+every realm `beforeEach` does.
 
 ## Fix
 

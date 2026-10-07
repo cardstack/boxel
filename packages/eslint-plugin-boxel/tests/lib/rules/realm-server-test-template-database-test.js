@@ -143,6 +143,38 @@ ruleTester.run('realm-server-test-template-database', rule, {
         });
       `,
     },
+    // A realm built but never started indexes nothing.
+    {
+      code: `
+        import { setupDB, createRealm } from './helpers';
+        setupDB(hooks, {
+          beforeEach: async (dbAdapter, publisher) => {
+            ({ realm } = await createRealm({ dir, dbAdapter, publisher }));
+          },
+        });
+      `,
+    },
+    // \`start()\` on a realm no factory built.
+    {
+      code: `${IMPORTS}
+        setupDB(hooks, {
+          beforeEach: async () => {
+            await runner.start();
+          },
+        });
+      `,
+    },
+    // A starter named only in a type.
+    {
+      code: `${IMPORTS}
+        setupDB(hooks, {
+          beforeEach: async () => {
+            let server: Awaited<ReturnType<typeof runTestRealmServer>> | undefined;
+            servers.push(server);
+          },
+        });
+      `,
+    },
     // A namespace member that is not a starter.
     {
       code: `
@@ -291,6 +323,67 @@ ruleTester.run('realm-server-test-template-database', rule, {
         });
       `,
       errors: [perTestIndex('runTestRealmServerWithRealms')],
+    },
+    // A realm built by a factory and started in the hook.
+    {
+      code: `
+        import { setupDB, createRealm } from './helpers';
+        let realm;
+        setupDB(hooks, {
+          beforeEach: async (dbAdapter, publisher) => {
+            ({ realm } = await createRealm({ dir, dbAdapter, publisher }));
+            await realm.start();
+          },
+        });
+      `,
+      errors: [perTestIndex('createRealm')],
+    },
+    {
+      code: `
+        import { setupDB, createRealm } from './helpers';
+        setupDB(hooks, {
+          beforeEach: async (dbAdapter, publisher) => {
+            let { realm } = await createRealm({ dir, dbAdapter, publisher });
+            await realm.start();
+          },
+        });
+      `,
+      errors: [perTestIndex('createRealm')],
+    },
+    // \`setupDB\` aliased, or through a namespace import.
+    {
+      code: `
+        import { setupDB as setup, runTestRealmServer } from './helpers';
+        setup(hooks, {
+          beforeEach: async () => {
+            await runTestRealmServer();
+          },
+        });
+      `,
+      errors: [perTestIndex('runTestRealmServer')],
+    },
+    {
+      code: `
+        import * as helpers from './helpers';
+        helpers.setupDB(hooks, {
+          beforeEach: async () => {
+            await helpers.runTestRealmServer();
+          },
+        });
+      `,
+      errors: [perTestIndex('runTestRealmServer')],
+    },
+    // A template property that holds no template.
+    {
+      code: `${IMPORTS}
+        setupDB(hooks, {
+          templateDatabase: undefined,
+          beforeEach: async () => {
+            await runTestRealmServer();
+          },
+        });
+      `,
+      errors: [perTestIndex('runTestRealmServer')],
     },
     // An uncached setup helper at module level, in its default mode.
     {
