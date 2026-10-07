@@ -7,15 +7,17 @@
   "scripts": {
     "build": "vite build",
     "build:realm": "node scripts/build-realm.mjs",
-    "check:realm": "node scripts/build-realm.mjs --check",
+    "fixtures": "node --conditions=developing:choreo scripts/film-fixtures.mjs",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:golden": "node --conditions=developing:choreo scripts/film-fixtures.mjs --check",
     "lint:format": "prettier . --cache --check",
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
+    "lint:realm": "node scripts/build-realm.mjs --check",
     "lint:types": "ember-tsc --noEmit",
     "start": "vite --host ::",
     "test": "vite build --mode=development --out-dir dist-tests && ember test --path dist-tests"

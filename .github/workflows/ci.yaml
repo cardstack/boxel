@@ -135,6 +135,7 @@ jobs:
             choreo:
               - *shared
               - 'packages/choreo/**'
+              - 'packages/choreo-film-app/**'
               - 'packages/choreo-gallery/**'
               - 'packages/choreo-player/**'
               - 'packages/choreo-test-app/**'
@@ -634,6 +635,25 @@ jobs:
       - name: Run test suite
         run: pnpm test
         working-directory: packages/choreo
+
+  # The film app's QUnit suite: the reference films' scores against their
+  # golden fixtures. It compiles glimmer-motion and Choreo from source through
+  # the `developing:choreo` export condition.
+  choreo-film-app-test:
+    name: Choreo Film App Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: choreo-film-app-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo-film-app
 
   # The QUnit suite for the gallery demos, which lives in choreo-test-app.
   choreo-test-app-test:

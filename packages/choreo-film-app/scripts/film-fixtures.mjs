@@ -10,8 +10,8 @@
  * number here and you have changed the film; a phase that means to is a
  * phase that re-runs this script and reviews the diff.
  *
- *   node packages/choreo-film-app/scripts/film-fixtures.mjs          # writes tests/fixtures/film/*.json
- *   node packages/choreo-film-app/scripts/film-fixtures.mjs --check  # exits 1 if any fixture would change
+ *   pnpm --filter choreo-film-app fixtures      # writes tests/fixtures/film/*.json
+ *   pnpm --filter choreo-film-app lint:golden   # exits 1 if any fixture would change
  *
  * Runs on Node's own type stripping: the schedule and the data modules
  * are plain TypeScript with erasable types and no Ember in them, and the

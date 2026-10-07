@@ -181,3 +181,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-gallery
+      # Includes the check that the film app's build committed to the gallery
+      # realm is the build of its sources.
+      - name: Lint Choreo Film App
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-film-app

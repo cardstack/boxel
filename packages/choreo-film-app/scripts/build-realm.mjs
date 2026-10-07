@@ -3,7 +3,7 @@
  * `packages/choreo-gallery/realm/film-app/`, where it is committed.
  *
  *   pnpm build:realm   # rebuild and replace the realm's copy
- *   pnpm check:realm   # rebuild into a scratch directory; exit 1 if it differs
+ *   pnpm lint:realm    # rebuild into a scratch directory; exit 1 if it differs
  *
  * The realm compiles every `.js` file it serves as a card module, which would
  * break a browser bundle, and serves `.mjs` verbatim with a JavaScript content
