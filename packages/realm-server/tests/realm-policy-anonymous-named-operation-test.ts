@@ -662,18 +662,21 @@ module(basename(import.meta.filename), function (hooks) {
         `${label}: explain reports the 401 the realm sends`,
       );
     }
-    // A realm anyone may read tells such a caller its refused write as the
-    // gate refused it, and explain says the same.
+    // A realm anyone may read tells such a caller to authenticate for a write
+    // it refused too, and explain says the same.
     let explained = await explain(BOARD_CLOSED, 'sign', BOARD_POLICY);
     assert.strictEqual(explained.reason, 'predicate-false');
-    let response = await operations(BOARD, [
-      invoke('sign', { href: BOARD_CLOSED, data: { name: 'Ada' } }),
-    ]);
-    assert.strictEqual(response.status, 403, response.text);
+    unauthenticated(
+      await operations(BOARD, [
+        invoke('sign', { href: BOARD_CLOSED, data: { name: 'Ada' } }),
+      ]),
+      'a realm anyone may read',
+      assert,
+    );
     assert.deepEqual(
       explained.refusal,
-      { status: 403, code: response.body?.errors?.[0]?.code },
-      'a realm anyone may read: explain reports the refusal the realm sends',
+      { status: 401, code: 'actor-required' },
+      'a realm anyone may read: explain reports the 401 the realm sends',
     );
   });
 });

@@ -927,6 +927,11 @@ async function explain(
 // this is follows from the behavior the operation resolves to. That is
 // resolved first, as a caller the ACL allows would resolve it. An operation
 // that does not resolve travels as a read would.
+//
+// The realm asks whether a caller it declined a write could read the realm
+// only of a signed-in caller, so a write from a caller who isn't signed in is
+// declined outright even where anyone may read the realm, and is judged and
+// answered as such.
 async function coarseDeclinedFor(
   core: OperationCore,
   target: OperationTarget,
@@ -949,7 +954,7 @@ async function coarseDeclinedFor(
   if (writes ? acl.write : acl.read) {
     return 'none';
   }
-  return acl.read ? 'writes' : 'all';
+  return acl.read && actor.kind === 'user' ? 'writes' : 'all';
 }
 
 function refused(
