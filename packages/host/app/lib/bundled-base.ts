@@ -358,8 +358,9 @@ export const BUNDLED_BASE_MODULES: Record<
   'audio-metadata': () => import('@cardstack/base/audio-metadata'),
   'audio-waveform': () => import('@cardstack/base/audio-waveform'),
   'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
-  'brand-functional-palette': () =>
-    import('@cardstack/base/brand-functional-palette'),
+  // `brand-functional-palette` stays fetched: served from the bundle, Safari
+  // intermittently evaluates it before its `color` import is initialized
+  // (CS-13654).
   'brand-logo': () => import('@cardstack/base/brand-logo'),
   coordinate: () => import('@cardstack/base/coordinate'),
   country: () => import('@cardstack/base/country'),
