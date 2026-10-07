@@ -69,7 +69,7 @@ export class ExampleGallery extends Component<{
         display: grid;
         grid-template-columns: repeat(
           auto-fill,
-          minmax(var(--_exg-tile-min-w), 1fr)
+          minmax(min(var(--_exg-tile-min-w), 100%), 1fr)
         );
         gap: var(--boxel-sp-sm);
         align-items: stretch;

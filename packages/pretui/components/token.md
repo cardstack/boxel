@@ -59,3 +59,5 @@ Notes and gaps:
 `--card` (the surface) with `--card-foreground` (the text) and `--border` (the ring), plus `--boxel-border-radius-xs`, `--boxel-sp-2xs` and `--font-mono`. `--pretui-token-hue` sets the text color, on the Token (through `@hue`, a class or `style`) or on any ancestor; pass an ink such as `--primary-ink` or `--muted-foreground`, not a pale fill hue. `--pretui-token-font-size` sets an exact size; unset, the default is `--boxel-font-size-2xs`, and `@size` takes the house scale (`--pretui-size-*`).
 
 The default line height matches Chip's 18px, so a Token and a Chip side by side line up.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

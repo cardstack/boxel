@@ -51,7 +51,7 @@ export interface FreestyleUsageSignature {
 export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
   <template>
     <div class='pretui-usage' data-test-pretui-usage ...attributes>
-      {{! identity lives in the page header (breadcrumb) — no h2 here; one
+      {{! the component's name lives in the page header (breadcrumb); one
           compact description line, then straight to the artboard }}
       {{#if (has-block 'description')}}
         <p
@@ -281,9 +281,6 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       }
       .wb-cap {
         margin-block-end: 0;
-      }
-      .pretui-usage-api {
-        min-width: 0;
       }
     </style>
   </template>;

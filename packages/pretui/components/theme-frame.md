@@ -21,7 +21,7 @@ It is a tool, not a product control — a real application's theme setting belon
 
 **The frame owns the switching state**: the mode and the selected theme id live here, starting light like ThemeDashboard. The Boxel chrome around the frame has fixed colors, so the switch previews dark mode rather than following the reader's system setting. What it does not own is _persistence_ — nothing is written to storage, so a host that wants the choice to survive a reload stores it itself.
 
-**`@context` is the switch between one theme and all of them.** Without it the frame dresses its content in `@theme` and offers only the mode switch and the theme's name; with it, the frame queries the realm for every Theme instance and a **Select** replaces the name.
+**`@context` is the switch between one theme and all of them.** Without it the frame dresses its content in `@theme` and offers only the mode switch and the theme's name; with it, the frame queries the realm for every Theme instance, and when it finds more than one, a **Select** replaces the name.
 
 **`@bar={{false}}`** stops the frame drawing its own bar when the page seats the yielded controls in its own header.
 

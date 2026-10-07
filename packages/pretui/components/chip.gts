@@ -56,7 +56,8 @@ export class Chip extends Component<ChipSignature> {
           height: var(--pretui-chip-height);
           padding: 0 var(--boxel-sp-2xs);
           border-radius: var(--boxel-border-radius-xs);
-          font-size: var(--boxel-font-size-2xs);
+          /* --text-ui-xs is the legacy size knob catalog chips still set */
+          font-size: var(--pretui-chip-font-size, var(--boxel-font-size-2xs));
           font-weight: 500;
           letter-spacing: var(--boxel-lsp-xs);
           white-space: nowrap;
@@ -72,6 +73,16 @@ export class Chip extends Component<ChipSignature> {
             var(--foreground) var(--pretui-ink-mix, 100%),
             var(--pretui-chip-hue)
           );
+          /* the hue hairline legacy chips were drawn with: any
+             --pretui-chip-mix above 0% shows it at full strength, and the
+             default 0% leaves it transparent */
+          box-shadow: 0 0 0 1px
+            color-mix(
+              in oklch,
+              color-mix(in oklch, var(--pretui-chip-hue) 45%, var(--border))
+                min(calc(var(--pretui-chip-mix, 0%) * 100), 100%),
+              transparent
+            );
         }
         /* a toned chip is outlined on --card: its -ink draws the text and the
            ring (the fill hue misses 3:1 as a ring), the dot takes the tone */

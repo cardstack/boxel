@@ -34,7 +34,7 @@ No pattern of its own; it renders one of two kit controls plus a table row.
 
 Gaps:
 
-- **The knob's label is the property-row rail, not a `<label for>`.** Verify the label and the control are actually associated — a property list of unlabelled Inputs and Selects is the most likely failure here, and neither **Input** nor **Select** generates its own name. Both accept `@controlId`, so the fix is available.
+- **The knob's visible label is the property-row rail, not a `<label for>`.** The control takes the argument name as its accessible name (`@label` on the Select, `aria-label` on the Input), so it is named, but clicking the rail does not focus it.
 - **`@required` must reach the accessible name**, not only render an asterisk — the fix **FormField** already made in the forms territory.
 - **Changing a knob re-renders the example silently.** No live region announces the effect, so a screen-reader user changing `@size` from `md` to `lg` gets no confirmation that anything happened. This belongs to **FreestyleUsage** but is felt here.
 - **Free-text mode has no format guidance.** A string argument expecting a CSS length or an ISO date offers a bare Input with no hint (**WCAG 3.3.2**), and `@description` lives in the _other_ lens — so the docs table has the explanation and the knob does not.

@@ -56,12 +56,14 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
             >*</span>{{/if}}
         </td>
         <td class='pretui-usage-arg-type'>{{this.typeLabel}}</td>
-        <td class='pretui-usage-arg-description'>{{@description}}</td>
+        <td><span
+            class='pretui-usage-arg-description-text'
+          >{{@description}}</span></td>
         <td class='pretui-usage-arg-default'>
           {{#if this.shouldRenderDefaultValue}}
             {{this.defaultText}}
           {{else}}
-            <span class='u-none'>—</span>
+            —
           {{/if}}
         </td>
       </tr>
@@ -90,8 +92,9 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
         width: 1%;
         text-transform: lowercase;
       }
-      .pretui-usage-arg-description {
-        color: var(--foreground);
+      /* on a span: table layout ignores max-width on a cell */
+      .pretui-usage-arg-description-text {
+        display: block;
         max-width: var(--pretui-usage-arg-description-max-w);
       }
       .pretui-usage-arg-default {
@@ -101,9 +104,6 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
         text-align: end;
         white-space: nowrap;
         width: 1%;
-      }
-      .u-none {
-        color: var(--muted-foreground);
       }
     </style>
   </template>

@@ -135,13 +135,15 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
       .pretui-table :deep(tbody th) {
         text-align: start;
       }
-      /* zebra and hover paint the row, beneath its cells, so a caller's
-         own cell background still shows */
-      .pretui-table :deep(tbody tr:nth-child(even)) {
+      /* on the cells, so a caller that repaints a cell replaces the stripe
+         or hover instead of stacking a second one over the row's */
+      .pretui-table :deep(tbody tr:nth-child(even) td),
+      .pretui-table :deep(tbody tr:nth-child(even) th) {
         background-color: var(--stripe);
       }
       @media (hover: hover) {
-        .pretui-table :deep(tbody tr:hover) {
+        .pretui-table :deep(tbody tr:hover td),
+        .pretui-table :deep(tbody tr:hover th) {
           background-color: var(--hover);
         }
       }

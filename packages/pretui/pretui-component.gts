@@ -25,6 +25,7 @@ import GlimmerComponent from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
@@ -104,14 +105,36 @@ interface WriteupFoldSignature {
 
 class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
   @tracked open = false;
+  @tracked overflows = false;
   regionId = `${guidFor(this)}-writeup`;
   toggle = () => (this.open = !this.open);
+  get showToggle(): boolean {
+    return this.open || this.overflows;
+  }
+  // The toggle and its fade only matter when the closed region clips the
+  // prose; measured while closed, so opening keeps "Show less".
+  measureOverflow = modifier((region: HTMLElement) => {
+    let prose = region.firstElementChild;
+    let check = () => {
+      if (!this.open && prose) {
+        this.overflows = prose.scrollHeight > region.clientHeight;
+      }
+    };
+    let observer = new ResizeObserver(check);
+    observer.observe(region);
+    if (prose) observer.observe(prose);
+    return () => observer.disconnect();
+  });
 
   <template>
     <div class='wb-fold' data-open={{if this.open 'true'}} ...attributes>
       {{! the write-up's prose only — the panel owns the padding, so the
           file's own embedded chrome and surface stay out }}
-      <div id={{this.regionId}} class='wb-fold-region'>
+      <div
+        id={{this.regionId}}
+        class='wb-fold-region'
+        {{this.measureOverflow}}
+      >
         <div class='wb-fold-prose'>
           <MarkdownPreview
             @model={{@writeup}}
@@ -120,17 +143,19 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
           />
         </div>
       </div>
-      <div class='wb-fold-more'>
-        <Button
-          @tone='neutral'
-          @appearance='outlined'
-          @size='xs'
-          aria-expanded={{if this.open 'true' 'false'}}
-          aria-controls={{this.regionId}}
-          {{on 'click' this.toggle}}
-          data-test-pretui-writeup-toggle
-        >{{if this.open 'Show less' 'Show more'}}</Button>
-      </div>
+      {{#if this.showToggle}}
+        <div class='wb-fold-more'>
+          <Button
+            @tone='neutral'
+            @appearance='outlined'
+            @size='xs'
+            aria-expanded={{if this.open 'true' 'false'}}
+            aria-controls={{this.regionId}}
+            {{on 'click' this.toggle}}
+            data-test-pretui-writeup-toggle
+          >{{if this.open 'Show less' 'Show more'}}</Button>
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       /* closed, the preview fills whatever height the fold is given, never
@@ -251,9 +276,11 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
         min-width: var(--note-compose-min-w);
       }
       .note-compose-cap {
-        font-size: var(--boxel-font-size-2xs);
-        font-weight: 600;
-        letter-spacing: 0.06em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
@@ -365,6 +392,8 @@ export class PretUISpec extends Spec {
 
   // each format is cast: Spec's format classes carry getters these views do not use
   static isolated = class Isolated extends Component<typeof PretUISpec> {
+    writeupHeadingId = `${guidFor(this)}-writeup-heading`;
+    provenanceHeadingId = `${guidFor(this)}-provenance-heading`;
     get demoLoad() {
       let m = this.args.model;
       return m.componentName
@@ -700,9 +729,15 @@ export class PretUISpec extends Spec {
           <ExampleGallery @specs={{this.examples}} />
           <div class='wb-below'>
             {{#if @model.writeup}}
-              <section class='wb-panel wb-writeup-panel' aria-label='Write-up'>
+              <section
+                class='wb-panel wb-writeup-panel'
+                aria-labelledby={{this.writeupHeadingId}}
+              >
                 <div class='wb-panel-h'>
-                  <span class='wb-cap'>Write-up</span>
+                  <h2
+                    id={{this.writeupHeadingId}}
+                    class='wb-cap'
+                  >Write-up</h2>
                 </div>
                 <WriteupFold
                   class='wb-writeup-fold'
@@ -710,9 +745,15 @@ export class PretUISpec extends Spec {
                 />
               </section>
             {{/if}}
-            <section class='wb-panel wb-provenance' aria-label='Provenance'>
+            <section
+              class='wb-panel wb-provenance'
+              aria-labelledby={{this.provenanceHeadingId}}
+            >
               <div class='wb-panel-h'>
-                <span class='wb-cap'>Provenance</span>
+                <h2
+                  id={{this.provenanceHeadingId}}
+                  class='wb-cap'
+                >Provenance</h2>
               </div>
               <StepList
                 class='wb-pipe'
@@ -983,9 +1024,12 @@ export class PretUISpec extends Spec {
         /* THE caps treatment — panel and group headers only (type spec:
            one caps style, everything else sentence case) */
         .wb-cap {
-          font-size: var(--boxel-font-size-2xs);
-          font-weight: 600;
-          letter-spacing: 0.06em;
+          margin: 0;
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          line-height: var(--boxel-eyebrow-line-height);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
@@ -1157,14 +1201,14 @@ export class PretUISpec extends Spec {
           text-overflow: ellipsis;
         }
         .fit-star {
-          color: var(--accent-ink);
+          color: var(--warning-ink);
         }
         .fit-sub {
           display: flex;
           gap: var(--boxel-sp-xs);
           font-family: var(--font-mono);
-          font-size: var(--boxel-font-size-2xs);
-          letter-spacing: 0.06em;
+          font-size: var(--boxel-eyebrow-font-size);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
@@ -1266,8 +1310,8 @@ export class PretUISpec extends Spec {
         }
         .territory {
           font-family: var(--font-mono);
-          font-size: var(--boxel-font-size-2xs);
-          letter-spacing: 0.08em;
+          font-size: var(--boxel-eyebrow-font-size);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
@@ -1339,7 +1383,12 @@ export class PretUISpec extends Spec {
         <fieldset class='wb-group'>
           <legend>Write-up</legend>
           <div class='wb-fields'>
-            <label class='wb-wide'>Linked file <@fields.writeup /></label>
+            {{! a div, not a label: the editor's first control is Remove,
+                which a label would activate on any click }}
+            <div class='wb-wide'>
+              <span class='wb-cap'>Linked file</span>
+              <@fields.writeup />
+            </div>
           </div>
         </fieldset>
       </div>
@@ -1359,9 +1408,11 @@ export class PretUISpec extends Spec {
           min-width: 0;
         }
         .wb-group > legend {
-          font-size: var(--boxel-font-size-2xs);
-          font-weight: 600;
-          letter-spacing: 0.08em;
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          line-height: var(--boxel-eyebrow-line-height);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
           padding-inline: var(--boxel-sp-2xs);
@@ -1378,9 +1429,11 @@ export class PretUISpec extends Spec {
         .wb-fields > div {
           display: grid;
           gap: var(--boxel-sp-2xs);
-          font-size: var(--boxel-font-size-2xs);
-          font-weight: 600;
-          letter-spacing: 0.04em;
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          line-height: var(--boxel-eyebrow-line-height);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
           color: var(--muted-foreground);
           min-width: 0;
