@@ -40,6 +40,7 @@ import {
   isOperationFailure,
   unshareableFormatsOf,
   isHeadResult,
+  isWrite,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
@@ -732,6 +733,31 @@ export async function resolveOperation(
     name,
     scope,
   );
+}
+
+// Whether the operation resolves to a write on the target, which says which
+// request would carry it: a write travels on a `POST`, which the ACL judges as
+// a write, and everything else on a request it judges as a read. It is
+// resolved as a caller the ACL allows would resolve it, so the gate doesn't
+// decide what it is then asked to judge. An operation that does not resolve
+// travels as a read would.
+export async function resolvesToWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): Promise<boolean> {
+  try {
+    let { base } = await resolveOperation(
+      core,
+      target,
+      name,
+      scope.derive({ coarseDeclined: 'none' }),
+    );
+    return isWrite(base);
+  } catch {
+    return false;
+  }
 }
 
 function sameTarget(a: OperationTarget, b: OperationTarget): boolean {

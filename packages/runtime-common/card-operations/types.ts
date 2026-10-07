@@ -1152,9 +1152,11 @@ export type PolicyExplanationReason =
   // caller, so the invocation is answered with a 401 before anything about
   // the target is read.
   | 'actor-required'
-  // A grant opens the operation to a caller who isn't signed in, but the
-  // operation, as the target's type declares it, reads `actor()`, which such
-  // a caller has none of, so the grant doesn't apply to them.
+  // The operation, as the target's type declares it, reads `actor()`, and
+  // the caller isn't signed in, so has no actor for it to read. Where a grant
+  // opens the operation to such callers, the grant doesn't apply to them.
+  // Where the ACL lets anyone invoke it, the realm refuses the invocation
+  // with a 401 before it runs.
   | 'reads-actor'
   // The caller isn't signed in, and the target realm's `anonymousBlocklist`
   // has an entry that is neither an address nor a range, which closes the

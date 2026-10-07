@@ -6712,20 +6712,30 @@ export class Realm {
       return { coarseDeclined: readAllowed ? 'none' : 'all' };
     }
     let coarseDeclined: CoarseDeclined = readAllowed ? 'writes' : 'all';
-    // A caller who isn't signed in writes as the grant's acting user, so the
-    // gate judges their writes as it judges a reader's: what a grant opts in
-    // to them, made as a user who may write the realm. That holds whether the
+    // A caller who isn't signed in writes as the grant's acting user: a grant
+    // that opts in to them makes their write as a user who may write the
+    // realm. So the gate judges their writes against such grants whether the
     // realm admitted them to this check through its policy or its ACL let
     // anyone read it, as long as the policy opens a write to such callers and
     // the realm doesn't refuse their address.
+    let policyJudgesWrite = await this.#policyJudges(
+      write.refusal,
+      requestContext,
+    );
     if (
-      (await this.#policyJudges(write.refusal, requestContext)) ||
+      policyJudgesWrite ||
       requestContext.anonymousCaller ||
       (write.refusal instanceof CoarseAuthenticationRequired &&
         !requestContext.authenticatedUser &&
         (await this.#anonymous.callerFor(request, ANONYMOUS_WRITE_CHECK)))
     ) {
-      return { coarseDeclined };
+      // The realm asks whether a caller it declined a write could read the
+      // realm only where its policy judges the write
+      // (`#recordCoarsePermission`), so any other write is declined outright
+      // even where the ACL lets them read.
+      return coarseDeclined === 'writes' && !policyJudgesWrite
+        ? { coarseDeclined, writesDeclinedOutright: true }
+        : { coarseDeclined };
     }
     return {
       coarseDeclined,

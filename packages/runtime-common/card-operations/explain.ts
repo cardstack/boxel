@@ -15,12 +15,13 @@ import {
   localPathFor,
   newOperationScope,
   resolveGatedOperation,
-  resolveOperation,
+  resolvesToWrite,
   scopeCallerFor,
   type CoarseDeclined,
   type OperationCore,
   type ScopeCaller,
 } from './dispatch.ts';
+import { needsActor } from './envelope.ts';
 import { GateTrace } from './gate-trace.ts';
 import {
   GATE_FAULTED,
@@ -42,7 +43,6 @@ import {
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isOperationFailure,
-  isWrite,
   refusalForNonReader,
   refusalSeenBy,
   type ExplainedGrant,
@@ -52,6 +52,7 @@ import {
   type ExplainedSearch,
   type OperationError,
   type OperationExplainListingResult,
+  type OperationDefinition,
   type OperationExplainResult,
   type OperationRequest,
   type OperationTarget,
@@ -837,10 +838,11 @@ async function explain(
     trace,
     route: EXPLAIN_ROUTE,
   });
+  let definition: OperationDefinition | undefined;
   let decision: GateDecision | undefined;
   let failure: OperationFailure | undefined;
   try {
-    ({ decision } = await resolveGatedOperation(
+    ({ definition, decision } = await resolveGatedOperation(
       core,
       target,
       question.operation,
@@ -852,7 +854,7 @@ async function explain(
     }
     failure = e;
   }
-  if (failure || !decision) {
+  if (failure || !decision || !definition) {
     let error = failure?.error ?? {
       status: 500,
       code: 'internal-error' as const,
@@ -871,6 +873,16 @@ async function explain(
         seenBy(actor, coarseDeclined, error),
         error.status >= 500 ? 'failed' : 'denied',
       ),
+      trace,
+    );
+  }
+  // An operation that reads `actor()` has no actor to read for a caller who
+  // isn't signed in. The realm refuses such an invocation with a 401 once the
+  // gate has let it through, before any write lock decides it, so that is
+  // what this caller would receive however the gate let it through.
+  if (actor.kind !== 'user' && needsActor(definition)) {
+    return withRules(
+      refused(base, 'reads-actor', { status: 401, code: 'actor-required' }),
       trace,
     );
   }
@@ -921,17 +933,14 @@ async function explain(
 }
 
 // What the realm's ACL declines for the request that would carry this
-// invocation. A write travels on a `POST`, which the ACL judges as a write, and
-// everything else on a request it judges as a read. So a caller the ACL lets
-// write and not read is allowed a write and declined a read, and which one
-// this is follows from the behavior the operation resolves to. That is
-// resolved first, as a caller the ACL allows would resolve it. An operation
-// that does not resolve travels as a read would.
+// invocation (see `resolvesToWrite`). So a caller the ACL lets write and not
+// read is allowed a write and declined a read.
 //
 // The realm asks whether a caller it declined a write could read the realm
-// only of a signed-in caller, so a write from a caller who isn't signed in is
-// declined outright even where anyone may read the realm, and is judged and
-// answered as such.
+// only where its policy judges the write, which it does only for a signed-in
+// caller on a realm that names a policy, as every realm an explain describes
+// does. So a write from a caller who isn't signed in is declined outright even
+// where anyone may read the realm, and is judged and answered as such.
 async function coarseDeclinedFor(
   core: OperationCore,
   target: OperationTarget,
@@ -939,18 +948,12 @@ async function coarseDeclinedFor(
   actor: ScopeCaller,
   acl: Acl,
 ): Promise<CoarseDeclined> {
-  let writes = false;
-  try {
-    let { base } = await resolveOperation(
-      core,
-      target,
-      question.operation,
-      newOperationScope(core, { caller: actor, coarseDeclined: 'none' }),
-    );
-    writes = isWrite(base);
-  } catch {
-    writes = false;
-  }
+  let writes = await resolvesToWrite(
+    core,
+    target,
+    question.operation,
+    newOperationScope(core, { caller: actor }),
+  );
   if (writes ? acl.write : acl.read) {
     return 'none';
   }
