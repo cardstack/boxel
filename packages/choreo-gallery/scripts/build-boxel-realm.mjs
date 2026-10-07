@@ -207,24 +207,6 @@ writeFileSync(
   JSON.stringify(manifest, null, 2),
 );
 
-if (process.argv.includes('--mirror')) {
-  const config = JSON.parse(
-    readFileSync(join(repoRoot, '.choreo-realm-sync.json'), 'utf8'),
-  );
-  const workspace = resolve(config.workspace);
-  if (!workspace.endsWith('/stack.cards/ctse/complex-macaw')) {
-    throw new Error(`Refusing to mirror to unexpected workspace: ${workspace}`);
-  }
-  const preserved = new Set(['.boxel-history', '.boxel-sync.json']);
-  for (const entry of readdirSync(workspace)) {
-    if (!preserved.has(entry)) {
-      rmSync(join(workspace, entry), { recursive: true, force: true });
-    }
-  }
-  cpSync(outputRoot, workspace, { recursive: true, force: true });
-  console.log(`✓ mirrored generated realm → ${workspace}`);
-}
-
 console.log(`✓ generated ${catalog.length} demos in ${outputRoot}`);
 console.log(
   `✓ runtime builds/${runtimeName} (${(runtimeCode.length / 1024).toFixed(1)} KB)`,
