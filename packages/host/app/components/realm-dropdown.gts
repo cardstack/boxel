@@ -104,20 +104,20 @@ export default class RealmDropdown extends Component<Signature> {
             />
           </div>
         {{/if}}
-        {{#if this.menuItems.length}}
-          <Menu
-            class='realm-dropdown-menu'
-            @items={{this.menuItems}}
-            @closeMenu={{dd.close}}
-            data-test-realm-dropdown-menu
-          />
-        {{else}}
+        {{#if this.hasNoSearchMatches}}
           <p
             class='realm-dropdown-no-results'
             data-test-realm-dropdown-no-results
           >
             No workspaces match “{{this.searchTerm}}”
           </p>
+        {{else}}
+          <Menu
+            class='realm-dropdown-menu'
+            @items={{this.menuItems}}
+            @closeMenu={{dd.close}}
+            data-test-realm-dropdown-menu
+          />
         {{/if}}
       </:content>
     </BoxelDropdown>
@@ -260,6 +260,13 @@ export default class RealmDropdown extends Component<Signature> {
     }
     return this.realms.filter((realm) =>
       realm.name.toLowerCase().includes(term),
+    );
+  }
+
+  get hasNoSearchMatches(): boolean {
+    return (
+      Boolean(this.args.searchable && this.searchTerm.trim()) &&
+      this.filteredRealms.length === 0
     );
   }
 
