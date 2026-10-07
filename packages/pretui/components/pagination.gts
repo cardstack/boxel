@@ -115,6 +115,11 @@ export class Pagination extends Component<PaginationSignature> {
           font-weight: 600;
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
+        /* The arrows are fixed SVGs, so they flip with the writing direction
+           the way the bidi-mirrored glyphs they replace did. */
+        .pretui-chevron:dir(rtl) {
+          scale: -1 1;
+        }
         .pretui-page:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 1px;
