@@ -1,4 +1,4 @@
-# Disallow a realm-server test module that brings up realms in `setupDB`’s `beforeEach` without a `templateDatabase`, which indexes them from scratch before every test (`@cardstack/boxel/realm-server-test-template-database`)
+# Disallow a realm-server test module that brings up realms before every test without a template database, which indexes them from scratch each time (`@cardstack/boxel/realm-server-test-template-database`)
 
 <!-- end auto-generated rule header -->
 
@@ -8,11 +8,20 @@ before every test. That index, not the test body, is usually most of the
 module's time. Nothing else flags the pattern, so it spreads when a suite is
 copied as a starting point.
 
-This rule reports a `setupDB(hooks, { beforeEach })` call that passes no
-`templateDatabase` when its `beforeEach` brings up realms. It does so when it
-calls `runTestRealmServer`, `runTestRealmServerWithRealms`,
-`setupPermissionedRealm` or `setupPermissionedRealms`, either directly or
-through functions declared in the same file. The rule does not follow imports.
+This rule reports two forms:
+
+- A `setupDB(hooks, { beforeEach })` call that passes no `templateDatabase`
+  when its `beforeEach` brings up realms. It does so when it calls
+  `runTestRealmServer` or `runTestRealmServerWithRealms`, either directly or
+  through functions declared in the same file. The rule does not follow
+  imports.
+- A call to `setupPermissionedRealm` or `setupPermissionedRealms` without
+  `mode: 'before'`. Both default to `mode: 'beforeEach'` with no template. Use
+  the `Cached` variant of the same helper instead.
+
+An import is matched by the name it imports, so an alias or a namespace member
+counts. The rule leaves alone options it cannot read: a variable, a spread, or
+a `mode` that is not a string literal.
 
 ## Fix
 

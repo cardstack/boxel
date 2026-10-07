@@ -9,7 +9,7 @@ Bringing up a realm on an empty database indexes it from scratch, and that index
 
 The cost is real. A 40-test suite that brought up two realms before every test took 524s; indexed once into a template it took 85s. Nineteen such suites together went from 46 minutes to 13 minutes of CI time, about five minutes off every Realm Server shard.
 
-The `@cardstack/boxel/realm-server-test-template-database` lint rule enforces this. It reports a `setupDB` whose `beforeEach` brings up realms (directly or through a function in the same file) and passes no `templateDatabase`. CI Lint fails on it.
+The `@cardstack/boxel/realm-server-test-template-database` lint rule enforces this. It reports a `setupDB` whose `beforeEach` brings up realms (directly or through a function in the same file) and passes no `templateDatabase`, and a `setupPermissionedRealm` or `setupPermissionedRealms` call without `mode: 'before'`. CI Lint fails on both.
 
 ## Pick the helper
 

@@ -24,6 +24,10 @@ function perTestIndex(starter) {
   return { messageId: 'perTestIndex', data: { starter } };
 }
 
+function uncachedSetup(helper) {
+  return { messageId: 'uncachedSetup', data: { helper } };
+}
+
 ruleTester.run('realm-server-test-template-database', rule, {
   valid: [
     // A template database: each test starts from a copy of the indexed realms.
@@ -100,6 +104,45 @@ ruleTester.run('realm-server-test-template-database', rule, {
         setupDB(hooks, options);
       `,
     },
+    // An uncached setup helper brought up once for the module.
+    {
+      code: `${IMPORTS}
+        setupPermissionedRealm(hooks, {
+          mode: 'before',
+          fixture: 'simple',
+          permissions,
+        });
+      `,
+    },
+    // The cached variants.
+    {
+      code: `
+        import {
+          setupPermissionedRealmCached,
+          setupPermissionedRealmsCached,
+        } from './helpers';
+        setupPermissionedRealmCached(hooks, { fixture: 'simple', permissions });
+        setupPermissionedRealmsCached(hooks, { realms });
+      `,
+    },
+    // Options the rule cannot read.
+    {
+      code: `${IMPORTS}
+        setupPermissionedRealm(hooks, { mode, fixture: 'simple', permissions });
+        setupPermissionedRealm(hooks, { ...shared, permissions });
+        setupPermissionedRealm(hooks, options);
+      `,
+    },
+    // The helper's own template hook.
+    {
+      code: `${IMPORTS}
+        setupPermissionedRealm(hooks, {
+          fixture: 'simple',
+          permissions,
+          dbTemplateDatabase,
+        });
+      `,
+    },
     // A namespace member that is not a starter.
     {
       code: `
@@ -161,10 +204,10 @@ ruleTester.run('realm-server-test-template-database', rule, {
           },
         });
         const start = async (dbAdapter, publisher, runner) => {
-          await setupPermissionedRealm(hooks, {});
+          await runTestRealmServer({ dbAdapter, publisher, runner });
         };
       `,
-      errors: [perTestIndex('setupPermissionedRealm')],
+      errors: [perTestIndex('runTestRealmServer')],
     },
     // Through two levels of local functions.
     {
@@ -248,6 +291,31 @@ ruleTester.run('realm-server-test-template-database', rule, {
         });
       `,
       errors: [perTestIndex('runTestRealmServerWithRealms')],
+    },
+    // An uncached setup helper at module level, in its default mode.
+    {
+      code: `${IMPORTS}
+        module('permissions', function (hooks) {
+          setupPermissionedRealm(hooks, { fixture: 'simple', permissions });
+        });
+      `,
+      errors: [uncachedSetup('setupPermissionedRealm')],
+    },
+    // The same with the mode spelled out, aliased.
+    {
+      code: `
+        import { setupPermissionedRealms as setupRealms } from './helpers';
+        setupRealms(hooks, { mode: 'beforeEach', realms });
+      `,
+      errors: [uncachedSetup('setupPermissionedRealms')],
+    },
+    // Through a namespace import.
+    {
+      code: `
+        import * as helpers from './helpers';
+        helpers.setupPermissionedRealm(hooks, { fixture: 'simple', permissions });
+      `,
+      errors: [uncachedSetup('setupPermissionedRealm')],
     },
     // A starter passed as a value rather than called.
     {

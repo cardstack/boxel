@@ -9,6 +9,12 @@
 const REALM_STARTERS = new Set([
   'runTestRealmServer',
   'runTestRealmServerWithRealms',
+]);
+
+// Setup helpers that register their own `setupDB` hooks. Without
+// `mode: 'before'` they bring up their realms before every test, on a database
+// with no template.
+const UNCACHED_SETUPS = new Set([
   'setupPermissionedRealm',
   'setupPermissionedRealms',
 ]);
@@ -58,16 +64,16 @@ function localFunctionOf(variable) {
   return undefined;
 }
 
-// The realm starter a reference names, if any. An import is matched by the name
-// it imports, so an alias (`import { runTestRealmServer as start }`) and a
+// The helper in `names` a reference names, if any. An import is matched by the
+// name it imports, so an alias (`import { runTestRealmServer as start }`) and a
 // namespace member (`helpers.runTestRealmServer`) both count. A name with no
 // declaration in the file is matched as spelled. A local binding that shares a
-// starter's name is not a starter.
-function starterNamedBy(reference) {
+// helper's name is not the helper.
+function helperNamedBy(reference, names) {
   const identifier = reference.identifier;
   const variable = reference.resolved;
   if (!variable || variable.defs.length === 0) {
-    return REALM_STARTERS.has(identifier.name) ? identifier.name : undefined;
+    return names.has(identifier.name) ? identifier.name : undefined;
   }
   for (const def of variable.defs) {
     if (def.type !== 'ImportBinding') {
@@ -75,7 +81,7 @@ function starterNamedBy(reference) {
     }
     if (def.node.type === 'ImportSpecifier') {
       const imported = def.node.imported.name ?? def.node.imported.value;
-      if (REALM_STARTERS.has(imported)) {
+      if (names.has(imported)) {
         return imported;
       }
     }
@@ -87,7 +93,7 @@ function starterNamedBy(reference) {
         member.object === identifier &&
         !member.computed &&
         member.property.type === 'Identifier' &&
-        REALM_STARTERS.has(member.property.name)
+        names.has(member.property.name)
       ) {
         return member.property.name;
       }
@@ -101,7 +107,7 @@ module.exports = {
     type: 'suggestion',
     docs: {
       description:
-        'Disallow a realm-server test module that brings up realms in `setupDB`’s `beforeEach` without a `templateDatabase`, which indexes them from scratch before every test',
+        'Disallow a realm-server test module that brings up realms before every test without a template database, which indexes them from scratch each time',
       category: 'Best Practices',
       recommended: false,
     },
@@ -109,6 +115,8 @@ module.exports = {
     messages: {
       perTestIndex:
         "This module brings up realms in `setupDB`'s `beforeEach` (through `{{starter}}`) without a `templateDatabase`, so it indexes them from scratch before every test. For one realm, use `setupPermissionedRealmCached`. For realms each on their own server, use `setupPermissionedRealmsCached`. For realms on one server or a custom setup, use `setupTestDatabaseTemplate`. If the module tests the boot index itself, disable this rule on this line with a reason. See the realm-server-test-setup skill.",
+      uncachedSetup:
+        '`{{helper}}` brings up its realms before every test without a template database, so it indexes them from scratch each time. Use `{{helper}}Cached`, which indexes once per module and starts each test from a copy. If the module tests the boot index itself, disable this rule on this line with a reason. See the realm-server-test-setup skill.',
     },
   },
 
@@ -136,7 +144,7 @@ module.exports = {
       visited.add(fn);
       for (const scope of scopesWithin(fn)) {
         for (const reference of scope.references) {
-          const starter = starterNamedBy(reference);
+          const starter = helperNamedBy(reference, REALM_STARTERS);
           if (starter) {
             return starter;
           }
@@ -159,10 +167,7 @@ module.exports = {
         return value;
       }
       if (value.type === 'Identifier') {
-        const scope = sourceCode.getScope
-          ? sourceCode.getScope(value)
-          : context.getScope();
-        const reference = findReference(scope, value);
+        const reference = findReference(scopeOf(value), value);
         return localFunctionOf(reference && reference.resolved);
       }
       return undefined;
@@ -178,8 +183,71 @@ module.exports = {
       return undefined;
     }
 
+    function scopeOf(node) {
+      return sourceCode.getScope
+        ? sourceCode.getScope(node)
+        : context.getScope();
+    }
+
+    // The uncached setup helper a call invokes, if any: `helper(...)` or
+    // `namespace.helper(...)`.
+    function uncachedSetupCalledBy(node) {
+      const callee = node.callee;
+      let identifier;
+      if (callee.type === 'Identifier') {
+        identifier = callee;
+      } else if (
+        callee.type === 'MemberExpression' &&
+        callee.object.type === 'Identifier'
+      ) {
+        identifier = callee.object;
+      } else {
+        return undefined;
+      }
+      const reference = findReference(scopeOf(node), identifier);
+      return reference && helperNamedBy(reference, UNCACHED_SETUPS);
+    }
+
+    // Reports a call to an uncached setup helper unless its options say
+    // `mode: 'before'` or carry a template. Options the rule cannot read (not
+    // an object literal, a spread, a `mode` that is not a string literal) are
+    // left alone.
+    function checkUncachedSetup(node, helper) {
+      const options = node.arguments[1];
+      if (!options || options.type !== 'ObjectExpression') {
+        return;
+      }
+      if (options.properties.some((p) => p.type === 'SpreadElement')) {
+        return;
+      }
+      if (
+        options.properties.some((p) => propertyName(p) === 'dbTemplateDatabase')
+      ) {
+        return;
+      }
+      const mode = options.properties.find((p) => propertyName(p) === 'mode');
+      if (mode) {
+        if (mode.value.type !== 'Literal') {
+          return;
+        }
+        if (mode.value.value !== 'beforeEach') {
+          return;
+        }
+      }
+      context.report({
+        node: node.callee,
+        messageId: 'uncachedSetup',
+        data: { helper },
+      });
+    }
+
     return {
       CallExpression(node) {
+        const helper = uncachedSetupCalledBy(node);
+        if (helper) {
+          checkUncachedSetup(node, helper);
+          return;
+        }
         if (
           node.callee.type !== 'Identifier' ||
           node.callee.name !== 'setupDB'
