@@ -70,6 +70,8 @@
 //   toast   100  the last word. A toast reports something that just happened
 //                and must stay readable over whatever is open, including a
 //                modal — so it is the only tier deliberately above `dialog`.
+//                Toaster's fixed region takes it; a bare Toast is in flow and
+//                takes no tier, so whatever positions one owns its z-index.
 //
 // The numbers are gapped so a host can interleave its own chrome (a global
 // nav at 65, an assistant panel at 85) without editing Pretui.

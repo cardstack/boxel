@@ -14,7 +14,7 @@ That is all. There is no `duration`, no `placement`, no `variant`, no close butt
 
 **The omissions are the design.** A toast stack is a host concern: it needs a single top-layer region, an ordering policy, a pause-on-hover rule, and one shared live region — and none of that belongs to a component that a card might render three of. Pretui ships the card here and the stack as **Toaster**, which draws its own item so the clock, roles and controls are one implementation. The upside is that a Toast composes into anything; the downside is that using it correctly requires you to build the parts that are hard.
 
-`width: max-content` with a 360px cap means a toast is as wide as its content and no wider, which is what makes a stack of them read as a column of distinct messages rather than a wall.
+`width: max-content` with a 22.5rem cap (`--pretui-toast-max-w`) means a toast is as wide as its content and no wider, which is what makes a stack of them read as a column of distinct messages rather than a wall.
 
 ## Prior art
 
@@ -43,7 +43,7 @@ Practical guidance: render Toast inside a host-owned region that carries the liv
 
 ## Theming
 
-`--popover` (surface), `--pretui-shadow-raised`, `--border`, `--foreground` (title), `--muted-foreground` (message), `--text-ui-md`. The 10px radius, 7px/10px padding, 9px gap and 360px max width are fixed.
+`--popover` / `--popover-foreground` (surface and title), `--muted-foreground` (message), `--border` and `--shadow-md` (edge and lift), `--boxel-border-radius`, the `--boxel-sp-*` spacing scale, and `--boxel-font-size-xs` / `--boxel-caption-font-size` (title and message). `--pretui-toast-max-w` sets the width cap.
 
 Because the surface is `--popover` rather than `--card`, a toast matches **Menu** and **Popover** rather than **Panel** — the "floating above" vocabulary. A season must keep `--popover` distinct from the page background, since the only other separation is a shadow, and shadows disappear on dark surfaces.
 
