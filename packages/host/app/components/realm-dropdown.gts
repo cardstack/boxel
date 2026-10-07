@@ -171,6 +171,12 @@ export default class RealmDropdown extends Component<Signature> {
       .realm-dropdown-search-input {
         width: 100%;
       }
+      /* The menu clips its items to its own rounded corners, which only
+         belong at the top of the dropdown, not under the search field */
+      .realm-dropdown-search + .realm-dropdown-menu {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
       .realm-dropdown-no-results {
         margin: 0;
         padding: var(--boxel-sp-xs);
