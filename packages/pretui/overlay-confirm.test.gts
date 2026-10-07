@@ -607,20 +607,20 @@ module('Pretui | DEMOS_OVERLAY_CONFIRM | usage pages', function (hooks) {
     let Page = PAGES['AlertDialog'];
     assert.ok(Page, 'the page is in the registry');
     await render(<template><Page /></template>);
-    assert.dom('.FreestyleUsage').exists('the page mounted');
+    assert.dom('[data-test-pretui-usage]').exists('the page mounted');
   });
 
   test('the Popconfirm usage page renders', async function (assert) {
     let Page = PAGES['Popconfirm'];
     assert.ok(Page, 'the page is in the registry');
     await render(<template><Page /></template>);
-    assert.dom('.FreestyleUsage').exists('the page mounted');
+    assert.dom('[data-test-pretui-usage]').exists('the page mounted');
   });
 
   test('the HoverCard usage page renders', async function (assert) {
     let Page = PAGES['HoverCard'];
     assert.ok(Page, 'the page is in the registry');
     await render(<template><Page /></template>);
-    assert.dom('.FreestyleUsage').exists('the page mounted');
+    assert.dom('[data-test-pretui-usage]').exists('the page mounted');
   });
 });

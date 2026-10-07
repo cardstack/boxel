@@ -50,13 +50,19 @@ export interface FreestyleUsageSignature {
 
 export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
   <template>
-    <div class='FreestyleUsage' ...attributes>
+    <div class='FreestyleUsage' data-test-pretui-usage ...attributes>
       {{! identity lives in the page header (breadcrumb) — no h2 here; one
           compact description line, then straight to the artboard }}
       {{#if (has-block 'description')}}
-        <p class='FreestyleUsage-description'>{{yield to='description'}}</p>
+        <p
+          class='FreestyleUsage-description'
+          data-test-pretui-usage-description
+        >{{yield to='description'}}</p>
       {{else if @description}}
-        <p class='FreestyleUsage-description'>{{@description}}</p>
+        <p
+          class='FreestyleUsage-description'
+          data-test-pretui-usage-description
+        >{{@description}}</p>
       {{/if}}
 
       <div class='FreestyleUsage-stage'>
@@ -66,8 +72,11 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
               {{yield to='example'}}
             </Viewport>
             {{#if @source}}
-              <div class='wb-codestrip'>
-                <code class='wb-code'>{{@source}}</code>
+              <div class='wb-codestrip' data-test-pretui-usage-source>
+                <code
+                  class='wb-code'
+                  data-test-pretui-usage-source-code
+                >{{@source}}</code>
                 <CopyButton
                   @text={{@source}}
                   @label='Copy usage'
@@ -78,8 +87,11 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
           </div>
         </div>
         {{#if (has-block 'api')}}
-          <aside class='FreestyleUsage-props'>
-            <h3 class='FreestyleUsage-sectionTitle'>Properties</h3>
+          <aside class='FreestyleUsage-props' data-test-pretui-usage-props>
+            <h3
+              class='FreestyleUsage-sectionTitle'
+              data-test-pretui-usage-section-title
+            >Properties</h3>
             {{yield
               (hash
                 Action=(component UsageAction mode='prop')
@@ -105,9 +117,12 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       </div>
 
       {{#if (has-block 'api')}}
-        <div class='FreestyleUsage-api wb-panel'>
+        <div class='FreestyleUsage-api wb-panel' data-test-pretui-usage-api>
           <div class='wb-panel-h'>
-            <h3 class='FreestyleUsage-sectionTitle wb-cap'>API</h3>
+            <h3
+              class='FreestyleUsage-sectionTitle wb-cap'
+              data-test-pretui-usage-section-title
+            >API</h3>
           </div>
           <Table>
             <:head>
@@ -139,9 +154,12 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       {{/if}}
 
       {{#if (has-block 'cssVars')}}
-        <div class='FreestyleUsage-api wb-panel'>
+        <div class='FreestyleUsage-api wb-panel' data-test-pretui-usage-css-vars>
           <div class='wb-panel-h'>
-            <h3 class='FreestyleUsage-sectionTitle wb-cap'>CSS Variables</h3>
+            <h3
+              class='FreestyleUsage-sectionTitle wb-cap'
+              data-test-pretui-usage-section-title
+            >CSS Variables</h3>
           </div>
           <Table>
             <:head>

@@ -175,6 +175,7 @@ export class Viewport extends Component<ViewportSignature> {
             <Switch
               @checked={{this.gutter}}
               @onCheckedChange={{this.setGutter}}
+              data-test-pretui-viewport-gutter
             />
             <span>Gutter</span>
           </label>
@@ -202,11 +203,14 @@ export class Viewport extends Component<ViewportSignature> {
             data-label={{this.frameCaption}}
             data-width={{this.widthLabel}}
             style={{htmlWidth this.frameStyleWidth}}
+            data-test-pretui-artboard
           >
             <div
               class='pretui-artboard-body'
               data-surface={{this.surface}}
               data-gutter={{if this.gutter 'true' 'false'}}
+              data-test-pretui-artboard-body
+              data-test-pretui-viewport-specimen
             >
               {{yield}}
             </div>
@@ -224,11 +228,14 @@ export class Viewport extends Component<ViewportSignature> {
                 class='pretui-artboard'
                 data-bp={{b.bp}}
                 data-label={{b.caption}}
+                data-test-pretui-artboard
               >
                 <div
                   class='pretui-artboard-body'
                   data-surface={{this.surface}}
                   data-gutter={{if this.gutter 'true' 'false'}}
+                  data-test-pretui-artboard-body
+                  data-test-pretui-viewport-specimen
                 >
                   {{yield}}
                 </div>
@@ -236,7 +243,10 @@ export class Viewport extends Component<ViewportSignature> {
             {{/each}}
           </div>
         {{else if (isInline this.mode)}}
-          <p class='pretui-viewport-prose'>The order ledger closes at noon, and
+          <p
+            class='pretui-viewport-prose'
+            data-test-pretui-viewport-specimen
+          >The order ledger closes at noon, and
             {{yield}}
             sits inline with the running text — cap-line trim and optical
             spacing judged mid-paragraph, exactly where machine values live.</p>
@@ -246,6 +256,7 @@ export class Viewport extends Component<ViewportSignature> {
               <div
                 class='pretui-viewport-cell'
                 data-surface={{this.surface}}
+                data-test-pretui-viewport-specimen
               >{{yield}}</div>
             {{/each}}
           </div>

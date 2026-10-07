@@ -7,13 +7,12 @@ import { Viewport } from './components/viewport';
 // SegmentedControl is a radiogroup over native <input type='radio'>. Click
 // the input: a synthetic click on the label would rely on label
 // activation forwarding, and the input is the thing that actually changes.
-function segButton(label: string): HTMLElement {
-  let labels = Array.from(
-    document.querySelectorAll('[data-test-pretui-viewport] .pretui-seg label'),
-  );
-  let target = labels.find((b) => b.textContent?.trim() === label);
-  if (!target) throw new Error(`no viewport segment labeled ${label}`);
-  return target.querySelector('input') as HTMLElement;
+function segButton(mode: string): HTMLElement {
+  let target = document.querySelector(
+    `[data-test-pretui-viewport] [data-test-pretui-segmented-option='${mode}']`,
+  ) as HTMLElement | null;
+  if (!target) throw new Error(`no viewport segment for ${mode}`);
+  return target;
 }
 
 module('Pretui | Viewport artboard', function (hooks) {
@@ -25,14 +24,14 @@ module('Pretui | Viewport artboard', function (hooks) {
     </template>);
 
     let artboard = () =>
-      document.querySelector('.pretui-artboard') as HTMLElement;
+      document.querySelector('[data-test-pretui-artboard]') as HTMLElement;
     assert.strictEqual(
       artboard().getAttribute('data-width'),
       'fill',
       'starts at fill',
     );
 
-    await click(segButton('Tablet'));
+    await click(segButton('tablet'));
     assert.strictEqual(
       artboard().style.width,
       '768px',
@@ -44,7 +43,7 @@ module('Pretui | Viewport artboard', function (hooks) {
       'caption carries name and true width',
     );
 
-    await click(segButton('Phone'));
+    await click(segButton('phone'));
     assert.strictEqual(artboard().style.width, '375px', 'phone is 375px');
   });
 
@@ -52,8 +51,8 @@ module('Pretui | Viewport artboard', function (hooks) {
     await render(<template>
       <Viewport @label='Probe'><span>content</span></Viewport>
     </template>);
-    await click(segButton('3-up'));
-    let boards = document.querySelectorAll('.pretui-bp-row .pretui-artboard');
+    await click(segButton('bp'));
+    let boards = document.querySelectorAll('[data-test-pretui-artboard]');
     assert.strictEqual(boards.length, 3, 'three artboards');
     assert.deepEqual(
       Array.from(boards).map((b) => b.getAttribute('data-label')),
@@ -67,29 +66,15 @@ module('Pretui | Viewport artboard', function (hooks) {
       <Viewport @label='Probe'><span>content</span></Viewport>
     </template>);
     let body = () =>
-      document.querySelector('.pretui-artboard-body') as HTMLElement;
+      document.querySelector('[data-test-pretui-artboard-body]') as HTMLElement;
     assert.strictEqual(body().getAttribute('data-surface'), 'background');
     assert.strictEqual(body().getAttribute('data-gutter'), 'true');
 
-    let gutterSwitch = document.querySelector(
-      '.pretui-viewport-gutter [data-test-pretui-switch]',
-    ) as HTMLElement | null;
-    if (gutterSwitch) {
-      await click(gutterSwitch);
-      assert.strictEqual(
-        body().getAttribute('data-gutter'),
-        'false',
-        'gutter toggles off',
-      );
-    } else {
-      let anySwitch = document.querySelector(
-        '.pretui-viewport-gutter button',
-      ) as HTMLElement | null;
-      assert.ok(anySwitch, 'gutter switch rendered');
-      if (anySwitch) {
-        await click(anySwitch);
-        assert.strictEqual(body().getAttribute('data-gutter'), 'false');
-      }
-    }
+    await click('[data-test-pretui-viewport-gutter]');
+    assert.strictEqual(
+      body().getAttribute('data-gutter'),
+      'false',
+      'gutter toggles off',
+    );
   });
 });

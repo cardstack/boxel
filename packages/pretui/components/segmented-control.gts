@@ -100,6 +100,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             checked={{this.isActive option}}
             disabled={{@disabled}}
             {{on 'change' (fn this.pick option)}}
+            data-test-pretui-segmented-option={{option.value}}
           />
           {{option.label}}
         </label>

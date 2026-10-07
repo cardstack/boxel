@@ -769,7 +769,11 @@ export class Autocomplete extends Component<AutocompleteSignature> {
                 {{!-- the face carries the chrome and is invisible to AT, so a
                       caller may yield ANY markup into it without tripping
                       require-presentational-children in their own file --}}
-                <span class='pretui-ac-face' aria-hidden='true'>
+                <span
+                  class='pretui-ac-face'
+                  aria-hidden='true'
+                  data-test-pretui-autocomplete-face
+                >
                   {{#if (has-block 'item')}}
                     {{yield row.item (this.rowState row) to='item'}}
                   {{else}}

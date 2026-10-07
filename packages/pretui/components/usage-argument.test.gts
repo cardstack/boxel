@@ -9,7 +9,7 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { UsageArgument } from './usage-argument';
 
 function cellTexts(): string[] {
-  return Array.from(document.querySelectorAll('tr.FreestyleUsageArgument td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+  return Array.from(document.querySelectorAll('[data-test-pretui-usage-arg] td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 }
 
 module('Pretui | components/usage-argument', function (hooks) {
@@ -18,13 +18,13 @@ module('Pretui | components/usage-argument', function (hooks) {
   test('doc mode is one API-table row: sigil + name, type, description, default', async function (assert) {
     await render(<template><table><tbody><UsageArgument @name='variant' @type='String' @description='Visual weight' @defaultValue='primary' /></tbody></table></template>);
     assert.deepEqual(cellTexts(), ['@variant', 'String', 'Visual weight', 'primary']);
-    assert.strictEqual(document.querySelector('.u-req'), null);
+    assert.strictEqual(document.querySelector('[data-test-pretui-usage-arg-required]'), null);
   });
 
   test('a missing default reads as a dash, required adds the asterisk, and typeLabel overrides type', async function (assert) {
     await render(<template><table><tbody><UsageArgument @name='items' @type='Array' @typeLabel='Item[]' @required={{true}} /></tbody></table></template>);
     assert.deepEqual(cellTexts(), ['@items *', 'Item[]', '', '—']);
-    assert.strictEqual(document.querySelector('.u-req')?.getAttribute('title'), 'Required');
+    assert.strictEqual(document.querySelector('[data-test-pretui-usage-arg-required]')?.getAttribute('title'), 'Required');
     await render(<template><table><tbody><UsageArgument @name='count' @type='Number' @defaultValue={{0}} /></tbody></table></template>);
     assert.strictEqual(cellTexts()[3], '0', 'zero is a real default, not a missing one');
   });

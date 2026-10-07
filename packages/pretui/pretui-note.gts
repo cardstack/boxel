@@ -107,8 +107,8 @@ export class PretuiNote extends CardDef {
           <button
             type='button'
             class='note-target'
-            data-test-pretui-note-target
             {{on 'click' this.openTarget}}
+            data-test-pretui-note-target
           >
             On
             <strong>{{if

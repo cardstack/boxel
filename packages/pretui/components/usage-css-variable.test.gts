@@ -13,7 +13,7 @@ module('Pretui | components/usage-css-variable', function (hooks) {
 
   test('doc mode is an API row typed CSS with no sigil', async function (assert) {
     await render(<template><table><tbody><UsageCssVariable @name='--pretui-gap' @description='Grid gutter' @defaultValue='8px' /></tbody></table></template>);
-    let cells = Array.from(document.querySelectorAll('tr.FreestyleUsageArgument td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
+    let cells = Array.from(document.querySelectorAll('[data-test-pretui-usage-arg] td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
     assert.deepEqual(cells, ['--pretui-gap', 'CSS', 'Grid gutter', '8px']);
   });
 
@@ -21,8 +21,8 @@ module('Pretui | components/usage-css-variable', function (hooks) {
     let seen: string[] = [];
     let onInput = (v: string) => seen.push(v);
     await render(<template><UsageCssVariable @mode='prop' @name='--pretui-gap' @value='8px' @onInput={{onInput}} /></template>);
-    assert.strictEqual(document.querySelector('.proprow-label')?.textContent?.trim(), '--pretui-gap');
-    let input = document.querySelector('.proprow input') as HTMLInputElement;
+    assert.strictEqual(document.querySelector('[data-test-pretui-prop-row-label]')?.textContent?.trim(), '--pretui-gap');
+    let input = document.querySelector('[data-test-pretui-prop-row] input') as HTMLInputElement;
     assert.strictEqual(input.getAttribute('aria-label'), '--pretui-gap');
     assert.strictEqual(input.value, '8px');
     await fillIn(input, '12px');

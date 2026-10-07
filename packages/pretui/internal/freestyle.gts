@@ -29,8 +29,8 @@ interface PropRowSignature {
 }
 
 export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
-  <div class='proprow' ...attributes>
-    <span class='proprow-label'>
+  <div class='proprow' data-test-pretui-prop-row ...attributes>
+    <span class='proprow-label' data-test-pretui-prop-row-label>
       {{@label}}
       {{#if @required}}<span class='proprow-req'>*</span>{{/if}}
     </span>

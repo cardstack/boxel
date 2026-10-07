@@ -44,12 +44,16 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
   }
   <template>
     {{#if this.isDoc}}
-      <tr class='FreestyleUsageArgument'>
+      <tr class='FreestyleUsageArgument' data-test-pretui-usage-arg>
         <td class='FreestyleUsageArgument-name'>
           <span class='u-sig'>{{this.sigilPre}}</span>{{#if @name}}{{@name}}{{/if}}<span
             class='u-sig'
           >{{this.sigilPost}}</span>
-          {{#if @required}}<span class='u-req' title='Required'>*</span>{{/if}}
+          {{#if @required}}<span
+              class='u-req'
+              title='Required'
+              data-test-pretui-usage-arg-required
+            >*</span>{{/if}}
         </td>
         <td class='FreestyleUsageArgument-type'>{{this.typeLabel}}</td>
         <td class='FreestyleUsageArgument-description'>{{@description}}</td>

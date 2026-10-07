@@ -132,8 +132,8 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
           @tone='primary'
           @size='s'
           @disabled={{this.draftEmpty}}
-          data-test-pretui-note-save
           {{on 'click' this.save}}
+          data-test-pretui-note-save
         >Stick it</Button>
       </div>
     </div>
@@ -467,7 +467,7 @@ export class PretUISpec extends Spec {
       >
       <article class='page' data-demo-policy={{this.demoPolicy}}>
         <nav class='wb-topbar'>
-          <div class='wb-crumb'>
+          <div class='wb-crumb' data-test-pretui-spec-crumb>
             <span class='wb-crumb-root'>Pretui</span>
             <span class='wb-sep'>/</span>
             <span class='wb-crumb-dim'>{{if
@@ -514,8 +514,8 @@ export class PretUISpec extends Spec {
                       type='button'
                       class='note-add'
                       aria-expanded={{if open 'true' 'false'}}
-                      data-test-pretui-note-add
                       {{on 'click' toggle}}
+                      data-test-pretui-note-add
                     >+ Note</button>
                   </:trigger>
                   <:default as |close|>
@@ -537,8 +537,8 @@ export class PretUISpec extends Spec {
                     <button
                       type='button'
                       class='note'
-                      data-test-pretui-note
                       {{on 'click' (fn this.openNote n.id)}}
+                      data-test-pretui-note
                     >
                       <span class='note-text'>{{if
                           n.note

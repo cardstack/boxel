@@ -83,7 +83,13 @@ module('Pretui | usage pages', function (hooks) {
         let Demo = registry[name] as AnyComponent;
         assert.ok(Demo, \`\${name} present\`);
         await render(<template><Demo /></template>);
-        assert.ok(document.querySelector('.FreestyleUsage'), \`\${name} rendered a FreestyleUsage shell\`);
+        assert.ok(document.querySelector('[data-test-pretui-usage]'), \`\${name} rendered a FreestyleUsage shell\`);
+        assert.ok(
+          Array.from(document.querySelectorAll('[data-test-pretui-viewport-specimen]')).some(
+            (s) => s.childElementCount > 0 || Boolean(s.textContent?.trim()),
+          ),
+          \`\${name} shows its example\`,
+        );
       });
     }
   }
