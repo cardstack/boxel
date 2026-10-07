@@ -14,6 +14,9 @@ function segButton(mode: string): HTMLElement {
   if (!target) throw new Error(`no viewport segment for ${mode}`);
   return target;
 }
+function artboard(): HTMLElement {
+  return document.querySelector('[data-test-pretui-artboard]') as HTMLElement;
+}
 
 module('Pretui | Viewport artboard', function (hooks) {
   setupCardTest(hooks);
@@ -23,28 +26,27 @@ module('Pretui | Viewport artboard', function (hooks) {
       <Viewport @label='Probe'><span>content</span></Viewport>
     </template>);
 
-    let artboard = () =>
-      document.querySelector('[data-test-pretui-artboard]') as HTMLElement;
     assert.strictEqual(
-      artboard().getAttribute('data-width'),
-      'fill',
-      'starts at fill',
+      artboard().getAttribute('data-label'),
+      'Fill · 100%',
+      'starts at fill, captioned as the full width',
     );
+    assert.strictEqual(artboard().style.width, '100%', 'fill is 100% wide');
 
     await click(segButton('tablet'));
     assert.strictEqual(
       artboard().style.width,
-      '768px',
-      'tablet artboard is exactly 768px',
+      '600px',
+      'tablet artboard is exactly 600px',
     );
     assert.strictEqual(
       artboard().getAttribute('data-label'),
-      'Probe · 768px',
-      'caption carries name and true width',
+      'Tablet · 600px',
+      'a device preset is captioned with the device and its true width',
     );
 
     await click(segButton('phone'));
-    assert.strictEqual(artboard().style.width, '375px', 'phone is 375px');
+    assert.strictEqual(artboard().style.width, '320px', 'phone is 320px');
   });
 
   test('R3: 3-up renders all three labeled breakpoints', async function (assert) {
@@ -52,12 +54,19 @@ module('Pretui | Viewport artboard', function (hooks) {
       <Viewport @label='Probe'><span>content</span></Viewport>
     </template>);
     await click(segButton('bp'));
-    let boards = document.querySelectorAll('[data-test-pretui-artboard]');
+    let boards = Array.from(
+      document.querySelectorAll('[data-test-pretui-artboard]'),
+    ) as HTMLElement[];
     assert.strictEqual(boards.length, 3, 'three artboards');
     assert.deepEqual(
-      Array.from(boards).map((b) => b.getAttribute('data-label')),
-      ['Phone · 375px', 'Tablet · 768px', 'Desktop · 1120px'],
+      boards.map((b) => b.getAttribute('data-label')),
+      ['Phone · 320px', 'Tablet · 600px', 'Desktop · 1120px'],
       'each labeled with its true width',
+    );
+    assert.deepEqual(
+      boards.map((b) => b.style.width),
+      ['320px', '600px', '1120px'],
+      'each is exactly the width its caption states',
     );
   });
 

@@ -6,15 +6,15 @@ The artboard: a framed stage that renders its content at a chosen device width, 
 
 ```
 @defaultMode? 'fill' | 'phone' | 'tablet' | 'desktop' | 'bp' | 'inline' | 'grid' | 'narrow' | 'wide'
-@label?   — artboard caption; renders "Name · <width>"
+@label?   — the specimen's name, captioning a dragged width as "Name · <width>"; presets are captioned by mode
 <:default>
 ```
 
-**True widths that pan rather than clamp.** A `phone` artboard is genuinely 390px wide and the stage scrolls horizontally to show it, rather than scaling the content down or clamping to the available space. That is the difference between an artboard and a resized div: a clamped preview lies about what the component does at that width, and a scaled one lies about its type size.
+**True widths that pan rather than clamp.** A `phone` artboard is genuinely 320px wide and the stage scrolls horizontally to show it, rather than scaling the content down or clamping to the available space. That is the difference between an artboard and a resized div: a clamped preview lies about what the component does at that width, and a scaled one lies about its type size.
 
 **`bp` is a 3-up mode** — three breakpoints side by side, which is how you actually check a responsive component.
 
-**The caption is live**: `"Name · 390px"`, updating as the drag handle moves. An artboard whose label does not track its real width is worse than no label, because it invites you to trust it.
+**The caption is live**: `"Phone · 320px"` for a preset and `"Name · 412px"` once you drag, updating as the drag handle moves. An artboard whose label does not track its real width is worse than no label, because it invites you to trust it.
 
 **The drag handle uses pointer capture, not document listeners.** Same discipline as **Popover**'s backdrop and **SplitPanes**' handle: the element's lifetime is the interaction's lifetime, so there is nothing to leak and nothing to remove on teardown.
 
@@ -48,7 +48,7 @@ Gaps, and the first two are the ones that matter for a tool:
 
 ## Theming
 
-Stage and gutter surfaces (`--canvas` or `--inset`), the frame's `--border` and `--pretui-shadow-card`, `--muted-foreground` for the caption, and **SegmentedControl**'s tokens for the mode picker.
+Stage surfaces (`--background`, `--card`, `--inset`, and `--sidebar` / `--sidebar-foreground` / `--sidebar-border`), `--border` for frames and the canvas dots, `--shadow-sm` on the card surface, `--border-strong` for the resize grip, `--primary-ink` for the artboard caption and the hovered grip, `--muted-foreground` for the width readout and the Padding label, a translucent `--background` veil over the dot floor on the Background surface, and **SegmentedControl**'s tokens for the mode picker.
 
 **The stage is deliberately neutral** with explicit surface and gutter settings, because an artboard that shares the page's background makes the framed component's own surface invisible. A season must keep the stage distinguishable from `--card` — otherwise every example appears to float in nothing, which is exactly the illusion an artboard exists to prevent.
 

@@ -1,6 +1,7 @@
 // Pretui — Viewport: the artboard every usage example renders in.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { SegmentedControl } from './segmented-control';
 import { Select } from './select';
@@ -8,7 +9,7 @@ import { Slider } from './slider';
 import { Switch } from './switch';
 
 function htmlWidth(w: string) {
-  return `width: ${w}`;
+  return htmlSafe(`width: ${w}`);
 }
 function isInline(mode: string) {
   return mode === 'inline';
@@ -32,19 +33,20 @@ const VIEWPORT_MODES = [
   { value: 'grid', label: 'Grid' },
 ];
 const PRESET_WIDTHS: Record<string, number> = {
-  phone: 375,
-  tablet: 768,
+  phone: 320,
+  tablet: 600,
   desktop: 1120,
 };
-const BREAKPOINTS = [
-  { bp: 'phone', caption: 'Phone · 375px' },
-  { bp: 'tablet', caption: 'Tablet · 768px' },
-  { bp: 'desktop', caption: 'Desktop · 1120px' },
-];
+const BREAKPOINTS = Object.entries(PRESET_WIDTHS).map(([bp, px]) => ({
+  bp,
+  width: `${px}px`,
+  caption: `${VIEWPORT_MODES.find((m) => m.value === bp)?.label} · ${px}px`,
+}));
 const SURFACES = [
   { value: 'background', label: 'Background' },
   { value: 'card', label: 'Card' },
   { value: 'inset', label: 'Inset' },
+  { value: 'sidebar', label: 'Sidebar' },
 ];
 // pre-artboard mode names still referenced by older pages
 const LEGACY_MODES: Record<string, string> = {
@@ -65,7 +67,8 @@ export interface ViewportSignature {
       | 'grid'
       | 'narrow'
       | 'wide';
-    // artboard caption, e.g. the component name — renders "Name · <width>"
+    // the specimen's name, e.g. the component name: the caption of a
+    // dragged width ("Name · <width>"); presets are captioned by mode
     label?: string;
   };
   Blocks: { default: [] };
@@ -100,13 +103,15 @@ export class Viewport extends Component<ViewportSignature> {
     return this.customWidth || PRESET_WIDTHS[this.mode] || 0;
   }
   get widthLabel() {
-    return this.artboardWidth ? `${this.artboardWidth}px` : 'fill';
-  }
-  get frameStyleWidth() {
     return this.artboardWidth ? `${this.artboardWidth}px` : '100%';
   }
+  // a preset (Fill or a device) is named by its mode, like the 3-up
+  // captions; a dragged width names the specimen
   get frameCaption() {
-    return `${this.args.label ?? 'Specimen'} · ${this.widthLabel}`;
+    let device = this.customWidth
+      ? undefined
+      : VIEWPORT_MODES.find((m) => m.value === this.mode)?.label;
+    return `${device ?? this.args.label ?? 'Specimen'} · ${this.widthLabel}`;
   }
   // Drag-to-resize on the artboard edge. Pointer capture keeps every event
   // on the handle — no document listeners (backdrop-close discipline).
@@ -159,6 +164,7 @@ export class Viewport extends Component<ViewportSignature> {
     <div class='pretui-viewport' data-test-pretui-viewport ...attributes>
       <div class='pretui-viewport-bar'>
         <SegmentedControl
+          @label='Viewport mode'
           @options={{VIEWPORT_MODES}}
           @value={{this.mode}}
           @onValueChange={{this.setMode}}
@@ -166,6 +172,7 @@ export class Viewport extends Component<ViewportSignature> {
         <div class='pretui-viewport-settings'>
           <div class='pretui-viewport-surface'>
             <Select
+              @label='Stage surface'
               @options={{this.surfaces}}
               @value={{this.surface}}
               @onValueChange={{this.setSurface}}
@@ -177,7 +184,7 @@ export class Viewport extends Component<ViewportSignature> {
               @onCheckedChange={{this.setGutter}}
               data-test-pretui-viewport-gutter
             />
-            <span>Gutter</span>
+            <span>Padding</span>
           </label>
         </div>
         <div class='pretui-viewport-width'>
@@ -202,7 +209,7 @@ export class Viewport extends Component<ViewportSignature> {
             class='pretui-artboard'
             data-label={{this.frameCaption}}
             data-width={{this.widthLabel}}
-            style={{htmlWidth this.frameStyleWidth}}
+            style={{htmlWidth this.widthLabel}}
             data-test-pretui-artboard
           >
             <div
@@ -228,6 +235,7 @@ export class Viewport extends Component<ViewportSignature> {
                 class='pretui-artboard'
                 data-bp={{b.bp}}
                 data-label={{b.caption}}
+                style={{htmlWidth b.width}}
                 data-test-pretui-artboard
               >
                 <div
@@ -243,13 +251,15 @@ export class Viewport extends Component<ViewportSignature> {
             {{/each}}
           </div>
         {{else if (isInline this.mode)}}
-          <p
-            class='pretui-viewport-prose'
-            data-test-pretui-viewport-specimen
-          >The order ledger closes at noon, and
-            {{yield}}
+          {{! a div, not a p: the specimen may be block-level markup }}
+          <div class='pretui-viewport-prose'>The order ledger closes at noon,
+            and
+            <div
+              class='pretui-viewport-inline'
+              data-test-pretui-viewport-specimen
+            >{{yield}}</div>
             sits inline with the running text — cap-line trim and optical
-            spacing judged mid-paragraph, exactly where machine values live.</p>
+            spacing judged mid-paragraph, exactly where machine values live.</div>
         {{else}}
           <div class='pretui-viewport-grid'>
             {{#each this.cells}}
@@ -266,6 +276,28 @@ export class Viewport extends Component<ViewportSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-viewport {
+          --pretui-viewport-bar-min-h: 2.25rem;
+          --pretui-viewport-width-min-w: 10rem;
+          --pretui-viewport-width-max-w: 18.75rem;
+          --pretui-viewport-readout-min-w: 3rem;
+          --pretui-viewport-surface-w: 8.125rem;
+          --pretui-viewport-canvas-min-h: 13.75rem;
+          --pretui-viewport-canvas-max-h: 34rem;
+          --pretui-viewport-dot-gap: 1.25rem;
+          /* a translucent --background follows the theme in light and dark,
+             which the fixed --boxel-light-* overlays don't */
+          --pretui-viewport-veil: color-mix(
+            in oklch,
+            var(--background) 70%,
+            transparent
+          );
+          --pretui-artboard-min-h: 4.5rem;
+          --pretui-artboard-handle-w: 1rem;
+          --pretui-artboard-grip-w: 0.25rem;
+          --pretui-artboard-grip-h: 1.875rem;
+          --pretui-viewport-tile-min-w: 12.5rem;
+          --pretui-viewport-cell-min-h: 4rem;
+
           display: grid;
           min-width: 0;
         }
@@ -282,45 +314,45 @@ export class Viewport extends Component<ViewportSignature> {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--space-4, 11px);
+          gap: var(--boxel-sp-sm);
           flex-wrap: wrap;
-          min-height: 36px;
-          padding: 6px var(--space-4, 11px);
+          min-height: var(--pretui-viewport-bar-min-h);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
           box-shadow: inset 0 -1px 0 var(--border);
         }
         .pretui-viewport-width {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--boxel-sp-xs);
           flex: 1;
-          min-width: 160px;
-          max-width: 300px;
+          min-width: var(--pretui-viewport-width-min-w);
+          max-width: var(--pretui-viewport-width-max-w);
         }
         .pretui-viewport-width > :first-child {
           flex: 1;
         }
         .pretui-viewport-readout {
           font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
-          min-width: 48px;
+          min-width: var(--pretui-viewport-readout-min-w);
           text-align: right;
           font-variant-numeric: tabular-nums;
         }
         .pretui-viewport-settings {
           display: flex;
           align-items: center;
-          gap: var(--space-4, 11px);
+          gap: var(--boxel-sp-sm);
         }
         .pretui-viewport-surface {
-          width: 130px;
-          font-size: var(--text-ui, 12px);
+          width: var(--pretui-viewport-surface-w);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-viewport-gutter {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          font-size: var(--text-ui, 12px);
+          gap: var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground);
           white-space: nowrap;
@@ -329,85 +361,75 @@ export class Viewport extends Component<ViewportSignature> {
         .pretui-viewport-canvas {
           /* the canvas floor: dot grid on the inset surface (Figma idiom).
              R1: true widths — wide artboards pan, they are never clamped */
-          background-color: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
+          color: var(--foreground);
           background-image: radial-gradient(
             circle,
-            var(
-                --pretui-canvas-dot,
-                color-mix(in oklch, var(--foreground) 13%, transparent)
-              )
-              1px,
+            var(--border) 1px,
             transparent 1px
           );
-          background-size: 20px 20px;
-          min-height: 220px;
-          max-height: 60vh;
-          padding: 34px var(--space-6, 19px) var(--space-6, 19px);
+          background-size: var(--pretui-viewport-dot-gap)
+            var(--pretui-viewport-dot-gap);
+          min-height: var(--pretui-viewport-canvas-min-h);
+          max-height: var(--pretui-viewport-canvas-max-h);
+          padding: var(--boxel-sp-2xl) var(--boxel-sp-lg) var(--boxel-sp-lg);
           overflow: auto;
           min-width: 0;
         }
         .pretui-artboard {
-          /* exact width from inline style or data-bp; centered while it fits,
-             panned once it doesn't */
+          /* exact width from its inline style; centered while it fits, panned
+             once it doesn't. The preset widths stay in px: they stand in for
+             device widths in CSS pixels. */
           position: relative;
           margin-inline: auto;
-          min-height: 72px;
+          min-height: var(--pretui-artboard-min-h);
         }
         .pretui-artboard[data-label]::before {
           content: attr(data-label);
           position: absolute;
-          top: -21px;
-          left: 0;
+          top: calc(-1 * var(--boxel-sp-lg));
+          inset-inline-start: 0;
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: 0.02em;
-          /* luminance clamp: a season's accent can be too light for small
-             text on the floor — always mix toward ink */
-          color: color-mix(
-            in oklch,
-            var(--pretui-accent, var(--primary)) 55%,
-            var(--foreground)
-          );
+          color: var(--primary-ink);
           white-space: nowrap;
-        }
-        .pretui-artboard:hover {
-          outline: 1px solid
-            color-mix(
-              in oklch,
-              var(--pretui-accent, var(--primary)) 45%,
-              transparent
-            );
-          outline-offset: 8px;
         }
         .pretui-artboard-body {
           /* R2: a neutral stage — normal block flow, no centering opinion */
-          min-height: 72px;
-          border-radius: 8px;
+          min-height: var(--pretui-artboard-min-h);
+          border-radius: var(--boxel-border-radius-sm);
           box-shadow: 0 0 0 1px var(--border);
         }
         .pretui-artboard-body[data-gutter='true'] {
-          padding: var(--space-5, 14px);
+          padding: var(--boxel-sp);
         }
         .pretui-artboard-body[data-surface='background'] {
-          /* the specimen sits directly on the dot floor — no extra box */
-          background: transparent;
-          box-shadow: none;
-          border-radius: 0;
+          /* a veil of the page color over the dot floor, so the stage reads as
+             an area while the specimen still sits on the page background */
+          background-color: var(--pretui-viewport-veil);
         }
         .pretui-artboard-body[data-surface='card'] {
-          background: var(--card);
-          box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border), 0 1px 3px var(--shadow-ink-soft, rgb(16 24 40 / 0.06)));
+          background-color: var(--card);
+          box-shadow:
+            0 0 0 1px var(--border),
+            var(--shadow-sm);
+        }
+        .pretui-artboard-body[data-surface='sidebar'] {
+          background-color: var(--sidebar);
+          color: var(--sidebar-foreground);
+          box-shadow: 0 0 0 1px var(--sidebar-border);
         }
         .pretui-artboard-body[data-surface='inset'] {
-          background: var(--inset, var(--boxel-100));
+          background-color: var(--inset);
           box-shadow: inset 0 0 0 1px var(--border);
         }
         .pretui-artboard-handle {
           position: absolute;
           top: 0;
           bottom: 0;
-          right: -18px;
-          width: 16px;
+          right: calc(-1 * var(--pretui-artboard-handle-w) - var(--boxel-sp-6xs));
+          width: var(--pretui-artboard-handle-w);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -416,54 +438,53 @@ export class Viewport extends Component<ViewportSignature> {
         }
         .pretui-artboard-handle::after {
           content: '';
-          width: 4px;
-          height: 30px;
-          border-radius: 4px;
-          background: var(--line-strong, var(--boxel-400));
+          width: var(--pretui-artboard-grip-w);
+          height: var(--pretui-artboard-grip-h);
+          border-radius: var(--boxel-border-radius-xs);
+          background-color: var(--border-strong);
         }
         .pretui-artboard-handle:hover::after {
-          background: var(--pretui-accent, var(--primary));
+          background-color: var(--primary-ink);
         }
         .pretui-bp-row {
           /* R3: the same specimen at every breakpoint, side by side */
           display: flex;
-          gap: 34px;
+          gap: var(--boxel-sp-2xl);
           align-items: flex-start;
           width: max-content;
           margin-inline: auto;
         }
-        .pretui-bp-row .pretui-artboard[data-bp='phone'] {
-          width: 375px;
-        }
-        .pretui-bp-row .pretui-artboard[data-bp='tablet'] {
-          width: 768px;
-        }
-        .pretui-bp-row .pretui-artboard[data-bp='desktop'] {
-          width: 1120px;
-        }
         .pretui-viewport-prose {
-          margin: 0;
           max-width: 62ch;
-          font-size: var(--text-body, 15px);
-          line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
-          color: var(--foreground);
+          font-size: var(--boxel-body-font-size);
+          line-height: var(--boxel-body-line-height);
+        }
+        /* a block specimen (a toast, a segmented control) still sits on the
+           line instead of breaking the paragraph */
+        .pretui-viewport-inline {
+          display: inline-block;
+          max-width: 100%;
+          vertical-align: middle;
         }
         .pretui-viewport-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-          gap: var(--space-4, 11px);
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(var(--pretui-viewport-tile-min-w), 1fr)
+          );
+          gap: var(--boxel-sp-sm);
         }
         .pretui-viewport-cell {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
-          background: var(--background);
-          border-radius: 8px;
+          background-color: var(--background);
+          border-radius: var(--boxel-border-radius-sm);
           box-shadow: 0 0 0 1px var(--border);
-          padding: var(--space-4, 11px);
-          min-height: 64px;
+          padding: var(--boxel-sp-sm);
+          min-height: var(--pretui-viewport-cell-min-h);
         }
       }
     </style>
