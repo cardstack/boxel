@@ -937,9 +937,10 @@ async function explain(
 // read is allowed a write and declined a read.
 //
 // The realm asks whether a caller it declined a write could read the realm
-// only of a signed-in caller, so a write from a caller who isn't signed in is
-// declined outright even where anyone may read the realm, and is judged and
-// answered as such.
+// only where its policy judges the write, which it does only for a signed-in
+// caller on a realm that names a policy, as every realm an explain describes
+// does. So a write from a caller who isn't signed in is declined outright even
+// where anyone may read the realm, and is judged and answered as such.
 async function coarseDeclinedFor(
   core: OperationCore,
   target: OperationTarget,
