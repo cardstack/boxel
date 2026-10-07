@@ -480,17 +480,22 @@ export default class ToolService extends Service {
         // Events are only queued once their content is finalized
         // (isStreamingFinished), but the room resource folds that content
         // into its Message asynchronously — at drain time the Message may
-        // not exist yet, or may still hold a streaming snapshot whose tool
-        // arguments are partial or unparsed. Validating that snapshot posts
-        // a spurious 'invalid' result for a request that is actually fine
-        // (CS-12103). Requeue until the Message reports the finalized state
-        // — chain-aware, so a head whose continuation is still streaming
-        // keeps waiting; bounded so a message that never catches up still
-        // falls through and resolves with a real (terminal) validation
-        // result.
+        // not exist yet, may still hold a streaming snapshot whose tool
+        // arguments are partial or unparsed, or may be finished while a
+        // declared tool is still being built (builds await network loads, so
+        // a finished message's tool list isn't final until
+        // allRequestedToolsBuilt). Validating such a snapshot posts a
+        // spurious 'invalid' result for a request that is actually fine, or
+        // runs a partial tool list that strands the late tool in "applying".
+        // Requeue until the Message reports the finalized state — chain-aware,
+        // so a head whose continuation is still streaming or building keeps
+        // waiting; bounded so a message that never catches up still falls
+        // through and resolves with a real (terminal) validation result.
         if (
           !message ||
-          (message.isStreamingFinished !== true && !message.isCanceled)
+          ((message.isStreamingFinished !== true ||
+            !message.allRequestedToolsBuilt) &&
+            !message.isCanceled)
         ) {
           let compoundKey = `${roomId}|${eventId}`;
           let retries = this.toolFinalizationRetries.get(compoundKey) ?? 0;

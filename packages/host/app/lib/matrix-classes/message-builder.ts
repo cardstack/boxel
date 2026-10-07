@@ -194,7 +194,17 @@ export default class MessageBuilder {
       message.reloadBillingData = shouldReloadBillingData(event.content);
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
-      if (getToolRequests(event.content)) {
+      let toolRequests = getToolRequests<Partial<EncodedToolRequest>>(
+        event.content,
+      );
+      if (toolRequests) {
+        // Same contract as updateMessage: declared ids are recorded before
+        // the builds they gate.
+        message.setExpectedToolRequestIds(
+          toolRequests
+            .map((request) => request.id)
+            .filter((id): id is string => Boolean(id)),
+        );
         message.setTools(await this.buildMessageCommands(message));
       }
     } else if (event.content.msgtype === 'm.text') {
@@ -221,19 +231,11 @@ export default class MessageBuilder {
         APP_BOXEL_REASONING_CONTENT_KEY
       ] || null,
     );
-    // A finished message is only marked finished once every tool it carries
-    // has been built (below). The tool drain and a restarted room pass both
-    // read "finished" as "the tool list is final": marking it first let a
-    // restarted pass skip the message while a slow tool build was still in
-    // flight, and the drain then ran the partial list and dropped the event,
-    // leaving the late tool spinning in "applying" with nothing to run it.
-    let isStreamingFinished =
+    message.setIsStreamingFinished(
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
-        : undefined;
-    if (isStreamingFinished !== true) {
-      message.setIsStreamingFinished(isStreamingFinished);
-    }
+        : undefined,
+    );
     message.setIsCanceled(
       'isCanceled' in this.event.content
         ? this.event.content.isCanceled
@@ -268,55 +270,55 @@ export default class MessageBuilder {
       message.attachedFiles = this.attachedFiles;
     }
 
-    try {
-      let encodedCommandRequests =
-        getToolRequests<Partial<EncodedToolRequest>>(
-          this.event.content as CardMessageContent,
-        ) ?? [];
-      for (let encodedCommandRequest of encodedCommandRequests) {
-        // A request without an id yet (its first streamed chunk) can't be
-        // matched to later chunks or to its result — skip it; a later replace
-        // always carries the id.
-        if (!encodedCommandRequest.id) {
-          continue;
-        }
-        let command = message.tools.find(
+    let encodedCommandRequests =
+      getToolRequests<Partial<EncodedToolRequest>>(
+        this.event.content as CardMessageContent,
+      ) ?? [];
+    // Record the declared request ids before the builds below, which await
+    // network loads (resolving a tool's declaring skill): a finished edit can
+    // apply while a tool is still being built, so "finished" never means the
+    // tool list is final. The tool drain and restarted room passes gate on
+    // Message.allRequestedToolsBuilt / allToolsForEventBuilt instead.
+    message.setExpectedToolRequestIds(
+      encodedCommandRequests
+        .map((request) => request.id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    for (let encodedCommandRequest of encodedCommandRequests) {
+      // A request without an id yet (its first streamed chunk) can't be
+      // matched to later chunks or to its result — skip it; a later replace
+      // always carries the id.
+      if (!encodedCommandRequest.id) {
+        continue;
+      }
+      let command = message.tools.find(
+        (c) => c.toolRequest.id === encodedCommandRequest.id,
+      );
+      if (command) {
+        await this.updateExistingTool(message, command, encodedCommandRequest);
+      } else {
+        let built = await this.buildMessageCommand(
+          message,
+          decodeToolRequest(encodedCommandRequest),
+        );
+        built.toolRequestEventTs = this.event.origin_server_ts;
+        // buildMessageCommand awaits network loads (resolving the tool's
+        // declaring skill), so a concurrent build for a later replace of the
+        // same message can land first. Re-check before pushing: a duplicate
+        // MessageTool for the same request would never receive its result
+        // (results attach to the first match) and would spin forever.
+        let existing = message.tools.find(
           (c) => c.toolRequest.id === encodedCommandRequest.id,
         );
-        if (command) {
+        if (existing) {
           await this.updateExistingTool(
             message,
-            command,
+            existing,
             encodedCommandRequest,
           );
         } else {
-          let built = await this.buildMessageCommand(
-            message,
-            decodeToolRequest(encodedCommandRequest),
-          );
-          built.toolRequestEventTs = this.event.origin_server_ts;
-          // buildMessageCommand awaits network loads (resolving the tool's
-          // declaring skill), so a concurrent build for a later replace of the
-          // same message can land first. Re-check before pushing: a duplicate
-          // MessageTool for the same request would never receive its result
-          // (results attach to the first match) and would spin forever.
-          let existing = message.tools.find(
-            (c) => c.toolRequest.id === encodedCommandRequest.id,
-          );
-          if (existing) {
-            await this.updateExistingTool(
-              message,
-              existing,
-              encodedCommandRequest,
-            );
-          } else {
-            message.tools.push(built);
-          }
+          message.tools.push(built);
         }
-      }
-    } finally {
-      if (isStreamingFinished === true) {
-        message.setIsStreamingFinished(true);
       }
     }
   }

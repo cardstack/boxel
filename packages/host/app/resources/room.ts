@@ -763,7 +763,17 @@ export class RoomResource extends Resource<Args> {
         message.setUsage(usage);
       }
     }
-    if (!message?.isStreamingOfEventFinished) {
+    // A finished event whose declared tools aren't all built yet still gets
+    // another updateMessage pass: tool builds await network loads (resolving
+    // the tool's declaring skill), so a pass restarted mid-build would
+    // otherwise skip the message and the tool drain would run a partial tool
+    // list, leaving the late tool stuck in "applying" with nothing to run it.
+    // Re-entering mid-build is safe — updateMessage re-checks for a duplicate
+    // after each build before pushing.
+    if (
+      !message?.isStreamingOfEventFinished ||
+      !message.allToolsForEventBuilt
+    ) {
       let author = this.upsertRoomMember({
         roomId,
         userId: event.sender,

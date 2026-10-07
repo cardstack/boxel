@@ -62,6 +62,7 @@ export class Message implements RoomMessageInterface {
   @tracked _tools: TrackedArray<MessageTool>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
+  @tracked private _expectedToolRequestIds: string[] = [];
   @tracked _isCanceled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
@@ -214,6 +215,40 @@ export class Message implements RoomMessageInterface {
 
   get isStreamingOfEventFinished(): boolean {
     return this._isStreamingFinished === true;
+  }
+
+  // The tool-request ids this message's latest event declares, recorded
+  // synchronously as the event starts applying. Building the matching
+  // MessageTools awaits network loads (resolving a tool's declaring skill),
+  // so isStreamingFinished alone never means the tool list is final — the
+  // getters below answer that separately.
+  setExpectedToolRequestIds(ids: string[]) {
+    this._expectedToolRequestIds = ids;
+  }
+
+  // Whether every tool request this message's own event declares has a built
+  // MessageTool. Per-event — no continuation chasing — because a room pass
+  // processes one event at a time, so each part of a split answer answers for
+  // itself. The lookup goes through the chasing `tools` getter since that is
+  // where consumers will read the built tool from.
+  get allToolsForEventBuilt(): boolean {
+    return this._expectedToolRequestIds.every((id) =>
+      this.tools.some((tool) => tool.toolRequest.id === id),
+    );
+  }
+
+  // Chain-chasing variant for consumers that see only the head of a split
+  // answer (the shape Message.tools exposes): true once the whole answer's
+  // tool list is final. A continuation that hasn't loaded yet counts as not
+  // built, mirroring isStreamingFinished.
+  get allRequestedToolsBuilt(): boolean {
+    if (this.hasContinuation) {
+      return (
+        this.allToolsForEventBuilt &&
+        (this.continuedInMessage?.allRequestedToolsBuilt ?? false)
+      );
+    }
+    return this.allToolsForEventBuilt;
   }
 
   get updated(): Date {
