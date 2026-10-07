@@ -78,7 +78,6 @@ module(basename(import.meta.filename), function () {
       runner: QueueRunner;
     }) {
       dir = dirSync();
-      copySync(fixtureDir('simple'), dir.name);
       testRealmDir = join(dir.name, 'realm_server_3', 'test');
       ensureDirSync(testRealmDir);
       copySync(fixtureDir('simple'), testRealmDir);
