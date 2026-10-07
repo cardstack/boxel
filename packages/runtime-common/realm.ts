@@ -6723,7 +6723,12 @@ export class Realm {
         !requestContext.authenticatedUser &&
         (await this.#anonymous.callerFor(request, ANONYMOUS_WRITE_CHECK)))
     ) {
-      return { coarseDeclined };
+      // The realm asks whether a caller it declined a write could read the
+      // realm only of a signed-in caller, so anyone else's write is declined
+      // outright even where the ACL lets them read.
+      return coarseDeclined === 'writes' && !requestContext.authenticatedUser
+        ? { coarseDeclined, writesDeclinedOutright: true }
+        : { coarseDeclined };
     }
     return {
       coarseDeclined,

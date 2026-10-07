@@ -10,12 +10,14 @@ import {
   canonicalizeTarget,
   newOperationScope,
   resolveGatedOperation,
+  resolveOperation,
   type CoarseDeclined,
   type GatedOperation,
   type OperationCore,
   type OperationScope,
   type ScopeCaller,
 } from './dispatch.ts';
+import { needsActor } from './envelope.ts';
 import { GateTrace } from './gate-trace.ts';
 import { storedWriteRefusal } from './gate.ts';
 import { principalQueryScope, type SearchPrincipal } from './policy-query.ts';
@@ -105,6 +107,12 @@ export interface CapabilityCaller {
   // refusal comes closest to: `actor-required` for the 401 a caller who
   // authenticated nobody is given, `operation-not-permitted` for the 403.
   writesRefused?: 'actor-required' | 'operation-not-permitted';
+  // Set where the ACL lets this caller read the realm and the realm declines
+  // their writes outright all the same: a caller who isn't signed in, whose
+  // write the realm never asks whether they could read. Each such write is
+  // judged as the realm judges it, as a caller declined everything, while
+  // their reads keep the ACL's answer.
+  writesDeclinedOutright?: true;
 }
 
 // Answer every pair, in order.
@@ -209,6 +217,16 @@ async function decide(
   let admitted: PairDecision = { answer: { allowed: true }, admitted: true };
   try {
     let target = targetFor(core, check.target);
+    // A write the realm declines outright is judged and told as a
+    // non-reader's, whatever the ACL says of this caller's reads.
+    let pairScope = scope;
+    if (
+      who.writesDeclinedOutright &&
+      (await resolvesToWrite(core, target, check.operation, scope))
+    ) {
+      bare = true;
+      pairScope = scope.derive({ coarseDeclined: 'all' });
+    }
     // A caller the ACL lets read the realm runs a query unscoped, and the gate
     // answers them from the ACL. Anyone else's query the gate refuses, and
     // records why in the trace a scope carries, so the pair is asked of the
@@ -221,7 +239,7 @@ async function decide(
         core,
         target,
         check.operation,
-        trace ? scope.derive({ trace }) : scope,
+        trace ? pairScope.derive({ trace }) : pairScope,
       );
     } catch (e: unknown) {
       if (trace?.refusal !== 'query-lane') {
@@ -238,6 +256,12 @@ async function decide(
     if (who.writesRefused && isWrite(definition.base)) {
       return refused(who.writesRefused);
     }
+    // An operation that reads `actor()` has no actor to read for a caller
+    // who isn't signed in, and the realm refuses its invocation with a 401
+    // once the gate has let it through, before any write lock decides it.
+    if (who.caller.kind !== 'user' && needsActor(definition)) {
+      return refused('actor-required');
+    }
     if (decision.kind !== 'pending') {
       return admitted;
     }
@@ -253,7 +277,7 @@ async function decide(
         target,
         name: check.operation,
         decision,
-        scope,
+        scope: pairScope,
       });
       return refusal ? refused(refusal.error.code) : admitted;
     }
@@ -273,6 +297,29 @@ async function decide(
     // check fails closed on it — one pair the realm could not decide, reported
     // as itself, rather than a request the caller cannot read at all.
     return refused(isOperationFailure(e) ? e.error.code : 'internal-error');
+  }
+}
+
+// Whether the operation resolves to a write on the target, resolved as a
+// caller the ACL allows would resolve it, so the gate doesn't decide what it
+// is asked to judge. One that does not resolve is left to the pair's own
+// resolution to refuse.
+async function resolvesToWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  operation: string,
+  scope: OperationScope,
+): Promise<boolean> {
+  try {
+    let { base } = await resolveOperation(
+      core,
+      target,
+      operation,
+      scope.derive({ coarseDeclined: 'none' }),
+    );
+    return isWrite(base);
+  } catch {
+    return false;
   }
 }
 

@@ -21,6 +21,7 @@ import {
   type OperationCore,
   type ScopeCaller,
 } from './dispatch.ts';
+import { needsActor } from './envelope.ts';
 import { GateTrace } from './gate-trace.ts';
 import {
   GATE_FAULTED,
@@ -52,6 +53,7 @@ import {
   type ExplainedSearch,
   type OperationError,
   type OperationExplainListingResult,
+  type OperationDefinition,
   type OperationExplainResult,
   type OperationRequest,
   type OperationTarget,
@@ -837,10 +839,11 @@ async function explain(
     trace,
     route: EXPLAIN_ROUTE,
   });
+  let definition: OperationDefinition | undefined;
   let decision: GateDecision | undefined;
   let failure: OperationFailure | undefined;
   try {
-    ({ decision } = await resolveGatedOperation(
+    ({ definition, decision } = await resolveGatedOperation(
       core,
       target,
       question.operation,
@@ -852,7 +855,7 @@ async function explain(
     }
     failure = e;
   }
-  if (failure || !decision) {
+  if (failure || !decision || !definition) {
     let error = failure?.error ?? {
       status: 500,
       code: 'internal-error' as const,
@@ -871,6 +874,16 @@ async function explain(
         seenBy(actor, coarseDeclined, error),
         error.status >= 500 ? 'failed' : 'denied',
       ),
+      trace,
+    );
+  }
+  // An operation that reads `actor()` has no actor to read for a caller who
+  // isn't signed in. The realm refuses such an invocation with a 401 once the
+  // gate has let it through, before any write lock decides it, so that is
+  // what this caller would receive however the gate let it through.
+  if (actor.kind !== 'user' && needsActor(definition)) {
+    return withRules(
+      refused(base, 'reads-actor', { status: 401, code: 'actor-required' }),
       trace,
     );
   }
