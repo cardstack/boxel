@@ -1,8 +1,31 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { defaultClientConditions, defineConfig } from 'vite';
 
 import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+/**
+ * Keeps the machine that built the app out of the build. The template
+ * compiler names each template by its absolute path on disk, which would
+ * publish that path in the realm and make the build differ from one checkout
+ * to the next; a production build names it from the repository root instead.
+ */
+function repoRelativePaths() {
+  return {
+    name: 'repo-relative-paths',
+    apply: 'build',
+    renderChunk(code) {
+      return code.includes(repoRoot)
+        ? { code: code.replaceAll(repoRoot, ''), map: null }
+        : null;
+    },
+  };
+}
 
 // Like choreo-test-app: the test suite is built in development mode into
 // dist-tests, with tests/index.html as an extra entry, and NODE_ENV follows the
@@ -34,6 +57,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [
+    repoRelativePaths(),
     glimmerMotionSource(),
     classicEmberSupport(),
     ember(),

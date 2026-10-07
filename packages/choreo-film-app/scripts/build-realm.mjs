@@ -27,6 +27,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = resolve(packageRoot, '../..');
 const target = resolve(packageRoot, '../choreo-gallery/realm/film-app');
 
 const scratch = mkdtempSync(join(tmpdir(), 'choreo-film-app-'));
@@ -42,6 +43,7 @@ try {
     );
   }
   renameScripts(out);
+  refuseLocalPaths(out);
   rmSync(target, { recursive: true, force: true });
   mkdirSync(dirname(target), { recursive: true });
   cpSync(out, target, { recursive: true });
@@ -72,5 +74,20 @@ function renameScripts(root) {
   }
   for (const name of scripts) {
     renameSync(join(root, name), join(root, name.replace(/\.js$/, '.mjs')));
+  }
+}
+
+/**
+ * The realm publishes the build, so it must not carry the path of the
+ * checkout that built it (vite.config.mjs strips it from every chunk).
+ */
+function refuseLocalPaths(root) {
+  const leaking = files(root).filter((name) =>
+    readFileSync(join(root, name), 'utf8').includes(repoRoot),
+  );
+  if (leaking.length) {
+    throw new Error(
+      `The build names this checkout's path (${repoRoot}) in: ${leaking.join(', ')}`,
+    );
   }
 }
