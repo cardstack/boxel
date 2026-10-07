@@ -1,5 +1,7 @@
 import {
+  hasCardExtension,
   hasExecutableExtension,
+  isIgnored,
   jobIdentity,
   SupportedMimeType,
   type DependencyIndexRow,
@@ -13,6 +15,27 @@ import type { VirtualNetwork } from '../virtual-network.ts';
 import { isScopedCSSRequest } from '../scoped-css.ts';
 import { referenceNamesFile } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
+import {
+  readRealmIgnoreRules,
+  realmIgnoreMap,
+} from './discover-invalidations.ts';
+
+// The realm-wide sweep's modules: every `.gts` / `.gjs` file the realm's
+// ignore rules leave in the realm.
+export async function realmCardModulesToWarm(
+  realmURL: URL,
+  reader: Reader,
+): Promise<string[]> {
+  let filesystemMtimes = await reader.mtimes();
+  let ignoreMap = realmIgnoreMap(
+    realmURL,
+    await readRealmIgnoreRules(realmURL, reader, filesystemMtimes),
+  );
+  return Object.keys(filesystemMtimes).filter(
+    (url) =>
+      hasCardExtension(url) && !isIgnored(realmURL, ignoreMap, new URL(url)),
+  );
+}
 
 // Default module pre-warm concurrency. Serial by default: a cold/shared
 // prerender pool serves serial pre-warm by reusing a single warm tab,

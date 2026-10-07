@@ -6,7 +6,6 @@ import {
   cardSourceForVisit,
   delay,
   flattenPrerenderHtmlVisitMeta,
-  hasCardExtension,
   isBrowserTestEnv,
   isCardResource,
   jobIdentity,
@@ -72,6 +71,7 @@ const SPAWNING_PASS_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
   preWarmModulesTable,
+  realmCardModulesToWarm,
   resolveModuleCacheContext,
 } from './prewarm-modules.ts';
 
@@ -271,9 +271,7 @@ export async function runPrerenderHtmlPass({
   if (preWarm && !isBrowserTestEnv()) {
     let preWarmStart = Date.now();
     try {
-      let filesystemMtimes = await reader.mtimes();
-      let allRealmCardModules =
-        Object.keys(filesystemMtimes).filter(hasCardExtension);
+      let allRealmCardModules = await realmCardModulesToWarm(realmURL, reader);
       // Info, not debug: the sweep can hold this worker for minutes on a
       // module-heavy realm, and with few workers everything queued behind it
       // waits that long. CI logs need the sweep's span attributable without a
