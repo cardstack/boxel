@@ -182,6 +182,15 @@ const realmEventsLogger = logger('realm:events');
 // router refresh that ends the boot. Compiles to a no-op outside a debug build.
 const signInWaiter = buildWaiter('matrix-service:sign-in');
 
+// Room events reach the app on a debounced, async drain: the debounce is a
+// runloop timer `settled()` already waits for, but once it fires the drain
+// awaits any drain still in flight and then each event's processing, none of
+// which a waiter covers. A realm's index event takes this route to the store,
+// so without this waiter `settled()` can resolve after an event has arrived
+// but before the store has heard of it. Compiles to a no-op outside a debug
+// build.
+const timelineDrainWaiter = buildWaiter('matrix-service:timeline-drain');
+
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
 // records one →true and a teardown one →false, so a handful of entries covers
 // even a re-entrant boot; keeping the most recent dozen is ample.
@@ -3183,22 +3192,27 @@ export default class MatrixService extends Service {
   }
 
   private async drainTimeline() {
-    await this.flushTimeline;
-
-    let eventsDrained: () => void;
-    this.flushTimeline = new Promise((res) => (eventsDrained = res));
+    let waiterToken = timelineDrainWaiter.beginAsync();
     try {
-      let events = [...this.timelineQueue];
-      this.timelineQueue = [];
-      for (let { event, oldEventId } of events) {
-        await this.client?.decryptEventIfNeeded(event);
-        await this.processDecryptedEvent(
-          this.buildEventForProcessing(event),
-          oldEventId,
-        );
+      await this.flushTimeline;
+
+      let eventsDrained: () => void;
+      this.flushTimeline = new Promise((res) => (eventsDrained = res));
+      try {
+        let events = [...this.timelineQueue];
+        this.timelineQueue = [];
+        for (let { event, oldEventId } of events) {
+          await this.client?.decryptEventIfNeeded(event);
+          await this.processDecryptedEvent(
+            this.buildEventForProcessing(event),
+            oldEventId,
+          );
+        }
+      } finally {
+        eventsDrained!();
       }
     } finally {
-      eventsDrained!();
+      timelineDrainWaiter.endAsync(waiterToken);
     }
   }
 

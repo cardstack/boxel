@@ -25,6 +25,7 @@ import {
   fileDefFormats,
   cardDefFormats,
 } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -2537,11 +2538,33 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-code-mode-card-renderer-body]')
-          ?.textContent?.includes('FadhlanXXX'),
-      );
+      // The preview updates through the realm's index event: the mock
+      // homeserver's dispatch, the matrix service's timeline drain, the store's
+      // reload of the card and the re-render. Each hop holds a test waiter, so
+      // settling covers the whole chain rather than racing it against a clock.
+      await settled();
+      let previewText = () =>
+        document.querySelector('[data-test-code-mode-card-renderer-body]')
+          ?.textContent ?? '';
+      if (!previewText().includes('FadhlanXXX')) {
+        // Tells apart an event that never reached this tab, a store that never
+        // re-read the card, and a card that re-read but never re-rendered.
+        let realmEvents = mockMatrixUtils
+          .getRoomIds()
+          .flatMap((roomId) => mockMatrixUtils.getRoomEvents(roomId))
+          .filter((event) => event.type === APP_BOXEL_REALM_EVENT_TYPE)
+          .slice(-5)
+          .map((event) => event.content);
+        let instance = getService('store').peek(
+          `${testRealmURL}Person/fadhlan`,
+        );
+        console.warn(
+          '[card-preview-live-updates flake-probe] preview not updated after settled(). ' +
+            `store firstName=${JSON.stringify((instance as any)?.firstName)}; ` +
+            `preview text=${JSON.stringify(previewText())}; ` +
+            `last realm events in mock homeserver=${JSON.stringify(realmEvents)}.`,
+        );
+      }
       assert
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('FadhlanXXX');
