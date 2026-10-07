@@ -1,4 +1,5 @@
 # Tracked in git but not part of the pretui realm. The deploy rsync reads this
-# list too (setup:pretui-in-deployment).
+# list too (setup:pretui-in-deployment), as filter rules: keep to simple
+# patterns and no `!` lines, which rsync reads as "clear the list".
 *.test.gts
 scripts/

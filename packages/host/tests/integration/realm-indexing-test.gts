@@ -5387,6 +5387,66 @@ scripts/
     );
   });
 
+  test('a from-scratch index removes the rows of a file that has since been ignored', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'draft.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+      },
+    });
+
+    let indexer = realm.realmIndexQueryEngine;
+    assert.ok(
+      await indexer.cardDocument(new URL(`${testRealmURL}draft`)),
+      'draft is indexed before it is ignored',
+    );
+
+    await adapter.write('.boxelignore', 'draft.json\n');
+    await realm.fullIndex();
+
+    assert.strictEqual(
+      await indexer.cardDocument(new URL(`${testRealmURL}draft`)),
+      undefined,
+      'draft is no longer indexed',
+    );
+    assert.ok(
+      await indexer.cardDocument(new URL(`${testRealmURL}post`)),
+      'post is still indexed',
+    );
+  });
+
+  test('a .boxelignore that lists itself keeps applying on every from-scratch index', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        'draft.json': { data: { meta: { adoptsFrom: baseCardRef } } },
+        '.boxelignore': `
+.boxelignore
+draft.json
+      `,
+      },
+    });
+
+    let indexer = realm.realmIndexQueryEngine;
+    for (let pass of [1, 2]) {
+      // the lastModified resolution is 1 second, so a rewrite needs a newer
+      // second for the from-scratch pass to see a change
+      await new Promise((r) => setTimeout(r, 1000));
+      await adapter.write(
+        'post.json',
+        JSON.stringify({ data: { meta: { adoptsFrom: baseCardRef } } }),
+      );
+      await realm.fullIndex();
+      assert.strictEqual(
+        await indexer.cardDocument(new URL(`${testRealmURL}draft`)),
+        undefined,
+        `draft is still ignored after from-scratch pass ${pass}`,
+      );
+    }
+  });
+
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,

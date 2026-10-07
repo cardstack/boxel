@@ -684,6 +684,12 @@ export class RealmIndexUpdater {
   }
 }
 
+// The realm-root files the indexer reads its ignore rules from. A rule can't
+// ignore them: a realm that hid them would read no rules on its next
+// from-scratch pass, index everything, and then read them again on the pass
+// after.
+export const REALM_IGNORE_FILES = ['.gitignore', '.boxelignore'];
+
 export function isIgnored(
   realmURL: URL,
   ignoreMap: Map<string, Ignore>,
@@ -691,6 +697,11 @@ export function isIgnored(
 ): boolean {
   if (url.href === realmURL.href) {
     return false; // you can't ignore the entire realm
+  }
+  if (
+    REALM_IGNORE_FILES.some((name) => url.href === `${realmURL.href}${name}`)
+  ) {
+    return false;
   }
   if (
     [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||

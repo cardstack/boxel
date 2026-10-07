@@ -19,7 +19,10 @@ import {
   rri,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { preWarmModulesTable } from '@cardstack/runtime-common/index-runner/prewarm-modules';
+import {
+  preWarmModulesTable,
+  realmCardModulesToWarm,
+} from '@cardstack/runtime-common/index-runner/prewarm-modules';
 import type { DependencyIndexRow } from '@cardstack/runtime-common/index-writer';
 import {
   setupPermissionedRealmsCached,
@@ -3564,6 +3567,37 @@ module(basename(import.meta.filename), function () {
         rows.length,
         0,
         'pre-warm persisted no row (no error_doc) for the failed module',
+      );
+    });
+
+    test("pre-warm sweep leaves out the modules the realm's ignore rules exclude", async function (assert) {
+      let files: Record<string, string> = {
+        'card.gts': '',
+        'card.test.gts': '',
+        'scripts/build.gts': '',
+        'notes.md': '',
+        '.boxelignore': '.boxelignore\n*.test.gts\nscripts/\n',
+      };
+      let reader: Reader = {
+        readFile: async (url: URL) => {
+          let path = url.href.slice(realmURL.length);
+          return path in files
+            ? { content: files[path], lastModified: 0, path }
+            : undefined;
+        },
+        readStream: () => {
+          throw new Error('reader should not stream in this test');
+        },
+        mtimes: async () =>
+          Object.fromEntries(
+            Object.keys(files).map((path) => [`${realmURL}${path}`, 1]),
+          ),
+      };
+
+      assert.deepEqual(
+        await realmCardModulesToWarm(new URL(realmURL), reader),
+        [`${realmURL}card.gts`],
+        'test files and scripts are not swept',
       );
     });
 

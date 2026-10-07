@@ -3,6 +3,7 @@ import { ignore, type Ignore } from '../ignore.ts';
 import {
   isIgnored,
   jobIdentity,
+  REALM_IGNORE_FILES,
   type Batch,
   type JobInfo,
   type LastModifiedTimes,
@@ -64,7 +65,9 @@ export async function discoverInvalidations({
   let ignoreRules = await readRealmIgnoreRules(url, reader, filesystemMtimes);
   perfDebug(`time to get ignore rules ${Date.now() - ignoreStart} ms`);
   if (ignoreRules) {
-    ignoreMap.set(url.href, ignore().add(ignoreRules));
+    for (let [key, value] of realmIgnoreMap(url, ignoreRules)) {
+      ignoreMap.set(key, value);
+    }
     ignoreData[url.href] = ignoreRules;
     // An ignored file is not part of the realm: it gets no visit and no
     // prerender, and a row it left from before it was ignored is tombstoned.
@@ -144,15 +147,17 @@ export async function discoverInvalidations({
 
 // The realm root's ignore rules: `.gitignore`, plus `.boxelignore` for files
 // that git tracks but that are not part of the realm (a package's tests, its
-// build scripts). Only files present in `filesystemMtimes` are read, since
-// asking for a missing one is slow.
+// build scripts). The two read as one gitignore-syntax list, `.gitignore`
+// first, so a `!` line in `.boxelignore` can re-include a path `.gitignore`
+// excludes. Only files present in `filesystemMtimes` are read, since asking
+// for a missing one is slow.
 export async function readRealmIgnoreRules(
   realmURL: URL,
   reader: Reader,
   filesystemMtimes: { [url: string]: number },
 ): Promise<string | undefined> {
   let rules: string[] = [];
-  for (let name of ['.gitignore', '.boxelignore']) {
+  for (let name of REALM_IGNORE_FILES) {
     let fileURL = new URL(name, realmURL);
     if (!filesystemMtimes[fileURL.href]) {
       continue;
@@ -163,4 +168,14 @@ export async function readRealmIgnoreRules(
     }
   }
   return rules.length > 0 ? rules.join('\n') : undefined;
+}
+
+// The rules `readRealmIgnoreRules` returns, in the form `isIgnored` takes.
+export function realmIgnoreMap(
+  realmURL: URL,
+  ignoreRules: string | undefined,
+): Map<string, Ignore> {
+  return new Map(
+    ignoreRules ? [[realmURL.href, ignore().add(ignoreRules)]] : [],
+  );
 }
