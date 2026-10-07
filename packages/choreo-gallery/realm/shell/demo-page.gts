@@ -83,7 +83,7 @@ export class DemoPage extends Component<Signature> {
         </div>
       </article>
       {{#if @demo.slowmo}}
-        <SpeedPicker />
+        <SpeedPicker @slug={{slug}} />
       {{/if}}
       <div class='stage-row'>
         <div

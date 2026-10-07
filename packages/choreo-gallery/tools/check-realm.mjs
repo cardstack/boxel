@@ -276,3 +276,44 @@ for (const { file, slug, doc } of demos) {
 console.log(
   `${demos.length} demos are well formed, linked from the index, and have guide embeds and complete teaching lessons.`,
 );
+
+// ---- the test app's copy of the catalog and lessons ----------------------
+
+/*
+ * The test app still renders its own gallery from catalog.ts and its guide
+ * links from demo-lessons.json. Until it is retired, it must keep one lesson
+ * per demo in its catalog, and every lesson the realm also has must read the
+ * same in both places.
+ */
+const testAppLessons = readJSON(
+  path.join(root, 'packages/choreo-test-app/app/content/demo-lessons.json'),
+);
+const testAppDemoIds = new Set([
+  ...literalIds(source('packages/choreo-test-app/app/lib/catalog.ts')),
+  ...literalIds(source('packages/choreo-test-app/app/lib/docs-demos.ts')),
+]);
+assert.equal(
+  new Set(testAppLessons.map((lesson) => lesson.id)).size,
+  testAppLessons.length,
+  'Duplicate lesson in choreo-test-app demo-lessons.json',
+);
+assert.deepEqual(
+  testAppLessons.map((lesson) => lesson.id).sort(),
+  [...testAppDemoIds].sort(),
+  'choreo-test-app demo-lessons.json needs one lesson per demo in its catalog',
+);
+const realmLessons = new Map(
+  demos.map(({ slug, doc }) => [slug, doc.attributes.lesson]),
+);
+for (const { id, ...lesson } of testAppLessons) {
+  if (realmLessons.has(id)) {
+    assert.deepEqual(
+      realmLessons.get(id),
+      lesson,
+      `The ${id} lesson differs between realm/demos/${id}.json and choreo-test-app demo-lessons.json`,
+    );
+  }
+}
+console.log(
+  `${testAppLessons.length} test-app lessons cover its catalog and match the realm's.`,
+);

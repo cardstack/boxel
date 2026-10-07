@@ -8,6 +8,7 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 import { click, waitFor } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
+import { motionSpeed } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -62,11 +63,36 @@ function catalog() {
   ];
 }
 
-async function renderGallery() {
+async function renderGallery(demos = catalog()) {
   let loader = getService('loader-service').loader;
-  let gallery = new ChoreoGallery({ demos: catalog() });
+  let gallery = new ChoreoGallery({ demos });
   await renderCard(loader, gallery, 'isolated');
   await animationsSettled();
+}
+
+/** the element the gallery scrolls in, as the crossing finds it */
+function scroller(): HTMLElement {
+  let node = one('[data-choreo-site]')?.parentElement ?? null;
+  while (node) {
+    let { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return document.scrollingElement as HTMLElement;
+}
+
+function chip(label: string): HTMLButtonElement {
+  return Array.from(root().querySelectorAll<HTMLButtonElement>('.chip')).find(
+    (button) => button.textContent?.trim() === label,
+  )!;
+}
+
+function speed(label: string): HTMLButtonElement {
+  return Array.from(
+    root().querySelectorAll<HTMLButtonElement>('.speeds button'),
+  ).find((button) => button.textContent?.trim() === label)!;
 }
 
 module('Choreo gallery | site', function (hooks) {
@@ -149,6 +175,67 @@ module('Choreo gallery | site', function (hooks) {
     await waitFor('[data-gallery-tile]');
     assert.deepEqual(tiles(), ['alpha', 'bravo', 'charlie', 'delta']);
   });
+
+  test('a filter leaves the scroll where it is, after a trip to a demo and back', async function (assert) {
+    // enough tiles that the gallery scrolls
+    let many = Array.from({ length: 24 }, (_, i) =>
+      demo(`demo-${i}`, i % 2 ? 'Layout' : 'Animate'),
+    );
+    await renderGallery(many);
+    let container = scroller();
+    container.style.height = '400px';
+    assert.ok(
+      container.scrollHeight > container.clientHeight + 200,
+      'the gallery scrolls',
+    );
+
+    container.scrollTop = 200;
+    await click('[data-gallery-tile="demo-3"] .card-meta');
+    await waitFor('[data-demo="demo-3"]');
+    await animationsSettled();
+    await click('[data-gallery-brand]');
+    await waitFor('[data-gallery-tile]');
+    await animationsSettled();
+    assert.strictEqual(container.scrollTop, 200, 'the trip home restores it');
+
+    container.scrollTop = 80;
+    await click(chip('Layout'));
+    await animationsSettled();
+    await click(chip('All'));
+    await animationsSettled();
+    assert.strictEqual(container.scrollTop, 80, 'filtering does not move it');
+  });
+
+  test('a speed picked on one demo ends with it', async function (assert) {
+    setTempo('instant');
+    await renderGallery([
+      demo('alpha', 'Animate', { slowmo: true }),
+      demo('bravo', 'Animate', { slowmo: true }),
+    ]);
+
+    await click('[data-gallery-tile="alpha"] .card-meta');
+    await waitFor('[data-demo="alpha"]');
+    await click(speed('÷10'));
+    assert.strictEqual(motionSpeed(), 10, 'the clock runs at a tenth');
+
+    await click('.next-demo');
+    await waitFor('[data-demo="bravo"]');
+    assert.strictEqual(motionSpeed(), 1, 'the next demo starts at full speed');
+    assert.strictEqual(
+      speed('Full').getAttribute('aria-pressed'),
+      'true',
+      'and its picker says so',
+    );
+
+    await click(speed('÷5'));
+    let loader = getService('loader-service').loader;
+    await renderCard(loader, demo('charlie', 'Animate'), 'isolated');
+    assert.strictEqual(
+      motionSpeed(),
+      1,
+      'closing the demo puts the clock back for the rest of the host',
+    );
+  });
 });
 
 module('Choreo gallery | formats', function (hooks) {
@@ -167,6 +254,26 @@ module('Choreo gallery | formats', function (hooks) {
     );
     assert.notOk(one('[data-gallery-home]'), 'no way back to a gallery');
     assert.notOk(one('.pager'), 'no pager');
+  });
+
+  test('a new demo card with no code yet still renders', async function (assert) {
+    let loader = getService('loader-service').loader;
+    await renderCard(
+      loader,
+      new GalleryDemo({
+        slug: 'blank',
+        title: 'Blank',
+        walkthrough: [new WalkthroughStep({ label: 'Empty step' })],
+      }),
+      'isolated',
+    );
+
+    assert.strictEqual(one('h1')?.textContent?.trim(), 'Blank');
+    assert.strictEqual(
+      root().querySelectorAll('.sample').length,
+      2,
+      'the usage example and the walkthrough step render empty',
+    );
   });
 
   test('the gallery embeds as a summary, not the whole site', async function (assert) {

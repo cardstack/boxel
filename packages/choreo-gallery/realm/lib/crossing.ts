@@ -79,11 +79,13 @@ export class Crossing {
    */
   private galleryScroll: number | null = null;
 
-  /** what the crossing in flight is doing, for the scroll intent */
-  private landing: { closing: boolean; slug: string | null } = {
-    closing: false,
-    slug: null,
-  };
+  /**
+   * The page swap waiting for its scroll placement. Set when a swap begins
+   * and consumed by the pass that renders it, so later passes in the same
+   * region — a filter, the How panel, the stages booting after the landing —
+   * leave the scroll where the viewer put it.
+   */
+  private landing: { closing: boolean; slug: string | null } | null = null;
 
   private region: ChoreoContext | null = null;
   private anchor: Element | null = null;
@@ -170,7 +172,7 @@ export class Crossing {
   /** stand any crossing down, and forget the remembered scroll */
   reset(): void {
     this.galleryScroll = null;
-    this.landing = { closing: false, slug: null };
+    this.landing = null;
     this.arming.end();
   }
 
@@ -180,14 +182,23 @@ export class Crossing {
    * final bounds are measured, so the flight lands where the page will
    * actually stand.
    *
+   * The region asks on every pass that brings something in, not only on a
+   * page swap; a pass with no swap pending answers with where the window
+   * already is, so nothing moves.
+   *
    * The region positions the window. Inside the host the card scrolls in its
    * stack item instead, so this places that container itself and answers
    * with the window's own position, which leaves the window where it is.
    */
   scrollIntent = (): number => {
+    const landing = this.landing;
+    this.landing = null;
     const scroller = this.anchor ? scrollerOf(this.anchor) : null;
-    const target = scroller ? this.targetScroll(scroller) : 0;
-    if (!scroller || scroller === document.scrollingElement) {
+    if (!landing || !scroller) {
+      return window.scrollY;
+    }
+    const target = this.targetScroll(scroller, landing);
+    if (scroller === document.scrollingElement) {
       return target;
     }
     scroller.scrollTop = target;
@@ -201,17 +212,20 @@ export class Crossing {
    * lands on is centred in view — the stage flies to something the eye can
    * follow.
    */
-  private targetScroll(scroller: Element): number {
-    if (!this.landing.closing) {
+  private targetScroll(
+    scroller: Element,
+    landing: { closing: boolean; slug: string | null },
+  ): number {
+    if (!landing.closing) {
       return 0;
     }
     if (this.galleryScroll !== null) {
       return this.galleryScroll;
     }
     const root = this.anchor?.closest('[data-choreo-site]');
-    const tile = this.landing.slug
+    const tile = landing.slug
       ? root?.querySelector<HTMLElement>(
-          `[${TILE_ATTRIBUTE}='${CSS.escape(this.landing.slug)}']`,
+          `[${TILE_ATTRIBUTE}='${CSS.escape(landing.slug)}']`,
         )
       : null;
     if (!tile) {

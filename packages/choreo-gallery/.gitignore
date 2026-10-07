@@ -2,3 +2,6 @@ tmp/
 out/
 *.log
 .eslintcache
+# written by `boxel realm push`/`sync` when the dev loop pushes realm/
+realm/.boxel-sync.json
+realm/.boxel-history/

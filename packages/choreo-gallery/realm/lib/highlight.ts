@@ -39,8 +39,9 @@ const HELPERS = new Set([
   'view-transition-group',
 ]);
 
-export function highlightSample(source: string) {
-  return htmlSafe(colorize(source));
+/** an empty card field reaches here as null, and highlights as nothing */
+export function highlightSample(source: string | null | undefined) {
+  return htmlSafe(colorize(source ?? ''));
 }
 
 function colorize(source: string): string {

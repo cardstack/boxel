@@ -6,7 +6,7 @@ interface Signature {
   Args: {
     /** what the snippet is FROM — a filename, or the language for a sketch */
     label?: string;
-    source: string;
+    source: string | null | undefined;
   };
   Element: HTMLElement;
 }

@@ -10,20 +10,48 @@ function label(rate: number) {
   return rate === 1 ? 'Full' : `÷${rate}`;
 }
 
+interface Signature {
+  Args: {
+    /** the demo the speed applies to; a choice made on one demo ends with it */
+    slug: string;
+  };
+}
+
 /**
  * Slow motion for the stage. Every transition started from here on is scaled,
  * so a sequence's phases separate out — the fade, then the move, then the
  * fade — instead of going by in four frames.
+ *
+ * The clock is glimmer-motion's, and global to everything the host animates,
+ * so a speed picked here lasts only while this picker is on screen.
  */
-export class SpeedPicker extends Component {
-  @tracked rate = motionSpeed();
+export class SpeedPicker extends Component<Signature> {
+  @tracked private picked: { rate: number; slug: string } | null = null;
+
+  /**
+   * The rate picked for this demo. Moving to another demo resets the clock,
+   * and the same picker can stay on screen across that move, so a choice made
+   * for an earlier demo is not this one's.
+   */
+  get rate() {
+    return this.picked?.slug === this.args.slug
+      ? this.picked.rate
+      : motionSpeed();
+  }
 
   isOn = (rate: number) => rate === this.rate;
 
   pick = (rate: number) => {
-    this.rate = rate;
+    this.picked = { rate, slug: this.args.slug };
     setMotionSpeed(rate);
   };
+
+  willDestroy() {
+    super.willDestroy();
+    if (this.picked) {
+      setMotionSpeed(1);
+    }
+  }
 
   <template>
     <div class='speeds'>
