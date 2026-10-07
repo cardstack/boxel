@@ -3305,6 +3305,57 @@ export function setupTestDatabaseTemplate(
   return () => acquiredTemplateDatabase;
 }
 
+// The `simple` fixture realm at `simpleRealmServerURL`, alone on its own
+// realm server. Every call writes the realm into a fresh directory.
+export const simpleRealmServerURL = new URL('http://127.0.0.1:0/test/');
+
+export async function startSimpleRealmServer({
+  dbAdapter,
+  publisher,
+  runner,
+  domainsForPublishedRealms,
+}: {
+  dbAdapter: PgAdapter;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
+  // Changes how the server answers, not what it indexes, so every caller
+  // shares the one template `setupSimpleRealmServerTemplate` builds.
+  domainsForPublishedRealms?: Parameters<
+    typeof runTestRealmServer
+  >[0]['domainsForPublishedRealms'];
+}): Promise<Server> {
+  let realmsRootPath = join(dirSync().name, 'realm_server_simple');
+  let testRealmDir = join(realmsRootPath, 'test');
+  ensureDirSync(testRealmDir);
+  copySync(fixtureDir('simple'), testRealmDir);
+  let { testRealmHttpServer } = await runTestRealmServer({
+    virtualNetwork: createVirtualNetwork(),
+    testRealmDir,
+    realmsRootPath,
+    realmURL: simpleRealmServerURL,
+    dbAdapter,
+    publisher,
+    runner,
+    matrixURL,
+    domainsForPublishedRealms,
+  });
+  return testRealmHttpServer;
+}
+
+// A template database holding the realm `startSimpleRealmServer` brings up.
+// Every module that uses it shares one key, so a test run indexes the realm
+// once. Pass it to `setupDB` and call `startSimpleRealmServer` in its
+// `beforeEach`.
+export function setupSimpleRealmServerTemplate(hooks: NestedHooks) {
+  return setupTestDatabaseTemplate(hooks, {
+    key: 'simple-realm-server',
+    build: async (args) => {
+      let server = await startSimpleRealmServer(args);
+      return () => closeServer(server);
+    },
+  });
+}
+
 async function buildTestDatabaseTemplate(
   cacheKey: string,
   build: Parameters<typeof setupTestDatabaseTemplate>[1]['build'],
