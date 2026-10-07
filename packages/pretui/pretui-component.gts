@@ -17,23 +17,26 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
+import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';
 import StringField from 'https://cardstack.com/base/string';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import GlimmerComponent from '@glimmer/component';
+import { guidFor } from '@ember/object/internals';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { cssStyle } from './pretui-css';
 import { fn } from '@ember/helper';
 import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';
 import { StatusChip } from './components/status-chip';
+import { Chip } from './components/chip';
 import { Token } from './components/token';
-import { statusHue } from './internal/ink';
 import { Button } from './components/button';
+import { VisuallyHidden } from './components/visually-hidden';
 import { Textarea } from './components/textarea';
 import { StepList } from './components/step-list';
+import { toIsoDate } from './components/known-date';
 import type { StepItem, StepState } from './components/step-list';
 import { Popover } from './components/popover';
 import {
@@ -47,21 +50,12 @@ import { iconFor } from './icon-registry';
 import { ExampleGallery } from './example-gallery';
 import type { ExampleSpec } from './examples-kit';
 
-// Today's callers pass a statusHue() result, which is always a `var(--chart-N)`
-// we built ourselves — but the hue originates in card data, so it goes through
-// the kit-wide allowlist rather than straight to htmlSafe. Nothing unvalidated
-// reaches an inline style anywhere in the kit.
-function htmlSafeHue(hue: string) {
-  return cssStyle('--pretui-fit-hue', hue);
-}
-
 // Structural shape of a PretuiNote instance as read off a getCards result.
 // Declared rather than imported: pretui-note.gts imports THIS module for its
 // linksTo target, so importing it back would make the pair circular. The
 // query names the type by module + name strings instead.
 interface NoteLike {
   id?: string;
-  title?: string;
   note?: string;
   status?: string;
 }
@@ -86,6 +80,116 @@ function createCardAction(context: unknown): CreateCardAction | undefined {
 // instance can sit in any realm, and a note must adopt from a module that
 // resolves wherever it is written.
 const NOTE_REF = { module: siblingHref('./pretui-note'), name: 'PretuiNote' };
+
+// The stage as shown: capitalized, from the stored lowercase value.
+function stageLabel(stage: string | undefined): string {
+  let value = stage || 'planned';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// A live component's stage chip takes the success tone; every other stage
+// keeps StatusChip's muted pill with its name-derived dot.
+function stageTone(stage: string | undefined): 'success' | undefined {
+  return stage === 'live' ? 'success' : undefined;
+}
+
+// The write-up shows its first lines under a fade, with a centered toggle
+// over the fade; opening it grows the region to the content's height. Its own
+// component for the same reason as NoteComposer: the open state can't live in
+// the format class.
+interface WriteupFoldSignature {
+  Args: { writeup: MarkdownDef };
+  Element: HTMLDivElement;
+}
+
+class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
+  @tracked open = false;
+  regionId = `${guidFor(this)}-writeup`;
+  toggle = () => (this.open = !this.open);
+
+  <template>
+    <div class='wb-fold' data-open={{if this.open 'true'}} ...attributes>
+      {{! the write-up's prose only — the panel owns the padding, so the
+          file's own embedded chrome and surface stay out }}
+      <div id={{this.regionId}} class='wb-fold-region'>
+        <div class='wb-fold-prose'>
+          <MarkdownPreview
+            @model={{@writeup}}
+            @format='isolated'
+            @displayContainer={{false}}
+          />
+        </div>
+      </div>
+      <div class='wb-fold-more'>
+        <Button
+          @tone='neutral'
+          @appearance='outlined'
+          @size='xs'
+          aria-expanded={{if this.open 'true' 'false'}}
+          aria-controls={{this.regionId}}
+          {{on 'click' this.toggle}}
+          data-test-pretui-writeup-toggle
+        >{{if this.open 'Show less' 'Show more'}}</Button>
+      </div>
+    </div>
+    <style scoped>
+      /* closed, the preview fills whatever height the fold is given, never
+         less than --wb-fold-preview-h; open, it grows to the content */
+      .wb-fold {
+        --wb-fold-preview-h: 14rem;
+        --wb-fold-fade-h: 2rem;
+
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+      .wb-fold-region {
+        flex: 1 1 0;
+        min-block-size: var(--wb-fold-preview-h);
+        overflow: hidden;
+        /* the open state changes the flex basis and grow, not height, so those
+           are what animate; interpolate-size lets the basis reach auto */
+        interpolate-size: allow-keywords;
+        transition:
+          flex-basis 250ms ease,
+          flex-grow 250ms ease;
+      }
+      .wb-fold[data-open='true'] .wb-fold-region {
+        flex: 0 0 auto;
+      }
+      /* mono reads larger than sans at the same size; a step down in em
+         matches the prose around it optically */
+      .wb-fold-prose {
+        --markdown-code-font-size: 0.875em;
+        --markdown-pre-font-size: 0.875em;
+        --markdown-pre-border-radius: var(--boxel-border-radius-sm);
+
+        padding: var(--boxel-sp-sm);
+      }
+      /* closed, the toggle sits over a fade into the panel's surface; open,
+         it follows the content */
+      .wb-fold-more {
+        display: flex;
+        justify-content: center;
+        position: absolute;
+        inset-inline: 0;
+        inset-block-end: 0;
+        padding: var(--wb-fold-fade-h) var(--boxel-sp-sm) var(--boxel-sp-xs);
+        background-image: linear-gradient(transparent, var(--card) 70%);
+      }
+      .wb-fold[data-open='true'] .wb-fold-more {
+        position: static;
+        padding-block-start: 0;
+        background-image: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .wb-fold-region {
+          transition: none;
+        }
+      }
+    </style>
+  </template>
+}
 
 // ── The sticky-note composer ─────────────────────────────────────────────
 // A top-level component, not an inline block in the page: reactive state
@@ -134,24 +238,22 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
           @disabled={{this.draftEmpty}}
           {{on 'click' this.save}}
           data-test-pretui-note-save
-        >Stick it</Button>
+        >Save note</Button>
       </div>
     </div>
     <style scoped>
-      /* Widened past the popover's default through the knobs Popover
-         exposes, rather than reaching into its panel with :deep() — a note
-         wants room to write. */
       .note-compose {
-        --pretui-popover-width: 320px;
+        --note-compose-min-w: 17.5rem;
+
         display: flex;
         flex-direction: column;
-        gap: var(--space-2, 6px);
-        min-width: 280px;
+        gap: var(--boxel-sp-2xs);
+        min-width: var(--note-compose-min-w);
       }
       .note-compose-cap {
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
-        letter-spacing: var(--track-eyebrow, 0.06em);
+        letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
@@ -162,10 +264,10 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: var(--space-3, 10px);
+        gap: var(--boxel-sp-xs);
       }
       .note-compose-hint {
-        font-size: var(--text-ui-xs, 11px);
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
     </style>
@@ -294,10 +396,10 @@ export class PretUISpec extends Spec {
     }
     get metaItems() {
       let m = this.args.model;
-      let rows = [
+      let rows: { key: string; value: string; dots?: boolean[] }[] = [
         { key: 'Category', value: m.category ?? m.territory ?? '—' },
         { key: 'Tier', value: m.tier ?? '—' },
-        { key: 'Stage', value: m.stage ?? '—' },
+        { key: 'Stage', value: m.stage ? stageLabel(m.stage) : '—' },
         // versions are earned by use — nothing worn shows no number
         ...(m.liveInUse
           ? [{ key: 'Version', value: m.version ?? '0.0.0' }]
@@ -312,6 +414,13 @@ export class PretUISpec extends Spec {
       }
       if (m.refs) {
         rows.push({ key: 'Elsewhere', value: m.refs });
+      }
+      if (this.demand) {
+        rows.push({
+          key: 'Demand',
+          value: `${this.demand} of 5`,
+          dots: [1, 2, 3, 4, 5].map((i) => i <= this.demand!),
+        });
       }
       return rows;
     }
@@ -338,36 +447,10 @@ export class PretUISpec extends Spec {
         state: (f.on ? 'complete' : 'upcoming') as StepState,
       }));
     }
-    get railFacts() {
-      let m = this.args.model;
-      return [
-        { label: 'Category', value: m.category ?? m.territory ?? '—', dim: true },
-        { label: 'Tier', value: m.tier ?? '—', dim: true },
-        {
-          label: 'Stage',
-          value: m.stage ?? 'planned',
-          accent: m.stage === 'live',
-        },
-        ...(m.liveInUse
-          ? [{ label: 'Version', value: m.version ?? '0.0.0' }]
-          : []),
-        { label: 'Source', value: m.source ?? '—', dim: true },
-        ...(m.lineage
-          ? [{ label: 'Lineage', value: `boxel-ui/${m.lineage}`, dim: true }]
-          : []),
-        ...(this.demandDots
-          ? [{ label: 'Demand', value: this.demandDots, accent: true }]
-          : []),
-      ];
-    }
-    get demandDots() {
+    get demand(): number | undefined {
       let d = this.args.model.demand;
       if (!d || d < 1) return undefined;
-      let n = Math.min(5, Math.round(d));
-      return '●'.repeat(n) + '○'.repeat(5 - n);
-    }
-    get titleHue() {
-      return htmlSafeHue(statusHue(this.args.model.stage ?? 'planned'));
+      return Math.min(5, Math.round(d));
     }
     // ── Sticky notes ───────────────────────────────────────────────────
     // Notes are their own cards (pretui-note.gts) that LINK to this one, so
@@ -443,7 +526,13 @@ export class PretUISpec extends Spec {
       // card must prerender identically); recording when a note was written
       // is data capture at the moment of a user action, which is exactly
       // what a timestamp is for.
-      let noted = new Date().toISOString().slice(0, 10);
+      // the author's local date, not toISOString()'s UTC one
+      let now = new Date();
+      let noted = toIsoDate(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        now.getDate(),
+      );
       create(ref, realm, {
         realmURL: realm,
         doc: {
@@ -460,277 +549,292 @@ export class PretUISpec extends Spec {
 
     <template>
       <ThemeFrame
+        class='wb-frame'
         @theme={{@model.cardTheme}}
         @context={{@context}}
         @bar={{false}}
         as |ThemeControls|
       >
-      <article class='page' data-demo-policy={{this.demoPolicy}}>
-        <nav class='wb-topbar'>
-          <div class='wb-crumb' data-test-pretui-spec-crumb>
-            <span class='wb-crumb-root'>Pretui</span>
-            <span class='wb-sep'>/</span>
-            <span class='wb-crumb-dim'>{{if
-                @model.category
-                @model.category
-                (if @model.territory @model.territory 'components')
-              }}</span>
-            <span class='wb-sep'>/</span>
-            <span class='wb-here'>{{if
-                @model.componentName
-                @model.componentName
-                'Component'
-              }}</span>
-          </div>
-          <div class='wb-badges'>
-            {{#if @model.liveInUse}}
-              <Token @value={{if @model.version @model.version '0.0.0'}} />
-            {{/if}}
-            <StatusChip @value={{if @model.stage @model.stage 'planned'}} />
-            {{#if @model.isNew}}<span class='flag flag-new'>NEW</span>{{/if}}
-            {{#if @model.featured}}<span class='flag flag-feat'>★</span>{{/if}}
-          </div>
-          <div class='wb-grow'></div>
-          <ThemeControls />
-        </nav>
+        <article class='page' data-demo-policy={{this.demoPolicy}}>
+          <header class='wb-topbar'>
+            <div class='wb-crumb' data-test-pretui-spec-crumb>
+              <span class='wb-crumb-root'>Pret UI</span>
+              <span aria-hidden='true'>/</span>
+              <span class='wb-crumb-dim'>{{if
+                  @model.category
+                  @model.category
+                  (if @model.territory @model.territory 'components')
+                }}</span>
+              <span aria-hidden='true'>/</span>
+              <span class='wb-here'>{{if
+                  @model.componentName
+                  @model.componentName
+                  'Component'
+                }}</span>
+            </div>
+            <div class='wb-badges'>
+              {{#if @model.liveInUse}}
+                <Token @value={{if @model.version @model.version '0.0.0'}} />
+              {{/if}}
+              <StatusChip
+                @value={{stageLabel @model.stage}}
+                @tone={{stageTone @model.stage}}
+              />
+              {{#if @model.isNew}}<Chip @label='New' @tone='attention' />{{/if}}
+              {{#if @model.featured}}<Chip @tone='warning' @dot={{false}}><span
+                    aria-hidden='true'
+                  >★</span><VisuallyHidden
+                  >Featured</VisuallyHidden></Chip>{{/if}}
+            </div>
+            <div class='wb-grow'></div>
+            <ThemeControls />
+          </header>
 
-        {{! Sticky notes live top-right, where you left them. Visible by
+          {{! Sticky notes live top-right, where you left them. Visible by
             design: an annotation hidden behind a disclosure is an annotation
             nobody reads. }}
-        {{#if this.showNotes}}
-          <aside
-            class='notes'
-            aria-label='Sticky notes on this component'
-            data-test-pretui-notes
-          >
-            {{! The trigger sits FIRST — directly under the theme control and
+          {{#if this.showNotes}}
+            <aside
+              class='notes'
+              aria-label='Sticky notes on this component'
+              data-test-pretui-notes
+            >
+              {{! The trigger sits FIRST — directly under the theme control and
                 above the artboard — so leaving a note is a fixed target on
                 every page, not something that moves as notes accumulate. }}
-            <div class='notes-foot'>
-              {{#if this.canAddNote}}
-                <Popover @placement='bottom-end' @label='Leave a sticky note'>
-                  <:trigger as |open toggle|>
-                    <button
-                      type='button'
-                      class='note-add'
-                      aria-expanded={{if open 'true' 'false'}}
-                      {{on 'click' toggle}}
-                      data-test-pretui-note-add
-                    >+ Note</button>
-                  </:trigger>
-                  <:default as |close|>
-                    <NoteComposer
-                      @componentName={{@model.componentName}}
-                      @onSave={{fn this.saveNote close}}
-                    />
-                  </:default>
-                </Popover>
+              <div class='notes-foot'>
+                {{#if this.canAddNote}}
+                  <Popover
+                    class='note-popover'
+                    @placement='bottom-end'
+                    @label='Leave a sticky note'
+                  >
+                    <:trigger as |open toggle|>
+                      <Button
+                        @tone='neutral'
+                        @appearance='outlined'
+                        @size='xs'
+                        aria-expanded={{if open 'true' 'false'}}
+                        {{on 'click' toggle}}
+                        data-test-pretui-note-add
+                      >Add note</Button>
+                    </:trigger>
+                    <:default as |close|>
+                      <NoteComposer
+                        @componentName={{@model.componentName}}
+                        @onSave={{fn this.saveNote close}}
+                      />
+                    </:default>
+                  </Popover>
+                {{/if}}
+                {{#if this.addressedCount}}
+                  <span class='notes-done'>{{this.addressedCount}}
+                    addressed</span>
+                {{/if}}
+              </div>
+              {{#if this.openNotes}}
+                <ul class='notes-list'>
+                  {{#each this.openNotes key='id' as |n|}}
+                    <li>
+                      <button
+                        type='button'
+                        class='note'
+                        {{on 'click' (fn this.openNote n.id)}}
+                        data-test-pretui-note
+                      >
+                        <span class='note-text'>{{if
+                            n.note
+                            n.note
+                            'Empty note'
+                          }}</span>
+                      </button>
+                    </li>
+                  {{/each}}
+                </ul>
               {{/if}}
-              {{#if this.addressedCount}}
-                <span class='notes-done'>{{this.addressedCount}} addressed</span>
-              {{/if}}
-            </div>
-            {{#if this.openNotes}}
-              <ul class='notes-list'>
-                {{#each this.openNotes key='id' as |n|}}
-                  <li>
-                    <button
-                      type='button'
-                      class='note'
-                      {{on 'click' (fn this.openNote n.id)}}
-                      data-test-pretui-note
-                    >
-                      <span class='note-text'>{{if
-                          n.note
-                          n.note
-                          'Empty note'
-                        }}</span>
-                    </button>
-                  </li>
-                {{/each}}
-              </ul>
-            {{/if}}
-          </aside>
-        {{/if}}
-        <h1 class='wb-title'>
-          {{#let (iconFor @model.icon) as |TitleIcon|}}
-            {{#if TitleIcon}}
-              <span class='wb-title-frame' style={{this.titleHue}}>
-                <TitleIcon class='wb-title-icon' role='presentation' />
-              </span>
-            {{/if}}
-          {{/let}}
-          {{if @model.componentName @model.componentName 'Component'}}
-        </h1>
-        {{#unless this.demo}}
-          {{#if @model.brief}}
-            <p class='brief'>{{@model.brief}}</p>
+            </aside>
           {{/if}}
-        {{/unless}}
-        <div class='wb-work'>
-          {{#if this.demo}}
-            <this.demo />
-          {{else if this.isDemoLoading}}
-            <section class='panel' aria-busy='true'></section>
-          {{else if this.isDemoExcluded}}
-            <section class='panel'>
-              {{#if this.isHost}}
-                <EmptyState
-                  @title='Catalog infrastructure — demo excluded'
-                  @message='Host chrome stays in boxel-ui by design. It is indexed here for vocabulary coverage, not as a Pretui demo target.'
-                />
-              {{else}}
-                <EmptyState
-                  @title='Catalog infrastructure — demo excluded'
-                  @message='This Runtime primitive builds the fitting room itself. It is indexed for API coverage and explicitly excluded from missing-demo QA.'
-                />
+          <h1 class='wb-title'>
+            {{#let (iconFor @model.icon) as |TitleIcon|}}
+              {{#if TitleIcon}}
+                <span class='wb-title-frame'>
+                  <TitleIcon width='22' height='22' role='presentation' />
+                </span>
               {{/if}}
-            </section>
-          {{else}}
-            <section class='panel'>
-              <EmptyState
-                @title='No usage page yet'
-                @message='This component has no freestyle page in the fitting room yet — see the kit showcase for the territory rail.'
+            {{/let}}
+            {{if @model.componentName @model.componentName 'Component'}}
+          </h1>
+          {{#unless this.demo}}
+            {{#if @model.brief}}
+              <p class='brief'>{{@model.brief}}</p>
+            {{/if}}
+          {{/unless}}
+          <div class='wb-work'>
+            {{#if this.demo}}
+              <this.demo />
+            {{else if this.isDemoLoading}}
+              <section class='panel' aria-busy='true'></section>
+            {{else if this.isDemoExcluded}}
+              <section class='panel'>
+                {{#if this.isHost}}
+                  <EmptyState
+                    @title='Catalog infrastructure — demo excluded'
+                    @message='Host chrome stays in boxel-ui by design. It is indexed here for vocabulary coverage, not as a Pret UI demo target.'
+                  />
+                {{else}}
+                  <EmptyState
+                    @title='Catalog infrastructure — demo excluded'
+                    @message='This Runtime primitive builds the fitting room itself. It is indexed for API coverage and explicitly excluded from missing-demo QA.'
+                  />
+                {{/if}}
+              </section>
+            {{else}}
+              <section class='panel'>
+                <EmptyState
+                  @title='No usage page yet'
+                  @message='This component has no freestyle page in the fitting room yet — see the kit showcase for the territory rail.'
+                />
+              </section>
+            {{/if}}
+          </div>
+          <ExampleGallery @specs={{this.examples}} />
+          <div class='wb-below'>
+            {{#if @model.writeup}}
+              <section class='wb-panel wb-writeup-panel' aria-label='Write-up'>
+                <div class='wb-panel-h'>
+                  <span class='wb-cap'>Write-up</span>
+                </div>
+                <WriteupFold
+                  class='wb-writeup-fold'
+                  @writeup={{@model.writeup}}
+                />
+              </section>
+            {{/if}}
+            <section class='wb-panel wb-provenance' aria-label='Provenance'>
+              <div class='wb-panel-h'>
+                <span class='wb-cap'>Provenance</span>
+              </div>
+              <StepList
+                class='wb-pipe'
+                @steps={{this.provenanceSteps}}
+                @variant='track'
+                @label='Provenance pipeline'
+                @summary={{true}}
               />
+              <dl class='wb-kv'>
+                {{#each this.metaItems as |row|}}
+                  <div class='wb-krow'>
+                    <dt>{{row.key}}</dt>
+                    <dd>
+                      {{#if row.dots}}
+                        {{! drawn, not ●/○ glyphs, so filled and hollow share one
+                        size and baseline }}
+                        <span
+                          class='wb-dots'
+                          role='img'
+                          aria-label={{row.value}}
+                        >
+                          {{#each row.dots as |on|}}
+                            <span
+                              class='wb-dot'
+                              data-on={{if on 'true'}}
+                            ></span>
+                          {{/each}}
+                        </span>
+                      {{else}}
+                        {{row.value}}
+                      {{/if}}
+                    </dd>
+                  </div>
+                {{/each}}
+              </dl>
             </section>
-          {{/if}}
-        </div>
-        <ExampleGallery @specs={{this.examples}} />
-        {{#if @model.writeup}}
-          <section class='wb-panel' aria-label='Write-up'>
-            <div class='wb-panel-h'>
-              <span class='wb-cap'>Write-up</span>
-            </div>
-            <@fields.writeup @format='embedded' />
-          </section>
-        {{/if}}
-        <div class='wb-below'>
-          <section class='wb-panel' aria-label='Provenance'>
-            <div class='wb-panel-h'>
-              <span class='wb-cap'>Provenance</span>
-            </div>
-            <StepList
-              class='wb-pipe'
-              @steps={{this.provenanceSteps}}
-              @variant='track'
-              @label='Provenance pipeline'
-              @summary={{true}}
-            />
-            <dl class='wb-kv'>
-              {{#each this.metaItems as |row|}}
-                <div class='wb-krow'>
-                  <dt>{{row.key}}</dt>
-                  <dd>{{row.value}}</dd>
-                </div>
-              {{/each}}
-            </dl>
-          </section>
-          <aside class='wb-rail' aria-label='Component facts'>
-            <div class='wb-igroup'>
-              <span class='wb-cap'>Component</span>
-              {{#each this.railFacts as |f|}}
-                <div class='wb-irow'>
-                  <span class='wb-ilabel'>{{f.label}}</span>
-                  <span
-                    class='wb-ival'
-                    data-dim={{if f.dim 'true'}}
-                    data-accent={{if f.accent 'true'}}
-                  >{{f.value}}</span>
-                </div>
-              {{/each}}
-            </div>
-            <div class='wb-igroup'>
-              <span class='wb-cap'>Provenance</span>
-              {{#each this.facetPills as |f|}}
-                <div class='wb-irow'>
-                  <span class='wb-ilabel'>{{f.label}}</span>
-                  <span
-                    class='wb-ival'
-                    data-accent={{if f.on 'true'}}
-                    data-dim={{unless f.on 'true'}}
-                  >{{if f.on '✓' '—'}}</span>
-                </div>
-              {{/each}}
-            </div>
-          </aside>
-        </div>
-      </article>
+          </div>
+        </article>
       </ThemeFrame>
       <style scoped>
+        /* the isolated root: exactly the card's height and the one scroller, so
+           the sticky topbar sticks to it and an overscroll can't bounce past
+           the island or carry on into the page behind */
+        .wb-frame {
+          height: 100%;
+          overflow-y: auto;
+          overscroll-behavior: none;
+        }
         .page {
+          --wb-topbar-h: 2.75rem;
+          --wb-panel-h: 2.25rem;
+          --wb-title-frame-size: 3rem;
+          --wb-notes-w: 17.5rem;
+          --wb-writeup-min-w: 48rem;
+          /* StepList's track turns vertical at 24rem; with the panel's
+             padding, provenance needs 26rem to keep it horizontal */
+          --wb-provenance-min-w: 26rem;
+          --wb-provenance-max-w: 30rem;
+          --wb-krow-label-w: 6.875rem;
+          --wb-dot-size: 0.5rem;
+
           min-height: 100%;
-          background: var(--background);
-          color: var(--foreground);
-          font-family: var(--font-sans);
-          font-size: var(--text-body, 15px);
-          letter-spacing: var(--track-ui, 0.01em);
-          padding: 0 var(--space-6, 19px) var(--space-8, 34px);
+          padding: 0 var(--boxel-sp-lg) var(--boxel-sp-2xl);
           display: grid;
-          gap: var(--space-5, 14px);
+          gap: var(--boxel-sp);
           align-content: start;
         }
         /* ── workbench chrome (pretui-alert-workbench format) ── */
         .wb-title {
-          margin: 6px 0 -4px;
+          margin: var(--boxel-sp-2xs) 0 calc(-1 * var(--boxel-sp-3xs));
           font-family: var(--font-serif);
-          font-size: var(--text-display, 33px);
-          font-weight: var(--weight-heading, 700);
-          letter-spacing: var(--track-heading, -0.02em);
+          font-size: var(--boxel-font-size-xl);
+          font-weight: 700;
+          letter-spacing: var(--boxel-lsp-xs);
           line-height: 1.1;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: var(--boxel-sp-xs);
         }
-        /* the icon sits framed — same box language as catalog cells and
-           the fitted disc: stage hue tint + hairline, fixed scale */
+        /* the component's icon beside its title: a --background tile with a
+           hairline ring on the page's --canvas, not a raised button */
         .wb-title-frame {
-          display: grid;
-          place-items: center;
-          width: 40px;
-          height: 40px;
-          flex: none;
-          border-radius: 9px;
-          background: color-mix(in oklch, var(--pretui-fit-hue, var(--chart-1)) 14%, var(--card));
-          box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--pretui-fit-hue, var(--chart-1)) 32%, var(--border));
-          color: color-mix(in oklch, var(--pretui-fit-hue, var(--chart-1)) 60%, var(--foreground));
           --icon-color: currentColor;
           --icon-bg: none;
-        }
-        .wb-title-icon {
-          width: 22px;
-          height: 22px;
+
+          display: grid;
+          place-items: center;
+          width: var(--wb-title-frame-size);
+          height: var(--wb-title-frame-size);
+          flex: none;
+          border-radius: var(--boxel-border-radius-sm);
+          box-shadow: inset 0 0 0 1px var(--border);
+          background-color: var(--background);
+          color: var(--muted-foreground);
         }
         .wb-topbar {
           position: sticky;
           top: 0;
-          /* kit stacking scale (pretui-css.gts): sticky page chrome sits
-             above content and well below every floating surface, so a menu
-             opened FROM this bar clears it. */
+          /* sticky page chrome sits above content and well below every
+             floating surface, so a menu opened from this bar clears it */
           z-index: var(--pretui-z-sticky, 10);
           display: flex;
           align-items: center;
-          gap: var(--space-4, 11px);
-          min-height: 44px;
-          margin: 0 calc(-1 * var(--space-6, 19px));
-          padding: 6px var(--space-6, 19px);
-          background: var(--card);
+          gap: var(--boxel-sp-sm);
+          min-height: var(--wb-topbar-h);
+          margin: 0 calc(-1 * var(--boxel-sp-lg));
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-lg);
+          background-color: var(--card);
+          color: var(--card-foreground);
           box-shadow: inset 0 -1px 0 var(--border);
           flex-wrap: wrap;
         }
         .wb-crumb {
           display: flex;
           align-items: center;
-          gap: 8px;
-          font-size: var(--text-ui, 12px);
+          gap: var(--boxel-sp-xs);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           min-width: 0;
         }
         .wb-crumb-root {
-          padding: 3px 5px;
-        }
-        .wb-sep {
-          color: var(--ink-3, var(--boxel-400));
-          user-select: none;
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-3xs);
         }
         .wb-here {
           color: var(--foreground);
@@ -739,8 +843,8 @@ export class PretUISpec extends Spec {
         .wb-badges {
           display: flex;
           align-items: center;
-          gap: 6px;
-          margin-left: 2px;
+          gap: var(--boxel-sp-2xs);
+          margin-inline-start: var(--boxel-sp-6xs);
         }
         .wb-grow {
           flex: 1;
@@ -758,53 +862,52 @@ export class PretUISpec extends Spec {
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          gap: var(--space-2, 6px);
-          width: min(280px, 100%);
+          gap: var(--boxel-sp-2xs);
+          width: min(var(--wb-notes-w), 100%);
           min-width: 0;
+        }
+        /* a note wants room to write: Popover reads its width knob on the
+           panel, which inherits it from the Popover root */
+        .note-popover {
+          --pretui-popover-width: 20rem;
         }
         .notes-list {
           display: flex;
           flex-direction: column;
-          gap: var(--space-2, 6px);
+          gap: var(--boxel-sp-2xs);
           width: 100%;
           margin: 0;
           padding: 0;
           list-style: none;
         }
         .note {
-          /* Law 2: one hue in, a complete treatment out — a tint of the hue
-             over --card with ink derived from the same hue, so the sticky
-             holds contrast in light and dark with no branch. */
-          --hue: var(--pretui-note-hue, var(--chart-3));
+          /* a tint of --attention over --card, so the sticky holds
+             contrast in light and dark */
           width: 100%;
-          text-align: left;
-          padding: var(--space-3, 10px);
+          text-align: start;
+          padding: var(--boxel-sp-xs);
           border: 0;
-          border-radius: var(--radius-surface, 10px);
-          background: color-mix(in oklch, var(--hue) 14%, var(--card));
-          /* Law 1: depth is hairline + shadow, never contrast. */
-          box-shadow: var(
-            --pretui-shadow-card,
-            0 0 0 1px var(--border),
-            0 1px 2px rgb(0 0 0 / 0.2),
-            0 2px 6px rgb(0 0 0 / 0.2)
+          border-radius: var(--boxel-border-radius);
+          background-color: color-mix(
+            in oklch,
+            var(--attention) 14%,
+            var(--card)
           );
-          font: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          color: var(--card-foreground);
+          box-shadow:
+            0 0 0 1px var(--border),
+            var(--shadow-sm);
+          font-size: var(--boxel-font-size-xs);
           line-height: 1.5;
-          color: var(--foreground);
-          cursor: pointer;
-        }
-        .note:hover {
-          box-shadow: var(
-            --pretui-shadow-raised,
-            0 0 0 1px var(--border),
-            0 2px 10px rgb(0 0 0 / 0.22)
-          );
         }
         .note:focus-visible {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
+        }
+        .note:hover {
+          box-shadow:
+            0 0 0 1px var(--border),
+            var(--shadow-md);
         }
         /* Clamp long notes: the rail is a pointer to the note card, not the
            note card. Clicking opens the whole thing. */
@@ -813,106 +916,74 @@ export class PretUISpec extends Spec {
           -webkit-line-clamp: 4;
           -webkit-box-orient: vertical;
           overflow: hidden;
-          /* a pasted URL or a long identifier is one "word" — without this
-             it blows the rail out of the narrow-pane layout instead of
-             clamping */
-          overflow-wrap: anywhere;
+          /* a pasted URL or a long identifier is one "word"; the rail has a
+             fixed width, so break-word wraps it instead of overflowing */
+          overflow-wrap: break-word;
         }
         .notes-foot {
           display: flex;
           align-items: center;
-          gap: var(--space-3, 10px);
-        }
-        .note-add {
-          padding: 3px 9px;
-          border: 0;
-          border-radius: var(--radius-control, 7px);
-          background: transparent;
-          box-shadow: var(
-            --pretui-shadow-hairline,
-            0 0 0 1px var(--border)
-          );
-          font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--muted-foreground);
-          cursor: pointer;
-        }
-        .note-add:hover {
-          background: var(--card);
-          color: var(--foreground);
-        }
-        .note-add:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
+          gap: var(--boxel-sp-xs);
         }
         .notes-done {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
         }
-        /* The composer inside the popover. Widened past the popover's default
-           through the knobs Popover exposes, rather than reaching into its
-           panel with :deep() — a note wants room to write. */
-        .note-compose {
-          --pretui-popover-width: 320px;
+        /* the write-up and provenance share a row when both fit, and stack
+           otherwise; provenance stops at its cap and the write-up takes the
+           rest */
+        .wb-below {
+          container-type: inline-size;
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp);
+          /* on a shared row the write-up is at least as tall as provenance */
+          align-items: stretch;
+        }
+        .wb-below > .wb-writeup-panel {
+          flex: 1 1 var(--wb-writeup-min-w);
           display: flex;
           flex-direction: column;
-          gap: var(--space-2, 6px);
-          min-width: 280px;
         }
-        .note-compose-cap {
-          font-size: var(--text-ui-xs, 11px);
-          font-weight: 600;
-          letter-spacing: var(--track-eyebrow, 0.06em);
-          text-transform: uppercase;
-          color: var(--muted-foreground);
+        .wb-writeup-fold {
+          flex: 1;
         }
-        .note-compose-field {
-          width: 100%;
+
+        .wb-below > .wb-provenance {
+          flex: 1 1 var(--wb-provenance-min-w);
+          align-self: start;
         }
-        .note-compose-foot {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--space-3, 10px);
-        }
-        .note-compose-hint {
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--muted-foreground);
-        }
-        /* the below-the-demo band: panels left, facts rail right — the rail
-           column matches FreestyleUsage's 280px properties rail so the two
-           read as one continuous inspector */
-        .wb-below {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 280px;
-          gap: var(--space-5, 14px);
-          align-items: start;
-        }
-        @media (max-width: 1100px) {
-          .wb-below {
-            grid-template-columns: minmax(0, 1fr);
+        /* capped only while it shares the row: 75rem is the write-up's 48rem
+           minimum plus provenance's 26rem plus the 1rem gap (a container query
+           can't read the variables). Stacked, it runs full width. Unnamed: a
+           named container query doesn't survive the realm's scoped-CSS
+           transpiler. */
+        @container (width >= 75rem) {
+          .wb-below > .wb-writeup-panel ~ .wb-provenance {
+            max-inline-size: var(--wb-provenance-max-w);
           }
         }
         .wb-panel {
-          background: var(--card);
-          border-radius: 6px;
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border-radius: var(--boxel-border-radius);
+          box-shadow: 0 0 0 1px var(--border);
           overflow: hidden;
           min-width: 0;
         }
         .wb-panel-h {
           display: flex;
           align-items: center;
-          gap: 10px;
-          min-height: 36px;
-          padding: 8px var(--space-4, 11px);
+          gap: var(--boxel-sp-xs);
+          min-height: var(--wb-panel-h);
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           box-shadow: inset 0 -1px 0 var(--border);
         }
         /* THE caps treatment — panel and group headers only (type spec:
            one caps style, everything else sentence case) */
         .wb-cap {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -922,130 +993,67 @@ export class PretUISpec extends Spec {
            the panel only positions it; every bar, glyph, state text and the
            completion summary belong to the component */
         .wb-pipe {
-          padding: 12px var(--space-4, 11px) 6px;
+          padding: var(--boxel-sp-sm) var(--boxel-sp-sm) var(--boxel-sp-2xs);
         }
         .wb-kv {
           margin: 0;
-          padding: 4px 0 6px;
+          padding: var(--boxel-sp-3xs) 0 var(--boxel-sp-2xs);
         }
         .wb-krow {
           display: grid;
-          grid-template-columns: 110px minmax(0, 1fr);
-          gap: 12px;
-          padding: 6.5px var(--space-4, 11px);
+          grid-template-columns: var(--wb-krow-label-w) minmax(0, 1fr);
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
           align-items: baseline;
         }
-        .wb-krow:hover {
-          background: var(--stripe, var(--boxel-100));
-        }
         .wb-krow dt {
-          font-size: var(--text-ui, 12px);
+          font-size: var(--boxel-font-size-xs);
           font-weight: 500;
           color: var(--muted-foreground);
+        }
+        .wb-dots {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-4xs);
+          vertical-align: middle;
+        }
+        .wb-dot {
+          width: var(--wb-dot-size);
+          height: var(--wb-dot-size);
+          border-radius: 50%;
+          box-shadow: inset 0 0 0 1px currentColor;
+        }
+        .wb-dot[data-on='true'] {
+          background-color: currentColor;
         }
         .wb-krow dd {
           margin: 0;
-          font-size: var(--text-ui-md, 12.5px);
-          overflow-wrap: anywhere;
-        }
-        .wb-rail {
-          display: grid;
-          gap: 0;
-          background: var(--card);
-          border-radius: 6px;
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          align-self: start;
-          overflow: hidden;
-        }
-        .wb-igroup {
-          padding: 10px var(--space-4, 11px) 14px;
-          box-shadow: inset 0 -1px 0 var(--border);
-        }
-        .wb-igroup:last-child {
-          box-shadow: none;
-        }
-        .wb-igroup > .wb-cap {
-          display: block;
-          margin-bottom: 10px;
-        }
-        .wb-irow {
-          display: grid;
-          grid-template-columns: 76px minmax(0, 1fr);
-          gap: 10px;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-        .wb-irow:last-child {
-          margin-bottom: 0;
-        }
-        .wb-ilabel {
-          font-size: var(--text-ui, 12px);
-          font-weight: 500;
-          color: var(--muted-foreground);
-        }
-        .wb-ival {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          color: var(--foreground);
-          overflow-wrap: anywhere;
-        }
-        .wb-ival[data-dim='true'] {
-          color: var(--muted-foreground);
-        }
-        .wb-ival[data-accent='true'] {
-          color: var(--pretui-accent, var(--primary));
-        }
-        .wb-pad {
-          padding: 10px var(--space-4, 11px);
+          font-size: var(--boxel-font-size-xs);
+          overflow-wrap: break-word;
         }
         .panel {
-          background: var(--card);
-          border-radius: var(--radius-surface, 10px);
-          box-shadow: var(--pretui-shadow-card, 0 0 0 1px var(--border));
-          padding: var(--space-5, 14px);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border-radius: var(--boxel-border-radius);
+          box-shadow: 0 0 0 1px var(--border);
+          padding: var(--boxel-sp);
           display: grid;
-          gap: var(--space-4, 11px);
+          gap: var(--boxel-sp-sm);
           align-content: start;
         }
         .brief {
-          margin: 0;
           max-width: 78ch;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           line-height: 1.5;
           color: var(--muted-foreground);
-        }
-        /* flags share the single caps treatment, sized to chip scale */
-        .flag {
-          font-size: 10px;
-          font-weight: 600;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          border-radius: 999px;
-          padding: 2px 8px;
-        }
-        .flag-new {
-          color: var(--pretui-attention-ink, var(--boxel-fuschia));
-          background: color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 14%, var(--card));
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-attention, var(--boxel-fuschia)) 35%, var(--border));
-        }
-        .flag-feat {
-          color: color-mix(in oklch, var(--warning, var(--boxel-warning)) 75%, var(--foreground));
-          background: color-mix(in oklch, var(--warning, var(--boxel-warning)) 13%, var(--card));
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--warning, var(--boxel-warning)) 35%, var(--border));
         }
       </style>
     </template>
   } as unknown as typeof Spec.isolated;
 
   static fitted = class Fitted extends Component<typeof PretUISpec> {
-    get hue() {
-      return statusHue(this.args.model.stage ?? 'planned');
-    }
     get monogram() {
       return (this.args.model.componentName ?? '?').charAt(0);
-    }
-    get monoStyle() {
-      return htmlSafeHue(this.hue);
     }
     <template>
       {{! The container element and the element the queries STYLE must be
@@ -1057,10 +1065,10 @@ export class PretUISpec extends Spec {
           root; this is the same shape. }}
       <div class='fit' data-test-pretui-component-fitted>
         <div class='fit-root'>
-          <div class='mono' style={{this.monoStyle}}>
+          <div class='mono'>
             {{#let (iconFor @model.icon) as |FitIcon|}}
               {{#if FitIcon}}
-                <FitIcon class='mono-icon' role='presentation' />
+                <FitIcon width='60%' height='60%' role='presentation' />
               {{else}}
                 {{this.monogram}}
               {{/if}}
@@ -1069,7 +1077,10 @@ export class PretUISpec extends Spec {
           <div class='fit-body'>
             <div class='fit-name'>
               {{@model.componentName}}
-              {{#if @model.featured}}<span class='fit-star'>★</span>{{/if}}
+              {{#if @model.featured}}<span class='fit-star'><span
+                    aria-hidden='true'
+                  >★</span><VisuallyHidden
+                  >Featured</VisuallyHidden></span>{{/if}}
             </div>
             <div class='fit-sub'>
               <span class='fit-terr'>{{if
@@ -1082,10 +1093,15 @@ export class PretUISpec extends Spec {
               {{/if}}
             </div>
             <div class='fit-extra'>
-              <StatusChip @value={{if @model.stage @model.stage 'planned'}} />
-              {{#if @model.isNew}}<span class='fit-new'>NEW</span>{{/if}}
+              <StatusChip
+                @value={{stageLabel @model.stage}}
+                @tone={{stageTone @model.stage}}
+              />
+              {{#if @model.isNew}}<Chip @label='New' @tone='attention' />{{/if}}
             </div>
-            {{#if @model.brief}}<div class='fit-brief'>{{@model.brief}}</div>{{/if}}
+            {{#if @model.brief}}<div
+                class='fit-brief'
+              >{{@model.brief}}</div>{{/if}}
           </div>
         </div>
       </div>
@@ -1097,58 +1113,57 @@ export class PretUISpec extends Spec {
           overflow: hidden;
         }
         .fit-root {
+          --fit-mono-size: 1.875rem;
+          --fit-mono-font-size: var(--boxel-font-size-sm);
+          --fit-mono-radius: var(--boxel-border-radius);
+
           width: 100%;
           height: 100%;
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 8px 10px;
-          background: var(--card);
-          font-family: var(--font-sans);
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xs);
+          background-color: var(--card);
+          color: var(--card-foreground);
           overflow: hidden;
           box-sizing: border-box;
         }
         .mono {
+          --icon-color: currentColor;
+          --icon-bg: none;
+
           flex: none;
-          width: 30px;
-          height: 30px;
-          border-radius: 9px;
+          width: var(--fit-mono-size);
+          height: var(--fit-mono-size);
+          border-radius: var(--fit-mono-radius);
           display: grid;
           place-items: center;
           font-weight: 800;
-          font-size: 15px;
-          background: color-mix(in oklch, var(--pretui-fit-hue, var(--chart-1)) 16%, var(--card));
-          color: color-mix(in oklch, var(--pretui-fit-hue, var(--chart-1)) 60%, var(--foreground));
-          box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--pretui-fit-hue, var(--chart-1)) 32%, var(--border));
-        }
-        .mono {
-          --icon-color: currentColor;
-          --icon-bg: none;
-        }
-        .mono-icon {
-          width: 60%;
-          height: 60%;
+          font-size: var(--fit-mono-font-size);
+          background-color: var(--muted);
+          color: var(--foreground);
+          box-shadow: inset 0 0 0 1px var(--border);
         }
         .fit-body {
           min-width: 0;
           display: grid;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
         }
         .fit-name {
           font-weight: 600;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .fit-star {
-          color: var(--warning, var(--boxel-warning));
+          color: var(--accent-ink);
         }
         .fit-sub {
           display: flex;
-          gap: 8px;
+          gap: var(--boxel-sp-xs);
           font-family: var(--font-mono);
-          font-size: 10px;
+          font-size: var(--boxel-font-size-2xs);
           letter-spacing: 0.06em;
           text-transform: uppercase;
           color: var(--muted-foreground);
@@ -1157,24 +1172,15 @@ export class PretUISpec extends Spec {
         .fit-brief {
           display: none;
         }
-        .fit-new {
-          font-family: var(--font-mono);
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          color: var(--pretui-attention-ink, var(--boxel-fuschia));
-        }
         /* badge: monogram + name only */
         @container ((max-width: 139px) or (max-height: 47px)) {
           .fit-root {
-            gap: 7px;
-            padding: 5px 8px;
-          }
-          .mono {
-            width: 22px;
-            height: 22px;
-            font-size: 12px;
-            border-radius: 7px;
+            --fit-mono-size: 1.375rem;
+            --fit-mono-font-size: var(--boxel-font-size-xs);
+            --fit-mono-radius: var(--boxel-border-radius-sm);
+
+            gap: var(--boxel-sp-2xs);
+            padding: var(--boxel-sp-3xs) var(--boxel-sp-xs);
           }
           .fit-sub {
             display: none;
@@ -1183,22 +1189,20 @@ export class PretUISpec extends Spec {
         /* tile & card: stack vertically, grow the monogram */
         @container ((min-width: 140px) and (min-height: 140px)) {
           .fit-root {
+            --fit-mono-size: 2.75rem;
+            --fit-mono-font-size: var(--boxel-font-size-lg);
+            --fit-mono-radius: var(--boxel-border-radius-lg);
+
             flex-direction: column;
             align-items: flex-start;
             justify-content: flex-end;
-            padding: 12px;
-            gap: 8px;
-          }
-          .mono {
-            width: 44px;
-            height: 44px;
-            font-size: 22px;
-            border-radius: 12px;
+            padding: var(--boxel-sp-sm);
+            gap: var(--boxel-sp-xs);
           }
           .fit-extra {
             display: flex;
             align-items: center;
-            gap: 7px;
+            gap: var(--boxel-sp-2xs);
           }
         }
         /* full card: show the brief */
@@ -1208,7 +1212,7 @@ export class PretUISpec extends Spec {
             -webkit-box-orient: vertical;
             -webkit-line-clamp: 3;
             overflow: hidden;
-            font-size: var(--text-ui-sm, 11.5px);
+            font-size: var(--boxel-font-size-xs);
             color: var(--muted-foreground);
             line-height: 1.45;
             white-space: normal;
@@ -1223,7 +1227,10 @@ export class PretUISpec extends Spec {
       <div class='tile'>
         <div class='tile-head'>
           <span class='tile-name'>{{@model.componentName}}</span>
-          <StatusChip @value={{if @model.stage @model.stage 'planned'}} />
+          <StatusChip
+            @value={{stageLabel @model.stage}}
+            @tone={{stageTone @model.stage}}
+          />
         </div>
         <div class='tile-meta'>
           <span class='territory'>{{if
@@ -1236,31 +1243,31 @@ export class PretUISpec extends Spec {
       </div>
       <style scoped>
         .tile {
-          padding: var(--space-4, 11px) var(--space-5, 14px);
+          padding: var(--boxel-sp-sm) var(--boxel-sp);
           display: grid;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
           align-content: start;
         }
         .tile-head {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
         }
         .tile-name {
           font-weight: 600;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
         }
         .tile-meta {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--space-3, 8px);
+          gap: var(--boxel-sp-xs);
         }
         .territory {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          letter-spacing: var(--track-eyebrow, 0.08em);
+          font-size: var(--boxel-font-size-2xs);
+          letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--muted-foreground);
         }
@@ -1338,38 +1345,42 @@ export class PretUISpec extends Spec {
       </div>
       <style scoped>
         .wb-edit {
+          --wb-field-min-w: 12.5rem;
+
           display: grid;
-          gap: var(--space-5, 14px);
-          padding: var(--space-5, 14px);
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
         }
         .wb-group {
           border: 1px solid var(--border);
-          border-radius: var(--radius-md, 8px);
-          padding: var(--space-4, 11px) var(--space-5, 14px)
-            var(--space-5, 14px);
+          border-radius: var(--boxel-border-radius-sm);
+          padding: var(--boxel-sp-sm) var(--boxel-sp) var(--boxel-sp);
           margin: 0;
           min-width: 0;
         }
         .wb-group > legend {
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
-          letter-spacing: var(--track-eyebrow, 0.08em);
+          letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--muted-foreground);
-          padding-inline: var(--space-2, 6px);
+          padding-inline: var(--boxel-sp-2xs);
         }
         .wb-fields {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: var(--space-3, 8px) var(--space-4, 11px);
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(min(var(--wb-field-min-w), 100%), 1fr)
+          );
+          gap: var(--boxel-sp-xs) var(--boxel-sp-sm);
         }
         .wb-fields > label,
         .wb-fields > div {
           display: grid;
-          gap: var(--space-2, 6px);
-          font-size: var(--text-ui-xs, 11px);
+          gap: var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-2xs);
           font-weight: 600;
-          letter-spacing: var(--track-eyebrow, 0.04em);
+          letter-spacing: 0.04em;
           text-transform: uppercase;
           color: var(--muted-foreground);
           min-width: 0;

@@ -17,7 +17,7 @@ export class ExampleGallery extends Component<{
     {{#if this.specs}}
       <section class='exg' data-test-pretui-examples>
         <header class='exg-h'>
-          <span class='exg-cap'>Examples</span>
+          <h2 class='exg-cap'>Examples</h2>
           <span class='exg-count'>{{this.countLabel}}</span>
         </header>
         <div class='exg-grid'>
@@ -28,7 +28,9 @@ export class ExampleGallery extends Component<{
               </div>
               <div class='exg-meta'>
                 <span class='exg-title'>{{spec.title}}</span>
-                {{#if spec.note}}<span class='exg-note'>{{spec.note}}</span>{{/if}}
+                {{#if spec.note}}<span
+                    class='exg-note'
+                  >{{spec.note}}</span>{{/if}}
               </div>
             </div>
           {{/each}}
@@ -37,62 +39,78 @@ export class ExampleGallery extends Component<{
     {{/if}}
     <style scoped>
       .exg {
+        --_exg-tile-min-w: 18.75rem;
+        --_exg-demo-shadow-room: var(--boxel-sp-sm);
+
         display: grid;
-        gap: var(--space-4, 11px);
+        gap: var(--boxel-sp-sm);
         align-content: start;
       }
       .exg-h {
         display: flex;
         align-items: baseline;
-        gap: 8px;
+        gap: var(--boxel-sp-xs);
       }
       /* THE caps treatment — one per page region (workbench type spec) */
       .exg-cap {
-        font-size: var(--text-ui-xs, 11px);
-        font-weight: 600;
-        letter-spacing: 0.06em;
+        font-family: var(--boxel-eyebrow-font-family);
+        font-size: var(--boxel-eyebrow-font-size);
+        font-weight: var(--boxel-eyebrow-font-weight);
+        line-height: var(--boxel-eyebrow-line-height);
+        letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
         color: var(--muted-foreground);
       }
       .exg-count {
-        font-size: var(--text-ui, 12px);
-        color: var(--ink-3, var(--boxel-400));
+        font-size: var(--boxel-caption-font-size);
+        color: var(--muted-foreground);
       }
       .exg-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: var(--space-4, 11px);
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--_exg-tile-min-w), 1fr)
+        );
+        gap: var(--boxel-sp-sm);
         align-items: stretch;
       }
       .exg-card {
-        background: var(--card);
-        border-radius: 6px;
-        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-        padding: var(--space-4, 11px);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border-radius: var(--boxel-border-radius);
+        box-shadow: 0 0 0 1px var(--border);
+        padding: var(--boxel-sp-sm);
+        /* each card takes two of the grid's rows as a subgrid, so the demo
+           and meta rows line up across every card in a row */
         display: grid;
-        grid-template-rows: 1fr auto;
-        gap: 10px;
+        grid-row: span 2;
+        grid-template-rows: subgrid;
+        /* at least the demo's shadow room, so its clip box stops short of
+           the meta row */
+        gap: var(--_exg-demo-shadow-room);
         min-width: 0;
       }
+      /* clips a wide demo, with a margin of room so a demo's own shadow
+         isn't cut off; the negative margin keeps the layout where it was */
       .exg-demo {
         min-width: 0;
         align-self: center;
-        padding: 4px 0;
+        margin: calc(-1 * var(--_exg-demo-shadow-room));
+        padding: var(--_exg-demo-shadow-room);
         overflow: hidden;
       }
       .exg-meta {
         display: grid;
-        gap: 2px;
-        padding-top: 8px;
+        gap: var(--boxel-sp-6xs);
+        padding-block-start: var(--boxel-sp-xs);
         box-shadow: inset 0 1px 0 var(--border);
       }
       .exg-title {
-        font-size: var(--text-ui, 12px);
-        font-weight: 500;
-        color: var(--foreground);
+        font-size: var(--boxel-caption-font-size);
+        font-weight: var(--boxel-caption-font-weight);
       }
       .exg-note {
-        font-size: var(--text-ui, 12px);
+        font-size: var(--boxel-caption-font-size);
         color: var(--muted-foreground);
       }
     </style>

@@ -78,7 +78,7 @@ module('Pretui | PretUISpec', function (hooks) {
   test('the breadcrumb names the kit without linking to a catalog card this package does not ship', async function (assert) {
     let model = specModel('Button');
     await render(<template><Isolated @model={{model}} /></template>);
-    assert.dom('[data-test-pretui-spec-crumb]').containsText('Pretui');
+    assert.dom('[data-test-pretui-spec-crumb]').containsText('Pret UI');
     assert.dom('[data-test-pretui-spec-crumb] button').doesNotExist('no navigation to a card that is not here');
   });
 
