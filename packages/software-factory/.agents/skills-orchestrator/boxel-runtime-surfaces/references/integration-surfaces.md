@@ -146,7 +146,7 @@ OpenRouter calls go through `/_request-forward` to the external
 | `/_publish-realm`, `/_unpublish-realm`                               | POST   | Realm publishing controls.                                                                      |
 | `/_create-realm`, `/_delete-realm`                                   | POST   | Realm lifecycle.                                                                                |
 | `/_run-command`                                                      | POST   | Server-side host command execution (underlying `boxel run-command`).                            |
-| `/_capture-card`                                                     | POST   | Capture a card as a PNG or PDF (underlying `boxel capture`).                                    |
+| `/_capture`                                                          | POST   | Capture a card or file as a PNG or PDF (underlying `boxel capture`).                            |
 | `{realm}_capture/{path}`                                             | GET    | Serve a capture. `download` → attachment; `filename=` names the saved file.                     |
 | `/_realm-auth`                                                       | GET    | Realm auth metadata.                                                                            |
 | `/_queue-status`                                                     | GET    | Indexing queue state.                                                                           |
