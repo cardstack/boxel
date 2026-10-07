@@ -1,6 +1,6 @@
 {
   "name": "glimmer-motion",
-  "version": "0.1.0-unstable.0",
+  "version": "0.1.0-unstable.1",
   "description": "The Motion engine for Ember: Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.",
   "keywords": [
     "ember-addon",
