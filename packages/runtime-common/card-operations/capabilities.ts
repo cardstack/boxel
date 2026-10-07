@@ -10,7 +10,7 @@ import {
   canonicalizeTarget,
   newOperationScope,
   resolveGatedOperation,
-  resolveOperation,
+  resolvesToWrite,
   type CoarseDeclined,
   type GatedOperation,
   type OperationCore,
@@ -218,7 +218,9 @@ async function decide(
   try {
     let target = targetFor(core, check.target);
     // A write the realm declines outright is judged and told as a
-    // non-reader's, whatever the ACL says of this caller's reads.
+    // non-reader's, whatever the ACL says of this caller's reads. An
+    // operation that does not resolve travels as a read would, and is told
+    // as the ACL answers this caller's reads.
     let pairScope = scope;
     if (
       who.writesDeclinedOutright &&
@@ -297,29 +299,6 @@ async function decide(
     // check fails closed on it — one pair the realm could not decide, reported
     // as itself, rather than a request the caller cannot read at all.
     return refused(isOperationFailure(e) ? e.error.code : 'internal-error');
-  }
-}
-
-// Whether the operation resolves to a write on the target, resolved as a
-// caller the ACL allows would resolve it, so the gate doesn't decide what it
-// is asked to judge. One that does not resolve is left to the pair's own
-// resolution to refuse.
-async function resolvesToWrite(
-  core: OperationCore,
-  target: OperationTarget,
-  operation: string,
-  scope: OperationScope,
-): Promise<boolean> {
-  try {
-    let { base } = await resolveOperation(
-      core,
-      target,
-      operation,
-      scope.derive({ coarseDeclined: 'none' }),
-    );
-    return isWrite(base);
-  } catch {
-    return false;
   }
 }
 

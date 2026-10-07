@@ -15,7 +15,7 @@ import {
   localPathFor,
   newOperationScope,
   resolveGatedOperation,
-  resolveOperation,
+  resolvesToWrite,
   scopeCallerFor,
   type CoarseDeclined,
   type OperationCore,
@@ -43,7 +43,6 @@ import {
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isOperationFailure,
-  isWrite,
   refusalForNonReader,
   refusalSeenBy,
   type ExplainedGrant,
@@ -934,12 +933,8 @@ async function explain(
 }
 
 // What the realm's ACL declines for the request that would carry this
-// invocation. A write travels on a `POST`, which the ACL judges as a write, and
-// everything else on a request it judges as a read. So a caller the ACL lets
-// write and not read is allowed a write and declined a read, and which one
-// this is follows from the behavior the operation resolves to. That is
-// resolved first, as a caller the ACL allows would resolve it. An operation
-// that does not resolve travels as a read would.
+// invocation (see `resolvesToWrite`). So a caller the ACL lets write and not
+// read is allowed a write and declined a read.
 //
 // The realm asks whether a caller it declined a write could read the realm
 // only of a signed-in caller, so a write from a caller who isn't signed in is
@@ -952,18 +947,12 @@ async function coarseDeclinedFor(
   actor: ScopeCaller,
   acl: Acl,
 ): Promise<CoarseDeclined> {
-  let writes = false;
-  try {
-    let { base } = await resolveOperation(
-      core,
-      target,
-      question.operation,
-      newOperationScope(core, { caller: actor, coarseDeclined: 'none' }),
-    );
-    writes = isWrite(base);
-  } catch {
-    writes = false;
-  }
+  let writes = await resolvesToWrite(
+    core,
+    target,
+    question.operation,
+    newOperationScope(core, { caller: actor }),
+  );
   if (writes ? acl.write : acl.read) {
     return 'none';
   }
