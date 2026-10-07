@@ -11,9 +11,10 @@
  * READS them with its image-capable Read tool and verdicts each
  * acceptance criterion against what is actually on screen.
  *
- * Endpoint contract (see realm-server handle-capture-card):
- * - formats: 'isolated' | 'embedded' only (fitted capture is an upstream
- *   ask — the prerenderer doesn't expose a sized fitted container yet).
+ * Endpoint contract (see realm-server handlers/handle-capture.ts):
+ * - formats: the gate captures 'isolated' and 'embedded'. The endpoint also
+ *   takes 'fitted', but only with a `captureSpec.envelope` sizing the box,
+ *   which the gate has no basis to choose.
  * - response: { data: { attributes: { status, base64?, width?, height?,
  *   error? } } }; status 'ready' is necessary but NOT sufficient for
  *   async domain renderers (WebGL/PDF/media may not have painted — bug
