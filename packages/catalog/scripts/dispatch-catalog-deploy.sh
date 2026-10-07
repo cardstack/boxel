@@ -51,20 +51,20 @@ if [ -n "$expiry" ]; then
 fi
 
 # A boxel change that merges before the catalog pull request fixing what it
-# breaks pins that pull request's head. Merged with a merge commit, the head is
-# on catalog main. Squashed or rebased, it never is, and the catalog deploy
-# refuses a revision off main, so deploy that pull request's merge commit,
-# which carries the same change.
-on_main=$(gh api "repos/$repo/compare/$revision...main" --jq .status 2>/dev/null || true)
-if [ "$on_main" != "ahead" ] && [ "$on_main" != "identical" ]; then
-  # A failed request prints its error body, so only a successful one counts.
-  if ! merged=$(gh api "repos/$repo/commits/$revision/pulls" \
-    --jq "[.[] | select(.merged_at != null and .base.ref == \"main\" and .head.sha == \"$revision\")][0] // empty | \"\(.number) \(.merge_commit_sha)\"" 2>/dev/null); then
-    merged=""
-  fi
-  if [ -n "$merged" ]; then
-    read -r merged_pr merged_sha <<<"$merged"
-    echo "::notice title=catalog deploy::$revision isn't on catalog main. It is the head of $repo#$merged_pr, which merged as $merged_sha, so this deploys $merged_sha."
+# breaks pins that pull request's head. The head descends only from where the
+# pull request branched, so production's catalog is usually past it on another
+# line, and the deploy check refuses a revision that diverged from it. Squashed
+# or rebased, the head isn't on catalog main at all. Either way, once that pull
+# request has merged, deploy its merge commit: it is on main, carries the same
+# change, and holds everything main had when it merged. A merge commit behind
+# production's catalog deploys nothing, as any revision behind it does.
+# A failed request prints its error body, so only a successful one counts.
+if merged=$(gh api "repos/$repo/commits/$revision/pulls" \
+  --jq "[.[] | select(.merged_at != null and .base.ref == \"main\" and .head.sha == \"$revision\")][0] // empty | \"\(.number) \(.merge_commit_sha)\"" 2>/dev/null) &&
+  [ -n "$merged" ]; then
+  read -r merged_pr merged_sha <<<"$merged"
+  if [ "$merged_sha" != "$revision" ]; then
+    echo "::notice title=catalog deploy::$revision is the head of $repo#$merged_pr, which merged as $merged_sha, so this deploys $merged_sha."
     revision=$merged_sha
     by_hand="Until then, run \"Deploy to production\" with revision $revision by hand: $runs"
   fi

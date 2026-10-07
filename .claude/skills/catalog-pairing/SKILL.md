@@ -76,7 +76,7 @@ For a boxel-first pair, this means the boxel pull request pins the catalog pull 
 1. Open the catalog pull request with the fix, paired with the boxel pull request in both descriptions.
 2. In the boxel pull request, set `revision` in `packages/catalog/test-subset.json` to the catalog pull request's head, run `pnpm --dir packages/catalog catalog:test-subset`, run the manifest's tests, and commit the new pin. Re-pin each time the catalog pull request gets new commits.
 3. Get the catalog pull request approved, then re-run the boxel pull request's Lint Catalog, and its Catalog Test Subset check if that one ran.
-4. Merge the boxel pull request, then the catalog pull request right after it. A merge commit keeps the pinned head on catalog `main`. After a squash or rebase it isn't, so the lockstep deploy (`dispatch-catalog-deploy.sh`) deploys that pull request's merge commit instead, which carries the same change.
+4. Merge the boxel pull request, then the catalog pull request right after it. Once it has merged, the lockstep deploy (`dispatch-catalog-deploy.sh`) deploys its merge commit in place of the pinned head, whatever the merge method: the head branches off before production's catalog, which the deploy check refuses, and after a squash or rebase it isn't on catalog `main` at all. The merge commit carries the same change and everything `main` had when it merged.
 
 Before the boxel pull request merges, the pin is a commit catalog `main` doesn't have yet. Until the catalog pull request merges, any other boxel pull request that touches the manifest fails `--check-pin`, waiting on it. That's one more reason to merge the catalog pull request right after.
 
