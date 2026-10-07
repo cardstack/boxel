@@ -3767,5 +3767,96 @@ module(basename(import.meta.filename), function () {
           .join(', ')})`,
       );
     });
+
+    test('pre-warm sweep skips file deps that are not modules', async function (assert) {
+      let virtualNetwork = createVirtualNetwork();
+      let prerenderedModuleUrls: string[] = [];
+      let capturingPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderedModuleUrls.push(args.url);
+          return Promise.resolve({
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {},
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        capturingPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+
+      let markdownFile = `${realmURL}docs/accordion.md`;
+      let imageFile = `${realmURL}images/hero.png`;
+      let helperModule = `${realmURL}lib/helpers.ts`;
+      let dottedModule = `${realmURL}components/accordion.usage`;
+      let unusedReader: Reader = {
+        readFile: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        readStream: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        mtimes: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+      };
+
+      await preWarmModulesTable({
+        realmURL: new URL(realmURL),
+        invalidations: [new URL(markdownFile)],
+        allRealmCardModules: [],
+        definitionLookup: workerLookup,
+        virtualNetwork,
+        reader: unusedReader,
+        getDependencyRows: async () =>
+          [
+            {
+              url: markdownFile,
+              type: 'file',
+              deps: [markdownFile, imageFile, helperModule, dottedModule],
+              hasError: false,
+              isDeleted: false,
+              errorDoc: null,
+            },
+          ] as DependencyIndexRow[],
+        getModuleCacheContext: async () => ({
+          resolvedRealmURL: realmURL,
+          cacheScope: 'realm-auth' as const,
+          authUserId: testUserId,
+        }),
+        prerenderUserId: testUserId,
+        jobPriority: 10,
+        jobInfo: {
+          jobId: 1,
+          reservationId: 1,
+          priority: 10,
+          queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
+        },
+        log: logger('test-prewarm'),
+        perfLog: logger('test-prewarm-perf'),
+      });
+
+      assert.deepEqual(
+        prerenderedModuleUrls.sort(),
+        [helperModule, `${dottedModule}.gts`].sort(),
+        'only module deps were warmed; the markdown and image files were not',
+      );
+    });
   });
 });
