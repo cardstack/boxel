@@ -1581,9 +1581,10 @@ export const AUTHENTICATION_REQUIRED: OperationError = {
 // `refusalForNonReader`), and one of them who isn't signed in is told to
 // authenticate wherever such a caller is told nothing is there, since that is
 // the answer every request that authenticated nobody gets. A caller the ACL
-// lets read the realm is told the refusal as it is. A caller who isn't signed
-// in is never one of those on a write: the realm asks whether a caller it
-// declined a write could read only of a signed-in caller.
+// lets read the realm is told the refusal as it is, where the realm asks: it
+// asks whether a caller it declined a write could read only of a signed-in
+// caller, so a visitor's refused write is told as a non-reader's even on a
+// realm anyone may read.
 //
 // The operations envelope and the card+json writes answer their callers with
 // this, and an explain reports it as the refusal its actor would receive. The
