@@ -108,10 +108,11 @@ export interface CapabilityCaller {
   // authenticated nobody is given, `operation-not-permitted` for the 403.
   writesRefused?: 'actor-required' | 'operation-not-permitted';
   // Set where the ACL lets this caller read the realm and the realm declines
-  // their writes outright all the same: a caller who isn't signed in, whose
-  // write the realm never asks whether they could read. Each such write is
-  // judged as the realm judges it, as a caller declined everything, while
-  // their reads keep the ACL's answer.
+  // their writes outright all the same: a write its policy doesn't judge,
+  // such as one from a caller who isn't signed in, for which the realm never
+  // asks whether they could read. Each such write is judged as the realm
+  // judges it, as a caller declined everything, while their reads keep the
+  // ACL's answer.
   writesDeclinedOutright?: true;
 }
 
