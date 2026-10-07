@@ -1580,7 +1580,7 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    test('a capture of an indexed file persists under the file row and answers with bytes, not a served URL', async function (assert) {
+    test('a capture of an indexed file persists under the file row and answers with its served URL', async function (assert) {
       await seedFileRow(3);
       let { queue, published } = makePersistQueue('ready');
 
@@ -1606,7 +1606,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(response.body.data.attributes.captures, [
         {
           name: null,
-          url: null,
+          url: `${REALM_URL}_capture/brand/guide.html`,
           width: 800,
           height: 600,
           deviceScaleFactor: null,
@@ -1640,7 +1640,11 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(published, [], 'no job was enqueued');
       let attrs = response.body.data.attributes;
       assert.strictEqual(attrs.base64, PNG_BASE64, 'bytes come from the store');
-      assert.strictEqual(attrs.captures[0].url, null, 'no served URL');
+      assert.strictEqual(
+        attrs.captures[0].url,
+        `${REALM_URL}_capture/brand/guide.html`,
+        "the file's served URL keeps its extension",
+      );
     });
 
     test('an extensionless fileURL does not resolve to a file row by its alias', async function (assert) {

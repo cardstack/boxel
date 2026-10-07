@@ -462,6 +462,7 @@ import {
   ANONYMOUS_RENDER,
   findMediaCacheEntry,
   putMedia,
+  resolveOnDemandCaptureSource,
   type MediaCacheAdapter,
   type MediaCacheCaptureKey,
 } from './media-cache.ts';
@@ -476,6 +477,7 @@ import {
   estimateCaptureQueueWait,
   CAPTURE_SYNC_WAIT_BUDGET_MS,
 } from './jobs/capture.ts';
+import type { CaptureSourceKind } from './tasks/capture.ts';
 import {
   emitCapturePerf,
   type CaptureRequestPerfEvent,
@@ -9516,21 +9518,22 @@ export class Realm {
     });
   }
 
-  // The realm's capture-serving surface: `_capture/{instanceLocalPath}`
-  // resolves a capture of one instance and streams it from the MediaCache
+  // The realm's capture-serving surface: `_capture/{localPath}` resolves a
+  // capture of one instance — or of one file, when the path names a file by
+  // a registered extension — and streams it from the MediaCache
   // with content-hash ETags and short-max-age revalidation (see
   // `media-cache-serving.ts` for the response contract). The durable URL is
   // the only public reference — MediaCache hashes surface solely as ETags —
   // so a re-capture changes what the URL serves, never the URL itself.
   //
   // Beyond realm read (enforced by internalHandle before dispatch), the
-  // parent instance must be live: this gives per-instance ACLs a place to
-  // land, and captures of a deleted instance stop serving the moment its
-  // index tombstone appears, ahead of GC reclaiming their artifacts. The
-  // gate is a narrow index read (`liveInstanceGeneration`) that returns the
-  // live instance's generation for the cache key, never a full hydration — it
-  // runs on every request, 304 revalidations included. Any request that
-  // resolves to no capture — instance missing or errored,
+  // captured instance or file must be live: this gives per-instance ACLs a
+  // place to land, and captures of a deleted source stop serving the moment
+  // its index tombstone appears, ahead of GC reclaiming their artifacts. The
+  // gate is a narrow index read that returns the live row's generation for
+  // the cache key, never a full hydration — it runs on every request, 304
+  // revalidations included. Any request that resolves to no capture —
+  // source missing or errored,
   // store unconfigured, addressing unresolvable — is an uncaptured miss:
   // 404 with a short max-age so an `<img>` picks up a later capture on
   // revalidation, never a synchronous wait inside an image load.
@@ -9695,13 +9698,23 @@ export class Realm {
       return response;
     }
 
-    // One narrow read is both the liveness gate and the cache key's
-    // generation: undefined means the instance is missing, deleted, or
-    // errored — an uncaptured miss — and otherwise it pins the generation an
-    // edit bumps, without hydrating the row.
+    // The source resolution is both the liveness gate and the cache key's
+    // generation, from narrow reads that never hydrate a row: undefined means
+    // the path names no single live source (missing, deleted, errored, or
+    // spelled alike by a live card and a live file) — an uncaptured miss —
+    // and otherwise it pins the generation an edit bumps. Which source a path
+    // names is the rule `POST /_capture` persists by (see
+    // `resolveOnDemandCaptureSource`), so a URL that endpoint answers with
+    // resolves to the capture it persisted.
+    let sourceURL = this.paths.fileURL(instanceLocalPath).href;
     let generationLookupStart = Date.now();
-    let sourceGeneration =
-      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
+    let source = await resolveOnDemandCaptureSource(this.#dbAdapter, {
+      realmURL: this.url,
+      url: sourceURL,
+    });
+    let sourceKind: CaptureSourceKind =
+      source?.kind === 'file' ? 'file' : 'card';
+    let sourceGeneration = source?.generation;
     let generationLookupMs = Date.now() - generationLookupStart;
     if (sourceGeneration === undefined) {
       return mediaCacheMissResponse({ requestContext });
@@ -9712,12 +9725,12 @@ export class Realm {
       return badRequest({ message: parsed.error.message, requestContext });
     }
 
-    // The cache key pins the instance's own index generation: an edit bumps
-    // it, so an edited card can never serve a stale capture, and an
-    // unchanged card is a pure ledger hit with zero Chrome work.
+    // The cache key pins the source's own index generation: an edit bumps
+    // it, so an edited card or file can never serve a stale capture, and an
+    // unchanged one is a pure ledger hit with zero Chrome work.
     let entryKey: MediaCacheCaptureKey = {
       realmURL: this.url,
-      sourceURL: instanceURL.href,
+      sourceURL,
       captureSpecHash: await captureSpecHash(parsed.spec),
       sourceGeneration,
     };
@@ -9762,6 +9775,7 @@ export class Realm {
       request,
       requestContext,
       entryKey,
+      sourceKind,
       reader,
       parsed.spec,
       perf,
@@ -9903,6 +9917,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
     entryKey: MediaCacheCaptureKey,
+    sourceKind: CaptureSourceKind,
     reader: string,
     spec: CaptureIdentity,
     perf: CaptureServePerf,
@@ -9967,7 +9982,7 @@ export class Realm {
         realmUsername: await this.getRealmOwnerUserId(),
         runAs: reader,
         cardId: entryKey.sourceURL,
-        sourceKind: 'card',
+        sourceKind,
         format: spec.format,
         // The spec's geometry overrides (viewport / dsf / fullPage / clip)
         // ride to the capture engine; the entry key's `captureSpecHash`

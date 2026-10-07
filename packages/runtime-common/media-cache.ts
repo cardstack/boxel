@@ -12,6 +12,7 @@ import {
 } from './expression.ts';
 import { uint8ArrayToHex } from './index.ts';
 import { effectiveHasError, prerenderedJoin } from './index-query-engine.ts';
+import { urlNamesFile } from './file-def-code-ref.ts';
 
 const log = logger('media-cache');
 
@@ -445,7 +446,9 @@ export async function findLiveInstanceGeneration(
 
 // The generation of a live index row of either type: an instance (see
 // `findLiveInstanceGeneration`) or a file's own row, which is what keys an
-// on-demand capture of a workspace file. Otherwise the predicate is the
+// on-demand capture of a workspace file — on `POST /_capture` and on the
+// GET `_capture/` route alike, so a file capture one persists resolves on
+// the other. Otherwise the predicate is the
 // query engine's `#liveRowConditions` for the same type. An instance is
 // addressable by its `file_alias` (the extensionless id) as well as its URL,
 // but a file only by its own URL: a file row's alias drops `.json` and
@@ -475,6 +478,54 @@ export async function findLiveRowGeneration(
   ] as Expression)) as { generation: number | string }[];
   let row = rows[0];
   return row == null ? undefined : Number(row.generation);
+}
+
+// What an on-demand capture of `url` is a capture of: the live row its
+// ledger key and its served `_capture/` URL both spell, with that row's
+// generation. The two serving surfaces resolve through this one rule —
+// `POST /_capture` persists only under the source it names, and the GET
+// `_capture/` route serves only that source — so a URL the POST answers
+// with always resolves to the capture it persisted.
+//
+// The ledger keys an instance by its extensionless card id and a file by its
+// own URL, extension intact, so `url` is a file's spelling exactly when it
+// names a file by a registered extension. A card id can end in one too (the
+// card `notes.md.json` has the id `notes.md`), and a URL that a live file and
+// a live card both answer to names neither: their captures would share one
+// key, so it resolves to nothing. An id ending in `.json` is never a card's,
+// since an instance's `.json` is shed from its id. Any other URL names a card:
+// an extensionless file is spelled like a card id, so its captures are never
+// keyed at all.
+export async function resolveOnDemandCaptureSource(
+  dbAdapter: DBAdapter,
+  { realmURL, url }: { realmURL: string; url: string },
+): Promise<{ kind: 'instance' | 'file'; generation: number } | undefined> {
+  let instanceGeneration = async () =>
+    await findLiveRowGeneration(dbAdapter, { realmURL, url, type: 'instance' });
+  if (!urlNamesFile(new URL(url))) {
+    let generation = await instanceGeneration();
+    return generation === undefined
+      ? undefined
+      : { kind: 'instance', generation };
+  }
+  let fileGeneration = await findLiveRowGeneration(dbAdapter, {
+    realmURL,
+    url,
+    type: 'file',
+  });
+  let cardGeneration = url.endsWith('.json')
+    ? undefined
+    : await instanceGeneration();
+  if (fileGeneration !== undefined && cardGeneration !== undefined) {
+    return undefined;
+  }
+  if (fileGeneration !== undefined) {
+    return { kind: 'file', generation: fileGeneration };
+  }
+  if (cardGeneration !== undefined) {
+    return { kind: 'instance', generation: cardGeneration };
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
