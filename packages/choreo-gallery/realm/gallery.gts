@@ -16,6 +16,14 @@ import { GalleryGrid } from './shell/gallery-grid';
 import { SiteFrame } from './shell/site-frame';
 
 /**
+ * The linked demos that have loaded. While the card is prerendered, a link
+ * that has not been loaded yet is an empty slot in the list.
+ */
+function loadedDemos(demos: unknown[] | undefined): GalleryDemo[] {
+  return (demos ?? []).filter((demo): demo is GalleryDemo => Boolean(demo));
+}
+
+/**
  * The whole gallery site, as one card.
  *
  * Gallery ⇄ demo is state inside this card rather than a navigation, so the
@@ -33,7 +41,7 @@ class Isolated extends Component<typeof ChoreoGallery> {
   }
 
   get demos(): GalleryDemo[] {
-    return (this.args.model.demos ?? []) as GalleryDemo[];
+    return loadedDemos(this.args.model.demos);
   }
 
   get current(): GalleryDemo | undefined {
@@ -100,7 +108,7 @@ class Isolated extends Component<typeof ChoreoGallery> {
 /** a summary of the gallery, for wherever it is listed or linked */
 class Summary extends Component<typeof ChoreoGallery> {
   get count() {
-    return this.args.model.demos?.length ?? 0;
+    return loadedDemos(this.args.model.demos).length;
   }
 
   <template>
