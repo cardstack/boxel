@@ -12,12 +12,12 @@
  */
 import { type CompiledGraph, FilmGraph } from '@cardstack/choreo/film';
 import { render, waitUntil } from '@ember/test-helpers';
+import { SagradaScore } from 'choreo-film-app/components/films/sagrada-score';
+import { TowersScore } from 'choreo-film-app/components/films/towers-score';
+import * as SAGRADA from 'choreo-film-app/lib/films/sagrada';
+import * as TOWERS from 'choreo-film-app/lib/films/towers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-import { SagradaScore } from 'test-app/components/films/sagrada-score';
-import { TowersScore } from 'test-app/components/films/towers-score';
-import * as SAGRADA from 'test-app/lib/films/sagrada';
-import * as TOWERS from 'test-app/lib/films/towers';
 
 /** the same object with every undefined member gone, so a row compares to one that never had the key */
 const plain = (o: unknown) => JSON.parse(JSON.stringify(o)) as unknown;

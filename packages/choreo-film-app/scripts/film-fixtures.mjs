@@ -2,7 +2,7 @@
  * THE GOLDEN FIXTURES. A film is its cue table and its camera path; this
  * writes both, for every reference film, from the same pure schedule the
  * engine runs (`packages/choreo/src/film/schedule.ts`) and the
- * same data the component renders (`packages/choreo-test-app/app/lib/films/*.ts`).
+ * same data the component renders (`packages/choreo-film-app/app/lib/films/*.ts`).
  *
  * The refactor of the film onto the graph is measured against these:
  * `tests/unit/film-schedule-test.ts` recomputes the schedule in the
@@ -10,8 +10,8 @@
  * number here and you have changed the film; a phase that means to is a
  * phase that re-runs this script and reviews the diff.
  *
- *   node packages/choreo-gallery/tools/film-fixtures.mjs          # writes tests/fixtures/film/*.json
- *   node packages/choreo-gallery/tools/film-fixtures.mjs --check  # exits 1 if any fixture would change
+ *   node packages/choreo-film-app/scripts/film-fixtures.mjs          # writes tests/fixtures/film/*.json
+ *   node packages/choreo-film-app/scripts/film-fixtures.mjs --check  # exits 1 if any fixture would change
  *
  * Runs on Node's own type stripping: the schedule and the data modules
  * are plain TypeScript with erasable types and no Ember in them, and the
@@ -23,7 +23,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const out = resolve(root, 'packages/choreo-test-app/tests/fixtures/film');
+const out = resolve(root, 'packages/choreo-film-app/tests/fixtures/film');
 const check = process.argv.includes('--check');
 
 const { schedule } = await import(
@@ -40,7 +40,7 @@ let changed = 0;
 mkdirSync(out, { recursive: true });
 for (const [name, join] of FILMS) {
   const data = await import(
-    resolve(root, `packages/choreo-test-app/app/lib/films/${name}.ts`)
+    resolve(root, `packages/choreo-film-app/app/lib/films/${name}.ts`)
   );
   const s = schedule(data.BEATS, data.CHAPTERS, join);
   const json = JSON.stringify(s, null, 2) + '\n';

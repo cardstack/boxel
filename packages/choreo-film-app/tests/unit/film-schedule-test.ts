@@ -10,15 +10,15 @@
  * the diff of the JSON; nothing else may.
  */
 import { schedule } from '@cardstack/choreo/film';
-import { module, test } from 'qunit';
 import {
   BEATS as SAGRADA,
   CHAPTERS as SAGRADA_CHAPTERS,
-} from 'test-app/lib/films/sagrada';
+} from 'choreo-film-app/lib/films/sagrada';
 import {
   BEATS as TOWERS,
   CHAPTERS as TOWERS_CHAPTERS,
-} from 'test-app/lib/films/towers';
+} from 'choreo-film-app/lib/films/towers';
+import { module, test } from 'qunit';
 
 import sagradaFixture from '../fixtures/film/sagrada.json';
 import towersFixture from '../fixtures/film/towers.json';

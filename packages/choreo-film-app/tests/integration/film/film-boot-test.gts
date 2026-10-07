@@ -9,10 +9,10 @@
 import { Film, IframePicture } from '@cardstack/choreo/film';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { render, waitUntil } from '@ember/test-helpers';
+import { SagradaScore } from 'choreo-film-app/components/films/sagrada-score';
+import { TowersScore } from 'choreo-film-app/components/films/towers-score';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-import { SagradaScore } from 'test-app/components/films/sagrada-score';
-import { TowersScore } from 'test-app/components/films/towers-score';
 
 module('Integration | film | boot from the graph', function (hooks) {
   setupRenderingTest(hooks);

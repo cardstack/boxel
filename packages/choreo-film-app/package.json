@@ -1,0 +1,87 @@
+{
+  "name": "choreo-film-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Choreo gallery's films (Towers, Sagrada, Sylva) as a standalone app, built into the gallery realm.",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build",
+    "build:realm": "node scripts/build-realm.mjs",
+    "check:realm": "node scripts/build-realm.mjs --check",
+    "format": "prettier . --cache --write",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
+    "lint:format": "prettier . --cache --check",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:types": "ember-tsc --noEmit",
+    "start": "vite --host ::",
+    "test": "vite build --mode=development --out-dir dist-tests && ember test --path dist-tests"
+  },
+  "dependencies": {
+    "@cardstack/choreo": "workspace:*",
+    "glimmer-motion": "workspace:*",
+    "three-149": "npm:three@0.149.0"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "@babel/plugin-transform-runtime": "^7.29.0",
+    "@babel/plugin-transform-typescript": "catalog:",
+    "@babel/runtime": "catalog:",
+    "@cardstack/choreo-eslint-config": "workspace:*",
+    "@ember/app-tsconfig": "^2.0.0",
+    "@ember/optional-features": "^2.3.0",
+    "@ember/string": "catalog:",
+    "@ember/test-helpers": "^4.0.5",
+    "@embroider/compat": "^4.1.22",
+    "@embroider/config-meta-loader": "^1.0.0",
+    "@embroider/core": "^4.6.3",
+    "@embroider/macros": "^1.20.2",
+    "@embroider/router": "^3.0.6",
+    "@embroider/vite": "^1.7.10",
+    "@glimmer/component": "catalog:",
+    "@glimmer/tracking": "^1.1.2",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
+    "@rollup/plugin-babel": "^7.1.0",
+    "@types/qunit": "catalog:",
+    "@types/rsvp": "catalog:",
+    "babel-plugin-ember-template-compilation": "catalog:",
+    "concurrently": "catalog:",
+    "decorator-transforms": "catalog:",
+    "ember-auto-import": "^2.13.1",
+    "ember-cli": "~6.12.0",
+    "ember-cli-babel": "^8.3.1",
+    "ember-cli-htmlbars": "^7.0.1",
+    "ember-load-initializers": "^3.0.1",
+    "ember-modifier": "^4.3.0",
+    "ember-qunit": "catalog:",
+    "ember-resolver": "^13.0.2",
+    "ember-source": "catalog:",
+    "ember-template-imports": "^4.4.0",
+    "ember-template-lint": "catalog:",
+    "eslint": "^9.39.4",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "ember": {
+    "edition": "octane"
+  },
+  "ember-addon": {
+    "type": "app",
+    "version": 2
+  },
+  "exports": {
+    "./tests/*": "./tests/*",
+    "./*": "./app/*"
+  }
+}
