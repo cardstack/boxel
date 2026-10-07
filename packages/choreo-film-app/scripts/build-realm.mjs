@@ -1,9 +1,9 @@
 /**
  * Builds the film app into the gallery realm, at
- * `packages/choreo-gallery/realm/film-app/`, where it is committed.
+ * `packages/choreo-gallery/realm/film-app/`. The build is not committed:
+ * `pnpm push` in choreo-gallery runs this before it pushes the realm.
  *
- *   pnpm build:realm   # rebuild and replace the realm's copy
- *   pnpm lint:realm    # rebuild into a scratch directory; exit 1 if it differs
+ *   pnpm build:realm
  *
  * The realm compiles every `.js` file it serves as a card module, which would
  * break a browser bundle, and serves `.mjs` verbatim with a JavaScript content
@@ -13,7 +13,6 @@
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -29,7 +28,6 @@ import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = resolve(packageRoot, '../choreo-gallery/realm/film-app');
-const check = process.argv.includes('--check');
 
 const scratch = mkdtempSync(join(tmpdir(), 'choreo-film-app-'));
 try {
@@ -44,25 +42,10 @@ try {
     );
   }
   renameScripts(out);
-
-  if (check) {
-    const differences = compare(out, target);
-    if (differences.length) {
-      console.error(
-        `The film app in the gallery realm is not the build of its sources:\n` +
-          differences.map((line) => `  ${line}`).join('\n') +
-          `\nRun \`pnpm --filter choreo-film-app build:realm\` and commit the result.`,
-      );
-      process.exitCode = 1;
-    } else {
-      console.log(`✓ ${relative(process.cwd(), target)} matches its sources`);
-    }
-  } else {
-    rmSync(target, { recursive: true, force: true });
-    mkdirSync(dirname(target), { recursive: true });
-    cpSync(out, target, { recursive: true });
-    console.log(`✓ built the film app into ${relative(process.cwd(), target)}`);
-  }
+  rmSync(target, { recursive: true, force: true });
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(out, target, { recursive: true });
+  console.log(`✓ built the film app into ${relative(process.cwd(), target)}`);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
@@ -90,30 +73,4 @@ function renameScripts(root) {
   for (const name of scripts) {
     renameSync(join(root, name), join(root, name.replace(/\.js$/, '.mjs')));
   }
-}
-
-function compare(built, committed) {
-  if (!existsSync(committed)) {
-    return [`${relative(process.cwd(), committed)} is missing`];
-  }
-  const expected = files(built);
-  const actual = files(committed);
-  const differences = [];
-  for (const name of expected) {
-    if (!actual.includes(name)) {
-      differences.push(`missing ${name}`);
-    } else if (
-      !readFileSync(join(built, name)).equals(
-        readFileSync(join(committed, name)),
-      )
-    ) {
-      differences.push(`differs ${name}`);
-    }
-  }
-  for (const name of actual) {
-    if (!expected.includes(name)) {
-      differences.push(`unexpected ${name}`);
-    }
-  }
-  return differences;
 }

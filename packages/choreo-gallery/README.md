@@ -22,7 +22,7 @@ The rest of the package is tooling and source material that is not served:
 | `stages/<slug>.gts` | A demo's own `GalleryDemo` subclass, supplying its live stage and its notes.                                                  |
 | `notes/`            | Each demo's long-form notes (its Deep Dive).                                                                                  |
 | `asset/`            | Media the demos load: the films' narration, looks, textures, picture pages, vendored three.js and posters.                    |
-| `film-app/`         | The films' own app, built from `packages/choreo-film-app` and committed. Never edited by hand.                                |
+| `film-app/`         | The films' own app, built from `packages/choreo-film-app` by `pnpm push`. Not committed.                                      |
 | `reel/`             | The feature reel: three demos, live, in one camera'd world under a title, brand and timecode plane. `feature-reel.json`.      |
 | `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`. |
 | `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.              |
@@ -39,9 +39,11 @@ shows a placeholder.
 Towers, Sagrada and Sylva each run in a document of their own: a three.js
 world, a shader post pass and per-beat audio do not share a page with the
 gallery. Their sources are `packages/choreo-film-app`, a small app that plays
-one film per document. Its build is committed to `film-app/`, with every
-script renamed `.mjs`, because the realm compiles `.js` files as card modules
-and serves `.mjs` files verbatim.
+one film per document. `pnpm push` builds it into `film-app/` before it
+pushes the realm, with every script renamed `.mjs`, because the realm compiles
+`.js` files as card modules and serves `.mjs` files verbatim. The build is not
+committed; anything else that copies the realm (a deploy, say) runs
+`pnpm --filter choreo-film-app build:realm` first.
 
 - In the grid a film is a poster (`shell/film-tile.gts`); its play control
   opens the film's page in theater.
@@ -53,14 +55,8 @@ and serves `.mjs` files verbatim.
   It is state held by the gallery card (or a demo card opened on its own), so
   it never changes the host's URL, and the frame is never re-parented.
 
-After editing the film app, rebuild it into the realm and commit the result:
-
-```sh
-pnpm --filter choreo-film-app build:realm
-```
-
-The film app's lint (`pnpm --filter choreo-film-app lint:realm`) fails when
-the committed build is not the build of the sources.
+CI builds the film app into the realm in the Choreo Film App Tests job, so a
+change that breaks that build fails there rather than at deploy.
 
 The film documents load their scripts and media with plain requests, without
 the viewer's realm session, so the films play only from a realm everyone can

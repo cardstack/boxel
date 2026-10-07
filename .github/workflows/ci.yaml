@@ -638,7 +638,8 @@ jobs:
 
   # The film app's QUnit suite: the reference films' scores against their
   # golden fixtures. It compiles glimmer-motion and Choreo from source through
-  # the `developing:choreo` export condition.
+  # the `developing:choreo` export condition. Then the realm build `pnpm push`
+  # makes, so a change that breaks it fails here rather than at deploy.
   choreo-film-app-test:
     name: Choreo Film App Tests
     needs: [change-check]
@@ -653,6 +654,10 @@ jobs:
       - uses: ./.github/actions/init
       - name: Run test suite
         run: pnpm test
+        working-directory: packages/choreo-film-app
+      - name: Build the film app into the gallery realm
+        if: ${{ !cancelled() }}
+        run: pnpm build:realm
         working-directory: packages/choreo-film-app
 
   # The QUnit suite for the gallery demos, which lives in choreo-test-app.

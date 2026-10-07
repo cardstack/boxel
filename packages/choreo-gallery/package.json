@@ -18,7 +18,7 @@
     "lint:js:fix": "eslint . --fix",
     "lint:realm": "node tools/check-realm.mjs",
     "lint:types": "ember-tsc --noEmit",
-    "push": "boxel realm push realm",
+    "push": "pnpm --filter choreo-film-app build:realm && boxel realm push realm",
     "test": "boxel test realm",
     "test:theater-sizing": "node scripts/test-theater-sizing.mjs"
   },
