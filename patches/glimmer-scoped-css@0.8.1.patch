@@ -1,0 +1,77 @@
+diff --git a/dist/ast-transform-8c8ef165.js b/dist/ast-transform-8c8ef165.js
+index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..64dcf28b8499ec53c9284c509007ac5a11d8b200 100644
+--- a/dist/ast-transform-8c8ef165.js
++++ b/dist/ast-transform-8c8ef165.js
+@@ -164,8 +164,71 @@ function decodeCSS(encodedCSSString) {
+   return new TextDecoder().decode(Uint8Array.from(binString, m => m.codePointAt(0)));
+ }
+ 
++// The scope prefix must be the same for the same source on every machine:
++// prerendered HTML carries the prefixes of the build that rendered it, and a
++// build at another path must still style it. A file inside a package is
++// identified by `<package name>/<path inside the package>`. Anything else
++// keeps its filename, including the synthetic paths a realm transpiles under
++// (`/spec.gts`), which do not exist on disk and are already stable.
++const packageRoots = new Map();
++function packageRootOf(dir, fs) {
++  let visited = [];
++  let root;
++  for (let current = dir; ; current = path.dirname(current)) {
++    if (packageRoots.has(current)) {
++      root = packageRoots.get(current);
++      break;
++    }
++    visited.push(current);
++    let manifest = path.join(current, 'package.json');
++    if (fs.existsSync(manifest)) {
++      let name;
++      try {
++        name = JSON.parse(fs.readFileSync(manifest, 'utf8')).name;
++      } catch {
++        name = undefined;
++      }
++      if (typeof name === 'string' && name.length > 0) {
++        root = { dir: current, name };
++        break;
++      }
++    }
++    if (path.dirname(current) === current) {
++      root = null;
++      break;
++    }
++  }
++  for (let entry of visited) {
++    packageRoots.set(entry, root);
++  }
++  return root;
++}
++function packageRelativeId(filename) {
++  let fs;
++  try {
++    fs = require('fs');
++  } catch {
++    return undefined;
++  }
++  if (
++    !fs ||
++    typeof fs.existsSync !== 'function' ||
++    typeof fs.readFileSync !== 'function' ||
++    typeof filename !== 'string' ||
++    !path.isAbsolute(filename) ||
++    !fs.existsSync(filename)
++  ) {
++    return undefined;
++  }
++  let root = packageRootOf(path.dirname(filename), fs);
++  if (!root) {
++    return undefined;
++  }
++  let inside = path.relative(root.dir, filename).split(path.sep).join('/');
++  return `${root.name}/${inside}`;
++}
+ function uniqueIdentifier(filename) {
+-  return superFastMd5.md5(filename).slice(0, 10);
++  return superFastMd5.md5(packageRelativeId(filename) ?? filename).slice(0, 10);
+ }
+ function generateScopedCSSPlugin(options) {
+   return env => {

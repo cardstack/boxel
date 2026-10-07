@@ -329,6 +329,7 @@ patchedDependencies:
   matrix-js-sdk@38.3.0: patches/matrix-js-sdk@38.3.0.patch
   ember-source: patches/ember-source.patch
   object-inspect: patches/object-inspect.patch
+  glimmer-scoped-css@0.8.1: patches/glimmer-scoped-css@0.8.1.patch
 allowBuilds:
   "@percy/core": true
   "@vscode/vsce-sign": true
