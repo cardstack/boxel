@@ -51,7 +51,6 @@ import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
   chooseCard,
-  codeRef,
   specRef,
   baseCardRef,
   baseFileRef,
@@ -64,9 +63,11 @@ import {
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
+  loaderForModule,
   type Query,
   type Filter,
   type CodeRef,
+  type Loader,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {
@@ -103,12 +104,15 @@ import type { RealmEventContent } from './matrix-event';
 import type { Spec } from './spec';
 import { now as clockNow, nowDate } from './helpers/clock';
 
-// This file is always loaded through the Boxel loader, which supplies
-// `import.meta`. When type-checking, tsc sees the file as CommonJS output and
-// rejects the meta-property, so suppress it — the same pattern used elsewhere
-// in packages/base.
-// @ts-ignore
-const here: string = (import.meta as any).url;
+// The loader this module runs under. A fetched copy gets the loader that
+// served it, a bundled copy the one the host publishes for bundled modules;
+// either way its `fetch` resolves realm URLs through the virtual network.
+function myLoader(): Loader {
+  // tsc checks this file as CommonJS output when it checks realm-server, and
+  // so rejects the `import.meta` read; the read is all that is suppressed.
+  // @ts-ignore
+  return loaderForModule(import.meta);
+}
 
 // Below this width the Library pane starts with its filter rail closed.
 const LIBRARY_NARROW_WIDTH_REM = 40;
@@ -231,7 +235,7 @@ export function classifyActivityVerb(
 
 // RemixCard's displayName. The feed recognizes a remix structurally (by
 // displayName, like SYSTEM_TYPE_NAMES) so this module keeps compiling without a
-// static RemixCard import — matching how loadJobs references it via codeRef.
+// static RemixCard import — matching how loadJobs references it by code ref.
 const REMIX_TYPE_NAME = 'Remix';
 // The subset of RemixCard the feed reads: the source it was cloned from.
 type RemixCardLike = CardDef & { remixedFrom?: CardDef };
@@ -3541,26 +3545,22 @@ class Isolated extends Component<typeof Workspace> {
     if (!realm) {
       return;
     }
-    // Nothing awaits this task, so a failure thrown here would surface as an
-    // unhandled rejection. Keep the current rail and warn instead, as
-    // `searchRealm` does for the panel searches.
-    let response: Response;
-    try {
-      response = await fetch(`${realm}_types`, {
-        headers: {
-          Accept: SupportedMimeType.CardTypeSummary,
-        },
-      });
-    } catch (e) {
-      console.warn(`Workspace could not load the type list for ${realm}`, e);
-      return;
-    }
+    let response = await myLoader().fetch(`${realm}_types`, {
+      headers: {
+        Accept: SupportedMimeType.CardTypeSummary,
+      },
+    });
     if (!response.ok) {
       let responseText = await response.text();
-      console.warn(
-        `Workspace could not load the type list for ${realm}: status ${response.status} ${response.statusText}. ${responseText}`,
-      );
-      return;
+      let err = new Error(
+        `status: ${response.status} -
+          ${response.statusText}. ${responseText}`,
+      ) as Error & { status?: number; responseText?: string };
+
+      err.status = response.status;
+      err.responseText = responseText;
+
+      throw err;
     }
     let cardTypeSummaries = (await response.json()).data as {
       id: string;
@@ -3629,8 +3629,14 @@ class Isolated extends Component<typeof Workspace> {
     if (!this.args.context?.store) {
       return;
     }
-    let processRef = codeRef(here, './process-card', 'ProcessCard');
-    let remixRef = codeRef(here, './remix-card', 'RemixCard');
+    let processRef = {
+      module: `${baseRealmRRI}process-card`,
+      name: 'ProcessCard',
+    } as CodeRef;
+    let remixRef = {
+      module: `${baseRealmRRI}remix-card`,
+      name: 'RemixCard',
+    } as CodeRef;
     let instances = await this.searchRealm({
       // Keep job discovery inside this realm.
       filter: {
