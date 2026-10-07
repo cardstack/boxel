@@ -2919,24 +2919,30 @@ export default class StoreService extends Service implements StoreInterface {
     return undefined;
   }
 
+  // Re-reads a card the store holds as an error or an awaiting-index
+  // placeholder. A realm event is what usually starts it, so the test waiter is
+  // what lets `settled()` after a realm write cover the card coming back.
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(idOrDoc, this.network.virtualNetwork);
-      let reloadTracker = this.startTrackingCardLoad(url);
-      try {
-        let oldInstance = url ? this.store.getCard(url) : undefined;
-        let instanceOrError = await this.getCardInstance({
-          idOrDoc,
-          opts: { noCache: true },
-        });
-        if (oldInstance) {
-          await this.stopAutoSaving(oldInstance);
+      let waiterLabel = `loadInstance ${url ?? 'new card document'}`;
+      await this.withTestWaiters(waiterLabel, async () => {
+        let reloadTracker = this.startTrackingCardLoad(url);
+        try {
+          let oldInstance = url ? this.store.getCard(url) : undefined;
+          let instanceOrError = await this.getCardInstance({
+            idOrDoc,
+            opts: { noCache: true },
+          });
+          if (oldInstance) {
+            await this.stopAutoSaving(oldInstance);
+          }
+          this.setIdentityContext(instanceOrError);
+          await this.startAutoSaving(instanceOrError);
+        } finally {
+          this.finishTrackingCardLoad(url, reloadTracker);
         }
-        this.setIdentityContext(instanceOrError);
-        await this.startAutoSaving(instanceOrError);
-      } finally {
-        this.finishTrackingCardLoad(url, reloadTracker);
-      }
+      });
     },
   );
 
