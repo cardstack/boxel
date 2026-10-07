@@ -165,6 +165,7 @@ export default class RealmDropdown extends Component<Signature> {
       .realm-dropdown-search {
         --boxel-input-search-background-color: transparent;
         --boxel-input-search-color: var(--boxel-dark);
+        --boxel-input-height: 2rem;
         padding: var(--boxel-sp-xxs);
         border-bottom: 1px solid var(--boxel-200);
       }
