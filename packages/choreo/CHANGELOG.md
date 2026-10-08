@@ -13,3 +13,10 @@ Pre-1.0 caveat: the public API is intentionally unstable. Minor and patch
 versions may change behavior until `1.0.0`.
 
 ## [Unreleased]
+
+### Fixed
+
+- **No `@glimmer/tracking` peer dependency.** Declaring it made pnpm and npm install the
+  standalone `@glimmer/tracking` 1.x package, whose `tracked` doesn't reach Ember's renderer.
+  ember-source provides the module.
+- **The README's first example passes `@duration`** (in seconds), not the removed `@ms`.

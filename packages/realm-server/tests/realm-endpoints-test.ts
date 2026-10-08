@@ -6,7 +6,7 @@ import { join, resolve, basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { dirSync, type DirResult } from 'tmp';
 import fsExtra from 'fs-extra';
-const { copySync, ensureDirSync, readFileSync, readJSONSync } = fsExtra;
+const { readFileSync, readJSONSync } = fsExtra;
 import { utimesSync, writeFileSync } from 'fs';
 import type { Realm } from '@cardstack/runtime-common';
 import {
@@ -17,14 +17,11 @@ import {
   scopedCSSInjectorSource,
   SupportedMimeType,
   type LooseSingleCardDocument,
-  type QueuePublisher,
-  type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   acquireBaseRealmTemplate,
   withIndexProgressHeartbeat,
   setupPermissionedRealmCached,
-  runTestRealmServer,
   setupDB,
   setupMatrixRoom,
   createRealm,
@@ -34,7 +31,6 @@ import {
   realmSecretSeed,
   grafanaSecret,
   createVirtualNetwork,
-  matrixURL,
   closeServer,
   getIndexHTML,
   makeTestReconciler,
@@ -66,8 +62,6 @@ import type {
   UpdateRealmEventContent,
 } from '@cardstack/base/matrix-event';
 
-const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
@@ -80,12 +74,6 @@ module(basename(import.meta.filename), function () {
     let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let testRealmHttpServer2: Server;
-    let testRealm2: Realm;
-    let dbAdapter2: PgAdapter;
-    let publisher: QueuePublisher;
-    let runner: QueueRunner;
-    let testRealmDir: string;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -128,45 +116,6 @@ module(basename(import.meta.filename), function () {
     });
 
     let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
-    let virtualNetwork = createVirtualNetwork();
-
-    async function startRealmServer(
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) {
-      if (testRealm2) {
-        virtualNetwork.unmount(testRealm2.handle);
-      }
-      ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
-        await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_2'),
-          realmURL: testRealm2URL,
-          dbAdapter,
-          publisher,
-          runner,
-          matrixURL,
-        }));
-
-      await testRealm.logInToMatrix();
-    }
-
-    setupDB(hooks, {
-      beforeEach: async (_dbAdapter, _publisher, _runner) => {
-        dbAdapter2 = _dbAdapter;
-        publisher = _publisher;
-        runner = _runner;
-        testRealmDir = join(dir.name, 'realm_server_2', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-        await startRealmServer(dbAdapter2, publisher, runner);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmHttpServer2);
-      },
-    });
 
     test('can set response ETag and Cache-Control headers for module request', async function (assert) {
       let response = await request

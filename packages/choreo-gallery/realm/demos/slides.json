@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "slides",
+      "title": "Slides",
+      "group": "Choreo",
+      "lede": "Three compositions. The same four things.",
+      "apis": ["Choreo", "Move", "layout", "borderRadius"],
+      "sample": "{{! Every slide renders the SAME elements. Only the stylesheet, keyed on\n    data-slide, says where they are — so the region sees four participants\n    that moved, and nothing that was replaced. }}\n<Choreo class='slide' data-slide={{this.slide}} as |c|>\n  <span class='slide-plate' {{motion id='plate' role='plate'}}></span>\n\n  {{! Two mechanisms, and the difference is the lesson.\n\n      The PLATE moves with c.Move — a real box animation of left/top/width/\n      height. It is absolutely positioned, so nothing reflows around it, and\n      its gradient and shadow are re-rendered at every size instead of being\n      stretched. A projected plate would be a 36px square scaled up six times\n      on one axis, and it would look it.\n\n      The TYPE moves with layout=true — projection — because the title is a\n      different font-size on every slide, and projection animates between two\n      real sizes rather than resizing a box around text that has already\n      jumped. It reads cleanly only because each box is fit-content. }}\n  <b {{motion id='title' role='type' layout=true transition=type}}>Kiln</b>\n  <small {{motion id='kicker' role='type' layout=true transition=type}}>\n    Night shift\n  </small>\n\n  {{#if this.note}}\n    <em {{motion id='note' role='note'}}>{{this.note}}</em>\n  {{/if}}\n\n  <c.Parallel>\n    <c.Move @of={{c.moved 'plate'}} @spring={{plate}} />\n\n    {{! The corner radius is the thing the View Transition version of this demo\n        could not do at all: the radius belongs to the layout being\n        transitioned between, so there was nothing to interpolate, and it had\n        to be carried across by hand in a pair of custom properties. On a\n        timeline it is one more animated property. }}\n    <c.Tween @of={{c.all 'plate'}} @borderRadius={{radiusFor this.slide}} @duration={{0.42}} />\n\n    {{! the note is the only thing that comes and goes: out fast, in late, so\n        a slide is never carrying two of them }}\n    <c.Tween @of={{c.removed 'note'}} @opacity={{0}} @duration={{0.14}} />\n    <c.Tween\n      @of={{c.inserted 'note'}}\n      @opacity={{array 0 1}}\n      @delay={{0.22}}\n      @duration={{0.26}}\n    />\n  </c.Parallel>\n</Choreo>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-slides",
+        "concept": "Stable roles connect changing compositions",
+        "why": "A shared plate and repeated text keep identity between slides while slide-specific copy enters and leaves. The plate is sized as a real box so its gradient does not stretch with a snapshot.",
+        "experiment": "Move forward, reverse mid-transition, and compare the plate edge with the departing sentence. Try Elastic typography and Editorial snap.",
+        "pitfall": "Giving every slide a wholly unrelated identity turns a meaningful rearrangement into disconnected entrances.",
+        "combine": "Combine with presentation gates for click-paced reveals within a slide."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

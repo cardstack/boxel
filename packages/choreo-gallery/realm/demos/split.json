@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "split",
+      "title": "Split view",
+      "group": "Choreo",
+      "lede": "A value read off another element’s measurement.",
+      "apis": ["Choreo", "Spring", "Sprite bounds"],
+      "sample": "// A property function is handed the sprite and the whole changeset, so one\n// element can be animated from ANOTHER element's measurement. The content's\n// left edge is not styled anywhere — it is a keyframe pair read off wherever\n// the bar was measured to be, before and after.\nleftRange = (_s, cs) => {\n  const bar = cs.sprite({ id: 'split-bar' });\n  return [bar.initial.parent.width, bar.final.parent.width];\n};\n\n<Choreo class={{if this.split 'split is-split' 'split'}} as |c|>\n  <aside {{motion id='split-bar'}} />\n  <section {{motion id='split-content'}}>…</section>\n\n  {{! the bar FLIPs and the content chases the bar's measurement on the SAME\n      spring, so the two edges stay welded together the whole way }}\n  <c.Parallel>\n    <c.Move @of={{c.id 'split-bar'}} @spring={{firm}} />\n    <c.Spring @of={{c.id 'split-content'}} @left={{this.leftRange}} @spring={{firm}} />\n  </c.Parallel>\n</Choreo>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-property-steps",
+        "concept": "Geometry can be a measured dependency",
+        "why": "The content's left offset is derived from the sidebar's before and after widths. A property function expresses that relationship without maintaining a duplicate numeric width in application state.",
+        "experiment": "Expand and collapse the sidebar while it moves. Inspect whether the content edge remains aligned with the measured sidebar edge.",
+        "pitfall": "A hard-coded offset becomes stale when text, viewport or sidebar content changes.",
+        "combine": "Combine with camera framing when the available reading area changes with a panel."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "long-take",
+      "title": "Long Take",
+      "group": "3D",
+      "lede": "Nothing on this screen changes. Every frame of it is the camera.",
+      "apis": ["c.Frame", "c.Aim", "c.Pan", "c.SlowZoom", "c.Camera3D"],
+      "sample": "{{! FIVE CONSTRUCTS, and between them every move a camera can make\n    over something that is not moving. Note what is NOT here: no c.Move, no\n    changeset, no c.Perform. The drawing is inert. }}\n<c.Sequence>\n  {{#each SHOTS as |shot|}}\n    {{! arrive — the shot that changes magnification. @padding is the\n        FRACTION of the frame the station should fill, not pixels: it is\n        multiplied into the fitted zoom, so 0 is a camera zoomed to\n        nothing rather than a tight crop. }}\n    <c.Frame @of={{c.id shot.at}} @padding={{shot.fill}} @duration={{shot.move}} />\n    {{! ...or travel, with the zoom HELD. The move you cannot fake with a\n        zoom: attention goes somewhere, scale does not. }}\n    <c.Aim @of={{c.id shot.at}} @duration={{shot.move}} />\n    {{! ...or drift, by exact pixels from wherever we stand }}\n    <c.Pan @x={{shot.x}} @y={{shot.y}} @duration={{shot.move}} />\n\n    {{! A HOLD IS NOT A FREEZE. The slow push is what keeps a held shot\n        alive, and it is one step rather than a second track to keep in\n        step with the first. }}\n    <c.SlowZoom @by={{shot.push}} @duration={{shot.hold}} />\n  {{/each}}\n</c.Sequence>\n\n// and OUTSIDE, a second camera on the same list — its leg for a shot is\n// that shot's own move + hold, so neither region owns the timing and\n// neither can drift.\n<c.Camera3D @yaw={{shot.yaw}} @pitch={{shot.pitch}} @dolly={{shot.dolly}}\n  @duration={{legFor shot}} />",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "spatial-camera3d",
+        "concept": "Two cameras can share a semantic shot list",
+        "why": "The inner 2D camera moves across an unchanged drawing while the outer 3D camera makes a restrained device movement. Both derive their durations from move plus hold in the same shot data.",
+        "experiment": "Compare Gallery stroll and Express tour. Check that the inner explanation and outer movement change pace together.",
+        "pitfall": "Independent duration constants let nested cameras drift apart even when they begin together.",
+        "combine": "Combine with Film chapters when the continuous shot must sit inside a longer narrative."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

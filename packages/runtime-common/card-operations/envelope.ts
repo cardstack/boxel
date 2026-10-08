@@ -652,8 +652,7 @@ export interface ResolvedEnvelopeEntry {
   // whose admission still rests on a predicate.
   decision: GateDecision;
   // This entry's own view of the batch's scope: the batch's caller and row
-  // memo, and — once `stageWriteEntry` has run — the document a create would
-  // write.
+  // memo.
   scope: OperationScope;
 }
 
@@ -1011,15 +1010,13 @@ export function entryWithPayload(
 // payload at all, so a declaration requiring one would be carried out over a
 // card the caller had not said enough to remove.
 //
-// A create's scope comes back carrying the payload as these two steps left it,
-// since that — not what the caller sent — is what the card would be minted
-// from. The transformed entry keeps its `position` and the envelope's own
-// members; only the payload moves.
+// The transformed entry keeps its `position` and the envelope's own members;
+// only the payload moves.
 export async function stageWriteEntry(
   write: ResolvedEnvelopeEntry,
   ctx: TransformContext,
 ): Promise<ResolvedEnvelopeEntry> {
-  let { entry, definition, scope } = write;
+  let { entry, definition } = write;
   if (definition.input) {
     entry = entryWithPayload(
       entry,
@@ -1030,15 +1027,7 @@ export async function stageWriteEntry(
     name: entry.name,
     ...(entry.href ? { id: entry.href } : {}),
   });
-  if (definition.base === 'create') {
-    // Read the way `batchEntryFor` stages it: a named create is filled from
-    // its params, which leave out the members the envelope reads for itself,
-    // and a plain create is minted from the whole resource, local id included.
-    scope = scope.derive({
-      proposed: definition.of ? paramsFor(entry) : (entry.data ?? {}),
-    });
-  }
-  return { ...write, entry, scope };
+  return { ...write, entry };
 }
 
 function own(

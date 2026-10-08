@@ -24,6 +24,7 @@ import {
   type OperationScope,
   type OperationTarget,
 } from '@cardstack/runtime-common/card-operations';
+import { GateTrace } from '@cardstack/runtime-common/card-operations/gate-trace';
 import { fileContentToBytes } from '@cardstack/runtime-common/stream';
 import { urlNamesFile } from '@cardstack/runtime-common/file-def-code-ref';
 import type { CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -1751,7 +1752,6 @@ module(basename(import.meta.filename), function () {
         { kind: 'unattributed' },
         'a scope built without naming a caller has none',
       );
-      assert.strictEqual(newOperationScope(core).proposed, undefined);
     });
 
     test('a scope with a caller resolves exactly as one without', async function (assert) {
@@ -1773,7 +1773,8 @@ module(basename(import.meta.filename), function () {
       let batch = newOperationScope(core, {
         caller: scopeCallerFor('@someone:example.com'),
       });
-      let entry = batch.derive({ proposed: { title: 'Q3' } });
+      let trace = new GateTrace();
+      let entry = batch.derive({ trace });
       await batch.peekInstance(url);
       await entry.peekInstance(url);
       assert.strictEqual(
@@ -1782,18 +1783,18 @@ module(basename(import.meta.filename), function () {
         'the two invocations read the row once between them',
       );
       assert.deepEqual(entry.caller, batch.caller);
-      assert.deepEqual(entry.proposed, { title: 'Q3' });
+      assert.strictEqual(entry.trace, trace);
       assert.strictEqual(
-        batch.proposed,
+        batch.trace,
         undefined,
         'deriving leaves the scope it came from as it was',
       );
       let unattributed = entry.derive({ caller: { kind: 'unattributed' } });
       assert.deepEqual(unattributed.caller, { kind: 'unattributed' });
       assert.strictEqual(
-        unattributed.proposed,
+        unattributed.trace,
         undefined,
-        'a proposed document is one invocation’s and does not carry over',
+        'a trace is one invocation’s and does not carry over',
       );
     });
 

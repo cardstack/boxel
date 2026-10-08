@@ -9,15 +9,16 @@ import {
 import {
   newOperationScope,
   resolveOperation,
-  scopeCallerFor,
   type OperationCore,
 } from './dispatch.ts';
+import { MAX_REMEMBERED_MS } from './gate.ts';
 import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
 import {
   linkStrategyOf,
   OperationFailure,
   unshareableFormatsOf,
+  type OperationDefinition,
 } from './types.ts';
 import type { PrerenderedHtmlFormat } from '../prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
@@ -212,15 +213,7 @@ export async function resolveNamedQuery(
   }
   let actor =
     context.principal?.kind === 'user' ? context.principal.user : undefined;
-  let scope = newOperationScope(core, {
-    caller: scopeCallerFor(actor ?? ''),
-  });
-  let definition = await resolveOperation(
-    core,
-    { kind: 'type', codeRef: on, realm: core.realmURL },
-    operation,
-    scope,
-  );
+  let definition = await declaredQuery(core, on, operation);
   let lowered = lowerQueryOperation(definition, {
     ...(actor === undefined ? {} : { actor }),
     ...(params === undefined ? {} : { params }),
@@ -259,6 +252,105 @@ export async function resolveNamedQuery(
     // store serves every format data-only rather than every format's markup.
     unshareableFormats: unshareableFormatsOf(definition.html),
   };
+}
+
+// The operation `on` declares under `operation`, as this realm resolves it.
+//
+// Resolving reads the type's definition entry, which is a database read, and
+// a dashboard sends one saved search many times over. Each of those requests
+// would otherwise pay that read before the live-search cache could answer it.
+// So the resolved declaration is remembered while the lookup's definition
+// generation holds the value it had before the definition was read, and for
+// at most `MAX_REMEMBERED_MS`. An edit in this process moves the generation,
+// so the next request after it reads the declaration afresh. An edit in a peer
+// process moves it when that process's invalidation notice arrives, and the
+// age bound keeps a lost notice from serving a stale declaration
+// indefinitely. Only a declaration that resolved is remembered: a refusal is
+// read again on the next request.
+//
+// What is remembered is the declaration, never what it lowers to: the actor
+// and the params differ per request and are substituted when each request
+// lowers it. Resolving names no caller and runs under a scope the ACL declined
+// nothing in, which the policy gate admits outright, so the declaration it
+// answers is the same whoever asks.
+//
+// It is remembered under the type as the realm resolves it, its module and
+// name, and not under the code ref as the request spelled it. Every spelling
+// of one type then shares an entry, and nothing else a request puts in the ref
+// reaches the key.
+async function declaredQuery(
+  core: OperationCore,
+  on: CodeRef,
+  operation: string,
+): Promise<OperationDefinition> {
+  let lookup = core.definitionLookup;
+  let generation = lookup.definitionGeneration?.();
+  let type = core.resolveCodeRef(on, new URL(core.realmURL));
+  let key = type
+    ? JSON.stringify([core.realmURL, operation, type.module, type.name])
+    : undefined;
+  let remembered =
+    generation === undefined || key === undefined
+      ? undefined
+      : rememberedDeclarations.get(lookup)?.get(key);
+  if (
+    remembered &&
+    remembered.generation === generation &&
+    Date.now() - remembered.at < MAX_REMEMBERED_MS
+  ) {
+    return remembered.definition;
+  }
+  let at = Date.now();
+  namedQueryStats(core).declarationReads++;
+  let definition = await resolveOperation(
+    core,
+    { kind: 'type', codeRef: on, realm: core.realmURL },
+    operation,
+    newOperationScope(core, {
+      caller: { kind: 'unattributed' },
+      coarseDeclined: 'none',
+    }),
+  );
+  if (generation !== undefined && key !== undefined) {
+    let remembering = rememberedDeclarations.get(lookup);
+    if (!remembering || remembering.size >= MAX_REMEMBERED_DECLARATIONS) {
+      remembering = new Map();
+      rememberedDeclarations.set(lookup, remembering);
+    }
+    remembering.set(key, { generation, at, definition });
+  }
+  return definition;
+}
+
+// What `declaredQuery` last resolved for a realm, an operation and a type, per
+// definition lookup, with the definition generation it read under and when it
+// began reading. A lookup's map starts over once it holds
+// `MAX_REMEMBERED_DECLARATIONS`, which bounds it without tracking which
+// declarations are still asked for.
+const rememberedDeclarations = new WeakMap<
+  OperationCore['definitionLookup'],
+  Map<
+    string,
+    { generation: number; at: number; definition: OperationDefinition }
+  >
+>();
+const MAX_REMEMBERED_DECLARATIONS = 10_000;
+
+// How many times a realm has read a named query's declaration rather than
+// answering it from what it remembered.
+export interface NamedQueryStats {
+  declarationReads: number;
+}
+
+const statsByCore = new WeakMap<OperationCore, NamedQueryStats>();
+
+export function namedQueryStats(core: OperationCore): NamedQueryStats {
+  let stats = statsByCore.get(core);
+  if (!stats) {
+    stats = { declarationReads: 0 };
+    statsByCore.set(core, stats);
+  }
+  return stats;
 }
 
 // A named search as the ad-hoc request that asks for its rendering and nothing

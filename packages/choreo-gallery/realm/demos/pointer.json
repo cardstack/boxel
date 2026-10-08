@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "pointer",
+      "title": "Follow the pointer",
+      "group": "Drag",
+      "lede": "Three springs after the hand.",
+      "apis": ["motionValue", "animate"],
+      "sample": "// Three pairs of values chasing one pointer at three stiffnesses. The lag\n// between them is not scripted — it falls out of the physics.\nx = motionValue(0);\ny = motionValue(0);\n\nmove = (event) => {\n  // Every pointer move RETARGETS the running spring rather than starting a\n  // new one: it keeps its current velocity and bends toward the new point.\n  // That is why fast circles trace a smooth arc instead of a star.\n  animate(this.x,  event.offsetX, tight);   // the orb, on the hand\n  animate(this.rx, event.offsetX, mid);     // the ring, a beat behind\n  animate(this.hx, event.offsetX, loose);   // the halo, last to arrive\n};\n\n<div {{motion style=(styles x=this.x y=this.y)}}></div>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-motion-values",
+        "concept": "A follower needs a resting rule as well as a chase rule",
+        "why": "The pointer, ring and halo use different springs while chasing the same input. When input leaves, they return toward the centre instead of remaining stranded at the last edge.",
+        "experiment": "Move sharply, stop, and leave the stage. Compare Comet tail with Magnetic pointer and watch the order in which the followers return.",
+        "pitfall": "Keeping the last pointer coordinate as the permanent target leaves the demo looking stuck after exit.",
+        "combine": "Combine with gestures to distinguish the input location from the control's hover and press states."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

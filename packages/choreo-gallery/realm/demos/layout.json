@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "layout",
+      "title": "Curves",
+      "group": "Layout",
+      "lede": "Same nodes. Pick the curve they travel on.",
+      "apis": ["layout", "layout=\"position\"", "LayoutGroup"],
+      "sample": "<LayoutGroup>\n  {{! Nothing here animates by name. The class swap restyles the shelf, and\n      layout=true animates each node from where it WAS to where it IS. }}\n  <div class={{if this.grid 'shelf is-grid' 'shelf is-list'}}>\n    {{#each records as |record|}}\n      <div {{motion layout=true transition=this.curve}}>\n        <div {{motion layout=true transition=this.curve}}></div>\n\n        {{! layout='position' — the un-obvious one. A parent that changes\n            SHAPE scales its whole subtree, and text under a non-uniform\n            scale is smeared. 'position' moves this node without taking its\n            parent's scale, so the type stays crisp the whole way. }}\n        <div {{motion layout='position' transition=this.curve}}>\n          <strong>{{record.title}}</strong>\n        </div>\n      </div>\n    {{/each}}\n  </div>\n</LayoutGroup>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-layout",
+        "concept": "The same node can animate between measured layouts",
+        "why": "Changing layout state lets projection compare the element's previous and next boxes. Motion-owned radius and related styles allow correction while the box changes shape.",
+        "experiment": "Toggle repeatedly at different viewport widths. Watch the corners and text while comparing Rubber layout with Crisp shuffle.",
+        "pitfall": "A stylesheet-only radius may distort during scaling because the engine was never told to correct it.",
+        "combine": "Combine with shared layout for continuity when the representation moves to a different node."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "rack",
+      "title": "Rack",
+      "group": "Drag",
+      "lede": "Six arrangements, one score, and a clock you can hold.",
+      "apis": ["c.run", "run.time", "run.paused", "c.Gate", "c.Move"],
+      "sample": "{{! ONE score for the whole journey, not one per leg.\n\n    A changeset has two ends, so five stops looks at first like four scores\n    with the host swapping between them. It is not: a keyframe array is the\n    from-and-to AND ANY WAYPOINTS in one value. Six stops per property is one\n    score, the DOM never changes, and the region compiles exactly once. }}\n<Choreo class='rk-stage' as |c|>\n  <span data-take={{this.take}} {{this.wire c}}></span>\n\n  {{! every tile states all six of its seats; nothing here re-renders }}\n  {{#each this.letters as |l|}}\n    <span class='rk-l' {{motion id=l.key role='tile'}}>{{l.ch}}</span>\n  {{/each}}\n\n  {{! furniture appears only where it is TRUE — one number per stop }}\n  <span class='rk-grid' {{motion id='grid' role='game'}}></span>\n\n  <c.Sequence>\n    <c.Gate />   {{! a score's way of saying \"do not start yet\" }}\n    <c.Parallel>\n      <c.Tween @of={{array (c.role 'tile') (c.role 'blank')}}\n               @x={{this.xs}} @y={{this.ys}}\n               @duration={{SPAN}} @ease='linear' />\n      <c.Tween @of={{c.role 'game'}} @opacity={{this.fadeGame}}\n               @duration={{SPAN}} @ease='linear' />\n    </c.Parallel>\n  </c.Sequence>\n</Choreo>\n\n// One array per property, one entry per stop. A property function is handed\n// the sprite, so each tile answers with its own journey.\nxs = (sprite) => seats.get(sprite.id).map((s) => s.x);\nfadeGame = [0, 0, 0, 0, 0, 1];\n\n// Nothing here is @tracked. A render inside a region is a PASS, so tracked\n// state written from a pointermove would recompile the score sixty times a\n// second — the run is held in a plain field and driven imperatively.\nmove = (event) => {\n  this.p = detent(this.at(event.clientX));   // sticky near a stop, never snapped\n  this.draw();\n};\n\n// one place writes the clock, whatever moved the playhead: a drag, a spring\n// after a throw, or an eased ride from a tap or an arrow key\nprivate draw() {\n  const run = this.run;\n  if (!run) return;\n  if (run.parked) run.advance();             // open the head gate, once\n  run.pause();\n  // parked a hair short: a run that reaches its own duration is FINISHED,\n  // and a finished run replays itself on any later render\n  run.time = (this.p / LAST) * Math.max(0, run.duration - 0.001);\n}",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-gates",
+        "concept": "A scrubbed score can visit several arrangements",
+        "why": "The score includes intermediate arrangements, rather than starting a new layout pass for every notch. The transport samples that one score so reverse travel can visit the same poses.",
+        "experiment": "Scrub slowly from letter order into the plotted arrangement, then reverse halfway. Track a single tile through the intermediate positions.",
+        "pitfall": "Rebuilding a separate score at each notch introduces render gaps and makes quick scrubbing outrun the choreography.",
+        "combine": "Combine with named build dependencies when the explanation needs both spatial arrangements and readable milestones."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

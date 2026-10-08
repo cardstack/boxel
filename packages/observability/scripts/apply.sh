@@ -87,6 +87,9 @@ if [[ "$env_name" != "local" ]]; then
     [[ -n "${!v:-}" ]] \
       || { echo "error: ${v} not set; CI fetches it from SSM in observability-apply-${env_name}.yml — for a local hosted run, export it manually first (see apply-datasources.sh header for the SSM path)" >&2; exit 1; }
   done
+  # Every ${VAR} in the alert files this env pushes, including
+  # provisioning/alerting-hosted/<env>/, read from the files themselves.
+  ./scripts/apply-alerting.sh --env "$env_name" --preflight
 fi
 
 cfg="$(./scripts/render-config.sh "$env_name")"

@@ -21,9 +21,9 @@ import {
 } from '../lib/seed-auth.ts';
 
 /**
- * Thin client over the realm server's `POST /_capture-card` endpoint
+ * Thin client over the realm server's `POST /_capture` endpoint
  * (contract documented at
- * `packages/realm-server/handlers/handle-capture-card.ts`). The CLI
+ * `packages/realm-server/handlers/handle-capture.ts`). The CLI
  * builds the request body and passes the capture spec through verbatim —
  * the server owns validation, so new spec capabilities work here without a
  * CLI change (an unsupported field comes back as a named 400).
@@ -399,10 +399,10 @@ async function runJob(
     ctx.realmServerUrl
       ? ensureTrailingSlash(ctx.realmServerUrl)
       : deriveRealmServerUrl(job.card)
-  }_capture-card`;
+  }_capture`;
   let body = JSON.stringify({
     data: {
-      type: 'capture-card',
+      type: 'capture',
       attributes: {
         realmURL,
         cardId: job.card,

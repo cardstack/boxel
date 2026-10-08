@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "escort",
+      "title": "Escort",
+      "group": "Choreo",
+      "lede": "Read from the card, not animated with it.",
+      "apis": ["c.Follow", "StepComponent", "@name"],
+      "sample": "// A composite step: a new word in the timeline, written in nothing but the\n// published seam. Its children are generic, so a specific step beside it\n// takes the sprite away without an exclusion syntax.\nclass Carry extends StepComponent {\n  node() {\n    return {\n      kind: 'parallel',\n      name: this.args.name,\n      children: [\n        { kind: 'move', generic: true, of: this.args.of, spring },\n        { kind: 'hold', generic: true, of: this.args.of, props: { zIndex: 3 } },\n      ],\n    };\n  }\n}\n\n// …and two values READ from the flight rather than animated with it. Neither\n// can be a tween: a tween would have to know the spring's overshoot in\n// advance, and what a mid-flight retarget does to it.\nconst pin = ({ self, sources: [card] }) => ({\n  x: card.x + card.width - (self.x + self.width),\n  y: card.y - self.y,\n});\n\n<c.Parallel>\n  <Carry @name='carry' @of={{c.moved 'card'}} />\n  <c.Follow @at={{at 'carry'}} @of={{c.id 'badge'}} @to={{c.id 'card'}}\n            @read={{pin}} @rest={{PIN_REST}} @duration={{1.1}} />\n</c.Parallel>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-follow",
+        "concept": "Derived motion stays attached without guessing a curve",
+        "why": "The badge and shadow are derived from the card's current driven values and the pass's measurements. They do not run independent tweens that merely happen to have similar durations.",
+        "experiment": "Send the card to another bay halfway through a flight. Watch the badge corner and shadow during the reversal, then compare the two presets.",
+        "pitfall": "Reading layout every frame adds work and can sample transformed positions; duplicating the spring curve drifts under retargeting.",
+        "combine": "Combine with tethers for a connector that follows the same subject through a workspace."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}
