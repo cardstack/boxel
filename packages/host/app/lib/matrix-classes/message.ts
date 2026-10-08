@@ -1,7 +1,7 @@
 import { guidFor } from '@ember/object/internals';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { TrackedArray } from 'tracked-built-ins';
+import { TrackedArray, TrackedSet } from 'tracked-built-ins';
 
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import {
@@ -19,7 +19,10 @@ import type { RoomMember } from './member';
 
 import type MessageTool from './message-tool';
 import type { FileDef } from '@cardstack/base/file-api';
-import type { TokenUsage } from '@cardstack/base/matrix-event';
+import type {
+  EncodedToolRequest,
+  TokenUsage,
+} from '@cardstack/base/matrix-event';
 import type { EventStatus } from 'matrix-js-sdk';
 
 const ErrorMessage: Record<string, string> = {
@@ -63,6 +66,7 @@ export class Message implements RoomMessageInterface {
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
   @tracked private _expectedToolRequestIds: string[] = [];
+  private _settledToolRequestIds = new TrackedSet<string>();
   @tracked _isCanceled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
@@ -217,23 +221,42 @@ export class Message implements RoomMessageInterface {
     return this._isStreamingFinished === true;
   }
 
-  // The tool-request ids this message's latest event declares, recorded
-  // synchronously as the event starts applying. Building the matching
-  // MessageTools awaits network loads (resolving a tool's declaring skill),
-  // so isStreamingFinished alone never means the tool list is final — the
-  // getters below answer that separately.
-  setExpectedToolRequestIds(ids: string[]) {
-    this._expectedToolRequestIds = ids;
+  // The tool requests this message's latest event declares, recorded
+  // synchronously as the event starts applying — before the builds they gate.
+  // Building the matching MessageTools awaits network loads (resolving a
+  // tool's declaring skill), so isStreamingFinished alone never means the
+  // tool list is final — the getters below answer that separately. A request
+  // without an id yet (its first streamed chunk) can't be matched to later
+  // chunks or to its result, so it doesn't count as expected; a later
+  // replace always carries the id.
+  setExpectedToolRequests(requests: Partial<EncodedToolRequest>[]) {
+    this._expectedToolRequestIds = requests
+      .map((request) => request.id)
+      .filter((id): id is string => Boolean(id));
+  }
+
+  // Records that a terminal result was posted for a declared request whose
+  // MessageTool never got built (its build kept failing or never finished),
+  // so the getters below stop waiting for it and room passes stop re-entering
+  // its build. Survives re-recording the expected requests: the event still
+  // declares the request on every later pass. Chain-recursing, settling the
+  // request on whichever part of a split answer declares it.
+  settleExpectedToolRequest(id: string) {
+    this._settledToolRequestIds.add(id);
+    this.continuedInMessage?.settleExpectedToolRequest(id);
   }
 
   // Whether every tool request this message's own event declares has a built
-  // MessageTool. Per-event — no continuation chasing — because a room pass
-  // processes one event at a time, so each part of a split answer answers for
-  // itself. The lookup goes through the chasing `tools` getter since that is
-  // where consumers will read the built tool from.
+  // MessageTool (or a settled terminal result). The expectations are
+  // per-event — a room pass processes one event at a time, so each part of a
+  // split answer answers for itself — but the lookup goes through the chasing
+  // `tools` getter since that is where consumers will read the built tool
+  // from.
   get allToolsForEventBuilt(): boolean {
-    return this._expectedToolRequestIds.every((id) =>
-      this.tools.some((tool) => tool.toolRequest.id === id),
+    return this._expectedToolRequestIds.every(
+      (id) =>
+        this._settledToolRequestIds.has(id) ||
+        this.tools.some((tool) => tool.toolRequest.id === id),
     );
   }
 
@@ -249,6 +272,21 @@ export class Message implements RoomMessageInterface {
       );
     }
     return this.allToolsForEventBuilt;
+  }
+
+  // The declared request ids across the whole answer that have neither a
+  // built MessageTool nor a settled terminal result — what the tool drain
+  // resolves 'invalid' when it gives up waiting for the builds.
+  get unbuiltExpectedToolRequestIds(): string[] {
+    let missing = this._expectedToolRequestIds.filter(
+      (id) =>
+        !this._settledToolRequestIds.has(id) &&
+        !this.tools.some((tool) => tool.toolRequest.id === id),
+    );
+    if (this.hasContinuation && this.continuedInMessage) {
+      missing.push(...this.continuedInMessage.unbuiltExpectedToolRequestIds);
+    }
+    return [...new Set(missing)];
   }
 
   get updated(): Date {

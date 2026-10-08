@@ -50,6 +50,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type StoreService from './store';
+import type { Message } from '../lib/matrix-classes/message';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -490,8 +491,9 @@ export default class ToolService extends Service {
         // Requeue until the Message reports the finalized state — chain-aware,
         // so a head whose continuation is still streaming or building keeps
         // waiting; bounded so a message that never catches up still falls
-        // through and validates whatever tools have built, each with a real
-        // (terminal) result, instead of requeuing forever.
+        // through: built tools are validated to a real (terminal) result
+        // below, and each declared request whose tool never got built is
+        // resolved 'invalid' and settled so nothing waits on it again.
         if (
           !message ||
           ((message.isStreamingFinished !== true ||
@@ -516,6 +518,17 @@ export default class ToolService extends Service {
             );
             continue;
           }
+          // A declared request with no built MessageTool has no other path to
+          // a terminal result — the bot is waiting on the call and the
+          // synthetic 'applying' spinner only clears on one. Resolve each
+          // 'invalid' and settle it, which also stops room passes from
+          // re-entering a build that never succeeds. Built tools proceed to
+          // normal validation below.
+          await this.invalidateUnbuiltExpectedTools(
+            roomId!,
+            message,
+            'The tool for this call could not be prepared; command was not started',
+          );
         } else {
           this.toolFinalizationRetries.delete(`${roomId}|${eventId}`);
         }
@@ -742,6 +755,64 @@ export default class ToolService extends Service {
         )}s; command was not started`,
         context: await this.operatorModeStateService.getSummaryForAIBot(),
       });
+    }
+    // Wedged processing also means in-flight tool builds never finish, and a
+    // declared request with no built MessageTool is invisible to the loop
+    // above — resolve those too, so neither the bot nor the spinner waits on
+    // a build that can't complete.
+    await this.invalidateUnbuiltExpectedTools(
+      roomId,
+      message,
+      `Room processing did not finish within ${Math.round(
+        STUCK_PROCESSING_TIMEOUT_MS / 1000,
+      )}s; command was not started`,
+    );
+  }
+
+  // Posts a terminal 'invalid' result for every declared tool request on this
+  // message (chain-aware) that has no built MessageTool, then settles the
+  // request so the finalization gates stop waiting for its build. Terminal
+  // for auto-execution: a later drain pass must not execute a request the
+  // model has been told was not started.
+  private async invalidateUnbuiltExpectedTools(
+    roomId: string,
+    message: Message,
+    failureReason: string,
+  ) {
+    if (message.agentId !== this.matrixService.agentId) {
+      return;
+    }
+    for (let commandRequestId of message.unbuiltExpectedToolRequestIds) {
+      if (
+        this.currentlyExecutingToolRequestIds.has(commandRequestId) ||
+        this.executedToolRequestIds.has(commandRequestId) ||
+        this.claimedToolRequestIds.has(commandRequestId)
+      ) {
+        continue;
+      }
+      this.claimedToolRequestIds.add(commandRequestId);
+      let invokedToolFromEventId =
+        this.getCurrentEventIdForCommandRequest(roomId, commandRequestId) ??
+        message.eventId;
+      try {
+        await this.matrixService.sendToolResultEvent({
+          roomId,
+          invokedToolFromEventId,
+          toolCallId: commandRequestId,
+          status: 'invalid',
+          failureReason,
+          context: await this.operatorModeStateService.getSummaryForAIBot(),
+        });
+        message.settleExpectedToolRequest(commandRequestId);
+      } catch (e) {
+        console.error(
+          `could not send invalid tool result for unbuilt request ${commandRequestId}`,
+          e,
+        );
+        // Unclaim so a later give-up pass can retry the terminal result —
+        // without it nothing else will ever resolve this request.
+        this.claimedToolRequestIds.delete(commandRequestId);
+      }
     }
   }
 

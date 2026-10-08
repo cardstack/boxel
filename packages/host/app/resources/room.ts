@@ -769,7 +769,9 @@ export class RoomResource extends Resource<Args> {
     // otherwise skip the message and the tool drain would run a partial tool
     // list, leaving the late tool stuck in "applying" with nothing to run it.
     // Re-entering mid-build is safe — updateMessage re-checks for a duplicate
-    // after each build before pushing.
+    // after each build before pushing. Bounded, too: a build that keeps
+    // failing is eventually resolved 'invalid' and settled by the tool
+    // drain's give-up paths, after which this condition stops re-entering.
     if (
       !message?.isStreamingOfEventFinished ||
       !message.allToolsForEventBuilt
