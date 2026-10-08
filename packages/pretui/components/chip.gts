@@ -57,7 +57,10 @@ export class Chip extends Component<ChipSignature> {
           padding: 0 var(--boxel-sp-2xs);
           border-radius: var(--boxel-border-radius-xs);
           /* --text-ui-xs is the legacy size knob catalog chips still set */
-          font-size: var(--pretui-chip-font-size, var(--boxel-font-size-2xs));
+          font-size: var(
+            --pretui-chip-font-size,
+            var(--text-ui-xs, var(--boxel-font-size-2xs))
+          );
           font-weight: 500;
           letter-spacing: var(--boxel-lsp-xs);
           white-space: nowrap;
