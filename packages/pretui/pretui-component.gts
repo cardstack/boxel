@@ -19,6 +19,7 @@ import { Spec } from 'https://cardstack.com/base/spec';
 import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
 import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';
 import StringField from 'https://cardstack.com/base/string';
+import enumField from 'https://cardstack.com/base/enum';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import GlimmerComponent from '@glimmer/component';
@@ -366,6 +367,55 @@ function examplesLoadFor(name: string): Loaded<ExampleSpec[]> {
 
 // ── The card ─────────────────────────────────────────────────────────────
 
+// Closed vocabularies for the Spec's classification fields: the edit form
+// offers these as dropdowns. Each list covers every value the catalog's
+// Specs store, so existing instances read unchanged.
+const CATEGORY_OPTIONS = [
+  'Actions',
+  'Agentic',
+  'Authoring Tools',
+  'Containers',
+  'Data Display',
+  'Feedback',
+  'Forms',
+  'Foundations',
+  'Inputs',
+  'Layout',
+  'Media',
+  'Motion & Effects',
+  'Navigation',
+  'Overlays',
+].map((value) => ({ value, label: value }));
+const TIER_OPTIONS = [
+  'Primitive',
+  'Element',
+  'Compound',
+  'Block',
+  'Surface',
+  'Runtime',
+].map((value) => ({ value, label: value }));
+const OWNERSHIP_OPTIONS = [
+  { value: 'pretui', label: 'Pret UI' },
+  { value: 'boxel-ui', label: 'boxel-ui' },
+];
+const ADOPTION_OPTIONS = [
+  { value: 'in-use', label: 'In use' },
+  { value: 'demo-ready', label: 'Demo ready' },
+  { value: 'experimental', label: 'Experimental' },
+];
+const SOURCE_OPTIONS = [
+  { value: 'design-v1', label: 'design-v1' },
+  { value: 'react-ecosystem', label: 'React ecosystem' },
+  { value: 'boxel-ui', label: 'boxel-ui' },
+  { value: 'ember-freestyle', label: 'ember-freestyle' },
+  { value: 'webawesome', label: 'Web Awesome' },
+  { value: 'pretui', label: 'Pret UI' },
+];
+const DEMAND_OPTIONS = [1, 2, 3, 4, 5].map((value) => ({
+  value,
+  label: String(value),
+}));
+
 export class PretUISpec extends Spec {
   static displayName = 'Pret UI Spec';
   static prefersWideFormat = true;
@@ -378,17 +428,25 @@ export class PretUISpec extends Spec {
   // category = the primary user-facing home; tier = compositional
   // complexity; tags = cross-cutting capabilities. Independent axes — never
   // infer one from another.
-  @field category = contains(StringField);
-  @field tier = contains(StringField);
+  @field category = contains(
+    enumField(StringField, { options: CATEGORY_OPTIONS }),
+  );
+  @field tier = contains(enumField(StringField, { options: TIER_OPTIONS }));
   @field tags = containsMany(StringField);
-  @field ownership = contains(StringField);
+  @field ownership = contains(
+    enumField(StringField, { options: OWNERSHIP_OPTIONS }),
+  );
   @field implementationStatus = contains(StringField);
-  @field adoptionStatus = contains(StringField);
+  @field adoptionStatus = contains(
+    enumField(StringField, { options: ADOPTION_OPTIONS }),
+  );
   @field introducedVersion = contains(StringField);
   // ── legacy axes, retained through the migration ──
   @field territory = contains(StringField);
   @field stage = contains(StringField);
-  @field source = contains(StringField);
+  @field source = contains(
+    enumField(StringField, { options: SOURCE_OPTIONS }),
+  );
   @field lineage = contains(StringField);
   @field version = contains(StringField);
   @field brief = contains(StringField);
@@ -404,7 +462,9 @@ export class PretUISpec extends Spec {
   @field liveInUse = contains(BooleanField);
   // cross-library demand signal, 1-5 — how many independent kits converged
   // on this component (sourcing/index.md dupe density)
-  @field demand = contains(NumberField);
+  @field demand = contains(
+    enumField(NumberField, { options: DEMAND_OPTIONS }),
+  );
   // the write-up lives in the sibling <name>.md; the indexer extracts its
   // content into the linked MarkdownDef, so the .md stays the single source.
   // searchable puts that content in the spec's search doc, once.
