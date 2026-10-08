@@ -42,3 +42,7 @@ Where it is thinner: no persistence, no per-component theme override, and no way
 The frame applies a theme rather than being themed by one — it establishes the token scope its subtree renders in, using boxel-ui's own theme helpers rather than hand-rolling the scoping.
 
 Its own controls take the active theme's tokens, so the switch and select restyle with the theme they switch to.
+
+The island paints its own surface, `--background` with `--foreground` in `--font-sans`, because its tokens flip below the card's own surface and the card's would otherwise show through. It grows to fill the frame. The controls are a group named "Theme preview"; the theme's name, when shown, is `--muted-foreground`.
+
+The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -69,7 +69,13 @@ interface ThemeControlsSignature {
 }
 
 const ThemeControls: TemplateOnlyComponent<ThemeControlsSignature> = <template>
-  <span class='pretui-theme-controls' data-test-pretui-theme-bar ...attributes>
+  <span
+    class='pretui-theme-controls'
+    role='group'
+    aria-label='Theme preview'
+    data-test-pretui-theme-bar
+    ...attributes
+  >
     <Switch
       @isEnabled={{@frame.isDarkMode}}
       @onChange={{@frame.toggleDarkMode}}
@@ -230,7 +236,11 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
     </div>
     <style scoped>
       @layer PretComponent {
+        /* a column, so the surface grows to fill the frame: a percentage
+           min-height can't, since the frame's own height isn't definite */
         .pretui-theme-frame {
+          display: flex;
+          flex-direction: column;
           min-height: 100%;
         }
         /* the scoped theme channel only carries custom properties, so the
@@ -245,8 +255,8 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
            applies its own background, foreground and font, or the card's show
            through */
         .pretui-theme-surface {
-          min-height: 100%;
-          background-color: var(--canvas);
+          flex: 1 0 auto;
+          background-color: var(--background);
           color: var(--foreground);
           font-family: var(--font-sans);
         }
