@@ -4,7 +4,10 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import XIcon from '@cardstack/boxel-icons/x';
 import { OwnedTimers, listen, ownsTimers } from '../focus';
+import { Button } from './button';
+import { VisuallyHidden } from './visually-hidden';
 import { PRETUI_TONES, emit, firstDefined, resolveSize, resolveTone } from '../pretui-primitives';
 import type {
   ControlAliasArgs,
@@ -394,8 +397,16 @@ export class Autocomplete extends Component<AutocompleteSignature> {
   get emptyText(): string {
     return this.args.emptyText ?? 'No matches';
   }
+  // a disabled field shows no Clear, since Clear can't act on it
   get clearable(): boolean {
-    return (this.args.clearable ?? false) && this.value.length > 0;
+    return (
+      (this.args.clearable ?? false) && !this.inert && this.value.length > 0
+    );
+  }
+  // Disabled stays focusable (aria-disabled, not the native attribute), so
+  // readonly is what stops the browser editing the text.
+  get blocksTyping(): boolean {
+    return this.inert || this.readonly;
   }
   get clearLabel(): string {
     return 'Clear ' + this.fieldLabel;
@@ -701,15 +712,16 @@ export class Autocomplete extends Component<AutocompleteSignature> {
       data-busy={{if this.busy 'true'}}
       data-invalid={{if this.invalid 'true'}}
       data-disabled={{if this.inert 'true'}}
-      data-test-pretui-autocomplete
       ...attributes
       {{ownsTimers this.timers}}
       {{listen 'focusout' this.handleFocusOut}}
       {{listen 'mouseover' this.handleHover}}
       {{listen 'mousedown' this.handlePress}}
+      data-test-pretui-autocomplete
     >
       {{#if this.ownsLabel}}
-        <label class='pretui-ac-sr' for={{this.inputId}}>{{this.fieldLabel}}</label>
+        <label for={{this.inputId}}><VisuallyHidden
+          >{{this.fieldLabel}}</VisuallyHidden></label>
       {{/if}}
 
       <div class='pretui-ac-field'>
@@ -729,23 +741,25 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           aria-disabled={{if this.inert 'true'}}
           aria-busy={{if this.busy 'true'}}
           placeholder={{@placeholder}}
-          readonly={{this.readonly}}
+          readonly={{this.blocksTyping}}
           value={{this.value}}
-          data-test-pretui-autocomplete-input
           {{on 'input' this.handleInput}}
           {{on 'focus' this.handleFieldFocus}}
           {{on 'keydown' this.handleKeyDown}}
+          data-test-pretui-autocomplete-input
         />
         {{#if this.busy}}
           <span class='pretui-ac-spin' aria-hidden='true'></span>
         {{else if this.clearable}}
-          <button
-            type='button'
+          <Button
             class='pretui-ac-clear'
+            @tone='neutral'
+            @appearance='plain'
+            @size='xs'
             aria-label={{this.clearLabel}}
-            data-test-pretui-autocomplete-clear
             {{on 'click' this.clear}}
-          ><span class='pretui-ac-cross' aria-hidden='true'></span></button>
+            data-test-pretui-autocomplete-clear
+          ><XIcon width='12' height='12' aria-hidden='true' /></Button>
         {{/if}}
       </div>
 
@@ -794,8 +808,8 @@ export class Autocomplete extends Component<AutocompleteSignature> {
                   aria-label={{row.label}}
                   aria-selected={{if row.active 'true' 'false'}}
                   aria-disabled={{if row.disabled 'true'}}
-                  data-test-pretui-autocomplete-option={{row.value}}
                   {{on 'click' (fn this.chooseRow row)}}
+                  data-test-pretui-autocomplete-option={{row.value}}
                 ></span>
               </li>
             {{/each}}
@@ -814,11 +828,10 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         </ul>
       {{/if}}
 
-      <span
-        class='pretui-ac-sr'
+      <VisuallyHidden
         role='status'
         data-test-pretui-autocomplete-status
-      >{{this.suggestionStatus}}</span>
+      >{{this.suggestionStatus}}</VisuallyHidden>
     </div>
     <style scoped>
       @layer PretComponent {
@@ -826,43 +839,58 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           position: relative;
           display: block;
           min-width: 0;
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
         }
+        /* the ladder has no step under 11px, so xs and s share it */
         .pretui-ac[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-ac[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-ac[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-ac[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
-        /* tone sets custom properties only; the recipes below read them, so a
-           season retints the field without a rule being touched */
+        /* tone sets custom properties only: the fill hue for tints, its -ink
+           for text and lines, and the default field's edge (--input when
+           neutral, the -ink otherwise, so a tone shows in both schemes) */
+        .pretui-ac {
+          --pretui-ac-edge: var(--pretui-tone-ink);
+        }
         .pretui-ac[data-tone='neutral'] {
           --pretui-tone: var(--foreground);
+          --pretui-tone-ink: var(--foreground);
+          --pretui-ac-edge: var(--input);
         }
         .pretui-ac[data-tone='primary'] {
           --pretui-tone: var(--primary);
+          --pretui-tone-ink: var(--primary-ink);
         }
         .pretui-ac[data-tone='info'] {
-          --pretui-tone: var(--pretui-info, var(--boxel-blue));
+          --pretui-tone: var(--info);
+          --pretui-tone-ink: var(--info-ink);
         }
         .pretui-ac[data-tone='success'] {
-          --pretui-tone: var(--success, var(--boxel-success));
+          --pretui-tone: var(--success);
+          --pretui-tone-ink: var(--success-ink);
         }
         .pretui-ac[data-tone='warning'] {
-          --pretui-tone: var(--warning, var(--boxel-warning));
+          --pretui-tone: var(--warning);
+          --pretui-tone-ink: var(--warning-ink);
         }
         .pretui-ac[data-tone='danger'] {
           --pretui-tone: var(--destructive);
+          --pretui-tone-ink: var(--destructive-ink);
         }
         .pretui-ac[data-tone='attention'] {
-          --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
+          --pretui-tone: var(--attention);
+          --pretui-tone-ink: var(--attention-ink);
         }
+        /* the edge is one variable: appearances and states set it, and only
+           this rule draws it, so no selector has to outrank another */
         .pretui-ac-field {
           position: relative;
           display: flex;
@@ -871,36 +899,58 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           min-width: 0;
           min-height: var(--pretui-ac-h, 2.24em);
           padding-inline: 0.5em;
-          border-radius: var(--radius);
+          border-radius: var(--boxel-border-radius);
+          box-shadow: 0 0 0 1px var(--pretui-ac-edge);
+        }
+        /* edges are drawn in the tone's -ink: the fill hue misses the 3:1 a
+           field boundary needs */
+        .pretui-ac[data-appearance='outlined'],
+        .pretui-ac[data-appearance='accent'] {
+          --pretui-ac-edge: var(--pretui-tone-ink);
+        }
+        .pretui-ac[data-appearance='filled'],
+        .pretui-ac[data-appearance='plain'] {
+          --pretui-ac-edge: transparent;
         }
         .pretui-ac[data-appearance='filled-outlined'] .pretui-ac-field {
-          background: color-mix(in oklch, var(--pretui-tone) 6%, var(--field, var(--boxel-light)));
-          box-shadow: 0 0 0 1px var(--input);
+          background-color: color-mix(
+            in oklch,
+            var(--pretui-tone) 6%,
+            var(--field)
+          );
+          color: var(--foreground);
         }
         .pretui-ac[data-appearance='outlined'] .pretui-ac-field {
-          background: var(--card);
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-tone) 45%, var(--border));
+          background-color: var(--card);
+          color: var(--card-foreground);
         }
         .pretui-ac[data-appearance='filled'] .pretui-ac-field {
-          background: color-mix(in oklch, var(--pretui-tone) 15%, var(--card));
+          background-color: color-mix(
+            in oklch,
+            var(--pretui-tone) 15%,
+            var(--card)
+          );
+          color: var(--card-foreground);
         }
         .pretui-ac[data-appearance='plain'] .pretui-ac-field {
-          background: transparent;
+          background-color: transparent;
         }
         .pretui-ac[data-appearance='accent'] .pretui-ac-field {
-          background: var(--field, var(--boxel-light));
-          box-shadow: 0 0 0 1px var(--pretui-tone);
+          background-color: var(--field);
+          color: var(--foreground);
         }
-        .pretui-ac-field:hover {
-          box-shadow: 0 0 0 1px var(--line-strong, var(--boxel-400));
+        /* hover strengthens a neutral field's gray edge; a toned or inked
+           edge is already strong */
+        .pretui-ac[data-tone='neutral']:not([data-appearance='outlined'], [data-appearance='accent'], [data-invalid='true'])
+          .pretui-ac-field:hover {
+          --pretui-ac-edge: var(--border-strong);
         }
         .pretui-ac[data-invalid='true'] .pretui-ac-field {
-          box-shadow: 0 0 0 1px var(--destructive);
+          --pretui-ac-edge: var(--destructive-ink);
         }
-        /* focus wins over both hover and the invalid ring — a reader must
-           always be able to see where they are */
-        .pretui-ac-field:focus-within,
-        .pretui-ac[data-invalid='true'] .pretui-ac-field:focus-within {
+        /* focus draws the box-shadow itself, so it wins over hover and the
+           invalid edge: a reader must always see where they are */
+        .pretui-ac-field:focus-within {
           box-shadow: 0 0 0 2px var(--ring);
         }
         .pretui-ac[data-disabled='true'] {
@@ -911,60 +961,22 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           min-width: 0;
           height: 2em;
           border: 0;
-          background: transparent;
-          color: var(--foreground);
-          font: inherit;
-          letter-spacing: var(--track-ui, 0.01em);
+          background-color: transparent;
+          color: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: inherit;
           outline: none;
         }
         .pretui-ac-input::placeholder {
-          color: var(--ink-3, var(--boxel-400));
-        }
-        .pretui-ac-clear {
-          flex: none;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 1.4em;
-          height: 1.4em;
-          padding: 0;
-          border: 0;
-          border-radius: var(--radius-sm, 5px);
-          background: transparent;
           color: var(--muted-foreground);
-          cursor: pointer;
         }
-        .pretui-ac-clear:hover {
-          background: var(--hover, rgb(0 0 0 / 0.05));
-          color: var(--foreground);
-        }
-        .pretui-ac-clear:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: -1px;
-        }
-        /* Drawn from two borders rather than an svg, so the field stays legal
-           inside any role a caller wraps it in. */
-        .pretui-ac-cross {
-          position: relative;
-          width: 0.6em;
-          height: 0.6em;
-        }
-        .pretui-ac-cross::before,
-        .pretui-ac-cross::after {
-          content: '';
-          position: absolute;
-          inset-block-start: 0.26em;
-          inset-inline-start: 0;
-          width: 0.6em;
-          height: 1.2px;
-          border-radius: 1px;
-          background: currentColor;
-        }
-        .pretui-ac-cross::before {
-          transform: rotate(45deg);
-        }
-        .pretui-ac-cross::after {
-          transform: rotate(-45deg);
+        /* a square 1.5rem target: Button's xs height, with no inline padding */
+        .pretui-ac-clear {
+          --pretui-button-px: 0;
+          --pretui-button-min-w: 1.5rem;
+
+          flex: none;
         }
         @keyframes pretui-ac-spin {
           to {
@@ -977,32 +989,34 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           height: 1.04em;
           border-radius: 50%;
           border: 1.5px solid color-mix(in oklch, currentColor 25%, transparent);
-          border-top-color: var(--pretui-tone, currentColor);
+          border-top-color: var(--pretui-tone-ink);
           animation: pretui-ac-spin 0.7s linear infinite;
         }
         /* The layer renders IN PLACE: a portaled surface cannot
-           inherit the season's tokens, which is the whole theming contract. */
+           inherit the theme's tokens, which is the whole theming contract. */
         .pretui-ac-list {
           position: absolute;
-          z-index: 20;
+          z-index: var(--pretui-z-dropdown, 60);
           inset-inline: 0;
-          inset-block-start: calc(100% + 4px);
+          inset-block-start: calc(100% + var(--boxel-sp-4xs));
           margin: 0;
           padding: 0.25em;
           max-height: 16em;
           overflow-y: auto;
           list-style: none;
-          border-radius: var(--radius);
-          background: var(--popover);
-          box-shadow: 0 0 0 1px var(--border),
-            0 6px 18px var(--shadow-ink-mid, rgb(0 0 0 / 0.08));
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--popover);
+          color: var(--popover-foreground);
+          box-shadow:
+            0 0 0 1px var(--border),
+            var(--shadow-md);
           animation: pretui-ac-drop var(--pretui-dur-snap, 180ms)
             var(--pretui-ease-snap, ease) both;
         }
         @keyframes pretui-ac-drop {
           from {
             opacity: 0;
-            transform: translateY(-3px);
+            transform: translateY(-0.1875rem);
           }
         }
         .pretui-ac-row {
@@ -1012,11 +1026,11 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           gap: 0.5em;
           min-width: 0;
           padding: 0.34em 0.5em;
-          border-radius: var(--radius-sm, 6px);
+          border-radius: var(--boxel-border-radius-sm);
           cursor: pointer;
         }
         .pretui-ac-row[data-active='true'] {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
         }
         .pretui-ac-face {
           position: relative;
@@ -1048,15 +1062,15 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          color: var(--foreground);
         }
         .pretui-ac-hit {
           font-weight: 600;
-          color: var(--pretui-tone, var(--primary));
+          /* the tone's -ink: the fill hue misses 4.5:1 as text */
+          color: var(--pretui-tone-ink);
         }
         .pretui-ac-meta {
           flex: none;
-          font-size: 0.86em;
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--muted-foreground);
         }
@@ -1077,19 +1091,10 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         }
         .pretui-ac-none-text {
           font-weight: 500;
-          color: var(--foreground);
         }
         .pretui-ac-none-hint {
-          font-size: 0.86em;
+          font-size: var(--boxel-font-size-2xs);
           color: var(--muted-foreground);
-        }
-        .pretui-ac-sr {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          overflow: hidden;
-          clip-path: inset(50%);
-          white-space: nowrap;
         }
         @media (pointer: coarse) {
           .pretui-ac-row {

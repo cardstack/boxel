@@ -32,7 +32,7 @@ That last clause is the whole difference from **Combobox**: an autocomplete's va
 <:empty> — replaces the built-in empty line
 ```
 
-**`@onCommit` is the callback that distinguishes typing from meaning it.** It fires on Enter, a click or a blur, and it tells you *which* happened: a suggestion object when one was chosen, `undefined` when the reader meant their own text.
+**`@onCommit` is the callback that distinguishes typing from meaning it.** It fires on Enter, a click or a blur, and it tells you _which_ happened: a suggestion object when one was chosen, `undefined` when the reader meant their own text.
 
 **`@enterCommits` defaults to `'deliberate'`, and that is the interesting decision.** When the highlight and the typed text disagree, Enter takes the typed text unless the reader deliberately moved to the highlight. An automatic highlight does **not** win Enter — so `@autoHighlight` is a visual aid rather than a trap that silently replaces what someone typed.
 
@@ -51,6 +51,7 @@ Where it is thinner: no multi-select or token mode — that is **TokenInput** �
 ## Accessibility
 
 - **Rows are rendered inside an `aria-hidden` face, and the option's accessible name is computed rather than scraped.** That is what makes `<:item>` safe: any markup is legal in the block because none of it reaches the accessibility tree.
+- **`@disabled` keeps the field focusable.** It sets `aria-disabled` and `readonly` rather than the native `disabled`, so a reader can still reach the field and hear that it's unavailable, while the text can't be edited. The Clear button is hidden.
 - **`@busy` retains focus.** A field that disables itself while fetching suggestions throws the reader to the document mid-word.
 - **The field is always named** — through `@label` as an `sr-only` label, or through a wrapper's `@controlId`.
 - **`@minChars` suppresses the layer silently.** A reader who types one character and gets nothing is not told why; if the threshold is high, say so in `@placeholder` or in help text.
@@ -59,8 +60,8 @@ Where it is thinner: no multi-select or token mode — that is **TokenInput** �
 
 ## Theming
 
-Tone, appearance and size resolve through the kit's shared recipe system, so the field matches every other control in a form at the same size.
+Tone, appearance and size resolve through the kit's shared recipe system, so the field matches every other control in a form at the same size. A tone sets two properties: `--pretui-tone`, the fill (`--primary`, `--info`, `--success`, `--warning`, `--destructive`, `--attention`) for tints, and `--pretui-tone-ink`, its `-ink`, for rings, the busy arc and the matched text, since a fill misses the contrast a line or text needs. The field reads `--field` or `--card` with its foreground; its edge is `--input` when neutral (`--border-strong` on hover) and the tone's `-ink` otherwise, `--destructive-ink` when invalid, `--ring` for focus and `--muted-foreground` for the placeholder. Sizes come from `--pretui-size-*`, falling back to `--boxel-font-size-2xs` (xs and s), `-xs` (m, as on Select), `-sm` (l) and `--boxel-font-size` (xl).
 
-The suggestion layer rides the kit's overlay tokens rather than defining its own surface, which is what keeps an autocomplete's dropdown at the same elevation and radius as a **Select**'s or a **Combobox**'s in the same season — three components that would look like three different products if each owned its own popover styling.
+The suggestion layer is a `--popover` surface with `--popover-foreground`, `--shadow-md`, `--boxel-border-radius` and the kit's `dropdown` stacking tier, the same elevation and radius as a **Select**'s or a **Combobox**'s, so three components don't look like three different products. The clear button is a plain neutral **Button** with a boxel-icons `x`.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

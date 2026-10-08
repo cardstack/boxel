@@ -240,6 +240,18 @@ module('controls-entry | Toggle', function (hooks) {
     assert.strictEqual(button.getAttribute('title'), 'Pin this row');
   });
 
+  test('a disabled field with a value shows no Clear', async function (assert) {
+    await render(<template>
+      <Autocomplete
+        @items={{ITEMS}}
+        @defaultValue='Berlin'
+        @clearable={{true}}
+        @disabled={{true}}
+      />
+    </template>);
+    assert.strictEqual(one('[data-test-pretui-autocomplete-clear]'), null);
+  });
+
   test('the treatment is reflected as data attributes', async function (assert) {
     await render(<template>
       <Toggle @tone='destructive' @size='lg' @pressed={{true}}>X</Toggle>
@@ -598,6 +610,7 @@ module('controls-entry | Autocomplete', function (hooks) {
     let input = one(FIELD) as HTMLInputElement;
     assert.strictEqual(input.getAttribute('aria-disabled'), 'true');
     assert.false(input.disabled, 'aria-disabled, never the native attribute');
+    assert.true(input.readOnly, 'readonly, so the browser cannot edit the text');
     await focus(input);
     assert.strictEqual(input.getAttribute('aria-expanded'), 'false');
     assert.strictEqual(
