@@ -73,6 +73,7 @@ This package includes automated linting checks for JavaScript, TypeScript, and G
 - **ESLint**: Validates `.ts` and `.gts` files
 - **ember-template-lint**: Validates `.hbs` files
 - **ember-tsc**: TypeScript type checking
+- **lint:css-vars** (`lint/css-variables.ts`): CSS custom properties in `.gts` styles
 
 ### Running Linting
 
@@ -90,9 +91,25 @@ Individual linting commands:
 pnpm lint:js      # ESLint check
 pnpm lint:hbs     # Template lint check
 pnpm lint:types   # TypeScript type check
+pnpm lint:css-vars # CSS custom properties (see below)
 ```
 
 These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
+
+### CSS variable lint
+
+A `var(--x)` that nothing defines resolves to nothing, so the property silently falls back. `pnpm lint:css-vars` reads every `var()` in `contents/` and reports:
+
+| Rule                                  | Catches                                                                                                                          | Use instead                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `css-variables/undefined`             | A variable that is not in `packages/boxel-ui/src/styles/*.css`, not a documented Pret UI knob, and not declared in the same file | The theme token for the role (`theme.css`), or declare the variable in the component's own styles. `--font-heading` becomes `--boxel-heading-font-family` (`--boxel-section-heading-font-family` for h2, `--boxel-subheading-font-family` for h3); body text is `--font-sans`, a mono register `--font-mono` |
+| `css-variables/theme-fallback`        | `var(--foreground, #333)`: a fallback on a theme contract token                                                                  | `var(--foreground)`. Every card renders under a theme that defines the contract; `CardContainer` is the only place that carries a fallback                                                                                                                                                                   |
+| `css-variables/private-name-fallback` | `var(--x-ink, var(--foreground))`: a private name with a theme variable as its fallback                                          | `var(--foreground)`, dropping the private name. A per-instance knob a component documents (`--pretui-button-radius`) is declared by the component and is not flagged                                                                                                                                         |
+| `css-variables/font-shorthand`        | `font: 600 0.8rem/1.2 …` (`font: inherit` is allowed)                                                                            | `font-size` and `font-weight`, with `line-height` only where it differs from the body role                                                                                                                                                                                                                   |
+
+The defined set is derived from the checkout on every run: custom properties declared in `packages/boxel-ui/src/styles/*.css`, and `--pretui-*` names declared or documented in `packages/pretui/components`. The theme contract is what `theme.css` declares. Nothing is typed into the script. A variable one file declares and another reads (a shared defaults module) is reported, since the read has no declaration in its own component; declare it where it is read.
+
+`lint/css-variables-baseline.json` records the violations the catalog already had when the rule landed, as a count per file, rule and variable. Those are not reported; any occurrence beyond the recorded count is. Regenerate it, after fixing violations, with `node lint/css-variables.ts --write-baseline`; `--no-baseline` lists everything. The script lives in `lint/`, not `scripts/`, because the catalog's own CI removes `scripts/` before it runs `pnpm run lint`. `pnpm test:css-vars` runs its tests.
 
 ### Catalog lint in boxel CI
 

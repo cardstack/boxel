@@ -1,0 +1,1982 @@
+[
+  {
+    "file": "packages/catalog/contents/19dee3-virtual-try-on-application/garment.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/components/tsp.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--tsp-center-opacity",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/components/tsp.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--tsp-motif",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/fixture.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/guest.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/host.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/person.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/41e20f-wedding-table-seating-planner/table.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 10
+  },
+  {
+    "file": "packages/catalog/contents/46f065-popover/example/popover-playground-example.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/46f065-popover/popover.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/4b6602-wine-cellar-card-definition/wine-bottle.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--wb-liquid",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/4b6602-wine-cellar-card-definition/wine-bottle.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--wb-rule",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/5ee9e6-color-tree/components/color-tree-studio.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--fx-color",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/5ee9e6-color-tree/components/color-tree-studio.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--fx-x",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/5ee9e6-color-tree/components/color-tree-studio.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--fx-y",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/673fb6-blackjack-cardgame-definition/blackjack.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-box-shadow-sm",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/673fb6-blackjack-cardgame-definition/game-result.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/673fb6-blackjack-cardgame-definition/validation-steps.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--validation-content-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/6a076d-ai-image-generator/ai-image.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/6a076d-ai-image-generator/components/generator.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 20
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--author-link-icon-size",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--author-thumbnail-size",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-body-sm",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-body",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-display-l",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-eyebrow",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-family",
+    "count": 13
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-name",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-pullquote",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-radius-pill",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-shadow-card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-shadow-portrait",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-tracking-eyebrow",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-tracking-tight",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/author.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-tracking-tighter",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-app.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-category.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 6
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-category.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--category-swatch",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 24
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-canvas-max",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-body",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-eyebrow",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-family",
+    "count": 8
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-h2",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-h3",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-headline",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-meta",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-pullquote",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-subtitle",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-headline-max",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-reading-max",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-subtitle-max",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-tracking-eyebrow",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-tracking-tight",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-tracking-tighter",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/blog-post.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-sp-md",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/components/admin-template.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/components/admin-view.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/components/isolated-portal.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 8
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/components/layout-canvas.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/components/site-view.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 23
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/components/site-view.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--blog-font-family",
+    "count": 24
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/games/tic-tac-toe.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 8
+  },
+  {
+    "file": "packages/catalog/contents/7af9aa-blog-app/games/wordle.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 9
+  },
+  {
+    "file": "packages/catalog/contents/aef6db-stepper/example/stepper-playground-example.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/aef6db-stepper/stepper.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--stepper-heading-font",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/aef6db-stepper/stepper.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--stepper-scrim-bg",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/aef6db-stepper/stepper.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--stepper-shadow",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/c7eda3-travel-itinerary-planner/components/ti.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--bx-popover-avail-h",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/audit/example/severity-badge-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/deal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/deal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/deal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/deal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/deal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/line-item.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/plan.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/plan.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/plan.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/plan.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 9
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/proposal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/proposal.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 6
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/quote.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/quote.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/quote.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 10
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/quote.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/service.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/service.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 8
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/tax-jurisdiction.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/tax-jurisdiction.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/territory.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/territory.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/territory.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/commerce/territory.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 9
+  },
+  {
+    "file": "packages/catalog/contents/cards/fulfilment/fulfilment-order.gts",
+    "rule": "css-variables/private-name-fallback",
+    "subject": "--st-hue",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/fulfilment/inventory-stock.gts",
+    "rule": "css-variables/private-name-fallback",
+    "subject": "--stock-hue",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/cards/fulfilment/inventory-stock.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--ful-perf",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/fulfilment/shipment.gts",
+    "rule": "css-variables/private-name-fallback",
+    "subject": "--st-hue",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/placement/components/placement-drop-zone.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/cards/placement/components/placement-drop-zone.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--radius-sm",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/placement/placement-board.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 6
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 12
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/procurement/vendor.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/brief.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 11
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 8
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 6
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 11
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/projects/project.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/cards/real-estate/components/publish-checklist.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--ck-fail-color",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/real-estate/components/publish-checklist.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--ck-pass-color",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/cards/real-estate/components/publish-checklist.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--ck-warn-color",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-1",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-2",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-3",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-4",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-5",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/catalog.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--app-listing-header-background-color",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--app-listing-header-border-radius",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--app-listing-header-box-shadow",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--app-listing-header-padding",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-box-shadow-sm",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/app-listing-header.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-gray",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/card-with-hydration.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-min-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/cards-display-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-min-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-filter-expanded-background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-filter-hover-background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-filter-selected-background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/category-filter-group.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-filter-selected-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/filter-section.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--shadow-lg",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--shadow-sm",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-min-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-min-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-fitted.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-fitted.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-fitted.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-mono",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-fitted.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-fitted.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-serif",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-fitted.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-hover-card.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-hover-card.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--accent",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-hover-card.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-hover-card.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-hover-card.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/listing-hover-card.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/showcase-view.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-footer.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-footer.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--accent",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-footer.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--accent",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 6
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-header.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-mono",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-serif",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-hero.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--shadow-xl",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 6
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-mono",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/storefront-how-it-works.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--shadow-md",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/type-filter-pills.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/type-filter-pills.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/type-filter-pills.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/type-filter-pills.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/type-filter-pills.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/components/type-filter-pills.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/layouts/catalog-layout.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--column-gap",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/layouts/catalog-layout.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--layout-container-background-color",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/layouts/catalog-layout.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--layout-content-padding",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/layouts/catalog-layout.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--layout-padding",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/layouts/catalog-layout.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--sidebar-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 21
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--accent",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--background",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-1",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-2",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-3",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-4",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--chart-5",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-mono",
+    "count": 9
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 13
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-serif",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 11
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--primary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--secondary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/listing.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--shadow-md",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/catalog-app/listing/spec-fields-grid.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/card-list.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--embedded-card-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/card-list.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--embedded-card-min-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/dashboard.gts",
+    "rule": "css-variables/private-name-fallback",
+    "subject": "--tile-accent",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/dashboard.gts",
+    "rule": "css-variables/private-name-fallback",
+    "subject": "--tile-value-color",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/edit-section-nav.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--edit-section-nav-ink-fg",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/edit-section-nav.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--edit-section-nav-ink",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/edit-section-nav-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/edit-section-nav-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/edit-section-nav-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/money-display-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/money-display-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/record-views-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/record-views-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/record-views-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/components/example/status-board-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--destructive",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/example/tree-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--grid-view-min-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-max-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/grid.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--strip-view-min-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/layout.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/components/money-display.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/money-display.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--state-red-fg",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/placement-palette.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 5
+  },
+  {
+    "file": "packages/catalog/contents/components/placement-palette.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--radius-sm",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/components/sectioned-edit.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--edit-section-nav-ink",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/ef8aea-wine-bottle/wine-bottle.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--wb-liquid",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/ef8aea-wine-bottle/wine-bottle.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--wb-rule",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--auto-dot-x",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--auto-dot-y",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--overlay-h",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--overlay-w",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--overlay-x",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--overlay-y",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--puck-x",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--puck-y",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--scan-h",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--scan-w",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--scan-x",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--scan-y",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--slip-w",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--slip-x",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--slip-y",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--world-pan-x",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--world-pan-y",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/f22ed9-echo-pad/echo-pad/components/isolated.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--world-zoom",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/avatar/components/avatar.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-box-shadow-lg",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/avatar/components/avatar.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--radius-lg",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/consent/consent-vocabulary.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/fields/featured-image/featured-image.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/featured-image/featured-image.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--atom-image-background-size",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/featured-image/featured-image.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--atom-image-height",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/featured-image/featured-image.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--atom-image-width",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-point/components/geo-point-map-picker.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-font-family-mono",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-point/components/geo-point-map-picker.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-surface-secondary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-point/components/geo-point-map-picker.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-text-muted",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-search-point/components/geo-search-address-input.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-font-family-mono",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-search-point/components/geo-search-recent-searches-addon.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-search-point/components/geo-search-top-results-addon.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-search-point/components/geo-search-top-results-addon.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-surface-secondary",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/geo-search-point/components/geo-search-top-results-addon.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-text-muted",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/leaflet-map-config-field/leaflet-map-config-field.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-sp-md",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/fields/leaflet-map-config-field/leaflet-map-config-field.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-text-color",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/fields/leaflet-map-config-field/leaflet-map-config-field.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-text-muted",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/fields/policy-predicate/policy-predicate.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/policy-predicate/policy-predicate.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/fields/status/example/task-record-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/fields/status/example/task-record-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--card",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/fields/status/example/task-record-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--font-sans",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/fields/status/example/task-record-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/fields/status/example/task-record-example.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/pr-card/components/isolated/ci-section.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxel-font-2xs",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 3
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--border",
+    "count": 7
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--destructive",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--foreground",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted-foreground",
+    "count": 16
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--muted",
+    "count": 2
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--warning-foreground",
+    "count": 4
+  },
+  {
+    "file": "packages/catalog/contents/realm-policy/realm-policy.gts",
+    "rule": "css-variables/theme-fallback",
+    "subject": "--warning",
+    "count": 9
+  },
+  {
+    "file": "packages/catalog/contents/simple-card.gts",
+    "rule": "css-variables/undefined",
+    "subject": "--boxund",
+    "count": 1
+  },
+  {
+    "file": "packages/catalog/contents/submission-workflow-card/submission-workflow-card.gts",
+    "rule": "css-variables/font-shorthand",
+    "subject": "font",
+    "count": 1
+  }
+]

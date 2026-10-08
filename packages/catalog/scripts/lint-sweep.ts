@@ -57,7 +57,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 
 import { mainVerdict, type Pair, type Resolution } from './pairing.ts';
 
-type Linter = 'lint:types' | 'lint:js' | 'lint:hbs';
+type Linter = 'lint:types' | 'lint:js' | 'lint:hbs' | 'lint:css-vars';
 
 interface Diagnostic {
   linter: Linter;
@@ -243,10 +243,39 @@ function lintHbs(outDir: string): LinterRun {
   return { diagnostics, status, output };
 }
 
+// scripts/lint-css-variables.ts writes the errors it reports as JSON already
+// shaped like a Diagnostic, with the file relative to the boxel repo root.
+function lintCssVars(outDir: string): LinterRun {
+  let reportPath = join(outDir, 'css-variables.json');
+  let { status, output } = runScript('lint:css-vars', [
+    '--format=json',
+    `--output-file=${reportPath}`,
+  ]);
+  let report = readReport(reportPath) as
+    | {
+        file: string;
+        line: number;
+        column: number;
+        rule: string;
+        message: string;
+      }[]
+    | undefined;
+  let diagnostics: Diagnostic[] = (report ?? []).map((e) => ({
+    linter: 'lint:css-vars',
+    file: e.file,
+    line: e.line,
+    column: e.column,
+    rule: e.rule,
+    message: e.message,
+  }));
+  return { diagnostics, status, output };
+}
+
 const parsers: Record<Linter, (outDir: string) => LinterRun> = {
   'lint:types': () => lintTypes(),
   'lint:js': lintJs,
   'lint:hbs': lintHbs,
+  'lint:css-vars': lintCssVars,
 };
 
 function git(dir: string, args: string[]) {
