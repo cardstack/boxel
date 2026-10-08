@@ -27,6 +27,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
+import StarIcon from '@cardstack/boxel-icons/star';
 import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';
@@ -156,10 +157,10 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
     </div>
     <style scoped>
       /* closed, the preview fills whatever height the fold is given, never
-         less than --wb-fold-preview-h; open, it grows to the content */
+         less than --_wb-fold-preview-h; open, it grows to the content */
       .wb-fold {
-        --wb-fold-preview-h: 14rem;
-        --wb-fold-fade-h: 2rem;
+        --_wb-fold-preview-h: 14rem;
+        --_wb-fold-fade-h: 2rem;
 
         position: relative;
         display: flex;
@@ -167,7 +168,7 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
       }
       .wb-fold-region {
         flex: 1 1 0;
-        min-block-size: var(--wb-fold-preview-h);
+        min-block-size: var(--_wb-fold-preview-h);
         overflow: hidden;
         /* the open state changes the flex basis and grow, not height, so those
            are what animate; interpolate-size lets the basis reach auto */
@@ -196,7 +197,7 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
         position: absolute;
         inset-inline: 0;
         inset-block-end: 0;
-        padding: var(--wb-fold-fade-h) var(--boxel-sp-sm) var(--boxel-sp-xs);
+        padding: var(--_wb-fold-fade-h) var(--boxel-sp-sm) var(--boxel-sp-xs);
         background-image: linear-gradient(transparent, var(--card) 70%);
       }
       .wb-fold[data-open='true'] .wb-fold-more {
@@ -230,6 +231,8 @@ interface NoteComposerSignature {
 
 class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
   @tracked draft = '';
+  fieldId = `${guidFor(this)}-note`;
+  hintId = `${guidFor(this)}-hint`;
   setDraft = (v: string) => (this.draft = v);
   get draftEmpty(): boolean {
     return this.draft.trim().length === 0;
@@ -242,18 +245,20 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
   };
   <template>
     <div class='note-compose' data-test-pretui-note-compose ...attributes>
-      <span class='note-compose-cap'>Note on
-        {{if @componentName @componentName 'this component'}}</span>
+      <label class='note-compose-cap' for={{this.fieldId}}>Note on
+        {{if @componentName @componentName 'this component'}}</label>
       <Textarea
         class='note-compose-field'
+        @controlId={{this.fieldId}}
         @value={{this.draft}}
         @onInput={{this.setDraft}}
         @placeholder='What should change? Markdown welcome.'
-        aria-label='Note text'
+        aria-describedby={{this.hintId}}
         data-test-pretui-note-draft
       />
       <div class='note-compose-foot'>
-        <span class='note-compose-hint'>Picked up by the next triage pass.</span>
+        <span class='note-compose-hint' id={{this.hintId}}>Picked up by the next
+          triage pass.</span>
         <Button
           @tone='primary'
           @size='s'
@@ -265,12 +270,17 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
     </div>
     <style scoped>
       .note-compose {
-        --note-compose-min-w: 17.5rem;
+        /* the composer sits on --popover, where --muted-foreground isn't a
+           guaranteed pair (4.2:1 in dark); a softer mix of its own ink is */
+        --_note-compose-dim: color-mix(
+          in oklch,
+          var(--popover-foreground) 75%,
+          var(--popover)
+        );
 
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-2xs);
-        min-width: var(--note-compose-min-w);
       }
       .note-compose-cap {
         font-family: var(--boxel-eyebrow-font-family);
@@ -279,7 +289,6 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
         line-height: var(--boxel-eyebrow-line-height);
         letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
-        color: var(--muted-foreground);
       }
       .note-compose-field {
         width: 100%;
@@ -290,9 +299,12 @@ class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
         justify-content: space-between;
         gap: var(--boxel-sp-xs);
       }
+      .note-compose-cap,
+      .note-compose-hint {
+        color: var(--_note-compose-dim);
+      }
       .note-compose-hint {
         font-size: var(--boxel-font-size-2xs);
-        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -400,6 +412,11 @@ export class PretUISpec extends Spec {
     get demo() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return this.demoLoad?.value as any;
+    }
+    // the brief stands in for a missing usage page; hidden while one loads,
+    // so it doesn't show and then vanish
+    get showBrief() {
+      return Boolean(this.args.model.brief) && !this.demo && !this.isDemoLoading;
     }
     get examples() {
       let name = this.args.model.componentName;
@@ -584,9 +601,9 @@ export class PretUISpec extends Spec {
         <article class='page' data-demo-policy={{this.demoPolicy}}>
           <header class='wb-topbar'>
             <div class='wb-crumb' data-test-pretui-spec-crumb>
-              <span class='wb-crumb-root'>Pret UI</span>
+              <span>Pret UI</span>
               <span aria-hidden='true'>/</span>
-              <span class='wb-crumb-dim'>{{if
+              <span>{{if
                   @model.category
                   @model.category
                   (if @model.territory @model.territory 'components')
@@ -607,10 +624,11 @@ export class PretUISpec extends Spec {
                 @tone={{stageTone @model.stage}}
               />
               {{#if @model.isNew}}<Chip @label='New' @tone='attention' />{{/if}}
-              {{#if @model.featured}}<Chip @tone='warning' @dot={{false}}><span
+              {{#if @model.featured}}<Chip @tone='warning' @dot={{false}}><StarIcon
+                    width='12'
+                    height='12'
                     aria-hidden='true'
-                  >★</span><VisuallyHidden
-                  >Featured</VisuallyHidden></Chip>{{/if}}
+                  /><VisuallyHidden>Featured</VisuallyHidden></Chip>{{/if}}
             </div>
             <div class='wb-grow'></div>
             <ThemeControls />
@@ -641,6 +659,7 @@ export class PretUISpec extends Spec {
                         @appearance='outlined'
                         @size='xs'
                         aria-expanded={{if open 'true' 'false'}}
+                        aria-haspopup='dialog'
                         {{on 'click' toggle}}
                         data-test-pretui-note-add
                       >Add note</Button>
@@ -688,18 +707,20 @@ export class PretUISpec extends Spec {
                 </span>
               {{/if}}
             {{/let}}
-            {{if @model.componentName @model.componentName 'Component'}}
+            <span class='wb-title-text'>{{if
+                @model.componentName
+                @model.componentName
+                'Component'
+              }}</span>
           </h1>
-          {{#unless this.demo}}
-            {{#if @model.brief}}
-              <p class='brief'>{{@model.brief}}</p>
-            {{/if}}
-          {{/unless}}
+          {{#if this.showBrief}}
+            <p class='brief'>{{@model.brief}}</p>
+          {{/if}}
           <div class='wb-work'>
             {{#if this.demo}}
               <this.demo />
             {{else if this.isDemoLoading}}
-              <section class='panel' aria-busy='true'>
+              <section class='panel'>
                 <LoadingState @label='Loading the usage page' />
               </section>
             {{else if this.isDemoExcluded}}
@@ -799,23 +820,24 @@ export class PretUISpec extends Spec {
           overscroll-behavior: none;
         }
         .page {
-          --wb-topbar-h: 2.75rem;
-          --wb-panel-h: 2.25rem;
-          --wb-title-frame-size: 3rem;
-          --wb-notes-w: 17.5rem;
-          --wb-writeup-min-w: 48rem;
+          --_wb-topbar-h: 2.75rem;
+          --_wb-panel-h: 2.25rem;
+          --_wb-title-frame-size: 3rem;
+          --_wb-notes-w: 17.5rem;
+          --_wb-notes-max-h: 20rem;
+          --_wb-writeup-min-w: 48rem;
           /* StepList's track turns vertical at 24rem; with the panel's
              padding, provenance needs 26rem to keep it horizontal */
-          --wb-provenance-min-w: 26rem;
-          --wb-provenance-max-w: 30rem;
-          --wb-krow-label-w: 6.875rem;
-          --wb-dot-size: 0.5rem;
+          --_wb-provenance-min-w: 26rem;
+          --_wb-provenance-max-w: 30rem;
+          --_wb-krow-label-w: 6.875rem;
+          --_wb-dot-size: 0.5rem;
           /* the page's inline padding, which the topbar cancels and restores
              to run edge to edge */
-          --wb-page-gutter: var(--boxel-sp-lg);
+          --_wb-page-gutter: var(--boxel-sp-lg);
 
           min-height: 100%;
-          padding: 0 var(--wb-page-gutter) var(--boxel-sp-2xl);
+          padding: 0 var(--_wb-page-gutter) var(--boxel-sp-2xl);
           display: grid;
           gap: var(--boxel-sp);
           align-content: start;
@@ -834,14 +856,20 @@ export class PretUISpec extends Spec {
         }
         /* the component's icon beside its title: a --background tile with a
            hairline ring, not a raised button */
+        /* the name shrinks and breaks, so a long one can't push the page
+           sideways at narrow widths */
+        .wb-title-text {
+          min-width: 0;
+          overflow-wrap: break-word;
+        }
         .wb-title-frame {
           --icon-color: currentColor;
           --icon-bg: none;
 
           display: grid;
           place-items: center;
-          width: var(--wb-title-frame-size);
-          height: var(--wb-title-frame-size);
+          width: var(--_wb-title-frame-size);
+          height: var(--_wb-title-frame-size);
           flex: none;
           border-radius: var(--boxel-border-radius-sm);
           box-shadow: inset 0 0 0 1px var(--border);
@@ -857,9 +885,9 @@ export class PretUISpec extends Spec {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-sm);
-          min-height: var(--wb-topbar-h);
-          margin: 0 calc(-1 * var(--wb-page-gutter));
-          padding: var(--boxel-sp-2xs) var(--wb-page-gutter);
+          min-height: var(--_wb-topbar-h);
+          margin: 0 calc(-1 * var(--_wb-page-gutter));
+          padding: var(--boxel-sp-2xs) var(--_wb-page-gutter);
           background-color: var(--card);
           color: var(--card-foreground);
           box-shadow: inset 0 -1px 0 var(--border);
@@ -867,16 +895,16 @@ export class PretUISpec extends Spec {
         }
         .wb-crumb {
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
           gap: var(--boxel-sp-xs);
           font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
           min-width: 0;
         }
-        .wb-crumb-root {
-          padding: var(--boxel-sp-5xs) var(--boxel-sp-3xs);
-        }
         .wb-here {
+          min-width: 0;
+          overflow-wrap: break-word;
           color: var(--card-foreground);
           font-weight: 600;
         }
@@ -903,7 +931,7 @@ export class PretUISpec extends Spec {
           flex-direction: column;
           align-items: flex-end;
           gap: var(--boxel-sp-2xs);
-          width: min(var(--wb-notes-w), 100%);
+          width: min(var(--_wb-notes-w), 100%);
           min-width: 0;
         }
         /* a note wants room to write: Popover reads its width knob on the
@@ -911,13 +939,17 @@ export class PretUISpec extends Spec {
         .note-popover {
           --pretui-popover-width: 20rem;
         }
+        /* a long run of notes scrolls instead of pushing the page down; the
+           padding keeps the notes' focus rings inside the scroller */
         .notes-list {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-2xs);
           width: 100%;
+          max-block-size: var(--_wb-notes-max-h);
+          overflow-y: auto;
           margin: 0;
-          padding: 0;
+          padding: var(--boxel-sp-3xs);
           list-style: none;
         }
         .note {
@@ -926,17 +958,17 @@ export class PretUISpec extends Spec {
           width: 100%;
           text-align: start;
           padding: var(--boxel-sp-xs);
-          border: 0;
+          /* a real border, so the clickable edge survives forced colors */
+          border: 1px solid var(--border);
           border-radius: var(--boxel-border-radius);
+          /* oklab, so the tint stays warm over a cool dark card */
           background-color: color-mix(
-            in oklch,
+            in oklab,
             var(--attention) 14%,
             var(--card)
           );
           color: var(--card-foreground);
-          box-shadow:
-            0 0 0 1px var(--border),
-            var(--shadow-sm);
+          box-shadow: var(--shadow-sm);
           font-size: var(--boxel-caption-font-size);
           line-height: 1.5;
         }
@@ -945,9 +977,7 @@ export class PretUISpec extends Spec {
           outline-offset: 2px;
         }
         .note:hover {
-          box-shadow:
-            0 0 0 1px var(--border),
-            var(--shadow-md);
+          box-shadow: var(--shadow-md);
         }
         /* Clamp long notes: the rail is a pointer to the note card, not the
            note card. Clicking opens the whole thing. */
@@ -982,7 +1012,7 @@ export class PretUISpec extends Spec {
           align-items: stretch;
         }
         .wb-below > .wb-writeup-panel {
-          flex: 1 1 var(--wb-writeup-min-w);
+          flex: 1 1 var(--_wb-writeup-min-w);
           display: flex;
           flex-direction: column;
         }
@@ -991,7 +1021,7 @@ export class PretUISpec extends Spec {
         }
 
         .wb-below > .wb-provenance {
-          flex: 1 1 var(--wb-provenance-min-w);
+          flex: 1 1 var(--_wb-provenance-min-w);
           align-self: start;
         }
         /* capped only while it shares the row: 75rem is the write-up's 48rem
@@ -1001,7 +1031,7 @@ export class PretUISpec extends Spec {
            transpiler. */
         @container (width >= 75rem) {
           .wb-below > .wb-writeup-panel ~ .wb-provenance {
-            max-inline-size: var(--wb-provenance-max-w);
+            max-inline-size: var(--_wb-provenance-max-w);
           }
         }
         .wb-panel {
@@ -1016,7 +1046,7 @@ export class PretUISpec extends Spec {
           display: flex;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          min-height: var(--wb-panel-h);
+          min-height: var(--_wb-panel-h);
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           box-shadow: inset 0 -1px 0 var(--border);
         }
@@ -1043,14 +1073,14 @@ export class PretUISpec extends Spec {
         }
         .wb-krow {
           display: grid;
-          grid-template-columns: var(--wb-krow-label-w) minmax(0, 1fr);
+          grid-template-columns: var(--_wb-krow-label-w) minmax(0, 1fr);
           gap: var(--boxel-sp-sm);
           padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
           align-items: baseline;
         }
         .wb-krow dt {
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
           color: var(--muted-foreground);
         }
         .wb-dots {
@@ -1060,8 +1090,8 @@ export class PretUISpec extends Spec {
           vertical-align: middle;
         }
         .wb-dot {
-          width: var(--wb-dot-size);
-          height: var(--wb-dot-size);
+          width: var(--_wb-dot-size);
+          height: var(--_wb-dot-size);
           border-radius: 50%;
           box-shadow: inset 0 0 0 1px currentColor;
         }
@@ -1071,6 +1101,7 @@ export class PretUISpec extends Spec {
         .wb-krow dd {
           margin: 0;
           font-size: var(--boxel-font-size-xs);
+          line-height: 1.5;
           overflow-wrap: break-word;
         }
         .panel {
@@ -1110,7 +1141,7 @@ export class PretUISpec extends Spec {
           <div class='mono'>
             {{#let (iconFor @model.icon) as |FitIcon|}}
               {{#if FitIcon}}
-                <FitIcon width='60%' height='60%' role='presentation' />
+                <FitIcon width='18' height='18' role='presentation' />
               {{else}}
                 {{this.monogram}}
               {{/if}}
@@ -1119,19 +1150,20 @@ export class PretUISpec extends Spec {
           <div class='fit-body'>
             <div class='fit-name'>
               {{@model.componentName}}
-              {{#if @model.featured}}<span class='fit-star'><span
+              {{#if @model.featured}}<span class='fit-star'><StarIcon
+                    width='12'
+                    height='12'
                     aria-hidden='true'
-                  >★</span><VisuallyHidden
-                  >Featured</VisuallyHidden></span>{{/if}}
+                  /><VisuallyHidden>Featured</VisuallyHidden></span>{{/if}}
             </div>
             <div class='fit-sub'>
-              <span class='fit-terr'>{{if
+              <span>{{if
                   @model.category
                   @model.category
                   @model.territory
                 }}</span>
               {{#if @model.liveInUse}}
-                <span class='fit-ver'>{{@model.version}}</span>
+                <span>{{if @model.version @model.version '0.0.0'}}</span>
               {{/if}}
             </div>
             <div class='fit-extra'>
@@ -1268,7 +1300,11 @@ export class PretUISpec extends Spec {
     <template>
       <div class='tile'>
         <div class='tile-head'>
-          <span class='tile-name'>{{@model.componentName}}</span>
+          <span class='tile-name'>{{if
+              @model.componentName
+              @model.componentName
+              'Component'
+            }}</span>
           <StatusChip
             @value={{stageLabel @model.stage}}
             @tone={{stageTone @model.stage}}
@@ -1280,7 +1316,7 @@ export class PretUISpec extends Spec {
               @model.category
               @model.territory
             }}</span>
-          <Token @value={{if @model.source @model.source 'design-v1'}} />
+          {{#if @model.source}}<Token @value={{@model.source}} />{{/if}}
         </div>
       </div>
       <style scoped>
@@ -1297,6 +1333,8 @@ export class PretUISpec extends Spec {
           gap: var(--boxel-sp-xs);
         }
         .tile-name {
+          min-width: 0;
+          overflow-wrap: break-word;
           font-weight: 600;
           font-size: var(--boxel-font-size-xs);
         }
@@ -1320,6 +1358,8 @@ export class PretUISpec extends Spec {
   // Hand-written: Spec's own edit template throws without a resolved ref, and
   // the default field editor surfaces ten inherited fields this card never sets.
   static edit = class Edit extends Component<typeof PretUISpec> {
+    // ids for the captions that name editors a <label> can't wrap
+    captionId = (key: string) => `${guidFor(this)}-${key}`;
     <template>
       <div class='wb-edit'>
         <fieldset class='wb-group'>
@@ -1347,8 +1387,12 @@ export class PretUISpec extends Spec {
               <@fields.adoptionStatus /></label>
             <label><span class='wb-cap'>Introduced in</span>
               <@fields.introducedVersion /></label>
-            <div class='wb-wide'>
-              <span class='wb-cap'>Tags</span>
+            <div
+              class='wb-wide'
+              role='group'
+              aria-labelledby={{this.captionId 'tags'}}
+            >
+              <span id={{this.captionId 'tags'}} class='wb-cap'>Tags</span>
               <@fields.tags />
             </div>
           </div>
@@ -1369,21 +1413,54 @@ export class PretUISpec extends Spec {
           </div>
         </fieldset>
 
+        {{! editors a <label> can't wrap (yes/no radios, the tag list, the
+            linked file with its Remove button) sit in a named group instead:
+            a wrapping label would activate their first control on any click }}
         <fieldset class='wb-group'>
           <legend>Signals</legend>
           <div class='wb-fields'>
             <label><span class='wb-cap'>Demand (1-5)</span>
               <@fields.demand /></label>
-            <label class='wb-flag'><@fields.featured />
-              <span class='wb-cap'>Featured</span></label>
-            <label class='wb-flag'><@fields.isNew />
-              <span class='wb-cap'>New</span></label>
-            <label class='wb-flag'><@fields.hasDesign />
-              <span class='wb-cap'>Has design</span></label>
-            <label class='wb-flag'><@fields.hasExamples />
-              <span class='wb-cap'>Has examples</span></label>
-            <label class='wb-flag'><@fields.liveInUse />
-              <span class='wb-cap'>Live in use</span></label>
+            <div
+              class='wb-flag'
+              role='group'
+              aria-labelledby={{this.captionId 'featured'}}
+            ><@fields.featured /><span
+                id={{this.captionId 'featured'}}
+                class='wb-cap'
+              >Featured</span></div>
+            <div
+              class='wb-flag'
+              role='group'
+              aria-labelledby={{this.captionId 'isNew'}}
+            ><@fields.isNew /><span
+                id={{this.captionId 'isNew'}}
+                class='wb-cap'
+              >New</span></div>
+            <div
+              class='wb-flag'
+              role='group'
+              aria-labelledby={{this.captionId 'hasDesign'}}
+            ><@fields.hasDesign /><span
+                id={{this.captionId 'hasDesign'}}
+                class='wb-cap'
+              >Has design</span></div>
+            <div
+              class='wb-flag'
+              role='group'
+              aria-labelledby={{this.captionId 'hasExamples'}}
+            ><@fields.hasExamples /><span
+                id={{this.captionId 'hasExamples'}}
+                class='wb-cap'
+              >Has examples</span></div>
+            <div
+              class='wb-flag'
+              role='group'
+              aria-labelledby={{this.captionId 'liveInUse'}}
+            ><@fields.liveInUse /><span
+                id={{this.captionId 'liveInUse'}}
+                class='wb-cap'
+              >Live in use</span></div>
           </div>
         </fieldset>
 
@@ -1399,10 +1476,13 @@ export class PretUISpec extends Spec {
         <fieldset class='wb-group'>
           <legend>Write-up</legend>
           <div class='wb-fields'>
-            {{! a div, not a label: the editor's first control is Remove,
-                which a label would activate on any click }}
-            <div class='wb-wide'>
-              <span class='wb-cap'>Linked file</span>
+            <div
+              class='wb-wide'
+              role='group'
+              aria-labelledby={{this.captionId 'writeup'}}
+            >
+              <span id={{this.captionId 'writeup'}} class='wb-cap'>Linked
+                file</span>
               <@fields.writeup />
             </div>
           </div>
@@ -1410,7 +1490,7 @@ export class PretUISpec extends Spec {
       </div>
       <style scoped>
         .wb-edit {
-          --wb-field-min-w: 12.5rem;
+          --_wb-field-min-w: 12.5rem;
 
           display: grid;
           gap: var(--boxel-sp);
@@ -1437,7 +1517,7 @@ export class PretUISpec extends Spec {
           display: grid;
           grid-template-columns: repeat(
             auto-fit,
-            minmax(min(var(--wb-field-min-w), 100%), 1fr)
+            minmax(min(var(--_wb-field-min-w), 100%), 1fr)
           );
           gap: var(--boxel-sp-xs) var(--boxel-sp-sm);
         }

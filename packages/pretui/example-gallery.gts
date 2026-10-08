@@ -20,21 +20,21 @@ export class ExampleGallery extends Component<{
           <h2 class='exg-cap'>Examples</h2>
           <span class='exg-count'>{{this.countLabel}}</span>
         </header>
-        <div class='exg-grid'>
+        <ul class='exg-grid'>
           {{#each this.specs as |spec|}}
-            <div class='exg-card'>
+            <li class='exg-card'>
               <div class='exg-demo'>
                 <spec.component />
               </div>
               <div class='exg-meta'>
-                <span class='exg-title'>{{spec.title}}</span>
+                <h3 class='exg-title'>{{spec.title}}</h3>
                 {{#if spec.note}}<span
                     class='exg-note'
                   >{{spec.note}}</span>{{/if}}
               </div>
-            </div>
+            </li>
           {{/each}}
-        </div>
+        </ul>
       </section>
     {{/if}}
     <style scoped>
@@ -66,6 +66,9 @@ export class ExampleGallery extends Component<{
         color: var(--muted-foreground);
       }
       .exg-grid {
+        margin: 0;
+        padding: 0;
+        list-style: none;
         display: grid;
         grid-template-columns: repeat(
           auto-fill,
@@ -100,18 +103,26 @@ export class ExampleGallery extends Component<{
         overflow: hidden;
       }
       .exg-meta {
+        min-width: 0;
         display: grid;
         gap: var(--boxel-sp-6xs);
         padding-block-start: var(--boxel-sp-xs);
         box-shadow: inset 0 1px 0 var(--border);
       }
+      /* an h3 for navigation, set in the caption role */
       .exg-title {
+        font-family: var(--boxel-caption-font-family);
         font-size: var(--boxel-caption-font-size);
         font-weight: var(--boxel-caption-font-weight);
+        line-height: var(--boxel-caption-line-height);
+        letter-spacing: var(--boxel-caption-letter-spacing);
+        overflow-wrap: break-word;
       }
       .exg-note {
         font-size: var(--boxel-caption-font-size);
+        line-height: 1.5;
         color: var(--muted-foreground);
+        overflow-wrap: break-word;
       }
     </style>
   </template>
