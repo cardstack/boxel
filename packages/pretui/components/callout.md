@@ -27,7 +27,7 @@ Governing pattern: APG **Alert**. `role="alert"` for `danger`, `role="status"` o
 
 ## Theming
 
-`--info`, `--success`, `--warning`, `--destructive` (the four tone hues); `--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink` (text); `--info-foreground`, `--success-foreground`, `--warning-foreground`, `--destructive-foreground` (the icon's ink on its disc); `--card` (the mix base), `--border` (mixed into the hairline), and the `--boxel-sp-*`, `--boxel-border-radius` and `--boxel-font-size-xs` tokens for geometry and type. The 20% tint strength is the component's own `--pretui-alert-mix`. A dark theme must define the four hues at a luminance that survives a 20% mix against a dark `--card`.
+`--info`, `--success`, `--warning`, `--destructive` (the four tone hues); `--foreground` (text); `--info-foreground`, `--success-foreground`, `--warning-foreground`, `--destructive-foreground` (the icon's ink on its disc); `--card` (the mix base), `--border` (mixed into the hairline), and the `--boxel-sp-*`, `--boxel-border-radius` and `--boxel-font-size-xs` tokens for geometry and type. The 20% tint strength is the component's own `--pretui-alert-mix`. A dark theme must define the four hues at a luminance that survives a 20% mix against a dark `--card`.
 
 ## React ecosystem
 

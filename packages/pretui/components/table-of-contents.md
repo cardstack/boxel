@@ -66,7 +66,7 @@ Gaps:
 
 ## Theming
 
-`--muted-foreground` (resting links), `--foreground` (active link), `--hover` (row hover fill), `--primary-ink` (the marker bar), `--border` (the rail), `--ring` (focus outline), `--boxel-font-size-xs`, `--boxel-sp-*` and `--boxel-border-radius-sm` (row type, padding, gap and radius), and `--_level` (the per-item indent step, set inline from `@level`).
+`--muted-foreground` (resting links), `--foreground` (active link), `--hover` (row hover fill), `--primary-ink` (the marker bar), `--border` (the rail), `--ring` (focus outline), `--boxel-font-size-xs`, `--boxel-sp-*` and `--boxel-border-radius-sm` (row type, padding, gap and radius), and `--_level` (the per-item indent step, set inline from `@level`). The rail, marker and indent sit on the inline-start side, so they move to the right under a right-to-left writing direction. The hover fill applies only on a device with a hovering pointer, so a tapped row on a touch screen does not keep it.
 
 Because the marker is absolutely positioned and measured, a theme that changes link line-height or padding gets a correctly-resized marker for free — the `ResizeObserver` handles reflow. A theme that hides the marker entirely, however, leaves `aria-current` as the only active signal and ink weight as the only visual one; keep at least one strong visual channel.
 

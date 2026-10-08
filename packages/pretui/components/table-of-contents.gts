@@ -290,13 +290,13 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         }
         .pretui-toc-track {
           position: relative;
-          padding-left: var(--pretui-toc-rail-gap, var(--boxel-sp-sm));
+          padding-inline-start: var(--pretui-toc-rail-gap, var(--boxel-sp-sm));
         }
         /* the rail the marker travels down */
         .pretui-toc-track::before {
           content: '';
           position: absolute;
-          left: 0;
+          inset-inline-start: 0;
           top: 0;
           bottom: 0;
           width: 1px;
@@ -311,7 +311,7 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
         }
         .pretui-toc-marker {
           position: absolute;
-          left: 0;
+          inset-inline-start: 0;
           width: 2px;
           border-radius: 1px;
           background-color: var(--primary-ink);
@@ -323,7 +323,7 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
             height 220ms var(--pretui-ease-snap, cubic-bezier(0.2, 0.8, 0.2, 1));
         }
         .pretui-toc-row {
-          padding-left: calc(
+          padding-inline-start: calc(
             var(--pretui-toc-indent, var(--boxel-sp-sm)) * (var(--_level, 1) - 1)
           );
           min-width: 0;
@@ -354,9 +354,13 @@ export class TableOfContents extends Component<TableOfContentsSignature> {
           letter-spacing: inherit;
           text-align: start;
         }
-        .pretui-toc-link:hover {
-          color: var(--foreground);
-          background-color: var(--hover);
+        /* gated on a hovering pointer, so a tapped row on a touch screen does
+           not keep the fill */
+        @media (hover: hover) {
+          .pretui-toc-link:hover {
+            color: var(--foreground);
+            background-color: var(--hover);
+          }
         }
         .pretui-toc-link[data-active='true'] {
           color: var(--foreground);

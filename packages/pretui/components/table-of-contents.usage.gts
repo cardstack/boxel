@@ -225,7 +225,8 @@ class TableOfContentsUsage extends Component {
         overflow-y: auto;
         padding: var(--boxel-sp-sm) var(--boxel-sp);
         border-radius: var(--boxel-border-radius);
-        background: var(--card);
+        background-color: var(--card);
+        color: var(--card-foreground);
         box-shadow: 0 0 0 1px var(--border);
         min-width: 0;
       }
@@ -233,7 +234,6 @@ class TableOfContentsUsage extends Component {
         margin: var(--boxel-sp) 0 var(--boxel-sp-3xs);
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
-        color: var(--foreground);
       }
       .toc-h-sub {
         font-size: var(--boxel-font-size-xs);

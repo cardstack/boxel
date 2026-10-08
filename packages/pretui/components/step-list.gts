@@ -328,7 +328,7 @@ export class StepList extends Component<StepListSignature> {
           min-width: 0;
           font-size: var(--boxel-font-size-xs);
           font-weight: 500;
-          letter-spacing: var(--track-ui, 0.01em);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
         }
         .pretui-step:not(:last-child) {
           flex: 1;
@@ -365,15 +365,15 @@ export class StepList extends Component<StepListSignature> {
           --pretui-step-ring: var(--pretui-step-error-ring, color-mix(in oklch, var(--destructive) 45%, var(--border)));
           --pretui-step-bar-fill: var(--pretui-step-error-bar, var(--destructive));
         }
-        /* running now: the primary hue filled solid, like 'current', but the
-           glyph is a play triangle rather than a number so the two never read
-           the same at a glance */
+        /* running now: a light info tint with an info-ink play triangle, so it
+           never reads like 'current' (the primary hue filled solid, with a
+           number) at a glance */
         .pretui-step[data-state='in-progress'] {
           --pretui-step-tone: var(--pretui-step-in-progress-tone, var(--foreground));
-          --pretui-step-marker-bg: var(--pretui-step-in-progress-marker-bg, color-mix(in oklch, var(--pretui-info, var(--primary)) 16%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-in-progress-marker-fg, var(--pretui-info, var(--primary)));
-          --pretui-step-ring: var(--pretui-step-in-progress-ring, color-mix(in oklch, var(--pretui-info, var(--primary)) 55%, var(--border)));
-          --pretui-step-bar-fill: var(--pretui-step-in-progress-bar, var(--pretui-info, var(--primary)));
+          --pretui-step-marker-bg: var(--pretui-step-in-progress-marker-bg, color-mix(in oklch, var(--info) 16%, var(--card)));
+          --pretui-step-marker-fg: var(--pretui-step-in-progress-marker-fg, var(--info-ink));
+          --pretui-step-ring: var(--pretui-step-in-progress-ring, color-mix(in oklch, var(--info) 55%, var(--border)));
+          --pretui-step-bar-fill: var(--pretui-step-in-progress-bar, var(--info));
         }
         /* cannot proceed: warning tone, not destructive — nothing has failed */
         .pretui-step[data-state='blocked'] {

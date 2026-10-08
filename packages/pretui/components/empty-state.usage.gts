@@ -51,7 +51,7 @@ class EmptyStateUsage extends Component {
             @texture={{this.texture}}
             @size={{this.size}}
           >
-            <:action><Button @variant='secondary'>Clear filters</Button></:action>
+            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{else}}
           <EmptyState
@@ -64,7 +64,7 @@ class EmptyStateUsage extends Component {
               and
               <Token @value='harvest' />
               filters.</:default>
-            <:action><Button @variant='secondary'>Clear filters</Button></:action>
+            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{/if}}
       </:example>

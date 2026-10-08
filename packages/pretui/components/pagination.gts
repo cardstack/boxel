@@ -87,7 +87,6 @@ export class Pagination extends Component<PaginationSignature> {
           border-radius: var(--boxel-border-radius-sm);
           background-color: transparent;
           color: var(--muted-foreground);
-          cursor: pointer;
           font-family: inherit;
           font-size: inherit;
           font-weight: inherit;
@@ -102,10 +101,14 @@ export class Pagination extends Component<PaginationSignature> {
           transition-timing-function: ease-out;
         }
         /* The current page keeps its selected fill and ink under the pointer:
-           this rule's specificity would otherwise beat the data-state rule. */
-        .pretui-page:hover:not([aria-disabled='true'], [data-state='active']) {
-          background-color: var(--hover);
-          color: var(--foreground);
+           this rule's specificity would otherwise beat the data-state rule.
+           Gated on a hovering pointer, so a tapped button on a touch screen
+           does not keep the fill. */
+        @media (hover: hover) {
+          .pretui-page:hover:not([aria-disabled='true'], [data-state='active']) {
+            background-color: var(--hover);
+            color: var(--foreground);
+          }
         }
         /* Press feedback. Edge arrows that are aria-disabled still receive
            presses, and the current page ignores them, so neither reacts. */
@@ -116,7 +119,8 @@ export class Pagination extends Component<PaginationSignature> {
           background-color: var(--selected);
           color: var(--primary-ink);
           font-weight: 600;
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          box-shadow: 0 0 0 1px var(--border);
+          cursor: default;
         }
         /* The arrows are fixed SVGs, so they flip with the writing direction
            the way the bidi-mirrored glyphs they replace did. */

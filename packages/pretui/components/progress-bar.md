@@ -45,8 +45,8 @@ What it does:
 Gaps, and they are the kind that pass review by looking present:
 
 - **No announcement on change.** A progress bar that advances silently is correct for a fast operation and unhelpful for a slow one; there is no live region and no hook for one.
-- **The fill fails WCAG 1.4.11 Non-text Contrast (3:1) against its track in the boxel light default theme.** The fill (`--pretui-progress-hue`, default `--primary`) sits on `--inset` with no border, and stepped mode tells lit from unlit segments by that color alone. In the boxel light default, `--primary` (`--boxel-teal`, `#00ffba`) on `--inset` (`#f5f5f5`) is 1.2:1, against the 3:1 that 1.4.11 requires; a lighter track cannot fix it (teal on white is 1.31:1), so a light-theme `3 / 6` bar reads as empty. The dark default passes (10.2:1 on `#302d3b`). The fill has to darken in light mode; that fix is tracked separately and this paragraph should be updated when it lands.
-- The 4px bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.
+- **The fill fails WCAG 1.4.11 Non-text Contrast (3:1) against its track in the boxel light default theme.** The fill (`--pretui-progress-hue`, default `--primary`) sits on `--inset` with no border, and stepped mode tells lit from unlit segments by that color alone. In the boxel light default, `--primary` (`--boxel-teal`, `#00ffba`) on `--inset` (`#f5f5f5`) is 1.2:1, against the 3:1 that 1.4.11 requires; a lighter track cannot fix it (teal on white is 1.31:1), so a light-theme `3 / 6` bar reads as empty. The dark default passes (10.2:1 on `#302d3b`). The fill has to darken in light mode.
+- The 0.25rem bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.
 
 ## Theming
 

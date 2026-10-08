@@ -118,13 +118,12 @@ module('Pretui | components/alert', function (hooks) {
     ]);
   });
 
-  test("a caller's style keeps the tone's hue, ink and on-hue properties", async function (assert) {
+  test("a caller's style keeps the tone's hue and on-hue properties", async function (assert) {
     await render(
       <template><Alert @tone='success' @title='Saved' style={{CALLER_STYLE}} /></template>,
     );
     let el = alerts()[0];
     assert.strictEqual(el.style.getPropertyValue('--pretui-alert-hue').trim(), 'var(--success)');
-    assert.strictEqual(el.style.getPropertyValue('--pretui-alert-ink').trim(), 'var(--success-ink)');
     assert.strictEqual(
       el.style.getPropertyValue('--pretui-alert-on-hue').trim(),
       'var(--success-foreground)',

@@ -23,30 +23,24 @@ const ALERT_VARIANTS: Record<string, AlertTone> = {
   default: 'info',
   destructive: 'danger',
 };
-// Each tone names its fill, the ink for hue-as-text, and the fill's paired
-// foreground (the ink that reads on the disc).
-const ALERT_COLORS: Record<
-  AlertTone,
-  { hue: string; ink: string; onHue: string }
-> = {
+// Each tone names its fill and the fill's paired foreground (the ink that
+// reads on the disc). The text is `--foreground`: the `-ink` tokens are only
+// guaranteed on `--background`, `--card` and `--muted`, not on the tint.
+const ALERT_COLORS: Record<AlertTone, { hue: string; onHue: string }> = {
   info: {
     hue: 'var(--info)',
-    ink: 'var(--info-ink)',
     onHue: 'var(--info-foreground)',
   },
   success: {
     hue: 'var(--success)',
-    ink: 'var(--success-ink)',
     onHue: 'var(--success-foreground)',
   },
   warning: {
     hue: 'var(--warning)',
-    ink: 'var(--warning-ink)',
     onHue: 'var(--warning-foreground)',
   },
   danger: {
     hue: 'var(--destructive)',
-    ink: 'var(--destructive-ink)',
     onHue: 'var(--destructive-foreground)',
   },
 };
@@ -95,19 +89,17 @@ export class Alert extends Component<AlertSignature> {
     return this.tone === 'danger' ? 'alert' : 'status';
   }
   get hueStyle() {
-    let { hue, ink, onHue } = ALERT_COLORS[this.tone];
-    return htmlSafe(
-      `--pretui-alert-hue: ${hue}; --pretui-alert-ink: ${ink}; --pretui-alert-on-hue: ${onHue}`,
+    let { hue, onHue } = ALERT_COLORS[this.tone];
+    return htmlSafe(`--pretui-alert-hue: ${hue}; --pretui-alert-on-hue: ${onHue}`,
     );
   }
   // The same properties again, kept on top of a caller's `style`: a caller's
-  // `style` attribute replaces the component's own, and the tint, ink and
-  // glyph disc all read these properties.
+  // `style` attribute replaces the component's own, and the tint, hairline
+  // and glyph disc all read these properties.
   get keptStyle(): KeptProperty[] {
-    let { hue, ink, onHue } = ALERT_COLORS[this.tone];
+    let { hue, onHue } = ALERT_COLORS[this.tone];
     return [
       { property: '--pretui-alert-hue', value: hue, strength: 'arg' },
-      { property: '--pretui-alert-ink', value: ink, strength: 'arg' },
       { property: '--pretui-alert-on-hue', value: onHue, strength: 'arg' },
     ];
   }
@@ -138,7 +130,7 @@ export class Alert extends Component<AlertSignature> {
           padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
           border-radius: var(--boxel-border-radius);
           background-color: color-mix(in oklch, var(--pretui-alert-hue) var(--pretui-alert-mix), var(--card));
-          color: var(--pretui-alert-ink);
+          color: var(--foreground);
           box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-alert-hue) 25%, var(--border));
           font-size: var(--boxel-font-size-xs);
         }

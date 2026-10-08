@@ -53,7 +53,7 @@ Gaps, and the first two are the real ones:
 
 The message and separator are set in `--foreground`, at the smaller size, because the contract guarantees `--muted-foreground` only on `--background`, `--card` and `--muted`, not on the neutral `--canvas`.
 
-A theme **must** define `--font-serif`; it is used almost nowhere else, so a season that omits it falls back to Georgia and the one moment of typographic voice in the kit lands on a system font. A theme must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
+The title uses the theme's `--font-serif` (IBM Plex Serif by default), which is used almost nowhere else in the kit, so it is the component's one moment of typographic voice. A theme must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
