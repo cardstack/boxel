@@ -1,8 +1,8 @@
 diff --git a/dist/ast-transform-8c8ef165.js b/dist/ast-transform-8c8ef165.js
-index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..2bce4478d48dd05a54dee0919f3fd77acfe6d0a1 100644
+index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..3483e529a009cbe4b6019ada0c332411b660595a 100644
 --- a/dist/ast-transform-8c8ef165.js
 +++ b/dist/ast-transform-8c8ef165.js
-@@ -164,8 +164,34 @@ function decodeCSS(encodedCSSString) {
+@@ -164,8 +164,41 @@ function decodeCSS(encodedCSSString) {
    return new TextDecoder().decode(Uint8Array.from(binString, m => m.codePointAt(0)));
  }
  
@@ -11,7 +11,10 @@ index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..2bce4478d48dd05a54dee0919f3fd77a
 +// build at another path must still style it. A file on disk is identified by
 +// its path relative to the working directory of the build. Anything else keeps
 +// its filename, including the synthetic paths a realm transpiles under
-+// (`/spec.gts`), which do not exist on disk and are already stable.
++// (`/spec.gts`), which do not exist on disk and are already stable. Both
++// paths are resolved through symlinks first: `process.cwd()` is always
++// resolved, and a filename reached through a symlink would otherwise give a
++// path up to the root and back down, which holds the absolute path again.
 +function cwdRelativeId(filename) {
 +  let fs;
 +  try {
@@ -22,6 +25,7 @@ index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..2bce4478d48dd05a54dee0919f3fd77a
 +  if (
 +    !fs ||
 +    typeof fs.existsSync !== 'function' ||
++    typeof fs.realpathSync !== 'function' ||
 +    typeof process === 'undefined' ||
 +    typeof process.cwd !== 'function' ||
 +    typeof filename !== 'string' ||
@@ -30,7 +34,10 @@ index 066d5bc5f9e350d855d7d48ae56f47b4e33907bc..2bce4478d48dd05a54dee0919f3fd77a
 +  ) {
 +    return undefined;
 +  }
-+  return path.relative(process.cwd(), filename).split(path.sep).join('/');
++  return path
++    .relative(fs.realpathSync(process.cwd()), fs.realpathSync(filename))
++    .split(path.sep)
++    .join('/');
 +}
  function uniqueIdentifier(filename) {
 -  return superFastMd5.md5(filename).slice(0, 10);
