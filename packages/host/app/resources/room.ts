@@ -25,6 +25,7 @@ import {
   LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   getToolRequests,
   isToolResultRelType,
+  APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -51,7 +52,7 @@ import {
   peekSkillSource,
 } from '../lib/skill-tools';
 
-import type { Message } from '../lib/matrix-classes/message';
+import type { Message, MessageCompaction } from '../lib/matrix-classes/message';
 
 import type Room from '../lib/matrix-classes/room';
 
@@ -79,6 +80,16 @@ import type {
 import type { Skill } from '@cardstack/base/skill';
 import type { TaskInstance } from 'ember-concurrency';
 import type { IRoomEvent } from 'matrix-js-sdk';
+
+interface CompactionEvent {
+  type: typeof APP_BOXEL_COMPACTION_EVENT_TYPE;
+  sender: string;
+  content?: {
+    status?: MessageCompaction['status'];
+    responseEventId?: string;
+    summary?: unknown;
+  };
+}
 
 export type RoomSkill = {
   cardId: string;
@@ -230,6 +241,12 @@ export class RoomResource extends Resource<Args> {
       // This is brought up to this level so if the
       // load task is rerun we can stop processing
       for (let event of this.sortedEvents) {
+        // Not a member of the matrix-event union, so handled before the
+        // switch narrows on it.
+        if ((event.type as string) === APP_BOXEL_COMPACTION_EVENT_TYPE) {
+          this.updateMessageCompaction(event as unknown as CompactionEvent);
+          continue;
+        }
         switch (event.type) {
           case 'm.room.member':
             await this.loadRoomMemberEvent(roomId, event);
@@ -970,6 +987,26 @@ export class RoomResource extends Resource<Args> {
       },
     );
     await messageBuilder.updateMessageCommandResult(message);
+  }
+
+  // ai-bot posts a compaction's progress as events that name the answer the
+  // compaction delays; events are processed in order, so the latest wins.
+  private updateMessageCompaction(event: CompactionEvent) {
+    let { status, responseEventId, summary } = event.content ?? {};
+    if (
+      event.sender !== this.matrixService.aiBotUserId ||
+      !responseEventId ||
+      (status !== 'running' && status !== 'done' && status !== 'failed')
+    ) {
+      return;
+    }
+    let message = this._messageCache.get(responseEventId);
+    if (message) {
+      message.compaction = {
+        status,
+        summary: typeof summary === 'string' ? summary : undefined,
+      };
+    }
   }
 
   private getEffectiveEventId(

@@ -20,6 +20,18 @@ export interface CompactionContent {
   summaryVersion: number;
 }
 
+export type CompactionStatus = 'running' | 'done' | 'failed';
+
+// The content of a compaction event. ai-bot posts one with status
+// `running` when it starts to summarize, then one with status `done` (which
+// carries the summary) or `failed`. `responseEventId` is the answer the
+// compaction belongs to, where the host shows its progress. Only a `done`
+// event changes the prompt.
+export interface CompactionEventContent extends Partial<CompactionContent> {
+  status: CompactionStatus;
+  responseEventId?: string;
+}
+
 // Appended to the history of the last turn the provider accepted, in place
 // of the volatile context message, so the request reuses that turn's cached
 // prefix. The output must be plain prose: text that looks like a patch, a
@@ -65,11 +77,12 @@ export function getLatestCompaction(
     let event = eventList[i] as {
       type: string;
       sender?: string;
-      content?: Partial<CompactionContent>;
+      content?: Partial<CompactionEventContent>;
     };
     if (
       event.type === APP_BOXEL_COMPACTION_EVENT_TYPE &&
       event.sender === aiBotUserId &&
+      event.content?.status === 'done' &&
       typeof event.content?.upToEventId === 'string' &&
       typeof event.content?.summary === 'string'
     ) {

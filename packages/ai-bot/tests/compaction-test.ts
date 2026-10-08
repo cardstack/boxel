@@ -124,7 +124,7 @@ function compactionEvent(
     sender,
     event_id: eventId,
     origin_server_ts: ts++,
-    content: { upToEventId, summary, summaryVersion: 1 },
+    content: { status: 'done', upToEventId, summary, summaryVersion: 1 },
   } as unknown as DiscreteMatrixEvent;
 }
 
@@ -226,6 +226,28 @@ module('compaction', (hooks) => {
       );
     });
 
+    test('detects a provider message that OpenRouter wraps in metadata', () => {
+      assert.true(
+        isContextLengthExceededError({
+          status: 400,
+          message: '400 Provider returned error',
+          error: {
+            message: 'Provider returned error',
+            code: 400,
+            metadata: {
+              provider_name: 'Inceptron',
+              raw: JSON.stringify({
+                error: {
+                  message:
+                    "This model's maximum context length is 262144 tokens. However, you requested 94372 output tokens and your prompt contains at least 167773 input tokens, for a total of at least 262145 tokens.",
+                },
+              }),
+            },
+          },
+        }),
+      );
+    });
+
     test('ignores rate limits and other errors', () => {
       assert.false(
         isContextLengthExceededError({
@@ -284,6 +306,26 @@ module('compaction', (hooks) => {
         'answer two',
         'three',
       ]);
+    });
+
+    test('ignores a compaction that is running or failed', async () => {
+      for (let status of ['running', 'failed']) {
+        let event = compactionEvent('c1', 'b1', 'Not a summary.');
+        (event.content as unknown as { status: string }).status = status;
+        let { messages } = await getPromptParts(
+          [
+            userMessage('u1', 'one'),
+            botMessage('b1', 'answer one'),
+            event,
+            userMessage('u2', 'two'),
+          ],
+          aiBotUserId,
+          client,
+        );
+        let all = messages!.map(text).join('\n');
+        assert.false(all.includes('Not a summary.'), status);
+        assert.true(all.includes('answer one'), status);
+      }
     });
 
     test('ignores a compaction event that ai-bot did not send', async () => {
@@ -508,6 +550,7 @@ module('compaction', (hooks) => {
         history,
         senderMatrixUserId: userId,
         botTools: [],
+        responseEventId: 'response-1',
         recordCost: async (cost, generationId) => {
           costs.push([cost, generationId]);
         },
@@ -541,9 +584,17 @@ module('compaction', (hooks) => {
       assert.deepEqual(costs, [[0.01, 'gen-1']]);
 
       let sent = client.getSentEvents();
-      assert.strictEqual(sent.length, 1);
-      assert.strictEqual(sent[0].eventType, APP_BOXEL_COMPACTION_EVENT_TYPE);
+      assert.deepEqual(
+        sent.map((event) => event.eventType),
+        [APP_BOXEL_COMPACTION_EVENT_TYPE, APP_BOXEL_COMPACTION_EVENT_TYPE],
+      );
       assert.deepEqual(sent[0].content, {
+        status: 'running',
+        responseEventId: 'response-1',
+      });
+      assert.deepEqual(sent[1].content, {
+        status: 'done',
+        responseEventId: 'response-1',
         upToEventId: 'u2',
         summary: 'Objective: build a wedding planner.',
         summaryVersion: 1,
@@ -567,12 +618,16 @@ module('compaction', (hooks) => {
       ]);
     });
 
-    test('posts nothing when the summary is cut off', async () => {
+    test('marks the compaction failed when the summary is cut off', async () => {
       let { result, costs } = await compact(
         completion({ finish_reason: 'length' }),
       );
       assert.false(result.compacted);
-      assert.strictEqual(client.getSentEvents().length, 0);
+      assert.false(!result.compacted && result.nothingToCompact);
+      assert.deepEqual(
+        client.getSentEvents().map((event) => event.content.status),
+        ['running', 'failed'],
+      );
       assert.deepEqual(costs, [[0.01, 'gen-1']], 'the call is still charged');
     });
 
@@ -580,7 +635,9 @@ module('compaction', (hooks) => {
       eventList = [userMessage('u1', 'Build a wedding planner')];
       let { result, requests } = await compact(completion());
       assert.false(result.compacted);
+      assert.true(!result.compacted && result.nothingToCompact);
       assert.strictEqual(requests.length, 0);
+      assert.strictEqual(client.getSentEvents().length, 0);
     });
   });
 });

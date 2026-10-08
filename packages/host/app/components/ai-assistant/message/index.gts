@@ -24,6 +24,7 @@ import {
 
 import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
+import type { MessageCompaction } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -32,6 +33,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
+import CompactionStatus from './compaction-status';
 import Meta from './meta';
 import UserMessage from './user-message';
 
@@ -77,6 +79,7 @@ interface Signature {
     isCodePatchCorrectness?: boolean;
     commands?: MessageTool[];
     usage?: TokenUsage;
+    compaction?: MessageCompaction;
   };
   Blocks: { default: [] };
 }
@@ -453,6 +456,9 @@ export default class AiAssistantMessage extends Component<Signature> {
       {{/unless}}
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
+          {{#if @compaction}}
+            <CompactionStatus @compaction={{@compaction}} />
+          {{/if}}
           {{#if this.hasBotMessage}}
             <AiBotMessage
               @monacoSDK={{@monacoSDK}}

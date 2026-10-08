@@ -85,8 +85,8 @@ import {
   isContextLengthExceededError,
 } from './lib/compaction.ts';
 import {
-  compactingStatusMessage,
   contextLengthExceededErrorMessage,
+  messageTooLargeErrorMessage,
 } from './constants.ts';
 
 let log = logger('ai-bot');
@@ -718,10 +718,10 @@ Common issues are:
           // Summarizes the room so its prompt fits the model again. Returns
           // the event list with the compaction event, or undefined when
           // nothing could be compacted.
+          let nothingToCompact = false;
           let compactForRetry = async (): Promise<
             DiscreteMatrixEvent[] | undefined
           > => {
-            await responder.showStatus(compactingStatusMessage);
             try {
               let result = await profTime(
                 eventId,
@@ -734,6 +734,7 @@ Common issues are:
                     history: promptParts.history,
                     senderMatrixUserId,
                     botTools: botTools.map((tool) => tool.definition),
+                    responseEventId: responder.responseEventId,
                     recordCost: (cost, costGenerationId) =>
                       debitUsageCost(
                         senderMatrixUserId,
@@ -743,6 +744,7 @@ Common issues are:
                   }),
               );
               if (!result.compacted) {
+                nothingToCompact = result.nothingToCompact;
                 log.warn(
                   `[${eventId}] Could not compact the room history: ${result.reason}`,
                 );
@@ -935,7 +937,11 @@ Common issues are:
                   promptParts = compactedPromptParts;
                   retryAfterCompaction = true;
                 } else {
-                  await responder.onError(contextLengthExceededErrorMessage);
+                  await responder.onError(
+                    nothingToCompact
+                      ? messageTooLargeErrorMessage
+                      : contextLengthExceededErrorMessage,
+                  );
                 }
               } else if (error instanceof APIUserAbortError) {
                 log.info(`[${eventId}] Generation was canceled by user`);

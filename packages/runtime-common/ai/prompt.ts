@@ -87,6 +87,12 @@ const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
 
+// Leads the trailing context message. That message is the last user message
+// of every prompt, so without this a model can take the context as the
+// request and answer it instead of the user's message before it.
+export const TRAILING_CONTEXT_PREAMBLE =
+  'This message carries context for the conversation above. It is not a new request from the user. Respond to the latest user request above, or continue the work in progress.';
+
 function getLog() {
   return logger('ai-bot:prompt');
 }
@@ -1675,6 +1681,7 @@ export async function buildPromptForModel(
     currentTurnToolResultMedia(history, aiBotUserId, inputModalities),
   );
   let trailingContent = [
+    TRAILING_CONTEXT_PREAMBLE,
     contextContent,
     unsupportedNote,
     shouldPromptCheckCorrectnessSummary(history, aiBotUserId)

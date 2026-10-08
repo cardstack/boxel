@@ -16,7 +16,7 @@ import {
   findCompactionCut,
   getLatestCompaction,
   getPromptParts,
-  type CompactionContent,
+  type CompactionEventContent,
   type PromptParts,
 } from '@cardstack/runtime-common/ai';
 import { buildChatCompletionRequest } from './chat-completion-request.ts';
@@ -57,9 +57,14 @@ export function isContextLengthExceededError(error: unknown): boolean {
   if (status === 429) {
     return false;
   }
-  let nestedMessage = (error as { error?: { message?: unknown } }).error
-    ?.message;
-  let text = [message, code, nestedMessage]
+  let body = (
+    error as {
+      error?: { message?: unknown; metadata?: { raw?: unknown } };
+    }
+  ).error;
+  // OpenRouter reports an upstream rejection as "Provider returned error"
+  // and carries the provider's own message in `metadata.raw`.
+  let text = [message, code, body?.message, body?.metadata?.raw]
     .filter((part) => typeof part === 'string')
     .join('\n');
   return CONTEXT_LENGTH_EXCEEDED_PATTERNS.some((pattern) => pattern.test(text));
@@ -113,11 +118,14 @@ export function summaryFromCompletion(
 
 export type CompactionResult =
   | { compacted: true; eventList: DiscreteMatrixEvent[] }
-  | { compacted: false; reason: string };
+  // `nothingToCompact`: no earlier history exists that a summary can
+  // replace, so the prompt is too long by itself.
+  | { compacted: false; nothingToCompact: boolean; reason: string };
 
 // Summarizes the room history up to the last answer the provider accepted,
 // posts the summary as a compaction event, and returns the event list with
-// that event appended, ready to build the next prompt from.
+// that event appended, ready to build the next prompt from. The host shows
+// the compaction's progress on `responseEventId`, the answer it delays.
 export async function compactRoomHistory(opts: {
   openai: OpenAI;
   client: MatrixClient;
@@ -127,72 +135,70 @@ export async function compactRoomHistory(opts: {
   history: DiscreteMatrixEvent[];
   senderMatrixUserId: string;
   botTools: Tool[];
+  responseEventId?: string;
   recordCost: (
     costInUsd: number | undefined,
     generationId: string | undefined,
   ) => Promise<void>;
 }): Promise<CompactionResult> {
-  let { openai, client, roomId, aiBotUserId, eventList, history } = opts;
+  let { client, roomId, aiBotUserId, eventList, history } = opts;
   let cut = findCompactionCut(
     history,
     aiBotUserId,
     getLatestCompaction(eventList, aiBotUserId),
   );
-  if (!cut) {
+  let anchorIndex = cut
+    ? eventList.findIndex((event) => event.event_id === cut.anchorEventId)
+    : -1;
+  if (!cut || anchorIndex === -1) {
     return {
       compacted: false,
+      nothingToCompact: true,
       reason: 'there is no earlier history that a summary can replace',
     };
   }
-  let anchorIndex = eventList.findIndex(
-    (event) => event.event_id === cut.anchorEventId,
-  );
-  if (anchorIndex === -1) {
-    return {
-      compacted: false,
-      reason: 'the last answer is not in the room events',
+
+  let sendCompactionEvent = async (
+    content: Omit<CompactionEventContent, 'responseEventId'>,
+  ) => {
+    let fullContent: CompactionEventContent = {
+      ...content,
+      ...(opts.responseEventId
+        ? { responseEventId: opts.responseEventId }
+        : {}),
     };
+    let { event_id } = await client.sendEvent(
+      roomId,
+      APP_BOXEL_COMPACTION_EVENT_TYPE as any,
+      fullContent as any,
+    );
+    return { event_id, content: fullContent };
+  };
+
+  await sendCompactionEvent({ status: 'running' });
+  let summary: string | undefined;
+  let reason: string | undefined;
+  try {
+    ({ summary, reason } = await summarize({
+      ...opts,
+      acceptedEventList: eventList.slice(0, anchorIndex),
+    }));
+  } catch (error) {
+    await sendCompactionEvent({ status: 'failed' }).catch((sendError) =>
+      log.error('Could not send the failed compaction event', sendError),
+    );
+    throw error;
   }
-  // The events of the last accepted turn: everything before its answer.
-  let acceptedPromptParts = await getPromptParts(
-    eventList.slice(0, anchorIndex),
-    aiBotUserId,
-    client,
-  );
-  if (!acceptedPromptParts.shouldRespond || !acceptedPromptParts.messages) {
-    return {
-      compacted: false,
-      reason: 'the last accepted prompt could not be rebuilt',
-    };
-  }
-  let request = buildCompactionRequest(
-    acceptedPromptParts,
-    opts.senderMatrixUserId,
-    opts.botTools,
-  );
-  let completion = await openai.chat.completions.create(request);
-  await opts.recordCost(
-    (completion.usage as { cost?: number } | undefined)?.cost,
-    completion.id,
-  );
-  log.info(`Compaction summary for room ${roomId}: usage %j`, completion.usage);
-  let summary = summaryFromCompletion(completion);
   if (!summary) {
-    return {
-      compacted: false,
-      reason: `the summary response was incomplete (finish reason: ${completion.choices?.[0]?.finish_reason})`,
-    };
+    await sendCompactionEvent({ status: 'failed' });
+    return { compacted: false, nothingToCompact: false, reason: reason! };
   }
-  let content: CompactionContent = {
+  let { event_id, content } = await sendCompactionEvent({
+    status: 'done',
     upToEventId: cut.upToEventId,
     summary,
     summaryVersion: COMPACTION_SUMMARY_VERSION,
-  };
-  let { event_id } = await client.sendEvent(
-    roomId,
-    APP_BOXEL_COMPACTION_EVENT_TYPE as any,
-    content as any,
-  );
+  });
   return {
     compacted: true,
     eventList: [
@@ -207,4 +213,50 @@ export async function compactRoomHistory(opts: {
       } as unknown as DiscreteMatrixEvent,
     ],
   };
+}
+
+// Sends the summary request built from the events of the last accepted turn
+// (everything before its answer).
+async function summarize(opts: {
+  openai: OpenAI;
+  client: MatrixClient;
+  roomId: string;
+  aiBotUserId: string;
+  acceptedEventList: DiscreteMatrixEvent[];
+  senderMatrixUserId: string;
+  botTools: Tool[];
+  recordCost: (
+    costInUsd: number | undefined,
+    generationId: string | undefined,
+  ) => Promise<void>;
+}): Promise<{ summary?: string; reason?: string }> {
+  let acceptedPromptParts = await getPromptParts(
+    opts.acceptedEventList,
+    opts.aiBotUserId,
+    opts.client,
+  );
+  if (!acceptedPromptParts.shouldRespond || !acceptedPromptParts.messages) {
+    return { reason: 'the last accepted prompt could not be rebuilt' };
+  }
+  let request = buildCompactionRequest(
+    acceptedPromptParts,
+    opts.senderMatrixUserId,
+    opts.botTools,
+  );
+  let completion = await opts.openai.chat.completions.create(request);
+  await opts.recordCost(
+    (completion.usage as { cost?: number } | undefined)?.cost,
+    completion.id,
+  );
+  log.info(
+    `Compaction summary for room ${opts.roomId}: usage %j`,
+    completion.usage,
+  );
+  let summary = summaryFromCompletion(completion);
+  if (!summary) {
+    return {
+      reason: `the summary response was incomplete (finish reason: ${completion.choices?.[0]?.finish_reason})`,
+    };
+  }
+  return { summary };
 }

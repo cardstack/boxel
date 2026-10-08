@@ -18,6 +18,13 @@ import type { FileDef } from '@cardstack/base/file-api';
 import type { TokenUsage } from '@cardstack/base/matrix-event';
 import type { EventStatus } from 'matrix-js-sdk';
 
+// A compaction ai-bot runs before this answer: it summarizes the earlier
+// conversation when the prompt is too long for the model.
+export interface MessageCompaction {
+  status: 'running' | 'done' | 'failed';
+  summary?: string;
+}
+
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
 };
@@ -87,6 +94,9 @@ export class Message implements RoomMessageInterface {
   // Tracked because the counts arrive on a late streamed edit, after the
   // message is already rendered.
   @tracked private _usage?: TokenUsage;
+  // Set from the room's compaction events, which arrive while the answer is
+  // already rendered.
+  @tracked compaction?: MessageCompaction;
 
   //This property is used for testing purpose
   instanceId: string;
