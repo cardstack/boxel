@@ -91,6 +91,9 @@ class RealmFsSession {
   readonly createdWorkspaces: string[] = [];
   // Workspaces deleted by this run, in order.
   readonly deletedWorkspaces: string[] = [];
+  // Workspaces this run deleted that do not exist again: a later create at
+  // the same URL takes the URL out.
+  readonly goneWorkspaces = new Set<string>();
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // Calls and saves refused because the run had already ended.
@@ -299,6 +302,7 @@ class RealmFsSession {
           },
         );
         this.createdWorkspaces.push(created.url);
+        this.goneWorkspaces.delete(created.url);
         return created;
       }
       case 'workspaces.delete': {
@@ -315,6 +319,7 @@ class RealmFsSession {
         }
         let deleted = await this.deleteWorkspace(realmIdentifier);
         this.deletedWorkspaces.push(deleted.url);
+        this.goneWorkspaces.add(deleted.url);
         return { url: deleted.url, deleted: true };
       }
       default:
@@ -546,6 +551,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (session.createdWorkspaces.length > 0) {
         report += ` Workspaces already created by this run: ${session.createdWorkspaces.join(', ')}`;
       }
+      // A delete cannot be undone, so the model must know it happened.
+      if (session.deletedWorkspaces.length > 0) {
+        report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
+      }
       throw new Error(report);
     }
 
@@ -579,6 +588,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
       createdWorkspaces: [...session.createdWorkspaces],
+      deletedWorkspaces: [...session.deletedWorkspaces],
     });
   }
 
@@ -602,7 +612,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // only for the UI, so a failure here does not fail the run.
   private async openCreatedWorkspace(session: RealmFsSession) {
     let url = session.createdWorkspaces
-      .filter((created) => !session.deletedWorkspaces.includes(created))
+      .filter((created) => !session.goneWorkspaces.has(created))
       .at(-1);
     if (!url || session.saved.size > 0) {
       return;

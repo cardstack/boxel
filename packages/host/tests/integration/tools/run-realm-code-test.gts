@@ -624,6 +624,56 @@ await realm.workspaces.create({ name: 'Side Project' });`,
     });
   });
 
+  test('the result names the deleted workspace when the script does not return it', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    stubWorkspaceDeletion(oldWorkspace);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.workspaces.delete('${oldWorkspace}');`,
+    });
+
+    assert.deepEqual(result.deletedWorkspaces, [oldWorkspace]);
+  });
+
+  test('a failed run names the workspaces it deleted', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    stubWorkspaceDeletion(oldWorkspace);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.delete('${oldWorkspace}');
+throw new Error('boom');`,
+      }),
+      /boom.*Workspaces already deleted by this run: http:\/\/test-realm\/testuser\/old\//,
+    );
+  });
+
+  test('a workspace recreated at a URL the run deleted is opened', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    stubWorkspaceDeletion(oldWorkspace);
+    stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.workspaces.delete('${oldWorkspace}');
+await realm.workspaces.create({ name: 'Old' });`,
+    });
+
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      `${oldWorkspace}index`,
+    );
+  });
+
   test('realm.workspaces.delete refuses a workspace the user does not own', async function (assert) {
     let deleteRealmCalls = stubWorkspaceDeletion(
       'http://test-realm/testuser/old/',

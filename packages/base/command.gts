@@ -506,6 +506,8 @@ export class RunRealmCodeResult extends CardDef {
   @field captures = containsMany(AttachedImageField);
   // URLs of the workspaces the script created with `realm.workspaces.create`.
   @field createdWorkspaces = containsMany(StringField);
+  // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
+  @field deletedWorkspaces = containsMany(StringField);
 
   // A run that saved no files and took no captures, such as one that only
   // read, has nothing for the chat to show. Its script result goes to the

@@ -22,13 +22,13 @@ import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 
-// 'approved' is the user's approval of a call ai-bot holds for approval; the
-// call is then running (see `status`) until ai-bot's result lands.
 // A tool class's per-call click rule (HostBaseTool.neverAutoExecutesFor).
 export type NeverAutoExecutesFor = (
   attributes: Record<string, unknown> | undefined,
 ) => boolean;
 
+// 'approved' is the user's approval of a call ai-bot holds for approval; the
+// call is then running (see `status`) until ai-bot's result lands.
 type ToolCallStatus =
   | 'applied'
   | 'ready'
