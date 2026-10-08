@@ -18,7 +18,7 @@ import { removeFieldPlugin } from './remove-field-plugin.ts';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import { isEqual } from 'lodash-es';
-import * as ContentTag from 'content-tag';
+import { contentTagPreprocessor, loadContentTag } from './content-tag.ts';
 
 import {
   baseCardRef,
@@ -74,6 +74,18 @@ export class ModuleSyntax {
     // plain string and there is no identifier here to mis-parse.
     this.url = new URL(trimExecutableExtension(normalized.href));
     this.analyze(src);
+  }
+
+  // Parsing a .gts module needs content-tag, which is loaded on first use.
+  // The constructor is synchronous, so it can only run once something has
+  // loaded it; this loads it first.
+  static async create(
+    src: string,
+    url: RealmResourceIdentifier | URL,
+    virtualNetwork: VirtualNetwork,
+  ): Promise<ModuleSyntax> {
+    await loadContentTag();
+    return new ModuleSyntax(src, url, virtualNetwork);
   }
 
   private analyze(src: string) {
@@ -361,7 +373,7 @@ export function gjsToPlaceholderJS(
   let placeholder = params?.placeholder ?? 'templatePlaceholder';
   let output = [];
   let offset = 0;
-  let matches = new ContentTag.Preprocessor().parse(src);
+  let matches = contentTagPreprocessor().parse(src);
   const srcArray = Array.from(src); // to be multi-byte character safe, we need to slice on a string converted to an array
   for (let match of matches) {
     output.push(srcArray.slice(offset, match.range.startChar).join(''));

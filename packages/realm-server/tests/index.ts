@@ -229,6 +229,7 @@ QUnit.done(() => {
 
 import 'decorator-transforms/globals';
 import '../setup-logger.ts'; // This should be first
+import { loadContentTag } from '@cardstack/runtime-common/content-tag';
 
 // Every `*-test.ts` under this directory is loaded, found by the same walk that
 // assigns files to CI shards (scripts/shard-test-modules.cjs), so a file the
@@ -257,6 +258,10 @@ for (const file of filesToLoad) {
   // Explicit `.ts` — native `require` does no extension search for TypeScript.
   require(`${file}.ts`);
 }
+
+// Tests compare and parse .gts source synchronously (`assert.codeEqual`,
+// `new ModuleSyntax`), which needs content-tag already loaded.
+await loadContentTag();
 
 QUnit.start();
 
