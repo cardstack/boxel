@@ -1,6 +1,6 @@
 ## What it is
 
-The usage page: a component's example, its interactive knobs, its API table and its source, in one frame. Use it to document a component. Every page in the Pretui catalogue is one of these. If you only need the artboard frame, **Viewport**; if you need the theme switcher, **ThemeFrame**.
+The usage page: a component's example, its interactive knobs, its API table and its source, in one frame. Use it to document a component. Every page in the Pret UI catalog is one of these. If you only need the artboard frame, **Viewport**; if you need the theme switcher, **ThemeFrame**.
 
 ## The contract
 
@@ -35,15 +35,15 @@ No pattern governs it; it is a page composed of the kit's own components, and it
 
 Gaps worth knowing, because a documentation surface is read by exactly the people who care about these:
 
-- **Only part of the page has heading structure.** Properties, API and CSS Variables are headed by `h2`s, so heading navigation reaches the knobs and the tables, and Properties is an `<aside>`. The description and the example have no heading, and no region carries an `aria-label`, so a screen-reader user cannot jump to "the example", and landmark navigation finds an unnamed complementary region.
-- **`@name` is not necessarily a heading**, and if it is, its level is fixed — the kit-wide problem (**Panel**, **Toolbar**, **EmptyState**, **Stat**, **FittedCard** all share it).
+- **Only part of the page has heading structure.** Properties, API and CSS Variables are headed by `h2`s, so heading navigation reaches the knobs and the tables; Properties is an `<aside>` named "Properties", and each table carries its heading as its name. The description and the example have no heading or region, so a screen-reader user cannot jump to "the example".
+- **`@name` is not a heading here.** It only labels the Viewport's artboard; the page's heading is the Spec's `h1`, and the section titles are `h2`s under it.
 - **The knobs and the API table describe the same arguments and are not linked.** A user reading a row in the docs table has no route to the control that changes it.
-- **The `<code>` source strip** needs `tabindex="0"` if it scrolls, or a keyboard user cannot reach the end of a long line (**WCAG 2.1.1**), and it has no language annotation.
+- **The `<code>` source has no language annotation.** It scrolls inside a named region ("Usage source") with a tab stop, so a keyboard user can reach the end of a long line, and the Copy button stays in view beside it.
 - **Changing a knob re-renders the example silently.** A `role="status"` region would make the cause-and-effect available; without it, a screen-reader user changing a Select has no confirmation that anything happened.
 - **The example region contains arbitrary live components**, so the page's overall accessibility is whatever is being demonstrated — including deliberately-broken states. That is unavoidable and worth stating: a usage page is not a claim about the component's accessibility.
 
 ## Theming
 
-Composes **Viewport**, **Table**, **Select**, **Input**, **Switch**, **Slider**, **SegmentedControl**, **CopyButton** and **Popover**, so it consumes their token sets rather than defining many of its own. Page structure uses `--card` with `--card-foreground`, `--border`, `--muted-foreground`, `--boxel-border-radius` and the `--boxel-sp-*` scale; the section titles take the eyebrow role (`--boxel-eyebrow-*`).
+Composes **Viewport**, **Table**, **Select**, **Input**, **Switch**, **Slider**, **SegmentedControl**, **CopyButton** and **Popover**, so it consumes their token sets rather than defining many of its own. Page structure uses `--card` with `--card-foreground`, `--border`, `--muted-foreground`, `--boxel-border-radius` and the `--boxel-sp-*` scale; the section titles take the eyebrow role (`--boxel-eyebrow-*`), and the source is set in `--font-mono` at `--boxel-font-size-xs`. The Properties panel and the two tables are named by their `h2`s.
 
 The whole page renders inside the theme island, so a theme change re-dresses both the documentation chrome _and_ the example — which is the point, and is what **ThemeFrame** exists to drive.

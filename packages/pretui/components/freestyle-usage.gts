@@ -1,6 +1,6 @@
 // Pretui — FreestyleUsage: a component's usage page — example, knobs and API table.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { hash } from '@ember/helper';
+import { hash, uniqueId } from '@ember/helper';
 import { Table } from './table';
 import { CopyButton } from './copy-button';
 import { UsageAction } from './usage-action';
@@ -13,7 +13,7 @@ import { UsageNumber } from './usage-number';
 import { UsageObject } from './usage-object';
 import { UsageString } from './usage-string';
 import { UsageYield } from './usage-yield';
-import { Viewport } from './viewport';
+import { Viewport, type ViewportSignature } from './viewport';
 
 // ── FreestyleUsage (the page) ────────────────────────────────────────────
 export interface FreestyleUsageSignature {
@@ -22,7 +22,7 @@ export interface FreestyleUsageSignature {
     description?: string;
     slug?: string;
     source?: string;
-    viewportMode?: 'fill' | 'narrow' | 'wide' | 'inline' | 'grid';
+    viewportMode?: ViewportSignature['Args']['defaultMode'];
   };
   Blocks: {
     description: [];
@@ -50,6 +50,7 @@ export interface FreestyleUsageSignature {
 
 export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
   <template>
+    {{#let (uniqueId) (uniqueId) (uniqueId) as |propsId apiId cssId|}}
     <div class='pretui-usage' data-test-pretui-usage ...attributes>
       {{! the component's name lives in the page header (breadcrumb); one
           compact description line, then straight to the artboard }}
@@ -73,10 +74,19 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
             </Viewport>
             {{#if @source}}
               <div class='wb-codestrip' data-test-pretui-usage-source>
-                <code
-                  class='wb-code'
-                  data-test-pretui-usage-source-code
-                >{{@source}}</code>
+                {{! the code scrolls, not the strip, so Copy stays in view; a
+                    scroller needs a tab stop and a name for keyboard users }}
+                <div
+                  class='wb-code-scroll'
+                  tabindex='0'
+                  role='region'
+                  aria-label='Usage source'
+                >
+                  <code
+                    class='wb-code'
+                    data-test-pretui-usage-source-code
+                  >{{@source}}</code>
+                </div>
                 <CopyButton
                   @text={{@source}}
                   @label='Copy usage'
@@ -89,9 +99,11 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         {{#if (has-block 'api')}}
           <aside
             class='pretui-usage-props wb-panel'
+            aria-labelledby={{propsId}}
             data-test-pretui-usage-props
           >
             <h2
+              id={{propsId}}
               class='pretui-usage-section-title'
               data-test-pretui-usage-section-title
             >Properties</h2>
@@ -123,11 +135,12 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         <div class='pretui-usage-api wb-panel' data-test-pretui-usage-api>
           <div class='wb-panel-h'>
             <h2
+              id={{apiId}}
               class='pretui-usage-section-title wb-cap'
               data-test-pretui-usage-section-title
             >API</h2>
           </div>
-          <Table @framed={{false}}>
+          <Table @framed={{false}} @labelledBy={{apiId}}>
             <:head>
               <tr>
                 <th>Argument</th>
@@ -160,11 +173,12 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         <div class='pretui-usage-api wb-panel' data-test-pretui-usage-css-vars>
           <div class='wb-panel-h'>
             <h2
+              id={{cssId}}
               class='pretui-usage-section-title wb-cap'
               data-test-pretui-usage-section-title
             >CSS Variables</h2>
           </div>
-          <Table @framed={{false}}>
+          <Table @framed={{false}} @labelledBy={{cssId}}>
             <:head>
               <tr>
                 <th>Variable</th>
@@ -183,9 +197,10 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         </div>
       {{/if}}
     </div>
+    {{/let}}
     <style scoped>
       .pretui-usage {
-        --pretui-usage-props-w: 22rem;
+        --pretui-usage-props-w: 26rem;
         --pretui-usage-panel-h: 2.25rem;
         --pretui-usage-description-max-w: 64rem;
 
@@ -197,6 +212,7 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       }
       .pretui-usage-description {
         max-inline-size: var(--pretui-usage-description-max-w);
+        line-height: var(--boxel-line-height-md);
         color: var(--muted-foreground);
       }
       /* the Properties rail wraps under the preview when the preview would
@@ -248,16 +264,23 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
+        padding-inline: var(--boxel-sp-sm);
         box-shadow: inset 0 1px 0 var(--border);
+      }
+      /* the block padding lives here, not on the strip, so an overlay
+         scrollbar draws in it rather than over the one line of code */
+      .wb-code-scroll {
+        flex: 1;
+        min-width: 0;
+        padding-block: var(--boxel-sp-xs);
         overflow-x: auto;
+        scrollbar-width: thin;
       }
       .wb-code {
         font-family: var(--font-mono);
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
         white-space: pre;
-        flex: 1;
       }
       .wb-codestrip > :last-child {
         flex: none;

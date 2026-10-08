@@ -49,20 +49,19 @@ Governing pattern: APG **Table**, whose keyboard interaction section reads "Not 
 
 Component-level gaps:
 
-- **The scroll container has no `tabindex="0"`.** `overflow-x: auto` on a wide table means a keyboard-only user cannot scroll it without tabbing through cells, which fails WCAG **2.1.1** for a table of static text. One attribute fixes it, and it would fix DataGrid too.
-- **Sticky headers with no `scroll-margin`** can obscure a focused cell in a vertically scrolled table (WCAG **2.4.11 Focus Not Obscured**).
+- **The scroll container has no `tabindex="0"`.** `overflow: auto` on a wide table means a keyboard-only user cannot scroll it without tabbing through cells, which fails WCAG **2.1.1** for a table of static text. One attribute fixes it, and it would fix DataGrid too.
 - `vertical-align: top` on the body (inherited by every cell) is a good default for mixed-height content and worth knowing about before you fight it.
 
 ## Theming
 
 Everything comes from the boxel theme contract:
 
-- **Surfaces and ink:** `--card` with `--card-foreground` (the wrapper, which cells inherit), `--inset` with `--foreground` (the header band), `--muted-foreground` (the caption), `--stripe` (zebra), `--hover` (row hover, on devices that hover).
-- **Rules and edge:** `--border` (row rules and the outer hairline), `--border-strong` (header underline), `--radius`.
+- **Surfaces and ink:** `--card` with `--card-foreground` (the wrapper, which cells inherit), `--inset` with `--foreground` (the header band), `--muted-foreground` (the caption), `--stripe` (zebra) and `--hover` (row hover, on devices that hover), each with `--foreground`.
+- **Rules and edge:** `--border` (row rules and the outer hairline), `--border-strong` (header underline), `--boxel-border-radius` (the frame's corner).
 - **Type:** `--boxel-font-size-xs` (the table), the caption role (`--boxel-caption-font-size`, `-font-weight`, `-line-height`, `-letter-spacing`), the label role for the header band (`--boxel-ui-label-font-size`, `-font-weight`, `-letter-spacing`), and `--font-mono` for its family.
 - **Spacing:** `--boxel-sp-2xs` (block padding of the caption and cells) and `--boxel-sp-xs` (inline padding of the caption, header and cells, so their text shares one start edge).
 
-The header band's height is `--pretui-table-head-height` (1.875rem), declared on `.pretui-table`. **The header only sticks inside a wrapper that scrolls vertically.** `overflow: auto` makes the wrapper the header's scroll container, and with no height limit it never scrolls, so the header leaves with the rows. Set `--pretui-table-max-height` on the table (or an ancestor) to bound the wrapper, for example `--pretui-table-max-height: 24rem`; the rows then scroll under a header that stays put. Unset, it is `none` and the table is as tall as its rows. `--stripe` must be distinguishable from both `--card` and `--hover`, or zebra and hover collapse into each other.
+The header band's height is `--pretui-table-head-height` (1.875rem), declared on the wrapper so a caller can set it; the wrapper also reads it as `scroll-padding-block-start`, so a focused cell scrolls clear of the sticky header. Body cells take a 1.4 line height (`--boxel-line-height-md`), since they wrap. **The header only sticks inside a wrapper that scrolls vertically.** `overflow: auto` makes the wrapper the header's scroll container, and with no height limit it never scrolls, so the header leaves with the rows. Set `--pretui-table-max-height` on the table (or an ancestor) to bound the wrapper, for example `--pretui-table-max-height: 24rem`; the rows then scroll under a header that stays put. Unset, it is `none` and the table is as tall as its rows. `--stripe` must be distinguishable from both `--card` and `--hover`, or zebra and hover collapse into each other.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

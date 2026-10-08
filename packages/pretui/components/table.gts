@@ -64,7 +64,11 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
          vertically. A caller bounds it with --pretui-table-max-height; unset,
          the wrapper grows with its rows and the header scrolls away with them. */
       .pretui-tablewrap {
+        --pretui-table-head-height: 1.875rem;
+
         overflow: auto;
+        /* a focused cell scrolls clear of the sticky header */
+        scroll-padding-block-start: var(--pretui-table-head-height);
         min-width: 0;
         max-width: 100%;
         max-height: var(--pretui-table-max-height, none);
@@ -78,7 +82,6 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         box-shadow: none;
       }
       .pretui-table {
-        --pretui-table-head-height: 1.875rem;
         width: 100%;
         border-collapse: collapse;
         font-size: var(--boxel-font-size-xs);
@@ -100,10 +103,11 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         letter-spacing: var(--boxel-ui-label-letter-spacing);
         text-transform: uppercase;
         white-space: nowrap;
-        color: var(--foreground);
       }
+      /* cells wrap, so the body line height clears the 1.4 floor */
       .pretui-table tbody {
         vertical-align: top;
+        line-height: var(--boxel-line-height-md);
       }
       /* :deep() only for what the browser's th rule overrides and for what
          doesn't inherit. */
@@ -116,6 +120,7 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
         text-align: start;
         font-weight: var(--boxel-ui-label-font-weight);
         background-color: var(--inset);
+        color: var(--foreground);
         box-shadow: inset 0 -1px 0 var(--border-strong);
       }
       .pretui-table :deep(td),
@@ -140,11 +145,13 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
       .pretui-table :deep(tbody tr:nth-child(even) td),
       .pretui-table :deep(tbody tr:nth-child(even) th) {
         background-color: var(--stripe);
+        color: var(--foreground);
       }
       @media (hover: hover) {
         .pretui-table :deep(tbody tr:hover td),
         .pretui-table :deep(tbody tr:hover th) {
           background-color: var(--hover);
+          color: var(--foreground);
         }
       }
     }
