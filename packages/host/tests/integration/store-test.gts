@@ -27,6 +27,7 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type CardStore from '@cardstack/host/lib/gc-card-store';
@@ -3637,7 +3638,11 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitFor('[data-test-card-error]');
+    // Each write reaches the stack through the realm's index event, and
+    // settling covers that event's delivery and the store's re-read of the
+    // card rather than racing them against a clock.
+    await settled();
+    assert.dom('[data-test-card-error]').exists('the card error is shown');
     assert
       .dom('[data-test-error-message]')
       .containsText('intentional error thrown');
@@ -3664,7 +3669,7 @@ module('Integration | Store', function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    await waitFor('[data-test-card-error]', { count: 0 });
+    await settled();
     assert.dom('[data-test-card-error]').doesNotExist('the error is dismissed');
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
@@ -3706,7 +3711,10 @@ module('Integration | Store', function (hooks) {
       .doesNotExist('no card error is reported');
 
     // The realm indexes the file and broadcasts the invalidation, which is
-    // what the placeholder is waiting on.
+    // what the placeholder is waiting on. The event reaches the store through
+    // the mock homeserver's dispatch and the matrix service's timeline drain,
+    // and the store re-reads the card; each of those holds `settled()`, so
+    // settling covers the whole chain rather than racing it against a clock.
     await testRealm.write(
       'Person/pending.json',
       JSON.stringify({
@@ -3718,8 +3726,29 @@ module('Integration | Store', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
+    await settled();
 
-    await waitFor('[data-test-card-awaiting-index]', { count: 0 });
+    let id = `${testRealmURL}Person/pending`;
+    if (document.querySelector('[data-test-card-awaiting-index]')) {
+      // Tells apart an index event that never reached this tab, a store that
+      // never re-read the card, and a card that re-read but never re-rendered.
+      let realmEvents = mockMatrixUtils
+        .getRoomIds()
+        .flatMap((roomId) => mockMatrixUtils.getRoomEvents(roomId))
+        .filter((event) => event.type === APP_BOXEL_REALM_EVENT_TYPE)
+        .sort((a, b) => a.origin_server_ts - b.origin_server_ts)
+        .slice(-5)
+        .map((event) => event.content);
+      console.warn(
+        '[awaiting-index-placeholder flake-probe] placeholder still shown after settled(). ' +
+          `store error=${JSON.stringify(storeService.peekError(id) ?? null)}; ` +
+          `store holds instance=${isCardInstance(storeService.peek(id))}; ` +
+          `last realm events in mock homeserver=${JSON.stringify(realmEvents)}.`,
+      );
+    }
+    assert
+      .dom('[data-test-card-awaiting-index]')
+      .doesNotExist('the placeholder is gone once the card is indexed');
     assert
       .dom(
         `[data-stack-card="${testRealmURL}Person/pending"] [data-test-field="name"]`,
