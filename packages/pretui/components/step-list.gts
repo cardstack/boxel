@@ -257,14 +257,19 @@ export class StepList extends Component<StepListSignature> {
               {{else if step.isError}}
                 <ExclamationMarkIcon width='9' height='9' stroke-width='4' />
               {{else if step.isBlocked}}
-                {{!-- a bar across the marker — "the way through is shut", and
-                    unmistakably not the error exclamation beside it --}}
+                {{! a bar across the marker — "the way through is shut", and
+                    unmistakably not the error exclamation beside it }}
                 <MinusIcon width='9' height='9' stroke-width='4' />
               {{else if step.isRunning}}
-                {{!-- a play triangle — "the machine is working on this one".
+                {{! a play triangle — "the machine is working on this one".
                     Static on purpose: a spinning marker would be motion that
-                    encodes nothing the tone and the state text do not --}}
-                <PlayerPlayIcon width='9' height='9' stroke-width='4' fill='currentColor' />
+                    encodes nothing the tone and the state text do not }}
+                <PlayerPlayIcon
+                  width='9'
+                  height='9'
+                  stroke-width='4'
+                  fill='currentColor'
+                />
               {{else}}
                 {{step.number}}
               {{/if}}
@@ -338,50 +343,137 @@ export class StepList extends Component<StepListSignature> {
            --pretui-step-error-marker-bg (etc.) on any ancestor to re-tone one
            state without touching the rest */
         .pretui-step[data-state='upcoming'] {
-          --pretui-step-tone: var(--pretui-step-upcoming-tone, var(--muted-foreground));
-          --pretui-step-marker-bg: var(--pretui-step-upcoming-marker-bg, var(--inset));
-          --pretui-step-marker-fg: var(--pretui-step-upcoming-marker-fg, var(--muted-foreground));
+          --pretui-step-tone: var(
+            --pretui-step-upcoming-tone,
+            var(--muted-foreground)
+          );
+          --pretui-step-marker-bg: var(
+            --pretui-step-upcoming-marker-bg,
+            var(--inset)
+          );
+          --pretui-step-marker-fg: var(
+            --pretui-step-upcoming-marker-fg,
+            var(--muted-foreground)
+          );
           --pretui-step-ring: var(--pretui-step-upcoming-ring, var(--border));
-          --pretui-step-bar-fill: var(--pretui-step-upcoming-bar, var(--border));
+          --pretui-step-bar-fill: var(
+            --pretui-step-upcoming-bar,
+            var(--border)
+          );
         }
         .pretui-step[data-state='current'] {
-          --pretui-step-tone: var(--pretui-step-current-tone, var(--foreground));
-          --pretui-step-marker-bg: var(--pretui-step-current-marker-bg, var(--primary));
-          --pretui-step-marker-fg: var(--pretui-step-current-marker-fg, var(--primary-foreground));
-          --pretui-step-ring: var(--pretui-step-current-ring, color-mix(in oklch, var(--primary) 70%, var(--border)));
-          --pretui-step-bar-fill: var(--pretui-step-current-bar, var(--primary));
+          --pretui-step-tone: var(
+            --pretui-step-current-tone,
+            var(--foreground)
+          );
+          --pretui-step-marker-bg: var(
+            --pretui-step-current-marker-bg,
+            var(--primary)
+          );
+          --pretui-step-marker-fg: var(
+            --pretui-step-current-marker-fg,
+            var(--primary-foreground)
+          );
+          --pretui-step-ring: var(
+            --pretui-step-current-ring,
+            color-mix(in oklch, var(--primary) 70%, var(--border))
+          );
+          --pretui-step-bar-fill: var(
+            --pretui-step-current-bar,
+            var(--primary)
+          );
         }
         .pretui-step[data-state='complete'] {
-          --pretui-step-tone: var(--pretui-step-complete-tone, var(--muted-foreground));
-          --pretui-step-marker-bg: var(--pretui-step-complete-marker-bg, color-mix(in oklch, var(--success) 15%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-complete-marker-fg, var(--success-ink));
-          --pretui-step-ring: var(--pretui-step-complete-ring, color-mix(in oklch, var(--success) 40%, var(--border)));
-          --pretui-step-bar-fill: var(--pretui-step-complete-bar, var(--success));
+          --pretui-step-tone: var(
+            --pretui-step-complete-tone,
+            var(--muted-foreground)
+          );
+          --pretui-step-marker-bg: var(
+            --pretui-step-complete-marker-bg,
+            color-mix(in oklch, var(--success) 15%, var(--card))
+          );
+          --pretui-step-marker-fg: var(
+            --pretui-step-complete-marker-fg,
+            var(--success-ink)
+          );
+          --pretui-step-ring: var(
+            --pretui-step-complete-ring,
+            color-mix(in oklch, var(--success) 40%, var(--border))
+          );
+          --pretui-step-bar-fill: var(
+            --pretui-step-complete-bar,
+            var(--success)
+          );
         }
         .pretui-step[data-state='error'] {
-          --pretui-step-tone: var(--pretui-step-error-tone, var(--destructive-ink));
-          --pretui-step-marker-bg: var(--pretui-step-error-marker-bg, color-mix(in oklch, var(--destructive) 12%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-error-marker-fg, var(--destructive-ink));
-          --pretui-step-ring: var(--pretui-step-error-ring, color-mix(in oklch, var(--destructive) 45%, var(--border)));
-          --pretui-step-bar-fill: var(--pretui-step-error-bar, var(--destructive));
+          --pretui-step-tone: var(
+            --pretui-step-error-tone,
+            var(--destructive-ink)
+          );
+          --pretui-step-marker-bg: var(
+            --pretui-step-error-marker-bg,
+            color-mix(in oklch, var(--destructive) 12%, var(--card))
+          );
+          --pretui-step-marker-fg: var(
+            --pretui-step-error-marker-fg,
+            var(--destructive-ink)
+          );
+          --pretui-step-ring: var(
+            --pretui-step-error-ring,
+            color-mix(in oklch, var(--destructive) 45%, var(--border))
+          );
+          --pretui-step-bar-fill: var(
+            --pretui-step-error-bar,
+            var(--destructive)
+          );
         }
         /* running now: a light info tint with an info-ink play triangle, so it
            never reads like 'current' (the primary hue filled solid, with a
            number) at a glance */
         .pretui-step[data-state='in-progress'] {
-          --pretui-step-tone: var(--pretui-step-in-progress-tone, var(--foreground));
-          --pretui-step-marker-bg: var(--pretui-step-in-progress-marker-bg, color-mix(in oklch, var(--info) 16%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-in-progress-marker-fg, var(--info-ink));
-          --pretui-step-ring: var(--pretui-step-in-progress-ring, color-mix(in oklch, var(--info) 55%, var(--border)));
-          --pretui-step-bar-fill: var(--pretui-step-in-progress-bar, var(--info));
+          --pretui-step-tone: var(
+            --pretui-step-in-progress-tone,
+            var(--foreground)
+          );
+          --pretui-step-marker-bg: var(
+            --pretui-step-in-progress-marker-bg,
+            color-mix(in oklch, var(--info) 16%, var(--card))
+          );
+          --pretui-step-marker-fg: var(
+            --pretui-step-in-progress-marker-fg,
+            var(--info-ink)
+          );
+          --pretui-step-ring: var(
+            --pretui-step-in-progress-ring,
+            color-mix(in oklch, var(--info) 55%, var(--border))
+          );
+          --pretui-step-bar-fill: var(
+            --pretui-step-in-progress-bar,
+            var(--info)
+          );
         }
         /* cannot proceed: warning tone, not destructive — nothing has failed */
         .pretui-step[data-state='blocked'] {
-          --pretui-step-tone: var(--pretui-step-blocked-tone, var(--foreground));
-          --pretui-step-marker-bg: var(--pretui-step-blocked-marker-bg, color-mix(in oklch, var(--warning) 14%, var(--card)));
-          --pretui-step-marker-fg: var(--pretui-step-blocked-marker-fg, var(--warning-ink));
-          --pretui-step-ring: var(--pretui-step-blocked-ring, color-mix(in oklch, var(--warning) 50%, var(--border)));
-          --pretui-step-bar-fill: var(--pretui-step-blocked-bar, var(--warning));
+          --pretui-step-tone: var(
+            --pretui-step-blocked-tone,
+            var(--foreground)
+          );
+          --pretui-step-marker-bg: var(
+            --pretui-step-blocked-marker-bg,
+            color-mix(in oklch, var(--warning) 14%, var(--card))
+          );
+          --pretui-step-marker-fg: var(
+            --pretui-step-blocked-marker-fg,
+            var(--warning-ink)
+          );
+          --pretui-step-ring: var(
+            --pretui-step-blocked-ring,
+            color-mix(in oklch, var(--warning) 50%, var(--border))
+          );
+          --pretui-step-bar-fill: var(
+            --pretui-step-blocked-bar,
+            var(--warning)
+          );
         }
         .pretui-step-marker {
           display: inline-grid;
@@ -429,7 +521,11 @@ export class StepList extends Component<StepListSignature> {
           background-color: var(--border);
         }
         .pretui-step[data-state='complete'] .pretui-step-connector {
-          background-color: color-mix(in oklch, var(--success) 45%, var(--border));
+          background-color: color-mix(
+            in oklch,
+            var(--success) 45%,
+            var(--border)
+          );
         }
         /* ── track variant ── equal-width bars, caption beneath each. The
            caption keeps the marker glyph, so 'complete' is carried by shape
@@ -505,7 +601,7 @@ export class StepList extends Component<StepListSignature> {
             gap: var(--boxel-sp-2xs);
           }
           .pretui-steplist[data-variant='track'] .pretui-step {
-            grid-template-columns: 0.875rem auto minmax(0, 1fr);
+            grid-template-columns: 2rem auto minmax(0, 1fr);
             grid-template-areas: 'bar marker label';
             gap: var(--boxel-sp-2xs);
           }

@@ -25,7 +25,7 @@ Pretui's improvement is the shared traveling highlight. shadcn's Tabs-as-segment
 
 **A radiogroup of native radios.** The rail is `role="radiogroup"`, named by `@label`; pass it whenever no visible heading names the control. Each segment is a visually hidden `<input type="radio">` sharing one `name`, with its `<label>` as the visible face, so the browser supplies the APG radio contract: the group is one tab stop, arrow keys move and select, the checked state is exposed, and the value takes part in a form. There is no keyboard code of our own.
 
-- **Focus** draws a 2px `--ring` outline inside the label of the focused radio (`:has(:focus-visible)`), inset because the rail's padding is thinner than an outside ring.
+- **Focus** draws a 2px `--ring` outline on the label of the focused radio (`:has(:focus-visible)`), since the radio itself is visually hidden.
 - **Disabled** dims the whole rail; there is no per-option disabled, unlike **RadioGroup**.
 - **The selected label is bold**, and a hidden bold copy of each label (`visibility: hidden`, so it never reaches the accessible name) reserves that width, so selection never shifts the segments.
 - **A controlled `@value` that rejects a change** puts the radio back; focus stays on the radio the reader moved to.

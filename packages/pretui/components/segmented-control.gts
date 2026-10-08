@@ -158,10 +158,9 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           opacity: 0;
           pointer-events: none;
         }
-        /* inset: the rail's padding and gap are thinner than an outside ring */
+        /* the radio is visually hidden, so its label shows the focus */
         .pretui-seg-item:has(.pretui-seg-input:focus-visible) {
           outline: 2px solid var(--ring);
-          outline-offset: -2px;
         }
         /* the label sits on the pill's --card face */
         .pretui-seg-item[data-state='active'] {

@@ -16,7 +16,9 @@ export interface ToastSignature {
 
 export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
   <div class='pretui-toast' role='status' data-test-pretui-toast ...attributes>
-    {{#if (has-block 'icon')}}{{yield to='icon'}}{{/if}}
+    {{#if (has-block 'icon')}}<span class='pretui-toast-icon'>{{yield
+          to='icon'
+        }}</span>{{/if}}
     <div class='pretui-toast-body'>
       <div class='pretui-toast-title'>{{@title}}</div>
       {{#if @message}}<div class='pretui-toast-msg'>{{@message}}</div>
@@ -48,7 +50,13 @@ export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
         padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         font-size: var(--boxel-font-size-xs);
         width: max-content;
-        max-width: var(--pretui-toast-max-w);
+        /* never wider than its container, so a narrow column wraps it */
+        max-width: min(var(--pretui-toast-max-w), 100%);
+      }
+      /* the icon keeps its size when the message wraps */
+      .pretui-toast-icon {
+        display: inline-flex;
+        flex: none;
       }
       .pretui-toast-body {
         display: grid;

@@ -306,7 +306,10 @@ export class Viewport extends Component<ViewportSignature> {
           --pretui-viewport-tile-min-w: 12.5rem;
           --pretui-viewport-cell-min-h: 4rem;
 
+          /* one column that may shrink below its content, so a wide artboard
+             pans inside the canvas instead of widening the whole viewport */
           display: grid;
+          grid-template-columns: minmax(0, 1fr);
           min-width: 0;
         }
         /* While the width handle is being dragged, nothing in the viewport is
@@ -324,6 +327,7 @@ export class Viewport extends Component<ViewportSignature> {
           justify-content: space-between;
           gap: var(--boxel-sp-sm);
           flex-wrap: wrap;
+          min-width: 0;
           min-height: var(--pretui-viewport-bar-min-h);
           padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
           box-shadow: inset 0 -1px 0 var(--border);
@@ -340,7 +344,7 @@ export class Viewport extends Component<ViewportSignature> {
           align-items: center;
           gap: var(--boxel-sp-xs);
           flex: 1;
-          min-width: var(--pretui-viewport-width-min-w);
+          min-width: min(var(--pretui-viewport-width-min-w), 100%);
           max-width: var(--pretui-viewport-width-max-w);
         }
         .pretui-viewport-width > :first-child {
@@ -356,8 +360,10 @@ export class Viewport extends Component<ViewportSignature> {
         }
         .pretui-viewport-settings {
           display: flex;
+          flex-wrap: wrap;
           align-items: center;
           gap: var(--boxel-sp-sm);
+          min-width: 0;
         }
         .pretui-viewport-surface {
           width: var(--pretui-viewport-surface-w);
