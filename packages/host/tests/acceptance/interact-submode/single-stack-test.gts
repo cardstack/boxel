@@ -2,6 +2,7 @@ import {
   currentURL,
   click,
   fillIn,
+  find,
   focus,
   triggerKeyEvent,
   triggerEvent,
@@ -25,6 +26,21 @@ import {
   setupInteractSubmodeTests,
   testRealm2URL,
 } from '../../helpers/interact-submode-setup';
+
+// Prepares the page for a hit-test of the app. Stack padding and card
+// margins transition after the stack changes, so the transitions must
+// land first. The test container can be left scrolled (opening a menu
+// can do it), and a point outside its visible box hits the test page
+// instead of the app, so it returns to its origin.
+async function settleForHitTest() {
+  await Promise.all(
+    document
+      .getAnimations()
+      .filter((animation) => animation instanceof CSSTransition)
+      .map((animation) => animation.finished.catch(() => undefined)),
+  );
+  document.querySelector('#ember-testing-container')?.scrollTo(0, 0);
+}
 
 module('Acceptance | interact submode | single stack tests', function (hooks) {
   let realm: Realm;
@@ -181,6 +197,130 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       await settled();
 
       assert.dom('[data-test-pet-title]').containsText('Renamed via UI');
+    });
+
+    test('clicking the visible header of a buried card closes the cards above it', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await settleForHitTest();
+      let buriedHeader = find(
+        '[data-test-stack-card-index="0"] [data-test-stack-card-header]',
+      );
+      let topCard = find('[data-test-stack-card-index="1"]');
+      if (!buriedHeader || !topCard) {
+        throw new Error('expected a buried card header and a top card');
+      }
+
+      // Aim the way a pointer would: at the middle of the strip of the
+      // buried header that shows above the top card, and click whatever
+      // element is hit there.
+      let headerRect = buriedHeader.getBoundingClientRect();
+      let visibleBottom = Math.min(
+        headerRect.bottom,
+        topCard.getBoundingClientRect().top,
+      );
+      assert.ok(
+        visibleBottom > headerRect.top,
+        'part of the buried header shows above the top card',
+      );
+      let target = document.elementFromPoint(
+        headerRect.left + headerRect.width / 2,
+        (headerRect.top + visibleBottom) / 2,
+      );
+      if (!target) {
+        throw new Error('no element is hit over the buried header');
+      }
+      assert.ok(
+        buriedHeader.contains(target),
+        `the buried header receives the pointer (hit: ${target.tagName}.${target.getAttribute('class')})`,
+      );
+
+      await click(target);
+
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the clicked card is now the top of the stack');
+    });
+
+    test('a click above an expanded card does not reach the faded cards buried under it', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            { id: `${testRealmURL}index`, format: 'isolated' },
+            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/vangogh`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+          ],
+        ],
+      });
+
+      await click(
+        '[data-test-stack-card-index="3"] [data-test-more-options-button]',
+      );
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
+      assert
+        .dom('[data-test-stack-card-index="3"]')
+        .hasClass('expanded', 'the top card is expanded');
+
+      await settleForHitTest();
+      let expandedCard = find('[data-test-stack-card-index="3"]');
+      let fadedCards = [0, 1, 2].map((index) =>
+        find(`[data-test-stack-card-index="${index}"]`),
+      );
+      if (!expandedCard || fadedCards.some((card) => !card)) {
+        throw new Error('expected an expanded card over three faded cards');
+      }
+      let expandedTop = expandedCard.getBoundingClientRect().top;
+      // Find a faded card's header that rises above the expanded card,
+      // and aim the way a pointer would at the middle of that strip.
+      let strip = fadedCards
+        .map((card) =>
+          card
+            ?.querySelector('[data-test-stack-card-header]')
+            ?.getBoundingClientRect(),
+        )
+        .find((rect) => rect && rect.top < expandedTop);
+      if (!strip) {
+        throw new Error(
+          'expected a faded header to rise above the expanded card',
+        );
+      }
+      let target = document.elementFromPoint(
+        strip.left + strip.width / 2,
+        (strip.top + Math.min(strip.bottom, expandedTop)) / 2,
+      );
+      if (!target) {
+        throw new Error('no element is hit above the expanded card');
+      }
+      let hit = `${target.tagName}.${target.getAttribute('class')}`;
+      assert.ok(
+        find('[data-test-operator-mode-stack]')?.contains(target),
+        `the hit-test lands on the stack (hit: ${hit})`,
+      );
+      assert.notOk(
+        fadedCards.some((card) => card?.contains(target)),
+        `no faded card receives the pointer (hit: ${hit})`,
+      );
+
+      await click(target);
+      assert.dom('[data-test-stack-card-index]').exists({ count: 4 });
+      assert
+        .dom('[data-test-stack-card-index="3"]')
+        .hasClass('expanded', 'the top card stays expanded');
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {

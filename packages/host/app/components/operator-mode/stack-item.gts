@@ -1244,6 +1244,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
         opacity: 0;
         transition: opacity 380ms ease;
       }
+      /* A faded card takes no clicks either. The deepest buried cards
+         rise into the top bar's strip, which passes clicks through to
+         the stack, and a click must never act on a card the user can't
+         see. */
+      .item:not(.expanded):has(~ .item.expanded) > .stack-item-card {
+        pointer-events: none;
+      }
 
       .stack-item-card {
         position: relative;
