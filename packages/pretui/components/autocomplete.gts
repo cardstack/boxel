@@ -712,12 +712,12 @@ export class Autocomplete extends Component<AutocompleteSignature> {
       data-busy={{if this.busy 'true'}}
       data-invalid={{if this.invalid 'true'}}
       data-disabled={{if this.inert 'true'}}
-      ...attributes
       {{ownsTimers this.timers}}
       {{listen 'focusout' this.handleFocusOut}}
       {{listen 'mouseover' this.handleHover}}
       {{listen 'mousedown' this.handlePress}}
       data-test-pretui-autocomplete
+      ...attributes
     >
       {{#if this.ownsLabel}}
         <label for={{this.inputId}}><VisuallyHidden

@@ -164,7 +164,7 @@ export class Viewport extends Component<ViewportSignature> {
     };
   });
   <template>
-    <div class='pretui-viewport' ...attributes data-test-pretui-viewport>
+    <div class='pretui-viewport' data-test-pretui-viewport ...attributes>
       <div class='pretui-viewport-bar'>
         <SegmentedControl
           class='pretui-viewport-modes'

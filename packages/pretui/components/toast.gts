@@ -15,7 +15,7 @@ export interface ToastSignature {
 }
 
 export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
-  <div class='pretui-toast' role='status' ...attributes data-test-pretui-toast>
+  <div class='pretui-toast' role='status' data-test-pretui-toast ...attributes>
     {{#if (has-block 'icon')}}{{yield to='icon'}}{{/if}}
     <div class='pretui-toast-body'>
       <div class='pretui-toast-title'>{{@title}}</div>

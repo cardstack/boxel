@@ -174,8 +174,8 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
       data-variant={{this.variant}}
       style={{this.style}}
       aria-hidden='true'
-      ...attributes
       data-test-pretui-sliding-highlight
+      ...attributes
     >{{yield}}</span>
     <style scoped>
       @layer PretComponent {

@@ -72,9 +72,9 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
       class='pretui-seg'
       role='radiogroup'
       aria-label={{@label}}
-      ...attributes
       {{slidingHighlight}}
       data-test-pretui-segmented
+      ...attributes
     >
       <SlidingHighlight @variant='pill' />
       {{#each this.options as |option|}}
