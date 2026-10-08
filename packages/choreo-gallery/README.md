@@ -1,55 +1,84 @@
-# Boxel gallery build
+# Choreo gallery
 
-`test-app/app` remains the canonical gallery. This private package generates
-the Boxel adaptation; do not edit copied demos, notes, catalog, or styles here.
-The generated copies are gitignored. Shared film engine fixes live
-in `packages/choreo`, so the normal gallery benefits too.
+The gallery and documentation site for glimmer-motion and Choreo, authored as
+Boxel realm content. Everything in [`realm/`](realm/) is the realm: cards,
+their data, and the modules they import. Cards import `glimmer-motion` and
+`@cardstack/choreo` like any other card; the host serves both to realms.
 
-## Rebuild
+The rest of the package is tooling and source material that is not served:
+`tools/` (the realm check and the film and widget tools), `scripts/`,
+`docs/`, `notes/` and `agent-skills/`.
 
-From the monorepo root:
+## The realm
+
+| Path                | What it is                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `realm.json`        | The realm's config.                                                                                                           |
+| `index.json`        | The gallery: a `ChoreoGallery` card linking every demo, in the order the gallery shows them.                                  |
+| `gallery.gts`       | `ChoreoGallery`. Its isolated format is the whole site; embedded and fitted are a summary.                                    |
+| `demo.gts`          | `GalleryDemo`, one gallery entry: its title, group, lede, API pills, usage example, walkthrough and teaching lesson.          |
+| `demos/<slug>.json` | One `GalleryDemo` per demo. The catalog is this data.                                                                         |
+| `shell/`            | The site's components: the frame, the grid, the demo page, the How panel and the pickers.                                     |
+| `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`. |
+| `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.              |
+| `*.test.gts`        | The gallery's tests, run by `boxel test`.                                                                                     |
+
+A demo's stage and its long-form notes are components, not data. A demo that
+has them adopts from its own subclass of `GalleryDemo`, in
+`stages/<slug>.gts`, which sets `static stage` and `static notes`; its
+instance in `demos/` then adopts from that module. A demo without a stage
+shows a placeholder.
+
+Moving between the grid and a demo page is state inside the gallery card, so
+the site frame's `<Choreo @route>` region sees each move as one render pass
+and flies the tile into the page. The gallery never writes the host's URL or
+title.
+
+## Developing
+
+Serve the realm from the local stack and push your edits to it.
+
+1. Start the stack from the repository root: `mise run dev-all`.
+2. Install the Boxel CLI at the version CI uses:
+   `npm install -g @cardstack/boxel-cli@0.8.0-unstable.0`.
+3. Sign in to the local stack: `boxel profile add --local`. Use the
+   `@user:localhost` test user (`pnpm --filter matrix register-test-user`), or
+   any account you have registered locally.
+4. Create a realm for the gallery: `boxel realm create choreo-gallery "Choreo"`.
+   It prints the realm's URL, such as
+   `https://localhost:4201/user/choreo-gallery/`.
+5. Push the realm from this package, and push again after each edit:
+
+   ```sh
+   pnpm push https://localhost:4201/user/choreo-gallery/ --delete
+   ```
+
+   `--delete` removes files you have deleted or renamed locally, so the realm
+   mirrors `realm/`. It never deletes the remote `index.json` or `realm.json`.
+
+6. Open `https://localhost:4200/`, choose the realm, and open the Choreo
+   gallery card.
+
+## Checks
 
 ```sh
-pnpm build:boxel
-pnpm --filter choreo-gallery lint:types
-pnpm --filter choreo-gallery test:realm
+pnpm lint   # eslint, template lint, prettier, types, and the realm check
+pnpm test   # boxel test realm
 ```
 
-`sync-gallery.mjs` copies the current demos and applies the host adapters.
-It copies no media: `build-boxel-realm.mjs` reads the test app's `public/`
-directly.
-`scope-css.mjs` constrains gallery CSS and plain component style blocks to
-`.choreo-site`, preserving cross-component selectors without leaking into Boxel.
-`build-boxel-realm.mjs` emits `dist-realm/`, including a content-addressed
-runtime, all catalog cards, host routes, media, and a separate iframe app.
-The ordinary Pages build is unchanged unless `CHOREO_BOXEL_BUILD=1`.
+`pnpm lint:realm` (`tools/check-realm.mjs`) checks the realm's contents
+against the libraries it documents:
 
-Mockup and Long Take stay in the main DOM. Towers, Sagrada, and Sylva use
-raw-document frames; HTML is fetched as card source, not navigated through
-Boxel's HTML file viewer. The two films pass their model HTML through the
-shared picture API's `srcdoc` option. Their assets resolve inside `iframe/`.
-The iframe's Vite chunks use `.mjs` to avoid realm-module transformations.
-Main-DOM Draco decoder source is likewise fetched as a raw `.txt` asset before
-Three creates its worker; it must not contain Boxel loader instrumentation.
+- `docs/api-inventory.json` names every public export of glimmer-motion,
+  Choreo and choreo-player, and every member of the `ChoreoContext` and
+  `FilmVocabulary` vocabularies, and maps each to a guide;
+- every `demos/*.json` is well formed, `index.json` links exactly that set,
+  and each demo has a complete teaching lesson naming a known guide;
+- every guide meets the prose floor, has a preamble, and links only to guides
+  that exist.
 
-## Publish and compare
+The guides themselves, and the guide pages that embed the demos, are still
+`choreo-test-app` sources; the check reads them from there.
 
-Choose your own source realm and Boxel host. Keep account-specific addresses
-and authentication in local CLI configuration, outside this repository.
-
-Before pushing, cancel running and pending source indexing. Push without
-deleting remote files, POST the normal `_reindex`, then publish to the existing
-unlisted host. Wait for readiness: a publish acceptance is not proof that all
-pages have finished indexing. The generated `robots.txt` requests no indexing;
-unlisted does not mean private or access-controlled.
-
-Run browser checks with audio muted:
-
-```sh
-node packages/choreo-gallery/scripts/compare-hosts.mjs "$BOXEL_HOST_URL"
-node packages/choreo-gallery/scripts/compare-hosts.mjs https://cardstack.github.io/choreo/
-```
-
-Playwright Chromium must be installed (`pnpm exec playwright install chromium`
-from this package). Browser checks cover a smoke-test subset, not exhaustive
-visual or interaction parity across every demo.
+`pnpm test:theater-sizing` checks the film theater's sizing rules in
+`choreo-test-app`'s stylesheet.

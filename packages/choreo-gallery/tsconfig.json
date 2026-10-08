@@ -1,31 +1,51 @@
 {
-  "extends": "@ember/library-tsconfig",
-  "include": ["src/**/*"],
   "compilerOptions": {
-    "allowJs": true,
-    "baseUrl": ".",
-    "declaration": false,
-    "declarationMap": false,
-    "emitDeclarationOnly": false,
-    "noEmit": true,
-    "paths": {
-      "choreo-gallery/*": ["src/*"],
-      /**
-        choreo-player resolves to its source, so type-checking needs it
-        unbuilt. Its package.json#exports point types at the build output
-        that npm consumers get.
-      */
-      "@cardstack/choreo-player": ["../choreo-player/src/index.ts"],
-      "@cardstack/choreo-player/hyperframes": [
-        "../choreo-player/src/hyperframes.ts"
-      ]
-    },
+    "target": "es2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     /**
       glimmer-motion and @cardstack/choreo resolve to their source through
       the `developing:choreo` export condition, so type-checking needs
       neither built.
     */
     "customConditions": ["developing:choreo"],
-    "types": ["ember-source/types"]
-  }
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "experimentalDecorators": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "@cardstack/host/*": ["../host/app/*"],
+      "@cardstack/host/tests/*": ["../host/tests/*"],
+      "@cardstack/boxel-host/tools/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/tools/*"],
+      "@cardstack/boxel-host/lib/*": ["../host/app/lib/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
+      "*": ["../host/types/*"]
+    },
+    "types": ["@cardstack/local-types", "qunit", "qunit-dom"],
+    "resolveJsonModule": true,
+    "allowJs": true
+  },
+  "include": ["../host/types/**/*", "realm/**/*.ts", "realm/**/*.gts"]
 }

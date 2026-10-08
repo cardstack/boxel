@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "wires",
+      "title": "Wires",
+      "group": "Timeline",
+      "lede": "Hover a mark. The comment still has hold.",
+      "apis": ["c.Tether", "@path", "c.Move", "c.inserted"],
+      "sample": "// A wire is not a tween from A to B. @path is asked every frame (and\n// every still) with both sprites' current boxes. One function: a cubic.\n// Hover a highlight or a comment to see it. Step V1 → V2 → V3 and the\n// draft grows — marks walk, comments update, threads stay attached.\n<c.Parallel>\n  <c.Move @of={{c.moved}} @spring={{GLIDE}} />\n  <c.Tween @of={{c.inserted 'note'}} @opacity={{array 0 1}} @duration={{0.32}} />\n  <c.Tether @from={{c.id 'm-gauge'}} @to={{c.id 'c-gauge'}}\n    @path={{PATH_GAUGE}} />\n  <c.Tether @from={{c.id 'm-edition'}} @to={{c.id 'c-edition'}}\n    @path={{PATH_EDITION}} />\n  <c.Tether @from={{c.id 'm-hed'}} @to={{c.id 'c-hed'}}\n    @path={{PATH_HED}} />\n</c.Parallel>\n\n// Maya's comment keeps its name as the highlight walks down the draft.\n// Jo's is inserted at V2. Step back and that tether follows the leaver.",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-tethers",
+        "concept": "Connections follow moving endpoints",
+        "why": "A tether derives the wire from endpoint geometry during motion. Stable thread identity lets connected paths retarget instead of tearing down and fading in each time a node moves.",
+        "experiment": "Move a connected node again before it lands. Track the endpoint and the bend of each wire through the interruption.",
+        "pitfall": "Tweening a separately guessed SVG path cannot reliably match an interrupted spring-driven endpoint.",
+        "combine": "Combine with escort when a badge, shadow and connecting line must follow the same moving item."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

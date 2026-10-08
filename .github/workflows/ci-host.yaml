@@ -513,6 +513,9 @@ jobs:
           name: host-live-test-report
           path: junit/host-live.xml
           retention-days: 30
+      - name: Realm boot index times
+        if: ${{ !cancelled() }}
+        run: mise run ci:realm-index-times /tmp/server.log "live tests"
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
@@ -974,6 +977,9 @@ jobs:
           name: memory-report-${{ matrix.shardIndex }}
           path: /tmp/memory-report-${{ matrix.shardIndex }}.json
           retention-days: 30
+      - name: Realm boot index times
+        if: ${{ !cancelled() }}
+        run: mise run ci:realm-index-times /tmp/server.log "shard ${{ matrix.shardIndex }}"
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log

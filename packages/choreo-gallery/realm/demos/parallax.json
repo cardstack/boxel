@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "parallax",
+      "title": "Parallax",
+      "group": "Scroll",
+      "lede": "One scroll value, five different rates.",
+      "apis": ["scrollProgress", "transformValue", "style"],
+      "sample": "// One scroll value, five different rates. There is no clock and no easing\n// here: progress IS the animation, so it tracks the finger exactly and\n// reverses the instant the scroll does.\nscroll = scrollProgress();\n\n// transformValue derives a NEW motion value from an existing one. Reading\n// .get() inside registers the dependency, so these recompute themselves.\nback = { y: transformValue(() => this.scroll.scrollYProgress.get() * -220) };\nmid  = { y: transformValue(() => this.scroll.scrollYProgress.get() * -90) };\n// the further back a layer sits, the more it moves — that difference is\n// the entire depth cue\nword = {\n  y:       transformValue(() => this.scroll.scrollYProgress.get() * -320),\n  opacity: transformValue(() => 1 - this.scroll.scrollYProgress.get() * 1.4),\n};\n\n<div {{this.scroll.container}}>\n  <div {{motion style=this.back}}></div>\n  <div {{motion style=this.mid}}></div>\n  <p {{motion style=this.word}}>DEPTH</p>\n</div>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-scroll",
+        "concept": "Several mappings can give one scroll value depth",
+        "why": "Each layer derives a transform from the same progress source. Different travel distances and rotations create relative motion without needing separate scroll listeners for every layer.",
+        "experiment": "Compare Deep layers and Gentle depth at the same scroll position. Stop scrolling and inspect whether the resulting composition remains readable.",
+        "pitfall": "Large transforms can move essential text outside the reading area; depth should not hide the content it is meant to explain.",
+        "combine": "Combine with reveal for discrete arrivals while continuous layers remain scroll-driven."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

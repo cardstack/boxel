@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "reorder",
+      "title": "Reorder",
+      "group": "Drag",
+      "lede": "Pull a track out of line.",
+      "apis": ["ReorderGroup", "ReorderItem", "whileDrag"],
+      "sample": "{{! Only the dragged track is lifted. Every OTHER track layout-animates into\n    its new slot as the order changes underneath it — @onReorder fires as\n    soon as the pointer crosses a neighbour's midpoint, not on drop. }}\n<ReorderGroup\n  @values={{this.items}}\n  @onReorder={{this.setItems}}\n  @axis='y'\n  as |group|\n>\n  {{#each this.items as |track|}}\n    {{! whileDrag holds for the whole gesture: lifted, and above its\n        neighbours so it is never occluded by the row it is passing }}\n    <ReorderItem\n      @group={{group}}\n      @value={{track}}\n      @transition={{snap}}\n      @whileDrag={{to scale=1.04 zIndex=3 boxShadow='0 12px 30px #0009'}}\n    >{{track.title}}</ReorderItem>\n  {{/each}}\n</ReorderGroup>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-reorder",
+        "concept": "Order is application state, motion explains its change",
+        "why": "The group updates the values array while each track keeps stable identity. A lifted row remains recognizable as neighbours make room around it.",
+        "experiment": "Move the same track upward and then downward without releasing. Change the pickup preset and distinguish the active row from displaced neighbours.",
+        "pitfall": "Updating only DOM order or using array positions as identities separates the visual order from the application's data.",
+        "combine": "Combine with a handle-driven drag when rows contain inputs or selection controls."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

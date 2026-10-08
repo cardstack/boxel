@@ -842,6 +842,77 @@ export function mainVerdict(resolution: Resolution) {
   };
 }
 
+// Whether the catalog test subset may pin a commit of the open catalog pull
+// request `pull`, ahead of its merge. Production deploys a boxel commit with
+// the catalog at the revision it pins, so a change that breaks catalog main
+// and merges before the catalog pull request that fixes it has to pin that
+// fix: the catalog it pins otherwise is one it breaks. That pull request can't
+// merge first, so the pin may wait on it under the terms catalog main waits on
+// it (mainVerdict): open, ready for review, approved, and neither side
+// stacked, to merge right after this change. The pin has to be its head, the
+// commit that lands. Answers undefined when `pull` isn't a pull request this
+// change merges before, so the pin waits on it to merge like any other.
+export function openPinVerdict(
+  resolution: Resolution,
+  pull: number,
+  pin: string,
+) {
+  let pair = resolution.pairs.find(
+    (p) => p.key === 'merges-before' && !p.merged && p.number === pull,
+  );
+  if (!pair) {
+    return undefined;
+  }
+  let ref = `${pair.repository}#${pair.number}`;
+  let after = resolution.pairs.find(
+    (p) => p.key === 'merges-after' && !p.merged,
+  );
+  let notReady = after
+    ? `this change merges after ${after.repository}#${after.number}, which ` +
+      `hasn't merged, so this change can't merge yet`
+    : resolution.stackedOn
+      ? `this change is stacked on ${resolution.stackedOn}; retarget it to ` +
+        `main once that merges`
+      : pair.stackedOn
+        ? `${ref} is stacked on ${pair.stackedOn}; retarget it to main once ` +
+          `that merges`
+        : pair.draft
+          ? `${ref} is still a draft; mark it ready for review and get it ` +
+            `approved`
+          : pair.approved === false
+            ? `${ref} is not approved yet; get it approved`
+            : pair.approved === null
+              ? `whether ${ref} is approved could not be read ` +
+                `(${pair.approvalError})`
+              : undefined;
+  if (notReady) {
+    return {
+      passes: false,
+      message:
+        `The pin is a commit in ${ref}, which this change merges before. It ` +
+        `may pin that pull request only while it can merge right after this ` +
+        `change, and ${notReady}. Then re-run this check.`,
+    };
+  }
+  if (pair.headSha !== pin) {
+    return {
+      passes: false,
+      message:
+        `The pin is a commit in ${ref}, which this change merges before, but ` +
+        `not its head (${pair.headSha}), which is the commit that lands. ` +
+        `Re-pin to the head, run the manifest's tests against it, and commit ` +
+        `the new pin.`,
+    };
+  }
+  return {
+    passes: true,
+    message:
+      `The pin is the head of ${ref}, which this change merges before and ` +
+      `which is approved. Merge ${ref} right after this change. If ${ref} ` +
+      `gets new commits, re-pin to its head.`,
+  };
+}
+
 function describe(here: string, pair: Pair) {
   let state = pair.merged
     ? 'merged'

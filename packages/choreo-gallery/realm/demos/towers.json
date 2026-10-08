@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "towers",
+      "title": "Towers",
+      "group": "Film",
+      "lede": "Not a video. A four-minute museum film composited live in the browser — a 3D scene, motion graphics and a score, cut in real time at any size, with interactive chapters and its own audio mixer.",
+      "apis": ["<Film>", "f.Spine", "@through", "c.Attach", "c.Perform"],
+      "sample": "{{! THE SCORE IS THE EDITOR — and it is three things in one\n    region, which is the whole of how a film composes with Choreo.\n\n    ONE CAMERA STEP for the entire film. Every beat contributes waypoints\n    to a single spline: a hold breathes, and a cut waypoint SPLICES the\n    path so the shots either side are clamped rather than travelled\n    between. Nothing else moves the lens — there is no per-shot camera.\n\n    ONE ATTACHED WINDOW PER BEAT. The type, the insert and the clip are\n    their own regions with their own steps, and the film does not PLAY\n    them: it opens a window on its own clock and drives them through it.\n    That is why a scrub lands every one of them where the clock says\n    rather than where they had got to.\n\n    AND, IN A CUT FILM, A CUE PER EDIT. An exact film has none at all: it\n    derives the beat in force from the number, which is what makes it a\n    pure function of its clock and what lets it be rendered frame by\n    frame rather than recorded. }}\n\n{{! THE CONSTRUCT, first: <Film> is the editor, and everything below is\n    what it runs. The picture is a component rather than fourteen\n    arguments — it declares the adjustments a shot may hold on it,\n    f.picture.* — and the score is the graph in the default block. }}\n<Film @name='towers' @menuTitle='TOWERS' @join='wipe'\n  @rail={{false}} @seek={{this.seek}} @settle={{0.5}}>\n  <:picture as |register|>\n    <IframePicture @register={{register}}\n      @src={{this.src}} @assets={{this.assets}} @standing={{STANDING}} />\n  </:picture>\n  <:default as |f|>\n    <f.Spine>…chapters, shots and the joins between them…</f.Spine>\n  </:default>\n  <:gate as |f|>…the door: the title package, in the film's own type…</:gate>\n  <:end as |f|>…the back matter…</:end>\n</Film>\n\n{{! AND THIS IS WHAT <Film> COMPILES ITS SCORE INTO — one region, three\n    kinds of step. The film writes this; a score never does. }}\n<c.Sequence @name={{this.filmName}}>\n  {{! @settle averages the spline around the clock instead of chasing it:\n      the curvature step at every waypoint goes, the cuts and the landing\n      do not, and it stays a pure function of the clock }}\n  <c.Camera3D @name='film' @through={{this.path}}\n    @duration={{this.filmSeconds}} @ease='linear'\n    @settle={{this.settle}} @tension={{0.34}} />\n\n  {{! driven, never played — and @end says what happens past the window:\n      taken off, held on its last sample, or frozen }}\n  {{#each this.windows as |w|}}\n    <c.Attach @region={{w.region}} @at={{at 'film'}}\n      @delay={{w.start}} @duration={{w.length}}\n      @end={{w.end}} @exact={{this.exact}} />\n  {{/each}}\n\n  {{#unless this.exact}}\n    {{! the narration, the type, the stage marks, the traces, the grade\n        and the weather all enter on these. A beat with a LEAD emits two:\n        an 'air' cue a tick early, so the sky turns while the lens is\n        still travelling, and then the 'beat' itself. }}\n    {{#each this.cues as |cue|}}\n      <c.Perform @at={{at 'film'}} @delay={{cue.delay}}\n        @action={{cue.action}} @target={{cue.index}} />\n    {{/each}}\n\n    {{! and the last cue does not loop — a film that laps past its own\n        coda never meant any of it. The run stops, the end card rises. }}\n    <c.Perform @action='lap' />\n  {{/unless}}\n</c.Sequence>",
+      "slowmo": false,
+      "theater": true,
+      "walkthrough": [
+        {
+          "label": "One shot, as the score writes it",
+          "note": "A film is a GRAPH — a spine of chapters and shots, with everything else attached to a shot — and it COMPILES to a table of beats the engine runs. Both are here on purpose: this is the source, the next panel is what it becomes. Every field is a FACT about the shot rather than a keyframe, which is what lets an agent direct the film by editing the score and a person direct it by dragging one number. Order inside a shot does not matter; a Join is a sibling BETWEEN two shots, because a seam belongs to neither.",
+          "source": "<f.Join @presentation=\"dip\" />\n<f.Shot\n  @name=\"ishigaki\"       {{! the shot's name IS its place in the script }}\n  @ticks={{7}}           {{! how long it runs: one tick is two seconds }}\n  @cut={{true}}          {{! SPLICE the camera path, do not travel to it }}\n  @dolly={{1.24}} @lookY={{-4.4}} @ox={{-0.12}} @pitch={{-1}} @yaw={{72}}\n  @to={{array 2.8 1.6 0.6}}        {{! what the callouts point at }}\n>\n  {{! the tail pose: the shot travels here over its seven ticks }}\n  <f.To @dolly={{1.12}} @lookY={{-3.2}} @ox={{-0.12}}\n    @pitch={{1}} @yaw={{84}} />\n\n  <f.Type @mode=\"lower\" @kicker=\"STAGE ONE\"\n    @word=\"石垣\" @reading=\"ISHIGAKI\" @gloss=\"the stone base\"\n    @says={{array \"No mortar. None.\" \"The wall sheds the shock\"}} />\n\n  <f.Voice @line=\"Ishigaki. Dry stone, no mortar, stacked into a curve.\"\n    @read={{get VO_SECS \"ishigaki\"}} />\n\n  {{! adjustments the PICTURE declares, held for this shot only }}\n  <f.picture.Build @clock={{array (tAt 1576) (tAt 1579)}} />\n</f.Shot>"
+        },
+        {
+          "label": "The same shot, compiled",
+          "note": "What the graph above becomes: one row the engine reads. Five members are required — id, ch, cam, mode, ticks — and the other forty-odd are the direction. The compiler is pure and the rows are pinned by golden fixtures, so a change to the score that was not meant to move the film shows up as a diff rather than as a surprise four minutes in.",
+          "source": "{\n  id: 'ishigaki',            // from @name\n  ch: 2,                     // from the enclosing chapter\n  ticks: 7,\n  mode: 'lower',             // from the Type\n  cut: true,\n  join: 'dip',               // from the Join before it\n  cam:   { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },\n  toCam: { dolly: 1.12, lookY: -3.2, ox: -0.12, pitch: 1,  yaw: 84 },\n  to: [2.8, 1.6, 0.6],\n  build: [tAt(1576), tAt(1579)],\n  kanji: '石垣',\n  romaji: 'ISHIGAKI',\n  gloss: 'the stone base',\n  says: ['No mortar. None.', 'The wall sheds the shock'],\n  vo: 'Ishigaki. Dry stone, no mortar, stacked into a curve.',\n}"
+        },
+        {
+          "label": "The chapters",
+          "note": "Five rows, and the whole grade of the film. A beat names a chapter by index and inherits its mood and its film stock unless it overrides them — so a colourist's pass is five lines, not four hundred.",
+          "source": "const CHAPTERS = [\n  { n: '01', title: 'CONTEXT',      grade: 'amber', lut: 'sandstone' },\n  { n: '02', title: 'HISTORY',      grade: 'iron',  lut: 'iron' },\n  { n: '03', title: 'CONSTRUCTION', grade: 'chalk', lut: 'chalk' },\n  { n: '04', title: 'DETAIL',       grade: 'ink',   lut: 'ink' },\n  { n: '05', title: 'COMPARISON',   grade: 'plate', lut: 'plate' },\n];"
+        },
+        {
+          "label": "A mood, as numbers",
+          "note": "A grade is not a filter name, it is the numbers the glass takes. The film hands the construct a table of them and a beat wears one by name; the shader interpolates between whichever two are in force across a seam.",
+          "source": "const GRADES = {\n  // the film's one night shot: a night that has been LIFTED is dusk, so\n  // this one pulls the black down and leaves the rim light to draw\n  night: {\n    sat: 0.78, con: 1.12, bri: 0.7, sep: 0, hue: 0,\n    warm: hex('#c9c2b4'),\n    cool: hex('#6f7f9e'),\n    gradeA: 0.6, vigA: 0,\n  },\n};"
+        }
+      ],
+      "lesson": {
+        "guide": "film-picture",
+        "concept": "A film directs a picture through a contract",
+        "why": "The renderer owns the architecture, lighting and rendering work. The Film score requests framing and picture capabilities, making the camera and treatment independently tunable.",
+        "experiment": "Compare Into the mist with Clear architecture at the same shot. Separate the effect of rig height from the effect of haze and grade.",
+        "pitfall": "Advancing before the model or picture is ready can capture an empty frame even when the timeline time is correct.",
+        "combine": "Combine with world annotations when a label must stay attached to part of a building."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -522,11 +522,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
-      # Reads the TypeScript sources and the guides directly, so it needs no
-      # build.
-      - name: Check guide coverage
-        run: pnpm run docs:check
-        working-directory: packages/choreo-gallery
       # The gallery resolves these packages through their built output
       # (package.json#exports maps into dist/ and declarations/). glimmer-motion
       # builds first: choreo's declarations build resolves it the same way.
@@ -558,22 +553,45 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run test:release
         working-directory: packages/choreo-player
-      # The realm output test reads dist-realm/, and the theater sizing test
-      # reads the scoped stylesheet the build generates.
-      - name: Build Choreo Gallery and its realm
-        id: build-gallery
-        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
-        run: pnpm run build && pnpm run build:realm
-        working-directory: packages/choreo-gallery
-      - name: Choreo Gallery realm output tests
-        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
-        run: pnpm run test:realm
-        working-directory: packages/choreo-gallery
+      # Reads choreo-test-app's stylesheet directly, so it needs no build.
       # Playwright launches the runner's preinstalled Google Chrome (the
       # script's default `chrome` channel), so no browser download is needed.
       - name: Choreo Gallery theater sizing test
-        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         run: pnpm run test:theater-sizing
+        working-directory: packages/choreo-gallery
+
+  # The gallery realm's *.test.gts files. The realm's lint and its content
+  # check run in ci-lint.yaml.
+  choreo-gallery-test:
+    name: Choreo Gallery Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: choreo-gallery-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+      # The boxel-cli test engine mounts realm/ as an in-memory realm and
+      # drives the host test harness bundled with that CLI release, so no
+      # workspace install or realm-server is needed. The harness must shim
+      # glimmer-motion and Choreo, which 0.8.0-unstable.0 is the first release
+      # to do. The pin decides which host harness the tests run against; bump
+      # it deliberately.
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@0.8.0-unstable.0
+      # The browser revision must match the CLI's own @playwright/test pin,
+      # so install through the CLI's nested playwright binary.
+      - name: Install Chromium
+        run: |
+          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Run tests
+        run: boxel test realm
         working-directory: packages/choreo-gallery
 
   # glimmer-motion's own QUnit suite, which compiles the package from source.

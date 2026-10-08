@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "trail",
+      "title": "Trail",
+      "group": "Animate",
+      "lede": "Push a path. Pop a crumb.",
+      "apis": ["Presence", "popLayout", "layout"],
+      "sample": "{{! popLayout lifts a leaving crumb out of flow the moment it exits, so the\n    row closes up underneath it while it fades in place. Without it the gap\n    would not shut until the exit had finished. }}\n<Presence\n  @items={{this.items}}\n  @key={{keyOf}}\n  @mode='popLayout'\n  @initial={{false}}\n  as |step h|\n>\n  {{! layout=true is what animates the SURVIVORS into the closed-up row —\n      the exit poses below only describe the crumb that is leaving }}\n  <span\n    {{motion\n      presence=h\n      layout=true\n      initial=(to opacity=0 x=-12)\n      animate=(to opacity=1 x=0)\n      exit=(to opacity=0 scale=0.92 x=8)\n      transition=spring\n    }}\n  >{{step.label}}</span>\n</Presence>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-presence",
+        "concept": "Removing a breadcrumb changes the path and its layout",
+        "why": "Presence keeps popped crumbs alive for their exits while popLayout releases their slots immediately. The retained crumbs use layout projection to close the path without waiting for the old nodes to disappear.",
+        "experiment": "Push to the deepest path, then select an earlier crumb. Watch several removed crumbs leave while the retained path settles. Compare the two spring presets.",
+        "pitfall": "Reading the current depth to label a departing crumb can change its meaning during exit. Keep the departing label on the item yielded by Presence.",
+        "combine": "Combine with shared tabs when both a path and a selection marker should communicate navigation without a full page transition."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

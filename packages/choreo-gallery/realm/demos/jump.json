@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "jump",
+      "title": "Triage",
+      "group": "Choreo",
+      "lede": "Nine tests are red in a run of sixty. Find each one without losing your place.",
+      "apis": ["c.Scroll", "@align", "c.Raise", "c.Hold @fill", "@debug"],
+      "sample": "// A jump is only information when you did not already know where you were\n// going. This stage used to hand you four buttons reading \"take 11\" over a\n// list of numbered rows — you named the row, and the scroll then told you\n// where the row you had just named was. Nothing was learned.\n//\n// A failing test is the case where you genuinely do not know: not where it\n// is, not how far apart they are, not whether they cluster. Each of the\n// three steps then has a job that survives being frozen.\n<c.Sequence @name={{concat 'ask-' this.pass}}>\n  {{! how far down the run it is, and whether it sits with the others.\n      Teleport instead and you get the row with none of the geography.\n      It yields to the wheel, which here is a requirement and not a\n      nicety: you are already scrolling to read an assertion. }}\n  <c.Scroll @of={{c.id this.target}} @align={{this.align}} @duration={{0.5}} />\n\n  <c.Parallel>\n    {{! the only way the row can be above the sticky header AND outside\n        the pane's overflow clip at once — z-index cannot buy that, since\n        a stacking context does not escape an ancestor's clip. Raising\n        DURING the scroll would pin it where the lift began. }}\n    <c.Raise @of={{c.id this.target}} @shadow={{true}} @duration={{0.9}} />\n\n    {{! @fill is a flash versus a record. Keeping the marks is how you\n        find your place after scrolling off to read a stack trace — and\n        the fill bridges the flight to the render that commits the row's\n        own class, so it does not blink between the two. }}\n    <c.Hold @of={{c.id this.target}} @backgroundColor='var(--ember)'\n      @duration={{0.7}} @fill={{this.keep}} />\n  </c.Parallel>\n</c.Sequence>\n\n// The ask number is in @name because a region declines a pass whose tree\n// fingerprints identical to the one standing — and pressing \"next failure\"\n// twice on the same row is a thing people do.",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-raise-scroll",
+        "concept": "Motion can help a person locate an unknown result",
+        "why": "Scroll reveals where the next failure sits in a long run, Raise gives that result temporary emphasis, and Hold keeps attention there long enough to read it.",
+        "experiment": "Advance to successive failures and notice distance and clustering. Compare Scenic jump with Jump cut without losing the highlighted target.",
+        "pitfall": "Scrolling to a destination already obvious beside the button adds movement without teaching location.",
+        "combine": "Combine with gates when each discovered result becomes the next step in a guided explanation."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

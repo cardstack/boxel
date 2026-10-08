@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "camera",
+      "title": "Camera",
+      "group": "Choreo",
+      "lede": "The whole library sits on the glass. Dive in to grade a shot.",
+      "apis": ["c.Camera", "@fit", "@margin", "@steady"],
+      "sample": "{{! A photo library: the whole set sits on the glass.\n    Dive IN and the camera info develops — number first, then the full\n    exposure. ONE step, aimed by state — an interrupted dive simply bends.\n\n    @fit is the whole dive: the library computes the zoom AND the\n    centring pan from the clicked frame's REST-layout box and the glass\n    it has to fit inside — so a click straight from one dive to the next\n    tile still measures true geometry, not whatever was mid-flight.\n    @margin is the frame's share of the glass once centred; null fits\n    nothing — back to the resting sheet. }}\n<c.Parallel>\n  <c.Camera\n    @fit={{if this.focus (c.id this.focus) null}}\n    @margin={{0.72}}\n    @spring={{carry}}\n    @steady={{array (c.role 'no') (c.role 'heart') (c.role 'verdict')}}\n  />\n\n  {{! if a verdict reflows the sheet, every frame that moved tweens }}\n  <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />\n</c.Parallel>\n\n{{! @steady keeps take numbers and the other tiles' marks legible while\n    the camera flies. Heart and pass on the open frame live in the dock,\n    off the photograph. For a pinch-anchored zoom that should NOT\n    recentre, @origin/@x/@y are still there — @fit is the canned form of\n    the common case: dive on this thing, and centre it. }}",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "spatial-frame",
+        "concept": "Move the view to explain a relationship",
+        "why": "Framing computes pan and zoom from resting layout bounds. The selected photo remains part of the same collection, and the callout appears beside the frame rather than covering the subject.",
+        "experiment": "Select a second photo during the dive. Observe whether its final framing uses the photo's real bounds rather than its transient screen position.",
+        "pitfall": "Measuring a transformed intermediate box can feed camera motion back into its own next target.",
+        "combine": "Combine with spatial paths when several purposeful framings should form a guided route."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

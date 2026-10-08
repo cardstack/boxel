@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "enter",
+      "title": "Enter",
+      "group": "Animate",
+      "lede": "Two notices find their scale.",
+      "apis": ["initial", "animate", "transition"],
+      "sample": "{{! Every notice is keyed, so replaying swaps IDENTITIES — the old ones\n    exit while the new ones enter, rather than one list mutating in place }}\n<Presence @items={{this.items}} @key={{keyOf}} @mode='popLayout' as |note h|>\n  {{! initial is the pose painted BEFORE the first frame; animate is home.\n      The transition is PER VALUE: opacity is a short tween because a fade\n      reads as instant anyway, while scale and y are springs so the card\n      arrives with weight. One blanket duration would flatten both. }}\n  <article\n    {{motion\n      presence=h\n      initial=(to opacity=0 scale=0.55 y=56)\n      animate=(to opacity=1 scale=1 y=0)\n      exit=(to opacity=0 scale=0.9 y=-20)\n      transition=(perValue\n        opacity=(tween duration=0.16)\n        scale=(spring bounce=0.48 visualDuration=0.42)\n        y=(spring bounce=0.38 visualDuration=0.42)\n      )\n    }}\n  >{{note.title}}</article>\n</Presence>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-targets",
+        "concept": "Arrival can use different property responses",
+        "why": "The notice has explicit initial and target values. Scale and vertical movement use springs while opacity uses a short tween, and a second arrival can be offset without duplicating the component.",
+        "experiment": "Compare Jack in the box and Polite entrance. Follow the text baseline and the opacity separately during the first appearance.",
+        "pitfall": "Binding a style attribute on the same element can overwrite Motion's transform during a Glimmer update.",
+        "combine": "Combine with presence when the same notice also needs a retained exit."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

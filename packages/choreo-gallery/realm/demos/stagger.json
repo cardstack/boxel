@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "stagger",
+      "title": "Stagger",
+      "group": "Animate",
+      "lede": "One label, a whole dock.",
+      "apis": ["variants", "staggerChildren"],
+      "sample": "// A variant is a NAMED pose. Naming one on the parent cascades the\n// name down to every descendant that has variants of its own, so the whole\n// dock is animated by setting a single string in the template.\nconst grid = {\n  hidden: {},\n  show: { transition: { staggerChildren: 0.035, delayChildren: 0.06 } },\n};\nconst tile = {\n  hidden: { opacity: 0, scale: 0.6, y: 18 },\n  show: { opacity: 1, scale: 1, y: 0 },\n};\n\n<div {{motion variants=grid initial='hidden' animate='show'}}>\n  {{#each apps as |app|}}\n    {{! a child declares only its poses; the parent decides WHEN, and\n        staggerChildren spaces the starts out in sibling order }}\n    <div {{motion variants=tile}}>{{app.name}}</div>\n  {{/each}}\n</div>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-variants",
+        "concept": "A parent state can orchestrate its descendants",
+        "why": "The group propagates a named state and schedules children with a stagger. Each child supplies its own target and spring, so ordering and response remain independently editable.",
+        "experiment": "Compare Popcorn with Domino ripple, then reduce the stagger while leaving the child spring unchanged. Notice which part controls order and which controls bounce.",
+        "pitfall": "Hard-coding a delay from stale array indices makes order disagree with the rendered collection.",
+        "combine": "Combine with presence when the staggered collection also inserts and removes items."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}
