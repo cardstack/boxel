@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Push alert rule groups in `provisioning/alerting/` to a hosted Grafana
-# via the provisioning HTTP API. grafanactl doesn't manage alert rules
+# Push alert rule groups in `provisioning/alerting/`, plus the contact
+# points and rule groups in `provisioning/alerting-hosted/<env>/`, to a hosted
+# Grafana via the provisioning HTTP API. grafanactl doesn't manage alert rules
 # (its `resources list` covers App Platform kinds only — dashboards,
 # folders, playlists, etc.), and locally docker-compose mounts
 # `provisioning/alerting/` into the container so Grafana provisions from
@@ -15,6 +16,8 @@
 # run, source ./scripts/grafanactl-env.sh first.
 #
 #   GRAFANA_TOKEN — service-account token (SecureString)
+#   Plus every ${VAR} the env's files reference, e.g. DISCORD_ALARMS_WEBHOOK
+#   for provisioning/alerting-hosted/staging/contact-points/.
 #
 # What it pushes:
 #   - Each `.json` in `provisioning/alerting/` is read as the standard
@@ -162,13 +165,49 @@ upsert_group() {
   esac
 }
 
-shopt -s nullglob
-files=(provisioning/alerting/*.json)
-[[ "${#files[@]}" -gt 0 ]] || { echo "no alert-rule-group json files found" >&2; exit 0; }
+# A contact point is created when its uid is new and replaced otherwise.
+# The provisioning API has no single upsert call for contact points, so look
+# the uid up first.
+upsert_contact_point() {
+  local uid="$1" body="$2"
+  local method url http_status response existing
+  existing="$(curl -sS --fail-with-body \
+    -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+    "${grafana_server}/api/v1/provisioning/contact-points")" \
+    || fail "listing contact points failed: ${existing}"
+  if jq -e --arg uid "$uid" 'any(.[]; .uid == $uid)' <<<"$existing" >/dev/null; then
+    method=PUT
+    url="${grafana_server}/api/v1/provisioning/contact-points/${uid}"
+  else
+    method=POST
+    url="${grafana_server}/api/v1/provisioning/contact-points"
+  fi
 
-echo "apply-alerting: env=${env_name} server=${grafana_server} files=${#files[@]}" >&2
+  response="$(mktemp -t alerting-response.XXXXXX)"
+  http_status="$(curl -sS -o "$response" -w '%{http_code}' -X "$method" \
+    -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -H "X-Disable-Provenance: true" \
+    --data-binary "$body" \
+    "$url")"
 
-for f in "${files[@]}"; do
+  case "$http_status" in
+    2??)
+      echo "  ↻ contact point ${uid} (${method})" >&2
+      rm -f "$response"
+      ;;
+    *)
+      # The body carries the webhook URL, so print only the server's message.
+      echo "  ✗ contact point ${uid} → HTTP ${http_status}" >&2
+      jq -r '.message // empty' "$response" 2>/dev/null | sed 's/^/    /' >&2 || true
+      rm -f "$response"
+      fail "contact point push failed"
+      ;;
+  esac
+}
+
+push_rule_groups() {
+  local f="$1" raw resolved folder_uid group_name interval_raw interval_secs body
   echo "→ ${f}" >&2
   # Each file is `apiVersion: 1` + `groups: [...]`. Pull groups out as
   # JSON one per line, envsubst them so ${VAR} placeholders resolve, then
@@ -195,6 +234,42 @@ for f in "${files[@]}"; do
 
     upsert_group "$folder_uid" "$group_name" "$body"
   done
+}
+
+push_contact_points() {
+  local f="$1" raw resolved uid body
+  echo "→ ${f}" >&2
+  # Same file shape as Grafana file provisioning: `contactPoints[].receivers[]`.
+  # The API takes one receiver at a time, named after its contact point.
+  jq -c '.contactPoints[] | .name as $name | .receivers[] | . + {name: $name}' "$f" \
+    | while IFS= read -r raw; do
+      resolved="$(resolve_placeholders "$raw" "$f")"
+      uid="$(jq -r '.uid' <<<"$resolved")"
+      [[ -n "$uid" && "$uid" != "null" ]] || fail "${f}: receiver missing 'uid'"
+      body="$(jq -c '{uid, name, type, settings, disableResolveMessage}' <<<"$resolved")"
+      upsert_contact_point "$uid" "$body"
+    done
+}
+
+shopt -s nullglob
+# provisioning/alerting/ applies to every environment, and docker-compose
+# mounts it for local Grafana too. provisioning/alerting-hosted/<env>/ holds
+# what exists in one hosted environment only: rules for a service that runs
+# there alone, and contact points whose secrets come from that
+# environment's SSM. Contact points go first, so a rule that routes to one
+# can find it.
+hosted_dir="provisioning/alerting-hosted/${env_name}"
+contact_point_files=("${hosted_dir}"/contact-points/*.json)
+rule_files=(provisioning/alerting/*.json "${hosted_dir}"/rules/*.json)
+
+echo "apply-alerting: env=${env_name} server=${grafana_server} contact-point files=${#contact_point_files[@]} rule files=${#rule_files[@]}" >&2
+
+for f in "${contact_point_files[@]}"; do
+  push_contact_points "$f"
+done
+
+for f in "${rule_files[@]}"; do
+  push_rule_groups "$f"
 done
 
 echo "apply-alerting: done" >&2
