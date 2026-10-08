@@ -18,17 +18,7 @@
 // the loader is actually asked for get served, and one reached from inside an
 // already-bundled chunk never is, so a served module has to answer for the
 // stylesheets of everything it pulls in as well as its own.
-//
-// It also marks each class a base module declares with the module's name, as
-// the loader's own transpiler does for a module it fetches. A module reached
-// only from inside another module's chunk is never served, so the loader is
-// never asked for it; the mark is how it can name that module's classes all
-// the same.
 import { sep } from 'node:path';
-
-import { transformAsync } from '@babel/core';
-
-import { moduleProvenancePlugin } from '../../runtime-common/loader-plugin.ts';
 
 const REGISTRY = '__boxelBundledBaseScopedCSS';
 
@@ -142,7 +132,7 @@ export function bundledBaseScopedCSS() {
     // bundler resolves it: `enforce: 'post'` puts this at the end of the
     // transform chain.
     enforce: 'post',
-    async transform(code, id) {
+    transform(code, id) {
       if (!isBaseModule(id)) {
         return null;
       }
@@ -158,31 +148,15 @@ export function bundledBaseScopedCSS() {
         ),
       ].filter((imported) => imported !== name);
 
-      // In a chunk `import.meta.url` is the chunk's, so the mark names the
-      // module by the identifier the loader serves it under.
-      let marked = await transformAsync(code, {
-        filename: id,
-        sourceType: 'module',
-        babelrc: false,
-        configFile: false,
-        sourceMaps: true,
-        plugins: [
-          [
-            moduleProvenancePlugin,
-            { moduleIdentifier: `@cardstack/base/${name}` },
-          ],
-        ],
-      });
-      let result = marked?.code ?? code;
-
-      if (css.length || imports.length) {
-        // A name that turns out to be something other than a base module
-        // costs nothing: the reader walks only names the registry holds.
-        result +=
-          `\n;(globalThis.${REGISTRY} ??= {})[${JSON.stringify(name)}] = ` +
-          `${JSON.stringify({ css, imports })};\n`;
+      if (!css.length && !imports.length) {
+        return null;
       }
-      return { code: result, map: marked?.map ?? null };
+      // A name that turns out to be something other than a base module costs
+      // nothing: the reader walks only names the registry holds.
+      let registration =
+        `\n;(globalThis.${REGISTRY} ??= {})[${JSON.stringify(name)}] = ` +
+        `${JSON.stringify({ css, imports })};\n`;
+      return { code: code + registration, map: null };
     },
   };
 }

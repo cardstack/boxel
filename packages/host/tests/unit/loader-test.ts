@@ -241,11 +241,6 @@ module('Unit | loader', function (hooks) {
     let { Person } = await loader.import<{ Person: unknown }>(
       `${testRealmURL}person`,
     );
-    assert.deepEqual(loader.identify(Person), {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
-    // The loader knows which loader instance was used to import the card
     assert.deepEqual(Loader.identify(Person), {
       module: `${testRealmURL}person`,
       name: 'Person',
@@ -725,7 +720,7 @@ module('Unit | loader', function (hooks) {
     });
 
     // This Loader is constructed without a `virtualNetwork`, so
-    // `captureIdentitiesOfModuleExports` records the raw shim module
+    // `markModuleExports` records the raw shim module
     // identifier without running it through `vn.unresolveURL`. The
     // identity stays in URL form. Other test setups that build a VN
     // alongside the Loader see the RRI canonical form here.
@@ -743,24 +738,19 @@ module('Unit | loader', function (hooks) {
     let { Declared } = await loader.import<{ Declared: unknown }>(
       `${testRealmURL}declarer`,
     );
-    let declarer = loader.identify(Declared);
-    // On the same network, so both loaders spell the module alike.
-    let { virtualNetwork } = getService('network');
-    let throwIfFetch = new Loader(
-      async () => {
-        throw new Error(
-          'fetch should not be invoked during shimmed module tests',
-        );
-      },
-      virtualNetwork.resolveImport,
-      { virtualNetwork },
-    );
+    let declarer = { module: `${testRealmURL}declarer`, name: 'Declared' };
+    assert.deepEqual(Loader.identify(Declared), declarer);
+    let throwIfFetch = new Loader(async () => {
+      throw new Error(
+        'fetch should not be invoked during shimmed module tests',
+      );
+    });
     throwIfFetch.shimModule('https://example.com/re-exporter.js', {
       Declared,
     });
 
     assert.deepEqual(
-      throwIfFetch.identify(Declared),
+      Loader.identify(Declared),
       declarer,
       'the re-exporter does not take the credit',
     );

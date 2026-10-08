@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
+import { moduleProvenanceMark } from '@cardstack/runtime-common/etc/test-fixtures';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(import.meta.filename), function () {
@@ -59,14 +60,15 @@ module(basename(import.meta.filename), function () {
   });
 
   module('module provenance', function () {
-    test('marks each class and function the module declares and exports', async function (assert) {
+    test('marks each class the module declares and exports', async function (assert) {
       let transpiled = await transpileJS(
         `
         export class A {}
         export function f() {}
         export const g = () => 1;
+        export const H = class {};
         class B {}
-        export { B, B as Bee };
+        export { B as Bee, B };
         export default class C {}
         `,
         'test-module.ts',
@@ -74,25 +76,21 @@ module(basename(import.meta.filename), function () {
       assert.codeEqual(
         transpiled,
         `
-        export class A {}
+        export class A {
+          ${moduleProvenanceMark('A')}
+        }
         export function f() {}
         export const g = () => 1;
-        class B {}
-        export { B, B as Bee };
-        export default class C {}
-        function _markModuleProvenance(value, name) {
-          let key = Symbol.for("module-provenance");
-          if (typeof value === 'function' && Object.isExtensible(value) && !Object.prototype.hasOwnProperty.call(value, key)) {
-            Object.defineProperty(value, key, {
-              value: Object.freeze({ module: import.meta.url, name })
-            });
-          }
+        export const H = class {
+          ${moduleProvenanceMark('H')}
+        };
+        class B {
+          ${moduleProvenanceMark('B')}
         }
-        _markModuleProvenance(A, "A");
-        _markModuleProvenance(f, "f");
-        _markModuleProvenance(g, "g");
-        _markModuleProvenance(B, "B");
-        _markModuleProvenance(C, "default");
+        export { B as Bee, B };
+        export default class C {
+          ${moduleProvenanceMark('default')}
+        }
         `,
       );
     });
@@ -105,6 +103,7 @@ module(basename(import.meta.filename), function () {
         interface Shape { a: number }
         export type { Shape };
         export declare const Declared: unknown;
+        export declare class DeclaredClass {}
         export { Imported };
         export default Imported;
         `,

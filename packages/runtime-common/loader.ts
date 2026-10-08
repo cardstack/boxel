@@ -14,7 +14,7 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import { moduleProvenanceOf } from './loader-plugin.ts';
+import { markModuleProvenance, moduleProvenanceOf } from './loader-plugin.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -253,10 +253,6 @@ export class Loader {
   private knownDepsCache = new Map<string, Set<string>>();
   // Module identifier → the key it is tracked under (see trackingKey).
   private trackingKeyCache = new Map<string, string>();
-  private identities = new WeakMap<
-    Function,
-    { module: string; name: string }
-  >();
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
@@ -397,7 +393,7 @@ export class Loader {
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
-    this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
+    this.markModuleExports(module, moduleIdentifier);
     this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
@@ -516,24 +512,10 @@ export class Loader {
   static identify(
     value: unknown,
   ): { module: string; name: string } | undefined {
-    if (typeof value !== 'function') {
-      return undefined;
-    }
-    // A loader that served the value has already read its mark, and put the
-    // module in canonical form. The mark alone answers for a value no loader
-    // served: one evaluated outside every loader, such as in a module compiled
-    // into a bundle that no loader was asked for.
-    return (
-      Loader.loaders.get(value)?.identify(value) ?? moduleProvenanceOf(value)
-    );
-  }
-
-  identify(value: unknown): { module: string; name: string } | undefined {
-    if (typeof value === 'function') {
-      return this.identities.get(value);
-    } else {
-      return undefined;
-    }
+    // The mark a class carries names the module that declares it, in the
+    // canonical form a code ref persists. See `moduleProvenancePlugin` and
+    // `markModuleExports`.
+    return moduleProvenanceOf(value);
   }
 
   static getLoaderFor(value: unknown): Loader | undefined {
@@ -1331,44 +1313,24 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
-  private captureIdentitiesOfModuleExports(
-    module: any,
-    moduleIdentifier: string,
-  ) {
-    // Identities are recorded in canonical identifier form so that
-    // `identify()` output matches the form persisted in code refs.
+  // Records this loader as the one a module's exports came from, for
+  // `getLoaderFor`, and marks each export that has no provenance mark yet with
+  // this module. Transpilation marks the classes a module declares, as it is
+  // evaluated, so this marks what it did not: a value in a module the loader
+  // was handed as a shim, or in a module transpiled before marks existed.
+  private markModuleExports(module: any, moduleIdentifier: string) {
+    // In canonical identifier form, so that `identify()` output matches the
+    // form persisted in code refs.
     let moduleId = this.canonicalIdentifier(
       trimModuleIdentifier(moduleIdentifier),
     );
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
-      if (
-        typeof exportedEntity === 'function' &&
-        typeof propName === 'string' &&
-        !this.identities.has(exportedEntity)
-      ) {
-        // A value marked with the module that declares it is credited to that
-        // module, not to the first module that happened to expose it. The two
-        // differ when a module that re-exports the value is served before its
-        // declarer — possible for a shimmed module, whose imports the loader
-        // never sees evaluate. A mark naming this very module (by the URL it
-        // was evaluated at) changes nothing.
-        let provenance = moduleProvenanceOf(exportedEntity);
-        let declaredElsewhere =
-          provenance &&
-          provenance.module !== moduleIdentifier &&
-          provenance.module !== this.getCanonicalModuleURL(moduleIdentifier);
-        this.identities.set(
-          exportedEntity,
-          declaredElsewhere
-            ? {
-                module: this.canonicalIdentifier(
-                  trimModuleIdentifier(provenance!.module),
-                ),
-                name: provenance!.name,
-              }
-            : { module: moduleId, name: propName },
-        );
+      if (typeof exportedEntity === 'function') {
+        markModuleProvenance(exportedEntity, {
+          module: moduleId,
+          name: propName,
+        });
         Loader.loaders.set(exportedEntity, this);
       }
     }
@@ -1457,7 +1419,7 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
-      this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+      this.markModuleExports(loaded.module, moduleIdentifier);
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
@@ -1593,6 +1555,10 @@ export class Loader {
                 this.getCanonicalModuleURL(moduleIdentifier) ??
                 moduleIdentifier,
               loader: this,
+              // What the provenance marks in this module name it as.
+              moduleIdentifier: this.canonicalIdentifier(
+                trimModuleIdentifier(moduleIdentifier),
+              ),
             };
           case 'completing-dep':
           case 'dep': {
@@ -1635,7 +1601,7 @@ export class Loader {
         );
         this.#currentlyEvaluatingModule = previouslyEvaluating;
       }
-      this.captureIdentitiesOfModuleExports(moduleProxy, moduleIdentifier);
+      this.markModuleExports(moduleProxy, moduleIdentifier);
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: moduleProxy,

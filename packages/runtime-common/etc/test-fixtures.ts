@@ -37,6 +37,7 @@ import StringField from '@cardstack/base/string';
 import { setComponentTemplate } from "@ember/component";
 import { createTemplateFactory } from "@ember/template-factory";
 export class Person extends CardDef {
+  ${moduleProvenanceMark('Person')}
   static displayName = 'Person';
   static {
     dt7948.g(this.prototype, "firstName", [field], function () {
@@ -71,30 +72,18 @@ export class Person extends CardDef {
 export let counter = 0;
 export function increment() {
   counter++;
-}
-${moduleProvenanceMarks([
-  ['Person', 'Person'],
-  ['counter', 'counter'],
-  ['increment', 'increment'],
-])}`.trim();
+}`.trim();
 }
 
-// What transpilation appends to a module that declares exports: a helper,
-// then one call per declared export, as [local binding, export name].
-export function moduleProvenanceMarks(exports: [string, string][]) {
-  return `
-function _markModuleProvenance(value, name) {
-  let key = Symbol.for("module-provenance");
-  if (typeof value === 'function' && Object.isExtensible(value) && !Object.prototype.hasOwnProperty.call(value, key)) {
-    Object.defineProperty(value, key, {
+// The static block transpilation puts first in each class a module declares
+// and exports, which marks the class with that module and its export name.
+export function moduleProvenanceMark(name: string) {
+  return `static {
+    Object.defineProperty(this, Symbol.for("module-provenance"), {
       value: Object.freeze({
-        module: import.meta.url,
-        name
+        module: import.meta.moduleIdentifier ?? import.meta.url,
+        name: "${name}"
       })
     });
-  }
-}
-${exports
-  .map(([local, name]) => `_markModuleProvenance(${local}, "${name}");`)
-  .join('\n')}`.trim();
+  }`;
 }

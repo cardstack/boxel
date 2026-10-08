@@ -1,12 +1,12 @@
 import type * as Babel from '@babel/core';
 import type { types as t } from '@babel/core';
-import type { NodePath } from '@babel/traverse';
+import type { NodePath, Binding } from '@babel/traverse';
 
-// The own property an exported class or function carries to name the module
-// that declares it, as `{ module, name }`. A module that only re-exports a
-// binding marks nothing, so the mark names the declarer whichever module
-// exposing the binding is loaded first. Non-enumerable and keyed by a symbol,
-// so nothing that lists a class's own keys sees it.
+// The own property an exported class carries to name the module that declares
+// it, as `{ module, name }`. A module that only re-exports a class marks
+// nothing, so the mark names the declarer whichever module exposing the class
+// is loaded first. Non-enumerable and keyed by a symbol, so nothing that lists
+// a class's own keys sees it.
 export const MODULE_PROVENANCE = Symbol.for('module-provenance');
 
 export interface ModuleProvenance {
@@ -30,152 +30,219 @@ export function moduleProvenanceOf(
   return undefined;
 }
 
-export interface ModuleProvenanceOptions {
-  // The module the marks name. Without it a mark names `import.meta.url`,
-  // which is how a module names itself; a build that puts the module in a
-  // chunk, where `import.meta.url` is the chunk's, names it here instead.
-  moduleIdentifier?: string;
+// Marks a value that transpilation did not, such as a class in a module the
+// loader was handed as a shim. A value that already has a mark keeps it.
+export function markModuleProvenance(
+  value: Function,
+  provenance: ModuleProvenance,
+): void {
+  if (
+    Object.isExtensible(value) &&
+    !Object.prototype.hasOwnProperty.call(value, MODULE_PROVENANCE)
+  ) {
+    Object.defineProperty(value, MODULE_PROVENANCE, {
+      value: Object.freeze({ ...provenance }),
+    });
+  }
 }
 
-// Marks each class or function a module declares and exports with the module
-// and the name it is exported under. Runs on `Program` exit, after the
-// TypeScript transform has removed type-only exports.
+export interface ModuleProvenanceOptions {
+  // For a build that puts modules in chunks, where `import.meta` describes the
+  // chunk: the directory the modules come from, and the prefix the loader
+  // serves them under. A module at `<moduleRoot>/a/b.gts` is marked as
+  // `<modulePrefix>a/b`. Without these, a mark names the module the loader
+  // evaluated it as.
+  moduleRoot?: string;
+  modulePrefix?: string;
+}
+
+// The class nodes this plugin has marked: each one's block, and the name its
+// mark carries.
+const markedClasses = new WeakMap<
+  t.Class,
+  { block: t.StaticBlock; name: string }
+>();
+
+// Gives each class a module declares and exports a static block that marks it
+// with the module and the name it is exported under. Only classes: card and
+// field definitions are classes, and they are what the loader is asked to
+// identify. The block is the class's first member, so the mark is in place
+// before any other static code of the class runs.
 //
-// Only a binding this module declares is marked. `import { X } from './y';
+// Only a class this module declares is marked. `import { X } from './y';
 // export { X }` and `export { X } from './y'` mark nothing: `./y` declares X,
-// and marks it itself. A binding exported under more than one name is marked
+// and marks it itself. A class exported under more than one name is marked
 // with the name that sorts first, which is the first key of the module's
 // namespace.
-//
-// The mark is set only when the value has none yet, so when a declaration
-// holds a value another module declared (`export const A = ImportedClass`),
-// the declarer's mark — set as it was evaluated, which is first — stands.
 export function moduleProvenancePlugin(
   babel: typeof Babel,
   options: ModuleProvenanceOptions = {},
 ) {
+  let t = babel.types;
+
+  function moduleExpression(filename: string | undefined): t.Expression {
+    let { moduleRoot, modulePrefix } = options;
+    if (moduleRoot !== undefined && modulePrefix !== undefined && filename) {
+      let root = moduleRoot.replace(/\\/g, '/').replace(/\/$/, '');
+      let file = filename.replace(/\\/g, '/');
+      if (file.startsWith(`${root}/`)) {
+        let name = file
+          .slice(root.length + 1)
+          .split('?')[0]
+          .replace(/\.(gts|gjs|ts|js)$/, '');
+        return t.stringLiteral(`${modulePrefix}${name}`);
+      }
+    }
+    // The loader puts the identifier it serves the module under on
+    // `import.meta`; `import.meta.url` covers a module evaluated without it.
+    return babel.template.expression.ast(
+      'import.meta.moduleIdentifier ?? import.meta.url',
+    );
+  }
+
+  function markStatement(module: t.Expression, name: string): t.Statement {
+    return t.expressionStatement(
+      t.callExpression(
+        t.memberExpression(
+          t.identifier('Object'),
+          t.identifier('defineProperty'),
+        ),
+        [
+          t.thisExpression(),
+          t.callExpression(
+            t.memberExpression(t.identifier('Symbol'), t.identifier('for')),
+            [t.stringLiteral(MODULE_PROVENANCE.description!)],
+          ),
+          t.objectExpression([
+            t.objectProperty(
+              t.identifier('value'),
+              t.callExpression(
+                t.memberExpression(
+                  t.identifier('Object'),
+                  t.identifier('freeze'),
+                ),
+                [
+                  t.objectExpression([
+                    t.objectProperty(t.identifier('module'), module),
+                    t.objectProperty(
+                      t.identifier('name'),
+                      t.stringLiteral(name),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  function mark(
+    cls: NodePath<t.Class>,
+    name: string,
+    filename: string | undefined,
+  ) {
+    let existing = markedClasses.get(cls.node);
+    if (existing) {
+      if (name < existing.name) {
+        existing.block.body = [markStatement(moduleExpression(filename), name)];
+        existing.name = name;
+      }
+      return;
+    }
+    let block = t.staticBlock([
+      markStatement(moduleExpression(filename), name),
+    ]);
+    cls.get('body').unshiftContainer('body', block);
+    markedClasses.set(cls.node, { block, name });
+  }
+
+  // The class a module-level binding holds, when this module declares it:
+  // `class X {}` or `const X = class {}`. Not an import, and not a TypeScript
+  // `declare`, which has nothing behind it at runtime.
+  function declaredClass(binding: Binding | undefined) {
+    if (!binding || binding.kind === 'module' || binding.path.removed) {
+      return undefined;
+    }
+    let declaration = binding.path;
+    if (declaration.isClassDeclaration()) {
+      return declaration.node.declare ? undefined : declaration;
+    }
+    if (declaration.isVariableDeclarator()) {
+      let parent = declaration.parentPath;
+      if (parent?.isVariableDeclaration() && parent.node.declare) {
+        return undefined;
+      }
+      let init = declaration.get('init');
+      return init.isClassExpression() ? init : undefined;
+    }
+    return undefined;
+  }
+
   return {
     visitor: {
-      Program: {
-        exit(path: NodePath<t.Program>) {
-          markDeclaredExports(babel, path, options);
-        },
+      ExportNamedDeclaration(
+        path: NodePath<t.ExportNamedDeclaration>,
+        state: { filename?: string },
+      ) {
+        if (path.node.source || path.node.exportKind === 'type') {
+          return;
+        }
+        let declaration = path.get('declaration');
+        if (
+          declaration.isClassDeclaration() ||
+          declaration.isVariableDeclaration()
+        ) {
+          for (let name of Object.keys(
+            t.getOuterBindingIdentifiers(declaration.node),
+          )) {
+            let cls = declaredClass(path.scope.getBinding(name));
+            if (cls) {
+              mark(cls, name, state.filename);
+            }
+          }
+        }
+        for (let specifier of path.node.specifiers) {
+          if (
+            !t.isExportSpecifier(specifier) ||
+            specifier.exportKind === 'type'
+          ) {
+            continue;
+          }
+          let cls = declaredClass(path.scope.getBinding(specifier.local.name));
+          if (cls) {
+            mark(
+              cls,
+              t.isIdentifier(specifier.exported)
+                ? specifier.exported.name
+                : specifier.exported.value,
+              state.filename,
+            );
+          }
+        }
+      },
+      ExportDefaultDeclaration(
+        path: NodePath<t.ExportDefaultDeclaration>,
+        state: { filename?: string },
+      ) {
+        let declaration = path.get('declaration');
+        if (
+          declaration.isClassDeclaration() ||
+          declaration.isClassExpression()
+        ) {
+          if (!(declaration.node as t.ClassDeclaration).declare) {
+            mark(declaration, 'default', state.filename);
+          }
+        } else if (declaration.isIdentifier()) {
+          let cls = declaredClass(path.scope.getBinding(declaration.node.name));
+          if (cls) {
+            mark(cls, 'default', state.filename);
+          }
+        }
       },
     },
   };
-}
-
-function markDeclaredExports(
-  babel: typeof Babel,
-  program: NodePath<t.Program>,
-  options: ModuleProvenanceOptions,
-) {
-  let t = babel.types;
-  // local binding → every name it is exported under
-  let exposedNames = new Map<string, string[]>();
-  let record = (local: string, exposed: string) => {
-    let names = exposedNames.get(local) ?? [];
-    names.push(exposed);
-    exposedNames.set(local, names);
-  };
-
-  for (let statement of program.node.body) {
-    if (t.isExportNamedDeclaration(statement)) {
-      if (statement.source || statement.exportKind === 'type') {
-        continue;
-      }
-      if (statement.declaration) {
-        for (let name of Object.keys(
-          t.getOuterBindingIdentifiers(statement.declaration),
-        )) {
-          record(name, name);
-        }
-      }
-      for (let specifier of statement.specifiers) {
-        if (
-          !t.isExportSpecifier(specifier) ||
-          specifier.exportKind === 'type'
-        ) {
-          continue;
-        }
-        record(
-          specifier.local.name,
-          t.isIdentifier(specifier.exported)
-            ? specifier.exported.name
-            : specifier.exported.value,
-        );
-      }
-    } else if (t.isExportDefaultDeclaration(statement)) {
-      let declaration = statement.declaration;
-      if (
-        (t.isClassDeclaration(declaration) ||
-          t.isFunctionDeclaration(declaration)) &&
-        declaration.id
-      ) {
-        record(declaration.id.name, 'default');
-      } else if (t.isIdentifier(declaration)) {
-        record(declaration.name, 'default');
-      }
-    }
-  }
-
-  let marks: [local: string, exposed: string][] = [];
-  for (let [local, names] of exposedNames) {
-    if (isDeclaredHere(program, local)) {
-      marks.push([local, [...names].sort()[0]]);
-    }
-  }
-  if (marks.length === 0) {
-    return;
-  }
-
-  let helper = program.scope.generateUidIdentifier('markModuleProvenance');
-  let moduleExpression =
-    options.moduleIdentifier !== undefined
-      ? JSON.stringify(options.moduleIdentifier)
-      : 'import.meta.url';
-  let source = `
-    function ${helper.name}(value, name) {
-      let key = Symbol.for(${JSON.stringify(MODULE_PROVENANCE.description)});
-      if (
-        typeof value === 'function' &&
-        Object.isExtensible(value) &&
-        !Object.prototype.hasOwnProperty.call(value, key)
-      ) {
-        Object.defineProperty(value, key, {
-          value: Object.freeze({ module: ${moduleExpression}, name }),
-        });
-      }
-    }
-    ${marks
-      .map(
-        ([local, exposed]) =>
-          `${helper.name}(${local}, ${JSON.stringify(exposed)});`,
-      )
-      .join('\n')}
-  `;
-  program.pushContainer(
-    'body',
-    babel.template.statements.ast(source, { sourceType: 'module' }),
-  );
-}
-
-// A value binding declared at the top level of this module: not an import,
-// not a type, and not a TypeScript `declare`, none of which exist at runtime.
-function isDeclaredHere(program: NodePath<t.Program>, name: string): boolean {
-  let binding = program.scope.getBinding(name);
-  if (!binding || binding.kind === 'module' || binding.path.removed) {
-    return false;
-  }
-  let declaration = binding.path;
-  if (declaration.isVariableDeclarator()) {
-    let parent = declaration.parentPath;
-    return !(parent?.isVariableDeclaration() && parent.node.declare);
-  }
-  return (
-    (declaration.isClassDeclaration() || declaration.isFunctionDeclaration()) &&
-    !declaration.node.declare
-  );
 }
 
 export function loaderPlugin(babel: typeof Babel) {
@@ -260,13 +327,6 @@ export function loaderPlugin(babel: typeof Babel) {
           // import('lodash') => import.meta.loader.import('lodash')
           path.replaceWith(createLoaderImportCall(path.node.arguments));
         }
-      },
-      // Last, so the marks name what remains exported once the TypeScript
-      // transform has removed what was only a type.
-      Program: {
-        exit(path: NodePath<t.Program>) {
-          markDeclaredExports(babel, path, {});
-        },
       },
     },
   };
