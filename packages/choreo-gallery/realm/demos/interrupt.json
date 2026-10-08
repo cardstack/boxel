@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "interrupt",
+      "title": "Interruption",
+      "group": "Choreo",
+      "lede": "Change your mind halfway.",
+      "apis": ["Choreo", "Move", "velocity"],
+      "sample": "{{! A puck is not positioned — it is RENDERED into one slot or another, and\n    the region works out that the same id is somewhere new. Two rails, the\n    same clicks, differing only in what carries the puck. }}\n<Choreo @id='spring' as |c|>\n  {{#each stations as |station|}}\n    <span class='slot'>\n      {{#if (this.isAt station)}}\n        <span {{motion id='puck' role='puck'}}></span>\n      {{/if}}\n    </span>\n  {{/each}}\n\n  {{! Retarget mid-flight and the run being replaced hands over how fast\n      everything was going, so the new spring is born already travelling. It\n      bends toward the new station, and overshoots if you send it back the way\n      it came. That is momentum, and it is not scripted anywhere. }}\n  <c.Move @of={{c.kept 'puck'}} @spring={{carry}} @size={{false}} />\n</Choreo>\n\n<Choreo @id='tween' as |c|>\n  …same markup…\n\n  {{! A tween has a start, an end and a curve between them, so interrupting it\n      can only mean starting a NEW curve from wherever it happens to be — it\n      stops dead and eases away again. Nothing is broken; it is what a\n      duration means. }}\n  <c.Move @of={{c.kept 'puck'}} @duration={{0.62}} @ease='easeInOut' @size={{false}} />\n</Choreo>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-springs",
+        "concept": "A new target need not mean a new start",
+        "why": "The loose spring leaves time to retarget it while moving. Its velocity participates in the next response; the timed comparison exposes the difference between continuity and starting a new fixed curve.",
+        "experiment": "Alternate targets mid-flight using Spring tug, then Fast catch. Follow the direction immediately after each reversal, not just the arrival time.",
+        "pitfall": "Disabling input until settlement hides the interruption problem instead of solving it.",
+        "combine": "Combine with far matching to test continuity while the same item changes region."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

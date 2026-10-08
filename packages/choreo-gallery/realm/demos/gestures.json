@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "gestures",
+      "title": "Gestures",
+      "group": "Animate",
+      "lede": "Hover. Press.",
+      "apis": ["variants", "whileHover", "whileTap"],
+      "sample": "// while* poses are held for as long as the gesture holds, then\n// release on their own — there is no pointerup handler to write. Naming them\n// as VARIANTS means one press cascades through the whole globe: the core, the\n// limb and both glow shells each read the same name and answer differently.\nconst core = {\n  rest:  { scale: 1,    backgroundColor: '#ff7a45' },\n  hover: { scale: 1.06, backgroundColor: '#ffb36a' },\n  press: { scale: 0.42, backgroundColor: '#fff4e8' },  // collapsed and HOT\n};\n\n<button\n  {{motion\n    variants=body\n    initial='rest'\n    animate='rest'\n    whileHover='hover'\n    whileTap='press'\n    whileFocus=focus\n  }}\n>\n  {{! the glow is real elements on opacity and scale. Animating a multi-layer\n      box-shadow STRING instead means re-parsing it every frame, which is\n      what makes a shadow animation judder. }}\n  <span {{motion variants=outer}}></span>\n  <span {{motion variants=inner}}></span>\n  <span {{motion variants=core}}>\n    <span {{motion variants=limb}}></span>\n  </span>\n</button>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-input",
+        "concept": "Related layers can share state without sharing one transition",
+        "why": "The body and glow inherit hover and press variants. Scale uses a spring while colour and light use their own tweens, so a physical squeeze and a lighting response remain distinct.",
+        "experiment": "Hold the globe under Rubber sun, release, then try Quiet pulse. Compare the shape response with how long the light takes to settle.",
+        "pitfall": "Applying one generic transition to all properties removes the intentional difference between movement and illumination.",
+        "combine": "Combine with a pointer follower, keeping keyboard focus and activation usable without hover."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "grip",
+      "title": "Table Plan",
+      "group": "Drag",
+      "lede": "Seat twelve people. Drag them by the corner, because the card is also a form.",
+      "apis": [
+        "createDragControls",
+        "dragControls",
+        "dragListener",
+        "onPanSessionStart",
+        "dragSnapToOrigin"
+      ],
+      "sample": "// drag=true swallows the element's pointer whole, and a guest card has a\n// note field in it and a phone number under that. dragListener=false hands the\n// pointer back — a caret goes in the field, the number selects — and the corner\n// tab is then the ONLY thing that can lift the card. That is not a nicety; it\n// is the only arrangement in which a draggable thing can also be a form.\nconst controls = createDragControls();\n\n<button {{on 'pointerdown' (fn this.lift guest.id)}}>⠿</button>\n\n<article {{motion\n  drag=true\n  dragControls=(this.controlsFor guest.id)\n  dragListener=false          {{! the card's own listener, off }}\n  dragSnapToOrigin=true       {{! and this is the REFUSAL — see below }}\n  dragTransition=RETURN\n  onPanSessionStart=this.session\n  onDragEnd=(fn this.drop guest)\n  onTap=(fn this.press guest)\n  onTapCancel=this.pressCancel\n}}>…</article>\n\n// onPanSessionStart fires at pointerdown, BEFORE the threshold that decides\n// this is a drag — so every table with a chair free lights the instant you take\n// hold of somebody, while you are still deciding whether to move them. Nothing\n// else in the drag surface fires that early.\nsession = () => { this.armed = true; };\n\n// And dragSnapToOrigin is the only \"no\" this interface gives. Land on a full\n// table, or on nothing, and the guest flies back to the list; land on a free\n// one and they take a chair. Freeze the frames and a refused drop and an\n// untouched card are the same picture — the flight IS the answer.",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-drag-handles",
+        "concept": "The drag handle protects the rest of the card",
+        "why": "The card disables its default drag listener, and a separate grip starts the drag controls. That leaves the note field and phone number usable as normal interactive content.",
+        "experiment": "Edit a note, select a phone number, and then drag only by the corner. Compare the release distance under Slippery grip and Sticky grip.",
+        "pitfall": "Starting a drag from every pointerdown steals caret placement and text selection from the form.",
+        "combine": "Combine with reorder for editable lists whose rows move only from a deliberate handle."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

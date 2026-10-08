@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "header",
+      "title": "Hide header",
+      "group": "Scroll",
+      "lede": "Direction, not distance.",
+      "apis": ["scrollProgress"],
+      "sample": "// Direction, not distance. Compare with the LAST y rather than a fixed\n// threshold: scrolling down hides the bar, and ANY scroll up brings it\n// back — even one pixel, even far down the thread.\nscroll = scrollProgress();\n\nfollow = (y) => {\n  this.travel += y - this.last;\n  this.last = y;\n  if (y <= 8) { this.hidden = false; this.travel = 0; return; }\n  // a small accumulator, so a jittery trackpad cannot flap the bar\n  if (this.travel > 8)       { this.hidden = true;  this.travel = 0; }\n  else if (this.travel < -8) { this.hidden = false; this.travel = 0; }\n};\n\nget header() { return { y: this.hidden ? -72 : 0 }; }\n\n<header {{motion style=this.header transition=tween}}></header>\n<div {{this.scroll.container}}></div>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-header",
+        "concept": "Direction needs hysteresis and boundary handling",
+        "why": "The header responds to sustained travel in a direction rather than every tiny delta. The scroll position is clamped and edge zones prevent rubber-band recoil from looking like deliberate reverse scrolling.",
+        "experiment": "Scroll down, reverse slightly, then reverse decisively. Repeat near the top and bottom and compare Floating header with Instant response.",
+        "pitfall": "Using the raw sign of every scroll delta makes the bar flicker under trackpad noise and iOS overscroll.",
+        "combine": "Combine with reveal while keeping the primary navigation reachable and the page's content position stable."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

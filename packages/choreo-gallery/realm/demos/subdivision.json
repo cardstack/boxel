@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "subdivision",
+      "title": "Subdivision",
+      "group": "Drag",
+      "lede": "Drag a seam. The grid is the sizes you leave.",
+      "apis": ["onPan", "layout", "instantLayoutTransition"],
+      "sample": "{{! Two things are happening, and keeping them apart is the demo. }}\n\n{{! LIVE — the seam is under the finger, so nothing may animate. Every update\n    is wrapped, which tells the projection tree to take this change without\n    animating it. A seam that lags behind the finger feels broken. }}\ndrag = (axis, event, info) => {\n  const next = clamp(this.startAt + (info.offset.x / box.width) * 100);\n  instantLayoutTransition(() => { this.col = next; });\n};\n\n{{! RELEASED — an ordinary state change, so the tiles spring into the new\n    tracks. Same elements, same layout=true, opposite behaviour, decided\n    entirely by whether the change was wrapped. }}\ndrop = () => { this.col = Math.round(this.col); };\n\n<div class='subdivide' style='grid-template-columns:{{this.col}}% 1fr'>\n  {{#each tiles as |tile|}}\n    <button {{motion layout=true transition=settle}}>\n      {{! 'position' moves this node without taking its parent's scale, so the\n          type stays crisp while the tile changes shape }}\n      <b {{motion layout='position' transition=settle}}>{{tile.label}}</b>\n    </button>\n  {{/each}}\n\n  {{! the seams are their own elements, which is why clicking a tile can never\n      start a pan — the gesture is not on the tiles at all }}\n  <span\n    {{motion\n      onPanStart=(fn this.grab 'col')\n      onPan=(fn this.drag 'col')\n      onPanEnd=(fn this.drop 'col')\n    }}\n  ></span>\n</div>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-layout",
+        "concept": "Direct manipulation and settlement need different rules",
+        "why": "During a seam drag, instantLayoutTransition applies pointer-driven layout immediately. On release the rounded track sizes update outside that wrapper, letting the same layout participants spring into place.",
+        "experiment": "Drag a seam slowly, then release between round percentages. The seam should track the finger exactly and only the final correction should spring.",
+        "pitfall": "Smoothing every pointer update makes the handle lag; making every update instant also removes the useful release settlement.",
+        "combine": "Combine with reorder when users can both resize regions and rearrange their contents."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

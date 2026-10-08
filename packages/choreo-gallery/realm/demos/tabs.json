@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "tabs",
+      "title": "Shared layout",
+      "group": "Layout",
+      "lede": "One highlight. It moves.",
+      "apis": ["layoutId"],
+      "sample": "<LayoutGroup>\n  {{#each tabs as |tab|}}\n    <button type='button' {{on 'click' (fn this.select tab)}}>\n      {{! The highlight UNMOUNTS here and MOUNTS under the next tab — two\n          different elements that never coexist. Sharing one layoutId makes\n          the engine treat them as the same thing, so the new one animates\n          from the old one's box instead of appearing. }}\n      {{#if (eq tab this.selected)}}\n        <span {{motion layoutId='tab-pill' transition=pill}}></span>\n      {{/if}}\n      {{tab}}\n    </button>\n  {{/each}}\n</LayoutGroup>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-shared-layout",
+        "concept": "One visual marker can travel between distinct nodes",
+        "why": "The selected tab renders a marker with one shared layoutId. LayoutGroup scopes the relationship so the receiver can animate from the previous marker bounds even though selection creates a different node.",
+        "experiment": "Switch between distant tabs quickly. Follow the marker and compare Jelly tab with Magnetic tab; the selected label updates immediately while the marker catches up.",
+        "pitfall": "A shared layoutId is not a unique DOM id; reusing it across unrelated tab groups can create unintended matches.",
+        "combine": "Combine with Presence when adding content panels that must remain mounted during their exits. The current demo isolates the marker itself."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

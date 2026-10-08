@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "build-order",
+      "title": "Build order",
+      "group": "Timeline",
+      "lede": "Keynote’s build inspector, wired to the site’s own logo. Retime it while it runs.",
+      "apis": ["c.Sequence", "@name", "at()/after()", "@by", "c.run"],
+      "sample": "// A build order, not a timeline. Nothing here is a timecode: a build\n// names a part, an effect, and when it goes relative to the build above\n// it — and the score is the template. `with` anchors on the previous\n// build's START, `after` on its end; the compiler resolves the rest.\n<c.Sequence>\n  <c.Tween @name='b1' @of={{c.id 'plate'}}\n    @opacity={{array 0 1 1 1}} @x={{array -38 0}}\n    @ease='easeOut' @duration={{0.62}} />\n  <c.Tween @name='b2' @at={{at 'b1'}} @delay={{0.14}}\n    @of={{c.id 'tail'}} @pathLength={{array 0 1}} @duration={{0.52}} />\n  <c.Tween @name='b3' @at={{after 'b2'}}\n    @of={{c.id 'head'}} @pathLength={{array 0 1}} @duration={{0.52}} />\n  …\n  <c.Tween @name='b7' @at={{after 'b6'}} @delay={{0.06}}\n    @of={{c.id 'word'}} @by='character'  // ← a second timeline, inside\n    @opacity={{array 0 1 1}} @scale={{array 0.78 1}} @y={{array 18 0}}\n    @ease='easeOut' @duration={{0.76}} />\n</c.Sequence>\n\n// An effect is nothing but keyframe values and an easing: Pop is a scale\n// through backOut, and a build-in's leading opacity frames are Keynote's\n// \"builds in\" — pinned hidden from the run's start until its window.\n\n// The transport holds the run. Play, pause and the scrubber share one\n// clock: `time` is settable in either direction, and a scrubbed frame\n// is a computed still.\nc.run.pause();\nc.run.time = 1.4;   // the scrubber — and an edit replays the pass and\nc.run.play();       // puts the new run back at the SAME t, so retiming\n                    // build 2 while parked at 1.4s shows what 1.4s now is.\n\n// The bars on the rail are read back from run.cues — the compiler's\n// resolved answer, never a second copy of the schedule.",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "film-schedule",
+        "concept": "Named dependencies express intent better than absolute times",
+        "why": "The builds name one another with with and after relationships. The compiler resolves start times, and the transport reads those times back instead of recomputing a parallel schedule.",
+        "experiment": "Lengthen an earlier build and inspect the dependent starts. Compare Show each beat with Rapid assembly while keeping the dependency graph unchanged.",
+        "pitfall": "Maintaining manual timestamps beside the template causes the displayed timeline to disagree with the actual score.",
+        "combine": "Combine with presentation gates when some boundaries wait for a person and others follow named build dependencies."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}
