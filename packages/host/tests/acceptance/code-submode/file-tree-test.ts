@@ -458,6 +458,47 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert.dom('[data-test-realm-read-only]').exists();
   });
 
+  test('can filter the realm dropdown by name', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+    await click('[data-test-realm-dropdown-trigger]');
+
+    assert.dom('[data-test-realm-dropdown-search]').isFocused();
+    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
+    assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
+
+    await fillIn('[data-test-realm-dropdown-search]', 'base');
+    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Test Workspace B"]')
+      .doesNotExist();
+
+    await fillIn('[data-test-realm-dropdown-search]', 'no such workspace');
+    assert.dom('[data-test-boxel-menu-item]').doesNotExist();
+    assert.dom('[data-test-realm-dropdown-no-results]').exists();
+
+    await fillIn('[data-test-realm-dropdown-search]', 'BASE');
+    await triggerKeyEvent(
+      '[data-test-realm-dropdown-search]',
+      'keydown',
+      'Enter',
+    );
+
+    await waitFor('[data-test-realm-name="Base Workspace"]');
+    assert.dom('[data-test-realm-dropdown-menu]').doesNotExist();
+
+    await click('[data-test-realm-dropdown-trigger]');
+    assert
+      .dom('[data-test-realm-dropdown-search]')
+      .hasValue('', 'the search is cleared when the dropdown reopens');
+    assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
+  });
+
   test('switch realm with recent file exists should open the recent file', async function (assert) {
     await visitOperatorMode({
       stacks: [
