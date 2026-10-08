@@ -20,9 +20,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../helpers';
-
-import { setupBaseRealm } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../helpers/setup';
@@ -62,7 +59,6 @@ module(
   'Integration | matrix-service | realms-list-updated (trusted server)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -224,7 +220,6 @@ module(
   'Integration | matrix-service | realms-list-updated (legacy session)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // No `activeRealmServers` — boot falls back to the legacy realm list.

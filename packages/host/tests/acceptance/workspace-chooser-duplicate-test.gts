@@ -17,7 +17,6 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -57,8 +56,6 @@ module('Acceptance | workspace-chooser duplicate', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [ownedRealmURL],
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     setupUserSubscription();

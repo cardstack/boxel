@@ -2,6 +2,7 @@ import Service from '@ember/service';
 import { render, settled, waitFor, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { CardDef } from '@cardstack/base/card-api';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -22,12 +23,10 @@ import {
   setupLocalIndexing,
   setupOperatorModeStateCleanup,
 } from '../helpers';
-import { setupBaseRealm, CardDef } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type { CardDef as CardInstance } from '@cardstack/base/card-api';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 // `@context.canInvoke` reads synchronously and answers from what the session
@@ -120,8 +119,8 @@ function indexed(realmURL: string, invalidations: string[]) {
   }
 }
 
-function cardAt(id: string): CardInstance {
-  return { id } as unknown as CardInstance;
+function cardAt(id: string): CardDef {
+  return { id } as unknown as CardDef;
 }
 
 // The two services the capability check reaches the realm through are faked,
@@ -248,7 +247,7 @@ module('Integration | canInvoke', function (hooks) {
 
   test('a card with no id, and a realm this session does not know, ask nothing', async function (assert) {
     assert.strictEqual(
-      service.canInvoke('read', {} as CardInstance),
+      service.canInvoke('read', {} as CardDef),
       undefined,
       'an unsaved card has no stored state for a predicate to read',
     );
@@ -471,12 +470,11 @@ module('Integration | canInvoke', function (hooks) {
   });
 });
 
-// A type target needs a class the loader produced, since that is what a card
-// author holds and what `identifyCard` can name. So this module loads the base
-// realm, and fakes only the capability request on the network it loads over.
+// A type target needs a class `identifyCard` can name, as the base `CardDef`
+// imported here is: the loader serves that same module to card code. This
+// module fakes only the capability request on the network the loader uses.
 module('Integration | canInvoke | a type target', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   test('a class asks whether a card of that type may be created', async function (assert) {
     let network = getService('network');

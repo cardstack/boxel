@@ -1,5 +1,13 @@
 import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -14,19 +22,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  linksTo,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const HOST_URL = `${testRealmURL}Host/anchor`;
 
@@ -36,7 +33,6 @@ module('Integration | query-field relationship status', function (hooks) {
   let queryFieldSupport: typeof import('@cardstack/base/query-field-support');
 
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -111,8 +107,8 @@ module('Integration | query-field relationship status', function (hooks) {
     async () => await loader.import('@cardstack/base/card-api'),
   );
 
-  async function loadHost(): Promise<CardDefType> {
-    let host = (await getService('store').get(HOST_URL)) as CardDefType;
+  async function loadHost(): Promise<CardDef> {
+    let host = (await getService('store').get(HOST_URL)) as CardDef;
     await settled();
     return host;
   }
@@ -159,7 +155,7 @@ module('Integration | query-field relationship status', function (hooks) {
 
   test('a singular query-backed field reports the one slot it surfaces, not the whole result set', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
-    let host = (await loadHost()) as CardDefType & { favorite: unknown };
+    let host = (await loadHost()) as CardDef & { favorite: unknown };
 
     let plural = getRelationshipMembershipState(host, 'matches');
     assert.strictEqual(
@@ -226,7 +222,7 @@ module('Integration | query-field relationship status', function (hooks) {
   test('a field that opts out of eager resolution resolves on first read', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
     let { peekQueryFieldSearchResource } = queryFieldSupport;
-    let host = (await loadHost()) as CardDefType & { deferred: unknown[] };
+    let host = (await loadHost()) as CardDef & { deferred: unknown[] };
 
     // Peeked rather than read through the status API, which would itself
     // resolve the field and so could not observe that nothing had.
@@ -285,7 +281,7 @@ module('Integration | query-field relationship status', function (hooks) {
     // Deliberately unsettled: the owner's document has arrived and its seed is
     // being applied, which is the window where the resource holds an empty
     // result set it is about to replace.
-    let host = (await getService('store').get(HOST_URL)) as CardDefType;
+    let host = (await getService('store').get(HOST_URL)) as CardDef;
 
     let status = getRelationshipMembershipState(host, 'matches');
     let claimsAnIncompleteSet =

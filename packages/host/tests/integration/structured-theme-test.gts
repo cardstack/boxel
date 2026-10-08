@@ -10,7 +10,6 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../helpers/base-realm';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -198,7 +197,6 @@ const TWEAKCN_EXPORT = `@import "tailwindcss";
 
 module('Integration | structured-theme', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let StructuredTheme: typeof StructuredThemeModule.default;
   let ThemeVarField: typeof StructuredThemeVarsModule.default;

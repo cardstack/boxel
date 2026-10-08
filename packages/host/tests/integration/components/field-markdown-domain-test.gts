@@ -1,21 +1,19 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
-
-import type { Loader } from '@cardstack/runtime-common';
-
 import {
   CardDef,
   CardInfoField,
   Component,
-  RealmField,
   contains,
-  enumField,
   field,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
+} from '@cardstack/base/card-api';
+import enumField from '@cardstack/base/enum';
+import RealmField from '@cardstack/base/realm';
+import StringField from '@cardstack/base/string';
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import type { Loader } from '@cardstack/runtime-common';
 
 import { renderCard } from '../../helpers/render-component';
 
@@ -53,7 +51,6 @@ function readRootMarkdown(root: Element | Document): string {
 
 module('Integration | field markdown domain', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let BrandFunctionalPalette: typeof BrandFunctionalPaletteModule.default;

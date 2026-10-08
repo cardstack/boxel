@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -35,7 +34,6 @@ const GTS_SOURCE = [
 // that it syntax-highlights the source (including GTS `<template>` tags).
 module('Integration | ts/gts file def preview', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let TsFileDef: typeof TsFileDefModule.TsFileDef;

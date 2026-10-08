@@ -3,6 +3,8 @@ import { type RenderingTestContext, render } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 
@@ -22,25 +24,13 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import type StoreService from '@cardstack/host/services/store';
 
-// The base-realm helper below exports `CardDef` as a value (for defining test
-// card classes); import the instance *type* separately for annotations.
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefInstance } from '@cardstack/base/card-api';
 
 const PreviewBox: TOC<{ Blocks: { default: [] } }> = <template>
   <div class='preview-box'>
@@ -96,7 +86,6 @@ function styleOf(): string {
 
 module('Integration | markdown-embed-preview', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -123,9 +112,9 @@ module('Integration | markdown-embed-preview', function (hooks) {
     await getService('realm').login(testRealmURL);
   });
 
-  async function loadCard(): Promise<CardDefInstance> {
+  async function loadCard(): Promise<CardDef> {
     let store = getService('store') as StoreService;
-    return (await store.get(mango)) as CardDefInstance;
+    return (await store.get(mango)) as CardDef;
   }
 
   test('renders atom format with no fitted sizing', async function (assert) {

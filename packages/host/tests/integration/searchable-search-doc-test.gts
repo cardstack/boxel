@@ -1,3 +1,18 @@
+import {
+  field,
+  contains,
+  containsMany,
+  linksTo,
+  linksToMany,
+  CardDef,
+  FieldDef,
+  Component,
+  createFromSerialized,
+  getDataBucket,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import { searchDocFromFields } from '@cardstack/base/searchable';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -20,26 +35,8 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  field,
-  contains,
-  containsMany,
-  linksTo,
-  linksToMany,
-  CardDef,
-  FieldDef,
-  Component,
-  NumberField,
-  StringField,
-  createFromSerialized,
-  getDataBucket,
-  searchDocFromFields,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 let realm: Realm;
@@ -52,7 +49,6 @@ let realm: Realm;
 // indexed card continues into it.
 module('Integration | searchable search doc', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
@@ -759,7 +755,7 @@ module('Integration | searchable search doc', function (hooks) {
 
   async function loadAndGenerate(id: string) {
     let store = getService('store') as StoreService;
-    let instance = (await store.get(id)) as CardDefType;
+    let instance = (await store.get(id)) as CardDef;
     return await searchDocFromFields(instance);
   }
 
@@ -1268,7 +1264,7 @@ module('Integration | searchable search doc', function (hooks) {
       doc,
       new URL(doc.data.id),
       { store },
-    )) as CardDefType;
+    )) as CardDef;
     let thrown: unknown;
     try {
       await searchDocFromFields(instance);
@@ -1373,7 +1369,7 @@ module('Integration | searchable search doc', function (hooks) {
 
   async function loadInstance(id: string) {
     let store = getService('store') as StoreService;
-    return (await store.get(id)) as CardDefType;
+    return (await store.get(id)) as CardDef;
   }
 
   // A store-resident instance can arrive with its link fields already
@@ -1382,7 +1378,7 @@ module('Integration | searchable search doc', function (hooks) {
   // the walk drives the load itself — the state an indexing visit starts
   // from.
   function unloadLink(
-    instance: CardDefType,
+    instance: CardDef,
     fieldName: string,
     reference: string | string[],
   ) {
