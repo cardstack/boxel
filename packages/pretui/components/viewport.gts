@@ -88,12 +88,14 @@ export class Viewport extends Component<ViewportSignature> {
     this.mode = v;
     this.customWidth = 0;
   };
+  // A free width belongs to Fill, so every preset click afterwards is a real
+  // change that resets it; snapped to the slider's 5px step so the slider
+  // can land on a dragged width.
   setWidth = (v: number) => {
-    this.customWidth = Math.round(Math.min(1600, Math.max(240, v)));
-    if (!this.isFramed) {
-      this.mode = 'fill';
-    }
+    this.customWidth = Math.round(Math.min(1600, Math.max(240, v)) / 5) * 5;
+    this.mode = 'fill';
   };
+  formatWidth = (v: number) => `${v} pixels`;
   setSurface = (v: string) => (this.surface = v);
   setGutter = (v: boolean) => (this.gutter = v);
   get isFramed() {
@@ -131,6 +133,7 @@ export class Viewport extends Component<ViewportSignature> {
     // user-select: none for the duration in case a selection was already
     // under way when the drag started.
     let down = (e: PointerEvent) => {
+      if (e.button !== 0) return;
       active = true;
       startX = e.clientX;
       startW = artboard?.getBoundingClientRect().width ?? 0;
@@ -161,9 +164,10 @@ export class Viewport extends Component<ViewportSignature> {
     };
   });
   <template>
-    <div class='pretui-viewport' data-test-pretui-viewport ...attributes>
+    <div class='pretui-viewport' ...attributes data-test-pretui-viewport>
       <div class='pretui-viewport-bar'>
         <SegmentedControl
+          class='pretui-viewport-modes'
           @label='Viewport mode'
           @options={{VIEWPORT_MODES}}
           @value={{this.mode}}
@@ -176,12 +180,14 @@ export class Viewport extends Component<ViewportSignature> {
               @options={{this.surfaces}}
               @value={{this.surface}}
               @onValueChange={{this.setSurface}}
+              @disabled={{isInline this.mode}}
             />
           </div>
           <label class='pretui-viewport-gutter'>
             <Switch
               @checked={{this.gutter}}
               @onCheckedChange={{this.setGutter}}
+              @disabled={{isInline this.mode}}
               data-test-pretui-viewport-gutter
             />
             <span>Padding</span>
@@ -194,13 +200,19 @@ export class Viewport extends Component<ViewportSignature> {
             @max={{1600}}
             @step={{5}}
             @label='Artboard width'
+            @formatValue={{this.formatWidth}}
             @onValueChange={{this.setWidth}}
           />
           <span class='pretui-viewport-readout'>{{this.widthLabel}}</span>
         </div>
       </div>
+      {{! wide artboards pan inside the canvas, so it takes a tab stop and a
+          name for keyboard users }}
       <div
         class='pretui-viewport-canvas'
+        tabindex='0'
+        role='region'
+        aria-label='Artboard canvas'
         data-mode={{this.mode}}
         data-width={{this.widthLabel}}
       >
@@ -266,6 +278,7 @@ export class Viewport extends Component<ViewportSignature> {
               <div
                 class='pretui-viewport-cell'
                 data-surface={{this.surface}}
+                data-gutter={{if this.gutter 'true' 'false'}}
                 data-test-pretui-viewport-specimen
               >{{yield}}</div>
             {{/each}}
@@ -320,6 +333,13 @@ export class Viewport extends Component<ViewportSignature> {
           padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
           box-shadow: inset 0 -1px 0 var(--border);
         }
+        /* seven segments outgrow a phone-width panel; the control scrolls on
+           its own rather than pushing the page sideways */
+        .pretui-viewport-modes {
+          max-width: 100%;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
         .pretui-viewport-width {
           display: flex;
           align-items: center;
@@ -346,14 +366,15 @@ export class Viewport extends Component<ViewportSignature> {
         }
         .pretui-viewport-surface {
           width: var(--pretui-viewport-surface-w);
-          font-size: var(--boxel-font-size-xs);
         }
         .pretui-viewport-gutter {
           display: inline-flex;
           align-items: center;
           gap: var(--boxel-sp-2xs);
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 500;
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
           color: var(--muted-foreground);
           white-space: nowrap;
           cursor: pointer;
@@ -391,12 +412,14 @@ export class Viewport extends Component<ViewportSignature> {
           inset-inline-start: 0;
           font-family: var(--font-mono);
           font-size: var(--boxel-font-size-2xs);
-          letter-spacing: 0.02em;
+          letter-spacing: var(--boxel-lsp-sm);
           color: var(--primary-ink);
           white-space: nowrap;
         }
-        .pretui-artboard-body {
-          /* R2: a neutral stage — normal block flow, no centering opinion */
+        /* a neutral stage, normal block flow with no centering opinion; grid
+           cells share its surfaces */
+        .pretui-artboard-body,
+        .pretui-viewport-cell {
           min-height: var(--pretui-artboard-min-h);
           border-radius: var(--boxel-border-radius-sm);
           box-shadow: 0 0 0 1px var(--border);
@@ -404,23 +427,28 @@ export class Viewport extends Component<ViewportSignature> {
         .pretui-artboard-body[data-gutter='true'] {
           padding: var(--boxel-sp);
         }
-        .pretui-artboard-body[data-surface='background'] {
+        .pretui-artboard-body[data-surface='background'],
+        .pretui-viewport-cell[data-surface='background'] {
           /* a veil of the page color over the dot floor, so the stage reads as
              an area while the specimen still sits on the page background */
           background-color: var(--pretui-viewport-veil);
         }
-        .pretui-artboard-body[data-surface='card'] {
+        .pretui-artboard-body[data-surface='card'],
+        .pretui-viewport-cell[data-surface='card'] {
           background-color: var(--card);
+          color: var(--card-foreground);
           box-shadow:
             0 0 0 1px var(--border),
             var(--shadow-sm);
         }
-        .pretui-artboard-body[data-surface='sidebar'] {
+        .pretui-artboard-body[data-surface='sidebar'],
+        .pretui-viewport-cell[data-surface='sidebar'] {
           background-color: var(--sidebar);
           color: var(--sidebar-foreground);
           box-shadow: 0 0 0 1px var(--sidebar-border);
         }
-        .pretui-artboard-body[data-surface='inset'] {
+        .pretui-artboard-body[data-surface='inset'],
+        .pretui-viewport-cell[data-surface='inset'] {
           background-color: var(--inset);
           box-shadow: inset 0 0 0 1px var(--border);
         }
@@ -480,11 +508,10 @@ export class Viewport extends Component<ViewportSignature> {
           justify-content: center;
           gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
-          background-color: var(--background);
-          border-radius: var(--boxel-border-radius-sm);
-          box-shadow: 0 0 0 1px var(--border);
-          padding: var(--boxel-sp-sm);
           min-height: var(--pretui-viewport-cell-min-h);
+        }
+        .pretui-viewport-cell[data-gutter='true'] {
+          padding: var(--boxel-sp-sm);
         }
       }
     </style>
