@@ -38,8 +38,13 @@ grafanactl/
     dashboards/        # grafanactl push: dashboard JSON, organized by folder
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
-  alerting/            # alert rule groups (no contact points / notification
-                       # policies live here — routing uses Grafana's defaults)
+  alerting/            # alert rule groups for every env; routing uses
+                       # Grafana's default notification policy
+  alerting-hosted/     # NOT mounted locally. <env>/contact-points/ and
+                       # <env>/rules/ exist in that hosted env only;
+                       # apply-alerting.sh pushes contact points first, with
+                       # ${VAR} secrets from SSM. A rule here may route to
+                       # one through `notification_settings.receiver`.
   local-only/          # local-dev overrides — bind-mounted file-by-file over
                        # `datasources/`. apply-datasources.sh ignores this dir.
 collectors/
@@ -146,6 +151,12 @@ sample can cost sixty. So the token needs **no permissions** while `boxel` is
 public — a fine-grained token scoped to _Public repositories (read-only)_, or
 even a classic token with no scopes ticked, is enough. Were the repository ever
 made private, it would need Actions: Read-only on it.
+
+The staging alert "Actions Collector Silent in Loki"
+(`provisioning/alerting-hosted/staging/rules/actions-collector-group.json`)
+posts to the `alarms-staging-internal` Discord channel when Loki receives no
+collector lines for ten minutes. Its summary says how to tell a stalled log
+router from a stopped collector.
 
 Build and deploy with the **Manual Deploy [actions-collector]** workflow. It is
 `workflow_dispatch` only — putting the deploy of a queue sampler on a CI
