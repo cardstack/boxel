@@ -75,6 +75,9 @@ module('Unit | loader', function (hooks) {
             return 'b' + c();
           }
         `,
+          'declarer.js': `
+          export class Declared {}
+        `,
           'c.js': `
           export function c() {
             return 'c';
@@ -729,6 +732,55 @@ module('Unit | loader', function (hooks) {
     assert.deepEqual(Loader.identify(StringField), {
       module: `${baseRealm.url}card-api`,
       name: 'StringField',
+    });
+  });
+
+  // A shim's imports never evaluate under the loader, so a shimmed module that
+  // re-exports a class can be served before the module that declares it. The
+  // class carries the mark its declarer's transpiled source set, and that is
+  // what names it.
+  test('identify credits a class to its declarer when a shimmed re-exporter is served first', async function (assert) {
+    let { Declared } = await loader.import<{ Declared: unknown }>(
+      `${testRealmURL}declarer`,
+    );
+    let declarer = loader.identify(Declared);
+    // On the same network, so both loaders spell the module alike.
+    let { virtualNetwork } = getService('network');
+    let throwIfFetch = new Loader(
+      async () => {
+        throw new Error(
+          'fetch should not be invoked during shimmed module tests',
+        );
+      },
+      virtualNetwork.resolveImport,
+      { virtualNetwork },
+    );
+    throwIfFetch.shimModule('https://example.com/re-exporter.js', {
+      Declared,
+    });
+
+    assert.deepEqual(
+      throwIfFetch.identify(Declared),
+      declarer,
+      'the re-exporter does not take the credit',
+    );
+  });
+
+  test('a subclass is not credited to the module that declares its parent', async function (assert) {
+    let { Declared } = await loader.import<{ Declared: new () => object }>(
+      `${testRealmURL}declarer`,
+    );
+    class Subclass extends Declared {}
+    let throwIfFetch = new Loader(async () => {
+      throw new Error(
+        'fetch should not be invoked during shimmed module tests',
+      );
+    });
+    throwIfFetch.shimModule('https://example.com/subclass.js', { Subclass });
+
+    assert.deepEqual(Loader.identify(Subclass), {
+      module: 'https://example.com/subclass',
+      name: 'Subclass',
     });
   });
 });

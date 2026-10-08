@@ -14,6 +14,7 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { moduleProvenanceOf } from './loader-plugin.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -237,66 +238,6 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 let nonce = 0;
-// A bundled base module publishes the classes it declares under its own name as
-// it is evaluated, which the `bundled-base-scoped-css` vite plugin appends to
-// its compiled source. This is the only account of those classes the loader can
-// have: it names the exports of every module it is asked for, and it is never
-// asked for a module reachable only from inside another module's chunk — the
-// bundler resolved that import where the loader could not see it.
-//
-// Read before the loader's own record, and it wins. Only a module that
-// *declares* a class publishes it, so this answers with the declarer or not at
-// all — it can correct an attribution but never invent one. The loader's own
-// record cannot make that promise: it credits the first module it is asked for
-// that exposes a name, so a bundled module re-exporting a class it did not
-// declare takes the credit whenever it happens to be served first, and the
-// answer then depends on which card imported what.
-//
-// The index is built from what has been published so far and extended on later
-// lookups, so a module evaluated after the first one is still found. Nothing
-// here resolves or fetches: the values are the very class objects the chunk is
-// using, published as a side effect of an evaluation that happens regardless.
-const bundledIdentities = new WeakMap<
-  Function,
-  { module: string; name: string }
->();
-const indexedBundledModules = new Set<string>();
-
-function bundledIdentityFor(
-  value: Function,
-): { module: string; name: string } | undefined {
-  let registry = (
-    globalThis as {
-      __boxelBundledBaseIdentities?: Record<string, Record<string, unknown>>;
-    }
-  ).__boxelBundledBaseIdentities;
-  if (!registry) {
-    return undefined;
-  }
-  let known = bundledIdentities.get(value);
-  if (known) {
-    return known;
-  }
-  for (let moduleName of Object.keys(registry)) {
-    if (indexedBundledModules.has(moduleName)) {
-      continue;
-    }
-    indexedBundledModules.add(moduleName);
-    let exports = registry[moduleName];
-    for (let exportName of Object.keys(exports)) {
-      let exported = exports[exportName];
-      // First registration wins. A class is declared by one module; a module
-      // that merely re-exports it publishes nothing, so there is no contest.
-      if (typeof exported === 'function' && !bundledIdentities.has(exported)) {
-        bundledIdentities.set(exported, {
-          module: `@cardstack/base/${moduleName}`,
-          name: exportName,
-        });
-      }
-    }
-  }
-  return bundledIdentities.get(value);
-}
 
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
@@ -578,8 +519,12 @@ export class Loader {
     if (typeof value !== 'function') {
       return undefined;
     }
+    // A loader that served the value has already read its mark, and put the
+    // module in canonical form. The mark alone answers for a value no loader
+    // served: one evaluated outside every loader, such as in a module compiled
+    // into a bundle that no loader was asked for.
     return (
-      bundledIdentityFor(value) ?? Loader.loaders.get(value)?.identify(value)
+      Loader.loaders.get(value)?.identify(value) ?? moduleProvenanceOf(value)
     );
   }
 
@@ -1402,10 +1347,28 @@ export class Loader {
         typeof propName === 'string' &&
         !this.identities.has(exportedEntity)
       ) {
-        this.identities.set(exportedEntity, {
-          module: moduleId,
-          name: propName,
-        });
+        // A value marked with the module that declares it is credited to that
+        // module, not to the first module that happened to expose it. The two
+        // differ when a module that re-exports the value is served before its
+        // declarer — possible for a shimmed module, whose imports the loader
+        // never sees evaluate. A mark naming this very module (by the URL it
+        // was evaluated at) changes nothing.
+        let provenance = moduleProvenanceOf(exportedEntity);
+        let declaredElsewhere =
+          provenance &&
+          provenance.module !== moduleIdentifier &&
+          provenance.module !== this.getCanonicalModuleURL(moduleIdentifier);
+        this.identities.set(
+          exportedEntity,
+          declaredElsewhere
+            ? {
+                module: this.canonicalIdentifier(
+                  trimModuleIdentifier(provenance!.module),
+                ),
+                name: provenance!.name,
+              }
+            : { module: moduleId, name: propName },
+        );
         Loader.loaders.set(exportedEntity, this);
       }
     }
