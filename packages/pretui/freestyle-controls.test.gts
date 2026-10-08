@@ -115,7 +115,7 @@ module('Pretui | freestyle property controls', function (hooks) {
       await fillIn(controlLabelled('label'), 'New lot');
       await click('[aria-label="enabled"]');
       await fillIn(controlLabelled('count'), '8');
-      await fillIn('[aria-label="tags"]', 'green, spring');
+      await fillIn(controlLabelled('tags'), 'green, spring');
 
       assert.strictEqual(sink.stringValue, 'New lot');
       assert.strictEqual(sink.boolValue, true);

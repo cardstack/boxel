@@ -1,14 +1,7 @@
-// Pretui — shared by the usage-page machinery: ember-freestyle, ported (verbatim-reuse directive) and dogfooded:
-// same invocation surface as addon/components/freestyle/usage (<:example>,
-// <:api as |Args|> with Args.String/Bool/Number/Array/Object/Component/
-// Action/Yield/Base, <:cssVars as |Css|>), but the machinery wears the kit —
-// Select/Input/Switch/Slider as knob controls, Table for the API docs, and
-// the Viewport frame around every example. Layout evolution (Chris): the
-// interactive knobs render as a right-hand PROPERTY LIST while the API table
-// below documents types/descriptions/defaults — the same <:api> block is
-// yielded twice through two lenses (prop / doc), so usage pages stay
-// verbatim-freestyle. Deliberate deltas: no ember-freestyle service, plain
-// <pre> for @source, labeled controls.
+// Pretui — shared pieces of the usage pages (components/freestyle-usage.gts
+// and the usage-* argument components): PropRow, one row of the property
+// list; PropReadOnly, a knob's value when it has no control; the
+// isPresent/readOnlyText helpers; and the ArgsMode/UsagePresetSignature types.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { VisuallyHidden } from '../components/visually-hidden';
 
@@ -63,10 +56,10 @@ export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
   <style scoped>
     /* workbench inspector row: label rail left, control right */
     .proprow {
-      --proprow-label-w: 8rem;
+      --_proprow-label-w: 8rem;
 
       display: grid;
-      grid-template-columns: var(--proprow-label-w) minmax(0, 1fr);
+      grid-template-columns: var(--_proprow-label-w) minmax(0, 1fr);
       gap: var(--boxel-sp-xs);
       align-items: center;
       padding-block: var(--boxel-sp-3xs);
@@ -100,7 +93,6 @@ export const PropReadOnly: TemplateOnlyComponent<PropReadOnlySignature> =
     <style scoped>
       .proprow-readonly {
         display: block;
-        min-width: 0;
         overflow-wrap: break-word;
         color: var(--muted-foreground);
         font-family: var(--font-mono);

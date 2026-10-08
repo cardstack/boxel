@@ -23,7 +23,8 @@ module('Pretui | components/usage-css-variable', function (hooks) {
     await render(<template><UsageCssVariable @mode='prop' @name='--pretui-gap' @value='8px' @onInput={{onInput}} /></template>);
     assert.strictEqual(document.querySelector('[data-test-pretui-prop-row-label]')?.textContent?.trim(), '--pretui-gap');
     let input = document.querySelector('[data-test-pretui-prop-row] input') as HTMLInputElement;
-    assert.strictEqual(input.getAttribute('aria-label'), '--pretui-gap');
+    let label = document.querySelector('[data-test-pretui-prop-row-label]');
+    assert.strictEqual(label?.getAttribute('for'), input.id, 'the rail is the field\'s label');
     assert.strictEqual(input.value, '8px');
     await fillIn(input, '12px');
     assert.deepEqual(seen, ['12px']);
