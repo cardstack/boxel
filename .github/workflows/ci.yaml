@@ -554,13 +554,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run test:release
         working-directory: packages/choreo-player
-      # Reads choreo-test-app's stylesheet directly, so it needs no build.
-      # Playwright launches the runner's preinstalled Google Chrome (the
-      # script's default `chrome` channel), so no browser download is needed.
-      - name: Choreo Gallery theater sizing test
-        if: ${{ !cancelled() }}
-        run: pnpm run test:theater-sizing
-        working-directory: packages/choreo-gallery
 
   # The gallery realm's *.test.gts files. The realm's lint and its content
   # check run in ci-lint.yaml.

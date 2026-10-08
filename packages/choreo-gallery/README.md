@@ -118,6 +118,3 @@ Tests that load the gallery's cards from their realm source run in the host
 suite, `packages/host/tests/integration/choreo-*-test.gts`, through
 `tests/helpers/choreo-gallery.ts`: the films' faces and theater, and the
 feature reel under an external clock.
-
-`pnpm test:theater-sizing` checks the film theater's sizing rules in
-`choreo-test-app`'s stylesheet.
