@@ -1,6 +1,14 @@
+import { buildWaiter } from '@ember/test-waiters';
+
 import * as MatrixSDK from 'matrix-js-sdk';
 
 type IEvent = MatrixSDK.IEvent;
+
+// A room event reaches the client's listeners on a later macrotask, the way a
+// real homeserver's sync delivers it after the send returns. This waiter holds
+// `settled()` across that hop, so a test that sends an event (or has a realm
+// broadcast one) and then settles sees what the client did with it.
+const roomEventDispatchWaiter = buildWaiter('mock-matrix:room-event-dispatch');
 
 export class ServerState {
   #roomCounter = 0;
@@ -247,8 +255,13 @@ export class ServerState {
       relatesTo.event_id = relatesTo.event_id.replace(/__EVENT_ID__/g, eventId);
     }
     room.events.push(matrixEvent);
+    let waiterToken = roomEventDispatchWaiter.beginAsync();
     setTimeout(() => {
-      this.#listeners.forEach((listener) => listener(matrixEvent));
+      try {
+        this.#listeners.forEach((listener) => listener(matrixEvent));
+      } finally {
+        roomEventDispatchWaiter.endAsync(waiterToken);
+      }
     }, 0);
     if (typeof overrides?.state_key === 'string') {
       if (!room.roomStateEvents.has(event.type)) {
