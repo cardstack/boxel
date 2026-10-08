@@ -2708,12 +2708,10 @@ module(basename(import.meta.filename), function () {
     });
 
     // Writers run at the user-initiated tier and a from-scratch pass at the
-    // system tier, so a later writer job is not held behind the exclusive job.
-    // But while it is pending the family runs one writer lane at a time, so
-    // writer-b waits for writer-a rather than running beside it. When writer-a
-    // finishes, a runner that can claim both takes the oldest, which is the
-    // exclusive job.
-    test('on all-priority runners an older lower-tier exclusive job still runs before a later writer job', async function (assert) {
+    // system tier, so the pending exclusive job neither holds a later writer
+    // job back nor costs the family a lane: both writers run at once. It takes
+    // its turn once the family is idle.
+    test('an older lower-tier exclusive job costs its family neither a turn nor a lane', async function (assert) {
       await publishLaneJob('writer-a', {
         concurrencyGroup: lane('a'),
         laneFamily: family,
@@ -2730,26 +2728,25 @@ module(basename(import.meta.filename), function () {
         laneFamily: family,
         priority: userInitiatedPriority,
       });
-      await afterAControlStarts('control');
+      await started('writer-b');
       assert.false(
-        hasStarted('writer-b'),
-        "b's lane outranks the exclusive job, but while it is pending the family runs one writer lane at a time",
+        hasStarted('exclusive'),
+        "b's lane outranks the exclusive job and runs beside a's, while the exclusive job waits for the family to empty",
       );
 
       await finish('writer-a');
+      await finish('writer-b');
       await started('exclusive');
-      await finish('exclusive');
-      await started('writer-b');
       assert.deepEqual(
         events.filter((event) => !event.startsWith('control')),
         [
           'writer-a start',
-          'writer-a finish',
-          'exclusive start',
-          'exclusive finish',
           'writer-b start',
+          'writer-a finish',
+          'writer-b finish',
+          'exclusive start',
         ],
-        'the runner took the older exclusive job before the later writer job',
+        'the exclusive job took its turn once both lanes were done',
       );
     });
 
@@ -2957,7 +2954,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('while an older lower-tier exclusive job is pending the family runs one writer lane at a time', async function (assert) {
+    test('a pending lower-tier exclusive job does not cost its family a writer lane', async function (assert) {
       await occupyTheAllPriorityRunner();
       await publishLaneJob('exclusive', {
         concurrencyGroup: family,
@@ -2975,18 +2972,94 @@ module(basename(import.meta.filename), function () {
         laneFamily: family,
         priority: userInitiatedPriority,
       });
-      await afterAControlStarts('control', { priority: userInitiatedPriority });
-      assert.false(
-        hasStarted('writer-b'),
-        "b's lane waits for a's rather than running beside it",
-      );
-
-      await finish('writer-a');
       await started('writer-b');
       assert.deepEqual(
         familyEvents(),
-        ['writer-a start', 'writer-a finish', 'writer-b start'],
-        'the writers took turns while the exclusive job stayed pending',
+        ['writer-a start', 'writer-b start'],
+        "b's lane runs beside a's: the pass it outranks takes nothing from the family while it waits",
+      );
+    });
+
+    // The running case of the same rule, and the one a deploy's reindex hits:
+    // the pass is not merely queued but holding the family, and a save must
+    // still go through. Indexing tolerates the overlap — see the lane rules in
+    // the claim query.
+    test('a user-initiated writer job starts while a system-tier exclusive job of its family is running', async function (assert) {
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: systemInitiatedPriority,
+      });
+      await started('exclusive');
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('writer');
+      assert.deepEqual(
+        {
+          writerRanOn: floorOf('writer'),
+          passFinished: familyEvents().includes('exclusive finish'),
+        },
+        { writerRanOn: highPriority, passFinished: false },
+        'a high-priority runner took the save while the pass was still running',
+      );
+    });
+
+    // An exclusive job at the writer's own tier, such as an operator's reindex
+    // of the realm, is work the user is waiting on rather than background work,
+    // so it keeps the family to itself.
+    test('a writer job waits for a running exclusive job at its own tier', async function (assert) {
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await started('exclusive');
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPriority,
+      });
+      await afterAControlStarts('control', { priority: userInitiatedPriority });
+      assert.false(
+        hasStarted('writer'),
+        'the runner that took the later control passed the writer job over',
+      );
+
+      await finish('exclusive');
+      await started('writer');
+      assert.deepEqual(
+        familyEvents(),
+        ['exclusive start', 'exclusive finish', 'writer start'],
+        'it started once the exclusive job was done',
+      );
+    });
+
+    // The tier line is priority, not job type or family, so the render family's
+    // own pair of priorities splits across it exactly as the index family's
+    // does.
+    test('the same holds at the render tiers, where a running system render does not hold a user render back', async function (assert) {
+      await publishLaneJob('exclusive', {
+        concurrencyGroup: family,
+        laneFamily: family,
+        priority: systemInitiatedPrerenderHtmlPriority,
+      });
+      await started('exclusive');
+      await publishLaneJob('writer', {
+        concurrencyGroup: lane('a'),
+        laneFamily: family,
+        priority: userInitiatedPrerenderHtmlPriority,
+      });
+      await started('writer');
+      assert.deepEqual(
+        {
+          writerRanOn: floorOf('writer'),
+          passFinished: familyEvents().includes('exclusive finish'),
+        },
+        { writerRanOn: highPriority, passFinished: false },
+        'the user-tier render ran while the system-tier one held the family',
       );
     });
 
