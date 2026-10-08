@@ -27,6 +27,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
+import { not } from '@cardstack/boxel-ui/helpers';
 import StarIcon from '@cardstack/boxel-icons/star';
 import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
@@ -36,6 +37,8 @@ import { StatusChip } from './components/status-chip';
 import { Chip } from './components/chip';
 import { Token } from './components/token';
 import { Button } from './components/button';
+import { Switch } from './components/switch';
+import { Tooltip } from './components/tooltip';
 import { VisuallyHidden } from './components/visually-hidden';
 import { Textarea } from './components/textarea';
 import { StepList } from './components/step-list';
@@ -188,6 +191,12 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
         --markdown-pre-border-radius: var(--boxel-border-radius-sm);
 
         padding: var(--boxel-sp-sm);
+      }
+      /* highlighted code joins its words with non-breaking spaces, so a long
+         line can't wrap; it scrolls inside its block instead of being
+         clipped by the fold */
+      .wb-fold-prose :deep(pre) {
+        overflow-x: auto;
       }
       /* closed, the toggle sits over a fade into the panel's surface; open,
          it follows the content */
@@ -386,6 +395,8 @@ export class PretUISpec extends Spec {
   // prose citation ('shadcn Button · wa-button'), not Spec's `ref` CodeRef
   @field refs = contains(StringField);
   @field buildsOn = contains(StringField);
+  /** a hand-picked flagship of the kit, the components to look at first;
+   *  shown as a gold star on the Spec page and its fitted card */
   @field featured = contains(BooleanField);
   @field isNew = contains(BooleanField);
   @field hasDesign = contains(BooleanField);
@@ -624,11 +635,16 @@ export class PretUISpec extends Spec {
                 @tone={{stageTone @model.stage}}
               />
               {{#if @model.isNew}}<Chip @label='New' @tone='attention' />{{/if}}
-              {{#if @model.featured}}<Chip @tone='warning' @dot={{false}}><StarIcon
-                    width='12'
-                    height='12'
-                    aria-hidden='true'
-                  /><VisuallyHidden>Featured</VisuallyHidden></Chip>{{/if}}
+              {{#if @model.featured}}
+                <Tooltip @content='Featured: a flagship component' @side='bottom'>
+                  <Chip @tone='warning' @dot={{false}}><StarIcon
+                      class='wb-star'
+                      width='12'
+                      height='12'
+                      aria-hidden='true'
+                    /><VisuallyHidden>Featured: a flagship component</VisuallyHidden></Chip>
+                </Tooltip>
+              {{/if}}
             </div>
             <div class='wb-grow'></div>
             <ThemeControls />
@@ -811,13 +827,13 @@ export class PretUISpec extends Spec {
         </article>
       </ThemeFrame>
       <style scoped>
-        /* the isolated root: exactly the card's height and the one scroller, so
-           the sticky topbar sticks to it and an overscroll can't bounce past
-           the island or carry on into the page behind */
+        /* the isolated root: the card's height and its scroller. No
+           overscroll-behavior: where a host sizes the card to its content
+           (code mode's preview), the frame has nothing to scroll and the
+           wheel has to pass up to the host's scroller */
         .wb-frame {
           height: 100%;
           overflow-y: auto;
-          overscroll-behavior: none;
         }
         .page {
           --_wb-topbar-h: 2.75rem;
@@ -838,7 +854,10 @@ export class PretUISpec extends Spec {
 
           min-height: 100%;
           padding: 0 var(--_wb-page-gutter) var(--boxel-sp-2xl);
+          /* one column that may shrink below its content, so a long name
+             breaks instead of widening the page */
           display: grid;
+          grid-template-columns: minmax(0, 1fr);
           gap: var(--boxel-sp);
           align-content: start;
         }
@@ -916,6 +935,10 @@ export class PretUISpec extends Spec {
         }
         .wb-grow {
           flex: 1;
+        }
+        /* the icon set's star is outline-only; filled reads as a flag */
+        .wb-star {
+          fill: currentColor;
         }
         .wb-work {
           min-width: 0;
@@ -1150,11 +1173,15 @@ export class PretUISpec extends Spec {
           <div class='fit-body'>
             <div class='fit-name'>
               {{@model.componentName}}
-              {{#if @model.featured}}<span class='fit-star'><StarIcon
+              {{#if @model.featured}}<span
+                  class='fit-star'
+                  title='Featured: a flagship component'
+                ><StarIcon
+                    class='wb-star'
                     width='12'
                     height='12'
                     aria-hidden='true'
-                  /><VisuallyHidden>Featured</VisuallyHidden></span>{{/if}}
+                  /><VisuallyHidden>Featured: a flagship component</VisuallyHidden></span>{{/if}}
             </div>
             <div class='fit-sub'>
               <span>{{if
@@ -1232,6 +1259,10 @@ export class PretUISpec extends Spec {
         }
         .fit-star {
           color: var(--warning-ink);
+        }
+        /* the icon set's star is outline-only; filled reads as a flag */
+        .wb-star {
+          fill: currentColor;
         }
         .fit-sub {
           display: flex;
@@ -1360,6 +1391,13 @@ export class PretUISpec extends Spec {
   static edit = class Edit extends Component<typeof PretUISpec> {
     // ids for the captions that name editors a <label> can't wrap
     captionId = (key: string) => `${guidFor(this)}-${key}`;
+    // the yes/no signals are switches that write the field directly
+    setFlag = (
+      key: 'featured' | 'isNew' | 'hasDesign' | 'hasExamples' | 'liveInUse',
+      on: boolean,
+    ) => {
+      this.args.model[key] = on;
+    };
     <template>
       <div class='wb-edit'>
         <fieldset class='wb-group'>
@@ -1413,54 +1451,55 @@ export class PretUISpec extends Spec {
           </div>
         </fieldset>
 
-        {{! editors a <label> can't wrap (yes/no radios, the tag list, the
-            linked file with its Remove button) sit in a named group instead:
-            a wrapping label would activate their first control on any click }}
+        {{! editors a <label> can't wrap (the tag list, the linked file with
+            its Remove button) sit in a named group instead: a wrapping label
+            would activate their first control on any click. The yes/no
+            signals are single switches, so their label does wrap them. }}
         <fieldset class='wb-group'>
           <legend>Signals</legend>
           <div class='wb-fields'>
             <label><span class='wb-cap'>Demand (1-5)</span>
               <@fields.demand /></label>
-            <div
-              class='wb-flag'
-              role='group'
-              aria-labelledby={{this.captionId 'featured'}}
-            ><@fields.featured /><span
-                id={{this.captionId 'featured'}}
-                class='wb-cap'
-              >Featured</span></div>
-            <div
-              class='wb-flag'
-              role='group'
-              aria-labelledby={{this.captionId 'isNew'}}
-            ><@fields.isNew /><span
-                id={{this.captionId 'isNew'}}
-                class='wb-cap'
-              >New</span></div>
-            <div
-              class='wb-flag'
-              role='group'
-              aria-labelledby={{this.captionId 'hasDesign'}}
-            ><@fields.hasDesign /><span
-                id={{this.captionId 'hasDesign'}}
-                class='wb-cap'
-              >Has design</span></div>
-            <div
-              class='wb-flag'
-              role='group'
-              aria-labelledby={{this.captionId 'hasExamples'}}
-            ><@fields.hasExamples /><span
-                id={{this.captionId 'hasExamples'}}
-                class='wb-cap'
-              >Has examples</span></div>
-            <div
-              class='wb-flag'
-              role='group'
-              aria-labelledby={{this.captionId 'liveInUse'}}
-            ><@fields.liveInUse /><span
-                id={{this.captionId 'liveInUse'}}
-                class='wb-cap'
-              >Live in use</span></div>
+            <label class='wb-switch-row'>
+              <Switch
+                @checked={{@model.featured}}
+                @onCheckedChange={{fn this.setFlag 'featured'}}
+                @disabled={{not @canEdit}}
+              />
+              <span class='wb-cap'>Featured</span>
+            </label>
+            <label class='wb-switch-row'>
+              <Switch
+                @checked={{@model.isNew}}
+                @onCheckedChange={{fn this.setFlag 'isNew'}}
+                @disabled={{not @canEdit}}
+              />
+              <span class='wb-cap'>New</span>
+            </label>
+            <label class='wb-switch-row'>
+              <Switch
+                @checked={{@model.hasDesign}}
+                @onCheckedChange={{fn this.setFlag 'hasDesign'}}
+                @disabled={{not @canEdit}}
+              />
+              <span class='wb-cap'>Has design</span>
+            </label>
+            <label class='wb-switch-row'>
+              <Switch
+                @checked={{@model.hasExamples}}
+                @onCheckedChange={{fn this.setFlag 'hasExamples'}}
+                @disabled={{not @canEdit}}
+              />
+              <span class='wb-cap'>Has examples</span>
+            </label>
+            <label class='wb-switch-row'>
+              <Switch
+                @checked={{@model.liveInUse}}
+                @onCheckedChange={{fn this.setFlag 'liveInUse'}}
+                @disabled={{not @canEdit}}
+              />
+              <span class='wb-cap'>Live in use</span>
+            </label>
           </div>
         </fieldset>
 
@@ -1530,19 +1569,20 @@ export class PretUISpec extends Spec {
         .wb-wide {
           grid-column: 1 / -1;
         }
-        .wb-flag {
-          grid-template-columns: auto 1fr;
+        .wb-fields > .wb-switch-row {
+          display: flex;
           align-items: center;
+          gap: var(--boxel-sp-xs);
+          cursor: pointer;
         }
-        /* the caption only, so the caps style stays off the editor beside it */
+        /* field captions are sentence-case labels; the caps style is the
+           group legends' alone */
         .wb-cap {
           display: block;
-          font-family: var(--boxel-eyebrow-font-family);
-          font-size: var(--boxel-eyebrow-font-size);
-          font-weight: var(--boxel-eyebrow-font-weight);
-          line-height: var(--boxel-eyebrow-line-height);
-          letter-spacing: var(--boxel-eyebrow-letter-spacing);
-          text-transform: uppercase;
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
           color: var(--muted-foreground);
         }
       </style>
