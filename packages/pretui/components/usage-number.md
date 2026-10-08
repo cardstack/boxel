@@ -34,17 +34,15 @@ No pattern of its own; it renders a **Slider** or an **Input** plus a table row,
 
 Gaps, and two are inherited and consequential in this context:
 
-- **Slider's `aria-label` defaults to the literal `'Slider'`** and it accepts no `@controlId`, so **Field**-style `<label for>` wiring is not available to it at all. A property list of numeric knobs can therefore end up as several controls all announced "Slider". This is an API hole in **Slider** that shows up first here.
-- **Slider sets no `aria-valuetext`**, so a knob announces "8" where "8 pixels" is meant — and a usage page is precisely where the unit matters, because the reader is learning what the argument does.
-- **Slider styles only `::-webkit-slider-thumb`**, so in Firefox the thumb falls back to the UA default. On a documentation page that is visible on every numeric knob.
+- **The number field is labeled by the rail.** Without bounds the knob is an **Input**, and the property row's label is its `<label for>`, so clicking the name focuses the field; `@min`, `@max` and `@step` reach the field too.
+- **The slider names itself.** With both bounds it is a **Slider**, which takes no `@controlId`, so it is named by `@label` (the argument name) and the rail stays plain text.
+- **No unit is announced.** Slider supports `@formatValue` for `aria-valuetext`, but UsageNumber has no unit argument to pass, so a knob announces "8" where "8 pixels" is meant.
 - **Changing a knob re-renders the example silently** — no live region, no confirmation.
-- **`@required` must reach the accessible name** in the docs lens rather than only rendering an asterisk.
+- **`@required`** adds a visually hidden "(required)" beside the asterisk, in the property row and the doc row.
 - **`null` versus `0`** is not distinguishable in the control's announcement; an unset numeric argument and one explicitly set to zero read the same.
 
 ## Theming
 
-**Slider**'s tokens (`--primary` for the filled track, `--line-strong` for the remainder and the thumb hairline, `--card` for the thumb, `--shadow-ink-mid`, `--font-mono` and `--ink-3` for tick labels) or **Input**'s, plus **Table**'s for the doc row and the property rail's label voice.
+**Slider**'s or **Input**'s tokens for the control, **Table**'s for the doc row, and the property rail's mono label in `--muted-foreground`. The readout beside a slider is mono at a fixed minimum width (`--numrange-readout-min-w`), so the slider doesn't shift as the value changes.
 
-Nothing of its own. Check Slider's thumb against `--line-strong` per season — a property list shows sliders at several positions at once, and a thumb that disappears at either end of the track makes the knob unreadable exactly where the bounds are being demonstrated.
-
-The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
+A property list shows sliders at several positions at once, so a thumb that disappears at either end of the track makes the knob unreadable exactly where the bounds are being demonstrated; check the thumb against the track in both schemes.

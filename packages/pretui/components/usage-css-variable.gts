@@ -1,5 +1,6 @@
 // Pretui — UsageCssVariable: a documented CSS custom property.
 import Component from '@glimmer/component';
+import { guidFor } from '@ember/object/internals';
 import { Input } from './input';
 import { UsageArgument } from './usage-argument';
 import { PropRow } from '../internal/freestyle';
@@ -28,17 +29,18 @@ export class UsageCssVariable extends Component<UsageCssVariableSignature> {
   get hasControl() {
     return this.args.onInput !== undefined;
   }
+  controlId = `${guidFor(this)}-control`;
   callOnInput = (v: string) => {
     this.args.onInput?.(v);
   };
   <template>
     {{#if this.isProp}}
       {{#if this.hasControl}}
-        <PropRow @label={{@name}}>
+        <PropRow @label={{@name}} @controlId={{this.controlId}}>
           <Input
             @value={{this.valueStr}}
             @onInput={{this.callOnInput}}
-            aria-label={{@name}}
+            @controlId={{this.controlId}}
           />
         </PropRow>
       {{/if}}

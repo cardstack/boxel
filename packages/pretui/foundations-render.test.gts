@@ -27,7 +27,13 @@ module('Pretui | foundation usage pages', function (hooks) {
     test(`${name} mounts with representative data`, async function (assert) {
       let Demo = PAGES[name] as AnyComponent;
       await render(<template><Demo /></template>);
-      assert.ok(document.querySelector('.FreestyleUsage'), `${name} rendered`);
+      assert.ok(document.querySelector('[data-test-pretui-usage]'), `${name} rendered`);
+      assert.ok(
+        Array.from(document.querySelectorAll('[data-test-pretui-viewport-specimen]')).some(
+          (s) => s.childElementCount > 0 || Boolean(s.textContent?.trim()),
+        ),
+        `${name} shows its example`,
+      );
       assert.notOk(
         document.body.textContent?.includes('There is no JSON to display.'),
         `${name} has no empty object fixture`,

@@ -26,18 +26,17 @@ function probeColor(): string {
   return getComputedStyle(probe).backgroundColor;
 }
 
-// The mode picker is a SegmentedControl: a radiogroup over native
-// <input type='radio'>. The helper accepts a tab shape too, so it survives
-// the theme bar being re-cut.
-async function clickMode(label: string) {
-  let candidates = Array.from(
-    document.querySelectorAll('[data-test-pretui-theme-bar] button, [data-test-pretui-theme-bar] label'),
-  );
-  let target = candidates.find((b) => b.textContent?.trim() === label);
-  if (!target) {
-    throw new Error(`no mode button labeled ${label}`);
+// The mode control is the dark mode switch: a checkbox with role='switch'.
+async function setDarkMode(on: boolean) {
+  let input = document.querySelector(
+    '[data-test-pretui-theme-mode] input',
+  ) as HTMLInputElement | null;
+  if (!input) {
+    throw new Error('no dark mode switch rendered');
   }
-  await click(target.querySelector('input') ?? target);
+  if (input.checked !== on) {
+    await click(input);
+  }
 }
 
 module('Pretui | ThemeFrame', function (hooks) {
@@ -56,22 +55,31 @@ module('Pretui | ThemeFrame', function (hooks) {
     assert.strictEqual(
       probeColor(),
       'rgb(10, 20, 30)',
-      'auto mode resolves the light token set',
+      'the frame starts light',
     );
+    assert
+      .dom('[data-test-pretui-theme-frame]')
+      .hasAttribute('data-theme', 'light', 'the frame stamps light, not an auto scheme');
 
-    await clickMode('Dark');
+    await setDarkMode(true);
     assert.strictEqual(
       probeColor(),
       'rgb(40, 50, 60)',
       'dark mode re-resolves the theme dark block — no component changed',
     );
+    assert
+      .dom('[data-test-pretui-theme-frame]')
+      .hasAttribute('data-theme', 'dark', 'dark mode stamps dark');
 
-    await clickMode('Light');
+    await setDarkMode(false);
     assert.strictEqual(
       probeColor(),
       'rgb(10, 20, 30)',
       'light mode forces the light set back on',
     );
+    assert
+      .dom('[data-test-pretui-theme-frame]')
+      .hasAttribute('data-theme', 'light', 'light mode stamps light');
   });
 
   test('frame without a theme still flips boxel-ui ambient tokens', async function (assert) {
@@ -85,7 +93,7 @@ module('Pretui | ThemeFrame', function (hooks) {
     </template>);
 
     let lightBg = probeColor();
-    await clickMode('Dark');
+    await setDarkMode(true);
     assert.notStrictEqual(
       probeColor(),
       lightBg,
@@ -146,13 +154,13 @@ module('Pretui | ThemeFrame · seasons', function (hooks) {
       </ThemeFrame>
     </template>);
 
-    await clickMode('Light');
+    await setDarkMode(false);
     let lightBg = probeBg();
     let lightPrimary = readVar('--primary');
     let lightFg = readVar('--foreground');
     assert.ok(lum(lightBg) > 0.9, `light --background is paper (${lightBg})`);
 
-    await clickMode('Dark');
+    await setDarkMode(true);
     let darkBg = probeBg();
     let darkPrimary = readVar('--primary');
     let darkFg = readVar('--foreground');
@@ -205,7 +213,7 @@ module('Pretui | ThemeFrame · seasons', function (hooks) {
           <div data-test-probe style='background: var(--primary)'>probe</div>
         </ThemeFrame>
       </template>);
-      await clickMode('Light');
+      await setDarkMode(false);
       seen.push(probeBg());
     }
     assert.strictEqual(
@@ -246,12 +254,12 @@ module('Pretui | ThemeFrame · season selector', function (hooks) {
       document.querySelector('[data-test-pretui-theme-bar]'),
       'the theme bar rendered — the selector branch does not throw',
     );
-    assert.dom('.pretui-theme-name').doesNotExist(
+    assert.dom('[data-test-pretui-theme-name]').doesNotExist(
       'with 3 themes found the static name is replaced by the picker',
     );
     assert.ok(
-      document.querySelector('.pretui-theme-pick'),
-      'the season picker is present',
+      document.querySelector('[data-test-pretui-theme-pick]'),
+      'the theme picker is present',
     );
   });
 
@@ -303,7 +311,7 @@ module('Pretui | ThemeFrame · season selector', function (hooks) {
         <div data-test-probe style='background: var(--primary)'>probe</div>
       </ThemeFrame>
     </template>);
-    assert.dom('.pretui-theme-name').hasText(
+    assert.dom('[data-test-pretui-theme-name]').hasText(
       'AW26',
       'prerender/test contexts still name the linked theme',
     );

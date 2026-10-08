@@ -76,6 +76,17 @@ module('Pretui | ink', function (hooks) {
     );
   });
 
+  test('Chip is neutral by default and reflects a known @tone', async function (assert) {
+    await render(
+      <template>
+        <Chip @label='Draft' data-test-neutral />
+        <Chip @label='Live' @tone='success' data-test-toned />
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-neutral]').getAttribute('data-tone'), 'neutral');
+    assert.strictEqual(q('[data-test-toned]').getAttribute('data-tone'), 'success');
+  });
+
   // ── StatusChip ──────────────────────────────────────────────────────────
   test('StatusChip derives its hue from the value and renders it as the label', async function (assert) {
     await render(<template><StatusChip @value='blocked' /></template>);
@@ -92,6 +103,25 @@ module('Pretui | ink', function (hooks) {
     assert.true(
       q('[data-test-pretui-status-chip]').getAttribute('style')?.includes('var(--chart-1)'),
       'the caller hue wins',
+    );
+  });
+
+  test('a toned StatusChip hands its dot to the tone, and neutral keeps the status hue', async function (assert) {
+    await render(
+      <template>
+        <StatusChip @value='live' @tone='success' data-test-toned />
+        <StatusChip @value='live' @tone='neutral' data-test-neutral />
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-toned]').getAttribute('data-tone'), 'success');
+    assert.strictEqual(
+      q('[data-test-toned]').getAttribute('style'),
+      null,
+      'no status hue overrides the tone on a toned chip',
+    );
+    assert.true(
+      q('[data-test-neutral]').getAttribute('style')?.includes(statusHue('live')),
+      'an explicit neutral tone renders like an omitted one',
     );
   });
 

@@ -524,7 +524,7 @@ module('Pretui | reading-listing', function (hooks) {
           @onExpandedChange={{knobs.onExpandedChange}}
         >
           <:expanded as |row|>
-            <p class='t-detail'>{{row.place}}</p>
+            <p data-test-detail>{{row.place}}</p>
           </:expanded>
         </DataTable>
       </template>,
@@ -544,7 +544,7 @@ module('Pretui | reading-listing', function (hooks) {
     let controls = toggle.getAttribute('aria-controls') as string;
     let detail = tableRoot().querySelector('#' + controls) as HTMLElement;
     assert.ok(detail, 'aria-controls resolves to a real element');
-    assert.dom(detail.querySelector('.t-detail')).hasText('Uji');
+    assert.dom(detail.querySelector('[data-test-detail]')).hasText('Uji');
     assert.strictEqual(
       detail.querySelector('td')?.getAttribute('colspan'),
       '5',
@@ -762,11 +762,11 @@ module('Pretui | reading-listing', function (hooks) {
     await render(
       <template>
         <List @items={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode={{knobs.selectionMode}} @onActivate={{knobs.onActivate}}>
-          <:item as |row|><span class='t-tea'>{{row.tea}}</span></:item>
+          <:item as |row|><span data-test-tea>{{row.tea}}</span></:item>
         </List>
       </template>,
     );
-    await click(listRoot().querySelectorAll('.t-tea')[1] as HTMLElement);
+    await click(listRoot().querySelectorAll('[data-test-tea]')[1] as HTMLElement);
     assert.deepEqual(knobs.activations, ['B-2'], 'the row text activates');
     await click(listRoot().querySelectorAll('[data-test-pretui-list-select]')[0] as HTMLElement);
     assert.deepEqual(knobs.activations, ['B-2'], 'the radio does not');
@@ -837,7 +837,7 @@ module('Pretui | reading-listing', function (hooks) {
     );
     assert.deepEqual(terms, ['Lot', 'Tea', 'Note', 'Empty']);
     let pairs = Array.from(
-      root.querySelectorAll('.pretui-desc-pair'),
+      root.querySelectorAll('[data-test-pretui-descriptions-pair]'),
     ) as HTMLElement[];
     assert.strictEqual(pairs[2]?.getAttribute('data-span'), 'fill');
     assert.strictEqual(root.getAttribute('data-bordered'), 'true');
@@ -853,15 +853,15 @@ module('Pretui | reading-listing', function (hooks) {
     await render(
       <template>
         <Descriptions @items={{items}} @colon={{true}}>
-          <:value as |item|><b class='t-v'>{{item.label}} block</b></:value>
+          <:value as |item|><b data-test-value>{{item.label}} block</b></:value>
         </Descriptions>
       </template>,
     );
     let root = document.querySelector(
       '[data-test-pretui-descriptions]',
     ) as HTMLElement;
-    assert.dom(root.querySelector('.t-v')).hasText('Lot block');
-    let colon = root.querySelector('.pretui-desc-colon') as HTMLElement;
+    assert.dom(root.querySelector('[data-test-value]')).hasText('Lot block');
+    let colon = root.querySelector('[data-test-pretui-descriptions-colon]') as HTMLElement;
     assert.strictEqual(
       colon.getAttribute('aria-hidden'),
       'true',
@@ -935,7 +935,7 @@ module('Pretui | reading-listing | usage pages', function (hooks) {
       assert.ok(Page, name + ' present');
       await render(<template><Page /></template>);
       assert.ok(
-        document.querySelector('.FreestyleUsage'),
+        document.querySelector('[data-test-pretui-usage]'),
         name + ' rendered a FreestyleUsage shell',
       );
     });

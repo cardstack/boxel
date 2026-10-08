@@ -5,21 +5,21 @@ import { FreestyleUsage } from './freestyle-usage';
 import { Token } from './token';
 import { PRETUI_SIZES, type PretuiSize } from '../pretui-primitives';
 
-// The size knob's choices: the --text-body default plus the house scale.
-const BODY_SIZE = 'body';
+// The size knob's choices: the 2xs default plus the house scale.
+const BODY_SIZE = 'default';
 const SIZES = [BODY_SIZE, ...PRETUI_SIZES];
-// The hue knob's choices: the default plus the contract's muted and state hues.
-const DEFAULT_HUE = 'var(--pretui-primary-ink, var(--primary))';
+// The hue knob's choices: the default plus inks, since the hue is the text
+// color and has to read on --card.
+const DEFAULT_HUE = 'var(--card-foreground)';
 const HUES = [
   DEFAULT_HUE,
   'var(--muted-foreground)',
-  'var(--chart-2)',
-  'var(--chart-4)',
-  'var(--destructive)',
+  'var(--primary-ink)',
+  'var(--success-ink)',
+  'var(--destructive-ink)',
 ];
 
 class TokenUsage extends Component {
-  values = ['records@2.4.0', 'LOT-B-103', 'ctse/pretui'];
   @tracked value = 'records@2.4.0';
   @tracked size = BODY_SIZE;
   @tracked hue = DEFAULT_HUE;
@@ -67,7 +67,6 @@ class TokenUsage extends Component {
           <Token @value='ctse/pretui' />.</p>
       </:example>
       <:api as |Args|>
-        <Args.Object @name='sample values' @value={{this.values}} />
         <Args.String
           @name='value'
           @value={{this.value}}
@@ -78,7 +77,7 @@ class TokenUsage extends Component {
           @value={{this.size}}
           @options={{SIZES}}
           @defaultValue={{BODY_SIZE}}
-          @description='House scale xs|s|m|l|xl, the same steps as Button; sets the font-size only. Omitted, the size follows --text-body, or --pretui-token-font-size when that is set (Pretui addition).'
+          @description='House scale xs|s|m|l|xl, the same steps as Button; sets the font-size, with the line box growing past 18px. Omitted, the size is --boxel-font-size-2xs, or --pretui-token-font-size when that is set (Pretui addition).'
           @onInput={{this.setSize}}
         />
         <Args.String
@@ -86,7 +85,7 @@ class TokenUsage extends Component {
           @value={{this.hue}}
           @options={{HUES}}
           @defaultValue={{DEFAULT_HUE}}
-          @description='Validated CSS colour for the fill, ink and hairline. Sets --pretui-token-hue, and stays set when the caller also passes a style attribute.'
+          @description='Validated CSS color for the text. Sets --pretui-token-hue, and stays set when the caller also passes a style attribute.'
           @onInput={{this.setHue}}
         />
         <Args.Bool
@@ -105,21 +104,20 @@ class TokenUsage extends Component {
         <Css.Basic
           @name='pretui-token-hue'
           @type='color'
-          @description='Colour the fill, ink and hairline are mixed from. Set on the Token or any ancestor, or through @hue.'
-          @defaultValue='var(--pretui-primary-ink, var(--primary))'
+          @description='Text color. Set on the Token or any ancestor, or through @hue.'
+          @defaultValue='var(--card-foreground)'
         />
         <Css.Basic
           @name='pretui-token-font-size'
           @type='dimension'
           @description='Exact font-size for a Token with no @size, such as var(--boxel-font-size-xs). Set on the Token or any ancestor; @size wins over it.'
-          @defaultValue='calc(var(--text-body, 15px) - 3.5px)'
+          @defaultValue='var(--boxel-font-size-2xs)'
         />
       </:cssVars>
     </FreestyleUsage>
     <style scoped>
       .foundation-prose {
         margin: 0;
-        color: var(--foreground);
       }
     </style>
   </template>

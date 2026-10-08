@@ -1,5 +1,5 @@
-// Pretui — SegmentedControl: compact view switcher. The active card is
-// motion-core's SlidingHighlight, not the segment's own background.
+// Pretui — SegmentedControl: compact view switcher. The active card is a
+// SlidingHighlight pill, not the segment's own background.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
@@ -32,25 +32,14 @@ export interface SegmentedControlSignature {
   Element: HTMLDivElement;
 }
 
-// The active segment's card face is not painted by the segment: it is ONE
-// <SlidingHighlight @variant='pill' /> that travels between segments, driven
-// by motion-core's slidingHighlight modifier on the rail. Adopting the shared
-// primitive rather than keeping a local copy means the measuring code, the
-// first-paint suppression and the reduced-motion fallback live in exactly one
-// place for Segmented, Tabs and anything that adopts it next. The modifier
-// reads the same data-state='active' the styling already used, so nothing
-// here had to hand over its DOM or thread an active index through.
+// The active segment's card face is one <SlidingHighlight @variant='pill' />
+// that slides between segments, driven by the slidingHighlight modifier on
+// the rail; it reads each label's data-state='active'.
 //
-// **A radiogroup, not a tablist.** A segmented control swaps a *value*, not
-// a panel, so it is radios; a tablist's children must be tabs. Tabs, three components down this file, is the one that swaps a
-// panel. It is now what it always was: a single-choice value picker, built on
-// the same native `<input type='radio'>` foundation `RadioGroup` uses, which
-// hands over the entire APG radio contract — one tab stop for the group,
-// arrows to move and select, checked state exposed, form participation — with
-// no roving-tabindex code and no keyboard handler of our own. Nothing about
-// how it LOOKS changed: the radio is visually hidden, the `<label>` wears the
-// old `.pretui-seg-item` dress and keeps `data-state='active'` so
-// SlidingHighlight measures exactly what it measured before.
+// A radiogroup, not a tablist: a segmented control picks a value, not a
+// panel. Native radios sharing a name give the APG radio contract (one tab
+// stop, arrows move and select, checked state, form participation) with no
+// keyboard code here; each radio is visually hidden and its label is the face.
 export class SegmentedControl extends Component<SegmentedControlSignature> {
   @tracked internal =
     this.args.defaultValue ??
@@ -62,7 +51,7 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
   get value() {
     return this.args.value ?? this.internal;
   }
-  pick = (option: SegmentOption, event: Event) => {
+  pick = (option: SegmentOption) => {
     if (this.args.value === undefined) {
       this.internal = option.value;
     }
@@ -70,10 +59,11 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
     // controlled: the browser already moved the radio; move it back unless the
     // owner took the new value
     if (this.args.value !== undefined && this.args.value !== option.value) {
-      let group = (event.target as HTMLElement).closest('.pretui-seg');
-      group?.querySelectorAll<HTMLInputElement>('.pretui-seg-input').forEach((radio) => {
+      for (let radio of document.getElementsByName(
+        this.name,
+      ) as NodeListOf<HTMLInputElement>) {
         radio.checked = radio.value === this.args.value;
-      });
+      }
     }
   };
   isActive = (option: SegmentOption) => this.value === option.value;
@@ -82,9 +72,9 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
       class='pretui-seg'
       role='radiogroup'
       aria-label={{@label}}
+      {{slidingHighlight}}
       data-test-pretui-segmented
       ...attributes
-      {{slidingHighlight}}
     >
       <SlidingHighlight @variant='pill' />
       {{#each this.options as |option|}}
@@ -100,50 +90,66 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
             checked={{this.isActive option}}
             disabled={{@disabled}}
             {{on 'change' (fn this.pick option)}}
+            data-test-pretui-segmented-option={{option.value}}
           />
-          {{option.label}}
+          <span
+            class='pretui-seg-text'
+            data-text={{option.label}}
+          >{{option.label}}</span>
         </label>
       {{/each}}
     </div>
     <style scoped>
       @layer PretComponent {
         .pretui-seg {
+          /* the rail's gap, padding and radius offset move together, so the
+             pill's corner stays concentric with the rail's */
+          --pretui-seg-inset: var(--boxel-sp-6xs);
+          /* the active label's weight; the hidden copy below must match it */
+          --pretui-seg-active-weight: 600;
+          /* Button's corner, shared by the segments and the pill; the rail
+             adds the inset so the pill's corner stays concentric */
+          --pretui-seg-radius: calc(var(--radius) - 2px);
+          --pretui-highlight-radius: var(--pretui-seg-radius);
+
           position: relative;
           display: inline-flex;
-          gap: 2px;
-          padding: 2px;
-          background: var(--inset, var(--boxel-100));
-          border-radius: calc(var(--radius) + 2px);
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          gap: var(--pretui-seg-inset);
+          padding: var(--pretui-seg-inset);
+          background-color: var(--inset);
+          color: var(--foreground);
+          border-radius: calc(var(--pretui-seg-radius) + var(--pretui-seg-inset));
+          box-shadow: 0 0 0 1px var(--border);
+        }
+        .pretui-seg:has(.pretui-seg-input:disabled) {
+          opacity: 0.5;
         }
         .pretui-seg-item {
-          /* positioned + z-index so the label paints above the travelling
-             highlight, which is a sibling rather than this button's own
-             background. `raised` is the kit scale's in-component tier
-             (pretui-css.gts) — it never competes outside this box. */
+          /* above the pill, which is a sibling, not the label's background;
+             raised is the kit's in-component stacking tier */
           position: relative;
           z-index: var(--pretui-z-raised, 1);
           display: inline-flex;
           align-items: center;
-          height: 24px;
-          padding: 0 11px;
-          border: 0;
-          background: none;
-          border-radius: var(--radius);
-          font-family: inherit;
-          font-size: var(--text-ui, 12px);
-          font-weight: 500;
-          letter-spacing: inherit;
+          height: 1.5rem;
+          padding: 0 var(--boxel-sp-sm);
+          border-radius: var(--pretui-seg-radius);
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          line-height: var(--boxel-ui-label-line-height);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
           color: var(--muted-foreground);
           cursor: pointer;
           white-space: nowrap;
-          /* the label crosses to ink over the same beat the pill travels, so
-             the two halves of the state change read as one move */
-          transition: color 150ms var(--pretui-ease-snap, ease);
+          /* the ink shift keeps the pill's timing, so the two read as one move */
+          transition: color 180ms cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .pretui-seg-item:has(.pretui-seg-input:disabled) {
+          cursor: default;
         }
         /* the radio carries the semantics and the keyboard; the label carries
-           the look. Kept 1px and in flow rather than display:none so it stays
-           focusable and so the focus ring below has something to sit on. */
+           the look. Kept 1px rather than display:none so it stays focusable
+           and the focus ring below has something to follow. */
         .pretui-seg-input {
           position: absolute;
           width: 1px;
@@ -152,21 +158,37 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           opacity: 0;
           pointer-events: none;
         }
+        /* the radio is visually hidden, so its label shows the focus */
         .pretui-seg-item:has(.pretui-seg-input:focus-visible) {
           outline: 2px solid var(--ring);
-          outline-offset: 1px;
         }
+        /* the label sits on the pill's --card face */
         .pretui-seg-item[data-state='active'] {
-          /* the card face and control shadow now belong to the shared
-             SlidingHighlight in its pill cut — identical treatment, one
-             element, and it travels */
-          color: var(--foreground);
+          color: var(--card-foreground);
+          font-weight: var(--pretui-seg-active-weight);
+        }
+        /* a hidden bold copy under the label holds every segment at its bold
+           width, so selecting one never shifts its neighbors or the pill */
+        .pretui-seg-text {
+          display: inline-grid;
+        }
+        .pretui-seg-text::after {
+          content: attr(data-text);
+          height: 0;
+          overflow: hidden;
+          visibility: hidden;
+          font-weight: var(--pretui-seg-active-weight);
         }
         /* coarse pointers get a real hit target without moving the fine one */
         @media (any-pointer: coarse) {
           .pretui-seg-item {
-            min-height: 34px;
-            padding: 0 14px;
+            min-height: 2.125rem;
+            padding: 0 var(--boxel-sp);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-seg-item {
+            transition: none;
           }
         }
       }
