@@ -18,7 +18,10 @@ import { removeFieldPlugin } from './remove-field-plugin.ts';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import { isEqual } from 'lodash-es';
-import { contentTagPreprocessor, loadContentTag } from './content-tag.ts';
+import {
+  contentTagPreprocessor,
+  loadContentTag,
+} from './content-tag-loader.ts';
 
 import {
   baseCardRef,

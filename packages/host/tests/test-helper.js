@@ -5,7 +5,7 @@ import { setApplication } from '@ember/test-helpers';
 import { setConfig as setBasicDropdownConfig } from 'ember-basic-dropdown/config';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
 import { start as examStart } from 'ember-exam/test-support';
-import { loadContentTag } from '@cardstack/runtime-common/content-tag';
+import { loadContentTag } from '@cardstack/runtime-common/content-tag-loader';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';

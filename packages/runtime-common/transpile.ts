@@ -18,7 +18,10 @@ import decoratorTransforms from 'decorator-transforms';
 //@ts-ignore no upstream types
 import * as emberCompiler from 'ember-source/ember-template-compiler/index.js';
 
-import { contentTagPreprocessor, loadContentTag } from './content-tag.ts';
+import {
+  contentTagPreprocessor,
+  loadContentTag,
+} from './content-tag-loader.ts';
 
 import { md5 } from 'super-fast-md5';
 

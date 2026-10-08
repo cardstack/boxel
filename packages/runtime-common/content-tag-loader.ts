@@ -9,6 +9,10 @@ import type { Preprocessor as ContentTagPreprocessor } from 'content-tag';
 // asked for it run, before a dependency it shares with another import has
 // finished evaluating. Loading content-tag here keeps the `await` out of
 // every static graph, and keeps the wasm off the path a page takes to boot.
+//
+// This file must not be named `content-tag.ts`: this package's tsconfig sets
+// `baseUrl: "."`, and bundlers that honor it (esbuild, for boxel-cli) then
+// resolve `import('content-tag')` to this file instead of the package.
 let preprocessorClass: typeof ContentTagPreprocessor | undefined;
 let loading: Promise<void> | undefined;
 
