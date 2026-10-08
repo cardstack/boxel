@@ -13,7 +13,7 @@ A small tinted pill for a categorical value: a status, a tag, a label. It is dis
 
 **The dot is on by default.** That is the decision most kits get backwards: without it, a row of chips is distinguished only by fill colour, and colour alone is a WCAG 1.4.1 problem _and_ hard to scan. The dot gives the hue a saturated anchor next to muted ink, so the category reads at a glance even when the fills are close. Turn it off (`@dot={{false}}`) only when the chip's own text already names the category unambiguously.
 
-The mix ratios are tokens (`--pretui-chip-mix`, `--pretui-ink-mix`), shared with **Alert**, so a banner and a chip about the same thing tint identically.
+The mix ratios are tokens (`--pretui-chip-mix`, `--pretui-ink-mix`).
 
 ## Prior art
 
@@ -38,7 +38,7 @@ That is the right answer for a static chip, and it means the accessibility quest
 
 ## Theming
 
-`--pretui-chip-hue` (the per-instance hue, defaulting to `--muted-foreground`), `--pretui-chip-mix` (fill strength, default 20%, shared with **Alert**), `--pretui-ink-mix` (ink strength, default 34%), `--card` (the mix base), `--foreground` (mixed into ink), `--border` (mixed into the hairline), `--radius-chip` (6px), `--text-ui-xs`, `--track-ui`.
+`--pretui-chip-hue` (the per-instance hue, defaulting to `--muted-foreground`), `--pretui-chip-mix` (fill strength, default 20%), `--pretui-ink-mix` (ink strength, default 34%), `--card` (the mix base), `--foreground` (mixed into ink), `--border` (mixed into the hairline), `--radius-chip` (6px), `--text-ui-xs`, `--track-ui`.
 
 The 18px height, 7px padding and 5px dot are fixed.
 

@@ -50,10 +50,15 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
   </div>
   <style scoped>
     @layer PretComponent {
+      /* overflow: auto makes the wrapper the scroll container of the sticky
+         header, so the header only sticks once the wrapper itself scrolls
+         vertically. A caller bounds it with --pretui-table-max-height; unset,
+         the wrapper grows with its rows and the header scrolls away with them. */
       .pretui-tablewrap {
-        overflow-x: auto;
+        overflow: auto;
         min-width: 0;
         max-width: 100%;
+        max-height: var(--pretui-table-max-height, none);
         border-radius: var(--radius);
         box-shadow: 0 0 0 1px var(--border);
         background-color: var(--card);

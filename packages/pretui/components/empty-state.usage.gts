@@ -51,7 +51,7 @@ class EmptyStateUsage extends Component {
             @texture={{this.texture}}
             @size={{this.size}}
           >
-            <:action><Button @variant='secondary'>Clear filters</Button></:action>
+            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{else}}
           <EmptyState
@@ -64,7 +64,7 @@ class EmptyStateUsage extends Component {
               and
               <Token @value='harvest' />
               filters.</:default>
-            <:action><Button @variant='secondary'>Clear filters</Button></:action>
+            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{/if}}
       </:example>
@@ -91,7 +91,7 @@ class EmptyStateUsage extends Component {
           @value={{this.size}}
           @options={{SIZES}}
           @defaultValue='m'
-          @description="House scale. 's' is the compact well for an empty note inside a card section (1rem padding, the title at --boxel-font-size); 'm' sizes for a page section. xs lands on s, l and xl on m (Pretui addition)."
+          @description="House scale. 's' is the compact well for an empty note inside a card section (--boxel-sp padding, the title at --boxel-font-size); 'm' sizes for a page section. xs lands on s, l and xl on m (Pretui addition)."
           @onInput={{this.setSize}}
         />
         <Args.Yield

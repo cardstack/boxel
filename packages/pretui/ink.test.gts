@@ -254,7 +254,7 @@ module('Pretui | ink', function (hooks) {
     );
     assert.deepEqual(
       all('.pretui-meter-bar').map((b) => b.style.getPropertyValue('height')),
-      ['4px', '8px', '8px', '8px'],
+      ['0.25rem', '0.5rem', '0.5rem', '0.5rem'],
       'a short, non-empty heights array does not produce undefined-height bars (an empty array would: heights[-1])',
     );
   });

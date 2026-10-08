@@ -75,10 +75,12 @@ export class Avatar extends Component<AvatarSignature> {
     <span
       class='pretui-avatar'
       title={{@name}}
-      aria-label={{@name}}
+      role={{unless this.showImage 'img'}}
+      aria-label={{unless this.showImage @name}}
+      data-has-image={{if this.showImage 'true'}}
       style={{this.style}}
-      data-test-pretui-avatar
       {{keepStyle this.keptStyle}}
+      data-test-pretui-avatar
       ...attributes
     >
       {{#if this.showImage}}<img src={{@src}} alt={{@name}} {{on 'error' this.imageError}} />{{else}}{{this.initials}}{{/if}}
@@ -89,17 +91,20 @@ export class Avatar extends Component<AvatarSignature> {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: var(--pretui-avatar-size, 1.5rem);
-          height: var(--pretui-avatar-size, 1.5rem);
+          /* the default diameter, declared once */
+          --_avatar-size: var(--pretui-avatar-size, 1.5rem);
+          --_avatar-hue: var(--pretui-chip-hue, var(--primary));
+          width: var(--_avatar-size);
+          height: var(--_avatar-size);
           /* 0.42 of the diameter; rounded to the whole pixel below where
              round() is supported */
-          font-size: calc(var(--pretui-avatar-size, 1.5rem) * 0.42);
+          font-size: calc(var(--_avatar-size) * 0.42);
           border-radius: 50%;
           font-family: var(--font-mono);
           font-weight: 600;
-          background: color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 16%, var(--card));
-          color: color-mix(in oklch, var(--foreground) 20%, var(--pretui-chip-hue, var(--primary)));
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-chip-hue, var(--primary)) 28%, var(--border));
+          background-color: color-mix(in oklch, var(--_avatar-hue) 16%, var(--card));
+          color: var(--foreground);
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--_avatar-hue) 28%, var(--border));
           overflow: hidden;
           flex: none;
         }
@@ -109,11 +114,14 @@ export class Avatar extends Component<AvatarSignature> {
            the parent's font size instead of using the fallback. */
         @supports (font-size: round(1px, 1px)) {
           .pretui-avatar {
-            font-size: round(
-              calc(var(--pretui-avatar-size, 1.5rem) * 0.42),
-              1px
-            );
+            font-size: round(calc(var(--_avatar-size) * 0.42), 1px);
           }
+        }
+        /* A photo gets a neutral ring: the name's hue carries no meaning once
+           the photo shows. The ring sits on the root, whose overflow: hidden
+           circle would clip an outline on the square img. */
+        .pretui-avatar[data-has-image] {
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent);
         }
         .pretui-avatar img {
           width: 100%;

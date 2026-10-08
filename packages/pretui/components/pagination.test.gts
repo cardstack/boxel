@@ -21,7 +21,7 @@ function texts(sel: string): (string | undefined)[] {
 module('Pretui | components/pagination', function (hooks) {
   setupCardTest(hooks);
 
-  test('Pagination is a labelled nav that marks the current page', async function (assert) {
+  test('Pagination is a labeled nav that marks the current page', async function (assert) {
     await render(<template><Pagination @pages={{5}} /></template>);
     let nav = q('[data-test-pretui-pagination]');
     assert.strictEqual(nav.tagName, 'NAV');
@@ -29,6 +29,15 @@ module('Pretui | components/pagination', function (hooks) {
     let current = nav.querySelector('[aria-current="page"]') as HTMLElement;
     assert.strictEqual(current.textContent?.trim(), '1', 'page 1 by default');
     assert.strictEqual(current.dataset['state'], 'active');
+  });
+
+  test('Pagination gives each page number an accessible name', async function (assert) {
+    await render(<template><Pagination @pages={{3}} /></template>);
+    assert.deepEqual(
+      all('[data-test-pretui-pagination] button').map((b) => b.getAttribute('aria-label')),
+      ['Previous', 'Page 1', 'Page 2', 'Page 3', 'Next'],
+      'a bare "3" is announced as "Page 3"',
+    );
   });
 
   test('Pagination disables the arrow at each end rather than hiding it', async function (assert) {
@@ -76,7 +85,7 @@ module('Pretui | components/pagination', function (hooks) {
   test('Pagination elides the middle, keeping the ends and the neighbours of the current page', async function (assert) {
     await render(<template><Pagination @pages={{20}} @defaultPage={{10}} /></template>);
     assert.deepEqual(
-      texts('.pretui-page:not([aria-label]), .pretui-gap'),
+      texts('[aria-label^="Page "], .pretui-gap'),
       ['1', '…', '9', '10', '11', '…', '20'],
       'one gap on each side, never two in a row',
     );
