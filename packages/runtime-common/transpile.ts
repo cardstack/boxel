@@ -5,7 +5,7 @@ import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/bro
 import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
 //@ts-ignore breaks esbuild for VS Code extension
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
-import { loaderPlugin } from './loader-plugin.ts';
+import { loaderPlugin, moduleProvenancePlugin } from './loader-plugin.ts';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -83,6 +83,7 @@ export async function transpileJS(
       [decoratorTransforms],
       [makeEmberTemplatePlugin, templateOptions],
       loaderPlugin,
+      moduleProvenancePlugin,
     ],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
   });
