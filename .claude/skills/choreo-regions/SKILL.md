@@ -50,7 +50,7 @@ in both regions (`atlas`, not `kiln-atlas`) and the barrier pairs an
 inserted id in one region with a removed id in another. Region-scoping the
 id is precisely how you turn it off.
 
-Mechanics (all in `src/choreo/far.ts`):
+Mechanics (all in `packages/choreo/src/far.ts`):
 
 - Every region animating this pass parks at a render-pass barrier, then
   three synchronous phases run with **no frame painted between them**:
@@ -73,8 +73,8 @@ Mechanics (all in `src/choreo/far.ts`):
 
   {{! these fire only when there was NO match (or matching is off):
       a matched sender is released quietly, a matched receiver is kept }}
-  <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @ms={{200}} />
-  <c.Tween @of={{c.inserted 'piece'}} @opacity={{1}} @from={{hidden}} @ms={{260}} />
+  <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @duration={{0.2}} />
+  <c.Tween @of={{c.inserted 'piece'}} @opacity={{array 0 1}} @duration={{0.26}} />
 </c.Parallel>
 ```
 
@@ -103,6 +103,7 @@ mid-flight, assert `orphanCount() === 0` and `strandedTransforms()` is
 empty (`motion-testing`). `setupChoreo(hooks)` resets the far-match
 barrier between tests — required, or passes leak across tests.
 
-Ground truth: `test-app/app/components/examples/far-match.gts` (three bays,
-the on/off switch is just id scoping) and its Deep Dive note
-`test-app/app/components/notes/far.gts`; design in `docs/nested-choreo.md`.
+Ground truth: `packages/choreo-test-app/app/components/examples/far-match.gts`
+(three bays, the on/off switch is just id scoping) and its Deep Dive note
+`packages/choreo-test-app/app/components/notes/far.gts`; design in
+`packages/choreo-gallery/docs/nested-choreo.md`.

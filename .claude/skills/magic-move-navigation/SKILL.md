@@ -10,17 +10,26 @@ description: >-
 
 # Magic Move navigation
 
-The gallery ⇄ demo transition is a **Choreo crossing**: the application
-template wraps `{{outlet}}` in `<Choreo @route={{true}} @quiet={{true}}
-@scroll={{scrollIntent}}>` and the whole move is its timeline
-(`test-app/app/templates/application.gts`). The old 435-line
-`animateView` orchestration is deleted; `animateView` remains only for
-MPA/cross-document transitions where snapshotting is the point.
+The gallery ⇄ demo transition is a **Choreo crossing**: the gallery card's
+site frame wraps the page in `<Choreo @route={{true}} @quiet={{true}}
+@scroll={{@crossing.scrollIntent}}>` and the whole move is its timeline
+(`packages/choreo-gallery/realm/shell/site-frame.gts`). Moving between the grid and a demo
+page is state inside the gallery card, not a host route change, so the
+region sees each move as one render pass and the gallery never writes the
+host's URL or title. The old 435-line `animateView` orchestration is
+deleted; `animateView` remains only for MPA/cross-document transitions
+where snapshotting is the point.
+
+The tiles and their stages are in `packages/choreo-gallery/realm/shell/gallery-grid.gts`,
+the demo page in `packages/choreo-gallery/realm/shell/demo-page.gts`. The standalone Ember
+gallery in `packages/choreo-test-app` has a route-driven copy
+(`app/templates/application.gts`, `app/lib/crossing.ts`); the realm's is
+the one to change.
 
 ## The cast (Keynote's grammar, spoken by the region)
 
-- **MOVES** — an id on both pages: `id='stage-playhead' role='stage'` on
-  the card's stage AND on the demo page's `.stage-wrap`. The pass pairs
+- **MOVES** — an id on both pages: `id='stage-<slug>' role='stage'` on
+  the tile's stage AND on the demo page's `.stage-wrap`. The pass pairs
   them as counterpart/received, the receiver flies FLIP from the old
   box, the old skin rides the flight above it. Type pairs the same way
   (`title-`/`lede-`/`group-<id>`).
@@ -40,13 +49,16 @@ MPA/cross-document transitions where snapshotting is the point.
 
 - `@quiet` — pauses every animation running at liftoff, resumes on
   landing (the old `quietTheRest`, as a region arg). Animations that
-  START during the crossing aren't caught; the gallery gates its card
-  entrances with `isCrossing()` (`app/lib/tempo.ts`) for exactly that.
-- `@scroll={{scrollIntent}}` — the window is placed INSIDE the pass,
-  after the swap renders and before final bounds are measured. The app's
-  thunk (`app/lib/crossing.ts`): opening/demo-to-demo → top; closing →
-  the saved gallery position; standalone-load closing → centre the
-  counterpart card so the flight lands on-screen.
+  START during the crossing aren't caught; the gallery gates its tile
+  entrances with `crossing.isCrossing` for exactly that.
+- `@scroll={{@crossing.scrollIntent}}` — the scroll is placed INSIDE the
+  pass, after the swap renders and before final bounds are measured. The
+  gallery's thunk (`packages/choreo-gallery/realm/lib/crossing.ts`): opening/demo-to-demo
+  → top; closing → the saved gallery position; a demo opened directly,
+  then closed → centre the counterpart tile so the flight lands
+  on-screen. The region positions the window; inside the host the card
+  scrolls in its stack item, so the thunk places that container itself
+  and answers with the window's own position.
 - `onstage` — the crossing only animates what a viewport can see;
   leavers judged in the old scene's window, arrivals in the new one's.
 - The yield rule — a sibling step naming a sprite owns it (the hero's
@@ -71,29 +83,38 @@ MPA/cross-document transitions where snapshotting is the point.
   `factor() === 0` renders no steps at all — no run, and the scroll
   still lands (the region applies it regardless of cues).
 
-## App-side wiring (`app/lib/crossing.ts`, ~150 lines)
+## Gallery-side wiring (`packages/choreo-gallery/realm/lib/crossing.ts`)
 
-`routeWillChange → beginCrossing`: records the gallery scroll, arms the
-timeline (`crossingActive()` gates the steps in the template — so a
-gallery FILTER pass compiles nothing and `<Presence>` keeps its own
-animation), sets the entrance-suppression flag, and watches the region's
-run (`wireRegion` hands the context over). The watcher latches
-`run.finished`, hands over to a replacement run on interruption, and
-stands the timeline down when the run that survives settles.
+One `Crossing` per gallery card (a gallery open in two stacks has two).
+The site frame hands it the region's context (`wire`). `begin(from, to)`
+runs just before the page swap: it records the gallery scroll, notes
+whether this is the trip home, sets the entrance-suppression flag
+(`isCrossing`), and arms the timeline. `active` gates the steps in the
+template, so a gallery FILTER pass compiles nothing and `<Presence>`
+keeps its own animation.
+
+The lifecycle is the library's `createArming()` (`@cardstack/choreo`,
+`packages/choreo/src/arming.ts`), not gallery code: it stands the flag
+up before the run exists and latches the first live run, hands over to
+a replacement run on interruption, ignores a stale run's settle, and
+stands down on the survivor's settle or on a deadline. A host that needs
+to know "a crossing is under way" uses it rather than re-deriving those
+four rules.
 
 **The return trip is three acts, and the order is the whole point.**
 Booting thirty live demos inside the pass is the heaviest render in the
 app, and paying it under the flight is exactly the jank the crossing
 exists to avoid. So: (1) the flight travels ALONE — every unmatched tile
 holds its hidden pose, claimed away from the canned arrive by a
-`returningHome`-gated `<c.Hold>` (the yield rule again), and the card the
-flight lands on is exempt via `counterpartId()`, its shell hidden by CSS
-(`.card.is-veiled`) rather than by opacity, because an opacity-0 card
+`returningHome`-gated `<c.Hold>` (the yield rule again), and the tile the
+flight lands on is exempt via `crossing.counterpart`, its shell hidden by
+CSS (`.card.is-veiled`) rather than by opacity, because an opacity-0 tile
 would hide the live stage inside it; (2) that counterpart's stage boards
 MID-FLIGHT (`stageLive`) — it is the other half of the dissolve, and a
 dissolve needs something real underneath, or the skin fades to blank and
-the demo pops in; (3) at `crossingSettled()` the tiles spring in and the
-other demos mount, once, latched permanently.
+the demo pops in; (3) at `crossing.settled()` the tiles spring in and the
+other demos mount, once, latched permanently. All three acts are in
+`packages/choreo-gallery/realm/shell/gallery-grid.gts`.
 
 ## Load-bearing library behavior (each was a shipped bug here)
 
@@ -125,22 +146,28 @@ other demos mount, once, latched permanently.
    window; never-started tracks land finals while playing too —
    otherwise an arrival's seeded opacity 0 stands forever.
 6. **Assert COMPUTED style and geometry.** Accelerated flights paint
-   through WAAPI; the style attribute never hears of it. The acceptance
-   suite (`tests/acceptance/crossing-test.ts`) measures boxes.
+   through WAAPI; the style attribute never hears of it. The crossing
+   contract suite (`packages/choreo/tests/integration/choreo/crossing-test.gts`)
+   and the gallery's acceptance suite
+   (`packages/choreo-test-app/tests/acceptance/crossing-test.ts`) measure
+   boxes.
 
 ## Still true from the old system
 
 - **Both ends must hold proportions** — the pair crossfades in one
   flying box; content sized in container units (`cqw`/`cqh`) keeps one
   fraction at both scales.
-- **Suppress landing entrances** — cards mounting mid-crossing check
-  `isCrossing()` and mount already-at-rest.
-- **The gallery-wide settle never comes** — several demos never go
-  idle; tests wait on `crossingActive()`, not `animationsSettled()`.
+- **Suppress landing entrances** — tiles mounting mid-crossing check
+  `crossing.isCrossing` and mount already-at-rest.
+- **With live demos on the page, the gallery-wide settle never comes** —
+  several demos never go idle, so a test waits on the crossing standing
+  down (`crossingActive()` in the test app's suites), not on
+  `animationsSettled()`.
 
 ## Died with animateView
 
-The veil and its light-mode exception, `is-veiled`, the root snapshot
+The veil and its light-mode exception (today's `.card.is-veiled` is a
+different thing: the return trip's counterpart tile), the root snapshot
 and its never-name-the-grid rule, the nesting freeze (never name a
 container of named things), coextensive-pair blits, `whenEnded`'s poll,
 `--gm-morph` and every `::view-transition` rule. The Shared Layout

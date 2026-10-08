@@ -1,20 +1,22 @@
 ---
 name: motion-pattern
 description: >-
-  Choose the right animation pattern in this repo (Choreo / glimmer-motion).
-  Use FIRST whenever adding, changing, or reviewing any animation, transition,
-  enter/exit, layout move, drag, scroll effect, or page transition — before
-  writing code. Routes to the specific pattern skill.
+  Choose the right animation pattern with glimmer-motion and Choreo
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  and host UI that animates with them). Use FIRST whenever adding, changing, or
+  reviewing an animation, transition, enter/exit, layout move, drag, scroll
+  effect, or page transition there — before writing code. Routes to the
+  specific pattern skill.
 ---
 
 # Choosing the animation pattern
 
 The library is two layers, one package each:
 
-- **The binding** (`glimmer-motion`) — Motion's engine (`motion-dom`, untouched) driven through
+- **The binding** (`glimmer-motion`, `packages/glimmer-motion`) — Motion's engine (`motion-dom`, untouched) driven through
   Glimmer: the `{{motion}}` modifier plus `<Presence>`, `<LayoutGroup>`,
   `<MotionConfig>`, `<ReorderGroup>`/`<ReorderItem>`.
-- **Choreo** (`@cardstack/choreo`) — a region-scoped model on top: `<Choreo>` watches a render pass,
+- **Choreo** (`@cardstack/choreo`, `packages/choreo`) — a region-scoped model on top: `<Choreo>` watches a render pass,
   hands you its **changeset** (inserted / removed / kept, with bounds before
   and after), and plays a declared timeline over it.
 
@@ -29,7 +31,7 @@ doors, not steps on that ladder.
 | "fade/slide/scale this in", hover/tap states, keyframes, variants, stagger                                                                                                                       | `{{motion}}` with `initial`/`animate`/`transition`                         | `motion-element`                                   |
 | "animate it when it's removed", toasts, list add/remove, modal open/close                                                                                                                        | `<Presence>` + `exit`                                                      | `motion-presence`                                  |
 | "it moved because the layout changed", tab indicator, thumbnail → detail of the SAME thing                                                                                                       | `layout=true` / `layoutId` / `<LayoutGroup>`                               | `motion-layout`                                    |
-| "first X, THEN everyone moves, THEN Y" — ordering across several elements; z-index for the span of a move; one element's motion computed from another's box; fly to a place that must not deform | `<Choreo>` timeline (+ `{{beacon}}`)                                       | `choreo-scene`                                     |
+| "first X, THEN everyone moves, THEN Y" — ordering across several elements; z-index for the span of a move; one element's motion computed from another's box; fly to a place that must not deform | `<Choreo>` timeline (+ `{{beacon}}`, both from `@cardstack/choreo`)        | `choreo-scene`                                     |
 | more than one `<Choreo>` in a tree; an element flying from one region into another (Boxel card between panels)                                                                                   | nested regions + far matching                                              | `choreo-regions`                                   |
 | Route/page change                                                                                                                                                                                | Live DOM crossing: `<Choreo @route>`; intentional snapshots: `animateView` | `magic-move-navigation` / `motion-page-transition` |
 | the gallery-card ⇄ demo-page shared-element navigation, or porting that Magic Move recipe                                                                                                        | `<Choreo @route>` + paired identities                                      | `magic-move-navigation`                            |
@@ -43,7 +45,7 @@ doors, not steps on that ladder.
   animation, not a view transition: `startViewTransition` snapshots the page
   into bitmaps, so running demos/videos/canvases freeze for the crossfade.
   `layout=true` moves the real elements. (See the comment in
-  `test-app/app/components/gallery.gts`.)
+  `packages/choreo-gallery/realm/shell/gallery-grid.gts`.)
 - **`layoutId` to fly a row into a trash can.** `layoutId` pairs two real
   elements and morphs one into the other — the bin would stretch into a row
   shape. A destination that is a _place_, not an identity, is a
@@ -58,14 +60,22 @@ doors, not steps on that ladder.
 ## Ground truth
 
 Every gallery demo is a real component in
-`test-app/app/components/examples/` — read the matching one before inventing
-an approach. `test-app/app/lib/catalog.ts` maps demo → group → source file, and
-`test-app/app/components/notes/*.gts` are the per-demo Deep Dives — the
+`packages/choreo-test-app/app/components/examples/` — read the matching one
+before inventing an approach. `packages/choreo-test-app/app/lib/catalog.ts`
+maps demo → group → source file, and
+`packages/choreo-test-app/app/components/notes/*.gts` are the per-demo Deep
+Dives — the
 _reasoning_ behind each pattern choice (why the inbox uses beacons, how the
 interruption model holds, what the playhead samples). Read the note when
 modifying its demo.
-Docs: `docs/guide.md` (tutorial), `README.md` (API reference),
-`docs/choreography.md` + `docs/nested-choreo.md` (Choreo design).
+Docs: `packages/choreo-gallery/docs/guide.md` (tutorial), the package READMEs
+`packages/glimmer-motion/README.md` and `packages/choreo/README.md` (API
+reference), `packages/choreo-gallery/docs/choreography.md` +
+`packages/choreo-gallery/docs/nested-choreo.md` (Choreo design).
+
+A card in a realm imports the same libraries through host's realm shims, under
+different rules (no direct motion-dom imports, state shared with host). For
+card authoring, follow the `card-motion` skill in boxel-skills instead.
 
 ## Beyond the basic patterns
 

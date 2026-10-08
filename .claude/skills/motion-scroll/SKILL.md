@@ -12,24 +12,38 @@ description: >-
 Two questions, two tools:
 
 **"Where is the scroll?"** — `scrollProgress()` returns motion values for
-position/progress; bind them through `style=(styles …)`:
+position/progress (`scrollX`, `scrollY`, `scrollXProgress`,
+`scrollYProgress`) plus three modifiers that say what to track; bind the
+values through an object passed to `style=` (`motion-element`):
 
-```ts
+```gts
 import { scrollProgress } from 'glimmer-motion';
-// container, target, and offsets (['start end', 'end start'] etc.) supported
-const { scrollYProgress } = scrollProgress({
-  target: el,
-  offset: ['start end', 'end start'],
-});
+
+class Story extends Component {
+  // options are the offsets etc.; container and target are modifiers
+  scroll = scrollProgress({ offset: ['start end', 'end start'] });
+
+  <template>
+    <div class='well' {{this.scroll.container}}>
+      <section {{this.scroll.target}}>…</section>
+    </div>
+  </template>
+}
 ```
 
-Feed a motion value through a transform for parallax (`parallax.gts`), or
-into a scaleX for a progress bar. The lower-level `scroll()` /
-`scrollInfo()` from motion-dom are exported too, and use the native
-ScrollTimeline where the browser has one.
+`{{s.container}}` names the scrolling element (default: the document),
+`{{s.target}}` the element whose position within it is tracked, and
+`{{s.track}}` tracks the document scroll with neither — put it on anything
+that lives as long as the values. Feed a motion value through a transform
+for parallax (`parallax.gts`), or into a scaleX for a progress bar. The
+lower-level `scroll()`, `scrollInfo()` and `inView()` (re-exported from
+`framer-motion/dom`) are there too, and use the native ScrollTimeline where
+the browser has one.
 
-**"Is it on screen?"** — `InView` (a tracked `isInView`) or the `whileInView`
-prop with `viewport` options (`root`, `margin`, `amount`, `once`):
+**"Is it on screen?"** — `InView`, for a tracked `isInView` your template
+can branch on (`v = new InView({ once: true })`, `<div {{this.v.observe}}>`,
+read `this.v.isInView`), or the `whileInView` prop with `viewport` options
+(`root`, `margin`, `amount`, `once`):
 
 ```gts
 <section {{motion initial=(to opacity=0 y=24) whileInView=(to opacity=1 y=0)
@@ -52,4 +66,5 @@ new code against them.
   timing. Don't wrap them in springs unless you want lag on purpose
   (sometimes you do: smoothed parallax).
 
-Canonical demos: `parallax.gts`, `reveal.gts`, `hide-header.gts`.
+Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
+`parallax.gts`, `reveal.gts`, `hide-header.gts`.

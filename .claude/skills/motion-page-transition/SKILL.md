@@ -2,9 +2,9 @@
 name: motion-page-transition
 description: >-
   Page and route transitions with the View Transitions API via animateView /
-  viewTransition — full-scene morphs between screens, Magic Move-style
-  navigation. Use for route changes; also covers when a view transition is
-  the WRONG tool (live/animated content) and the veil pattern this app uses.
+  viewTransition — snapshot morphs between screens, scoped or document-wide.
+  Use for route changes; also covers when a view transition is the WRONG tool
+  (live/animated content, where a <Choreo @route> crossing keeps the real DOM).
 ---
 
 # Page transitions: `animateView` / `viewTransition`
@@ -20,7 +20,9 @@ Two exports, one platform API:
   optionally scoped to an element so a study morphs inside its own box
   without snapshotting the rest of the page. Falls back to just applying the
   update when unsupported, and **skips the transition entirely under
-  prefers-reduced-motion** — you don't handle that.
+  prefers-reduced-motion** — you don't handle that. `animateView` does not
+  skip under reduced motion; check `prefers-reduced-motion` yourself if the
+  morph should not run.
 
 Tag the elements that should fly with `view-transition-name` /
 `view-transition-class` in CSS, then style `::view-transition-old/new/group`
@@ -39,12 +41,13 @@ it read as Magic Move instead of a crossfade soup.
 bitmaps. Anything alive — running animations, video, canvas — freezes for
 the duration. The gallery's filter deliberately uses `layout=true` +
 `<LayoutGroup>` instead so two dozen live demos keep running while their
-cards fly (see the comment block in `test-app/app/components/gallery.gts`).
+cards fly (see the comment block in
+`packages/choreo-gallery/realm/shell/gallery-grid.gts`).
 Choose by content ownership: use layout for same-view geometry, Choreo route
 crossings for live DOM continuity, and view transitions when snapshot behaviour
 is intentional. A route change alone does not imply a snapshot.
 
-## This app's route transition
+## The gallery's route transition
 
 The gallery uses `<Choreo @route>` to cross real DOM, with shared participant
 identities and a declared timeline. Read `magic-move-navigation` before changing

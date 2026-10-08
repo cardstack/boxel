@@ -38,15 +38,17 @@ module('the inbox', function (hooks) {
 ```
 
 - **`setupMotion(hooks)`** — resets what outlives an owner: the projection
-  root, the layout-loop guard, motion speed. Always pair with
-  `setupRenderingTest`.
+  root, the layout-loop guard, motion speed, and any reset registered with
+  `registerMotionReset(fn)`. Its afterEach also fails a test in which a
+  layout loop ran. Always pair with `setupRenderingTest`.
 - **`setupChoreo(hooks)`** (`@cardstack/choreo/test-support`) — the
   setup for a suite that renders `<Choreo>`, in place of `setupMotion`. It
   is `setupMotion` plus Choreo's own resets: the beacon registry, the
   far-match barrier, gesture samples.
 - **`animationsSettled()`** — resolves when every motion element, layout
   animation and `<Choreo>` timeline in the document has stopped. On timeout
-  it names what was still moving. It is deliberately NOT folded into
+  it names what was still moving (`{ timeout }`, default 5000 ms;
+  `whatIsBusy()` / `isMotionIdle()` are the probes it polls). It is deliberately NOT folded into
   `settled()`: a blocking waiter would turn "click again while it is still
   moving" into "wait for it to finish", and interruption tests would go
   green by no longer testing anything.
@@ -60,6 +62,15 @@ module('the inbox', function (hooks) {
   (`@cardstack/choreo/test-support`) — the two invariants to assert
   after any interruption test: nothing parked in a Choreo orphan
   layer, nothing wearing a transform nobody is animating.
+- **`live(selector)` / `liveAll(selector)`** (`@cardstack/choreo/test-support`)
+  — query while a crossing may be aloft. A leaver's skin is parked in
+  `[data-choreo-orphans]`, so a bare `querySelector` can return the ghost
+  rather than the live element.
+- **`advanceGate()`** opens every parked `c.Gate` and settles;
+  **`seekTo(seconds)`** pauses every live run and sets its clock — the way
+  to assert a frame mid-timeline without timing it.
+- Also in `glimmer-motion/test-support`: `boundsAndShape(el)` (both in one
+  object) and `velocityOf(el)` (px/s, sampled across two frames).
 
 ## Conventions
 
@@ -73,10 +84,11 @@ module('the inbox', function (hooks) {
   the suite in headless Chrome, compiled from source), or `pnpm start:test`
   there for interactive runs. The Choreo and film suites run the same way in
   `packages/choreo`, compiling choreo and glimmer-motion from source. The
-  tests that render gallery demos run with `pnpm test` in test-app (builds the
-  suite, runs it in Chrome), or
-  `pnpm --filter test-app exec vite --port 4202 --strictPort` + `/tests` for
-  interactive runs.
+  tests that render gallery demos run with `pnpm test` in
+  `packages/choreo-test-app` (builds the suite, runs it in Chrome), or
+  `pnpm start:test` there for interactive runs. The gallery realm's own
+  `*.test.gts` files run with `pnpm test` in `packages/choreo-gallery`
+  (`boxel test realm`).
 
 Reference suites: `packages/choreo/tests/integration/choreo/` (the Choreo
 contract suite) and the upstream ports under `packages/glimmer-motion/tests/`.

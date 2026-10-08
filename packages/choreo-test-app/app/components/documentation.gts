@@ -229,7 +229,7 @@ export class Documentation extends Component<Signature> {
         </nav>
         <div class="guide-sidebar-foot"><LinkTo @route="widget-room">Explore the
             3D gallery ↗</LinkTo><a
-            href="https://github.com/cardstack/choreo/tree/main/.claude/skills/choreo-create"
+            href="https://github.com/cardstack/boxel/tree/main/.claude/skills/choreo-create"
           >Build with an agent ↗</a></div>
       </aside>
       <div class="guide-main">

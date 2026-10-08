@@ -34,14 +34,14 @@ const keyOf = (todo) => todo.id;
   element that owns the exit. `h.isPresent` is tracked.
 - Single conditional element? Model it as a 0-or-1-item array
   (`get panel() { return this.open ? [{ id: 'panel' }] : NO_PANEL; }` — see
-  `gallery.gts`).
+  `packages/choreo-gallery/realm/shell/gallery-grid.gts`).
 - `@mode`: `"sync"` (default — leavers and newcomers together), `"wait"`
   (newcomer holds until the leaver finishes), `"popLayout"` (leaver out of
   flow immediately so siblings close up; `@anchorX`/`@anchorY` available).
 - `@initial={{false}}` skips the first-render entrance. **Caution:** the
   presence context is inherited — blocking the first entrance blocks it for
   every motion node inside the block too. If children animate on mount,
-  prefer a tracked getter for `initial` (the gallery's `entrance` getter)
+  prefer computing `initial` per item (the gallery grid's `cardInitial`)
   over `@initial={{false}}`.
 - `@onExitComplete`, `@custom` (for exit-direction), nested presence under a
   leaving parent: `@propagate={{true}} @parent={{outerHandle}}`.
@@ -63,5 +63,6 @@ _props_, but your template's own bindings are yours to keep stable.
   See `choreo-scene`.
 - The element isn't leaving, just moving → `motion-layout`.
 
-Canonical demos: `presence-modes.gts` (the three modes side by side),
+Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
+`presence-modes.gts` (the three modes side by side),
 `shared-tabs.gts` (presence + layoutId handover), `sheet.gts`.
