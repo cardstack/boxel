@@ -467,9 +467,9 @@ export default class AiAssistantMessage extends Component<Signature> {
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
               @reasoning={{if
-                @reasoningContent
+                this.reasoningContent
                 (hash
-                  content=@reasoningContent
+                  content=this.reasoningContent
                   isExpanded=this.isReasoningExpanded
                   updateExpanded=this.updateReasoningExpanded
                 )
@@ -628,8 +628,20 @@ export default class AiAssistantMessage extends Component<Signature> {
     </style>
   </template>
 
+  // The "Thinking..." placeholder stands for work not yet visible; while a
+  // compaction runs, its own row says what the assistant is doing instead.
+  private get reasoningContent() {
+    if (
+      this.args.compaction?.status === 'running' &&
+      isThinkingMessage(this.args.reasoningContent)
+    ) {
+      return null;
+    }
+    return this.args.reasoningContent;
+  }
+
   private get hasBotMessage() {
-    return this.args.messageHTMLParts?.length || this.args.reasoningContent;
+    return this.args.messageHTMLParts?.length || this.reasoningContent;
   }
 
   // The provider's token counts for the turn that produced this message.

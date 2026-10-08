@@ -145,6 +145,9 @@ module('Integration | ai-assistant-panel | compaction', function (hooks) {
     assert
       .dom('[data-test-compaction-status] [data-test-view-code-button]')
       .doesNotExist('there is no summary to show yet');
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .doesNotExist('the compaction replaces the thinking placeholder');
 
     simulateRemoteMessage(
       roomId,
@@ -166,6 +169,9 @@ module('Integration | ai-assistant-panel | compaction', function (hooks) {
       .dom('[data-test-compaction-status] [data-test-apply-state="applied"]')
       .exists();
     assert.dom('[data-test-compaction-summary]').doesNotExist();
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...', 'the placeholder returns once it is done');
 
     await click('[data-test-compaction-status] [data-test-view-code-button]');
     assert
