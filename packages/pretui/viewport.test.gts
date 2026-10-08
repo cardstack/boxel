@@ -23,7 +23,7 @@ module('Pretui | Viewport artboard', function (hooks) {
 
   test('R1: presets set exact widths; R5: caption is honest', async function (assert) {
     await render(<template>
-      <Viewport @label='Probe'><span>content</span></Viewport>
+      <Viewport><span>content</span></Viewport>
     </template>);
 
     assert.strictEqual(
@@ -51,7 +51,7 @@ module('Pretui | Viewport artboard', function (hooks) {
 
   test('R3: 3-up renders all three labeled breakpoints', async function (assert) {
     await render(<template>
-      <Viewport @label='Probe'><span>content</span></Viewport>
+      <Viewport><span>content</span></Viewport>
     </template>);
     await click(segButton('bp'));
     let boards = Array.from(
@@ -72,7 +72,7 @@ module('Pretui | Viewport artboard', function (hooks) {
 
   test('R2/R9: surface and gutter are explicit, reflected settings', async function (assert) {
     await render(<template>
-      <Viewport @label='Probe'><span>content</span></Viewport>
+      <Viewport><span>content</span></Viewport>
     </template>);
     let body = () =>
       document.querySelector('[data-test-pretui-artboard-body]') as HTMLElement;

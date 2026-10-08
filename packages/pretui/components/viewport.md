@@ -7,7 +7,6 @@ The artboard: a framed stage that renders its content at a chosen device width, 
 ```
 @defaultMode? 'fill' | 'phone' | 'tablet' | 'desktop' | 'bp' | 'inline' | 'grid'
               ('narrow' and 'wide' are kept as aliases for 'phone' and 'desktop')
-@label?   — the specimen's name, captioning a dragged width as "Name · <width>"; presets are captioned by mode
 <:default>
 ```
 
@@ -17,7 +16,7 @@ The artboard: a framed stage that renders its content at a chosen device width, 
 
 **The stage** takes one of four surfaces (Background, a translucent veil of the page color; Card; Sidebar; Inset) and an optional Padding. Both apply to the framed modes and the grid cells; Inline sits in prose, so the two controls are disabled there.
 
-**The caption is live**: `"Phone · 320px"` for a preset, `"Fill · 100%"` for the full width, and `"Name · 412px"` once you drag or use the width slider, updating as it moves. A dragged width belongs to Fill, so clicking a preset afterwards always resets it. An artboard whose label does not track its real width is worse than no label, because it invites you to trust it.
+**The caption is live**: `"Phone · 320px"` for a preset, `"Fill · 100%"` for the full width, and `"Fill · 412px"` once you drag or use the width slider, updating as it moves. A dragged width belongs to Fill, so clicking a preset afterwards always resets it. An artboard whose label does not track its real width is worse than no label, because it invites you to trust it.
 
 **The drag handle uses pointer capture, not document listeners.** Same discipline as **Popover**'s backdrop and **SplitPanes**' handle: the listeners live on the handle, so teardown only unbinds them and clears the resize flag. Only the primary button starts a drag.
 

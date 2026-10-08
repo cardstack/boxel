@@ -67,9 +67,6 @@ export interface ViewportSignature {
       | 'grid'
       | 'narrow'
       | 'wide';
-    // the specimen's name, e.g. the component name: the caption of a
-    // dragged width ("Name · <width>"); presets are captioned by mode
-    label?: string;
   };
   Blocks: { default: [] };
   Element: HTMLDivElement;
@@ -107,13 +104,11 @@ export class Viewport extends Component<ViewportSignature> {
   get widthLabel() {
     return this.artboardWidth ? `${this.artboardWidth}px` : '100%';
   }
-  // a preset (Fill or a device) is named by its mode, like the 3-up
-  // captions; a dragged width names the specimen
+  // named by the selected mode, like the 3-up captions; a dragged width is
+  // Fill, so it reads "Fill · 412px"
   get frameCaption() {
-    let device = this.customWidth
-      ? undefined
-      : VIEWPORT_MODES.find((m) => m.value === this.mode)?.label;
-    return `${device ?? this.args.label ?? 'Specimen'} · ${this.widthLabel}`;
+    let mode = VIEWPORT_MODES.find((m) => m.value === this.mode)?.label;
+    return `${mode} · ${this.widthLabel}`;
   }
   // Drag-to-resize on the artboard edge. Pointer capture keeps every event
   // on the handle — no document listeners (backdrop-close discipline).

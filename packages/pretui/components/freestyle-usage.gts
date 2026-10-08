@@ -69,7 +69,7 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
       <div class='pretui-usage-stage'>
         <div class='pretui-usage-preview-col'>
           <div class='wb-panel'>
-            <Viewport @defaultMode={{@viewportMode}} @label={{@name}}>
+            <Viewport @defaultMode={{@viewportMode}}>
               {{yield to='example'}}
             </Viewport>
             {{#if @source}}

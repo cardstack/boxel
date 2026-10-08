@@ -36,7 +36,7 @@ No pattern governs it; it is a page composed of the kit's own components, and it
 Gaps worth knowing, because a documentation surface is read by exactly the people who care about these:
 
 - **Only part of the page has heading structure.** Properties, API and CSS Variables are headed by `h2`s, so heading navigation reaches the knobs and the tables; Properties is an `<aside>` named "Properties", and each table carries its heading as its name. The description and the example have no heading or region, so a screen-reader user cannot jump to "the example".
-- **`@name` is not a heading here.** It only labels the Viewport's artboard; the page's heading is the Spec's `h1`, and the section titles are `h2`s under it.
+- **`@name` is not rendered.** It is accepted for ember-freestyle parity; the page's heading is the Spec's `h1`, and the section titles are `h2`s under it.
 - **The knobs and the API table describe the same arguments and are not linked.** A user reading a row in the docs table has no route to the control that changes it.
 - **The `<code>` source has no language annotation.** It scrolls inside a named region ("Usage source") with a tab stop, so a keyboard user can reach the end of a long line, and the Copy button stays in view beside it.
 - **Changing a knob re-renders the example silently.** A `role="status"` region would make the cause-and-effect available; without it, a screen-reader user changing a Select has no confirmation that anything happened.
