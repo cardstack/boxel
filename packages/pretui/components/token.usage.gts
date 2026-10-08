@@ -20,7 +20,6 @@ const HUES = [
 ];
 
 class TokenUsage extends Component {
-  values = ['records@2.4.0', 'LOT-B-103', 'ctse/pretui'];
   @tracked value = 'records@2.4.0';
   @tracked size = BODY_SIZE;
   @tracked hue = DEFAULT_HUE;
@@ -68,7 +67,6 @@ class TokenUsage extends Component {
           <Token @value='ctse/pretui' />.</p>
       </:example>
       <:api as |Args|>
-        <Args.Object @name='sample values' @value={{this.values}} />
         <Args.String
           @name='value'
           @value={{this.value}}
@@ -79,7 +77,7 @@ class TokenUsage extends Component {
           @value={{this.size}}
           @options={{SIZES}}
           @defaultValue={{BODY_SIZE}}
-          @description='House scale xs|s|m|l|xl, the same steps as Button; sets the font-size only. Omitted, the size is --boxel-font-size-2xs, or --pretui-token-font-size when that is set (Pretui addition).'
+          @description='House scale xs|s|m|l|xl, the same steps as Button; sets the font-size, with the line box growing past 18px. Omitted, the size is --boxel-font-size-2xs, or --pretui-token-font-size when that is set (Pretui addition).'
           @onInput={{this.setSize}}
         />
         <Args.String
@@ -120,7 +118,6 @@ class TokenUsage extends Component {
     <style scoped>
       .foundation-prose {
         margin: 0;
-        color: var(--foreground);
       }
     </style>
   </template>

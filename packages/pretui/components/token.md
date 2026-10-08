@@ -12,7 +12,7 @@ Element: HTMLElement (a <code>)
 
 **It renders `<code>`**, which is the correct element and is what makes it a Token rather than a styled span.
 
-**`@size`** takes the house scale `xs | s | m | l | xl` (and the `sm` / `md` / `lg` / `small` / `medium` / `large` aliases), the same steps and the same `--pretui-size-*` → `--text-ui-*` tokens as **Button**'s `@size`. Like Button's, it sets the font-size only; the padding, radius and margins stay as they are. It lands as `data-size` on the element. Without `@size`, or with `@size='default'` (as on Button, the component's own default), the size is `--boxel-font-size-2xs`; `--pretui-token-font-size` pins it to an exact value instead, such as `var(--boxel-font-size-xs)`. `@size` wins over that property.
+**`@size`** takes the house scale `xs | s | m | l | xl` (and the `sm` / `md` / `lg` / `small` / `medium` / `large` aliases), read from `--pretui-size-*`, falling back to the ladder: `--boxel-font-size-2xs` (xs and s), `-xs` (m), `-sm` (l) and `--boxel-font-size` (xl). It sets the font-size; the line box stays 18px until the text needs more (`max(1.125rem, 1.5em)`), and the padding, radius and margins stay as they are. It lands as `data-size` on the element. Without `@size`, or with `@size='default'` (as on Button, the component's own default), the size is `--boxel-font-size-2xs`; `--pretui-token-font-size` pins it to an exact value instead, such as `var(--boxel-font-size-xs)`. `@size` wins over that property.
 
 **`@hue` and a caller's `style` work together.** Glimmer lets a caller's `style` attribute replace a component's own, so `@hue` is also written as a single `--pretui-token-hue` property on top of whatever style the element ends up with, and written again if the caller's style changes later. The caller's own declarations are kept, and so is a property another modifier on the element sets, such as boxel-ui's `setCssVar`. If the caller's style sets `--pretui-token-hue` as well, `@hue` wins, and the hue the caller's style last set comes back when `@hue` is cleared, including when the caller rewrote its style to `@hue`'s own value. One rewrite is not told apart from another modifier's write: a caller style that sets the hue exactly as `@hue` wrote it and changes some other declaration (dropping a property another modifier set counts). Its hue is not taken as the caller's, so clearing `@hue` brings back the caller's earlier hue, or none. `@size` and `@wrap` are data attributes, so a caller's style cannot remove them.
 
@@ -20,7 +20,7 @@ Element: HTMLElement (a <code>)
 
 Two details worth knowing, both about how it behaves in context:
 
-**`margin-inline: 0.35ch`.** A mono pill dropped into proportional prose sits too tight against its neighbours because the pill's padding is inside the box. A third of a character on each side restores the word rhythm — and because it is `ch`, it scales with the surrounding type.
+**`margin-inline: 0.35ch`.** A mono pill dropped into proportional prose sits too tight against its neighbors because the pill's padding is inside the box. A third of a character on each side restores the word rhythm — and because it is `ch`, it scales with the surrounding type.
 
 **`:where(td, dd) > .pretui-token { margin-inline: 0 }`.** As a direct child of a table cell or a definition-list value, the margins go away so the pill aligns flush with the cell edge. The `:where()` keeps specificity at zero so a call site can override without a fight. This is a small thing that makes tables of ids look right without anyone thinking about it.
 
@@ -34,7 +34,7 @@ Nobody ships this as a component. **shadcn**, **Radix**, **Web Awesome** and **R
 
 So the comparison is against "a global `code { }` rule", and the improvements are specific:
 
-- **It is a component, so a season can retune every machine value in the product at once** rather than hunting for a global rule that some card overrode.
+- **It is a component, so a theme can retune every machine value in the product at once** rather than hunting for a global rule that some card overrode.
 - **`@hue` makes it tintable per instance**, which is what lets **FieldError**'s rule-id provenance, an error trace and a normal id look related but distinguishable.
 - **The context-aware margins** (above) — a global `code` rule cannot know it is in a table cell without the same `:where()` trick, and almost none do it.
 - **The size is a fixed small step** (`--boxel-font-size-2xs` by default), so the mono value sits at about the optical size of body text rather than the visually larger result you get from matching point sizes.
@@ -51,7 +51,7 @@ Notes and gaps:
 - **Long or opaque values are hostile to speech.** A UUID or a hash announced character by character is unusable, and announced as a word is meaningless. If a Token holds something a screen-reader user might need to transcribe, pair it with a **CopyButton** — that is the accessible affordance, not the text.
 - **`white-space: nowrap`** is the default, so a long value overflows its container rather than wrapping, which can push a card horizontally and fail **WCAG 1.4.10 Reflow** at 320px. This is the most likely practical problem: paths and URLs are exactly what people put in Tokens. Set `@wrap` wherever the value can be long.
 - **Contrast.** By default the text is `--card-foreground` on `--card`, the theme's own guaranteed pair. A `@hue` replaces the text color, so pass an ink (`--primary-ink`, `--muted-foreground`), not a pale fill hue, and check it at the size it is used (11px by default, smaller at `@size='xs'`).
-- **The hue carries no meaning** and there is no non-colour channel, so do not use `@hue` to encode state — use two components, or add text.
+- **The hue carries no meaning** and there is no non-color channel, so do not use `@hue` to encode state — use two components, or add text.
 - Nothing is focusable, correctly.
 
 ## Theming

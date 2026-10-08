@@ -157,7 +157,8 @@ export class Token extends Component<TokenSignature> {
           vertical-align: baseline;
           font-family: var(--font-mono);
           font-size: var(--pretui-token-font-size, var(--boxel-font-size-2xs));
-          line-height: 1.125rem;
+          /* 18px, matching Chip, until the text needs more */
+          line-height: max(1.125rem, 1.5em);
           padding: 0 var(--boxel-sp-2xs);
           border-radius: var(--boxel-border-radius-xs);
           background-color: var(--card);
@@ -166,24 +167,22 @@ export class Token extends Component<TokenSignature> {
           white-space: nowrap;
           font-variant-numeric: tabular-nums;
         }
-        /* size scale — the same steps as Button's @size */
+        /* size scale, the same steps as Autocomplete's; the ladder has no
+           step under 11px, so xs and s share it */
         .pretui-token[data-size='xs'] {
-          font-size: var(--pretui-size-xs, var(--text-ui-xs, 0.66rem));
+          font-size: var(--pretui-size-xs, var(--boxel-font-size-2xs));
         }
         .pretui-token[data-size='s'] {
-          font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
+          font-size: var(--pretui-size-s, var(--boxel-font-size-2xs));
         }
         .pretui-token[data-size='m'] {
-          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
-          line-height: 1.5;
+          font-size: var(--pretui-size-m, var(--boxel-font-size-xs));
         }
         .pretui-token[data-size='l'] {
-          font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
-          line-height: 1.5;
+          font-size: var(--pretui-size-l, var(--boxel-font-size-sm));
         }
         .pretui-token[data-size='xl'] {
-          font-size: var(--pretui-size-xl, var(--text-ui-xl, 1rem));
-          line-height: 1.5;
+          font-size: var(--pretui-size-xl, var(--boxel-font-size));
         }
         .pretui-token[data-wrap] {
           white-space: normal;
