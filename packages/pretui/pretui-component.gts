@@ -39,6 +39,7 @@ import { Chip } from './components/chip';
 import { Token } from './components/token';
 import { Button } from './components/button';
 import { Switch } from './components/switch';
+import { noteExcerpt, noteSummary } from './note-text';
 import { Tooltip } from './components/tooltip';
 import { VisuallyHidden } from './components/visually-hidden';
 import { Textarea } from './components/textarea';
@@ -98,6 +99,13 @@ function stageLabel(stage: string | undefined): string {
 // keeps StatusChip's muted pill with its name-derived dot.
 function stageTone(stage: string | undefined): 'success' | undefined {
   return stage === 'live' ? 'success' : undefined;
+}
+
+// A component name split at its camel-case humps ("ApprovalFooter" →
+// "Approval", "Footer"), so a narrow title breaks between words.
+const NAME_HUMP_RE = new RegExp('(?<=[a-z0-9])(?=[A-Z])');
+function nameParts(name: string): string[] {
+  return name.split(NAME_HUMP_RE);
 }
 
 // The write-up shows its first lines under a fade, with a centered toggle
@@ -607,6 +615,13 @@ export class PretUISpec extends Spec {
         (n) => (n.status ?? '').toLowerCase() !== 'addressed',
       );
     }
+    // the rail shows the first few open notes; the rest sit in a disclosure
+    get firstNotes(): NoteLike[] {
+      return this.openNotes.slice(0, 3);
+    }
+    get moreNotes(): NoteLike[] {
+      return this.openNotes.slice(3);
+    }
     get addressedCount(): number {
       return this.notes.length - this.openNotes.length;
     }
@@ -710,85 +725,117 @@ export class PretUISpec extends Spec {
             <ThemeControls />
           </header>
 
-          {{! Sticky notes live top-right, where you left them. Visible by
-            design: an annotation hidden behind a disclosure is an annotation
-            nobody reads. }}
-          {{#if this.showNotes}}
-            <aside
-              class='notes'
-              aria-label='Sticky notes on this component'
-              data-test-pretui-notes
-            >
-              {{! The trigger sits FIRST — directly under the theme control and
-                above the artboard — so leaving a note is a fixed target on
-                every page, not something that moves as notes accumulate. }}
-              <div class='notes-foot'>
-                {{#if this.canAddNote}}
-                  <Popover
-                    class='note-popover'
-                    @placement='bottom-end'
-                    @label='Leave a sticky note'
-                  >
-                    <:trigger as |open toggle|>
-                      <Button
-                        @tone='neutral'
-                        @appearance='outlined'
-                        @size='xs'
-                        aria-expanded={{if open 'true' 'false'}}
-                        aria-haspopup='dialog'
-                        {{on 'click' toggle}}
-                        data-test-pretui-note-add
-                      >Add note</Button>
-                    </:trigger>
-                    <:default as |close|>
-                      <NoteComposer
-                        @componentName={{@model.componentName}}
-                        @onSave={{fn this.saveNote close}}
-                      />
-                    </:default>
-                  </Popover>
+          <div class='wb-head'>
+            <h1 class='wb-title'>
+              {{#let (iconFor @model.icon) as |TitleIcon|}}
+                {{#if TitleIcon}}
+                  <span class='wb-title-frame'>
+                    <TitleIcon width='22' height='22' role='presentation' />
+                  </span>
                 {{/if}}
-                {{#if this.addressedCount}}
-                  <span class='notes-done'>{{this.addressedCount}}
-                    addressed</span>
+              {{/let}}
+              <span class='wb-title-text'>{{#each
+                  (nameParts (if @model.componentName @model.componentName 'Component'))
+                  as |part i|
+                }}{{#if i}}<wbr />{{/if}}{{part}}{{/each}}</span>
+            </h1>
+              {{! Sticky notes sit beside the title, where you left them, and
+                the first few stay visible: an annotation hidden behind a
+                disclosure is an annotation nobody reads. }}
+            {{#if this.showNotes}}
+              <aside
+                class='notes'
+                aria-label='Sticky notes on this component'
+                data-test-pretui-notes
+              >
+                {{! The trigger sits FIRST — directly under the theme control and
+                  above the artboard — so leaving a note is a fixed target on
+                  every page, not something that moves as notes accumulate. }}
+                <div class='notes-foot'>
+                  {{#if this.canAddNote}}
+                    <Popover
+                      class='note-popover'
+                      @placement='bottom-end'
+                      @label='Leave a sticky note'
+                    >
+                      <:trigger as |open toggle|>
+                        <Button
+                          @tone='neutral'
+                          @appearance='outlined'
+                          @size='xs'
+                          aria-expanded={{if open 'true' 'false'}}
+                          aria-haspopup='dialog'
+                          {{on 'click' toggle}}
+                          data-test-pretui-note-add
+                        >Add note</Button>
+                      </:trigger>
+                      <:default as |close|>
+                        <NoteComposer
+                          @componentName={{@model.componentName}}
+                          @onSave={{fn this.saveNote close}}
+                        />
+                      </:default>
+                    </Popover>
+                  {{/if}}
+                  {{#if this.addressedCount}}
+                    <span class='notes-done'>{{this.addressedCount}}
+                      addressed</span>
+                  {{/if}}
+                </div>
+                {{#if this.openNotes}}
+                  <ul class='notes-list'>
+                    {{#each this.firstNotes key='id' as |n|}}
+                      <li>
+                        <button
+                          type='button'
+                          class='note'
+                          {{on 'click' (fn this.openNote n.id)}}
+                          data-test-pretui-note
+                        >
+                          <span class='note-title'>{{noteSummary n.note}}</span>
+                          {{#let (noteExcerpt n.note) as |excerpt|}}
+                            {{#if excerpt}}
+                              <span class='note-excerpt'>{{excerpt}}</span>
+                            {{/if}}
+                          {{/let}}
+                        </button>
+                      </li>
+                    {{/each}}
+                  </ul>
+                  {{#if this.moreNotes.length}}
+                    {{! buttons in a details' content, outside its summary, are
+                        valid; the rule counts details itself as interactive }}
+                    {{! template-lint-disable no-nested-interactive }}
+                    <details class='notes-more' data-test-pretui-notes-more>
+                      <summary>Show
+                        {{this.moreNotes.length}}
+                        more</summary>
+                      <ul class='notes-list'>
+                        {{#each this.moreNotes key='id' as |n|}}
+                          <li>
+                            <button
+                              type='button'
+                              class='note'
+                              {{on 'click' (fn this.openNote n.id)}}
+                              data-test-pretui-note
+                            >
+                              <span class='note-title'>{{noteSummary n.note}}</span>
+                              {{#let (noteExcerpt n.note) as |excerpt|}}
+                                {{#if excerpt}}
+                                  <span class='note-excerpt'>{{excerpt}}</span>
+                                {{/if}}
+                              {{/let}}
+                            </button>
+                          </li>
+                        {{/each}}
+                      </ul>
+                    </details>
+                    {{! template-lint-enable no-nested-interactive }}
+                  {{/if}}
                 {{/if}}
-              </div>
-              {{#if this.openNotes}}
-                <ul class='notes-list'>
-                  {{#each this.openNotes key='id' as |n|}}
-                    <li>
-                      <button
-                        type='button'
-                        class='note'
-                        {{on 'click' (fn this.openNote n.id)}}
-                        data-test-pretui-note
-                      >
-                        <span class='note-text'>{{if
-                            n.note
-                            n.note
-                            'Empty note'
-                          }}</span>
-                      </button>
-                    </li>
-                  {{/each}}
-                </ul>
-              {{/if}}
-            </aside>
-          {{/if}}
-          <h1 class='wb-title'>
-            {{#let (iconFor @model.icon) as |TitleIcon|}}
-              {{#if TitleIcon}}
-                <span class='wb-title-frame'>
-                  <TitleIcon width='22' height='22' role='presentation' />
-                </span>
-              {{/if}}
-            {{/let}}
-            <span class='wb-title-text'>{{if
-                @model.componentName
-                @model.componentName
-                'Component'
-              }}</span>
-          </h1>
+              </aside>
+            {{/if}}
+          </div>
           {{#if this.showBrief}}
             <p class='brief'>{{@model.brief}}</p>
           {{/if}}
@@ -890,8 +937,12 @@ export class PretUISpec extends Spec {
         /* the isolated root: the card's height and its scroller. No
            overscroll-behavior: where a host sizes the card to its content
            (code mode's preview), the frame has nothing to scroll and the
-           wheel has to pass up to the host's scroller */
+           wheel has to pass up to the host's scroller. position: relative
+           keeps absolute descendants (visually hidden text) inside this
+           scroller; otherwise they overflow the card container, which then
+           scrolls past the frame onto its own background */
         .wb-frame {
+          position: relative;
           height: 100%;
           overflow-y: auto;
         }
@@ -1003,18 +1054,25 @@ export class PretUISpec extends Spec {
         .wb-work {
           min-width: 0;
         }
-        /* ── Sticky notes ────────────────────────────────────────────────
-           Pinned to the right edge of the page column, above the title, so
-           an annotation is the first thing you see on a page that has one.
-           justify-self keeps the rail narrow instead of stretching across
-           the grid column. */
+        /* the title and the notes rail share a row; the rail wraps under
+           the title when the row is too narrow for both */
+        .wb-head {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          gap: var(--boxel-sp) var(--boxel-sp-lg);
+        }
+        .wb-head > .wb-title {
+          flex: 1 1 18rem;
+          min-width: 0;
+        }
+        /* ── Sticky notes ── */
         .notes {
-          justify-self: end;
+          flex: 0 1 var(--_wb-notes-w);
           display: flex;
           flex-direction: column;
           align-items: flex-end;
           gap: var(--boxel-sp-2xs);
-          width: min(var(--_wb-notes-w), 100%);
           min-width: 0;
         }
         /* a note wants room to write: Popover reads its width knob on the
@@ -1062,16 +1120,37 @@ export class PretUISpec extends Spec {
         .note:hover {
           box-shadow: var(--shadow-md);
         }
-        /* Clamp long notes: the rail is a pointer to the note card, not the
-           note card. Clicking opens the whole thing. */
-        .note-text {
+        .notes-more {
+          width: 100%;
+        }
+        .notes-more > summary {
+          width: fit-content;
+          margin-inline-start: auto;
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .notes-more[open] > summary {
+          margin-block-end: var(--boxel-sp-2xs);
+        }
+        /* each note reads as a small card: its title, then the start of
+           its body; clicking opens the whole note */
+        .note {
+          display: grid;
+          gap: var(--boxel-sp-6xs);
+        }
+        .note-title {
+          font-weight: 600;
+          overflow-wrap: break-word;
+        }
+        .note-excerpt {
           display: -webkit-box;
-          -webkit-line-clamp: 4;
+          -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
-          /* a pasted URL or a long identifier is one "word"; the rail has a
-             fixed width, so break-word wraps it instead of overflowing */
           overflow-wrap: break-word;
+          color: var(--muted-foreground);
         }
         .notes-foot {
           display: flex;
@@ -1183,6 +1262,7 @@ export class PretUISpec extends Spec {
         }
         .wb-krow dd {
           margin: 0;
+          font-family: var(--font-mono);
           font-size: var(--boxel-font-size-xs);
           line-height: 1.5;
           overflow-wrap: break-word;

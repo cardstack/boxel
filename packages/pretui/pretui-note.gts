@@ -37,27 +37,14 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { Button } from './components/button';
 import { Chip } from './components/chip';
 import { PretUISpec } from './pretui-component';
+import { noteSummary } from './note-text';
 
 /** A note is open unless it has been explicitly addressed. */
 export function isAddressed(status: string | undefined): boolean {
   return (status ?? '').toLowerCase() === 'addressed';
 }
 
-/**
- * First line of a note, flattened to plain text and shortened — the note's
- * title in card lists, search results, and the assistant's card picker.
- * Notes are markdown, so the leading `#`/`>`/`-`/backtick furniture is
- * stripped rather than shown.
- */
-export function noteSummary(note: string | undefined): string {
-  let first = (note ?? '')
-    .split('\n')
-    .map((line) => line.replace(/^[\s>#*\-+]+/, '').trim())
-    .find((line) => line.length > 0);
-  if (!first) return 'Sticky note';
-  let plain = first.replace(/[`*_]/g, '');
-  return plain.length > 72 ? `${plain.slice(0, 71)}…` : plain;
-}
+export { noteSummary };
 
 // The note's state as a chip: open in the attention tone, addressed in
 // success.
