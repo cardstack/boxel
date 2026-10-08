@@ -6,7 +6,7 @@ A small raised card announcing that something just happened — saved, copied, f
 
 ```
 @title: string   (required)
-@message?
+@message?    (or @description, the Sonner / shadcn / Mantine name)
 <:icon>  <:action>
 ```
 
@@ -14,7 +14,7 @@ That is all. There is no `duration`, no `placement`, no `variant`, no close butt
 
 **The omissions are the design.** A toast stack is a host concern: it needs a single top-layer region, an ordering policy, a pause-on-hover rule, and one shared live region — and none of that belongs to a component that a card might render three of. Pretui ships the card here and the stack as **Toaster**, which draws its own item so the clock, roles and controls are one implementation. The upside is that a Toast composes into anything; the downside is that using it correctly requires you to build the parts that are hard.
 
-`width: max-content` with a 22.5rem cap (`--pretui-toast-max-w`) means a toast is as wide as its content and no wider, which is what makes a stack of them read as a column of distinct messages rather than a wall.
+`width: max-content` with a 22.5rem cap (`--pretui-toast-max-w`, set on the Toast itself) means a toast is as wide as its content and no wider, which is what makes a stack of them read as a column of distinct messages rather than a wall.
 
 ## Prior art
 
@@ -39,13 +39,13 @@ Governing pattern: APG **Alert** for the announcement, plus the live-region rule
 - **`<:icon>` content is not `aria-hidden` by the component**, so a decorative icon that emits a `<title>` will be read before the title text.
 - The title and message are plain text with no heading semantics — correct for a transient card.
 
-Practical guidance: render Toast inside a host-owned region that carries the live semantics, keep `role="status"` on the region rather than the card, and give anything actionable a persistent home as well.
+Practical guidance: **Toaster** does not render Toast; it draws its own item with its own live region, so don't put a Toast in Toaster's `<:toast>` block, which would nest one status region in another. In a host region of your own that carries the live semantics, pass `role={{null}}` so the card isn't a second region, and give anything actionable a persistent home as well.
 
 ## Theming
 
-`--popover` / `--popover-foreground` (surface and title), `--muted-foreground` (message), `--border` and `--shadow-md` (edge and lift), `--boxel-border-radius`, the `--boxel-sp-*` spacing scale, and `--boxel-font-size-xs` / `--boxel-caption-font-size` (title and message). `--pretui-toast-max-w` sets the width cap.
+`--popover` / `--popover-foreground` (surface and title), a 75% mix of `--popover-foreground` into `--popover` (message, so it holds contrast in both schemes), `--border` and `--shadow-md` (edge and lift), `--boxel-border-radius`, the `--boxel-sp-*` spacing scale, and `--boxel-font-size-xs` (title and message). `--pretui-toast-max-w` sets the width cap.
 
-Because the surface is `--popover` rather than `--card`, a toast matches **Menu** and **Popover** rather than **Panel** — the "floating above" vocabulary. A season must keep `--popover` distinct from the page background, since the only other separation is a shadow, and shadows disappear on dark surfaces.
+Because the surface is `--popover` rather than `--card`, a toast matches **Menu** and **Popover** rather than **Panel** — the "floating above" vocabulary. The edge is a 1px `--border` ring plus `--shadow-md`. A theme should keep `--popover` distinct from `--background`, since shadows fade on dark surfaces; the default light theme doesn't, so there the ring carries the edge.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

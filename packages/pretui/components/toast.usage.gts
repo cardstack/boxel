@@ -8,7 +8,8 @@ import { Toast } from './toast';
 const ToastUsage: TemplateOnlyComponent = <template>
     <FreestyleUsage @name='Toast' @description='A brief in-flow status receipt. Positioning and lifetime belong to its host; title, message and action remain ordinary content.' @source='<Toast @title="Lot saved" @message="B-103 is ready for review">…</Toast>'>
       <:example><Toast @title='Lot saved' @message='B-103 is ready for review'><:icon><CheckIcon width='14' height='14' aria-hidden='true' /></:icon><:action><Button @tone='neutral' @appearance='plain'>Review</Button></:action></Toast></:example>
-      <:api as |Args|><Args.String @name='title' @value='Lot saved' /><Args.String @name='message' @value='B-103 is ready for review' /><Args.Yield @name='icon' /><Args.Yield @name='action' /></:api>
+      <:api as |Args|><Args.String @name='title' @value='Lot saved' /><Args.String @name='message' @value='B-103 is ready for review' /><Args.String @name='description' @description='Alias for message, the name Sonner, shadcn and Mantine use.' /><Args.Yield @name='icon' /><Args.Yield @name='action' /></:api>
+      <:cssVars as |Css|><Css.Basic @name='pretui-toast-max-w' @type='dimension' @description='The width cap; set it on the Toast itself.' @defaultValue='22.5rem' /></:cssVars>
     </FreestyleUsage>
   </template>;
 

@@ -15,7 +15,7 @@ export interface ToastSignature {
 }
 
 export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
-  <div class='pretui-toast' role='status' data-test-pretui-toast ...attributes>
+  <div class='pretui-toast' role='status' ...attributes data-test-pretui-toast>
     {{#if (has-block 'icon')}}{{yield to='icon'}}{{/if}}
     <div class='pretui-toast-body'>
       <div class='pretui-toast-title'>{{@title}}</div>
@@ -58,9 +58,15 @@ export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
       .pretui-toast-title {
         font-weight: 600;
       }
+      /* a softer ink than the title: --muted-foreground isn't a guaranteed
+         pair on --popover (4.2:1 in dark), a mix of the surface's own ink is */
       .pretui-toast-msg {
-        color: var(--muted-foreground);
-        font-size: var(--boxel-caption-font-size);
+        color: color-mix(
+          in oklch,
+          var(--popover-foreground) 75%,
+          var(--popover)
+        );
+        line-height: 1.4;
       }
       .pretui-toast-action {
         margin-inline-start: var(--boxel-sp-xs);
