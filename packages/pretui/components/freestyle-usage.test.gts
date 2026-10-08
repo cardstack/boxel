@@ -69,9 +69,9 @@ module('Pretui | components/freestyle-usage', function (hooks) {
     let aside = root().querySelector('[data-test-pretui-usage-props]') as HTMLElement;
     assert.deepEqual(Array.from(aside.querySelectorAll('[data-test-pretui-prop-row-label]')).map((l) => l.textContent?.trim()), ['label', 'disabled', '--pretui-btn-radius'], 'actions and yields have no knob');
     let apiRows = Array.from(root().querySelector('[data-test-pretui-usage-api]')?.querySelectorAll('[data-test-pretui-usage-arg]') ?? []);
-    assert.deepEqual(apiRows.map((r) => r.querySelector('td')?.textContent?.replace(/\s+/g, ' ').trim()), ['@label', '@disabled', '@onClick', '{{default}}']);
-    assert.deepEqual(apiRows.map((r) => r.querySelectorAll('td')[1]?.textContent?.trim()), ['String', 'Bool', 'Action', 'Yield']);
+    assert.deepEqual(apiRows.map((r) => r.querySelector('th')?.textContent?.replace(/\s+/g, ' ').trim()), ['@label', '@disabled', '@onClick', '{{default}}']);
+    assert.deepEqual(apiRows.map((r) => r.querySelector('td')?.textContent?.trim()), ['String', 'Bool', 'Action', 'Yield']);
     let cssRows = Array.from(root().querySelector('[data-test-pretui-usage-css-vars]')?.querySelectorAll('[data-test-pretui-usage-arg]') ?? []);
-    assert.deepEqual(cssRows.map((r) => Array.from(r.querySelectorAll('td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim())), [['--pretui-btn-radius', 'CSS', '', '6px']]);
+    assert.deepEqual(cssRows.map((r) => Array.from(r.querySelectorAll(':is(th, td)')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim())), [['--pretui-btn-radius', 'CSS', '', '6px']]);
   });
 });

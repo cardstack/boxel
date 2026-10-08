@@ -40,7 +40,7 @@ export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
         {{#if @required}}<span
             class='proprow-req'
             aria-hidden='true'
-          >*</span><VisuallyHidden>(required)</VisuallyHidden>{{/if}}
+          >*</span><VisuallyHidden> (required)</VisuallyHidden>{{/if}}
       </label>
     {{else}}
       <span class='proprow-label' data-test-pretui-prop-row-label>
@@ -48,7 +48,7 @@ export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
         {{#if @required}}<span
             class='proprow-req'
             aria-hidden='true'
-          >*</span><VisuallyHidden>(required)</VisuallyHidden>{{/if}}
+          >*</span><VisuallyHidden> (required)</VisuallyHidden>{{/if}}
       </span>
     {{/if}}
     <div class='proprow-control'>{{yield}}</div>

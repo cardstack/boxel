@@ -55,7 +55,7 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
               class='u-req'
               aria-hidden='true'
               data-test-pretui-usage-arg-required
-            >*</span><VisuallyHidden>(required)</VisuallyHidden>{{/if}}
+            >*</span><VisuallyHidden> (required)</VisuallyHidden>{{/if}}
         </th>
         <td class='pretui-usage-arg-type'>{{this.typeLabel}}</td>
         <td><span
