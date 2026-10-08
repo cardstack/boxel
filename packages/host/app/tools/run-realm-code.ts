@@ -82,6 +82,9 @@ class RealmFsSession {
   // Calls and saves refused because the run had already ended.
   private refused = 0;
   private queue: Promise<unknown> = Promise.resolve();
+  // Aborted when the run ends, so a workspace create still in flight stops
+  // holding up the report.
+  private inFlight = new AbortController();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
   // has reported.
@@ -122,6 +125,7 @@ class RealmFsSession {
   close() {
     this.closed = true;
     this.captures.close();
+    this.inFlight.abort();
   }
 
   // Settles once every call already made has finished or been refused.
@@ -245,10 +249,39 @@ class RealmFsSession {
             `Realm code may create at most ${MAX_WORKSPACES} workspaces`,
           );
         }
-        let created = await this.createWorkspace({
+        let creating = this.createWorkspace({
           name: (name as string | null) ?? undefined,
           endpoint: (endpoint as string | null) ?? undefined,
         });
+        // The realm server cannot cancel a create, so a run that ends while
+        // one is in flight reports without it. Log the URL if it lands later.
+        let { signal } = this.inFlight;
+        let created = await new Promise<{ url: string; name: string }>(
+          (resolve, reject) => {
+            let onAbort = () =>
+              reject(
+                new Error(
+                  'The run has ended; the workspace create was not awaited',
+                ),
+              );
+            if (signal.aborted) {
+              onAbort();
+            }
+            signal.addEventListener('abort', onAbort, { once: true });
+            creating
+              .then((workspace) => {
+                if (signal.aborted) {
+                  log.warn(
+                    `Workspace ${workspace.url} was created after the run ended`,
+                  );
+                }
+                resolve(workspace);
+              }, reject)
+              .finally(() => {
+                signal.removeEventListener('abort', onAbort);
+              });
+          },
+        );
         this.createdWorkspaces.push(created.url);
         return created;
       }
@@ -358,8 +391,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private toolService: ToolService;
 
   description =
-    'Run safe Realm code that reads and edits realm source files, and can ' +
-    'look at what it made with realm.capture.';
+    'Run safe Realm code that reads and edits realm source files, can ' +
+    'look at what it made with realm.capture, and can create workspaces ' +
+    'with realm.workspaces.create.';
   static actionVerb = 'Run';
 
   async getInputType() {
@@ -444,7 +478,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
       await session.idle();
       // Writes are saved as they happen, so a failed run can have saved some
       // files already. Name them, so the model knows what state it left.
-      await this.openCreatedWorkspace(session);
       let message = error instanceof Error ? error.message : String(error);
       let saved = [...session.saved];
       // A call the script did not await either finished before the session
@@ -453,11 +486,16 @@ export default class RunRealmCodeTool extends HostBaseTool<
       log.debug(
         `run failed: saved=${saved.length} refusedAfterClose=${session.refusedAfterClose}: ${message}`,
       );
-      throw new Error(
+      let report =
         saved.length > 0
           ? `${message}. Files already saved by this run: ${saved.join(', ')}`
-          : `${message}. No file was saved.`,
-      );
+          : `${message}. No file was saved.`;
+      // Workspaces stay created too. Name them, so a retry does not create
+      // them again. The run failed, so none of them is opened.
+      if (session.createdWorkspaces.length > 0) {
+        report += ` Workspaces already created by this run: ${session.createdWorkspaces.join(', ')}`;
+      }
+      throw new Error(report);
     }
 
     clearTimeout(deadlineTimer);
@@ -489,6 +527,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
             height: viewed.height,
           }),
       ),
+      createdWorkspaces: [...session.createdWorkspaces],
     });
   }
 
@@ -506,11 +545,19 @@ export default class RunRealmCodeTool extends HostBaseTool<
 
   // Opens the last workspace the run created, as the create-workspace tool
   // does. It runs once the script has ended, so the script's own realm calls
-  // never race a workspace switch.
+  // never race a workspace switch. A run that also saved files stays in its
+  // realm: the open workspace is the default realm of the next run, which is
+  // where validation of those files asks the model to fix them. Opening is
+  // only for the UI, so a failure here does not fail the run.
   private async openCreatedWorkspace(session: RealmFsSession) {
     let url = session.createdWorkspaces.at(-1);
-    if (url) {
+    if (!url || session.saved.size > 0) {
+      return;
+    }
+    try {
       await this.operatorModeStateService.openWorkspace(url);
+    } catch (error) {
+      log.warn(`Could not open new workspace ${url}`, error);
     }
   }
 

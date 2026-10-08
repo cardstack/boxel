@@ -505,6 +505,56 @@ return { created, realmAfterCreate: realm.current.url };`,
       'http://test-realm/testuser/sales-pipeline/index',
       'the new workspace is opened once the run ends',
     );
+    assert.deepEqual(
+      result.createdWorkspaces,
+      ['http://test-realm/testuser/sales-pipeline/'],
+      'the result names the created workspace',
+    );
+  });
+
+  test('a failed run names the workspaces it created and opens none', async function (assert) {
+    stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let stackBefore = operatorModeStateService.state?.stacks[0]?.[0]?.id;
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.create({ name: 'First Try' });
+throw new Error('boom');`,
+      }),
+      /boom.*Workspaces already created by this run: http:\/\/test-realm\/testuser\/first-try\//,
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      stackBefore,
+      'no workspace is opened after a failed run',
+    );
+  });
+
+  test('a run that saves files and creates a workspace stays in its realm', async function (assert) {
+    stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let stackBefore = operatorModeStateService.state?.stacks[0]?.[0]?.id;
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('notes/new-workspace.txt', 'hello');
+await realm.workspaces.create({ name: 'Side Project' });`,
+    });
+
+    assert.deepEqual(result.createdWorkspaces, [
+      'http://test-realm/testuser/side-project/',
+    ]);
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      stackBefore,
+      'the new workspace is not opened, so the next run defaults to this realm',
+    );
   });
 
   test('realm.workspaces.create refuses options that are not strings', async function (assert) {

@@ -504,6 +504,8 @@ export class RunRealmCodeResult extends CardDef {
   // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
+  // URLs of the workspaces the script created with `realm.workspaces.create`.
+  @field createdWorkspaces = containsMany(StringField);
 
   // A run that saved no files and took no captures, such as one that only
   // read, has nothing for the chat to show. Its script result goes to the
