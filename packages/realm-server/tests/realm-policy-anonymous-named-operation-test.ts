@@ -37,14 +37,19 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // registering for updates. Both are made as the submitter the realm's own
 // `realm.json` names. Closing a petition is opened to signed-in callers only,
 // and `claim`, which reads the caller, is opened to everyone but admits only
-// signed-in callers.
+// signed-in callers. A notice declares `sign` too and no grant names it, and a
+// ballot's only grant is made as a key the realm's config doesn't hold.
 const CIVIC = 'http://127.0.0.1:4444/civic/';
-// A board anyone may read, whose policy opens only a declared write, `sign`,
-// to callers who aren't signed in.
+// A board anyone may read, whose policy opens only a declared write, `sign` of
+// an open petition, to callers who aren't signed in.
 const BOARD = 'http://127.0.0.1:4444/board/';
+// A commons anyone may read and write, so the ACL, not its policy, admits a
+// caller who isn't signed in to every operation its types declare.
+const COMMONS = 'http://127.0.0.1:4444/commons/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const CIVIC_POLICY = `${ORG}policies/civic`;
 const BOARD_POLICY = `${ORG}policies/board`;
+const COMMONS_POLICY = `${ORG}policies/commons`;
 const EDITOR = '@editor:localhost';
 const SUBMITTER = '@submitter:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
@@ -88,6 +93,18 @@ const CIVIC_MODULE = `
       set: { signature: actor() },
     };
   }
+  export class Notice extends CardDef {
+    @field title = contains(StringField);
+    @field status = contains(StringField);
+    @field signature = contains(StringField);
+
+    @operation static sign = {
+      base: 'transform',
+      params: { name: StringField },
+      set: { signature: params('name') },
+    };
+  }
+  export class Ballot extends Notice {}
   export class Signup extends CardDef {
     @field email = contains(StringField);
     @field source = contains(StringField);
@@ -111,8 +128,12 @@ const SIGNUP = type(CIVIC, 'Signup');
 const OPEN = `${CIVIC}petitions/open`;
 const LOCAL = `${CIVIC}petitions/local`;
 const CLOSED = `${CIVIC}petitions/closed`;
+const NOTICE = `${CIVIC}notices/open`;
+const BALLOT = `${CIVIC}ballots/open`;
 const MISSING = `${CIVIC}petitions/nowhere`;
 const BOARD_PETITION = `${BOARD}petitions/open`;
+const BOARD_CLOSED = `${BOARD}petitions/closed`;
+const COMMONS_PETITION = `${COMMONS}petitions/open`;
 
 function petition(title: string, status: string, name = 'Petition') {
   return JSON.stringify({
@@ -155,11 +176,15 @@ const POLICY = policyCard([
   rule(SIGNUP, [
     { operation: 'register', anonymous: true, actingUser: 'submitter' },
   ]),
+  rule(type(CIVIC, 'Ballot'), [
+    { operation: 'sign', anonymous: true, actingUser: 'missing' },
+  ]),
 ]);
 
 module(basename(import.meta.filename), function (hooks) {
   let civic: Realm;
   let board: Realm;
+  let commons: Realm;
   let org: Realm;
   let request: SuperTest<Test>;
   let server: Server;
@@ -197,6 +222,8 @@ module(basename(import.meta.filename), function (hooks) {
               'open',
               'LocalPetition',
             ),
+            'notices/open.json': petition('Quiet hours', 'open', 'Notice'),
+            'ballots/open.json': petition('Name the park', 'open', 'Ballot'),
           },
           permissions: {
             [EDITOR]: ['read', 'write', 'realm-owner'],
@@ -214,11 +241,27 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'civic.gts': CIVIC_MODULE,
             'petitions/open.json': petition('Paint the fence', 'open'),
+            'petitions/closed.json': petition('Fix the gate', 'closed'),
           },
           permissions: {
             '*': ['read'],
             [EDITOR]: ['read', 'write', 'realm-owner'],
             [SUBMITTER]: ['read', 'write'],
+          },
+        },
+        {
+          realmURL: new URL(COMMONS),
+          fileSystem: {
+            'realm.json': realmConfigCardJSON({
+              name: 'Commons',
+              policy: COMMONS_POLICY,
+            }),
+            'civic.gts': CIVIC_MODULE,
+            'petitions/open.json': petition('Plant the verge', 'open'),
+          },
+          permissions: {
+            '*': ['read', 'write'],
+            [EDITOR]: ['read', 'write', 'realm-owner'],
           },
         },
         {
@@ -228,8 +271,16 @@ module(basename(import.meta.filename), function (hooks) {
             'policies/civic.json': POLICY,
             'policies/board.json': policyCard([
               rule(type(BOARD, 'Petition'), [
-                { operation: 'sign', anonymous: true, actingUser: 'submitter' },
+                {
+                  operation: 'sign',
+                  anonymous: true,
+                  actingUser: 'submitter',
+                  where: '.status == "open"',
+                },
               ]),
+            ]),
+            'policies/commons.json': policyCard([
+              rule(type(COMMONS, 'Petition'), [{ operation: 'close' }]),
             ]),
           },
           permissions: { [ORG_ADMIN]: ['read', 'write', 'realm-owner'] },
@@ -244,11 +295,12 @@ module(basename(import.meta.filename), function (hooks) {
     request = supertest(server);
     civic = result.realms.find((realm) => realm.url === CIVIC)!;
     board = result.realms.find((realm) => realm.url === BOARD)!;
+    commons = result.realms.find((realm) => realm.url === COMMONS)!;
     org = result.realms.find((realm) => realm.url === ORG)!;
   }
 
   async function stop() {
-    for (let realm of [civic, board, org]) {
+    for (let realm of [civic, board, commons, org]) {
       realm.__testOnlyClearCaches();
       realm.unsubscribe();
     }
@@ -357,7 +409,11 @@ module(basename(import.meta.filename), function (hooks) {
     return `Bearer ${createJWT(civic, EDITOR, ['read', 'write', 'realm-owner'])}`;
   }
 
-  async function explain(target: string, operation: string) {
+  async function explain(
+    target: string,
+    operation: string,
+    policy = CIVIC_POLICY,
+  ) {
     let response = await request
       .post(`${new URL(ORG).pathname}_operations`)
       .set('X-HTTP-Method-Override', 'QUERY')
@@ -371,7 +427,7 @@ module(basename(import.meta.filename), function (hooks) {
         JSON.stringify({
           'boxel:operations': [
             invoke('explain', {
-              href: CIVIC_POLICY,
+              href: policy,
               data: { actor: '', target, operation },
             }),
           ],
@@ -600,6 +656,110 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a realm anyone may read answers a capability check about a write it declines such a caller as that write is answered', async function (assert) {
+    // The realm declines such a caller's write outright, without asking
+    // whether they could read, so a refused write is told without a reason,
+    // as it is to a caller who may not read the realm. Their reads keep the
+    // ACL's answer.
+    let response = await request
+      .post(`${new URL(BOARD).pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR)
+      .send({
+        checks: [
+          { target: BOARD_CLOSED, operation: 'sign' },
+          { target: BOARD_PETITION, operation: 'close' },
+          { target: BOARD_PETITION, operation: 'read' },
+        ],
+      });
+    assert.strictEqual(response.status, 200, response.text);
+    assert.deepEqual(
+      (
+        response.body.checks as {
+          allowed: boolean;
+          reason?: string;
+          conditional?: boolean;
+        }[]
+      ).map(({ allowed, reason, conditional }) => ({
+        allowed,
+        reason,
+        conditional,
+      })),
+      [
+        { allowed: false, reason: undefined, conditional: undefined },
+        { allowed: false, reason: undefined, conditional: undefined },
+        { allowed: true, reason: undefined, conditional: undefined },
+      ],
+      'each refused write is a bare refusal, and the read is allowed',
+    );
+    for (let [label, name, href] of [
+      ['a write its grant refuses', 'sign', BOARD_CLOSED],
+      ['a write no grant opens', 'close', BOARD_PETITION],
+    ]) {
+      unauthenticated(
+        await operations(BOARD, [
+          invoke(name, { href, data: name === 'sign' ? { name: 'Ada' } : {} }),
+        ]),
+        label,
+        assert,
+      );
+    }
+  });
+
+  test('a realm anyone may write refuses such a caller an operation that reads the caller, and explain and a capability check say so', async function (assert) {
+    let explained = await explain(COMMONS_PETITION, 'claim', COMMONS_POLICY);
+    assert.strictEqual(explained.decision, 'denied');
+    assert.strictEqual(explained.reason, 'reads-actor');
+    assert.deepEqual(
+      explained.refusal,
+      { status: 401, code: 'actor-required' },
+      'explain reports the 401 the realm sends',
+    );
+    unauthenticated(
+      await operations(COMMONS, [invoke('claim', { href: COMMONS_PETITION })]),
+      'an operation that reads the caller',
+      assert,
+    );
+
+    let checked = await request
+      .post(`${new URL(COMMONS).pathname}_capabilities`)
+      .set('Accept', SupportedMimeType.JSON)
+      .set('Content-Type', SupportedMimeType.JSON)
+      .set('X-Forwarded-For', VISITOR)
+      .send({
+        checks: [
+          { target: COMMONS_PETITION, operation: 'claim' },
+          { target: COMMONS_PETITION, operation: 'sign' },
+        ],
+      });
+    assert.strictEqual(checked.status, 200, checked.text);
+    assert.deepEqual(
+      (checked.body.checks as { allowed: boolean; reason?: string }[]).map(
+        ({ allowed, reason }) => ({ allowed, reason }),
+      ),
+      [
+        { allowed: false, reason: 'actor-required' },
+        { allowed: true, reason: undefined },
+      ],
+      'the capability check refuses the operation that reads the caller',
+    );
+
+    // One that doesn't read the caller is the ACL's to allow, and is.
+    let signing = await explain(COMMONS_PETITION, 'sign', COMMONS_POLICY);
+    assert.strictEqual(signing.decision, 'allowed');
+    assert.strictEqual(signing.reason, 'acl');
+    let signed = await operations(COMMONS, [
+      invoke('sign', { href: COMMONS_PETITION, data: { name: 'Ada' } }),
+    ]);
+    assert.strictEqual(signed.status, 200, signed.text);
+    assert.strictEqual(
+      (await stored(commons, COMMONS_PETITION))?.signature,
+      'Ada',
+      'and the petition is signed',
+    );
+  });
+
   test('explain judges such a caller’s declared write by the grants that opt in to them', async function (assert) {
     assert.strictEqual(
       (await explain(OPEN, 'sign')).decision,
@@ -610,6 +770,42 @@ module(basename(import.meta.filename), function (hooks) {
       (await explain(CLOSED, 'sign')).decision,
       'denied',
       'a closed petition',
+    );
+  });
+
+  test('explain reports a refusal as the caller who is not signed in receives it', async function (assert) {
+    let refusals: [string, string, string][] = [
+      ['a predicate that does not hold', CLOSED, 'predicate-false'],
+      ['an operation that reads the caller', LOCAL, 'reads-actor'],
+      ['a type no grant names', NOTICE, 'no-grant'],
+      ['a grant whose acting user is not in the config', BALLOT, 'no-grant'],
+    ];
+    for (let [label, target, reason] of refusals) {
+      let explained = await explain(target, 'sign');
+      assert.strictEqual(explained.reason, reason, `${label}: ${reason}`);
+      let response = await sign(target, 'Ada');
+      unauthenticated(response, label, assert);
+      assert.deepEqual(
+        explained.refusal,
+        { status: 401, code: 'actor-required' },
+        `${label}: explain reports the 401 the realm sends`,
+      );
+    }
+    // A realm anyone may read tells such a caller to authenticate for a write
+    // it refused too, and explain says the same.
+    let explained = await explain(BOARD_CLOSED, 'sign', BOARD_POLICY);
+    assert.strictEqual(explained.reason, 'predicate-false');
+    unauthenticated(
+      await operations(BOARD, [
+        invoke('sign', { href: BOARD_CLOSED, data: { name: 'Ada' } }),
+      ]),
+      'a realm anyone may read',
+      assert,
+    );
+    assert.deepEqual(
+      explained.refusal,
+      { status: 401, code: 'actor-required' },
+      'a realm anyone may read: explain reports the 401 the realm sends',
     );
   });
 });

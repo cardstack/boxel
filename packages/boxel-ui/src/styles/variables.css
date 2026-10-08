@@ -17,7 +17,7 @@
   --boxel-monospace-font-family:
     'IBM Plex Mono', 'Menlo', 'Courier New', Courier, monospace;
 
-  /* font size range -- note: see semantic names on line 248 */
+  /* font size range */
   --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25); /* 36px */
   --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
   --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
@@ -27,7 +27,7 @@
   --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75); /* 12px */
   --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
 
-  /* font shorthand -- note: see semantic names on line 248 */
+  /* font shorthand */
   --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
     var(--boxel-font-family);
   --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)
@@ -284,35 +284,4 @@
   --boxel-border-radius-xxl: var(
     --boxel-border-radius-2xl
   ); /* xxl is deprecated, use 2xl */
-}
-
-/** Semantic CSS Variables for General Use */
-:root {
-  /* font-family */
-  --boxel-body-font-family: var(--boxel-font-family);
-  --boxel-heading-font-family: var(--boxel-font-family);
-  --boxel-section-heading-font-family: var(--boxel-font-family);
-  --boxel-subheading-font-family: var(--boxel-font-family);
-  --boxel-caption-font-family: var(--boxel-font-family);
-
-  /* font-size */
-  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 22px */
-  --boxel-section-heading-font-size: var(--boxel-font-size-md); /* 18px */
-  --boxel-subheading-font-size: var(--boxel-font-size); /* 16px */
-  --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
-  --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
-
-  /* line-height */
-  --boxel-body-line-height: var(--boxel-line-height-sm);
-  --boxel-heading-line-height: var(--boxel-line-height-lg);
-  --boxel-caption-line-height: var(--boxel-line-height-xs);
-  --boxel-section-heading-line-height: var(--boxel-line-height-md);
-  --boxel-subheading-line-height: var(--boxel-line-height);
-
-  /* font-weight */
-  --boxel-heading-font-weight: 700;
-  --boxel-section-heading-font-weight: 500;
-  --boxel-subheading-font-weight: 500;
-  --boxel-body-font-weight: 400;
-  --boxel-caption-font-weight: 500;
 }

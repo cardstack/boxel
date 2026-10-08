@@ -5,7 +5,13 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, beforeEach, test } from 'node:test';
 
-import { mainVerdict, resolvePairing, type Resolution } from './pairing.ts';
+import {
+  mainVerdict,
+  openPinVerdict,
+  pinVerdict,
+  resolvePairing,
+  type Resolution,
+} from './pairing.ts';
 
 const BOXEL = 'cardstack/boxel';
 const CATALOG = 'cardstack/boxel-catalog';
@@ -24,7 +30,17 @@ interface StubPull {
   body?: string;
 }
 
+// The commit a merged pull request merged as.
+function mergeCommit(n: number) {
+  return `m${n}`.padEnd(40, '0');
+}
+
+const PIN = 'a'.repeat(40);
+
 let pulls: StubPull[] = [];
+// GitHub's compare status for `<base>...<head>`; a pair it doesn't list is
+// two commits GitHub doesn't know.
+let comparisons = new Map<string, string>();
 let server: Server;
 
 // A pull request as the list endpoint returns it: `merged_at`, and no
@@ -36,6 +52,7 @@ function listedPull(pull: StubPull) {
     html_url: `https://github.com/${pull.repository}/pull/${pull.number}`,
     state: pull.state ?? 'open',
     merged_at: pull.merged ? (pull.mergedAt ?? '2026-10-01T12:00:00Z') : null,
+    merge_commit_sha: pull.merged ? mergeCommit(pull.number) : null,
     draft: false,
     body: pull.body ?? '',
     base: { ref: pull.base ?? 'main' },
@@ -69,6 +86,17 @@ before(async () => {
           },
         }),
       );
+      return;
+    }
+    let compared = /^\/repos\/[^/]+\/[^/]+\/compare\/(.+)$/.exec(url.pathname);
+    if (compared) {
+      let status = comparisons.get(compared[1]);
+      if (!status) {
+        res.statusCode = 404;
+        res.end('{}');
+        return;
+      }
+      res.end(JSON.stringify({ status }));
       return;
     }
     let one = /^\/repos\/([^/]+\/[^/]+)\/pulls\/(\d+)$/.exec(url.pathname);
@@ -115,6 +143,7 @@ after(() => {
 
 beforeEach(() => {
   pulls = [];
+  comparisons = new Map();
 });
 
 // A boxel pull request and the catalog pull request it pairs with, each
@@ -138,7 +167,7 @@ function pair(boxel: Partial<StubPull>, catalog: Partial<StubPull> = {}) {
   );
 }
 
-function resolveBoxel() {
+function resolveBoxel(pinnedRevision?: string) {
   let boxel = pulls.find((p) => p.repository === BOXEL && p.number === 6454)!;
   return resolvePairing(
     BOXEL,
@@ -146,6 +175,7 @@ function resolveBoxel() {
     boxel.base ?? 'main',
     CATALOG,
     boxel.body ?? '',
+    pinnedRevision,
   );
 }
 
@@ -386,6 +416,124 @@ test('a counterpart whose merged parent merged into a grandparent that is still 
   );
 });
 
+test('a pin that contains the merge commit of the pull request this change merges after resolves', async () => {
+  pair({}, { state: 'closed', merged: true });
+  comparisons.set(`${mergeCommit(791)}...${PIN}`, 'ahead');
+  let { resolution, problems } = await resolveBoxel(PIN);
+  assert.deepEqual(problems, []);
+  assert.equal(resolution.pairs[0]?.merged, true);
+});
+
+test('a pin at the merge commit of the pull request this change merges after resolves', async () => {
+  pair({}, { state: 'closed', merged: true });
+  comparisons.set(`${mergeCommit(791)}...${mergeCommit(791)}`, 'identical');
+  let { problems } = await resolveBoxel(mergeCommit(791));
+  assert.deepEqual(problems, []);
+});
+
+test('a pin that predates the merge of the pull request this change merges after fails, saying to bump it', async () => {
+  pair({}, { state: 'closed', merged: true });
+  comparisons.set(`${mergeCommit(791)}...${PIN}`, 'behind');
+  let { resolution, problems } = await resolveBoxel(PIN);
+  assert.deepEqual(resolution.pairs, []);
+  assert.equal(problems.length, 1);
+  assert.equal(
+    problems[0],
+    `cardstack/boxel-catalog#791 merged as ${mergeCommit(791).slice(0, 12)}, ` +
+      `but cardstack/boxel#6454 pins ${PIN.slice(0, 12)}, which predates it. ` +
+      'Run `pnpm --dir packages/catalog catalog:test-subset --bump`.',
+  );
+});
+
+test("a pin at the head of the pull request this change merges after, which main doesn't contain after a squash, fails", async () => {
+  pair({}, { state: 'closed', merged: true });
+  comparisons.set(`${mergeCommit(791)}...${PIN}`, 'diverged');
+  let { problems } = await resolveBoxel(PIN);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /which predates it\. Run `pnpm/);
+});
+
+test('a pin GitHub cannot compare with the merge commit fails, saying to re-run', async () => {
+  pair({}, { state: 'closed', merged: true });
+  let { problems } = await resolveBoxel(PIN);
+  assert.equal(problems.length, 1);
+  assert.match(
+    problems[0],
+    /Could not read whether cardstack\/boxel#6454's pin aaaaaaaaaaaa contains cardstack\/boxel-catalog#791/,
+  );
+});
+
+test('the pin must contain the commit a stacked counterpart reached main through: its last parent', async () => {
+  pair({}, { base: 'catalog-parent', state: 'closed', merged: true });
+  pulls.push({
+    repository: CATALOG,
+    number: 780,
+    head: 'catalog-parent',
+    state: 'closed',
+    merged: true,
+  });
+  comparisons.set(`${mergeCommit(791)}...${PIN}`, 'diverged');
+  comparisons.set(`${mergeCommit(780)}...${PIN}`, 'ahead');
+  let { problems } = await resolveBoxel(PIN);
+  assert.deepEqual(problems, []);
+});
+
+test('an open pull request this change merges after resolves, and the pin verdict waits for it to merge and a re-pin', async () => {
+  pair({});
+  let { resolution, problems } = await resolveBoxel(PIN);
+  assert.deepEqual(problems, []);
+  assert.equal(
+    pinVerdict(resolution),
+    `cardstack/boxel#6454 merges after cardstack/boxel-catalog#791, which ` +
+      `hasn't merged, so cardstack/boxel#6454's pin ${PIN.slice(0, 12)} ` +
+      `can't contain it yet. Production deploys the catalog at the revision ` +
+      `boxel pins. Once cardstack/boxel-catalog#791 merges, run ` +
+      '`pnpm --dir packages/catalog catalog:test-subset --bump` and push: ' +
+      'that push re-runs this check.',
+  );
+});
+
+test('the pin verdict passes once the pull request this change merges after is merged and in the pin', async () => {
+  pair({}, { state: 'closed', merged: true });
+  comparisons.set(`${mergeCommit(791)}...${PIN}`, 'ahead');
+  let { resolution } = await resolveBoxel(PIN);
+  assert.equal(pinVerdict(resolution), undefined);
+});
+
+test('the pin verdict does not wait on an open pull request this change merges before', async () => {
+  pair(
+    { body: 'Merges before: cardstack/boxel-catalog#791' },
+    { body: 'Merges after: cardstack/boxel#6454' },
+  );
+  let { resolution } = await resolveBoxel(PIN);
+  assert.equal(pinVerdict(resolution), undefined);
+});
+
+test('without a pin, the pin verdict does not wait on an open pull request this change merges after', async () => {
+  pair({});
+  let { resolution } = await resolveBoxel();
+  assert.equal(pinVerdict(resolution), undefined);
+});
+
+test('a merged pull request this change merges before is not held to the pin', async () => {
+  pair(
+    { body: 'Merges before: cardstack/boxel-catalog#791' },
+    {
+      body: 'Merges after: cardstack/boxel#6454',
+      state: 'closed',
+      merged: true,
+    },
+  );
+  let { problems } = await resolveBoxel(PIN);
+  assert.deepEqual(problems, []);
+});
+
+test('without a pin, a merged pull request this change merges after resolves', async () => {
+  pair({}, { state: 'closed', merged: true });
+  let { problems } = await resolveBoxel();
+  assert.deepEqual(problems, []);
+});
+
 test('a description that declares no pair says nothing about its base', async () => {
   let { problems, notices } = await resolvePairing(
     BOXEL,
@@ -455,5 +603,80 @@ test('the catalog-main gate refuses a pair this change merges before when the pa
   assert.match(
     verdict.message,
     /cardstack\/boxel-catalog#791 is stacked on cardstack\/boxel-catalog#780, so it can't land on catalog main right after this change/,
+  );
+});
+
+test('the pin may wait on the head of an approved pair this change merges before', () => {
+  let verdict = openPinVerdict(
+    { repository: BOXEL, number: 6454, pairs: [openBefore()] },
+    791,
+    '791'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, true);
+  assert.match(
+    verdict!.message,
+    /Merge cardstack\/boxel-catalog#791 right after this change/,
+  );
+});
+
+test('the pin may not wait on a commit of that pair other than its head', () => {
+  let verdict = openPinVerdict(
+    { repository: BOXEL, number: 6454, pairs: [openBefore()] },
+    791,
+    'abc'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, false);
+  assert.match(verdict!.message, /not its head \(7910+\)/);
+});
+
+test('the pin may not wait on a pair this change merges before until it is approved', () => {
+  let verdict = openPinVerdict(
+    {
+      repository: BOXEL,
+      number: 6454,
+      pairs: [openBefore({ approved: false })],
+    },
+    791,
+    '791'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, false);
+  assert.match(
+    verdict!.message,
+    /cardstack\/boxel-catalog#791 is not approved yet/,
+  );
+});
+
+test('the pin may not wait on a pair this change merges before while this change is stacked', () => {
+  let verdict = openPinVerdict(
+    {
+      repository: BOXEL,
+      number: 6454,
+      stackedOn: 'cardstack/boxel#6417',
+      pairs: [openBefore()],
+    },
+    791,
+    '791'.padEnd(40, '0'),
+  );
+  assert.equal(verdict?.passes, false);
+  assert.match(verdict!.message, /stacked on cardstack\/boxel#6417/);
+});
+
+test('the pin has no say over a catalog pull request this change does not merge before', () => {
+  let resolution: Resolution = {
+    repository: BOXEL,
+    number: 6454,
+    pairs: [openBefore({ key: 'merges-after' })],
+  };
+  assert.equal(
+    openPinVerdict(resolution, 791, '791'.padEnd(40, '0')),
+    undefined,
+  );
+  assert.equal(
+    openPinVerdict(
+      { repository: BOXEL, number: 6454, pairs: [openBefore()] },
+      792,
+      '792'.padEnd(40, '0'),
+    ),
+    undefined,
   );
 });

@@ -34,11 +34,12 @@ import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
 ## Install
 
 ```
-pnpm add glimmer-motion motion-dom motion-utils
+pnpm add glimmer-motion
 ```
 
 Peers: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glimmer/component`,
-`@glimmer/tracking`, `ember-source >= 5.4`. A v2 addon — Embroider and Vite apps consume it directly, with
+`ember-source >= 5.4`. pnpm and npm install the peers in range. Adding `motion-dom` or `motion-utils` yourself
+at a version outside glimmer-motion's ranges puts a second copy of the engine on the page. A v2 addon — Embroider and Vite apps consume it directly, with
 TypeScript types and Glint signatures.
 
 New here? The [guide](https://github.com/cardstack/choreo/blob/main/docs/guide.md) teaches this

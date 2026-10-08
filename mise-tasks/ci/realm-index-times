@@ -1,0 +1,52 @@
+#!/bin/bash
+#MISE description="Print each realm's boot index time from a realm-server log, and add it to the job summary"
+# Usage:
+#   mise run ci:realm-index-times <log-file> [label]
+#
+# Reads the "Realm <url> is starting indexing", "has completed indexing in
+# <n>s" and "failed indexing" lines the realm-server services print, from the
+# lines `run-p -ln` labels `[start:development]` or `[start:test-realms]`
+# (realms a test page runs in the browser print the same text under other
+# labels). Only each realm's first pass counts, the boot index: a realm
+# indexed again later (a test realm reset between tests) keeps its boot
+# result. A boot index with no result is `not finished`, the realm a
+# `ci:wait-for-realms` timeout was waiting behind. Rows sort with `failed`
+# and `not finished` first, then slowest first. `label` names the job in the
+# summary heading, e.g. a shard.
+set -uo pipefail
+
+log="${1:?usage: mise run ci:realm-index-times <log-file> [label]}"
+label="${2:-}"
+
+table=$(
+  grep -E '^\[start:(development|test-realms) *\]' "$log" |
+    grep -oE 'Realm [^ ]+ (is starting indexing|has completed indexing in [0-9.]+s|failed indexing)' |
+    awk '
+      $3 == "is" { starts[$2]++; if (starts[$2] == 1) order[++n] = $2; next }
+      starts[$2] == 1 && !($2 in result) {
+        if ($3 == "has") { secs = $NF; sub(/s$/, "", secs); result[$2] = secs }
+        else { result[$2] = "failed" }
+      }
+      END {
+        for (i = 1; i <= n; i++) {
+          realm = order[i]
+          r = (realm in result) ? result[realm] : "not finished"
+          # sort key: failed, then not finished, then by seconds descending
+          key = (r == "failed") ? "0" : (r == "not finished") ? "1" : sprintf("2 %012.2f", 1e9 - r)
+          shown = (r ~ /^[0-9.]+$/) ? r "s" : r
+          printf "%s\t| %s | %s |\n", key, realm, shown
+        }
+      }' |
+    sort | cut -f2-
+)
+
+if [ -z "$table" ]; then
+  echo "No realm indexing lines in $log"
+  exit 0
+fi
+
+report=$(printf '### Realm boot index times%s\n\n| Realm | Boot index |\n| --- | --- |\n%s\n' "${label:+ ($label)}" "$table")
+echo "$report"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  echo "$report" >> "$GITHUB_STEP_SUMMARY"
+fi

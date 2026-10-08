@@ -209,11 +209,13 @@ export {
   isNamedQueryPayload,
   namedQueryInvocation,
   namedQueryRendering,
+  namedQueryStats,
   resolveNamedQuery,
   searchInvocation,
 } from './named-query.ts';
 export type {
   NamedQueryContext,
+  NamedQueryStats,
   ResolvedNamedQuery,
   SearchInvocation,
 } from './named-query.ts';
@@ -243,7 +245,9 @@ export {
   linkStrategyOf,
   readLinkStrategyOf,
   refusalForNonReader,
+  refusalSeenBy,
   unshareableFormatsOf,
+  AUTHENTICATION_REQUIRED,
 } from './types.ts';
 export type {
   BaseOperation,
