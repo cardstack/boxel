@@ -72,9 +72,10 @@ export function isContextLengthExceededError(error: unknown): boolean {
 
 // The summary request is the request of the last turn the provider accepted,
 // with the instruction in place of the trailing context message. Model,
-// provider routing, tools, tool choice and reasoning stay the same: any
-// change there invalidates the cached prefix, and the summary call is cheap
-// only because it reads that prefix from the cache.
+// provider routing, tools, tool choice (unless it forces a tool, see below)
+// and reasoning stay the same: any change there invalidates the cached
+// prefix, and the summary call is cheap only because it reads that prefix
+// from the cache.
 export function buildCompactionRequest(
   promptParts: PromptParts,
   senderMatrixUserId?: string,
@@ -93,6 +94,12 @@ export function buildCompactionRequest(
       senderMatrixUserId,
       botTools,
     );
+  // A turn can force a tool call (a tool choice other than `auto`). The
+  // summary must be prose, so it never inherits that; this costs the cached
+  // messages, but only for a turn that forced a tool.
+  if (request.tool_choice !== undefined && request.tool_choice !== 'auto') {
+    request.tool_choice = 'none';
+  }
   return {
     ...request,
     stream: false,
@@ -136,6 +143,8 @@ export async function compactRoomHistory(opts: {
   senderMatrixUserId: string;
   botTools: Tool[];
   responseEventId?: string;
+  // Cancels the summary request.
+  signal?: AbortSignal;
   recordCost: (
     costInUsd: number | undefined,
     generationId: string | undefined,
@@ -181,7 +190,11 @@ export async function compactRoomHistory(opts: {
   try {
     ({ summary, reason } = await summarize({
       ...opts,
-      acceptedEventList: eventList.slice(0, anchorIndex),
+      acceptedEventList: acceptedTurnEvents(
+        eventList,
+        anchorIndex,
+        aiBotUserId,
+      ),
     }));
   } catch (error) {
     await sendCompactionEvent({ status: 'failed' }).catch((sendError) =>
@@ -215,8 +228,32 @@ export async function compactRoomHistory(opts: {
   };
 }
 
-// Sends the summary request built from the events of the last accepted turn
-// (everything before its answer).
+// The events the accepted turn built its prompt from: everything before its
+// answer, plus a compaction that turn ran itself. That compaction is posted
+// after the answer's placeholder, so it sits after the answer in the room,
+// yet the prompt the provider accepted already used its summary.
+function acceptedTurnEvents(
+  eventList: DiscreteMatrixEvent[],
+  anchorIndex: number,
+  aiBotUserId: string,
+): DiscreteMatrixEvent[] {
+  let anchorEventId = eventList[anchorIndex].event_id;
+  let ownCompactions = eventList.slice(anchorIndex + 1).filter((event) => {
+    let { type, sender, content } = event as {
+      type: string;
+      sender?: string;
+      content?: Partial<CompactionEventContent>;
+    };
+    return (
+      type === APP_BOXEL_COMPACTION_EVENT_TYPE &&
+      sender === aiBotUserId &&
+      content?.responseEventId === anchorEventId
+    );
+  });
+  return [...eventList.slice(0, anchorIndex), ...ownCompactions];
+}
+
+// Sends the summary request built from the events of the last accepted turn.
 async function summarize(opts: {
   openai: OpenAI;
   client: MatrixClient;
@@ -225,6 +262,7 @@ async function summarize(opts: {
   acceptedEventList: DiscreteMatrixEvent[];
   senderMatrixUserId: string;
   botTools: Tool[];
+  signal?: AbortSignal;
   recordCost: (
     costInUsd: number | undefined,
     generationId: string | undefined,
@@ -243,7 +281,9 @@ async function summarize(opts: {
     opts.senderMatrixUserId,
     opts.botTools,
   );
-  let completion = await opts.openai.chat.completions.create(request);
+  let completion = await opts.openai.chat.completions.create(request, {
+    signal: opts.signal,
+  });
   await opts.recordCost(
     (completion.usage as { cost?: number } | undefined)?.cost,
     completion.id,

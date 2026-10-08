@@ -100,7 +100,9 @@ let activeGenerations = new Map<
   string,
   {
     responder: Responder;
-    runner: ChatCompletionStream;
+    // What a stop or a newer message aborts: the streaming generation, or
+    // the summary request while a compaction runs.
+    runner: Pick<ChatCompletionStream, 'abort'>;
     lastGeneratedChunkId: string | undefined;
     completionPromise: Promise<void>;
   }
@@ -719,9 +721,18 @@ Common issues are:
           // the event list with the compaction event, or undefined when
           // nothing could be compacted.
           let nothingToCompact = false;
+          // A stop or a newer message during the compaction cancels the
+          // summary request and the retry with it.
+          let compactionAbort = new AbortController();
           let compactForRetry = async (): Promise<
             DiscreteMatrixEvent[] | undefined
           > => {
+            let activeGeneration = activeGenerations.get(room.roomId);
+            if (activeGeneration) {
+              activeGeneration.runner = {
+                abort: () => compactionAbort.abort(),
+              };
+            }
             try {
               let result = await profTime(
                 eventId,
@@ -735,6 +746,7 @@ Common issues are:
                     senderMatrixUserId,
                     botTools: botTools.map((tool) => tool.definition),
                     responseEventId: responder.responseEventId,
+                    signal: compactionAbort.signal,
                     recordCost: (cost, costGenerationId) =>
                       debitUsageCost(
                         senderMatrixUserId,
@@ -753,6 +765,9 @@ Common issues are:
               log.info(`[${eventId}] Compacted the room history`);
               return result.eventList;
             } catch (compactionError) {
+              if (compactionAbort.signal.aborted) {
+                return undefined;
+              }
               log.error(`[${eventId}] Error compacting the room history`);
               log.error(compactionError);
               Sentry.captureException(compactionError, {
@@ -932,7 +947,12 @@ Common issues are:
                     log.error(promptError);
                   }
                 }
-                if (compactedEventList && compactedPromptParts) {
+                if (compactionAbort.signal.aborted) {
+                  log.info(
+                    `[${eventId}] Compaction was canceled by a stop or a newer message`,
+                  );
+                  await responder.finalize({ isCanceled: true });
+                } else if (compactedEventList && compactedPromptParts) {
                   eventList = compactedEventList;
                   promptParts = compactedPromptParts;
                   retryAfterCompaction = true;

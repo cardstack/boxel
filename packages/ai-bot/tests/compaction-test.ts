@@ -16,8 +16,10 @@ import {
   constructHistory,
   findCompactionCut,
   getPromptParts,
+  type PromptParts,
 } from '@cardstack/runtime-common/ai';
 import {
+  buildCompactionRequest,
   compactRoomHistory,
   isContextLengthExceededError,
   summaryFromCompletion,
@@ -173,17 +175,19 @@ function completion(
 
 function fakeOpenAI(response: ChatCompletion) {
   let requests: any[] = [];
+  let requestOptions: any[] = [];
   let openai = {
     chat: {
       completions: {
-        create: async (request: unknown) => {
+        create: async (request: unknown, options?: unknown) => {
           requests.push(request);
+          requestOptions.push(options);
           return response;
         },
       },
     },
   } as unknown as OpenAI;
-  return { openai, requests };
+  return { openai, requests, requestOptions };
 }
 
 module('compaction', (hooks) => {
@@ -485,6 +489,50 @@ module('compaction', (hooks) => {
     });
   });
 
+  module('buildCompactionRequest', () => {
+    function parts(toolChoice: PromptParts['toolChoice']): PromptParts {
+      return {
+        shouldRespond: true,
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'searchCards',
+              description: 'Searches cards',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        ],
+        messages: [
+          { role: 'system', content: 'system' },
+          { role: 'user', content: 'find authors' },
+          { role: 'user', content: 'context' },
+        ],
+        model: 'anthropic/claude-sonnet-5',
+        history: [],
+        toolChoice,
+        toolsSupported: true,
+        reasoningEffort: undefined,
+      };
+    }
+
+    test('keeps the tool choice of the accepted turn', () => {
+      assert.strictEqual(
+        buildCompactionRequest(parts('auto')).tool_choice,
+        'auto',
+      );
+    });
+
+    test('never forces a tool call on the summary', () => {
+      assert.strictEqual(
+        buildCompactionRequest(
+          parts({ type: 'function', function: { name: 'searchCards' } }),
+        ).tool_choice,
+        'none',
+      );
+    });
+  });
+
   module('summaryFromCompletion', () => {
     test('accepts a complete prose answer', () => {
       assert.strictEqual(
@@ -537,8 +585,11 @@ module('compaction', (hooks) => {
       ];
     });
 
-    async function compact(response: ChatCompletion) {
-      let { openai, requests } = fakeOpenAI(response);
+    async function compact(
+      response: ChatCompletion,
+      opts: { signal?: AbortSignal } = {},
+    ) {
+      let { openai, requests, requestOptions } = fakeOpenAI(response);
       let costs: [number | undefined, string | undefined][] = [];
       let history = await constructHistory(eventList, client);
       let result = await compactRoomHistory({
@@ -551,11 +602,12 @@ module('compaction', (hooks) => {
         senderMatrixUserId: userId,
         botTools: [],
         responseEventId: 'response-1',
+        signal: opts.signal,
         recordCost: async (cost, generationId) => {
           costs.push([cost, generationId]);
         },
       });
-      return { result, requests, costs };
+      return { result, requests, requestOptions, costs };
     }
 
     test('summarizes the prompt of the last accepted turn and posts the summary', async () => {
@@ -629,6 +681,48 @@ module('compaction', (hooks) => {
         ['running', 'failed'],
       );
       assert.deepEqual(costs, [[0.01, 'gen-1']], 'the call is still charged');
+    });
+
+    test("keeps the summary that the accepted turn's own compaction made", async () => {
+      // The turn that answered b2 had been compacted: its compaction event
+      // follows b2's placeholder in the room, yet its prompt used the summary.
+      eventList = [
+        userMessage('u1', 'Build a wedding planner'),
+        botMessage('b1', 'Created WeddingPlanner card'),
+        userMessage('u2', 'Add a guest list'),
+        botMessage('b2', 'Added a guest list field'),
+        {
+          ...compactionEvent('c1', 'u1', 'We started a wedding planner.'),
+          content: {
+            status: 'done',
+            responseEventId: 'b2',
+            upToEventId: 'u1',
+            summary: 'We started a wedding planner.',
+            summaryVersion: 1,
+          },
+        } as unknown as DiscreteMatrixEvent,
+        userMessage('u3', 'Add a budget'),
+      ];
+      let { requests } = await compact(completion());
+      let sent = requests[0].messages.map(text).join('\n');
+      assert.true(
+        sent.includes('We started a wedding planner.'),
+        'the request carries the summary the accepted turn used',
+      );
+      assert.false(
+        sent.includes('Build a wedding planner'),
+        'and not the history that summary replaced',
+      );
+      assert.true(sent.includes('Created WeddingPlanner card'));
+      assert.true(sent.includes('Add a guest list'));
+    });
+
+    test('passes the cancel signal to the summary request', async () => {
+      let controller = new AbortController();
+      let { requestOptions } = await compact(completion(), {
+        signal: controller.signal,
+      });
+      assert.strictEqual(requestOptions[0]?.signal, controller.signal);
     });
 
     test('does not call the model when there is nothing to compact', async () => {
