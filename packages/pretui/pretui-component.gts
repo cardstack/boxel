@@ -30,6 +30,7 @@ import { fn } from '@ember/helper';
 import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';
+import { LoadingState } from './components/loading-state';
 import { StatusChip } from './components/status-chip';
 import { Chip } from './components/chip';
 import { Token } from './components/token';
@@ -130,11 +131,7 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
     <div class='wb-fold' data-open={{if this.open 'true'}} ...attributes>
       {{! the write-up's prose only — the panel owns the padding, so the
           file's own embedded chrome and surface stay out }}
-      <div
-        id={{this.regionId}}
-        class='wb-fold-region'
-        {{this.measureOverflow}}
-      >
+      <div id={{this.regionId}} class='wb-fold-region' {{this.measureOverflow}}>
         <div class='wb-fold-prose'>
           <MarkdownPreview
             @model={{@writeup}}
@@ -702,7 +699,9 @@ export class PretUISpec extends Spec {
             {{#if this.demo}}
               <this.demo />
             {{else if this.isDemoLoading}}
-              <section class='panel' aria-busy='true'></section>
+              <section class='panel' aria-busy='true'>
+                <LoadingState @label='Loading the usage page' />
+              </section>
             {{else if this.isDemoExcluded}}
               <section class='panel'>
                 {{#if this.isHost}}
@@ -734,10 +733,7 @@ export class PretUISpec extends Spec {
                 aria-labelledby={{this.writeupHeadingId}}
               >
                 <div class='wb-panel-h'>
-                  <h2
-                    id={{this.writeupHeadingId}}
-                    class='wb-cap'
-                  >Write-up</h2>
+                  <h2 id={{this.writeupHeadingId}} class='wb-cap'>Write-up</h2>
                 </div>
                 <WriteupFold
                   class='wb-writeup-fold'
@@ -814,9 +810,12 @@ export class PretUISpec extends Spec {
           --wb-provenance-max-w: 30rem;
           --wb-krow-label-w: 6.875rem;
           --wb-dot-size: 0.5rem;
+          /* the page's inline padding, which the topbar cancels and restores
+             to run edge to edge */
+          --wb-page-gutter: var(--boxel-sp-lg);
 
           min-height: 100%;
-          padding: 0 var(--boxel-sp-lg) var(--boxel-sp-2xl);
+          padding: 0 var(--wb-page-gutter) var(--boxel-sp-2xl);
           display: grid;
           gap: var(--boxel-sp);
           align-content: start;
@@ -834,7 +833,7 @@ export class PretUISpec extends Spec {
           gap: var(--boxel-sp-xs);
         }
         /* the component's icon beside its title: a --background tile with a
-           hairline ring on the page's --canvas, not a raised button */
+           hairline ring, not a raised button */
         .wb-title-frame {
           --icon-color: currentColor;
           --icon-bg: none;
@@ -859,8 +858,8 @@ export class PretUISpec extends Spec {
           align-items: center;
           gap: var(--boxel-sp-sm);
           min-height: var(--wb-topbar-h);
-          margin: 0 calc(-1 * var(--boxel-sp-lg));
-          padding: var(--boxel-sp-2xs) var(--boxel-sp-lg);
+          margin: 0 calc(-1 * var(--wb-page-gutter));
+          padding: var(--boxel-sp-2xs) var(--wb-page-gutter);
           background-color: var(--card);
           color: var(--card-foreground);
           box-shadow: inset 0 -1px 0 var(--border);
@@ -878,7 +877,7 @@ export class PretUISpec extends Spec {
           padding: var(--boxel-sp-5xs) var(--boxel-sp-3xs);
         }
         .wb-here {
-          color: var(--foreground);
+          color: var(--card-foreground);
           font-weight: 600;
         }
         .wb-badges {
@@ -938,7 +937,7 @@ export class PretUISpec extends Spec {
           box-shadow:
             0 0 0 1px var(--border),
             var(--shadow-sm);
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-caption-font-size);
           line-height: 1.5;
         }
         .note:focus-visible {
@@ -1024,7 +1023,6 @@ export class PretUISpec extends Spec {
         /* THE caps treatment — panel and group headers only (type spec:
            one caps style, everything else sentence case) */
         .wb-cap {
-          margin: 0;
           font-family: var(--boxel-eyebrow-font-family);
           font-size: var(--boxel-eyebrow-font-size);
           font-weight: var(--boxel-eyebrow-font-weight);
@@ -1087,7 +1085,7 @@ export class PretUISpec extends Spec {
         }
         .brief {
           max-width: 78ch;
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(--boxel-caption-font-size);
           line-height: 1.5;
           color: var(--muted-foreground);
         }
@@ -1256,9 +1254,9 @@ export class PretUISpec extends Spec {
             -webkit-box-orient: vertical;
             -webkit-line-clamp: 3;
             overflow: hidden;
-            font-size: var(--boxel-font-size-xs);
+            font-size: var(--boxel-caption-font-size);
             color: var(--muted-foreground);
-            line-height: 1.45;
+            line-height: 1.5;
             white-space: normal;
           }
         }
@@ -1327,21 +1325,28 @@ export class PretUISpec extends Spec {
         <fieldset class='wb-group'>
           <legend>Identity</legend>
           <div class='wb-fields'>
-            <label>Name <@fields.componentName /></label>
-            <label>Icon <@fields.icon /></label>
-            <label class='wb-wide'>Brief <@fields.brief /></label>
+            <label><span class='wb-cap'>Name</span>
+              <@fields.componentName /></label>
+            <label><span class='wb-cap'>Icon</span> <@fields.icon /></label>
+            <label class='wb-wide'><span class='wb-cap'>Brief</span>
+              <@fields.brief /></label>
           </div>
         </fieldset>
 
         <fieldset class='wb-group'>
           <legend>Taxonomy</legend>
           <div class='wb-fields'>
-            <label>Category <@fields.category /></label>
-            <label>Tier <@fields.tier /></label>
-            <label>Ownership <@fields.ownership /></label>
-            <label>Implementation <@fields.implementationStatus /></label>
-            <label>Adoption <@fields.adoptionStatus /></label>
-            <label>Introduced in <@fields.introducedVersion /></label>
+            <label><span class='wb-cap'>Category</span>
+              <@fields.category /></label>
+            <label><span class='wb-cap'>Tier</span> <@fields.tier /></label>
+            <label><span class='wb-cap'>Ownership</span>
+              <@fields.ownership /></label>
+            <label><span class='wb-cap'>Implementation</span>
+              <@fields.implementationStatus /></label>
+            <label><span class='wb-cap'>Adoption</span>
+              <@fields.adoptionStatus /></label>
+            <label><span class='wb-cap'>Introduced in</span>
+              <@fields.introducedVersion /></label>
             <div class='wb-wide'>
               <span class='wb-cap'>Tags</span>
               <@fields.tags />
@@ -1352,31 +1357,42 @@ export class PretUISpec extends Spec {
         <fieldset class='wb-group'>
           <legend>Provenance</legend>
           <div class='wb-fields'>
-            <label>Source <@fields.source /></label>
-            <label>Lineage <@fields.lineage /></label>
-            <label>Version <@fields.version /></label>
-            <label>Builds on <@fields.buildsOn /></label>
-            <label class='wb-wide'>References <@fields.refs /></label>
+            <label><span class='wb-cap'>Source</span> <@fields.source /></label>
+            <label><span class='wb-cap'>Lineage</span>
+              <@fields.lineage /></label>
+            <label><span class='wb-cap'>Version</span>
+              <@fields.version /></label>
+            <label><span class='wb-cap'>Builds on</span>
+              <@fields.buildsOn /></label>
+            <label class='wb-wide'><span class='wb-cap'>References</span>
+              <@fields.refs /></label>
           </div>
         </fieldset>
 
         <fieldset class='wb-group'>
           <legend>Signals</legend>
           <div class='wb-fields'>
-            <label>Demand (1-5) <@fields.demand /></label>
-            <label class='wb-flag'><@fields.featured /> Featured</label>
-            <label class='wb-flag'><@fields.isNew /> New</label>
-            <label class='wb-flag'><@fields.hasDesign /> Has design</label>
-            <label class='wb-flag'><@fields.hasExamples /> Has examples</label>
-            <label class='wb-flag'><@fields.liveInUse /> Live in use</label>
+            <label><span class='wb-cap'>Demand (1-5)</span>
+              <@fields.demand /></label>
+            <label class='wb-flag'><@fields.featured />
+              <span class='wb-cap'>Featured</span></label>
+            <label class='wb-flag'><@fields.isNew />
+              <span class='wb-cap'>New</span></label>
+            <label class='wb-flag'><@fields.hasDesign />
+              <span class='wb-cap'>Has design</span></label>
+            <label class='wb-flag'><@fields.hasExamples />
+              <span class='wb-cap'>Has examples</span></label>
+            <label class='wb-flag'><@fields.liveInUse />
+              <span class='wb-cap'>Live in use</span></label>
           </div>
         </fieldset>
 
         <fieldset class='wb-group'>
           <legend>Legacy axes</legend>
           <div class='wb-fields'>
-            <label>Territory <@fields.territory /></label>
-            <label>Stage <@fields.stage /></label>
+            <label><span class='wb-cap'>Territory</span>
+              <@fields.territory /></label>
+            <label><span class='wb-cap'>Stage</span> <@fields.stage /></label>
           </div>
         </fieldset>
 
@@ -1429,13 +1445,6 @@ export class PretUISpec extends Spec {
         .wb-fields > div {
           display: grid;
           gap: var(--boxel-sp-2xs);
-          font-family: var(--boxel-eyebrow-font-family);
-          font-size: var(--boxel-eyebrow-font-size);
-          font-weight: var(--boxel-eyebrow-font-weight);
-          line-height: var(--boxel-eyebrow-line-height);
-          letter-spacing: var(--boxel-eyebrow-letter-spacing);
-          text-transform: uppercase;
-          color: var(--muted-foreground);
           min-width: 0;
         }
         .wb-wide {
@@ -1445,8 +1454,16 @@ export class PretUISpec extends Spec {
           grid-template-columns: auto 1fr;
           align-items: center;
         }
+        /* the caption only, so the caps style stays off the editor beside it */
         .wb-cap {
           display: block;
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          line-height: var(--boxel-eyebrow-line-height);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
+          text-transform: uppercase;
+          color: var(--muted-foreground);
         }
       </style>
     </template>
