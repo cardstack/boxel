@@ -175,6 +175,23 @@ ruleTester.run('realm-server-test-template-database', rule, {
         });
       `,
     },
+    // The shared simple realm server, with its template.
+    {
+      code: `
+        import {
+          setupDB,
+          setupSimpleRealmServerTemplate,
+          startSimpleRealmServer,
+        } from './helpers';
+        let templateDatabase = setupSimpleRealmServerTemplate(hooks);
+        setupDB(hooks, {
+          templateDatabase,
+          beforeEach: async (dbAdapter, publisher, runner) => {
+            server = await startSimpleRealmServer({ dbAdapter, publisher, runner });
+          },
+        });
+      `,
+    },
     // A namespace member that is not a starter.
     {
       code: `
@@ -323,6 +340,22 @@ ruleTester.run('realm-server-test-template-database', rule, {
         });
       `,
       errors: [perTestIndex('runTestRealmServerWithRealms')],
+    },
+    // The shared simple realm server, without its template.
+    {
+      code: `
+        import { setupDB, startSimpleRealmServer } from './helpers';
+        setupDB(hooks, {
+          beforeEach: async (db, p, r) => {
+            server = await startSimpleRealmServer({
+              dbAdapter: db,
+              publisher: p,
+              runner: r,
+            });
+          },
+        });
+      `,
+      errors: [perTestIndex('startSimpleRealmServer')],
     },
     // A realm built by a factory and started in the hook.
     {

@@ -3306,7 +3306,9 @@ export function setupTestDatabaseTemplate(
 }
 
 // The `simple` fixture realm at `simpleRealmServerURL`, alone on its own
-// realm server. Every call writes the realm into a fresh directory.
+// realm server. Every call writes the realm into a fresh directory. The
+// `realm-server-test-template-database` lint rule lists this function by name
+// as a realm starter, as it does any exported helper that brings up realms.
 export const simpleRealmServerURL = new URL('http://127.0.0.1:0/test/');
 
 export async function startSimpleRealmServer({

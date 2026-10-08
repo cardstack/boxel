@@ -12,7 +12,8 @@ This rule reports two forms:
 
 - A `setupDB(hooks, { beforeEach })` call that passes no `templateDatabase`
   when its `beforeEach` brings up realms. It does so when it calls
-  `runTestRealmServer` or `runTestRealmServerWithRealms`, or calls `start()` on
+  `runTestRealmServer`, `runTestRealmServerWithRealms` or
+  `startSimpleRealmServer`, or calls `start()` on
   a realm that `createRealm` returned, either directly or through functions
   declared in the same file. The rule does not follow imports, and it ignores
   a starter named only in a type.

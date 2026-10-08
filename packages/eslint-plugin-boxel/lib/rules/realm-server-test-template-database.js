@@ -6,9 +6,12 @@
 
 // Calls that bring up realms. On an empty test database each one indexes its
 // realms from scratch, which is usually most of a realm-server test's time.
+// The rule does not follow imports, so an exported test helper that brings up
+// realms belongs here by name.
 const REALM_STARTERS = new Set([
   'runTestRealmServer',
   'runTestRealmServerWithRealms',
+  'startSimpleRealmServer',
 ]);
 
 // Calls that build a realm without starting it. The realm indexes when its
