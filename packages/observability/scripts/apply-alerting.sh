@@ -8,7 +8,12 @@
 # the file directly. This script only runs against staging / production.
 #
 # Usage:
-#   ./scripts/apply-alerting.sh --env <local|staging|production>
+#   ./scripts/apply-alerting.sh --env <local|staging|production> [--preflight]
+#
+#   --preflight  only check that every ${VAR} the env's files reference is
+#                set, then exit without contacting Grafana. apply.sh runs this
+#                before it pushes anything, so a missing secret cannot leave
+#                a partial apply. A normal run makes the same check first too.
 #
 # Required env vars (staging / production only). The CI apply workflow
 # (.github/workflows/observability-apply-{staging,production}.yml) fetches
@@ -45,6 +50,7 @@ usage_error() { echo "error: $1" >&2; exit 2; }
 fail() { echo "error: $1" >&2; exit 1; }
 
 env_name=""
+preflight=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
@@ -55,6 +61,10 @@ while [[ $# -gt 0 ]]; do
     --env=*)
       env_name="${1#--env=}"
       [[ -n "$env_name" ]] || usage_error "--env requires a value"
+      shift
+      ;;
+    --preflight)
+      preflight=1
       shift
       ;;
     *) usage_error "unknown option: $1";;
@@ -75,14 +85,50 @@ case "$env_name" in
     ;;
 esac
 
+cd "$(dirname "$0")/.."
+
+shopt -s nullglob
+# provisioning/alerting/ applies to every environment, and docker-compose
+# mounts it for local Grafana too. provisioning/alerting-hosted/<env>/ holds
+# what exists in one hosted environment only: rules for a service that runs
+# there alone, and contact points whose secrets come from that
+# environment's SSM. Contact points go first, so a rule that routes to one
+# can find it.
+hosted_dir="provisioning/alerting-hosted/${env_name}"
+contact_point_files=("${hosted_dir}"/contact-points/*.json)
+rule_files=(provisioning/alerting/*.json "${hosted_dir}"/rules/*.json)
+
+# Fail before any push when a file this run would push references a ${VAR}
+# that is not set, naming every missing one at once. resolve_placeholders
+# below makes the same check per group, but only when it reaches that group,
+# after earlier files have been pushed.
+check_placeholders() {
+  local f name missing=()
+  for f in "${contact_point_files[@]}" "${rule_files[@]}"; do
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      [[ -n "${!name:-}" ]] || missing+=("\${${name}} (${f})")
+    done < <(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' "$f" | sed -E 's/^\$\{(.*)\}$/\1/' | sort -u)
+  done
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf 'error: not set (or empty) in environment; CI fetches these from SSM in observability-apply-%s.yml:\n' "$env_name" >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    exit 1
+  fi
+}
+
+check_placeholders
+if [[ -n "$preflight" ]]; then
+  echo "apply-alerting: preflight ok (env=${env_name})" >&2
+  exit 0
+fi
+
 for cmd in yq jq curl envsubst; do
   command -v "$cmd" >/dev/null \
     || fail "missing dependency: ${cmd}. Install via brew (yq, jq, gettext for envsubst) or apt (yq, jq, gettext-base)."
 done
 
 [[ -n "${GRAFANA_TOKEN:-}" ]] || fail "GRAFANA_TOKEN not set; run \`source ./scripts/grafanactl-env.sh ${env_name}\` first"
-
-cd "$(dirname "$0")/.."
 
 # Pull the per-env Grafana server URL from grafanactl's committed config so
 # this script and grafanactl always agree on the target host.
@@ -250,17 +296,6 @@ push_contact_points() {
       upsert_contact_point "$uid" "$body"
     done
 }
-
-shopt -s nullglob
-# provisioning/alerting/ applies to every environment, and docker-compose
-# mounts it for local Grafana too. provisioning/alerting-hosted/<env>/ holds
-# what exists in one hosted environment only: rules for a service that runs
-# there alone, and contact points whose secrets come from that
-# environment's SSM. Contact points go first, so a rule that routes to one
-# can find it.
-hosted_dir="provisioning/alerting-hosted/${env_name}"
-contact_point_files=("${hosted_dir}"/contact-points/*.json)
-rule_files=(provisioning/alerting/*.json "${hosted_dir}"/rules/*.json)
 
 echo "apply-alerting: env=${env_name} server=${grafana_server} contact-point files=${#contact_point_files[@]} rule files=${#rule_files[@]}" >&2
 
