@@ -2091,6 +2091,55 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a patch that gives a primitive field an object replaces its value', async function (assert) {
+    // A JSON-valued primitive is one value: a key the patch leaves out is a
+    // key the field no longer has, while a compound field beside it still
+    // keeps the nested values the patch does not name.
+    await testRealm.write(
+      'Settings/one.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Settings', summary: 'Kept' },
+            config: { approver: '@mae:localhost', retired: true },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      }),
+    );
+    let id = `${testRealmURL}Settings/one`;
+    let instance = await storeService.patch(id, {
+      attributes: {
+        cardInfo: { name: 'Renamed' },
+        config: { approvers: '@mae:localhost' },
+      },
+    });
+
+    assert.deepEqual(
+      (instance as any).config,
+      { approvers: '@mae:localhost' },
+      'the instance holds the map the patch sent',
+    );
+    let file = await testRealmAdapter.openFile('Settings/one.json');
+    let { attributes } = JSON.parse(file!.content as string).data;
+    assert.deepEqual(
+      attributes.config,
+      { approvers: '@mae:localhost' },
+      'and so does the saved file, without the renamed or dropped keys',
+    );
+    assert.strictEqual(
+      attributes.cardInfo.summary,
+      'Kept',
+      'the compound field keeps the nested value the patch leaves out',
+    );
+  });
+
   // Loading is a read. Resolving a linksTo assigns the loaded target back onto
   // the field, which notifies change subscribers — the same signal a user edit
   // produces — so without care the mere act of viewing a card can dirty it and

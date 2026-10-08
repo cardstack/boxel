@@ -1,4 +1,10 @@
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  triggerEvent,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -46,7 +52,7 @@ module('Integration | realm-config | settings', function (hooks) {
       await loader.import('@cardstack/base/cards-grid');
     let { CardsGrid } = cardsGrid;
 
-    await setupIntegrationTestRealm({
+    let { adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       permissions: {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -82,6 +88,7 @@ module('Integration | realm-config | settings', function (hooks) {
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}realm"]`);
+    return { adapter };
   }
 
   test('the stored settings read as a table', async function (assert) {
@@ -240,6 +247,94 @@ module('Integration | realm-config | settings', function (hooks) {
     assert
       .dom('[data-test-realm-settings-empty]')
       .exists('and the table reads as a realm with no settings');
+  });
+
+  test('a renamed setting replaces the old name in the stored file', async function (assert) {
+    let { adapter } = await renderRealmConfig(
+      { approver: '@mae:localhost', escalateAfterDays: 3 },
+      'edit',
+    );
+
+    await fillIn('[data-test-setting-key="0"]', 'approvers');
+    await click('[data-test-remove-setting="1"]');
+
+    let stored = async () => {
+      let file = await adapter.openFile('realm.json');
+      return JSON.parse(file!.content as string).data.attributes.config;
+    };
+    await waitUntil(async () => 'approvers' in ((await stored()) ?? {}));
+    assert.deepEqual(
+      await stored(),
+      { approvers: '@mae:localhost' },
+      'the file holds the new name and not the old one, nor the removed setting',
+    );
+  });
+
+  test('a setting name is written once the author finishes it', async function (assert) {
+    let { adapter } = await renderRealmConfig(
+      { approver: '@mae:localhost' },
+      'edit',
+    );
+    let stored = async () => {
+      let file = await adapter.openFile('realm.json');
+      return JSON.parse(file!.content as string).data.attributes.config;
+    };
+
+    // Mid-name: the input has the partial text, and has not been left.
+    let key = document.querySelector(
+      '[data-test-setting-key="0"]',
+    ) as HTMLInputElement;
+    key.value = 'appr';
+    await triggerEvent(key, 'input');
+
+    assert
+      .dom('[data-test-setting-key="0"]')
+      .hasValue('appr', 'the row shows what is being typed');
+    assert.deepEqual(
+      await stored(),
+      { approver: '@mae:localhost' },
+      'a partial name is not written as a setting',
+    );
+
+    await triggerEvent(key, 'change');
+    await waitUntil(async () => 'appr' in ((await stored()) ?? {}));
+    assert.deepEqual(
+      await stored(),
+      { appr: '@mae:localhost' },
+      'the finished name is written in place of the old one',
+    );
+  });
+
+  test('a name still being typed is written when the editor goes away', async function (assert) {
+    let { adapter } = await renderRealmConfig(
+      { approver: '@mae:localhost' },
+      'edit',
+    );
+    let stored = async () => {
+      let file = await adapter.openFile('realm.json');
+      return JSON.parse(file!.content as string).data.attributes.config;
+    };
+
+    // Typed but never left, so no change event ever fires for it.
+    let key = document.querySelector(
+      '[data-test-setting-key="0"]',
+    ) as HTMLInputElement;
+    key.value = 'approvers';
+    await triggerEvent(key, 'input');
+
+    await click(
+      `[data-test-stack-card="${testRealmURL}realm"] [data-test-edit-button]`,
+    );
+    assert
+      .dom('[data-test-realm-settings-edit]')
+      .doesNotExist('the editor is gone');
+
+    await waitUntil(async () => 'approvers' in ((await stored()) ?? {}));
+    assert.deepEqual(
+      await stored(),
+      { approvers: '@mae:localhost' },
+      'the name the author was typing is the one the file holds',
+    );
   });
 
   // The realm's policy pointer sits beside the settings as the id of the card

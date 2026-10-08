@@ -23,6 +23,7 @@ import { normalizeRelationships } from '../relationship-utils.ts';
 import {
   clearReplacedArrayFieldMeta,
   isCardResource,
+  type CardFields,
   type CardResource,
   type Relationship,
 } from '../resource-types.ts';
@@ -814,6 +815,16 @@ export async function stageUpdate(
     // merging would make removing an item impossible.
     Array.isArray(source) ? source : undefined,
   );
+  if (patch.attributes && primary.attributes) {
+    await replacePrimitiveValues(
+      primary.attributes,
+      patch.attributes,
+      primary.meta.adoptsFrom,
+      primary.meta.fields,
+      url,
+      ctx,
+    );
+  }
   if (primary.relationships || patch.relationships) {
     let mergedRelationships = mergeRelationships(
       primary.relationships,
@@ -880,6 +891,81 @@ export async function stageUpdate(
     id: url.href,
     primaryPath: sourcePath,
   };
+}
+
+// A primitive field's value is one value, however it is shaped: a `JsonField`
+// holding `{ "approver": "…" }` is a single setting map, not a compound field
+// whose keys are fields of their own. So where the patch gives a primitive
+// field an object, that object replaces the stored one rather than merging
+// into it — merging would make a key impossible to remove or rename, since a
+// key the patch leaves out would always survive from the stored file.
+//
+// Compound `contains` fields still merge key by key, which is what lets a
+// patch name only the nested fields it changes; this walks into them, by the
+// type the card's `meta.fields` names for a polymorphic value or else the
+// declared one, to find the primitives inside.
+//
+// Only a patch value that is an object needs the type at all, so a patch with
+// none never reads a definition. One that does, against a type whose
+// definition cannot be read, is refused: the plain merge would keep every key
+// the patch removed and could report the card unchanged, acknowledging a
+// removal that never happened.
+async function replacePrimitiveValues(
+  merged: Record<string, unknown>,
+  patch: Record<string, unknown>,
+  adoptsFrom: CodeRef | undefined,
+  fieldsMeta: CardFields | undefined,
+  url: URL,
+  ctx: StagingContext,
+): Promise<void> {
+  if (!adoptsFrom || !Object.values(patch).some(isPlainRecord)) {
+    return;
+  }
+  let definition: Definition | undefined;
+  try {
+    definition = await ctx.lookupDefinition(adoptsFrom, url);
+  } catch {
+    definition = undefined;
+  }
+  if (!definition) {
+    throw new OperationFailure({
+      id: url.href,
+      status: 500,
+      code: 'internal-error',
+      title: 'Unknown type',
+      detail: `no definition for ${JSON.stringify(adoptsFrom)}, so the patch cannot be merged`,
+    });
+  }
+  for (let [name, source] of Object.entries(patch)) {
+    if (!isPlainRecord(source)) {
+      // Arrays already replace, and anything else is not merged at all.
+      continue;
+    }
+    let field = Object.prototype.hasOwnProperty.call(definition.fields, name)
+      ? getImmediateFieldDef(definition, name)
+      : undefined;
+    if (!field) {
+      continue;
+    }
+    if (field.isPrimitive) {
+      merged[name] = cloneDeep(source);
+      continue;
+    }
+    let target = merged[name];
+    if (field.type !== 'contains' || !isPlainRecord(target)) {
+      continue;
+    }
+    let fieldMeta = fieldsMeta?.[name];
+    let nestedMeta = Array.isArray(fieldMeta) ? undefined : fieldMeta;
+    await replacePrimitiveValues(
+      target,
+      source,
+      nestedMeta?.adoptsFrom ?? field.fieldOrCard,
+      nestedMeta?.fields,
+      url,
+      ctx,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

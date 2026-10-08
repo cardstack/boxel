@@ -1189,6 +1189,166 @@ module('Integration | realm', function (hooks) {
     );
   });
 
+  test('realm PATCH replaces a primitive field holding an object rather than merging into it', async function (assert) {
+    // A JSON-valued primitive is one value, so a key the patch leaves out is a
+    // key the card no longer has. A compound field beside it still merges, so
+    // a patch can name only the nested fields it changes.
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Settings Workspace', summary: 'Kept' },
+              config: { approver: '@mae:localhost', retired: true },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}realm`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Renamed Workspace' },
+              config: { approvers: '@mae:localhost' },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        }),
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let fileRef = await adapter.openFile('realm.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    let { attributes } = JSON.parse(fileRef.content as string).data;
+    assert.deepEqual(
+      attributes.config,
+      { approvers: '@mae:localhost' },
+      'the stored map is the one the patch sent, with the renamed and dropped keys gone',
+    );
+    assert.strictEqual(
+      attributes.cardInfo.name,
+      'Renamed Workspace',
+      'the compound field takes the nested value the patch names',
+    );
+    assert.strictEqual(
+      attributes.cardInfo.summary,
+      'Kept',
+      'and keeps the nested value the patch leaves out',
+    );
+  });
+
+  test('realm PATCH replaces a primitive inside a compound field, by the type the card names for it', async function (assert) {
+    let { JsonField } = await loader.import<
+      typeof import('@cardstack/base/json-field')
+    >('@cardstack/base/json-field');
+
+    class Settings extends FieldDef {
+      @field label = contains(StringField);
+      @field values = contains(JsonField);
+    }
+    // Declares a primitive the declared type does not have, so a walk that
+    // read only the declared type would never find it.
+    class SpecialSettings extends Settings {
+      @field extra = contains(JsonField);
+    }
+    class Holder extends CardDef {
+      @field settings = contains(Settings);
+      @field special = contains(Settings);
+    }
+
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'holder.gts': { Holder, Settings, SpecialSettings },
+        'holder-1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              settings: { label: 'Kept', values: { a: 1, b: 2 } },
+              special: { label: 'Special', extra: { a: 1, b: 2 } },
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}holder`, name: 'Holder' },
+              fields: {
+                special: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}holder`,
+                    name: 'SpecialSettings',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}holder-1`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              settings: { values: { a: 1 } },
+              special: { extra: { a: 1 } },
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}holder`, name: 'Holder' },
+            },
+          },
+        }),
+      }),
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let fileRef = await adapter.openFile('holder-1.json');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    let { attributes } = JSON.parse(fileRef.content as string).data;
+    assert.deepEqual(
+      attributes.settings.values,
+      { a: 1 },
+      'the primitive inside the compound field is replaced',
+    );
+    assert.strictEqual(
+      attributes.settings.label,
+      'Kept',
+      'while the compound field keeps the nested value the patch leaves out',
+    );
+    assert.deepEqual(
+      attributes.special.extra,
+      { a: 1 },
+      'a primitive the polymorphic type declares is replaced too',
+    );
+  });
+
   test('realm can remove item from linksToMany field via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
