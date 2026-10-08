@@ -136,7 +136,7 @@ export const BUNDLED_BASE_MODULES: Record<
   //
   // Nothing else here is blocked. `commands/search-card-result`,
   // `commands/search-entry-result` and `commands/search-result-list` pass the
-  // check together at 204, as do `markdown`, `text-area`, `file-api`, `index`,
+  // check together, as do `markdown`, `text-area`, `file-api`, `index`,
   // `command-field` and `file-formats/index`, which import nothing the table
   // lacks. All of them are follow-on work rather than exclusions.
   // `string` has a reason of its own: it is `export default StringField` in a
@@ -284,7 +284,7 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/color-field/util/css-color-parsers'),
   // `commands/search-card-result` is not blocked: adding it with
   // `commands/search-entry-result` and `commands/search-result-list` passes
-  // the check at 204. The three are follow-on work.
+  // the check. The three are follow-on work.
   //
   // `command` is blocked, and by attribution rather than closure. Its
   // `linksToMany(Spec)` fields name `Spec`, which `spec` declares; bundling
@@ -358,8 +358,9 @@ export const BUNDLED_BASE_MODULES: Record<
   'audio-metadata': () => import('@cardstack/base/audio-metadata'),
   'audio-waveform': () => import('@cardstack/base/audio-waveform'),
   'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
-  'brand-functional-palette': () =>
-    import('@cardstack/base/brand-functional-palette'),
+  // `brand-functional-palette` is fetched, not bundled: served from the bundle,
+  // Safari intermittently evaluates it before its `color` import is
+  // initialized.
   'brand-logo': () => import('@cardstack/base/brand-logo'),
   coordinate: () => import('@cardstack/base/coordinate'),
   country: () => import('@cardstack/base/country'),
