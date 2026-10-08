@@ -1,30 +1,19 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import type { Test, SuperTest } from 'supertest';
-import { join, basename } from 'path';
+import { basename } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
 import type { DirResult } from 'tmp';
-import fsExtra from 'fs-extra';
-const { copySync, ensureDirSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
-import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
-  runTestRealmServer,
   logRealmIndexDiagnostics,
-  setupDB,
   setupMatrixRoom,
-  createVirtualNetwork,
-  fixtureDir,
-  matrixURL,
-  closeServer,
   type RealmRequest,
   withRealmPath,
 } from './helpers/index.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
-
-const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | GET _types', function (hooks) {
@@ -35,12 +24,6 @@ module(basename(import.meta.filename), function () {
     let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
-    let testRealmHttpServer2: Server;
-    let testRealm2: Realm;
-    let dbAdapter2: PgAdapter;
-    let publisher: QueuePublisher;
-    let runner: QueueRunner;
-    let testRealmDir: string;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -79,45 +62,6 @@ module(basename(import.meta.filename), function () {
     });
 
     setupMatrixRoom(hooks, getRealmSetup);
-    let virtualNetwork = createVirtualNetwork();
-
-    async function startRealmServer(
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) {
-      if (testRealm2) {
-        virtualNetwork.unmount(testRealm2.handle);
-      }
-      ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
-        await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_2'),
-          realmURL: testRealm2URL,
-          dbAdapter,
-          publisher,
-          runner,
-          matrixURL,
-        }));
-
-      await testRealm.logInToMatrix();
-    }
-
-    setupDB(hooks, {
-      beforeEach: async (_dbAdapter, _publisher, _runner) => {
-        dbAdapter2 = _dbAdapter;
-        publisher = _publisher;
-        runner = _runner;
-        testRealmDir = join(dir.name, 'realm_server_2', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-        await startRealmServer(dbAdapter2, publisher, runner);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmHttpServer2);
-      },
-    });
 
     test('can fetch card type summary', async function (assert) {
       let response = await request

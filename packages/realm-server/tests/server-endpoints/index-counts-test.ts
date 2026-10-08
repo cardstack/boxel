@@ -21,6 +21,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   realmConfigCardJSON,
+  setupTestDatabaseTemplate,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -108,22 +109,33 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       )!;
     }
 
+    // Tolerate a half-finished setup. If the fixture build fails the realms
+    // are never assigned, and an unguarded teardown throws before
+    // `closeServer` — leaking the bound port so every later test in the
+    // process fails with EADDRINUSE instead of the real error.
+    async function stopCountsRealmServer() {
+      testRealm?.unsubscribe();
+      secondaryRealm?.unsubscribe();
+      if (testRealmHttpServer) {
+        await closeServer(testRealmHttpServer);
+      }
+      resetCatalogRealms();
+    }
+
+    let templateDatabase = setupTestDatabaseTemplate(hooks, {
+      key: import.meta.filename,
+      build: async (args) => {
+        await startCountsRealmServer(args);
+        return stopCountsRealmServer;
+      },
+    });
+
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (dbAdapter, publisher, runner) => {
         await startCountsRealmServer({ dbAdapter, publisher, runner });
       },
-      // Tolerate a half-finished setup. If the fixture build fails the realms
-      // are never assigned, and an unguarded teardown throws before
-      // `closeServer` — leaking the bound port so every later test in the
-      // process fails with EADDRINUSE instead of the real error.
-      afterEach: async () => {
-        testRealm?.unsubscribe();
-        secondaryRealm?.unsubscribe();
-        if (testRealmHttpServer) {
-          await closeServer(testRealmHttpServer);
-        }
-        resetCatalogRealms();
-      },
+      afterEach: stopCountsRealmServer,
     });
 
     test('QUERY returns counts for every requested realm', async function (assert) {
