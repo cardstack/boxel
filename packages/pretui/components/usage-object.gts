@@ -5,13 +5,6 @@ import { UsageArgument } from './usage-argument';
 import { PropRow } from '../internal/freestyle';
 import type { ArgsMode } from '../internal/freestyle';
 
-function stringify(v: unknown): string {
-  try {
-    return JSON.stringify(v, null, 2) ?? String(v);
-  } catch {
-    return String(v);
-  }
-}
 // ── Freestyle::Usage::Object (read-only) ─────────────────────────────────
 export interface UsageObjectSignature {
   Args: {
@@ -31,23 +24,10 @@ export class UsageObject extends Component<UsageObjectSignature> {
   get isProp() {
     return this.args.mode === 'prop';
   }
-  get json() {
-    return stringify(this.args.value);
-  }
   <template>
     {{#if this.isProp}}
       {{#unless @hideControls}}
         <PropRow @label={{@name}} @required={{@required}}>
-          {{!-- Adopted 2026-08-13: this was a plain <pre> of the stringified
-                value. JsonTree gives every Args.Object knob in the gallery
-                collapsible nodes, type badges, copy-path and keyboard
-                navigation — and an empty state instead of the literal text
-                "undefined" for the call sites that pass no @value.
-                The json getter is kept: it is the only caller of stringify.
-                NOTE the long-form comment delimiters. A short {{! }} comment
-                ends at its first closing pair, so a mustache inside one
-                escapes into the template and orphans the next closing tag —
-                local parse accepts it; the realm transpiler does not. --}}
           <JsonTree
             @value={{@value}}
             @label={{@name}}
@@ -72,7 +52,6 @@ export class UsageObject extends Component<UsageObjectSignature> {
       .jsonviewer {
         --pretui-json-max-height: 7.5rem;
         --pretui-json-indent: var(--boxel-sp-sm);
-        --pretui-json-row-height: 1.25rem;
       }
     </style>
   </template>

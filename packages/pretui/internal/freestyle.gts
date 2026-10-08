@@ -10,6 +10,7 @@
 // verbatim-freestyle. Deliberate deltas: no ember-freestyle service, plain
 // <pre> for @source, labeled controls.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { VisuallyHidden } from '../components/visually-hidden';
 
 export function isPresent(v: unknown): boolean {
   return v !== undefined && v !== null && v !== '';
@@ -23,18 +24,41 @@ export function readOnlyText(v: unknown): string {
 export type ArgsMode = 'doc' | 'prop';
 // ── Property-list row (the prop lens) ────────────────────────────────────
 interface PropRowSignature {
-  Args: { label?: string; required?: boolean };
+  Args: {
+    label?: string;
+    required?: boolean;
+    /** id of the row's control: the rail becomes its <label for>, so the
+     * visible text names the control and a click on it focuses it */
+    controlId?: string;
+  };
   Blocks: { default: [] };
   Element: HTMLDivElement;
 }
 
 export const PropRow: TemplateOnlyComponent<PropRowSignature> = <template>
   <div class='proprow' data-test-pretui-prop-row ...attributes>
-    <span class='proprow-label' data-test-pretui-prop-row-label>
-      {{@label}}
-      {{#if @required}}<span class='proprow-req'>*</span>{{/if}}
-    </span>
-    <span class='proprow-control'>{{yield}}</span>
+    {{#if @controlId}}
+      <label
+        class='proprow-label'
+        for={{@controlId}}
+        data-test-pretui-prop-row-label
+      >
+        {{@label}}
+        {{#if @required}}<span
+            class='proprow-req'
+            aria-hidden='true'
+          >*</span><VisuallyHidden>(required)</VisuallyHidden>{{/if}}
+      </label>
+    {{else}}
+      <span class='proprow-label' data-test-pretui-prop-row-label>
+        {{@label}}
+        {{#if @required}}<span
+            class='proprow-req'
+            aria-hidden='true'
+          >*</span><VisuallyHidden>(required)</VisuallyHidden>{{/if}}
+      </span>
+    {{/if}}
+    <div class='proprow-control'>{{yield}}</div>
   </div>
   <style scoped>
     /* workbench inspector row: label rail left, control right */

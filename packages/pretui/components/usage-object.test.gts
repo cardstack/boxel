@@ -13,14 +13,14 @@ module('Pretui | components/usage-object', function (hooks) {
 
   test('doc mode is an API row typed Object', async function (assert) {
     await render(<template><table><tbody><UsageObject @name='item' @description='The record' @required={{true}} /></tbody></table></template>);
-    let cells = Array.from(document.querySelectorAll('[data-test-pretui-usage-arg] td')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
-    assert.deepEqual(cells, ['@item *', 'Object', 'The record', '—']);
+    let cells = Array.from(document.querySelectorAll('[data-test-pretui-usage-arg] :is(th, td)')).map((td) => td.textContent?.replace(/\s+/g, ' ').trim());
+    assert.deepEqual(cells, ['@item * (required)', 'Object', 'The record', '—']);
   });
 
   test('prop mode shows the value as a labelled JSON tree, or nothing when controls are hidden', async function (assert) {
     const VALUE = { id: 7, tags: ['a', 'b'] };
     await render(<template><UsageObject @mode='prop' @name='item' @value={{VALUE}} @required={{true}} /></template>);
-    assert.strictEqual(document.querySelector('[data-test-pretui-prop-row-label]')?.textContent?.replace(/\s+/g, ' ').trim(), 'item *');
+    assert.strictEqual(document.querySelector('[data-test-pretui-prop-row-label]')?.textContent?.replace(/\s+/g, ' ').trim(), 'item * (required)');
     let tree = document.querySelector('[data-test-pretui-prop-row] [data-test-pretui-json-tree]') as HTMLElement;
     assert.ok(tree, 'a JsonTree, not a <pre> of stringified JSON');
     assert.true(tree.textContent?.includes('tags'));

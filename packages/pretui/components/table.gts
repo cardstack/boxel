@@ -134,9 +134,8 @@ export const Table: TemplateOnlyComponent<TableSignature> = <template>
       .pretui-table :deep(tbody tr:last-child th) {
         box-shadow: none;
       }
-      /* Kept off td: at this specificity it would beat a caller's own td
-         alignment in the same layer, such as UsageArgument's right-aligned
-         Default column. */
+      /* Kept off td: at this specificity it would beat a layered caller's
+         own cell alignment, such as a right-aligned number column. */
       .pretui-table :deep(tbody th) {
         text-align: start;
       }

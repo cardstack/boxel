@@ -22,6 +22,17 @@ class Sink {
   takeArray = (value: string[]) => (this.arrayValue = value);
 }
 
+// the control a property row's visible label points at, so the test also
+// proves the rail names its control
+function controlLabelled(name: string): HTMLElement {
+  let label = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-test-pretui-prop-row-label]'),
+  ).find((element) => element.textContent?.trim() === name);
+  let target = label?.getAttribute('for');
+  if (!target) throw new Error(`no <label for> names the ${name} control`);
+  return document.getElementById(target) as HTMLElement;
+}
+
 module('Pretui | freestyle property controls', function (hooks) {
   setupCardTest(hooks);
 
@@ -101,9 +112,9 @@ module('Pretui | freestyle property controls', function (hooks) {
         />
       </template>);
 
-      await fillIn('[aria-label="label"]', 'New lot');
+      await fillIn(controlLabelled('label'), 'New lot');
       await click('[aria-label="enabled"]');
-      await fillIn('[aria-label="count"]', '8');
+      await fillIn(controlLabelled('count'), '8');
       await fillIn('[aria-label="tags"]', 'green, spring');
 
       assert.strictEqual(sink.stringValue, 'New lot');
