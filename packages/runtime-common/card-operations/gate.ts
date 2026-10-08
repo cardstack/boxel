@@ -13,8 +13,12 @@ import { routesForField } from '../searchable-routes.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
-import type { ActingUserResolution } from './acting-users.ts';
-import type { AnonymousAccessSettings } from '../anonymous-access.ts';
+import type { AnonymousRateLimit } from '../anonymous-access.ts';
+import { ANONYMOUS_ACTOR, settleActingUser } from './grant-expressions.ts';
+import type {
+  ActingUserResolution,
+  ActingUserResolver,
+} from './anonymous-request.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
 import type {
   GateTrace,
@@ -29,11 +33,12 @@ import {
   type PolicyDecisionEvent,
   type PolicyDecisionReason,
 } from './telemetry.ts';
-import type {
-  CompiledOperationGrant,
-  CompiledPolicyPredicate,
-  CompiledPolicyRule,
-  CompiledRealmPolicy,
+import {
+  opensToAnonymous,
+  type CompiledOperationGrant,
+  type CompiledPolicyPredicate,
+  type CompiledPolicyRule,
+  type CompiledRealmPolicy,
 } from './policy.ts';
 import { loadBxlTransform } from './transforms.ts';
 import {
@@ -185,14 +190,15 @@ export interface OperationPolicyAccess {
     card: string,
     document: Record<string, unknown>,
   ): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }>;
-  // Who an acting-user key names in the realm's current `realm.json`
-  // `config`, and whether that user may write the realm (see
-  // `ActingUsers`). A realm without it admits no write by a caller who isn't
-  // signed in.
-  actingUser?(key: string): Promise<ActingUserResolution>;
-  // How the realm limits and blocks callers who aren't signed in, from its
-  // `realm.json` and the platform default. An explain reports it.
-  anonymousAccess?(): Promise<AnonymousAccessSettings>;
+  // Whether `user`, the value a grant's `actingUser` produced, is a Matrix
+  // user who may write the realm, as its ACL says now. A realm without it
+  // admits no write by a caller who isn't signed in.
+  checkActingUser?(
+    user: string,
+  ): Promise<{ user: string } | { failure: 'not-a-matrix-id' | 'no-write' }>;
+  // The rate limit a grant counts callers who aren't signed in against where
+  // it sets none: the platform's. An explain reports it.
+  platformAnonymousRateLimit?(): AnonymousRateLimit;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and
@@ -233,7 +239,7 @@ export type GateScope = Pick<
   | 'trace'
   | 'advisory'
   | 'route'
-  | 'actingUsers'
+  | 'anonymousRequest'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -654,22 +660,28 @@ async function decide(
     core.policy,
     notes ? notes.alongside(trace) : trace,
   );
-  // A caller who isn't signed in is admitted only by a grant that opts in to
-  // them. Every other grant was written for signed-in callers, and admitting
-  // anyone at all through one would widen it past what its author wrote.
+  // A caller who isn't signed in is admitted only by a grant whose `where`
+  // names them, and only by one whose blocklist and rate limit let their
+  // address in. Every other grant was written for signed-in callers, and
+  // admitting anyone at all through one would widen it past what its author
+  // wrote.
   if (scope.caller.kind === 'anonymous') {
-    matched = matched.filter(({ grant }) => grant.anonymous);
-    // An operation whose program, template or output reads `actor()` has no
-    // actor to read for such a caller, and is refused before it runs, so a
-    // grant that opens it to one admits nobody. The definition is the one the
-    // target's own type resolves, which may be a subtype's redeclaration of
-    // what a grant on its parent opened.
+    matched = matched.filter(
+      ({ grant }) =>
+        opensToAnonymous(grant) && scope.anonymousRequest.admits(grant),
+    );
+    // An operation whose program, template or output reads `actor()` is
+    // refused to such a caller before it runs, so a grant that opens it to
+    // one admits nobody. The definition is the one the target's own type
+    // resolves, which may be a subtype's redeclaration of what a grant on its
+    // parent opened.
     if (matched.length > 0 && definition.readsActor) {
       return refuse('reads-actor');
     }
     // Such a caller's write is made as the user its grant names, so a grant
     // whose acting user doesn't resolve to one who may write the realm admits
-    // nothing.
+    // nothing. One that reads the target is settled once the target is,
+    // under the write lock.
     if (isWrite(base)) {
       matched = await withActingUsers(scope, matched);
     }
@@ -1258,36 +1270,78 @@ export async function dischargePendingDecision(
   if (!('grant' in admission)) {
     throw gateRefusal(core, admission, pending.target, pending.name);
   }
-  await admittedAs(scope, admission);
 }
 
-// The grants among `matched` whose acting user resolves to one who may write
-// the realm. A grant that opts a write in to callers who aren't signed in
-// always names a key (`anonymous-write-without-acting-user` otherwise), so one
-// that names none admits nothing here.
+// The grants among `matched` whose acting user may resolve to one who may
+// write the realm: every one whose `actingUser` reads the target, which is
+// settled under the write lock, and every other one whose `actingUser`
+// resolves now.
 async function withActingUsers(
   scope: GateScope,
   matched: MatchedGrant[],
 ): Promise<MatchedGrant[]> {
   let resolved = await Promise.all(
-    matched.map(async (candidate) => {
-      let key = candidate.grant.anonymous?.actingUserKey;
-      return key && 'user' in (await scope.actingUsers.resolve(key));
-    }),
+    matched.map(async ({ grant }) =>
+      grant.anonymous?.actingUser?.readsInstance
+        ? true
+        : 'user' in (await scope.anonymousRequest.actingUser(grant, undefined)),
+    ),
   );
   return matched.filter((_candidate, index) => resolved[index]);
 }
 
-// Records the user a write by a caller who isn't signed in is made as, once
-// a grant has admitted it.
+// Records the grant that admitted an invocation by a caller who isn't signed
+// in, and for a write, the user it is made as.
 async function admittedAs(
   scope: GateScope,
   { grant }: MatchedGrant,
+  instance?: Record<string, unknown>,
 ): Promise<void> {
-  let key = grant.anonymous?.actingUserKey;
-  if (scope.caller.kind === 'anonymous' && key) {
-    await scope.actingUsers.admittedThrough(key);
+  if (scope.caller.kind === 'anonymous') {
+    await scope.anonymousRequest.admittedThrough(grant, instance);
   }
+}
+
+// Whether an acting user that reads the target resolves, for a write by a
+// caller who isn't signed in to `subject`. Every other grant was settled
+// before the lock.
+async function actingUserHolds(
+  scope: GateScope,
+  { grant }: MatchedGrant,
+  subject: PredicateSubject,
+): Promise<boolean> {
+  if (
+    scope.caller.kind !== 'anonymous' ||
+    !grant.anonymous?.actingUser?.readsInstance
+  ) {
+    return true;
+  }
+  return (
+    'user' in (await scope.anonymousRequest.actingUser(grant, subject.instance))
+  );
+}
+
+// How a realm's core settles a grant's `actingUser`: evaluated against the
+// governed realm's settings, the policy card's fields and the target, and the
+// value judged by the realm's own check.
+export function actingUserResolver(core: OperationCore): ActingUserResolver {
+  return async (grant, instance): Promise<ActingUserResolution> => {
+    let expression = grant.anonymous?.actingUser;
+    let check = core.policy?.checkActingUser;
+    if (!expression || !check) {
+      return { failure: 'expression-failed' };
+    }
+    let policy = await core.policy?.compiledPolicy();
+    return await settleActingUser(
+      expression,
+      {
+        realmConfig: await core.realmConfig(),
+        policy: policy?.fields ?? {},
+        ...(instance ? { instance } : {}),
+      },
+      (user) => check(user),
+    );
+  };
 }
 
 // The write lock's decision record, naming what the gate matched the write on.
@@ -1454,7 +1508,27 @@ async function firstHolding(
   notes?: DecisionNotes,
 ): Promise<Admission> {
   let stats = policyGateStats(core);
-  let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
+  // A caller who isn't signed in is `"anonymous"` to a predicate, which only
+  // a grant whose `where` names them is ever asked about.
+  let actor =
+    scope.caller.kind === 'user'
+      ? scope.caller.actor
+      : scope.caller.kind === 'anonymous'
+        ? ANONYMOUS_ACTOR
+        : undefined;
+  // Whether a grant that holds admits the invocation: for a write by a caller
+  // who isn't signed in, its acting user has to resolve for the card the write
+  // is judged by. What admitted it is recorded, except for a question that
+  // decides nothing.
+  let admitted = async (candidate: MatchedGrant, judged: PredicateSubject) => {
+    if (!(await actingUserHolds(scope, candidate, judged))) {
+      return false;
+    }
+    if (lane !== 'rehearsal' && !scope.advisory) {
+      await admittedAs(scope, candidate, judged.instance);
+    }
+    return true;
+  };
   // A predicate that throws is a fault in the policy, but another grant can
   // still hold. Grants union, so the fault is reported only when none does,
   // and the answer is the same whatever order the grants are in.
@@ -1462,7 +1536,10 @@ async function firstHolding(
   for (let candidate of grants) {
     let where = candidate.grant.where;
     if (!where) {
-      return candidate;
+      if (await admitted(candidate, subject)) {
+        return candidate;
+      }
+      continue;
     }
     // A predicate that reads the caller never holds for a caller who has no
     // actor, so it is not evaluated for one: asked, it would throw for want of
@@ -1505,7 +1582,7 @@ async function firstHolding(
         hypothetical: scope.trace !== undefined,
       });
     }
-    if (outcome === 'holds') {
+    if (outcome === 'holds' && judged && (await admitted(candidate, judged))) {
       return candidate;
     }
     threw ||= outcome === 'threw';
@@ -2312,6 +2389,9 @@ async function evaluate(
     let realmConfig = where.canonical.includes('realmConfig')
       ? await core.realmConfig()
       : undefined;
+    let policy = where.canonical.includes('policy')
+      ? matched.policy.fields
+      : undefined;
     let answer = bxl.runBxlTransform(
       where.canonical,
       subject.input,
@@ -2319,6 +2399,7 @@ async function evaluate(
         ...(actor === undefined ? {} : { actor }),
         ...(subject.instance ? { instance: subject.instance } : {}),
         ...(realmConfig === undefined ? {} : { realmConfig }),
+        ...(policy === undefined ? {} : { policy }),
       },
       { syntax: 'solidified' },
     );

@@ -34,8 +34,22 @@ import {
   type MatchedGrant,
 } from './gate.ts';
 import { resolveNamedQuery, searchInvocation } from './named-query.ts';
-import { NO_ACTING_USER, type ActingUserResolution } from './acting-users.ts';
-import type { CompiledOperationGrant, CompiledRealmPolicy } from './policy.ts';
+import {
+  DEFAULT_ANONYMOUS_RATE_LIMIT,
+  formatAddressRange as formatRange,
+} from '../anonymous-access.ts';
+import { AnonymousRequest } from './anonymous-request.ts';
+import { actingUserResolver } from './gate.ts';
+import {
+  blocklistCloses,
+  settleTraffic,
+  type GrantTraffic,
+} from './grant-expressions.ts';
+import {
+  opensToAnonymous as grantOpensToAnonymous,
+  type CompiledOperationGrant,
+  type CompiledRealmPolicy,
+} from './policy.ts';
 import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
 import type { PolicyRoute } from './telemetry.ts';
 import {
@@ -46,6 +60,7 @@ import {
   refusalForNonReader,
   refusalSeenBy,
   type ExplainedGrant,
+  type ExplainedGrantAnonymous,
   type ExplainedGrantOutcome,
   type ExplainedIndexLag,
   type ExplainedRule,
@@ -283,7 +298,9 @@ export async function explainOperation(
   let acl = await realm.aclFor(actor);
   let draft = 'draft' in governing ? governing.draft : undefined;
   let deciding = await pinnedForExplain(governing.core);
-  let detailed = await detailer(deciding, actor);
+  let anonymous =
+    actor.kind === 'user' ? undefined : await anonymousAdmission(deciding);
+  let detailed = await detailer(deciding, anonymous);
   let answered = async (
     explanation: PolicyExplanation,
   ): Promise<PolicyExplanation> => {
@@ -302,6 +319,7 @@ export async function explainOperation(
           question,
           actor,
           acl,
+          anonymous,
         ),
       ),
     };
@@ -322,6 +340,7 @@ export async function explainOperation(
               question,
               actor,
               acl,
+              anonymous,
             ),
           ),
         );
@@ -349,50 +368,87 @@ export async function explainOperation(
     question,
     actor,
     acl,
+    anonymous,
   );
   return { explanation: await answered(explanation) };
 }
 
 // The core an explain decides with: the governing core, holding one compile
-// of its policy and one answer per acting-user key for the whole explain. A
-// listing runs the gate once per card, and the policy can recompile or a
-// user's permissions change between them, so without this one card could be
-// judged against a different policy from the next, or a grant reported with an
-// acting user the gate didn't see.
+// of its policy for the whole explain. A listing runs the gate once per card,
+// and the policy can recompile between them, so without this one card could be
+// judged against a different policy from the next.
 async function pinnedForExplain(core: OperationCore): Promise<OperationCore> {
   let access = core.policy;
   if (!access) {
     return core;
   }
   let compiled = await access.compiledPolicy();
-  let resolutions = new Map<string, Promise<ActingUserResolution>>();
   return {
     ...core,
     policy: {
       ...access,
       compiledPolicy: async () => compiled,
-      actingUser: (key: string) => {
-        let resolution = resolutions.get(key);
-        if (!resolution) {
-          resolution = access.actingUser?.(key) ?? NO_ACTING_USER();
-          resolutions.set(key, resolution);
-        }
-        return resolution;
-      },
     },
+  };
+}
+
+// How an explain judges a caller who isn't signed in: through the grants whose
+// `where` names them, each with its blocklist and rate limit settled as the
+// realm would settle them for a request. A question names no address, so a
+// grant is judged as admitting the caller unless its blocklist closes it to
+// every one. The same admission is shared by every gate the explain runs, and
+// holds the acting users they resolved.
+interface ExplainAnonymous {
+  request: AnonymousRequest;
+  traffic: Map<string, GrantTraffic>;
+  platformLimit: { requests: number; windowSeconds: number };
+}
+
+async function anonymousAdmission(
+  core: OperationCore,
+): Promise<ExplainAnonymous> {
+  let policy = await core.policy?.compiledPolicy();
+  let platformLimit =
+    core.policy?.platformAnonymousRateLimit?.() ?? DEFAULT_ANONYMOUS_RATE_LIMIT;
+  let traffic = new Map<string, GrantTraffic>();
+  let eligible = new Set<string>();
+  let context = {
+    realmConfig: await core.realmConfig(),
+    policy: policy?.fields ?? {},
+  };
+  for (let rule of policy?.rules ?? []) {
+    for (let grant of rule.grants) {
+      if (!grant.anonymous || !grantOpensToAnonymous(grant)) {
+        continue;
+      }
+      let settled = await settleTraffic(
+        grant.anonymous,
+        context,
+        platformLimit,
+      );
+      traffic.set(grant.path, settled);
+      if (!blocklistCloses(settled)) {
+        eligible.add(grant.anonymous.id);
+      }
+    }
+  }
+  return {
+    request: new AnonymousRequest(actingUserResolver(core), eligible),
+    traffic,
+    platformLimit: { ...platformLimit },
   };
 }
 
 // What an explanation reports beyond the decision itself, read from the
 // policy and the realm that decided it: for a question about a caller who
-// isn't signed in, how the realm limits and blocks such callers; for each
-// grant listed that opts in to them, the user its writes are made as, or why
-// its key names no one; and for each grant listed, what compiling the policy
-// recorded against it. It reads the same compile and acting users the gate
-// decided with (see `pinnedForExplain`).
+// isn't signed in, the platform's rate limit, and for each grant listed whose
+// `where` names them, each of its expressions and what it produced; and for
+// each grant listed, what compiling the policy recorded against it. It reads
+// the same compile and acting users the gate decided with (see
+// `pinnedForExplain`).
 async function detailer(
   core: OperationCore,
-  actor: ScopeCaller,
+  anonymous: ExplainAnonymous | undefined,
 ): Promise<(explanation: PolicyExplanation) => Promise<PolicyExplanation>> {
   let compiled = await core.policy?.compiledPolicy();
   let grants = new Map<string, CompiledOperationGrant>();
@@ -402,10 +458,6 @@ async function detailer(
     }
   }
   let issues = compiled?.issues ?? [];
-  let access =
-    actor.kind === 'user' ? undefined : await core.policy?.anonymousAccess?.();
-  let resolve = (key: string) =>
-    core.policy?.actingUser?.(key) ?? NO_ACTING_USER();
   let detail = async (explained: ExplainedGrant): Promise<ExplainedGrant> => {
     let grant = grants.get(explained.path);
     // Issues are recorded at a grant's path or at a part of it, and
@@ -415,60 +467,84 @@ async function detailer(
       ({ path }) =>
         path === explained.path || path.startsWith(`${explained.path}.`),
     );
-    let anonymous: ExplainedGrant['anonymous'];
-    if (grant?.anonymous) {
-      let key = grant.anonymous.actingUserKey;
-      if (key) {
-        let resolution = await resolve(key);
-        anonymous =
-          'user' in resolution
-            ? { actingUserKey: key, actingUser: resolution.user }
-            : { actingUserKey: key, actingUserFailure: resolution.failure };
-      } else {
-        anonymous = {};
-      }
-    }
+    let traffic = grant ? anonymous?.traffic.get(grant.path) : undefined;
+    let explainedAnonymous =
+      grant?.anonymous && traffic && anonymous
+        ? await anonymousDetail(grant, traffic, anonymous.request)
+        : undefined;
     return {
       ...explained,
-      ...(anonymous ? { anonymous } : {}),
+      ...(explainedAnonymous ? { anonymous: explainedAnonymous } : {}),
       ...(own.length > 0 ? { issues: own } : {}),
     };
   };
-  // A blocklist entry that is neither an address nor a range closes the realm
-  // to every caller who isn't signed in, before the policy is consulted. So
-  // where the answer turned on the policy, it is refused as such a caller's
-  // request would be. A realm whose ACL answers the request, or whose policy
-  // opens nothing to them, refuses them before reading the blocklist, and its
-  // answer stands.
-  let blocklistCloses =
-    access !== undefined && access.invalidBlocklistEntries.length > 0;
   return async (explanation) => ({
-    ...(blocklistCloses &&
-    explanation.reason !== 'acl' &&
-    explanation.reason !== 'actor-required'
-      ? (({ admittedBy: _admittedBy, ...rest }) => ({
-          ...rest,
-          decision: 'denied' as const,
-          reason: 'blocklist-invalid' as const,
-          refusal: { status: 401, code: 'actor-required' as const },
-        }))(explanation)
-      : explanation),
+    ...explanation,
     rules: await Promise.all(
       explanation.rules.map(async (rule) => ({
         ...rule,
         grants: await Promise.all(rule.grants.map(detail)),
       })),
     ),
-    ...(access
+    ...(anonymous
+      ? { anonymous: { platformLimit: { ...anonymous.platformLimit } } }
+      : {}),
+  });
+}
+
+// A grant's expressions, and what each produced for the question. An acting
+// user that reads the target is reported as the gate resolved it for the card
+// the question named, or as written where the gate didn't get that far.
+async function anonymousDetail(
+  grant: CompiledOperationGrant,
+  traffic: GrantTraffic,
+  request: AnonymousRequest,
+): Promise<ExplainedGrantAnonymous> {
+  let anonymous = grant.anonymous!;
+  let actingUser: ExplainedGrantAnonymous['actingUser'];
+  if (anonymous.writes) {
+    let expression = anonymous.actingUser;
+    let resolution =
+      request.lastActingUser(grant) ??
+      (expression && !expression.readsInstance
+        ? await request.actingUser(grant, undefined)
+        : undefined);
+    actingUser = {
+      ...(expression ? { expression: expression.source } : {}),
+      ...(resolution ?? (expression ? {} : { failure: 'expression-failed' })),
+    };
+  }
+  let { blocklist, limit } = traffic;
+  return {
+    ...(actingUser ? { actingUser } : {}),
+    ...(anonymous.blocklist
       ? {
-          anonymous: {
-            limit: { ...access.limit },
-            limitFrom: access.limitFrom,
-            invalidBlocklistEntries: [...access.invalidBlocklistEntries],
+          blocklist: {
+            expression: anonymous.blocklist.source,
+            ...(blocklist.failed !== undefined
+              ? { failed: blocklist.failed }
+              : {
+                  entries: blocklist.ranges.map(formatRange),
+                  ...(blocklist.invalid.length > 0
+                    ? { invalid: [...blocklist.invalid] }
+                    : {}),
+                }),
           },
         }
       : {}),
-  });
+    rateLimit: {
+      requests: limit.requests,
+      windowSeconds: limit.windowSeconds,
+      requestsFrom: limit.requestsFrom,
+      windowSecondsFrom: limit.windowSecondsFrom,
+      ...(anonymous.rateLimitRequests
+        ? { requestsExpression: anonymous.rateLimitRequests.source }
+        : {}),
+      ...(anonymous.rateLimitWindowSeconds
+        ? { windowSecondsExpression: anonymous.rateLimitWindowSeconds.source }
+        : {}),
+    },
+  };
 }
 
 // The core the target's realm would decide with were its policy card to hold
@@ -537,6 +613,7 @@ async function explainSearch(
   question: Question,
   actor: ScopeCaller,
   acl: Acl,
+  anonymous: ExplainAnonymous | undefined,
 ): Promise<PolicyExplanation> {
   let payload: Record<string, unknown> =
     'filter' in search
@@ -635,7 +712,7 @@ async function explainSearch(
       principal:
         actor.kind === 'user'
           ? { kind: 'user', user: actor.actor }
-          : { kind: 'anonymous' },
+          : { kind: 'anonymous', request: anonymous?.request },
       transport: 'explain',
       hypothetical: true,
     });
@@ -799,6 +876,7 @@ async function explain(
   question: Question,
   actor: ScopeCaller,
   acl: Acl,
+  anonymous: ExplainAnonymous | undefined,
 ): Promise<PolicyExplanation> {
   let base: PolicyExplanation = {
     actor: actor.kind === 'user' ? actor.actor : null,
@@ -837,6 +915,7 @@ async function explain(
     coarseDeclined,
     trace,
     route: EXPLAIN_ROUTE,
+    ...(anonymous ? { anonymousRequest: anonymous.request } : {}),
   });
   let definition: OperationDefinition | undefined;
   let decision: GateDecision | undefined;

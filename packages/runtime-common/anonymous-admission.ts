@@ -6,7 +6,7 @@ import {
   parseIP,
   rangesContain,
   rateLimitKey,
-  type AnonymousAccessSettings,
+  type AnonymousRateLimit,
 } from './anonymous-access.ts';
 import type {
   AnonymousRateLimiter,
@@ -19,11 +19,16 @@ import {
   type AnonymousRequestEvent,
 } from './card-operations/telemetry.ts';
 import {
-  ActingUsers,
-  type ActingUserResolution,
-} from './card-operations/acting-users.ts';
+  AnonymousRequest,
+  type ActingUserResolver,
+} from './card-operations/anonymous-request.ts';
 import type { CommitBatchOptions } from './card-operations/coordinator.ts';
 import type { OperationScope } from './card-operations/dispatch.ts';
+import {
+  blocklistCloses,
+  settleTraffic,
+  type GrantRateLimit,
+} from './card-operations/grant-expressions.ts';
 import type { AnonymousOpenings } from './card-operations/policy.ts';
 import {
   OperationFailure,
@@ -40,12 +45,13 @@ import type { ResponseWithNodeStream } from './virtual-network.ts';
 // Callers who aren't signed in.
 //
 // A realm's policy can admit a request that authenticated nobody, through the
-// grants that opt in to such callers (`OperationGrant.anonymous`), and the
-// governed realm limits and blocks those callers by address
-// (`anonymousRateLimit`, `anonymousBlocklist` in its `realm.json`). This is
-// that half of the realm: deciding whether such a request is admitted to what
-// its route would run, before anything about its target is resolved, and
-// counting what it costs against its address's budget once it has run.
+// grants whose `where` names such callers (`actor() == "anonymous"`), and each
+// of those grants limits and blocks them by address (its `blocklist`,
+// `rateLimitRequests` and `rateLimitWindowSeconds`). This is that half of the
+// realm: deciding which of those grants may admit such a request to what its
+// route would run, before anything about its target is resolved, and counting
+// what it costs against the budget its address has through the grant that
+// admitted it, once it has run.
 //
 // The realm hands a request here only once its ACL refused it for want of
 // credentials, on a route tagged with what it would run (`AnonymousDispatch`).
@@ -87,6 +93,13 @@ export interface AnonymousCaller {
   // never limited or blocked.
   infra: boolean;
   counted: AnonymousDispatch['counted'];
+  // The grants that may admit the request, in the order the policy card holds
+  // them: each one opening what the route runs whose blocklist lets the
+  // caller's address in and, for a request that is counted, whose budget for
+  // it isn't used up. Only these are asked about it.
+  grants: AdmittingGrant[];
+  // Which of those admitted the request, and who its writes are made as.
+  request: AnonymousRequest;
   // How long the caller is told to wait, where the request was refused
   // because it couldn't be counted.
   retryAfterSeconds?: number;
@@ -98,6 +111,14 @@ export interface AnonymousCaller {
   // the realm can't count it: its address has used up the realm's limit, or
   // the count couldn't be read. Settled at admission, before anything runs.
   turnedAway?: Exclude<AnonymousCount, { kind: 'counted' }>;
+}
+
+// A grant that may admit a caller who isn't signed in, with the limit it
+// counts them against.
+export interface AdmittingGrant {
+  id: string;
+  path: string;
+  limit: GrantRateLimit;
 }
 
 // What came of counting an anonymous caller's invocation against its
@@ -180,15 +201,17 @@ export interface AnonymousAdmissionEnvironment {
   limiter: AnonymousRateLimiter;
   // Whether the realm names a policy at all.
   hasPolicy(): Promise<boolean>;
-  // What the realm's policy opens to such callers.
+  // What the realm's policy opens to such callers, and through which grants.
   openedOperations(): Promise<AnonymousOpenings>;
-  // The realm's limit and blocklist for such callers.
-  access(): Promise<AnonymousAccessSettings>;
-  // Who an acting-user key names in the realm's current `realm.json`
-  // `config`, and whether that user may write the realm (see
-  // `ActingUsers`). The gate, explain and capability checks judge a key by
-  // this same function.
-  actingUser(key: string): Promise<ActingUserResolution>;
+  // The realm's `realm.json` `config`, which a grant's expressions read as
+  // `realmConfig()`.
+  realmConfig(): Promise<Record<string, unknown>>;
+  // The limit a grant that sets none counts such callers against.
+  platformLimit(): AnonymousRateLimit;
+  // Who a grant's `actingUser` names for a write, and whether that user may
+  // write the realm. The gate, explain and capability checks resolve acting
+  // users the same way.
+  actingUser: ActingUserResolver;
 }
 
 export class AnonymousAdmission {
@@ -236,6 +259,13 @@ export class AnonymousAdmission {
     if (operation === undefined) {
       return undefined;
     }
+    let candidates = opened.grants.filter((grant) =>
+      wanted === 'any'
+        ? true
+        : wanted === 'any-write'
+          ? grant.anonymous!.writes
+          : wanted.includes(grant.operation),
+    );
     let ipText = request.headers.get(CLIENT_IP_HEADER);
     let address = ipText ? parseIP(ipText) : undefined;
     let caller: AnonymousCaller = {
@@ -244,43 +274,78 @@ export class AnonymousAdmission {
       rateLimitKey: address ? rateLimitKey(address) : undefined,
       infra: request.headers.get(CLIENT_CLASS_HEADER) === INFRA_CLIENT_CLASS,
       counted: dispatch.counted,
+      grants: [],
+      request: new AnonymousRequest(this.#env.actingUser),
     };
-    if (!caller.infra) {
-      let access = await this.#env.access();
-      let blockReason: AnonymousRequestEvent['blockReason'] =
-        access.invalidBlocklistEntries.length > 0
+    // Each grant's blocklist and limit are settled for the request before
+    // anything about its target is, so what they answer is the address's,
+    // never the target's.
+    let context = {
+      realmConfig: await this.#env.realmConfig(),
+      policy: opened.fields,
+    };
+    let platformLimit = this.#env.platformLimit();
+    let blockReason: AnonymousRequestEvent['blockReason'];
+    for (let grant of candidates) {
+      let traffic = await settleTraffic(
+        grant.anonymous!,
+        context,
+        platformLimit,
+      );
+      let refusedBy: AnonymousRequestEvent['blockReason'] = caller.infra
+        ? undefined
+        : blocklistCloses(traffic)
           ? 'blocklist-invalid'
           : !address
             ? 'ip-undetermined'
-            : rangesContain(access.blocklist, address)
+            : rangesContain(traffic.blocklist.ranges, address)
               ? 'blocklist'
               : undefined;
-      if (blockReason) {
-        this.#record(request, caller, { outcome: 'blocked', blockReason });
-        return undefined;
+      if (refusedBy) {
+        if (blockReason === undefined) {
+          blockReason = refusedBy;
+          if (refusedBy === 'blocklist-invalid') {
+            this.#env.log.warn(
+              `the blocklist of the grant at ${grant.path} of ${this.#env.realmURL}'s policy isn't a list of IP addresses and CIDR ranges${
+                traffic.blocklist.failed
+                  ? ` (it threw ${traffic.blocklist.failed})`
+                  : ` (${traffic.blocklist.invalid.join(', ')})`
+              }, so the grant admits no caller who isn't signed in until it is fixed`,
+            );
+          }
+        }
+        continue;
       }
-      if (caller.counted !== 'never') {
-        caller.turnedAway = await this.#checkBudget(request, caller, access);
-      }
+      caller.grants.push({
+        id: grant.anonymous!.id,
+        path: grant.path,
+        limit: traffic.limit,
+      });
     }
+    if (caller.grants.length === 0) {
+      this.#record(request, caller, {
+        outcome: 'blocked',
+        blockReason,
+        ...(candidates[0] ? { grant: candidates[0].path } : {}),
+      });
+      return undefined;
+    }
+    if (!caller.infra && caller.counted !== 'never') {
+      caller.turnedAway = await this.#checkBudget(request, caller);
+    }
+    caller.request = new AnonymousRequest(
+      this.#env.actingUser,
+      new Set(caller.grants.map(({ id }) => id)),
+    );
     return caller;
   }
 
-  // See `AnonymousAdmissionEnvironment.actingUser`.
-  resolveActingUser(key: string): Promise<ActingUserResolution> {
-    return this.#env.actingUser(key);
-  }
-
-  // The acting users of a request a caller who isn't signed in sent, one set
-  // for the request, which every scope it builds shares.
-  actingUsersFor(requestContext: RequestContext): ActingUsers | undefined {
-    if (!requestContext.anonymousCaller) {
-      return undefined;
-    }
-    requestContext.actingUsers ??= new ActingUsers((key) =>
-      this.#env.actingUser(key),
-    );
-    return requestContext.actingUsers;
+  // The anonymous admission of a request a caller who isn't signed in sent,
+  // one for the request, which every scope it builds shares.
+  anonymousRequestFor(
+    requestContext: RequestContext,
+  ): AnonymousRequest | undefined {
+    return requestContext.anonymousCaller?.request;
   }
 
   // What a batch by a caller the realm admitted without a session commits
@@ -308,7 +373,7 @@ export class AnonymousAdmission {
         return;
       }
       let counted = await this.chargeCaller(request, caller, units, {
-        actingUsers: scope.actingUsers.admitted,
+        actingUsers: scope.anonymousRequest.admitted,
       });
       if (counted.kind !== 'counted') {
         let refusal = anonymousCountRefusal(counted);
@@ -317,7 +382,7 @@ export class AnonymousAdmission {
       }
     };
     return {
-      actingUser: () => scope.actingUsers.admitted[0],
+      actingUser: () => scope.anonymousRequest.admitted[0],
       beforeCommit: () => (counting ??= count()),
     };
   }
@@ -364,7 +429,7 @@ export class AnonymousAdmission {
     }
     if (!caller.served) {
       if (response.status === 401 || request.method === 'HEAD') {
-        let failures = requestContext.actingUsers?.failures ?? [];
+        let failures = caller.request.failures;
         this.#record(request, caller, {
           outcome: 'refused',
           ...(failures.length > 0 ? { actingUserFailures: [...failures] } : {}),
@@ -412,38 +477,46 @@ export class AnonymousAdmission {
     }
   }
 
-  // Counts `cost` invocations by `caller` against its address's budget in
-  // this realm, and records what came of it. A caller of ours is recorded and
-  // never counted.
+  // Counts `cost` invocations by `caller` against the budget its address has
+  // through the grant that admitted the request, and records what came of
+  // it. That is the first grant to admit one of its invocations, or where
+  // none has said so, such as a stylesheet drawn by markup the realm already
+  // served, the first that could have. A caller of ours is recorded and never
+  // counted.
   async chargeCaller(
     request: Request,
     caller: AnonymousCaller,
     cost: number,
     detail: Pick<AnonymousRequestEvent, 'actingUsers'> = {},
   ): Promise<AnonymousCount> {
+    let grant = chargedGrant(caller);
     if (caller.infra) {
-      this.#record(request, caller, { outcome: 'infra', ...detail });
+      this.#record(request, caller, {
+        outcome: 'infra',
+        grant: grant.path,
+        ...detail,
+      });
       return { kind: 'counted' };
     }
-    let { limit, limitFrom } = await this.#env.access();
     let outcome: AnonymousRateOutcome;
     try {
       outcome = await this.#env.limiter.charge({
         realmURL: this.#env.realmURL,
+        grantId: grant.id,
         clientIP: caller.rateLimitKey!,
-        limit,
+        limit: grant.limit,
         cost,
       });
     } catch (e: unknown) {
       this.#recordCountFailure(request, caller, e);
       return { kind: 'unavailable' };
     }
-    let recordedLimit = { ...limit, from: limitFrom };
     let costDetail = cost > 1 ? { cost } : {};
     if (outcome.admitted) {
       this.#record(request, caller, {
         outcome: 'admitted',
-        limit: recordedLimit,
+        grant: grant.path,
+        limit: { ...grant.limit },
         count: outcome.count,
         ...costDetail,
         ...detail,
@@ -452,7 +525,8 @@ export class AnonymousAdmission {
     }
     this.#record(request, caller, {
       outcome: 'rate-limited',
-      limit: recordedLimit,
+      grant: grant.path,
+      limit: { ...grant.limit },
       retryAfterSeconds: outcome.retryAfterSeconds,
       ...costDetail,
     });
@@ -462,39 +536,54 @@ export class AnonymousAdmission {
     };
   }
 
-  // Whether the caller's address has budget left for one more invocation,
-  // asked before the invocation runs so that one over the limit costs the
-  // realm nothing more than this question. The answer is the address's, not
-  // the target's, so it says nothing about what the request names. A count
-  // that can't be read turns the caller away rather than letting an
-  // invocation through uncounted.
+  // Leaves in `caller.grants` the grants through which the caller's address
+  // has budget left for one more invocation, asked before the invocation
+  // runs so that one over every limit costs the realm nothing more than this
+  // question. The answer is the address's, not the target's, so it says
+  // nothing about what the request names. A count that can't be read turns
+  // the caller away rather than letting an invocation through uncounted.
   async #checkBudget(
     request: Request,
     caller: AnonymousCaller,
-    { limit, limitFrom }: AnonymousAccessSettings,
   ): Promise<AnonymousCaller['turnedAway']> {
-    let outcome: AnonymousRateOutcome;
-    try {
-      outcome = await this.#env.limiter.remaining({
-        realmURL: this.#env.realmURL,
-        clientIP: caller.rateLimitKey!,
-        limit,
-      });
-    } catch (e: unknown) {
-      this.#recordCountFailure(request, caller, e);
-      return { kind: 'unavailable' };
+    let withBudget: AdmittingGrant[] = [];
+    let retryAfterSeconds: number | undefined;
+    for (let grant of caller.grants) {
+      let outcome: AnonymousRateOutcome;
+      try {
+        outcome = await this.#env.limiter.remaining({
+          realmURL: this.#env.realmURL,
+          grantId: grant.id,
+          clientIP: caller.rateLimitKey!,
+          limit: grant.limit,
+        });
+      } catch (e: unknown) {
+        this.#recordCountFailure(request, caller, e);
+        return { kind: 'unavailable' };
+      }
+      if (outcome.admitted) {
+        withBudget.push(grant);
+      } else {
+        retryAfterSeconds = Math.min(
+          retryAfterSeconds ?? Infinity,
+          outcome.retryAfterSeconds,
+        );
+      }
     }
-    if (outcome.admitted) {
+    if (withBudget.length > 0) {
+      caller.grants = withBudget;
       return undefined;
     }
+    let first = caller.grants[0];
     this.#record(request, caller, {
       outcome: 'rate-limited',
-      limit: { ...limit, from: limitFrom },
-      retryAfterSeconds: outcome.retryAfterSeconds,
+      grant: first.path,
+      limit: { ...first.limit },
+      retryAfterSeconds: retryAfterSeconds!,
     });
     return {
       kind: 'rate-limited',
-      retryAfterSeconds: outcome.retryAfterSeconds,
+      retryAfterSeconds: retryAfterSeconds!,
     };
   }
 
@@ -540,6 +629,7 @@ export class AnonymousAdmission {
     detail: Pick<
       AnonymousRequestEvent,
       | 'outcome'
+      | 'grant'
       | 'blockReason'
       | 'limit'
       | 'count'
@@ -564,6 +654,18 @@ export class AnonymousAdmission {
       }),
     );
   }
+}
+
+// The grant a caller's request is counted against: the first of its grants to
+// admit one of the request's invocations, or the first that could have.
+function chargedGrant(caller: AnonymousCaller): AdmittingGrant {
+  for (let id of caller.request.admittedGrants) {
+    let grant = caller.grants.find((candidate) => candidate.id === id);
+    if (grant) {
+      return grant;
+    }
+  }
+  return caller.grants[0];
 }
 
 // Marks the request as having served what its caller asked for (see

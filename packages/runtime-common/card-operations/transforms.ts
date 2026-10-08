@@ -78,6 +78,7 @@ export interface BxlTransformModule {
       actor?: string;
       instance?: Record<string, unknown>;
       realmConfig?: Record<string, unknown>;
+      policy?: Record<string, unknown>;
     },
     options?: { syntax?: 'readable' | 'solidified' },
   ): unknown;
