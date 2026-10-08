@@ -11,6 +11,8 @@ import {
 
 import { tracked } from '@glimmer/tracking';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -26,13 +28,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -75,7 +70,6 @@ async function waitForFileTreeReady() {
 
 module('Integration | mini-file-chooser', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

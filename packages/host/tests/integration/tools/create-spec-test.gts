@@ -17,7 +17,6 @@ import {
   withCachedRealmSetup,
   realmConfigCardJSON,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -25,7 +24,6 @@ import type { Spec } from '@cardstack/base/spec';
 
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   const realmName = 'Create Spec Test Realm';
   let loader: Loader;
   let createSpecCommand: CreateSpecTool;

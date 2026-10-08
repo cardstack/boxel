@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -22,7 +21,6 @@ import type * as XlsxDefModule from '@cardstack/base/xlsx-file-def';
 // resulting slot lands on the file row and reaches the fitted cell.
 module('Integration | office poster capture', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let OfficePosterCapture: typeof OfficeCapturesModule.OfficePosterCapture;

@@ -8,6 +8,17 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import * as cardAPI from '@cardstack/base/card-api';
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  FieldDef,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -28,19 +39,6 @@ import {
   testRealmURL,
   visitOperatorMode,
 } from '../helpers';
-import {
-  cardAPI,
-  CardDef,
-  Component,
-  contains,
-  field,
-  FieldDef,
-  linksTo,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -54,7 +52,6 @@ module(
   'Acceptance | Query Fields | host respects server-populated results',
   function (hooks) {
     setupApplicationTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

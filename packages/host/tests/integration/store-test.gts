@@ -12,6 +12,17 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import BooleanField from '@cardstack/base/boolean';
+import {
+  CardDef,
+  contains,
+  field,
+  linksTo,
+  linksToMany,
+  Component,
+} from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -52,19 +63,6 @@ import {
   withSlowSave,
   setupOperatorModeStateCleanup,
 } from '../helpers';
-
-import {
-  CardDef,
-  FileDef,
-  contains,
-  field,
-  linksTo,
-  linksToMany,
-  StringField,
-  BooleanField,
-  Component,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   registerDefaultRoutes,
@@ -75,7 +73,6 @@ import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
 import type * as CardAPI from '@cardstack/base/card-api';
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -84,7 +81,6 @@ import type {
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
   let api: typeof CardAPI;
   let loader: Loader;
   let loaderService: LoaderService;
@@ -93,10 +89,10 @@ module('Integration | Store', function (hooks) {
   let storeService: StoreService;
   let operatorModeStateService: OperatorModeStateService;
   let cardStore: CardStore;
-  let PersonDef: typeof CardDefType;
-  let BoomPersonDef: typeof CardDefType;
-  let EmployeeDef: typeof CardDefType;
-  let ManagerDef: typeof CardDefType;
+  let PersonDef: typeof CardDef;
+  let BoomPersonDef: typeof CardDef;
+  let EmployeeDef: typeof CardDef;
+  let ManagerDef: typeof CardDef;
   let realmService: RealmService;
 
   setupLocalIndexing(hooks);
@@ -312,7 +308,7 @@ module('Integration | Store', function (hooks) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
     let instanceA = storeService.peek(`${testRealmURL}Person/hassan`);
-    let instanceB = storeService.peek((instanceA as CardDefType)[localId]);
+    let instanceB = storeService.peek((instanceA as CardDef)[localId]);
     assert.true(isCardInstance(instanceB), 'peeked item is a card instance');
     assert.strictEqual(
       instanceA,
@@ -476,10 +472,8 @@ module('Integration | Store', function (hooks) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     storeService.addReference(`${testRealmURL}Person/boris`);
     await storeService.flush();
-    let hassan = storeService.peek(
-      `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
-    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDefType;
+    let hassan = storeService.peek(`${testRealmURL}Person/hassan`) as CardDef;
+    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDef;
     (hassan as any).bestFriend = boris;
     await settled();
 
@@ -511,11 +505,9 @@ module('Integration | Store', function (hooks) {
     storeService.addReference(`${testRealmURL}Person/boris`);
     storeService.addReference(`${testRealmURL}Person/jade`);
     await storeService.flush();
-    let hassan = storeService.peek(
-      `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
-    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDefType;
-    let jade = storeService.peek(`${testRealmURL}Person/jade`) as CardDefType;
+    let hassan = storeService.peek(`${testRealmURL}Person/hassan`) as CardDef;
+    let boris = storeService.peek(`${testRealmURL}Person/boris`) as CardDef;
+    let jade = storeService.peek(`${testRealmURL}Person/jade`) as CardDef;
     (hassan as any).friends = [jade, boris];
     await settled();
 
@@ -1059,7 +1051,7 @@ module('Integration | Store', function (hooks) {
     });
     assert.strictEqual(typeof url, 'string', 'received a url for new instance');
     let instance = storeService.peek(url as string);
-    assert.strictEqual((instance as CardDefType).id, url);
+    assert.strictEqual((instance as CardDef).id, url);
     assert.strictEqual((instance as any).name, 'Andrea');
 
     let file = await testRealmAdapter.openFile(
@@ -1434,7 +1426,7 @@ module('Integration | Store', function (hooks) {
           },
         },
       },
-    })) as CardDefType;
+    })) as CardDef;
     assert.ok(instance.id, 'instance has been assigned remote id');
     let peekedInstance = storeService.peek(instance.id);
     assert.strictEqual(instance, peekedInstance, 'instance is the same');
@@ -1472,7 +1464,7 @@ module('Integration | Store', function (hooks) {
         },
       },
       {},
-    )) as CardDefType;
+    )) as CardDef;
     assert.strictEqual(
       instance.id,
       undefined,
@@ -1574,9 +1566,11 @@ module('Integration | Store', function (hooks) {
         },
       },
     };
-    let conflictingInstance = await api.createFromSerialized<
-      typeof CardDefType
-    >(doc.data, doc, undefined);
+    let conflictingInstance = await api.createFromSerialized<typeof CardDef>(
+      doc.data,
+      doc,
+      undefined,
+    );
     try {
       await storeService.addWithoutPersisting(conflictingInstance);
       throw new Error('expected exception to be thrown');
@@ -1868,9 +1862,7 @@ module('Integration | Store', function (hooks) {
   test('can delete card from the store', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/boris`);
     await storeService.flush();
-    let instance = storeService.peek(
-      `${testRealmURL}Person/boris`,
-    ) as CardDefType;
+    let instance = storeService.peek(`${testRealmURL}Person/boris`) as CardDef;
 
     await storeService.delete(`${testRealmURL}Person/boris`);
     assert.strictEqual(
@@ -2604,7 +2596,7 @@ module('Integration | Store', function (hooks) {
   // yet — and records every card write the tab sends in the meantime. `fail`
   // makes the held create report an error instead of its response when it is
   // released.
-  function holdCreateResponse(held: CardDefType, opts?: { fail?: true }) {
+  function holdCreateResponse(held: CardDef, opts?: { fail?: true }) {
     let cardService = getService('card-service') as any;
     let originalFetchJSON = cardService.fetchJSON.bind(cardService);
     let writes: { method: string; body: LooseSingleCardDocument }[] = [];
@@ -2939,7 +2931,7 @@ module('Integration | Store', function (hooks) {
 
     let gallery = (await storeService.get(
       `${testRealmURL}Gallery/hero`,
-    )) as CardDefType;
+    )) as CardDef;
 
     assert.ok((gallery as any).hero, 'hero is loaded from included resources');
     assert.strictEqual(
@@ -3034,7 +3026,7 @@ module('Integration | Store', function (hooks) {
 
     let gallery = (await storeService.get(
       `${testRealmURL}Gallery/cached`,
-    )) as CardDefType;
+    )) as CardDef;
 
     assert.strictEqual(
       (gallery as any).hero,
@@ -3417,7 +3409,7 @@ module('Integration | Store', function (hooks) {
     );
     let instance = (await storeService.get(
       `${testRealmURL}Person/hassan`,
-    )) as CardDefType;
+    )) as CardDef;
     await testRealm.write(
       `person.gts`,
       `
@@ -3440,7 +3432,7 @@ module('Integration | Store', function (hooks) {
       .containsText('Hello', 'the instance rendered with the new code');
     let newInstance = storeService.peek(
       `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
+    ) as CardDef;
     assert.notStrictEqual(
       instance[localId],
       newInstance[localId],
@@ -3455,9 +3447,7 @@ module('Integration | Store', function (hooks) {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
-    let original = storeService.peek(
-      `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
+    let original = storeService.peek(`${testRealmURL}Person/hassan`) as CardDef;
     assert.true(
       original instanceof PersonDef,
       'the card starts out as a Person',
@@ -3490,9 +3480,7 @@ module('Integration | Store', function (hooks) {
         EmployeeDef,
       { timeout: 5_000 },
     );
-    let reloaded = storeService.peek(
-      `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
+    let reloaded = storeService.peek(`${testRealmURL}Person/hassan`) as CardDef;
     assert.true(
       reloaded instanceof EmployeeDef,
       'the store now holds an Employee instance for the same id',
@@ -3526,9 +3514,7 @@ module('Integration | Store', function (hooks) {
       },
     );
     await waitFor('[data-test-manager-badge]');
-    let original = storeService.peek(
-      `${testRealmURL}Manager/m1`,
-    ) as CardDefType;
+    let original = storeService.peek(`${testRealmURL}Manager/m1`) as CardDef;
     assert.true(original instanceof ManagerDef, 'the card starts as a Manager');
 
     // Re-point at the ancestor type. A subtype check would treat the Manager
@@ -3912,7 +3898,7 @@ module('Integration | Store', function (hooks) {
     // placeholder in front of it or detach its autosave.
     let instance = (await storeService.add(
       new PersonDef({ name: 'Brand New' }),
-    )) as CardDefType;
+    )) as CardDef;
     let url = instance.id!;
     assert.ok(url, 'the new card was assigned a remote id');
 
@@ -4234,7 +4220,7 @@ module('Integration | Store', function (hooks) {
       storeService.addReference(url);
       await storeService.flush();
 
-      let instance = storeService.peek(url) as CardDefType;
+      let instance = storeService.peek(url) as CardDef;
       (instance as any).name = 'Aged Out Edit';
       storeService.save(url);
       await settled();
@@ -4313,7 +4299,7 @@ module('Integration | Store', function (hooks) {
       await events.nextEventFor(url);
       storeService.addReference(url);
       await storeService.flush();
-      let preReset = storeService.peek(url) as CardDefType;
+      let preReset = storeService.peek(url) as CardDef;
 
       await writePerson('Person/reset-mid-reload.json', 'After Reset');
       let event = await events.nextEventFor(url);
@@ -4335,7 +4321,7 @@ module('Integration | Store', function (hooks) {
       await readHeld.promise;
 
       storeService.resetCache();
-      let replacement = (await storeService.get(url)) as CardDefType;
+      let replacement = (await storeService.get(url)) as CardDef;
       assert.notStrictEqual(
         replacement[localId],
         preReset[localId],
@@ -4384,7 +4370,7 @@ module('Integration | Store', function (hooks) {
       await events.nextEventFor(url);
       storeService.addReference(url);
       await storeService.flush();
-      let preReset = storeService.peek(url) as CardDefType;
+      let preReset = storeService.peek(url) as CardDef;
 
       await writePerson('Person/code-change-mid-reload.json', 'After Reset');
       let event = await events.nextEventFor(url);
@@ -4407,10 +4393,10 @@ module('Integration | Store', function (hooks) {
 
       storeService.refreshReferencesForCodeChange('test code change');
       await waitUntil(() => {
-        let current = storeService.peek(url) as CardDefType | undefined;
+        let current = storeService.peek(url) as CardDef | undefined;
         return current !== undefined && current[localId] !== preReset[localId];
       });
-      let reestablished = storeService.peek(url) as CardDefType;
+      let reestablished = storeService.peek(url) as CardDef;
 
       releaseRead.fulfill();
       await settled();
@@ -4503,7 +4489,7 @@ module('Integration | Store', function (hooks) {
       await waitUntil(() =>
         hold!.pendingCallers().includes('instance:another-tab'),
       );
-      let instance = storeService.peek(mine) as CardDefType;
+      let instance = storeService.peek(mine) as CardDef;
       (instance as any).name = 'Mine Edited';
       let ownSave = storeService.save(mine);
       await waitUntil(() => hold!.pendingCallers().length === 2);
@@ -4650,9 +4636,7 @@ module('Integration | Store', function (hooks) {
 
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
-    let instance = storeService.peek(
-      `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
+    let instance = storeService.peek(`${testRealmURL}Person/hassan`) as CardDef;
 
     (instance as any).friends = [newInstance];
 
@@ -4674,9 +4658,7 @@ module('Integration | Store', function (hooks) {
 
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
-    let instance = storeService.peek(
-      `${testRealmURL}Person/hassan`,
-    ) as CardDefType;
+    let instance = storeService.peek(`${testRealmURL}Person/hassan`) as CardDef;
 
     (instance as any).friends = [newInstance];
 

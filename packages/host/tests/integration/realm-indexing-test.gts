@@ -1,6 +1,19 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  linksTo,
+  linksToMany,
+  containsMany,
+  field,
+  FieldDef,
+} from '@cardstack/base/card-api';
+import DateTimeField from '@cardstack/base/datetime';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
@@ -36,20 +49,6 @@ import {
   cardInfo,
   getFileCreatedAt,
 } from '../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  linksTo,
-  linksToMany,
-  containsMany,
-  DateTimeField,
-  field,
-  FieldDef,
-  NumberField,
-  setupBaseRealm,
-  StringField,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
@@ -101,7 +100,6 @@ function expectSearchDoc(
 
 module(`Integration | realm indexing`, function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;

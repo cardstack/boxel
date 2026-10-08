@@ -15,13 +15,11 @@ import {
   setupRealmServerEndpoints,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
 

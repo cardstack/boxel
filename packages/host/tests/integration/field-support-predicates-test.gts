@@ -4,7 +4,6 @@ import { module, test } from 'qunit';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -50,7 +49,6 @@ module(
   'Integration | field-support | linksTo sentinel predicates',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupCardLogs(
       hooks,
       async () => await loader.import('@cardstack/base/card-api'),

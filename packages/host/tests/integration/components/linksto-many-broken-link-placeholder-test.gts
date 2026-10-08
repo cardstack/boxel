@@ -1,5 +1,15 @@
 import { click, fillIn, render, waitFor, waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  getDataBucket,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -19,22 +29,9 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  FileDef,
-  getDataBucket,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const GHOST_URL = `${testRealmURL}Pet/ghost`;
 const MANGO_URL = `${testRealmURL}Pet/mango`;
@@ -93,7 +90,7 @@ function makeCards() {
 // rather than surfacing a persisted error doc.
 async function createPerson(
   relationships: LooseCardResource['relationships'],
-): Promise<CardDefType & { pets: unknown }> {
+): Promise<CardDef & { pets: unknown }> {
   let store = getService('store');
   let resource: LooseCardResource = {
     attributes: { firstName: 'Hassan' },
@@ -104,7 +101,7 @@ async function createPerson(
     resource,
     { data: resource },
     new URL(testRealmURL),
-  )) as CardDefType & { pets: unknown };
+  )) as CardDef & { pets: unknown };
 }
 
 let loader: Loader;
@@ -113,7 +110,6 @@ module(
   'Integration | linksToMany broken-link placeholder (per element)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -502,7 +498,7 @@ module(
         resource,
         { data: resource },
         new URL(testRealmURL),
-      )) as CardDefType;
+      )) as CardDef;
       let missingImage = `${testRealmURL}Gallery/images/photo.jpg`;
       getDataBucket(gallery).set('photos', [
         {

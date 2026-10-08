@@ -8,6 +8,8 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 
@@ -32,14 +34,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -93,8 +87,6 @@ module('Integration | Component | hydratable-card', function (hooks) {
     activeRealms: [testRealmURL],
     autostart: true,
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Person extends CardDef {

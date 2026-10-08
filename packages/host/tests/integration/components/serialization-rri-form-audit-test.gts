@@ -1,5 +1,14 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  FieldDef,
+  field,
+  linksTo,
+  serializeCard,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -20,16 +29,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  FieldDef,
-  field,
-  linksTo,
-  serializeCard,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -37,7 +36,6 @@ let loader: Loader;
 
 module('Integration | serialization | RRI form audit', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     let permissions: Permissions = { canWrite: true, canRead: true };

@@ -1,5 +1,7 @@
 import { fillIn, triggerEvent } from '@ember/test-helpers';
 
+import { field, contains, CardDef, Component } from '@cardstack/base/card-api';
+import EmailField from '@cardstack/base/email';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -10,14 +12,6 @@ import {
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { provideConsumeContext, setupCardLogs } from '../helpers';
-import {
-  setupBaseRealm,
-  EmailField,
-  field,
-  contains,
-  CardDef,
-  Component,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -26,7 +20,6 @@ let loader: Loader;
 
 module('Integration | EmailField', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   setupMockMatrix(hooks);
 

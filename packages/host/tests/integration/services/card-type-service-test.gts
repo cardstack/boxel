@@ -10,7 +10,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -31,7 +30,6 @@ module('Integration | services | card-type-service', function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({

@@ -1,6 +1,8 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { waitUntil } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -26,19 +28,11 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
 } from '../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  StringField,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 module('Integration | store search public API', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let realm: Realm;
   let storeService: StoreService;

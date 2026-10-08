@@ -1,12 +1,10 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Card | workspace | pure functions', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let ws: typeof import('@cardstack/base/workspace');
 

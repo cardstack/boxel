@@ -1,3 +1,14 @@
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  getDataBucket,
+  getQueryableValue,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -14,18 +25,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  getDataBucket,
-  getQueryableValue,
-  linksTo,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -49,7 +48,6 @@ let loader: Loader;
 
 module('Integration | prerender serialize cycle guard', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

@@ -1,5 +1,7 @@
 import { settled } from '@ember/test-helpers';
 
+import { CardDef, contains, field, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -23,19 +25,9 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  linksTo,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const testRealm2URL = 'http://test-realm/test2/';
 
@@ -107,7 +99,6 @@ function ownerContents(prefix: string, petId: string) {
 
 module('Integration | shared link target reuse', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -188,10 +179,10 @@ module('Integration | shared link target reuse', function (hooks) {
     return (storeService as any).hasInflightCardLoad(id) as boolean;
   }
 
-  async function read(id: string): Promise<CardDefType> {
+  async function read(id: string): Promise<CardDef> {
     storeService.addReference(id);
     await storeService.flush();
-    return storeService.peek(id) as CardDefType;
+    return storeService.peek(id) as CardDef;
   }
 
   // The shape a page of results arrives in. Every parent is read first, so each
@@ -203,7 +194,7 @@ module('Integration | shared link target reuse', function (hooks) {
   // between, so nothing overlaps and every read after the first is one an
   // instance already in hand could answer.
   async function readThenRenderEach(ids: string[]) {
-    let owners: CardDefType[] = [];
+    let owners: CardDef[] = [];
     for (let id of ids) {
       owners.push(await read(id));
     }

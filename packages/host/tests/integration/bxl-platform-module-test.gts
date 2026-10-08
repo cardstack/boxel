@@ -14,7 +14,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import {
   bxlTrackingPol100Renewal,
   bxlTrackingRealmContents,
@@ -36,7 +35,6 @@ import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 // generation all evaluate the imported expressions.
 module('Integration | bxl platform module', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let realm: Realm;
 
