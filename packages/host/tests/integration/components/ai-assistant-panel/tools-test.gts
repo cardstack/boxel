@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn, find } from '@ember/test-helpers';
+import { waitFor, waitUntil, click, fillIn, find } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -38,6 +38,7 @@ import {
   withCachedRealmSetup,
   setupRealmCacheTeardown,
   addSkillToAiAssistant,
+  delay,
   percySnapshot,
   testRealmURL,
   setupCardLogs,
@@ -2496,14 +2497,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   // pass — stays in flight.
   function holdDiscoveredSkillLoads() {
     let store = getService('store');
-    let firstLoadReached = new Deferred<void>();
     let release = new Deferred<void>();
     let heldLoads = 0;
     let originalGet = store.get;
     (store as any).get = async (id: string, ...rest: unknown[]) => {
       if (id === discoveredSkillUrl) {
         heldLoads++;
-        firstLoadReached.fulfill();
         await release.promise;
       }
       return (originalGet as any).call(store, id, ...rest);
@@ -2513,29 +2512,33 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         return heldLoads;
       },
       async reached() {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          await Promise.race([
-            firstLoadReached.promise,
-            new Promise<never>((_, reject) => {
-              timer = setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      'the final edit never started building the discovered host tool (no load of its skill within 5s)',
-                    ),
-                  ),
-                5000,
-              );
-            }),
-          ]);
-        } finally {
-          clearTimeout(timer);
-        }
+        await waitUntil(() => heldLoads > 0, {
+          timeout: 5000,
+          timeoutMessage:
+            'the final edit never started building the discovered host tool (no load of its skill within 5s)',
+        });
       },
       release() {
         release.fulfill();
-        delete (store as any).get;
+        (store as any).get = originalGet;
+      },
+    };
+  }
+
+  // Fails every store load of the discovered skill, so every build of its
+  // tool rejects deterministically.
+  function failDiscoveredSkillLoads() {
+    let store = getService('store');
+    let originalGet = store.get;
+    (store as any).get = async (id: string, ...rest: unknown[]) => {
+      if (id === discoveredSkillUrl) {
+        throw new Error('simulated skill load failure');
+      }
+      return (originalGet as any).call(store, id, ...rest);
+    };
+    return {
+      restore() {
+        (store as any).get = originalGet;
       },
     };
   }
@@ -2607,11 +2610,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
         { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
       );
-      // Keep every build of the host tool held while the drain runs, then
-      // release well inside the drain's patience (a 1s stuck-processing
-      // timeout and ten ~100ms finalization retries in tests), so the drain
-      // has to wait for a build that is still slow.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // The restarted pass re-enters the final edit and starts its own build
+      // of the still-held tool — the second held load is the deterministic
+      // signal that the restart happened while the build was in flight.
+      await waitUntil(() => hold.heldLoads >= 2, {
+        timeout: 5000,
+        timeoutMessage:
+          'the restarted room pass never re-entered the held tool build',
+      });
     } finally {
       hold.release();
     }
@@ -2673,7 +2679,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
         matrixService.aiBotUserId,
       );
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
     } finally {
       hold.release();
     }
@@ -2691,6 +2697,59 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom(`[data-test-room="${roomId}"]`)
       .doesNotContainText('A stale preview.');
+  });
+
+  test('a host tool whose build keeps failing gets a terminal invalid result and the room keeps processing', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    let fail = failDiscoveredSkillLoads();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      // settled() rides the drain's bounded finalization retries (each a
+      // run-loop timer) through to its give-up pass.
+      await settled();
+    } finally {
+      fail.restore();
+    }
+    await settled();
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(
+      hostToolResults.length,
+      1,
+      'exactly one terminal result is posted for the request whose build kept failing',
+    );
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'invalid',
+      'the unbuildable tool is resolved invalid',
+    );
+    assert
+      .dom('[data-test-tool-call-apply="applying"]')
+      .doesNotExist('no tool is left spinning in the applying state');
+
+    // The failing build must not poison room processing: a later bot message
+    // in the same room still loads and renders.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Still alive',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: { context: { agentId: getService('matrix-service').agentId } },
+    });
+    await settled();
+    assert
+      .dom(`[data-test-room="${roomId}"]`)
+      .containsText('Still alive', 'the room keeps processing later events');
   });
 
   test('Accept All bar still renders for a command that requires user approval', async function (assert) {
