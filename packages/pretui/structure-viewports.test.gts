@@ -376,6 +376,25 @@ module('Pretui | AnimatedImage', function (hooks) {
     );
   });
 
+  test('@fill drops the frame and @controlPlacement moves the control', async function (assert) {
+    await render(<template>
+      <AnimatedImage @src={{PIXEL}} @alt='A rising bar' @playing={{true}} @fill={{true}} @controlPlacement='end' />
+    </template>);
+    let root = must('[data-test-pretui-animated-image]');
+    assert.strictEqual(root.dataset['fill'], 'true', 'full-bleed');
+    assert.strictEqual(root.dataset['controlPlacement'], 'end', 'control in the end corner');
+    assert.strictEqual(getComputedStyle(root).borderRadius, '0px', 'no frame radius');
+  });
+
+  test('defaults: framed, control in the start corner', async function (assert) {
+    await render(<template>
+      <AnimatedImage @src={{PIXEL}} @alt='A rising bar' @playing={{true}} />
+    </template>);
+    let root = must('[data-test-pretui-animated-image]');
+    assert.notOk(root.dataset['fill'], 'not full-bleed unless asked');
+    assert.strictEqual(root.dataset['controlPlacement'], 'start', 'start corner');
+  });
+
   test('uncontrolled: the control flips playback and the name follows', async function (assert) {
     await render(<template>
       <AnimatedImage

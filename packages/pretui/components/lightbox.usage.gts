@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { Lightbox } from './lightbox';
+import type { LightboxSection } from './lightbox';
 import type { MediaAssetSpec } from '../internal/media-viewer';
 import { platePoster } from '../media-examples';
 import { Token } from './token';
@@ -56,6 +57,11 @@ class LightboxUsage extends Component {
   @tracked counter = true;
   @tracked zoom = true;
   @tracked showUnknown = false;
+  @tracked layout: 'grid' | 'justified' = 'grid';
+  @tracked filmstrip = false;
+  @tracked download = false;
+  @tracked sectioned = false;
+  layouts = ['grid', 'justified'];
   @tracked opened = '—';
 
   setColumns = (v: number | null) => (this.columns = v ?? 4);
@@ -63,6 +69,11 @@ class LightboxUsage extends Component {
   setCounter = (v: boolean) => (this.counter = v);
   setZoom = (v: boolean) => (this.zoom = v);
   setShowUnknown = (v: boolean) => (this.showUnknown = v);
+  setLayout = (v: string | null) =>
+    (this.layout = v === 'justified' ? 'justified' : 'grid');
+  setFilmstrip = (v: boolean) => (this.filmstrip = v);
+  setDownload = (v: boolean) => (this.download = v);
+  setSectioned = (v: boolean) => (this.sectioned = v);
   noteOpen = (index: number) => (this.opened = `opened #${index + 1}`);
   noteChange = (index: number) => (this.opened = `showing #${index + 1}`);
   noteClose = () => (this.opened = 'closed');
@@ -70,11 +81,26 @@ class LightboxUsage extends Component {
   get assets(): readonly MediaAssetSpec[] {
     return this.showUnknown ? this.galleryWithUnknown : this.gallery;
   }
+  /** The same plates as two chapters, for the one-viewer-across-sections
+   * demo: open the last plate of the first and swipe into the second. */
+  get sections(): readonly LightboxSection[] | undefined {
+    if (!this.sectioned) {
+      return undefined;
+    }
+    const all = this.assets;
+    return [
+      { title: 'The sale', caption: 'Plates from the auction floor.', assets: all.slice(0, 4) },
+      { title: 'The cupping', assets: all.slice(4) },
+    ];
+  }
   get usage(): string {
     return [
       '<Lightbox',
-      '  @assets={{this.assets}}',
+      this.sectioned ? '  @sections={{this.sections}}' : '  @assets={{this.assets}}',
       `  @columns={{${this.columns}}}`,
+      ...(this.layout === 'justified' ? ["  @layout='justified'"] : []),
+      ...(this.filmstrip ? ['  @filmstrip={{true}}'] : []),
+      ...(this.download ? ['  @download={{true}}'] : []),
       '  @onChange={{this.note}}',
       '/>',
     ].join('\n');
@@ -89,6 +115,10 @@ class LightboxUsage extends Component {
       <:example>
         <Lightbox
           @assets={{this.assets}}
+          @sections={{this.sections}}
+          @layout={{this.layout}}
+          @filmstrip={{this.filmstrip}}
+          @download={{this.download}}
           @columns={{this.columns}}
           @loop={{this.loop}}
           @counter={{this.counter}}
@@ -137,6 +167,40 @@ class LightboxUsage extends Component {
           @defaultValue={{true}}
           @description='Offer the zoom button. Pinch, double-tap and wheel zoom are unaffected.'
           @onInput={{this.setZoom}}
+        />
+        <Args.String
+          @name='layout'
+          @value={{this.layout}}
+          @options={{this.layouts}}
+          @defaultValue='grid'
+          @description="'grid' keeps every tile at its own ratio in a column, so a portrait makes its row taller. 'justified' lays equal-height rows edge to edge with nothing cropped — the Google Photos / Flickr layout, and the one for mixed orientations."
+          @onInput={{this.setLayout}}
+        />
+        <Args.String
+          @name='rowHeight'
+          @defaultValue='clamp(96px, 16vw, 200px)'
+          @description="Target row height for the justified layout; rows stretch from it to fill the width."
+        />
+        <Args.Bool
+          @name='filmstrip'
+          @value={{this.filmstrip}}
+          @defaultValue={{false}}
+          @description='A thumbnail rail along the bottom of the open viewer; the current photo is wider, lit and kept centred. Hides with the chrome when a tap toggles it.'
+          @onInput={{this.setFilmstrip}}
+        />
+        <Args.Bool
+          @name='download'
+          @value={{this.download}}
+          @defaultValue={{false}}
+          @description="A save button in the viewer's toolbar: a real link with download on the open photo's full-size file."
+          @onInput={{this.setDownload}}
+        />
+        <Args.Bool
+          @name='sections'
+          @value={{this.sectioned}}
+          @defaultValue={{false}}
+          @description='{title?, caption?, assets}[] instead of @assets: a grid per chapter, ONE viewer over all of them, so a swipe carries on from one chapter into the next. Head each with <:section as |section index|>, or take the default title and caption. (Toggle here splits the plates into two chapters.)'
+          @onInput={{this.setSectioned}}
         />
         <Args.Bool
           @name='showUnknown'

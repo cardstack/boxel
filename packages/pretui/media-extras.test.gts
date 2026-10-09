@@ -9,7 +9,7 @@
 // phase machine, the slider semantics, the teardown — and never a decode, a
 // WebGL context or a network fetch.
 import { module, test } from 'qunit';
-import { render, clearRender, click, triggerKeyEvent } from '@ember/test-helpers';
+import { render, clearRender, click, triggerKeyEvent, waitFor, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 
 import { Lightbox, isLightboxable } from './components/lightbox';
@@ -161,6 +161,67 @@ module('Pretui | media extras', function (hooks) {
       document.querySelector('.pretui-lb-note'),
       'and the component says one asset was left out',
     );
+  });
+
+  test('Lightbox @sections heads each chapter but numbers the whole set', async function (assert) {
+    const sections = [
+      { title: 'Arrivals', caption: 'Hellos', assets: IMAGES },
+      { title: 'The ribbon', assets: [IMAGES[0]!] },
+    ];
+    await render(<template><Lightbox @sections={{sections}} @layout='justified' /></template>);
+    assert.strictEqual(document.querySelectorAll('.pretui-lb-section').length, 2, 'one section per chapter');
+    assert.strictEqual(document.querySelectorAll('.pretui-lb-gallery').length, 1, 'but one gallery, so one viewer');
+    assert.dom('.pretui-lb-section-title').exists({ count: 2 }, 'default headings');
+    assert.dom('.pretui-lb-section-caption').exists({ count: 1 }, 'a caption only where given');
+    const links = [...document.querySelectorAll('a.pretui-lb-link')];
+    assert.strictEqual(links.length, 3, 'every image');
+    assert.ok(
+      (links[2]!.getAttribute('aria-label') ?? '').includes('3 of 3'),
+      'positions run across sections, not within them',
+    );
+    assert.strictEqual(
+      document.querySelector('.pretui-lb-grid')?.getAttribute('data-layout'),
+      'justified',
+      'the layout reaches the grid',
+    );
+  });
+
+  test('Lightbox <:section> replaces the default heading', async function (assert) {
+    const sections = [{ title: 'Arrivals', assets: IMAGES }];
+    await render(<template>
+      <Lightbox @sections={{sections}}>
+        <:section as |section index|><h2 data-test-custom>{{index}} {{section.title}}</h2></:section>
+      </Lightbox>
+    </template>);
+    assert.dom('[data-test-custom]').hasText('0 Arrivals');
+    assert.dom('.pretui-lb-section-title').doesNotExist();
+  });
+
+  test('Lightbox @filmstrip and @download add a rail and a save link; Escape stays inside', async function (assert) {
+    let hostSawEscape = false;
+    const hostEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') hostSawEscape = true;
+    };
+    document.addEventListener('keydown', hostEscape);
+    try {
+      await render(<template><Lightbox @assets={{IMAGES}} @filmstrip={{true}} @download={{true}} /></template>);
+      await click('a.pretui-lb-link');
+      await waitFor('.pretui-pswp-filmstrip');
+      assert.strictEqual(document.querySelectorAll('.pretui-pswp-thumb').length, 2, 'one thumb per image');
+      assert.strictEqual(
+        document.querySelector('.pretui-pswp-thumb[aria-current="true"]'),
+        document.querySelectorAll('.pretui-pswp-thumb')[0],
+        'the open image is marked current',
+      );
+      const save = document.querySelector('a.pretui-pswp-save') as HTMLAnchorElement | null;
+      assert.ok(save?.hasAttribute('download'), 'save is a download link');
+      assert.strictEqual(save?.getAttribute('href'), PLATE, 'pointing at the open image');
+      await triggerKeyEvent(document, 'keydown', 'Escape');
+      await waitUntil(() => !document.querySelector('.pswp'), { timeout: 3000 });
+      assert.false(hostSawEscape, 'the keypress that closed the viewer never reached the host');
+    } finally {
+      document.removeEventListener('keydown', hostEscape);
+    }
   });
 
   // ── Waveform ───────────────────────────────────────────────────────────
