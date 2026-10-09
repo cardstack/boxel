@@ -3182,6 +3182,66 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     }
   });
 
+  test('a stop whose timestamp reads earlier than the answer still stops that answer', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      // A stop's local echo carries the client's clock, which can run behind
+      // the server's; here it reads earlier than every other event.
+      await stopWhileStreaming(
+        roomId,
+        'stopped-with-skewed-clock',
+        async () => {
+          simulateRemoteMessage(
+            roomId,
+            '@testuser:localhost',
+            {},
+            {
+              type: APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+              origin_server_ts: 1,
+            },
+          );
+        },
+      );
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status }) => ({
+            toolCallId,
+            status,
+          })),
+        ),
+        JSON.stringify([
+          { toolCallId: 'stopped-with-skewed-clock', status: 'canceled' },
+        ]),
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("Stop is not offered for a tool another of the user's clients runs", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'checking correctness',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'other-client-tool', name: 'checkCorrectness', arguments: '{}' },
+      ],
+      data: { context: { agentId: 'another-client-agent' } },
+    });
+    await waitFor('[data-test-accept-all]');
+    assert
+      .dom('[data-test-stop-generating]')
+      .doesNotExist('only the client that runs the tool offers Stop for it');
+    assert
+      .dom('[data-test-accept-all]')
+      .exists('this client offers the call like any other');
+  });
+
   test('a message from the user after a stop lets the next tools run', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let stub = stubToolValidation();

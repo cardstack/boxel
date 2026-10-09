@@ -2143,9 +2143,11 @@ export default class Room extends Component<Signature> {
   }
 
   // The assistant's loop is under way for its last message: the answer is
-  // still streaming, or a tool that runs without the user's click (here or
-  // in ai-bot) has no result yet, after which ai-bot starts the next turn on
-  // its own. Stop is offered for all of it, and a stop ends the loop.
+  // still streaming, or a tool that runs without the user's click has no
+  // result yet, after which ai-bot starts the next turn on its own. Stop is
+  // offered for all of it, and a stop ends the loop. A host tool runs only in
+  // the client that sent the request, so only that client counts it as
+  // running; elsewhere the tool shows as an ordinary call.
   @cached
   private get assistantLoopActive() {
     let lastMessage = this.messages[this.messages.length - 1];
@@ -2163,6 +2165,8 @@ export default class Room extends Component<Signature> {
     let activeMode = this.args.roomResource.getActiveLLMModeForMessage(
       lastMessage.eventId,
     );
+    let isOwnedByCurrentAgent =
+      lastMessage.agentId === this.matrixService.agentId;
     return lastMessage.tools.some(
       (tool) =>
         (tool.status === 'ready' ||
@@ -2170,8 +2174,7 @@ export default class Room extends Component<Signature> {
           tool.status === undefined) &&
         !tool.awaitsApproval &&
         (tool.executedBy === AI_BOT_EXECUTOR ||
-          // Whichever of the user's clients sent the request runs it.
-          isAutoExecutableTool(tool, activeMode, true)),
+          isAutoExecutableTool(tool, activeMode, isOwnedByCurrentAgent)),
     );
   }
 

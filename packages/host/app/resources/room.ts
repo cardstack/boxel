@@ -311,20 +311,20 @@ export class RoomResource extends Resource<Args> {
    * force (see `stopInForce`): its tools that have not started never run, and
    * Stop is no longer offered for it. Read from the room's events rather than
    * kept per tab, so every client and every reload agrees.
+   *
+   * While a stop is in force no person has written since it, and ai-bot
+   * starts no new answer, so the stopped message is the latest one from the
+   * bot. Timestamps aren't compared: a stop's local echo carries this
+   * client's clock, which can disagree with the server's.
    */
   @cached
   get stoppedMessageEventId(): string | undefined {
-    let stop = stopInForce(this.sortedEvents, this.matrixService.aiBotUserId);
-    if (!stop) {
+    if (!stopInForce(this.sortedEvents, this.matrixService.aiBotUserId)) {
       return undefined;
     }
-    let stoppedAt = stop.origin_server_ts;
     for (let i = this.messages.length - 1; i >= 0; i--) {
       let message = this.messages[i];
-      if (
-        message.author.userId === this.matrixService.aiBotUserId &&
-        message.created.getTime() <= stoppedAt
-      ) {
+      if (message.author.userId === this.matrixService.aiBotUserId) {
         return message.eventId;
       }
     }
