@@ -890,8 +890,10 @@ export default class ToolService extends Service {
       // that un-sticks the UI and the waiting ai-bot is only sent once this
       // settles.
       let performTool = async (): Promise<CardDef | undefined> => {
-        // A manual run can start before the tool's command is resolved.
-        await command.resolve();
+        // A manual run can start before the tool's command is resolved, or
+        // after it resolved to no command while its declaring skill was still
+        // loading.
+        await command.resolve({ retryUnresolved: true });
         // If we don't find it in the one-offs, start searching for
         // one in the skills we can construct
         let toolCodeRef = command.codeRef;

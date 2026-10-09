@@ -330,10 +330,20 @@ export default class MessageBuilder {
     tool.toolRequest = decodeToolRequest(encodedToolRequest);
     tool.toolRequestEventTs = this.event.origin_server_ts;
     // The first chunk can carry a name that is not complete yet; resolve the
-    // tool again for the name it has now. A no-op when the name is unchanged.
-    tool.resolve().catch(() => {
-      // Recorded on the tool; the tool drain retries when it validates.
-    });
+    // tool again for the name it has now (a no-op when the name is
+    // unchanged). Once the request is finished, a call nothing has answered
+    // that resolved to no command is resolved again too: the skill declaring
+    // it may have loaded since. Every tab does this, not only the one whose
+    // drain validates the call, so the pill and a manual run see the command.
+    let finished = !!(this.event.content as CardMessageContent)
+      .isStreamingFinished;
+    tool
+      .resolve({
+        retryUnresolved: finished && tool.toolCallStatus === 'ready',
+      })
+      .catch(() => {
+        // Recorded on the tool; the tool drain retries when it validates.
+      });
   }
 
   private buildMessageCommands(message: Message) {

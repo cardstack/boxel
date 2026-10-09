@@ -2438,11 +2438,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     name: 'default',
   });
 
-  // Seeds the readRealmFile result that teaches the room the host tool, then
-  // the streaming bot message a later final edit replaces. Returns that
-  // message's event id.
-  async function seedDiscoveredHostToolTurn(roomId: string) {
-    let agentId = getService('matrix-service').agentId;
+  // The readRealmFile result that teaches the room the host tool.
+  function simulateDiscoveredToolResult(roomId: string) {
     simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
@@ -2480,6 +2477,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       },
       { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
     );
+  }
+
+  // Seeds the readRealmFile result that teaches the room the host tool, then
+  // the streaming bot message a later final edit replaces. Returns that
+  // message's event id.
+  async function seedDiscoveredHostToolTurn(roomId: string) {
+    let agentId = getService('matrix-service').agentId;
+    simulateDiscoveredToolResult(roomId);
 
     let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2852,6 +2857,122 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       hostToolResults.map((event) => event.content['m.relates_to']?.key),
       ['applied'],
       'only the existing result, no contradictory invalid',
+    );
+  });
+
+  test('a call whose command fails to load gets a terminal invalid result saying it could not be prepared', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // The declaring skill loads, but importing the tool's command module
+    // throws, so resolving the tool rejects rather than finding no command.
+    // Patched on the prototype so a loader reset mid-test is covered too.
+    let loaderPrototype = Object.getPrototypeOf(
+      getService('loader-service').loader,
+    );
+    let originalImport = loaderPrototype.import;
+    loaderPrototype.import = async function (
+      this: unknown,
+      moduleId: string,
+      ...rest: unknown[]
+    ) {
+      if (String(moduleId).includes('read-file-for-ai-assistant')) {
+        throw new Error('simulated command module load failure');
+      }
+      return originalImport.call(this, moduleId, ...rest);
+    };
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      loaderPrototype.import = originalImport;
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(hostToolResults.length, 1, 'exactly one result');
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'invalid',
+      'the call is reported invalid',
+    );
+    assert.true(
+      String(hostToolResults[0]?.content.failureReason).includes(
+        'could not be prepared (simulated command module load failure)',
+      ),
+      `the reason names the load failure: ${hostToolResults[0]?.content.failureReason}`,
+    );
+    assert
+      .dom('[data-test-tool-call-apply="applying"]')
+      .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let otherAgentContext = { context: { agentId: 'another-agent' } };
+
+    // Another agent's turn streams a call to the host tool before the room
+    // has learned where that tool is declared, so it resolves to no command.
+    let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'other-agent-read', name: discoveredHostToolName },
+      ],
+      data: otherAgentContext,
+    });
+    await settled();
+    let roomResource = getService('matrix-service').roomResources.get(roomId)!;
+    let tool = () =>
+      roomResource
+        .messageForEventId(streamingEventId)!
+        .tools.find((t) => t.id === 'other-agent-read')!;
+    assert.strictEqual(tool().codeRef, undefined, 'no command is found yet');
+
+    // The result that declares the tool lands, then the request finishes.
+    simulateDiscoveredToolResult(roomId);
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'other-agent-read',
+          name: discoveredHostToolName,
+          arguments: JSON.stringify({
+            attributes: { fileIdentifier: `${testRealmURL}hello.txt` },
+          }),
+        },
+      ],
+      'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+      data: otherAgentContext,
+    });
+    await settled();
+
+    assert.strictEqual(
+      tool().codeRef?.module,
+      '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+      "the finished call resolves to its command in a tab whose drain doesn't run it",
+    );
+    assert.strictEqual(tool().actionVerb, 'Send', "the command's action verb");
+    assert.strictEqual(
+      getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'other-agent-read',
+      ).length,
+      0,
+      "this tab does not run another agent's call",
     );
   });
 
