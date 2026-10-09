@@ -116,6 +116,24 @@ module('Integration | Choreo gallery | films', function (hooks) {
     assert.dom('.tw-face .film-grip').exists('the frame can be resized');
   });
 
+  test('the stage’s controls keep their own ink, type and cursor inside the site', async function (assert) {
+    await renderFilm('towers', 'TowersDemo', 'isolated');
+    await waitFor('.tw-face iframe.film-frame');
+
+    let way = getComputedStyle(find('.tw-face [data-film-theater]')!);
+    assert.strictEqual(
+      way.color,
+      'rgb(242, 233, 210)',
+      'the theater button wears its own ink, not the page’s',
+    );
+    assert.strictEqual(way.fontSize, '11px', 'and its own type');
+    assert.strictEqual(
+      getComputedStyle(find('.tw-face .film-grip')!).cursor,
+      'nwse-resize',
+      'the grip shows the resize cursor',
+    );
+  });
+
   test('theater brings the stage to the front, and the mark leads back', async function (assert) {
     await renderFilm('sagrada', 'SagradaDemo', 'isolated');
     await waitFor('.sg-face iframe.film-frame');
