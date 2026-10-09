@@ -61,8 +61,20 @@ function seconds(value: number | undefined | null) {
   return value == null ? '–' : `${Math.round(value)} s`;
 }
 
-const TIERS = ['pending', 'failed', 'rough', 'good', 'great'] as const;
+const TIERS = [
+  'pending',
+  'unscored',
+  'failed',
+  'rough',
+  'good',
+  'great',
+] as const;
 export type EffectivenessTier = (typeof TIERS)[number];
+
+// Verdicts where the host, ai-bot or runner broke first: the run says nothing
+// about the model. Such a result is left unscored rather than counted as a
+// zero, and the report's mean leaves it out.
+const UNSCORED_VERDICTS = ['host-failure', 'bot-failure', 'runner-failure'];
 
 // The one place the score-to-tier thresholds live: the result card computes
 // its own tier with it, and the report tints its headline number with it.
@@ -101,6 +113,11 @@ export class EvaluationCard extends CardDef {
   // cards in the stack so they are part of the message context.
   @field initialCards = linksToMany(CardDef);
   @field initialFiles = linksToMany(FileDef);
+  // Skill features the evaluation needs switched on (`boxel-debug:feature:
+  // enable:<name>` in the room before the first prompt). A skill section
+  // between `<!-- feature:<name> -->` markers is left out of the prompt
+  // otherwise, so an evaluation of that section must name it here.
+  @field skillFeatures = containsMany(StringField);
 
   @field sessionReports = linksToMany(() => EvaluationReportCard, {
     query: {
@@ -292,10 +309,14 @@ export class EvaluationResultCard extends CardDef {
 
   // One number, 0 to 100. Half of it is the judged quality; the rest rewards
   // getting there in few turns, cheaply, with the prompt cache working, and
-  // quickly. A run that did not pass, or that a judge scored zero, is zero.
-  // Empty until the quality score is in.
+  // quickly. A run the model failed, or that a judge scored zero, is zero; a
+  // run with an unscored verdict has no score. Otherwise empty until the
+  // quality score is in.
   @field effectivenessScore = contains(NumberField, {
     computeVia: function (this: EvaluationResultCard) {
+      if (this.verdict && UNSCORED_VERDICTS.includes(this.verdict)) {
+        return undefined;
+      }
       if (this.verdict && this.verdict !== 'pass') {
         return 0;
       }
@@ -320,6 +341,9 @@ export class EvaluationResultCard extends CardDef {
     enumField(StringField, { options: [...TIERS] }),
     {
       computeVia: function (this: EvaluationResultCard): EffectivenessTier {
+        if (this.verdict && UNSCORED_VERDICTS.includes(this.verdict)) {
+          return 'unscored';
+        }
         return tierForScore(this.effectivenessScore);
       },
     },
@@ -489,6 +513,12 @@ export class EvaluationResultCard extends CardDef {
         .tier-failed {
           background: #ffd6d6;
         }
+        .tier-unscored {
+          background: transparent;
+          border: 1px dashed var(--boxel-300);
+          color: var(--boxel-450);
+          font-style: italic;
+        }
         .numbers {
           margin: 0;
           display: grid;
@@ -640,6 +670,12 @@ export class EvaluationResultCard extends CardDef {
         .tier-failed {
           background: #fde4e2;
           color: #8d231f;
+        }
+        .tier-unscored {
+          background: transparent;
+          border: 1px dashed var(--line);
+          color: var(--ink-soft);
+          font-style: italic;
         }
 
         .who {

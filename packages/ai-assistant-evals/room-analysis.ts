@@ -25,6 +25,13 @@ export interface RoomAnalysis {
   unansweredToolCalls: number;
   // realm.fs writes in run-realm-code calls the host applied.
   realmCodeWrites: number;
+  // Applied calls to the other tools that write into a realm (copy, patch,
+  // save, listing install/remix/use, ...). A card those write is as much the
+  // model's output as one written with run-realm-code.
+  toolWrites: number;
+  // URLs the model read with readRealmFile. A skill file under test that is
+  // missing here was never in the model's context.
+  filesRead: string[];
   filesWritten: string[];
   showCardIds: string[];
   lastBotBody: string;
@@ -32,7 +39,14 @@ export interface RoomAnalysis {
 
 const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
-// Every write call counts; the path is recorded only when it is a literal.
+// Tools, other than run-realm-code, whose applied call writes into a realm.
+// Tool names carry a hash suffix (`copy-card_eefc`), so match the prefix. The
+// list is kept by hand against packages/host/app/tools and the catalog's
+// commands (packages/catalog/contents/commands).
+const WRITE_TOOL =
+  /^(copy-card|copy-card-to-stack|copy-and-edit|copy-source|copy-file-to-realm|download-file-to-realm|patch-card-instance|patch-fields|patch-code|patch-theme|save-card|store-add|write-text-file|write-binary-file|apply-markdown-edit|add-field-to-card-definition|execute-atomic-operations|transform-cards|create-specs|generate-readme-spec|generate-example-cards|generate-thumbnail|migrate-skill|listing-create|listing-generate-example|listing-install|listing-remix|listing-use)(_|$)/;
+// realm.fs writes inside run-realm-code. Every write call counts; the path is
+// recorded only when it is a literal.
 const REALM_CODE_WRITE =
   /realm\.fs\.(?:writeText|replace)\(\s*(?:(['"`])([^'"`]+)\1)?/g;
 
@@ -80,6 +94,8 @@ export function analyzeRoom(
     failedToolCalls: [],
     unansweredToolCalls: 0,
     realmCodeWrites: 0,
+    toolWrites: 0,
+    filesRead: [],
     filesWritten: [],
     showCardIds: [],
     lastBotBody: '',
@@ -162,6 +178,18 @@ export function analyzeRoom(
       } else if (outcome.key !== 'applied') {
         result.failedToolCalls.push({ name, reason: outcome.reason });
       }
+      if (name === 'readRealmFile') {
+        let args = parseArguments(request.arguments);
+        let urls = args.attributes?.urls ?? args.urls;
+        if (Array.isArray(urls)) {
+          result.filesRead.push(
+            ...urls.filter((u: unknown): u is string => typeof u === 'string'),
+          );
+        }
+      }
+      if (WRITE_TOOL.test(name) && outcome?.key === 'applied') {
+        result.toolWrites++;
+      }
       if (name.startsWith('run-realm-code') && outcome?.key === 'applied') {
         // The host nests top-level fields under `attributes` before it runs a
         // call, so a model's flat `code` is a real write too.
@@ -210,5 +238,6 @@ export function analyzeRoom(
   }
 
   result.filesWritten = [...new Set(result.filesWritten)];
+  result.filesRead = [...new Set(result.filesRead)];
   return result;
 }
