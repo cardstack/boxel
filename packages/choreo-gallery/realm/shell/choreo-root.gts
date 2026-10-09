@@ -21,6 +21,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
   <div
     class='choreo-site'
     data-choreo-site
+    data-test-choreo-site
     data-theme={{theme.resolved}}
     ...attributes
   >
@@ -146,39 +147,38 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --lightbox-ring: rgba(33, 29, 24, 0.12);
     }
 
+    /* The element defaults the demos were designed against. :where() gives
+       them no more weight than a bare element selector, so any class rule a
+       component sets on its own elements outranks them. */
     .choreo-site,
-    .choreo-site :deep(*),
-    .choreo-site :deep(*::before),
-    .choreo-site :deep(*::after) {
+    :where(.choreo-site) :deep(:where(*)),
+    :where(.choreo-site) :deep(:where(*)::before),
+    :where(.choreo-site) :deep(:where(*)::after) {
       box-sizing: border-box;
     }
 
-    .choreo-site :deep(a) {
+    :where(.choreo-site) :deep(:where(a)) {
       color: inherit;
       text-decoration: none;
     }
 
-    .choreo-site :deep(button),
-    .choreo-site :deep(input) {
+    :where(.choreo-site) :deep(:where(button, input)) {
       font: inherit;
       color: inherit;
     }
 
-    .choreo-site :deep(button) {
+    :where(.choreo-site) :deep(:where(button)) {
       cursor: pointer;
     }
 
     /* No double-tap-to-zoom on anything you are meant to tap: Safari's
        wait for a second tap reads as lag on demos you tap repeatedly. */
-    .choreo-site :deep(button),
-    .choreo-site :deep(a),
-    .choreo-site :deep(select),
-    .choreo-site :deep(summary),
-    .choreo-site :deep([role='button']) {
+    :where(.choreo-site)
+      :deep(:where(button, a, select, summary, [role='button'])) {
       touch-action: manipulation;
     }
 
-    .choreo-site :deep(:focus-visible) {
+    :where(.choreo-site) :deep(:where(:focus-visible)) {
       outline: 2px solid var(--ember-hot);
       outline-offset: 3px;
     }

@@ -131,6 +131,11 @@ const GLIMMER_MOTION_PATH = BUNDLED_TYPES_DIR
 const CHOREO_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'choreo')
   : join(PACKAGES_PATH, 'choreo', 'src');
+// `@cardstack/choreo-player` is shimmed for cards that drive Choreo runs from
+// an external clock, and is bundled as source on the same terms.
+const CHOREO_PLAYER_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'choreo-player')
+  : join(PACKAGES_PATH, 'choreo-player', 'src');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -795,6 +800,7 @@ export async function runGlintCheck(
           ...motionEntryPointPaths({
             glimmerMotion: GLIMMER_MOTION_PATH,
             choreo: CHOREO_PATH,
+            choreoPlayer: CHOREO_PLAYER_PATH,
           }),
           '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
           '@cardstack/host/*': [`${HOST_APP_PATH}/*`],

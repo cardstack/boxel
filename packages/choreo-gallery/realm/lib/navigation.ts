@@ -9,4 +9,6 @@
 export interface GalleryNavigation {
   go(slug: string | null): void;
   hrefFor(slug: string | null): string;
+  /** a film's page, opened straight into theater */
+  openInTheater(slug: string): void;
 }
