@@ -15,6 +15,7 @@ import {
   T_TODAY,
   VO_GAIN,
 } from 'choreo-film-app/lib/films/sagrada';
+import { firstFrame } from 'choreo-film-app/lib/first-frame';
 import { tuneNumber } from 'choreo-film-app/lib/tuning';
 
 // Declare the film variables before asynchronous picture loading.
@@ -102,6 +103,9 @@ export default class SagradaFilm extends Component<{
       {{! FRONT MATTER. Keep the title package clear of oversized years;
       the date remains in the spine and navigation. }}
       <:gate as |f|>
+        {{! the door stands on the picture once it is seated: tell the page
+        that framed this film, which is holding its poster up until then }}
+        {{#if f.ready}}<span hidden {{firstFrame}}></span>{{/if}}
         {{! the spine: the film's name written down the edge }}
         <span class="cf-gate-vert" aria-hidden="true">Temple Expiatori de la
           Sagrada Família — 1882</span>
