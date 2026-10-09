@@ -37,13 +37,18 @@ export class SearchCardsByTypeAndTitleTool extends HostBaseTool<
         'At least one of cardTitle, cardType, or type must be provided',
       );
     }
-    let filter = {} as any;
+    // A filter holds at most one operator, so a title and a card type
+    // together are nested under `every`.
+    let conditions: Filter[] = [];
     if (input.cardTitle) {
-      filter.contains = { cardTitle: input.cardTitle };
+      conditions.push({ contains: { cardTitle: input.cardTitle } });
     }
     if (input.cardType) {
-      filter.eq = { _cardType: input.cardType };
+      conditions.push({ eq: { _cardType: input.cardType } });
     }
+    let filter = (
+      conditions.length > 1 ? { every: conditions } : (conditions[0] ?? {})
+    ) as any;
     if (input.type) {
       filter.type = input.type;
     }

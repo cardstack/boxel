@@ -214,9 +214,6 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       width: 10px;
       height: 10px;
     }
-    .state-indicator.compact.applied svg {
-      margin-left: -1px;
-    }
     .state-indicator.compact.applied-with-error svg {
       margin-top: -1px;
     }

@@ -81,10 +81,15 @@ export function indexingWriterLane(
 // Base is the only realm elevated this way, and two things bound what that
 // costs. Every job that writes a realm's index is in the lane family
 // `indexingConcurrencyGroup(realmURL)`, and the claim query runs one job per
-// lane and never runs a family's exclusive work beside anything else in it —
-// so base's exclusive index work occupies one worker at a time, and its
+// lane — so base's exclusive index work occupies one worker at a time, and its
 // incremental passes, which run in writer lanes, at most the queue's cap on
-// concurrent writer lanes per family. And the elevation stops at the index: follow-on
+// concurrent writer lanes per family. The two do not add up, because the
+// elevation puts base's exclusive index work at the same tier as its writer
+// lanes, and the claim query holds a writer lane off exclusive work of its own
+// tier or above. A realm elevated only part way — exclusive work left at the
+// system tier while its writers sit above it — would not get this bound: its
+// writer lanes would run past its own pass, and the two could hold the cap
+// plus one worker at once. And the elevation stops at the index: follow-on
 // prerender-html work derives its tier from `prerenderSpawnedPriority` below
 // rather than from the elevated value, so a realm-wide HTML sweep for base cannot take a second
 // worker out of the same pool. Each further realm elevated would add another

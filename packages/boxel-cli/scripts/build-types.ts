@@ -70,6 +70,9 @@
  * - `bundled-types/choreo/`      — `packages/choreo/src/*`, backing the
  *                                   `@cardstack/choreo` path alias, on the
  *                                   same terms as glimmer-motion.
+ * - `bundled-types/choreo-player/` — `packages/choreo-player/src/*`, backing
+ *                                   the `@cardstack/choreo-player` path
+ *                                   alias, on the same terms.
  *
  * This script runs from the monorepo only. The resulting tree is
  * committed-via-publish (`files` in package.json includes
@@ -591,6 +594,12 @@ const VENDORS: Vendor[] = [
     name: 'choreo',
     from: join(MONOREPO_PACKAGES, 'choreo', 'src'),
     to: join(PACKAGE_ROOT, 'bundled-types', 'choreo'),
+    filter: skipMonorepoArtifacts,
+  },
+  {
+    name: 'choreo-player',
+    from: join(MONOREPO_PACKAGES, 'choreo-player', 'src'),
+    to: join(PACKAGE_ROOT, 'bundled-types', 'choreo-player'),
     filter: skipMonorepoArtifacts,
   },
 ];

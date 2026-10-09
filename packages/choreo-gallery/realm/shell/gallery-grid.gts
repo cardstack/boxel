@@ -343,13 +343,18 @@ export class GalleryGrid extends Component<Signature> {
               {{motion id=(concat 'stage-' demo.slug) role='stage'}}
             >
               {{#if (this.stageLive demo.slug)}}
-                <DemoStage @demo={{demo}} />
+                <DemoStage
+                  @demo={{demo}}
+                  @face='tile'
+                  @open={{fn @nav.openInTheater demo.slug}}
+                />
               {{/if}}
             </div>
             <GalleryLink
               @href={{@nav.hrefFor demo.slug}}
               @onFollow={{fn @nav.go demo.slug}}
               class='card-meta'
+              data-test-gallery-tile-link={{demo.slug}}
             >
               <span
                 class='card-group'

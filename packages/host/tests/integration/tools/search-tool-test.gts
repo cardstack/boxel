@@ -1,7 +1,11 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { type Query, rri } from '@cardstack/runtime-common';
+import {
+  type Query,
+  type ResolvedCodeRef,
+  rri,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -49,6 +53,7 @@ module('Integration | tools | search', function (hooks) {
   function runTypeTitleSearch(input: {
     cardType: string | undefined;
     cardTitle: string | undefined;
+    type?: ResolvedCodeRef;
   }) {
     let toolService = getService('tool-service');
     let searchCommand = new SearchCardsByTypeAndTitleTool(
@@ -127,6 +132,25 @@ module('Integration | tools | search', function (hooks) {
       result.cardIds.every((id) => id.includes('Author')),
       'All results should be Author cards',
     );
+  });
+
+  test('search for a title and a card type together', async function (assert) {
+    let result = await runTypeTitleSearch({
+      cardTitle: 'Mark Jackson',
+      cardType: 'Author',
+    });
+    assert.strictEqual(result.cardIds.length, 1);
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/mark');
+  });
+
+  test('search for a title and a card type with a type ref', async function (assert) {
+    let result = await runTypeTitleSearch({
+      cardTitle: 'R2-D2',
+      cardType: 'Author',
+      type: { module: rri('http://test-realm/test/author'), name: 'Author' },
+    });
+    assert.strictEqual(result.cardIds.length, 1);
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
   });
 
   test('search with a query', async function (assert) {

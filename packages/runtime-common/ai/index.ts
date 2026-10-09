@@ -5,3 +5,4 @@ export * from './history.ts';
 export * from './prompt.ts';
 export * from './matrix-utils.ts';
 export * from './debug.ts';
+export * from './compaction.ts';
