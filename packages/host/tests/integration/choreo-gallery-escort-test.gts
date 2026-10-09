@@ -13,8 +13,6 @@
  */
 import { click, find } from '@ember/test-helpers';
 
-import window from 'ember-window-mock';
-
 import { module, test } from 'qunit';
 
 import {
@@ -80,8 +78,12 @@ module('Integration | Choreo gallery | escort', function (hooks) {
 
   let storedTheme: string | null = null;
   hooks.beforeEach(function () {
+    // the gallery's theme persists to the document's own storage, not the
+    // test's window mock: keep what a developer chose on this origin, and
+    // start every test from the gallery's default
     try {
-      storedTheme = window.localStorage.getItem(THEME_KEY);
+      storedTheme = globalThis.localStorage.getItem(THEME_KEY);
+      globalThis.localStorage.removeItem(THEME_KEY);
     } catch {
       storedTheme = null;
     }
@@ -92,9 +94,9 @@ module('Integration | Choreo gallery | escort', function (hooks) {
     setThemeMode('dark');
     try {
       if (storedTheme === null) {
-        window.localStorage.removeItem(THEME_KEY);
+        globalThis.localStorage.removeItem(THEME_KEY);
       } else {
-        window.localStorage.setItem(THEME_KEY, storedTheme);
+        globalThis.localStorage.setItem(THEME_KEY, storedTheme);
       }
     } catch {
       // persistence is optional

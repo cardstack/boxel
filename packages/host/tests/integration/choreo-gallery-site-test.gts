@@ -6,7 +6,6 @@
 import { click, waitFor } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
-import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import {
@@ -29,8 +28,12 @@ module('Integration | Choreo gallery | site', function (hooks) {
   let storedTheme: string | null = null;
 
   hooks.beforeEach(async function () {
+    // the gallery's theme persists to the document's own storage, not the
+    // test's window mock: keep what a developer chose on this origin, and
+    // start every test from the gallery's default
     try {
-      storedTheme = window.localStorage.getItem(THEME_KEY);
+      storedTheme = globalThis.localStorage.getItem(THEME_KEY);
+      globalThis.localStorage.removeItem(THEME_KEY);
     } catch {
       storedTheme = null;
     }
@@ -46,9 +49,9 @@ module('Integration | Choreo gallery | site', function (hooks) {
     setThemeMode('dark');
     try {
       if (storedTheme === null) {
-        window.localStorage.removeItem(THEME_KEY);
+        globalThis.localStorage.removeItem(THEME_KEY);
       } else {
-        window.localStorage.setItem(THEME_KEY, storedTheme);
+        globalThis.localStorage.setItem(THEME_KEY, storedTheme);
       }
     } catch {
       // persistence is optional
