@@ -3,6 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { TowersScore } from 'choreo-film-app/components/films/towers-score';
+import { JoinPreviews } from 'choreo-film-app/components/join-previews';
 import { assetURL } from 'choreo-film-app/lib/assets';
 import {
   BUILD,
@@ -172,6 +173,8 @@ export default class TowerFilm extends Component<{
       (tests/integration/film/graph-test.gts proves it, row for row). }}
       <:default as |f|>
         <TowersScore @f={{f}} />
+        {{! the wall plate's join triggers, from the page framing the film }}
+        <JoinPreviews @preview={{f.preview}} />
       </:default>
     </Film>
 
