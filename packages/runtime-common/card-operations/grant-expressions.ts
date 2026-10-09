@@ -424,30 +424,53 @@ function producesRightKind(name: GrantExpressionName, value: unknown): boolean {
 // user id, so no signed-in caller can ever be it.
 export const ANONYMOUS_ACTOR = 'anonymous';
 
-// Whether a predicate names the caller who isn't signed in: whether the
-// literal `'anonymous'` appears anywhere in it. Only a grant whose `where`
-// does admits such a caller, so a grant written for signed-in callers never
-// starts admitting anyone, whatever its `where` would say for one.
+// Whether a predicate names the caller who isn't signed in. The opt-in is an
+// equality comparison between `actor()` and the fixed anonymous value; a
+// card field that happens to contain that text is not an anonymous grant.
 export function namesAnonymous(
   bxl: Pick<GrantExpressionParser, 'visitBxlAst'>,
   body: unknown,
 ): boolean {
   let found = false;
   bxl.visitBxlAst(body, (node) => {
-    let { type, valueType, value, interpolated } = node as {
+    let { type, operator, left, right } = node as {
       type?: unknown;
-      valueType?: unknown;
-      value?: unknown;
-      interpolated?: unknown;
+      operator?: unknown;
+      left?: unknown;
+      right?: unknown;
     };
     if (
-      type === 'literal' &&
-      valueType === 'string' &&
-      interpolated !== true &&
-      value === ANONYMOUS_ACTOR
+      type === 'binary' &&
+      (operator === '==' || operator === '!=') &&
+      ((isActorCall(left) && isAnonymousText(right)) ||
+        (isActorCall(right) && isAnonymousText(left)))
     ) {
       found = true;
     }
   });
   return found;
+}
+
+function isActorCall(node: unknown): boolean {
+  let { type, name, arity } = node as {
+    type?: unknown;
+    name?: unknown;
+    arity?: unknown;
+  };
+  return type === 'call' && name === 'actor' && (arity ?? 0) === 0;
+}
+
+function isAnonymousText(node: unknown): boolean {
+  let { type, valueType, value, interpolated } = node as {
+    type?: unknown;
+    valueType?: unknown;
+    value?: unknown;
+    interpolated?: unknown;
+  };
+  return (
+    type === 'literal' &&
+    valueType === 'string' &&
+    interpolated !== true &&
+    value === ANONYMOUS_ACTOR
+  );
 }

@@ -1070,6 +1070,7 @@ module(basename(import.meta.filename), function (hooks) {
         { operation: 'read', where: 'true' },
         { operation: 'read', where: '.teacherIds | any(. == actor())' },
         { operation: 'read', where: `${ANYONE} or .status == "open"` },
+        { operation: 'read', where: '.status == "anonymous"' },
       ]),
     );
     let policy = await compiled();
@@ -1084,6 +1085,7 @@ module(basename(import.meta.filename), function (hooks) {
         { path: 'rules[0].grants[1]', opens: false },
         { path: 'rules[0].grants[2]', opens: false },
         { path: 'rules[0].grants[3]', opens: true },
+        { path: 'rules[0].grants[4]', opens: false },
       ],
       'only the grant whose where names the caller who is not signed in admits one',
     );
