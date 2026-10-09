@@ -22,7 +22,7 @@ async function watch(read: () => number, ms = 260) {
   const until = performance.now() + ms;
   while (performance.now() < until) {
     seen.add(read());
-    await frames(1);
+    await frames(0);
   }
   return [...seen];
 }

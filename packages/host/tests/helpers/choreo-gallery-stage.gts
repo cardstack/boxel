@@ -226,9 +226,10 @@ export function setupStageViewport(
 }
 
 /**
- * `count` animation frames. The demos drive their clocks from the frame loop,
- * outside the run loop `settled()` waits on, so a test that needs a demo to
- * have advanced waits on painted frames.
+ * Wait out the next animation frame and then `count` more: `frames(0)` is the
+ * next frame. The demos drive their clocks from the frame loop, outside the
+ * run loop `settled()` waits on, so a test that needs a demo to have advanced
+ * waits on painted frames.
  */
 export function frames(count: number) {
   return new Promise<void>((resolve) => {
