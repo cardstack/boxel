@@ -45,6 +45,13 @@ export class AnonymousRequest {
   // An expression that doesn't read the target names the same user for every
   // write of the request, so it is resolved once per grant.
   #resolved = new Map<string, Promise<ActingUserResolution>>();
+  // An expression that reads the target is settled once for each target while
+  // its write is being decided. The gate uses that same resolution to admit
+  // the write and to record the user it is made as.
+  #resolvedForInstance = new WeakMap<
+    Record<string, unknown>,
+    Map<string, Promise<ActingUserResolution>>
+  >();
   #lastResolved = new Map<string, ActingUserResolution>();
   #admitted: string[] = [];
   #admittedGrants: string[] = [];
@@ -72,8 +79,14 @@ export class AnonymousRequest {
     instance: Record<string, unknown> | undefined,
   ): Promise<ActingUserResolution> {
     let expression = grant.anonymous?.actingUser;
-    let key = expression && !expression.readsInstance ? grant.path : undefined;
-    let resolved = key ? this.#resolved.get(key) : undefined;
+    let key = expression ? grant.path : undefined;
+    let readsInstance = expression?.readsInstance ?? false;
+    let resolved =
+      key && !readsInstance
+        ? this.#resolved.get(key)
+        : key && instance
+          ? this.#resolvedForInstance.get(instance)?.get(key)
+          : undefined;
     if (!resolved) {
       resolved = this.#resolve(grant, instance).then((resolution) => {
         this.#lastResolved.set(grant.path, resolution);
@@ -88,8 +101,15 @@ export class AnonymousRequest {
         }
         return resolution;
       });
-      if (key) {
+      if (key && !readsInstance) {
         this.#resolved.set(key, resolved);
+      } else if (key && instance) {
+        let perInstance = this.#resolvedForInstance.get(instance);
+        if (!perInstance) {
+          perInstance = new Map();
+          this.#resolvedForInstance.set(instance, perInstance);
+        }
+        perInstance.set(key, resolved);
       }
     }
     return await resolved;

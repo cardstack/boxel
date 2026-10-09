@@ -1,5 +1,6 @@
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { rri } from '../realm-identifiers.ts';
+import type { AnonymousRequest } from './anonymous-request.ts';
 import {
   CAPABILITY_CHECK_CAP,
   type CapabilityAnswer,
@@ -94,6 +95,9 @@ import {
 // which is exactly what a request carrying both kinds of question needs.
 export interface CapabilityCaller {
   caller: ScopeCaller;
+  // The request-wide admission a caller without a session passed. Capability
+  // pairs must be judged through the same eligible grants as an invocation.
+  anonymousRequest?: AnonymousRequest;
   // Who a search this caller sent would run for. A query pair is judged as
   // that search is, so it is judged for the same principal: a request a
   // render sends runs under a realm's own authority, which no policy grants
@@ -134,6 +138,7 @@ export async function checkCapabilities(
 ): Promise<CapabilityOutcome> {
   let scope = newOperationScope(core, {
     caller: who.caller,
+    anonymousRequest: who.anonymousRequest,
     advisory: true,
     // A caller who may read the realm and whose writes are refused outright
     // has nothing for the policy to decide: their reads are the ACL's, and

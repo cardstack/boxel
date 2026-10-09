@@ -152,10 +152,9 @@ export interface CompiledOperationGrant {
 
 // How a grant treats the callers who aren't signed in that its `where` admits.
 export interface CompiledAnonymousGrant {
-  // What the realm counts such a caller's requests through the grant under. It
-  // is the grant's content rather than its position, so it is the same however
-  // often the policy recompiles, and moving the grant within the card doesn't
-  // reset its counts.
+  // What the realm counts such a caller's requests through the grant under.
+  // It identifies one policy-grant position, so grants with identical content
+  // still have independent budgets.
   id: string;
   // Whether the grant's operation writes.
   writes: boolean;
@@ -1471,6 +1470,7 @@ async function compileDocument(
               resolved,
               operation,
               outcome?.canonical ?? null,
+              grantPath,
             ]) ?? '',
           ),
           writes: isWrite(granted.base),

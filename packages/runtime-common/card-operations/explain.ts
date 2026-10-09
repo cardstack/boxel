@@ -418,7 +418,7 @@ async function anonymousAdmission(
   };
   for (let rule of policy?.rules ?? []) {
     for (let grant of rule.grants) {
-      if (!grant.anonymous || !grantOpensToAnonymous(grant)) {
+      if (!grant.anonymous) {
         continue;
       }
       let settled = await settleTraffic(
@@ -427,7 +427,7 @@ async function anonymousAdmission(
         platformLimit,
       );
       traffic.set(grant.path, settled);
-      if (!blocklistCloses(settled)) {
+      if (grantOpensToAnonymous(grant) && !blocklistCloses(settled)) {
         eligible.add(grant.anonymous.id);
       }
     }

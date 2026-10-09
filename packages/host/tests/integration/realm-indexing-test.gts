@@ -19,6 +19,7 @@ import { module, test } from 'qunit';
 import { md5 } from 'super-fast-md5';
 
 import {
+  DEFAULT_ANONYMOUS_RATE_LIMIT,
   baseRealmRRI,
   baseCardRef,
   internalKeyFor,
@@ -163,6 +164,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -442,6 +444,7 @@ module(`Integration | realm indexing`, function (hooks) {
             resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -528,6 +531,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -576,6 +580,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -892,6 +897,7 @@ module(`Integration | realm indexing`, function (hooks) {
           resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -987,6 +993,7 @@ module(`Integration | realm indexing`, function (hooks) {
           resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -1077,6 +1084,7 @@ module(`Integration | realm indexing`, function (hooks) {
           resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
           realmURL: testRealmURL,
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -1206,6 +1214,7 @@ module(`Integration | realm indexing`, function (hooks) {
           resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
           realmURL: testRealmURL,
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -1280,6 +1289,7 @@ module(`Integration | realm indexing`, function (hooks) {
           resourceCreatedAt: await getFileCreatedAt(realm, 'people-skill.json'),
           realmURL: testRealmURL,
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -2495,6 +2505,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -2533,6 +2544,7 @@ module(`Integration | realm indexing`, function (hooks) {
               resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/1.json'),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -2570,6 +2582,7 @@ module(`Integration | realm indexing`, function (hooks) {
               resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/2.json'),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -3039,6 +3052,7 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -3074,6 +3088,7 @@ module(`Integration | realm indexing`, function (hooks) {
             resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -3111,6 +3126,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -3226,6 +3242,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -3359,6 +3376,7 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -4018,6 +4036,7 @@ module(`Integration | realm indexing`, function (hooks) {
           ),
           realmURL: ri('http://test-realm/test/'),
           realmInfo: {
+            anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
             backgroundURL: null,
             iconURL: null,
             includePrerenderedDefaultRealmIndex: null,
@@ -4169,6 +4188,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -4218,6 +4238,7 @@ module(`Integration | realm indexing`, function (hooks) {
               ),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -4315,6 +4336,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -4364,6 +4386,7 @@ module(`Integration | realm indexing`, function (hooks) {
               ),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -4491,6 +4514,7 @@ module(`Integration | realm indexing`, function (hooks) {
             ),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -4639,6 +4663,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -4683,6 +4708,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -4721,6 +4747,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -4812,6 +4839,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -4859,6 +4887,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -4897,6 +4926,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -4994,6 +5024,7 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
             realmURL: ri('http://test-realm/test/'),
             realmInfo: {
+              anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
               backgroundURL: null,
               iconURL: null,
               includePrerenderedDefaultRealmIndex: null,
@@ -5041,6 +5072,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,
@@ -5079,6 +5111,7 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
               realmURL: ri('http://test-realm/test/'),
               realmInfo: {
+                anonymousRateLimitDefault: DEFAULT_ANONYMOUS_RATE_LIMIT,
                 backgroundURL: null,
                 iconURL: null,
                 includePrerenderedDefaultRealmIndex: null,

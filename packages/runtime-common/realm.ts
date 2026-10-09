@@ -6615,6 +6615,7 @@ export class Realm {
         {
           caller: scopeCallerFor(actor),
           searchPrincipal: this.#searchPrincipal(requestContext),
+          anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
           ...lanes,
         },
       );
@@ -15748,7 +15749,9 @@ export class Realm {
   private async touchSourceRealmUpdatedAt(): Promise<void> {
     try {
       await query(this.#dbAdapter, [
-        `UPDATE realm_registry SET updated_at = now() WHERE url =`,
+        `UPDATE realm_registry SET updated_at =`,
+        dbExpression({ pg: 'now()', sqlite: 'CURRENT_TIMESTAMP' }),
+        `WHERE url =`,
         param(this.url),
         `AND kind = 'source'`,
       ]);
