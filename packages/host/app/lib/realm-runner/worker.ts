@@ -60,6 +60,9 @@ const BOOTSTRAP = `
           call('fs.replace', [path, search, replacement]),
         writeText: (path, content) => call('fs.writeText', [path, content]),
       }),
+      cards: Object.freeze({
+        get: (path) => call('cards.get', [path]),
+      }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
       workspaces: Object.freeze({
         create: (options) => call('workspaces.create', [options ?? {}]),
@@ -125,6 +128,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.list',
   'fs.replace',
   'fs.writeText',
+  'cards.get',
   'capture',
   'workspaces.create',
   'workspaces.delete',

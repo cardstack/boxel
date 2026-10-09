@@ -1,6 +1,12 @@
 import { service } from '@ember/service';
 
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  logger,
+  rri,
+  SupportedMimeType,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -26,7 +32,9 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
+import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type Base64ImageFieldType from '@cardstack/base/base64-image';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const log = logger('tools:run-realm-code');
@@ -54,6 +62,10 @@ type WriteFile = (
 ) => Promise<string>;
 
 type DirectoryEntry = { name: string; kind: 'file' | 'directory' };
+
+// Reads one card instance as JSON data, computed fields included, with every
+// URL in it absolute.
+type ReadCard = (id: string) => Promise<LooseSingleCardDocument>;
 
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
@@ -114,6 +126,7 @@ class RealmFsSession {
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
     private listDirectory: ListDirectory,
+    private readCard: ReadCard,
     captureURL: CaptureURL,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
@@ -237,6 +250,20 @@ class RealmFsSession {
         }
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
+      }
+      // A card is read as the indexed instance, not as its file, so it does
+      // not count toward MAX_FILES and does not see this run's unsaved
+      // state.
+      case 'cards.get': {
+        let id = this.resolve(method, args[0]).replace(/\.json$/, '');
+        let { data } = await this.readCard(id);
+        return {
+          path: `${this.relative(id)}.json`,
+          id,
+          adoptsFrom: data.meta.adoptsFrom,
+          attributes: data.attributes ?? {},
+          relationships: data.relationships ?? {},
+        };
       }
       case 'capture': {
         let url = this.resolve(method, args[0]);
@@ -426,12 +453,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private recentFilesService: RecentFilesService;
+  @service declare private store: StoreService;
   @service declare private toolService: ToolService;
 
   description =
-    'Run safe Realm code that reads and edits realm source files, can ' +
-    'look at what it made with realm.capture, and can create workspaces ' +
-    'with realm.workspaces.create.';
+    'Run safe Realm code that reads and edits realm source files, reads ' +
+    'cards as JSON data with realm.cards.get, can look at what it made ' +
+    'with realm.capture, and can create workspaces with ' +
+    'realm.workspaces.create.';
   static actionVerb = 'Run';
 
   static neverAutoExecutesFor(
@@ -480,6 +509,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
       (url) => this.listDirectory(url),
+      (id) => this.readCard(id),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
       (workspaceInput) =>
@@ -682,6 +712,25 @@ export default class RunRealmCodeTool extends HostBaseTool<
       clientRequestId,
     });
     return content;
+  }
+
+  private async readCard(id: string): Promise<LooseSingleCardDocument> {
+    let card = await this.store.get(id);
+    if (!isCardInstance(card)) {
+      throw new Error(
+        card.status === 404
+          ? `Card not found: ${id}`
+          : `Unable to read card ${id}: ${card.message}`,
+      );
+    }
+    let { default: Base64ImageField } = await this.loaderService.loader.import<{
+      default: typeof Base64ImageFieldType;
+    }>('@cardstack/base/base64-image');
+    return await this.cardService.serializeCard(card, {
+      omitFields: [Base64ImageField],
+      useAbsoluteURL: true,
+      includeComputeds: true,
+    });
   }
 
   private async listDirectory(
