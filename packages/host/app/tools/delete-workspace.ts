@@ -1,9 +1,7 @@
 import { service } from '@ember/service';
 
-import { RealmPaths, ensureTrailingSlash, ri } from '@cardstack/runtime-common';
-
 import HostBaseTool from '../lib/host-base-tool';
-import { publishedRealmURLsFromInfo } from '../lib/utils';
+import { deleteWorkspace } from '../lib/workspaces';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -12,12 +10,7 @@ import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
-// Deletes a workspace (realm) the current user owns, with the same result as
-// "Delete Workspace" in the workspace chooser tile menu: the realm and all of
-// its content are removed on the realm server (published copies included), it
-// leaves the user's realm list, and the app falls back to the workspace
-// chooser if the deleted workspace — or one of its published copies — was
-// the one being viewed.
+// Deletes a workspace (realm) the current user owns (see `deleteWorkspace`).
 export default class DeleteWorkspaceTool extends HostBaseTool<
   typeof BaseToolModule.RealmIdentifierCard,
   undefined
@@ -52,46 +45,16 @@ export default class DeleteWorkspaceTool extends HostBaseTool<
     if (!input.realmIdentifier) {
       throw new Error('Realm identifier is required to delete a workspace.');
     }
-    // The identifier may be a scoped form (`@cardstack/base/`) rather than a
-    // URL, so it is never handed to `new URL()`; RealmPaths and the realm
-    // services accept either form.
-    let realmURL = ensureTrailingSlash(input.realmIdentifier);
-    if (!this.realm.isRealmOwner(realmURL)) {
-      throw new Error(
-        `Cannot delete workspace ${realmURL}: the current user is not its owner.`,
-      );
-    }
-
-    // The realm server removes the workspace's published copies along with
-    // it, so they are cleaned up here the same way.
-    let publishedRealmURLs = publishedRealmURLsFromInfo(
-      this.realm.info(realmURL),
+    await deleteWorkspace(
+      {
+        matrixService: this.matrixService,
+        operatorModeStateService: this.operatorModeStateService,
+        realm: this.realm,
+        realmServer: this.realmServer,
+        recentFilesService: this.recentFilesService,
+      },
+      input.realmIdentifier,
     );
-    let deletedRealmURLs = [realmURL, ...publishedRealmURLs];
-    let isActiveWorkspace = deletedRealmURLs.some((url) => {
-      let realmPath = new RealmPaths(ri(url));
-      return (
-        this.operatorModeStateService.realmURL === url ||
-        this.operatorModeStateService
-          .getOpenCardIds()
-          .some((cardId) => realmPath.inRealm(cardId)) ||
-        Boolean(this.operatorModeStateService.codePathString?.startsWith(url))
-      );
-    });
-
-    await this.realmServer.deleteRealm(realmURL);
-    await this.matrixService.removeRealmFromAccountData(realmURL);
-    for (let url of deletedRealmURLs) {
-      this.recentFilesService.removeRecentFilesForRealmURL(url);
-    }
-    this.realm.removeRealm(realmURL);
-
-    if (isActiveWorkspace) {
-      this.operatorModeStateService.clearStacks();
-      await this.operatorModeStateService.updateCodePath(null);
-      this.operatorModeStateService.openWorkspaceChooser();
-    }
-
     return undefined;
   }
 }

@@ -22,6 +22,11 @@ import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 
+// A tool class's per-call click rule (HostBaseTool.neverAutoExecutesFor).
+export type NeverAutoExecutesFor = (
+  attributes: Record<string, unknown> | undefined,
+) => boolean;
+
 // 'approved' is the user's approval of a call ai-bot holds for approval; the
 // call is then running (see `status`) until ai-bot's result lands.
 type ToolCallStatus =
@@ -74,7 +79,10 @@ export default class MessageTool {
     public failureReason?: string | undefined,
     // The tool class declares that it must always wait for the user's
     // click, whatever the room's mode (see HostBaseTool.neverAutoExecutes).
-    public neverAutoExecutes: boolean = false,
+    private alwaysNeedsClick: boolean = false,
+    // The same, for this call's input (see
+    // HostBaseTool.neverAutoExecutesFor).
+    private needsClickFor?: NeverAutoExecutesFor,
   ) {
     setOwner(this, owner);
 
@@ -99,6 +107,23 @@ export default class MessageTool {
   // readRealmFile). When set, the host records it in the timeline but never runs it.
   get executedBy() {
     return this.toolRequest.executedBy;
+  }
+
+  // Whether this call must wait for the user's click, whatever the room's
+  // mode. Read from the current arguments, so it is right once they finish
+  // streaming.
+  get neverAutoExecutes(): boolean {
+    if (this.alwaysNeedsClick) {
+      return true;
+    }
+    let attributes = this.arguments?.attributes;
+    return (
+      this.needsClickFor?.(
+        attributes && typeof attributes === 'object'
+          ? (attributes as Record<string, unknown>)
+          : undefined,
+      ) === true
+    );
   }
 
   get argumentsError() {
