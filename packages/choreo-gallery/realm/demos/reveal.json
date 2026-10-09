@@ -34,8 +34,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../demo",
-        "name": "GalleryDemo"
+        "module": "../stages/reveal",
+        "name": "RevealDemo"
       }
     }
   }
