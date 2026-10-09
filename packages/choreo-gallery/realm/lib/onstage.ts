@@ -24,6 +24,16 @@ import { modifier } from 'ember-modifier';
  * the card sits in, not the viewport — so a stage just below the item's edge is
  * already running when it scrolls in.
  */
+/**
+ * The nearest ancestor set to scroll, taken to be the one that does. That
+ * holds where the gallery renders: a card's stack item is sized to its pane
+ * and scrolls its content. The choice is made when the stage mounts, before
+ * the content above and below it has necessarily rendered, so it goes by the
+ * overflow style rather than by whether the box overflows yet. An ancestor
+ * set to scroll that instead grows with its content clips nothing, and every
+ * stage under it counts as visible: they keep running, which costs frames but
+ * never freezes a demo someone is looking at.
+ */
 function scrollRoot(el: Element): Element | null {
   let node = el.parentElement;
   while (node) {
