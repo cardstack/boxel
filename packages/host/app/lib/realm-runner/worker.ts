@@ -63,6 +63,7 @@ const BOOTSTRAP = `
       }),
       cards: Object.freeze({
         search: (query) => call('cards.search', [query]),
+        get: (path) => call('cards.get', [path]),
       }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
       workspaces: Object.freeze({
@@ -143,6 +144,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.writeText',
   'fs.writeBytes',
   'cards.search',
+  'cards.get',
   'capture',
   'workspaces.create',
   'workspaces.delete',
