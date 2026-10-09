@@ -153,8 +153,9 @@ export interface CompiledOperationGrant {
 // How a grant treats the callers who aren't signed in that its `where` admits.
 export interface CompiledAnonymousGrant {
   // What the realm counts such a caller's requests through the grant under.
-  // It identifies one policy-grant position, so grants with identical content
-  // still have independent budgets.
+  // It identifies the grant's anonymous-access behavior, so moving an
+  // unchanged grant does not reset its budget while grants with different
+  // traffic or acting-user controls stay separate.
   id: string;
   // Whether the grant's operation writes.
   writes: boolean;
@@ -1470,7 +1471,12 @@ async function compileDocument(
               resolved,
               operation,
               outcome?.canonical ?? null,
-              grantPath,
+              Object.fromEntries(
+                GRANT_EXPRESSION_NAMES.map((name) => [
+                  name,
+                  expressions[name]?.canonical ?? null,
+                ]),
+              ),
             ]) ?? '',
           ),
           writes: isWrite(granted.base),

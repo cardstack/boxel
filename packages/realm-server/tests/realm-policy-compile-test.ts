@@ -1137,6 +1137,29 @@ module(basename(import.meta.filename), function (hooks) {
       before?.[1],
       'and the one beside it is not',
     );
+
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        {
+          operation: 'read',
+          where: ANYONE,
+          rateLimitRequests: '10',
+        },
+        {
+          operation: 'read',
+          where: ANYONE,
+          rateLimitRequests: '20',
+        },
+      ]),
+    );
+    let trafficControls = (await compiled())?.rules[0]?.grants;
+    assert.notStrictEqual(
+      trafficControls?.[0]?.anonymous?.id,
+      trafficControls?.[1]?.anonymous?.id,
+      'grants with the same operation and predicate but different traffic controls are counted apart',
+    );
   });
 
   test("each of a grant's expressions is compiled, or recorded against the grant that has it", async function (assert) {
