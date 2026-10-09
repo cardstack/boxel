@@ -1,17 +1,17 @@
-import type { Join } from '@cardstack/choreo/film';
 import type { TOC } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
+import type { NotesSignature } from '../demo';
+
 /**
  * Deep dive for the Towers film — the wall plate under the exhibit.
  * Follows the house dive template (see notes/sylva.gts); the one film-only
- * element is the strip of live junction triggers, wired to the film's own
- * previewJoin through @preview.
+ * element is the strip of live junction triggers: @preview plays a join
+ * over the film in the stage above, which the demo page passes while the
+ * film's frame is there to hear it.
  */
-const TowersNotes: TOC<{
-  Args: { preview?: (join: Join) => void };
-}> = <template>
+const TowersNotes: TOC<NotesSignature> = <template>
   <section class='dive' aria-label='How it works'>
     <header class='dive-head'>
       <p class='dive-kicker'>The cutting room</p>
@@ -148,8 +148,7 @@ const TowersNotes: TOC<{
           </div>
         {{else}}
           <p>
-            (The live triggers ride the full film — take the ⛶ Theater door
-            above and scroll to the Cutting Room.)
+            (The live triggers appear here once the film above has loaded.)
           </p>
         {{/if}}
         <p>

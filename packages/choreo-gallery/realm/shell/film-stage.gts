@@ -208,7 +208,12 @@ export class FilmStage extends Component<Signature> {
           style={{this.frameStyle}}
           {{this.well}}
         >
-          <FilmFrame class='film-frame' @film={{@film}} @title={{@title}} />
+          <FilmFrame
+            class='film-frame'
+            @film={{@film}}
+            @link={{@filmLink}}
+            @title={{@title}}
+          />
           {{#if @theater}}
             {{#unless this.inTheater}}
               {{! UPPER RIGHT, where the mark stands in theater: the way in and
