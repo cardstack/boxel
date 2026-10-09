@@ -2,6 +2,7 @@ import { setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
+import { waitForPromise } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import {
@@ -53,6 +54,21 @@ export function labelFromToolName(name: string | undefined) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+// What the host resolves a request's tool name to: the command class it runs
+// and how it is presented and gated. Resolving it awaits network loads (the
+// declaring skill, the command module), so a MessageTool exists — with its
+// request, arguments and result status — before its resolution does.
+export interface ToolResolution {
+  codeRef: ResolvedCodeRef | undefined;
+  requiresApproval: boolean;
+  actionVerb: string;
+  neverAutoExecutes: boolean;
+}
+
+export type ToolResolver = (
+  toolRequest: Partial<ToolRequest>,
+) => Promise<ToolResolution>;
+
 export default class MessageTool {
   @tracked toolRequest: Partial<ToolRequest>;
   @tracked toolCallStatus?: ToolCallStatus;
@@ -64,23 +80,133 @@ export default class MessageTool {
   constructor(
     public message: Message,
     toolRequest: Partial<ToolRequest>,
-    public codeRef: ResolvedCodeRef | undefined,
+    codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
-    public requiresApproval: boolean,
-    public actionVerb: string,
+    requiresApproval: boolean,
+    actionVerb: string,
     toolCallStatus: ToolCallStatus,
     toolResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,
     // The tool class declares that it must always wait for the user's
     // click, whatever the room's mode (see HostBaseTool.neverAutoExecutes).
-    public neverAutoExecutes: boolean = false,
+    neverAutoExecutes: boolean = false,
+    // Resolves the tool from its name. Without one, the values above are the
+    // tool's fixed resolution (a call ai-bot runs has nothing to resolve).
+    resolver?: ToolResolver,
   ) {
     setOwner(this, owner);
 
     this.toolRequest = toolRequest;
     this.toolCallStatus = toolCallStatus;
     this.toolResultFileDef = toolResultFileDef;
+    this.#fixedResolution = {
+      codeRef,
+      requiresApproval,
+      actionVerb,
+      neverAutoExecutes,
+    };
+    this.#resolver = resolver;
+    if (resolver) {
+      this.resolve().catch(() => {
+        // Recorded on `settled`; the tool drain retries when it validates.
+      });
+    }
+  }
+
+  #fixedResolution: ToolResolution;
+  #resolver: ToolResolver | undefined;
+  // The latest started resolution. Only it may settle: a request renamed
+  // mid-resolve must not take the resolution of its old name.
+  #inFlight:
+    | { name: string | undefined; promise: Promise<ToolResolution> }
+    | undefined;
+  @tracked private settled:
+    | { name: string | undefined; value?: ToolResolution; error?: Error }
+    | undefined;
+
+  // Resolves the tool for the request's current name, reusing a resolution
+  // already made or in flight for that name. A failed one is tried again, so a
+  // load that failed transiently (a realm briefly unreachable) recovers. With
+  // `retryUnresolved`, a name that resolved to no command is tried again too:
+  // the skill declaring it may have loaded since.
+  resolve({
+    retryUnresolved,
+  }: { retryUnresolved?: boolean } = {}): Promise<ToolResolution> {
+    let resolver = this.#resolver;
+    if (!resolver) {
+      return Promise.resolve(this.#fixedResolution);
+    }
+    let name = this.name;
+    let inFlight = this.#inFlight;
+    if (inFlight && inFlight.name === name) {
+      return inFlight.promise;
+    }
+    let settled = this.settled;
+    if (
+      settled &&
+      settled.name === name &&
+      settled.value &&
+      !(retryUnresolved && !settled.value.codeRef)
+    ) {
+      return Promise.resolve(settled.value);
+    }
+    let promise = waitForPromise(resolver(this.toolRequest));
+    let started = { name, promise };
+    this.#inFlight = started;
+    promise.then(
+      (value) => {
+        if (this.#inFlight === started) {
+          this.#inFlight = undefined;
+          this.settled = { name, value };
+        }
+      },
+      (error) => {
+        if (this.#inFlight === started) {
+          this.#inFlight = undefined;
+          this.settled = {
+            name,
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
+        }
+      },
+    );
+    return promise;
+  }
+
+  // Whether the tool for the request's current name is still being resolved.
+  // Until it is, codeRef / requiresApproval / actionVerb / neverAutoExecutes
+  // read their defaults, so nothing may decide how to run or present the call.
+  get isResolving(): boolean {
+    if (!this.#resolver) {
+      return false;
+    }
+    let settled = this.settled;
+    return !settled || settled.name !== this.name;
+  }
+
+  private get resolution(): ToolResolution | undefined {
+    if (!this.#resolver) {
+      return this.#fixedResolution;
+    }
+    let settled = this.settled;
+    return settled && settled.name === this.name ? settled.value : undefined;
+  }
+
+  get codeRef(): ResolvedCodeRef | undefined {
+    return this.resolution?.codeRef;
+  }
+
+  get requiresApproval(): boolean {
+    return this.resolution?.requiresApproval ?? true;
+  }
+
+  get actionVerb(): string {
+    return this.resolution?.actionVerb ?? 'Apply';
+  }
+
+  get neverAutoExecutes(): boolean {
+    return this.resolution?.neverAutoExecutes ?? false;
   }
 
   @service declare toolService: ToolService;

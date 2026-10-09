@@ -2427,11 +2427,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     }
   });
 
-  // The tool-build race tests below use a host tool from a skill that is not
-  // enabled in the room: the model learned about it from an earlier
-  // readRealmFile result. Building that tool loads the skill through the
+  // The tool-resolution race tests below use a host tool from a skill that is
+  // not enabled in the room: the model learned about it from an earlier
+  // readRealmFile result. Resolving that tool loads the skill through the
   // store, and nothing else in the room loads it, so holding that load holds
-  // exactly this tool's build.
+  // exactly this tool's resolution.
   const discoveredSkillUrl = `${testRealmURL}Skill/boxel-environment`;
   const discoveredHostToolName = buildToolFunctionNameFromResolvedRef({
     module: '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
@@ -2493,8 +2493,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   }
 
   // Holds every store load of the discovered skill until released, so every
-  // build of its tool — including a duplicate build from a restarted room
-  // pass — stays in flight.
+  // resolution of its tool stays in flight.
   function holdDiscoveredSkillLoads() {
     let store = getService('store');
     let release = new Deferred<void>();
@@ -2515,7 +2514,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         await waitUntil(() => heldLoads > 0, {
           timeout: 5000,
           timeoutMessage:
-            'the final edit never started building the discovered host tool (no load of its skill within 5s)',
+            'the final edit never started resolving the discovered host tool (no load of its skill within 5s)',
         });
       },
       release() {
@@ -2525,8 +2524,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
   }
 
-  // Fails every store load of the discovered skill, so every build of its
-  // tool rejects deterministically.
+  // Fails every store load of the discovered skill, so its tool never
+  // resolves to a command.
   function failDiscoveredSkillLoads() {
     let store = getService('store');
     let originalGet = store.get;
@@ -2571,14 +2570,24 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
   }
 
-  test('a host tool whose build outlasts a room-processing restart still runs', async function (assert) {
+  // Waits until the tool drain is validating the request — which, while its
+  // tool's resolution is held, means it is waiting on that resolution.
+  async function drainIsValidating(toolCallId: string) {
+    let toolService = getService('tool-service') as any;
+    await waitUntil(() => toolService.validationSteps.has(toolCallId), {
+      timeout: 5000,
+      timeoutMessage: `the tool drain never started validating ${toolCallId}`,
+    });
+  }
+
+  test('a host tool whose resolution outlasts a room-processing restart still runs', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
     let hold = holdDiscoveredSkillLoads();
     try {
       // The finished message carries a bot-run tool followed by the host
-      // tool, whose build now waits on the held skill load.
+      // tool, whose resolution now waits on the held skill load.
       simulateRemoteMessage(
         roomId,
         '@aibot:localhost',
@@ -2594,8 +2603,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       await hold.reached();
 
       // The bot's own result for its tool lands while the host tool is still
-      // being built, restarting room processing and letting the tool drain
-      // run before the build finishes.
+      // being resolved, restarting room processing and letting the tool drain
+      // run before the resolution finishes.
       simulateRemoteMessage(
         roomId,
         '@aibot:localhost',
@@ -2610,14 +2619,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
         { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
       );
-      // The restarted pass re-enters the final edit and starts its own build
-      // of the still-held tool — the second held load is the deterministic
-      // signal that the restart happened while the build was in flight.
-      await waitUntil(() => hold.heldLoads >= 2, {
-        timeout: 5000,
-        timeoutMessage:
-          'the restarted room pass never re-entered the held tool build',
-      });
+      await drainIsValidating('slow-host-read');
+      assert.strictEqual(
+        hold.heldLoads,
+        1,
+        'neither the restarted room pass nor the drain starts a second resolution',
+      );
     } finally {
       hold.release();
     }
@@ -2631,7 +2638,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       hostToolResults.length,
       1,
-      'the host tool built after the restart is run and its result posted',
+      'the host tool resolved after the restart is run and its result posted',
     );
     assert.strictEqual(
       hostToolResults[0]?.content['m.relates_to']?.key,
@@ -2643,15 +2650,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .doesNotExist('no tool is left spinning in the applying state');
   });
 
-  // Pins the decision to keep isStreamingFinished a synchronous content flag
-  // rather than deferring it until the tools are built: the preview guards in
-  // RoomResource.hydrateResponseStreamPreview / applyResponseStreamPreview
-  // read it to drop a stale preview, so holding it open across a tool build's
-  // network latency would let a straggler preview overwrite the finalized
-  // body. This guards that content-flag contract — it passes whether or not
-  // the tool-build tracking is present — not the restart race the sibling test
-  // covers.
-  test('a response-stream preview that arrives while the final edit builds its tools does not overwrite it', async function (assert) {
+  // Pins isStreamingFinished as a synchronous content flag, independent of
+  // tool resolution: the preview gate in
+  // RoomResource.hydrateResponseStreamPreview reads it to drop a stale
+  // preview, so a straggler preview arriving while the final edit's tool is
+  // still resolving must not overwrite the finalized body.
+  test('a response-stream preview that arrives while the final edit resolves its tools does not overwrite it', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
     let matrixService = getService('matrix-service');
@@ -2666,7 +2670,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       await hold.reached();
 
       // A late to-device preview for the same turn arrives while the final
-      // edit's tool build is held.
+      // edit's tool resolution is held.
       simulateToDeviceEvent(
         APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
         {
@@ -2699,7 +2703,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .doesNotContainText('A stale preview.');
   });
 
-  test('a host tool whose build keeps failing gets a terminal invalid result and the room keeps processing', async function (assert) {
+  test('a host tool whose command never resolves gets a terminal invalid result and the room keeps processing', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
 
@@ -2710,8 +2714,6 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         '@aibot:localhost',
         finalEditWithHostTool(streamingEventId, 'Reading', []),
       );
-      // settled() rides the drain's bounded finalization retries (each a
-      // run-loop timer) through to its give-up pass.
       await settled();
     } finally {
       fail.restore();
@@ -2726,19 +2728,19 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.strictEqual(
       hostToolResults.length,
       1,
-      'exactly one terminal result is posted for the request whose build kept failing',
+      'exactly one terminal result is posted for the request that never resolved',
     );
     assert.strictEqual(
       hostToolResults[0]?.content['m.relates_to']?.key,
       'invalid',
-      'the unbuildable tool is resolved invalid',
+      'the unresolvable tool is reported invalid',
     );
     assert
       .dom('[data-test-tool-call-apply="applying"]')
       .doesNotExist('no tool is left spinning in the applying state');
 
-    // The failing build must not poison room processing: a later bot message
-    // in the same room still loads and renders.
+    // The failing resolution must not poison room processing: a later bot
+    // message in the same room still loads and renders.
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Still alive',
@@ -2750,6 +2752,107 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom(`[data-test-room="${roomId}"]`)
       .containsText('Still alive', 'the room keeps processing later events');
+  });
+
+  test('a host tool renamed by the final edit runs as the renamed tool, not the stale one', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // A streamed chunk names the request with a name that is not complete
+    // yet, which resolves to no command.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'slow-host-read', name: 'read-file-for' },
+      ],
+      'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+      data: { context: { agentId: getService('matrix-service').agentId } },
+    });
+    await settled();
+
+    let hold = holdDiscoveredSkillLoads();
+    try {
+      // The final edit renames it to the discovered host tool, whose
+      // resolution is held.
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await hold.reached();
+      await drainIsValidating('slow-host-read');
+      assert.strictEqual(
+        getRoomEvents(roomId).filter(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content.commandRequestId === 'slow-host-read',
+        ).length,
+        0,
+        'the drain waits for the renamed tool instead of validating the stale name',
+      );
+    } finally {
+      hold.release();
+    }
+    await settled();
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(hostToolResults.length, 1, 'exactly one result');
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'applied',
+      'the renamed tool ran',
+    );
+  });
+
+  test('a call that already has a result is not answered again when its command no longer resolves', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // As on a reload that replays history: the finished request and its
+    // result arrive together, while its command no longer resolves.
+    let fail = failDiscoveredSkillLoads();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'slow-host-read',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: streamingEventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+      await settled();
+    } finally {
+      fail.restore();
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.deepEqual(
+      hostToolResults.map((event) => event.content['m.relates_to']?.key),
+      ['applied'],
+      'only the existing result, no contradictory invalid',
+    );
   });
 
   test('Accept All bar still renders for a command that requires user approval', async function (assert) {

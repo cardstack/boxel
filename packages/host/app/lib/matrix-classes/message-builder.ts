@@ -42,7 +42,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import { Message } from './message';
-import MessageTool from './message-tool';
+import MessageTool, { type ToolResolution } from './message-tool';
 
 import type { RoomMember } from './member';
 import type { ToolCallStatus } from '@cardstack/base/command';
@@ -177,7 +177,7 @@ export default class MessageBuilder {
     );
   }
 
-  async buildMessage(): Promise<Message> {
+  buildMessage(): Message {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
@@ -194,16 +194,8 @@ export default class MessageBuilder {
       message.reloadBillingData = shouldReloadBillingData(event.content);
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
-      let toolRequests = getToolRequests<Partial<EncodedToolRequest>>(
-        event.content,
-      );
-      if (toolRequests) {
-        // Same contract as updateMessage: declared requests are recorded
-        // before the builds they gate.
-        message.setExpectedToolRequests(toolRequests);
-        message.setTools(
-          await this.buildMessageCommands(message, toolRequests),
-        );
+      if (getToolRequests(event.content)) {
+        message.setTools(this.buildMessageCommands(message));
       }
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
@@ -217,7 +209,7 @@ export default class MessageBuilder {
     return message;
   }
 
-  async updateMessage(message: Message) {
+  updateMessage(message: Message) {
     if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
@@ -272,12 +264,6 @@ export default class MessageBuilder {
       getToolRequests<Partial<EncodedToolRequest>>(
         this.event.content as CardMessageContent,
       ) ?? [];
-    // Record the declared requests before the builds below, which await
-    // network loads (resolving a tool's declaring skill): a finished edit can
-    // apply while a tool is still being built, so "finished" never means the
-    // tool list is final. The tool drain and restarted room passes gate on
-    // Message.allRequestedToolsBuilt / allToolsForEventBuilt instead.
-    message.setExpectedToolRequests(encodedCommandRequests);
     for (let encodedCommandRequest of encodedCommandRequests) {
       // A request without an id yet (its first streamed chunk) can't be
       // matched to later chunks or to its result — skip it; a later replace
@@ -285,65 +271,25 @@ export default class MessageBuilder {
       if (!encodedCommandRequest.id) {
         continue;
       }
-      try {
-        let command = message.tools.find(
-          (c) => c.toolRequest.id === encodedCommandRequest.id,
+      let command = message.tools.find(
+        (c) => c.toolRequest.id === encodedCommandRequest.id,
+      );
+      if (command) {
+        this.applyToolRequestChunk(command, encodedCommandRequest);
+      } else {
+        let built = this.buildMessageCommand(
+          message,
+          decodeToolRequest(encodedCommandRequest),
         );
-        if (command) {
-          await this.updateExistingTool(
-            message,
-            command,
-            encodedCommandRequest,
-          );
-        } else {
-          let built = await this.buildMessageCommand(
-            message,
-            decodeToolRequest(encodedCommandRequest),
-          );
-          built.toolRequestEventTs = this.event.origin_server_ts;
-          // buildMessageCommand awaits network loads (resolving the tool's
-          // declaring skill), so a concurrent build for a later replace of the
-          // same message can land first. Re-check before pushing: a duplicate
-          // MessageTool for the same request would never receive its result
-          // (results attach to the first match) and would spin forever.
-          let existing = message.tools.find(
-            (c) => c.toolRequest.id === encodedCommandRequest.id,
-          );
-          if (existing) {
-            await this.updateExistingTool(
-              message,
-              existing,
-              encodedCommandRequest,
-            );
-          } else {
-            message.tools.push(built);
-          }
-        }
-      } catch (e) {
-        // A build failure (the declaring skill or its command module failed
-        // to load) must not abort message building — the room pass would
-        // abort at this event on every restart, freezing the whole timeline.
-        // Leave the tool unbuilt instead: the next pass retries the build,
-        // and the tool drain's bounded wait posts a terminal 'invalid' for a
-        // request whose build never succeeds.
-        console.error(
-          `could not build tool "${encodedCommandRequest.name}" (${encodedCommandRequest.id}):`,
-          e,
-        );
+        built.toolRequestEventTs = this.event.origin_server_ts;
+        message.tools.push(built);
       }
     }
   }
 
-  async updateMessageCommandResult(message: Message) {
+  updateMessageCommandResult(message: Message) {
     if (message.tools.length === 0) {
-      message.setTools(
-        await this.buildMessageCommands(
-          message,
-          getToolRequests<Partial<EncodedToolRequest>>(
-            this.event.content as CardMessageContent,
-          ),
-        ),
-      );
+      message.setTools(this.buildMessageCommands(message));
     }
 
     if (this.builderContext.toolResultEvent && message.tools.length > 0) {
@@ -370,48 +316,6 @@ export default class MessageBuilder {
     }
   }
 
-  // A MessageTool resolves its tool (codeRef, approval, verb) once, when the
-  // first chunk of its request arrives. Resolve again when a later chunk
-  // renames the request, or when the finished request still has no tool: the
-  // first chunk can carry a name that is not complete yet, or the declaring
-  // skill can fail to load, and without this the call fails at validation
-  // with "No command for the name" although its skill declares it.
-  private async updateExistingTool(
-    message: Message,
-    tool: MessageTool,
-    encodedToolRequest: Partial<EncodedToolRequest>,
-  ) {
-    let decoded = decodeToolRequest(encodedToolRequest);
-    let renamed = !!decoded.name && decoded.name !== tool.name;
-    // Only a call nothing has answered yet: a result already recorded for it
-    // stays as it is.
-    let unresolvedAtEnd =
-      tool.toolCallStatus === 'ready' &&
-      !tool.codeRef &&
-      !!decoded.name &&
-      decoded.executedBy !== AI_BOT_EXECUTOR &&
-      !!(this.event.content as CardMessageContent).isStreamingFinished;
-    if (
-      (!renamed && !unresolvedAtEnd) ||
-      this.event.origin_server_ts < tool.toolRequestEventTs
-    ) {
-      this.applyToolRequestChunk(tool, encodedToolRequest);
-      return;
-    }
-    let rebuilt = await this.buildMessageCommand(message, decoded);
-    rebuilt.toolRequestEventTs = this.event.origin_server_ts;
-    // The build awaited network loads; find the tool again, since another
-    // pass may have replaced it or written a newer chunk meanwhile.
-    let index = message.tools.findIndex((c) => c.toolRequest.id === decoded.id);
-    if (index < 0) {
-      message.tools.push(rebuilt);
-    } else if (
-      message.tools[index].toolRequestEventTs <= rebuilt.toolRequestEventTs
-    ) {
-      message.tools.splice(index, 1, rebuilt);
-    }
-  }
-
   // Builder passes finishing out of order must not regress a MessageTool's
   // request to an older event's chunk — validation and auto-execution would
   // then run against stale arguments. Apply a chunk only when its event is
@@ -425,12 +329,17 @@ export default class MessageBuilder {
     }
     tool.toolRequest = decodeToolRequest(encodedToolRequest);
     tool.toolRequestEventTs = this.event.origin_server_ts;
+    // The first chunk can carry a name that is not complete yet; resolve the
+    // tool again for the name it has now. A no-op when the name is unchanged.
+    tool.resolve().catch(() => {
+      // Recorded on the tool; the tool drain retries when it validates.
+    });
   }
 
-  private async buildMessageCommands(
-    message: Message,
-    toolRequests: Partial<EncodedToolRequest>[] | undefined,
-  ) {
+  private buildMessageCommands(message: Message) {
+    let eventContent = this.event.content as CardMessageContent;
+    let toolRequests =
+      getToolRequests<Partial<EncodedToolRequest>>(eventContent);
     let commands = new TrackedArray<MessageTool>();
     if (!toolRequests) {
       return commands;
@@ -444,27 +353,17 @@ export default class MessageBuilder {
       if (!toolRequest.id) {
         continue;
       }
-      try {
-        let command = await this.buildMessageCommand(
-          message,
-          decodeToolRequest(toolRequest),
-        );
-        command.toolRequestEventTs = this.event.origin_server_ts;
-        commands.push(command);
-      } catch (e) {
-        // Same policy as updateMessage's build loop: a build failure leaves
-        // the tool unbuilt rather than aborting message building for the
-        // whole timeline.
-        console.error(
-          `could not build tool "${toolRequest.name}" (${toolRequest.id}):`,
-          e,
-        );
-      }
+      let command = this.buildMessageCommand(
+        message,
+        decodeToolRequest(toolRequest),
+      );
+      command.toolRequestEventTs = this.event.origin_server_ts;
+      commands.push(command);
     }
     return commands;
   }
 
-  private async buildMessageCommand(
+  private buildMessageCommand(
     message: Message,
     toolRequest: Partial<ToolRequest>,
   ) {
@@ -521,12 +420,51 @@ export default class MessageBuilder {
       );
     }
 
+    let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
+      'm.relates_to'
+    ]?.key || 'ready') as ToolCallStatus;
+
+    // The tool is created now, from the request alone; resolving its command
+    // awaits network loads and happens on the tool itself (see
+    // MessageTool.resolve), so the message's tool list is complete as soon as
+    // its event is applied.
+    return new MessageTool(
+      message,
+      toolRequest,
+      undefined,
+      this.builderContext.effectiveEventId,
+      true,
+      'Apply',
+      toolCallStatus,
+      toolResultEvent && isToolResultWithOutputContent(toolResultEvent.content)
+        ? toolResultEvent.content.data.card
+        : undefined,
+      getOwner(this)!,
+      toolResultEvent?.content.failureReason,
+      false,
+      (request) => this.resolveTool(request),
+    );
+  }
+
+  // Resolves a host tool's command from its name: the enabled skills first,
+  // then a skill the model discovered the tool in. Reads the room's skills and
+  // events when it runs, not when the tool was built: the skills may have
+  // finished loading, or the discovering result arrived, since.
+  private async resolveTool(
+    toolRequest: Partial<ToolRequest>,
+  ): Promise<ToolResolution> {
+    let roomResource = this.matrixService.roomResources.get(
+      this.builderContext.roomId,
+    );
+    let skills = roomResource?.skills ?? this.builderContext.skills;
+    let events = roomResource?.events ?? this.builderContext.events;
+
     // Find command in skills. loadSkillSource handles both legacy Skill
     // cards and markdown skills (tools in boxel.tools frontmatter).
     let skillTool:
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
-    findCommand: for (let skill of this.builderContext.skills) {
+    findCommand: for (let skill of skills) {
       let source = await loadSkillSource(this.store, skill.cardId);
       if (!source) {
         continue;
@@ -551,14 +489,11 @@ export default class MessageBuilder {
     // `requiresApproval` likewise comes from the verified declaration (absent
     // means approval required), exactly as for enabled skills.
     if (!skillTool && toolRequest.name) {
-      let sourceSkillUrl = findDiscoveredToolSkillUrl(
-        this.builderContext.events,
-        toolRequest.name,
-      );
+      let sourceSkillUrl = findDiscoveredToolSkillUrl(events, toolRequest.name);
       if (sourceSkillUrl) {
         // The URL comes from a bot event, so a load blowing up on a
-        // malformed or unreadable id must degrade to "unresolved tool", not
-        // break message building for the whole timeline.
+        // malformed or unreadable id degrades to "unresolved tool", which
+        // validation reports through the unrecognized-command path.
         try {
           let source = await loadSkillSource(this.store, sourceSkillUrl);
           if (source) {
@@ -588,28 +523,12 @@ export default class MessageBuilder {
       neverAutoExecutes = CommandKlass?.neverAutoExecutes === true;
     }
 
-    let requiresApproval = skillTool?.requiresApproval ?? true;
-
-    let toolCallStatus: ToolCallStatus = (toolResultEvent?.content[
-      'm.relates_to'
-    ]?.key || 'ready') as ToolCallStatus;
-
-    let messageTool = new MessageTool(
-      message,
-      toolRequest,
-      skillTool?.codeRef,
-      this.builderContext.effectiveEventId,
-      requiresApproval,
+    return {
+      codeRef: skillTool?.codeRef,
+      requiresApproval: skillTool?.requiresApproval ?? true,
       actionVerb,
-      toolCallStatus,
-      toolResultEvent && isToolResultWithOutputContent(toolResultEvent.content)
-        ? toolResultEvent.content.data.card
-        : undefined,
-      getOwner(this)!,
-      toolResultEvent?.content.failureReason,
       neverAutoExecutes,
-    );
-    return messageTool;
+    };
   }
 }
 

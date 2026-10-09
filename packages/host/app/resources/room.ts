@@ -106,12 +106,9 @@ export class RoomResource extends Resource<Args> {
   // Highest to-device preview `sequence` applied per streaming message
   // (keyed by parentEventId). Previews carry full accumulated state, so an
   // out-of-order or duplicate delivery is simply dropped rather than regressing
-  // the message to older content. Both maps are pruned when a message finalizes
-  // (see hydrateResponseStreamPreview) and cleared in teardown().
+  // the message to older content. Pruned when a message finalizes (see
+  // hydrateResponseStreamPreview) and cleared in teardown().
   #lastPreviewSequence = new Map<string, number>();
-  // Serializes preview applies per streaming message so their async tool-request
-  // builds land in sequence order rather than promise-completion order.
-  #previewApplyChain = new Map<string, Promise<void>>();
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -156,7 +153,6 @@ export class RoomResource extends Resource<Args> {
     this.#responseStreamPreviewDisposer?.();
     this.#responseStreamPreviewDisposer = undefined;
     this.#lastPreviewSequence.clear();
-    this.#previewApplyChain.clear();
     for (let id of this.#skillIds ?? []) {
       this.store.dropReference(id);
     }
@@ -238,7 +234,7 @@ export class RoomResource extends Resource<Args> {
             if (this.isRealmServerEvent(event)) {
               break;
             } else {
-              await this.loadRoomMessage({
+              this.loadRoomMessage({
                 roomId,
                 event,
                 index,
@@ -246,11 +242,11 @@ export class RoomResource extends Resource<Args> {
             }
             break;
           case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
-            await this.loadRoomMessage({ roomId, event, index });
+            this.loadRoomMessage({ roomId, event, index });
             break;
           case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
           case LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-            await this.updateMessageCommandResult({ roomId, event, index });
+            this.updateMessageCommandResult({ roomId, event, index });
             break;
           case 'm.room.create':
             await this.loadRoomCreateEvent(event);
@@ -732,7 +728,7 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private async loadRoomMessage({
+  private loadRoomMessage({
     roomId,
     event,
     index,
@@ -763,19 +759,7 @@ export class RoomResource extends Resource<Args> {
         message.setUsage(usage);
       }
     }
-    // A finished event whose declared tools aren't all built yet still gets
-    // another updateMessage pass: tool builds await network loads (resolving
-    // the tool's declaring skill), so a pass restarted mid-build would
-    // otherwise skip the message and the tool drain would run a partial tool
-    // list, leaving the late tool stuck in "applying" with nothing to run it.
-    // Re-entering mid-build is safe — updateMessage re-checks for a duplicate
-    // after each build before pushing. Bounded, too: a build that keeps
-    // failing is eventually resolved 'invalid' and settled by the tool
-    // drain's give-up paths, after which this condition stops re-entering.
-    if (
-      !message?.isStreamingOfEventFinished ||
-      !message.allToolsForEventBuilt
-    ) {
+    if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
         roomId,
         userId: event.sender,
@@ -790,13 +774,13 @@ export class RoomResource extends Resource<Args> {
       });
 
       if (!message) {
-        message = await messageBuilder.buildMessage();
+        message = messageBuilder.buildMessage();
         this._messageCache.set(
           message.clientGeneratedId ?? effectiveEventId,
           message as any,
         );
       } else {
-        await messageBuilder.updateMessage(message);
+        messageBuilder.updateMessage(message);
       }
     }
 
@@ -815,14 +799,10 @@ export class RoomResource extends Resource<Args> {
   // request chunk merging — and its `setUpdated(new Date())` resets the
   // streaming stall timeout so long responses don't trip the fallback.
   //
-  // This method gates an incoming preview (roomId / staleness / duplicate)
-  // synchronously and then enqueues its apply on a per-message chain. The gate
-  // must be synchronous: it decides ordering by arrival, and
-  // applyResponseStreamPreview awaits async tool-request builds, so without
-  // serialization two overlapping previews would resolve their tool args in
-  // promise-completion order rather than sequence order (every synthetic event
-  // pins the same origin_server_ts, so MessageBuilder.applyToolRequestChunk's
-  // timestamp guard can't reorder them).
+  // The gate (roomId / staleness / duplicate) and the apply both run
+  // synchronously, so previews apply in sequence order and none can apply
+  // after the final room edit finalized the message. updateMessage never
+  // awaits: a tool's command is resolved on the MessageTool itself.
   private hydrateResponseStreamPreview(payload: AppBoxelResponseStreamContent) {
     if (!payload || payload.roomId !== this.roomId) {
       return;
@@ -838,7 +818,6 @@ export class RoomResource extends Resource<Args> {
       // AI turn (teardown() is the backstop).
       if (message?.isStreamingOfEventFinished) {
         this.#lastPreviewSequence.delete(payload.parentEventId);
-        this.#previewApplyChain.delete(payload.parentEventId);
       }
       return;
     }
@@ -848,31 +827,13 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     this.#lastPreviewSequence.set(payload.parentEventId, payload.sequence);
-
-    let previous =
-      this.#previewApplyChain.get(payload.parentEventId) ?? Promise.resolve();
-    let next = previous.then(() =>
-      this.applyResponseStreamPreview(message, payload),
-    );
-    this.#previewApplyChain.set(payload.parentEventId, next);
+    this.applyResponseStreamPreview(message, payload);
   }
 
-  private async applyResponseStreamPreview(
+  private applyResponseStreamPreview(
     message: Message,
     payload: AppBoxelResponseStreamContent,
   ) {
-    // The synchronous gate checked isStreamingOfEventFinished at *enqueue* time,
-    // but this apply may have waited behind a predecessor on the chain while the
-    // final consolidated room edit landed and finalized the message. Re-check
-    // now: updateMessage rewrites body / reasoning / isStreamingFinished
-    // synchronously (before its first await), so an apply that *starts* after
-    // finalization would un-finish the completed message with stale content —
-    // leaving it stuck "streaming" until the stall timeout trips. An apply that
-    // started before finalization is safe: the final edit's synchronous writes
-    // still land last.
-    if (message.isStreamingOfEventFinished) {
-      return;
-    }
     try {
       let author = this.upsertRoomMember({
         roomId: payload.roomId,
@@ -912,13 +873,11 @@ export class RoomResource extends Resource<Args> {
         events: this.events,
         skills: this.skills,
       });
-      await messageBuilder.updateMessage(message);
+      messageBuilder.updateMessage(message);
     } catch (err) {
       // A dropped preview is harmless — the final room edit reconciles the true
       // state — so swallow (mirroring ai-bot's best-effort sendToDevicePreview)
-      // rather than surface an unhandled rejection from this fire-and-forget
-      // handler. updateMessage can throw when a new tool id triggers an async
-      // skill/loader resolve.
+      // rather than surface an exception from this to-device event handler.
       responseStreamLog.debug(
         `dropped response-stream preview (seq ${payload.sequence}) for ${payload.parentEventId}`,
         err,
@@ -926,7 +885,7 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private async updateMessageCommandResult({
+  private updateMessageCommandResult({
     roomId,
     event,
     index,
@@ -981,7 +940,7 @@ export class RoomResource extends Resource<Args> {
         toolResultEvent: event,
       },
     );
-    await messageBuilder.updateMessageCommandResult(message);
+    messageBuilder.updateMessageCommandResult(message);
   }
 
   private getEffectiveEventId(
