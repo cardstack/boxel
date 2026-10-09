@@ -4,6 +4,7 @@
  * margin, cubics derived every frame. Versions reflow the copy; the
  * selected pair shows its thread (first comment on by default).
  */
+import { htmlSafe } from '@ember/template';
 import {
   click,
   find,
@@ -18,9 +19,16 @@ import { module, test } from 'qunit';
 import {
   frames,
   setupChoreoGalleryTest,
+  stageWellStyle,
 } from '../helpers/choreo-gallery-stage';
 
 import type { ComponentLike } from '@glint/template';
+
+/** a scaled, shifted ancestor, so the demo is carried by a transform */
+const transformed = htmlSafe(
+  'transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0',
+);
+const well = stageWellStyle();
 
 module('Integration | Choreo gallery | wires', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
@@ -134,13 +142,8 @@ module('Integration | Choreo gallery | wires', function (hooks) {
     const Stage = Wires;
     const Carried = <template>
       <ChoreoRoot>
-        <div
-          style='transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0'
-        >
-          <div
-            class='choreo-stage-well'
-            style='position: relative; width: 1000px; height: 660px; container-name: platter; container-type: size; overflow: clip;'
-          >
+        <div style={{transformed}}>
+          <div class='choreo-stage-well' style={{well}}>
             <Stage />
           </div>
         </div>

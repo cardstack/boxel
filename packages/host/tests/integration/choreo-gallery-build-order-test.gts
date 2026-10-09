@@ -3,6 +3,7 @@
  * through its own transport.
  */
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import { click, render, settled, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -56,6 +57,9 @@ function isBo(item: { id: string }) {
   return item.id === 'bo';
 }
 
+/** the containing block the leavers' popLayout positions against */
+const positioned = htmlSafe('position: relative');
+
 module('Integration | Choreo gallery | build-order leaver', function (hooks) {
   setupBuildOrder(hooks);
 
@@ -69,7 +73,7 @@ module('Integration | Choreo gallery | build-order leaver', function (hooks) {
           class='narrow'
           {{on 'click' state.narrow}}
         >x</button>
-        <div style='position:relative'>
+        <div style={{positioned}}>
           <Presence
             @items={{state.items}}
             @key={{keyOf}}

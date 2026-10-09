@@ -97,9 +97,7 @@ export function setupChoreoGalleryTest(
           Element: HTMLDivElement;
         }>;
       }>('shell/choreo-root');
-      let well = htmlSafe(
-        `position: relative; width: ${width}px; height: ${height}px; container-name: platter; container-type: size; overflow: clip;`,
-      );
+      let well = stageWellStyle({ width, height });
       // the stage signature's args are optional, and a test renders a stage
       // on its own with none of them
       let AnyStage = Stage as ComponentLike<{ Args: { face?: string } }>;
@@ -115,6 +113,19 @@ export function setupChoreoGalleryTest(
     },
   };
   return gallery;
+}
+
+/**
+ * The style of the well `renderStage` mounts a stage in: a box of a fixed size
+ * that is the stage's platter container, as the demo page's well is.
+ */
+export function stageWellStyle({
+  width = 1000,
+  height = 660,
+}: { height?: number; width?: number } = {}) {
+  return htmlSafe(
+    `position: relative; width: ${width}px; height: ${height}px; container-name: platter; container-type: size; overflow: clip;`,
+  );
 }
 
 /**

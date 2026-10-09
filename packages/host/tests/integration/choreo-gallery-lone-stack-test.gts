@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import { settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 
@@ -42,6 +43,9 @@ function rest() {
  * the only member of its stack — nothing else on the page shares the id, so
  * there is no counterpart and no crossfade to hand over to.
  */
+/** the containing block the leavers' popLayout positions against */
+const positioned = htmlSafe('position: relative');
+
 module('Integration | Choreo gallery | a lone stack', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
   let Lightbox: ComponentLike;
@@ -55,7 +59,7 @@ module('Integration | Choreo gallery | a lone stack', function (hooks) {
 
     const Harness = <template>
       <LayoutGroup>
-        <div class='grid' style='position:relative'>
+        <div class='grid' style={{positioned}}>
           <Presence
             @items={{state.items}}
             @key={{keyOf}}
