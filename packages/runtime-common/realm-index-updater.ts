@@ -405,6 +405,22 @@ export class RealmIndexUpdater {
     return url.href === realmConfigHrefFor(this.realmURL);
   }
 
+  #isRealmIgnoreFile(url: URL): boolean {
+    return REALM_IGNORE_FILES.some(
+      (name) => url.href === `${this.realmURL.href}${name}`,
+    );
+  }
+
+  // Not awaited by the write that changed the rules: the gates a request
+  // waits on never cover a from-scratch pass (see `indexing`).
+  #rereadIgnoreRules() {
+    this.publishFullIndex().completed.catch((e: any) => {
+      this.#log.warn(
+        `Rereading the ignore rules of ${this.realmURL.href} failed: ${e?.message}`,
+      );
+    });
+  }
+
   publishFullIndex(
     priority = systemInitiatedPriority,
     opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
@@ -598,6 +614,12 @@ export class RealmIndexUpdater {
         // the fresher full-index data.
         if (snapshotVersion === this.#ignoreDataVersion) {
           this.#ignoreData = ignoreData;
+        }
+        // A pass carries the ignore rules forward unchanged, so an edit to the
+        // root ignore files takes a from-scratch pass: it rereads the rules,
+        // tombstones what they now hide and indexes what they now reveal.
+        if (changes.some(({ url }) => this.#isRealmIgnoreFile(url))) {
+          this.#rereadIgnoreRules();
         }
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
