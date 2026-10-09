@@ -492,10 +492,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let realmURL = this.realm.realmOf(
       rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
     );
-    // A workspace the user can only read still runs: reads work, and each
-    // write is refused on its own.
-    if (!realmURL || !this.realm.canRead(realmURL)) {
-      throw new Error(`The current user cannot read ${realmInput}`);
+    // Read and write are separate grants, and either one is enough to run:
+    // in a workspace the user can only read, each write is refused on its
+    // own, and in one the user can only write, the realm refuses each read.
+    if (
+      !realmURL ||
+      !(this.realm.canRead(realmURL) || this.realm.canWrite(realmURL))
+    ) {
+      throw new Error(`The current user cannot read or write ${realmInput}`);
     }
 
     let session = new RealmFsSession(
