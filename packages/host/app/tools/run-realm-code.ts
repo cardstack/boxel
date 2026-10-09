@@ -1,10 +1,16 @@
 import { service } from '@ember/service';
 
 import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
+import {
+  RoomActions,
+  type RequestedRoomChanges,
+} from '../lib/realm-runner/room-actions';
 import runRealmCode from '../lib/realm-runner/runner';
+import { loadSkillSource } from '../lib/skill-tools';
 import {
   captureDeadline,
   captureForAgent,
@@ -16,6 +22,8 @@ import {
 import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
 
 import LintAndFixTool from './lint-and-fix';
+import SetActiveLLMTool from './set-active-llm';
+import UpdateRoomSkillsTool from './update-room-skills';
 
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
@@ -26,6 +34,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
+import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -89,10 +98,14 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   capture: false,
   'workspaces.create': false,
   'workspaces.delete': false,
+  'room.enableSkills': false,
+  'room.disableSkills': false,
+  'room.setModel': false,
 };
 
 // The host half of `realm.fs`: every call the script makes lands here, inside
-// one realm. Reads come from the realm on first use. A write saves the file
+// one realm. `room.*` calls land here too, so they share the run's queue and
+// its end. Reads come from the realm on first use. A write saves the file
 // before the call returns, so a script that awaits each write sees each file
 // land in the realm as it goes.
 class RealmFsSession {
@@ -133,6 +146,7 @@ class RealmFsSession {
     private deleteWorkspace: DeleteWorkspace,
     private mayDeleteWorkspaces: boolean,
     private mayWrite: boolean,
+    readonly room: RoomActions,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -343,6 +357,12 @@ class RealmFsSession {
         this.goneWorkspaces.add(deleted.url);
         return { url: deleted.url, deleted: true };
       }
+      case 'room.enableSkills':
+        return await this.room.enableSkills(args[0]);
+      case 'room.disableSkills':
+        return this.room.disableSkills(args[0]);
+      case 'room.setModel':
+        return this.room.setModel(args[0]);
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -447,13 +467,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private recentFilesService: RecentFilesService;
+  @service declare private store: StoreService;
   @service declare private toolService: ToolService;
 
   description =
     'Run safe Realm code that reads and edits realm source files, can ' +
-    'look at what it made with realm.capture, and can create workspaces ' +
-    'with realm.workspaces.create. In a workspace the user can only read, ' +
-    'reads work and each write is refused.';
+    'look at what it made with realm.capture, can create workspaces with ' +
+    'realm.workspaces.create, and can change the skills and model of this ' +
+    'room with room.*. In a workspace the user can only read, reads work ' +
+    'and each write is refused.';
   static actionVerb = 'Run';
 
   static neverAutoExecutesFor(
@@ -529,6 +551,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
         ),
       scriptDeletesWorkspaces(input.code),
       this.realm.canWrite(realmURL),
+      new RoomActions({
+        checkSkill: (id) => this.checkSkill(id),
+        knownModels: () => this.knownModels(),
+      }),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -585,6 +611,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (session.deletedWorkspaces.length > 0) {
         report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
       }
+      // Room changes are made only after a run that finished, so a failed
+      // run made none.
+      if (session.room.requested) {
+        report += ' The room changes it asked for were not made.';
+      }
       throw new Error(report);
     }
 
@@ -592,6 +623,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     session.close();
     await session.idle();
     await this.openCreatedWorkspace(session);
+    let roomChanges = session.room.requested
+      ? await this.changeRoom(roomId, session.room.requested)
+      : [];
     let commandModule = await this.loadToolModule();
     return new commandModule.RunRealmCodeResult({
       files: [...session.saved].map(
@@ -619,7 +653,70 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ),
       createdWorkspaces: [...session.createdWorkspaces],
       deletedWorkspaces: [...session.deletedWorkspaces],
+      roomChanges,
     });
+  }
+
+  // Makes the room changes the script asked for, and describes each one. A
+  // change that fails is described too: the files are already saved, so the
+  // run still reports.
+  private async changeRoom(
+    roomId: string,
+    { skillsToEnable, skillsToDisable, model }: RequestedRoomChanges,
+  ): Promise<string[]> {
+    let changes: string[] = [];
+    if (skillsToEnable.length || skillsToDisable.length) {
+      try {
+        await new UpdateRoomSkillsTool(this.toolContext).execute({
+          roomId,
+          skillCardIdsToActivate: skillsToEnable,
+          skillCardIdsToDeactivate: skillsToDisable,
+        });
+        if (skillsToEnable.length) {
+          changes.push(`Enabled skills: ${skillsToEnable.join(', ')}`);
+        }
+        if (skillsToDisable.length) {
+          changes.push(`Disabled skills: ${skillsToDisable.join(', ')}`);
+        }
+      } catch (error) {
+        changes.push(`Skills were not changed: ${errorMessage(error)}`);
+      }
+    }
+    if (model !== undefined) {
+      try {
+        await new SetActiveLLMTool(this.toolContext).execute({
+          roomId,
+          model,
+        });
+        changes.push(`Model set to ${model}`);
+      } catch (error) {
+        changes.push(`Model was not changed: ${errorMessage(error)}`);
+      }
+    }
+    return changes;
+  }
+
+  private async checkSkill(id: string): Promise<void> {
+    let source;
+    try {
+      source = await loadSkillSource(this.store, id);
+    } catch (error) {
+      throw new Error(`Unable to load skill ${id}: ${errorMessage(error)}`);
+    }
+    if (!source) {
+      throw new Error(`Not a skill card or skill markdown file: ${id}`);
+    }
+  }
+
+  // The models the room's model picker offers.
+  private knownModels(): string[] {
+    let configs = this.matrixService.systemCard?.modelConfigurations;
+    if (configs) {
+      return configs.flatMap((config) =>
+        config.modelId ? [config.modelId] : [],
+      );
+    }
+    return DEFAULT_FALLBACK_MODELS.map((model) => model.modelId);
   }
 
   // The files it saved, then the captures it took.
@@ -747,6 +844,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ? virtualNetwork.toURL(realm).href
       : new URL(realm).href;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export { RunRealmCodeTool as RunRealmCodeCommand };

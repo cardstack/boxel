@@ -41,7 +41,7 @@ async function loadQuickJS(wasmURL: string): Promise<QuickJSWASMModule> {
   }
 }
 
-// The guest sees only `realm`. Each method is a thin wrapper that hands its
+// The guest sees only `realm` and `room`. Each method is a thin wrapper that hands its
 // arguments to the host and parses the host's JSON answer; the host does the
 // work and the checks, so nothing here is trusted.
 const BOOTSTRAP = `
@@ -65,6 +65,11 @@ const BOOTSTRAP = `
         create: (options) => call('workspaces.create', [options ?? {}]),
         delete: (url) => call('workspaces.delete', [url]),
       }),
+    });
+    globalThis.room = Object.freeze({
+      enableSkills: (ids) => call('room.enableSkills', [ids]),
+      disableSkills: (ids) => call('room.disableSkills', [ids]),
+      setModel: (model) => call('room.setModel', [model]),
     });
     delete globalThis.__realmURL;
   })();
@@ -128,6 +133,9 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'capture',
   'workspaces.create',
   'workspaces.delete',
+  'room.enableSkills',
+  'room.disableSkills',
+  'room.setModel',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a
