@@ -14,6 +14,7 @@ Reach for a neighbour in these cases:
 
 ```
 @src?, @alt (required; '' = decorative)
+@srcset?, @sizes? (responsive candidates; @src stays the fallback)
 @ratio? (number or '16 / 9'; defaults to @width / @height, then 4 / 3)
 @fit? ('cover' | 'contain'; default 'cover')
 @width?, @height?, @loading? ('lazy' | 'eager'; default 'lazy')
@@ -30,6 +31,8 @@ Element: HTMLDivElement
 **Three states, reported.** `data-status` on the frame is `loading`, `loaded` or `error`, and `@onStatusChange` fires on each change. While loading, the frame shows a shimmer on the ground colour and the image is transparent. It fades in once decoded. An image that finished before its listeners were attached, such as one from cache, is read on insert, so it never stays stuck in `loading`.
 
 **One fallback, then a face.** When `@src` fails, `@fallback` is tried once. A fallback identical to `@src` is not retried. When everything has failed, the broken `<img>` is removed and replaced with the `<:fallback>` block, or by default a picture glyph with the alt text written out, so the reader still learns what was meant to be there. A missing `@src` is a failure too. A new `@src` starts the whole sequence over.
+
+**`@srcset` lets the browser pick the size.** Hand it a width set (`photo-960.webp 960w, photo-1600.webp 1600w`) and a `@sizes` saying how wide the image is drawn, and a phone downloads the 960 while a retina desktop takes the 1600. `@src` stays the fallback for a browser that ignores the set. `sizes` and `srcset` are set before `src`, so nothing is fetched twice. Once `@fallback` takes over, the set is dropped with it, so a set that failed alongside `@src` never shadows the fallback.
 
 **`@preview` opens it larger.** The frame becomes a button. Click or Enter opens a **Dialog** with the image shown `contain` at up to 75% of the viewport height. The button is disabled until the image has loaded, so it never opens onto a broken picture.
 
