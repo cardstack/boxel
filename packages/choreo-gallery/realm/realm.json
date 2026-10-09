@@ -4,7 +4,8 @@
     "attributes": {
       "cardInfo": {
         "name": "Choreo"
-      }
+      },
+      "iconURL": "https://app.boxel.ai/choreo-gallery/icon.svg"
     },
     "meta": {
       "adoptsFrom": {

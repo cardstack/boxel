@@ -22,6 +22,11 @@ RUN CI=1 pnpm fetch
 COPY . ./
 RUN CI=1 pnpm install -r --offline
 
+# The Choreo gallery realm's films run from a built app that isn't committed.
+# Building it into the realm here means setup:choreo-gallery-in-deployment
+# copies the films along with the rest of the realm.
+RUN pnpm --dir=packages/choreo-film-app build:realm
+
 EXPOSE 3000
 
 CMD exec /realm-server/packages/realm-server/$realm_server_script

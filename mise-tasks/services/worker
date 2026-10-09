@@ -28,6 +28,7 @@ DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
 START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
+START_CHOREO_GALLERY=$(if [ -z "${SKIP_CHOREO_GALLERY:-}" ]; then echo "true"; else echo ""; fi)
 # `= "true"` rather than a non-empty test, matching services/realm-server
 # and the host config: a worker without the catalog realm cannot read back
 # the definitions cache the host's prerender writes under its prefix, so the
@@ -68,6 +69,9 @@ NODE_ENV=development \
   \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
+  \
+  ${START_CHOREO_GALLERY:+--fromUrl="${REALM_BASE_URL}/choreo-gallery/"} \
+  ${START_CHOREO_GALLERY:+--toUrl="${REALM_BASE_URL}/choreo-gallery/"} \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
