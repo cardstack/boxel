@@ -14,6 +14,7 @@ interface Signature {
     acceptingAll: boolean;
     acceptingAllLabel?: string;
     generatingResults: boolean;
+    generatingLabel?: string;
     stop: () => void;
     stopping: boolean;
     showUnreadIndicator: boolean;
@@ -49,9 +50,9 @@ export default class AiAssistantActionBar extends Component<Signature> {
       {{else if @generatingResults}}
         <div class='generating-results-container'>
           <span class='generating-results'>
-            Generating results<span class='dot'>.</span><span
+            {{if @generatingLabel @generatingLabel 'Generating results'}}<span
               class='dot'
-            >.</span><span class='dot'>.</span>
+            >.</span><span class='dot'>.</span><span class='dot'>.</span>
           </span>
           <BoxelButton
             @kind='primary'

@@ -2781,7 +2781,6 @@ export default class MatrixService extends Service {
         room: {
           timeline: {
             limit: 100,
-            not_types: [APP_BOXEL_STOP_GENERATING_EVENT_TYPE],
             'org.matrix.msc3874.not_rel_types': ['m.replace'],
           },
         },

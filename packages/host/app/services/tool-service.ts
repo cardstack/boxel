@@ -25,6 +25,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import {
   basicMappings,
@@ -541,7 +542,8 @@ export default class ToolService extends Service {
           if (
             messageTool.status === 'applied' ||
             messageTool.status === 'invalid' ||
-            messageTool.status === 'failed'
+            messageTool.status === 'failed' ||
+            messageTool.status === 'canceled'
           ) {
             continue;
           }
@@ -635,6 +637,13 @@ export default class ToolService extends Service {
           if (
             isAutoExecutableTool(messageTool, activeModeAtMessageTime, true)
           ) {
+            // Read after validation, which can take a while: the user may
+            // have stopped the loop meanwhile, and a tool that has not
+            // started must not start after a stop.
+            if (roomResource.stoppedMessageEventId === message.eventId) {
+              await this.sendCanceledToolResult(roomId!, messageTool);
+              continue;
+            }
             readyTools.push(messageTool);
           }
         }
@@ -660,6 +669,29 @@ export default class ToolService extends Service {
       // each one that arrives shows its spinner forever.
       finishedProcessingTools?.();
       toolProcessingWaiter.endAsync(waiterToken);
+    }
+  }
+
+  // Answers a tool the user's stop kept from running, so the call still has
+  // an outcome in the room and the model reads on the next turn why it
+  // never ran.
+  private async sendCanceledToolResult(
+    roomId: string,
+    messageTool: MessageTool,
+  ) {
+    try {
+      await this.matrixService.sendToolResultEvent({
+        roomId,
+        invokedToolFromEventId:
+          this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+          messageTool.eventId,
+        toolCallId: messageTool.id!,
+        status: 'canceled',
+        failureReason: STOPPED_TOOL_CALL_REASON,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+    } catch (e) {
+      console.error('could not send canceled tool result event to the room', e);
     }
   }
 
@@ -706,7 +738,8 @@ export default class ToolService extends Service {
       if (
         messageTool.status === 'applied' ||
         messageTool.status === 'invalid' ||
-        messageTool.status === 'failed'
+        messageTool.status === 'failed' ||
+        messageTool.status === 'canceled'
       ) {
         continue;
       }

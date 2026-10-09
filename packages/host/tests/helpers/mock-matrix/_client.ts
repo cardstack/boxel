@@ -21,6 +21,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -699,6 +700,7 @@ export class MockClient implements ExtendedClient {
       case 'm.room.name':
       case 'm.room.member':
       case APP_BOXEL_LLM_MODE:
+      case APP_BOXEL_STOP_GENERATING_EVENT_TYPE:
         return this.sdk.RoomEvent.Timeline;
       case 'm.receipt':
         return this.sdk.RoomEvent.Receipt;
