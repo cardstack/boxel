@@ -566,6 +566,15 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-policy-rule-grant] [data-test-field="blocklist"]')
       .exists({ count: 4 }, 'and which addresses it refuses them from');
     assert
+      .dom(`${ruleEditor(0)} [data-test-rate-limit-requests-default]`)
+      .includesText(
+        `${DEFAULT_ANONYMOUS_RATE_LIMIT.requests}`,
+        'the rate-limit fields say what applies when they are left empty',
+      );
+    assert
+      .dom(`${ruleEditor(0)} [data-test-rate-limit-window-default]`)
+      .includesText(`${DEFAULT_ANONYMOUS_RATE_LIMIT.windowSeconds}`);
+    assert
       .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
       .hasAttribute(
         'aria-label',
