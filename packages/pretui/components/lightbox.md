@@ -7,10 +7,11 @@ It owns the zoom engine, which is why **Gallery** does not: running two lightbox
 ## The contract
 
 ```
-@assets           — the gallery; non-image assets are dropped
+@assets           — the gallery (LightboxAsset[]); non-image assets are dropped
 @sections?         — {title?, caption?, assets}[]: one grid per chapter, ONE viewer over all of them
 @layout?           — 'grid' (default) | 'justified': equal-height rows, edge to edge, uncropped
 @rowHeight?        — target row height for 'justified'. Default 'clamp(96px, 16vw, 200px)'
+@thumbnailSizes?   — `sizes` for tiles with a thumbnailSrcset. Default 'auto, (max-width: 600px) 50vw, 25vw'
 @filmstrip?        — a thumbnail rail along the bottom of the open viewer. Default false
 @download?         — a save button in the viewer's toolbar. Default false
 @columns?          — fixed column count; omit for a responsive auto-fill grid
@@ -26,6 +27,8 @@ It owns the zoom engine, which is why **Gallery** does not: running two lightbox
 <:section as |section index|> — heads each section; defaults to its title and caption
 <:empty> — replaces the built-in empty state
 ```
+
+**Responsive sources, in the grid and in the viewer.** A `LightboxAsset` is a media asset that can also carry `thumbnailSrcset` (the tile's candidates) and `srcset` (the open image's). Tiles take `sizes` from `@thumbnailSizes`, so a phone's 90-pixel-tall row fetches a 480-wide thumbnail rather than the desktop's 720. The open image's set rides on the link as `data-pswp-srcset`, and PhotoSwipe sizes it to the width it actually displays, raising it as the reader zooms, so a phone opens a 1280 copy and only fetches the original when it zooms past it. The filmstrip rail draws from the tile set too. An asset without sets renders exactly as before.
 
 **`@sections` keeps one viewer across chapters.** One Lightbox per chapter means a swipe stops dead at the end of each one; a sectioned Lightbox renders a grid per chapter but hands PhotoSwipe the whole set, so the reader swipes from the last arrival straight into the first speech. Tile positions ("34 of 108") run across the set for the same reason.
 

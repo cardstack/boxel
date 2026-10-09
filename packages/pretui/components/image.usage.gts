@@ -65,6 +65,11 @@ export class ImageUsage extends Component {
       <:api as |Args|>
         <Args.String @name='src' @description='The image source.' />
         <Args.String
+          @name='srcset'
+          @description='Responsive width candidates (a 960w and a 1600w copy, say); the browser picks one by sizes, and src stays the fallback.'
+        />
+        <Args.String @name='sizes' @description='How wide the image is drawn, for choosing from srcset.' />
+        <Args.String
           @name='alt'
           @required={{true}}
           @value={{this.alt}}

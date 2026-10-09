@@ -181,6 +181,11 @@ class LightboxUsage extends Component {
           @defaultValue='clamp(96px, 16vw, 200px)'
           @description="Target row height for the justified layout; rows stretch from it to fill the width."
         />
+        <Args.String
+          @name='thumbnailSizes'
+          @defaultValue='auto, (max-width: 600px) 50vw, 25vw'
+          @description="The sizes attribute for tiles whose asset carries a thumbnailSrcset, so a phone fetches a small thumbnail and a desktop a larger one. Each asset may also carry srcset for the open image; PhotoSwipe sizes that to the width it displays."
+        />
         <Args.Bool
           @name='filmstrip'
           @value={{this.filmstrip}}

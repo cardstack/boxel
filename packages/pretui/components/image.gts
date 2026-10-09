@@ -25,6 +25,15 @@ export interface ImageSignature {
   Args: {
     src?: string;
     /**
+     * Responsive candidates (`url 480w, url 960w`) the browser chooses from
+     * by `@sizes`, keeping `@src` as the fallback. Dropped once `@fallback`
+     * is in use, so a failed set never shadows the fallback.
+     */
+    srcset?: string;
+    /** How wide the image is drawn, for choosing from `@srcset`. Default
+     * `100vw`, the browser's own default. */
+    sizes?: string;
+    /**
      * Required. The image's accessible name, or `''` for a decorative image.
      * There is no default: an omitted alt is a decision nobody made.
      */
@@ -83,6 +92,12 @@ export class Image extends Component<ImageSignature> {
 
   get currentSrc(): string | undefined {
     return this.current.triedFallback ? this.args.fallback : this.args.src;
+  }
+  get currentSrcset(): string | undefined {
+    return this.current.triedFallback ? undefined : this.args.srcset;
+  }
+  get currentSizes(): string | undefined {
+    return this.currentSrcset ? this.args.sizes : undefined;
   }
   get status(): ImageStatus {
     if (this.current.failed || !this.currentSrc) {
@@ -196,6 +211,8 @@ export class Image extends Component<ImageSignature> {
         >
           <img
             class='pretui-image-img'
+            sizes={{this.currentSizes}}
+            srcset={{this.currentSrcset}}
             src={{this.currentSrc}}
             alt=''
             width={{@width}}
@@ -211,6 +228,8 @@ export class Image extends Component<ImageSignature> {
       {{else}}
         <img
           class='pretui-image-img'
+          sizes={{this.currentSizes}}
+          srcset={{this.currentSrcset}}
           src={{this.currentSrc}}
           alt={{this.alt}}
           width={{@width}}

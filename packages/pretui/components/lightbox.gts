@@ -164,6 +164,11 @@ export interface LightboxItem {
   src: string;
   /** The thumbnail URL, which may be the same file. */
   thumb: string;
+  /** Responsive candidates for the tile, chosen by `@thumbnailSizes`. */
+  thumbSrcset?: string;
+  /** Responsive candidates for the open image; PhotoSwipe sizes them to the
+   * width it displays, so a phone never downloads the desktop file. */
+  srcset?: string;
   /** Always a number: PhotoSwipe needs one, so an unknown size is filled in
    * from `FALLBACK` and flagged on the element rather than guessed silently. */
   width: number;
@@ -187,8 +192,17 @@ export function isLightboxable(asset: ResolvedMediaAsset): boolean {
   return asset.kind === 'image';
 }
 
+/** A gallery image: a media asset plus the responsive sources a tile and the
+ * viewer choose from. Each is a plain `srcset` string (`url 480w, url 960w`). */
+export interface LightboxAsset extends MediaAssetSpec {
+  /** Candidates for the open image, alongside `src`. */
+  srcset?: string;
+  /** Candidates for the tile, alongside `thumbnail`. */
+  thumbnailSrcset?: string;
+}
+
 function toItem(
-  spec: MediaAssetSpec,
+  spec: LightboxAsset,
   index: number,
   total: number,
 ): LightboxItem {
@@ -200,6 +214,8 @@ function toItem(
     asset,
     src: asset.src,
     thumb: asset.thumbnail ?? asset.poster ?? asset.src,
+    thumbSrcset: spec.thumbnailSrcset,
+    srcset: spec.srcset,
     width,
     height,
     assumed: !known,
@@ -251,6 +267,7 @@ export interface LightboxEngineHost {
   filmstrip: boolean;
   download: boolean;
   thumbFor: (index: number) => string;
+  thumbSrcsetFor: (index: number) => string | undefined;
   srcFor: (index: number) => string;
   labelFor: (index: number) => string;
 }
@@ -372,6 +389,12 @@ const photoswipeGallery = modifier(
               img.alt = '';
               img.loading = 'lazy';
               img.decoding = 'async';
+              // sizes and srcset before src, so the browser picks once
+              const srcset = host.thumbSrcsetFor(i);
+              if (srcset) {
+                img.sizes = '88px';
+                img.srcset = srcset;
+              }
               img.src = host.thumbFor(i);
               button.appendChild(img);
               button.addEventListener('click', () => pswp.goTo(i));
@@ -448,7 +471,7 @@ const photoswipeGallery = modifier(
 export interface LightboxSection {
   title?: string;
   caption?: string;
-  assets: readonly MediaAssetSpec[];
+  assets: readonly LightboxAsset[];
 }
 
 /** A section as rendered: its tiles carry indices into the WHOLE set. */
@@ -462,7 +485,7 @@ export interface LightboxSignature {
   Args: {
     /** The gallery. Non-image assets are dropped, and the component says how
      * many it dropped rather than pretending the set was smaller. */
-    assets?: readonly MediaAssetSpec[];
+    assets?: readonly LightboxAsset[];
     /** The gallery in chapters: one grid per section, but ONE viewer over
      * the whole set, so a swipe carries on from one chapter into the next.
      * Use instead of `@assets`. Headed by `<:section>`, or by a default
@@ -488,6 +511,11 @@ export interface LightboxSignature {
     /** Target row height for the justified layout; rows stretch from it to
      * fill the width. Default `clamp(96px, 16vw, 200px)`. */
     rowHeight?: string;
+    /** The `sizes` for tiles that carry a `thumbnailSrcset`: how wide a tile
+     * is drawn, so the browser fetches the smallest candidate that stays
+     * sharp. Default `auto, (max-width: 600px) 50vw, 25vw`; `auto` lets a
+     * browser that supports it measure the lazy tile itself. */
+    thumbnailSizes?: string;
     /** Wrap from the last image to the first. Default `true`. */
     loop?: boolean;
     /** Show PhotoSwipe's "3 / 8" counter. Default `true`. */
@@ -522,9 +550,9 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
    * and the single viewer can swipe from one chapter into the next. */
   get groups(): LightboxGroup[] {
     // an image whose src could run script never becomes a link
-    const usable = (assets: readonly MediaAssetSpec[]) =>
+    const usable = (assets: readonly LightboxAsset[]) =>
       assets
-        .map((a) => resolveAsset(a))
+        .map((a) => resolveAsset(a) as ResolvedMediaAsset & LightboxAsset)
         .filter(isLightboxable)
         .filter((a) => safeHref(a.src, { images: true }) !== undefined);
     const perSection = this.sections.map((section) => usable(section.assets ?? []));
@@ -552,6 +580,10 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
     return this.args.download ?? false;
   }
   thumbFor = (index: number): string => this.items[index]?.thumb ?? '';
+  thumbSrcsetFor = (index: number): string | undefined => this.items[index]?.thumbSrcset;
+  get thumbnailSizes(): string {
+    return this.args.thumbnailSizes ?? 'auto, (max-width: 600px) 50vw, 25vw';
+  }
   srcFor = (index: number): string => this.items[index]?.src ?? '';
   labelFor = (index: number): string => this.items[index]?.position ?? '';
   get skippedNote(): string {
@@ -667,6 +699,7 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
                       target='_blank'
                       rel='noopener noreferrer'
                       data-pswp-width={{item.width}}
+                      data-pswp-srcset={{item.srcset}}
                       data-pswp-height={{item.height}}
                       data-assumed-size={{if item.assumed 'true'}}
                       aria-label={{item.position}}
@@ -674,6 +707,8 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
                     >
                       <img
                         class='pretui-lb-thumb'
+                        sizes={{if item.thumbSrcset this.thumbnailSizes}}
+                        srcset={{item.thumbSrcset}}
                         src={{item.thumb}}
                         alt={{item.alt}}
                         loading='lazy'

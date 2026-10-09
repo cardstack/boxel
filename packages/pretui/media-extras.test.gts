@@ -13,6 +13,7 @@ import { render, clearRender, click, triggerKeyEvent, waitUntil } from '@ember/t
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 
 import { Lightbox, isLightboxable } from './components/lightbox';
+import type { LightboxAsset } from './components/lightbox';
 import { TrimBar } from './components/trim-bar';
 import { Waveform, waveValueText } from './components/waveform';
 import { waveDelta } from './internal/media-wave';
@@ -184,6 +185,23 @@ module('Pretui | media extras', function (hooks) {
       'justified',
       'the layout reaches the grid',
     );
+  });
+
+  test('Lightbox hands responsive sources to the tile and to the viewer', async function (assert) {
+    const responsive: readonly LightboxAsset[] = [
+      { ...IMAGES[0]!, srcset: 'a-1280.webp 1280w, a.jpg 2000w', thumbnailSrcset: 'a-480.webp 480w, a-720.jpg 720w' },
+      IMAGES[1]!,
+    ];
+    await render(<template><Lightbox @assets={{responsive}} @thumbnailSizes='auto, 30vw' /></template>);
+    const [first, second] = Array.from(document.querySelectorAll('a.pretui-lb-link')) as HTMLAnchorElement[];
+    const thumb = first!.querySelector('img') as HTMLImageElement;
+    assert.strictEqual(thumb.getAttribute('srcset'), 'a-480.webp 480w, a-720.jpg 720w', 'the tile chooses from its own set');
+    assert.strictEqual(thumb.getAttribute('sizes'), 'auto, 30vw', '@thumbnailSizes says how wide a tile is drawn');
+    assert.strictEqual(first!.dataset['pswpSrcset'], 'a-1280.webp 1280w, a.jpg 2000w', 'PhotoSwipe reads the open image set off the link');
+    const plain = second!.querySelector('img') as HTMLImageElement;
+    assert.false(plain.hasAttribute('srcset'), 'an asset without a set renders a plain src');
+    assert.false(plain.hasAttribute('sizes'), 'and no sizes, which would mean nothing without a set');
+    assert.false(second!.hasAttribute('data-pswp-srcset'));
   });
 
   test('Lightbox <:section> replaces the default heading', async function (assert) {
