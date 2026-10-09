@@ -461,10 +461,9 @@ export class Wires extends Component {
         /* every stage keeps air on all four sides. A demo that runs edge to edge
            reads as a layout bug rather than as a stage, and the ones sized
            `min(Npx, 100%)` hit the frame exactly when the card is narrow.
-           The block padding was missing for a long time and it showed on any stage
-           tall enough to fill the platter: the content sat flush against the top and
-           bottom of the recess while keeping its 16px at the sides, which reads as
-           content that has overflowed rather than content that has been placed. */
+           The block padding matters as much as the inline: on a stage tall
+           enough to fill the platter, content flush against the top and bottom
+           of the recess reads as overflowed rather than placed. */
         padding-block: 10px;
         padding-inline: 16px;
         overflow: hidden;
