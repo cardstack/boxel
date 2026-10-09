@@ -4,10 +4,7 @@ import { module, test } from 'qunit';
 
 import { Loader } from '@cardstack/runtime-common';
 
-import {
-  BUNDLED_BASE_MODULES,
-  FETCHED_RE_EXPORTS,
-} from '@cardstack/host/lib/bundled-base';
+import { BUNDLED_BASE_MODULES } from '@cardstack/host/lib/bundled-base';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -93,9 +90,6 @@ module('Integration | bundled base modules', function (hooks) {
         if (imported in BUNDLED_BASE_MODULES) {
           continue;
         }
-        if (FETCHED_RE_EXPORTS.has(imported)) {
-          continue;
-        }
         violations.push(`${name} -> ${imported}`);
       }
     }
@@ -106,15 +100,13 @@ module('Integration | bundled base modules', function (hooks) {
     );
   });
 
-  // Why the whole-file re-exporters are fetched rather than bundled: evaluating
-  // one asks the loader for what it re-exports from, so the declarer is served
-  // first and the class is credited to it. Bundling the re-exporter is what
-  // breaks this — the bundler resolves that import inside the chunk, the loader
-  // is never asked for `card-api`, and every `FileDef` code ref then names a
-  // module that does not declare it, which an adoption-chain walk reaches as a
-  // filter referring to a nonexistent type. So this fails if `file-api` is ever
-  // added to the table.
-  test('a re-exporter left out of the bundle credits the class to its declarer', async function (assert) {
+  // A bundled module publishes the classes it declares as it is evaluated, and
+  // the loader reads that before its own record, so a class is named by its
+  // declarer whatever the serving order. Asking only for a module that
+  // re-exports a class must still name the module that declares it; naming
+  // the re-exporter would make an adoption-chain walk read the type as one
+  // that does not exist.
+  test('a re-exporter credits the class to its declarer', async function (assert) {
     let loader = getService('loader-service').loader;
     // Only the re-exporter is asked for, which is what a card importing just
     // `file-api` does.
