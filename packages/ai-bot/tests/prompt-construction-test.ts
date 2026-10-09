@@ -57,6 +57,7 @@ import {
   sessionSkillFeatures,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
+  TRAILING_CONTEXT_PREAMBLE,
 } from '@cardstack/runtime-common/ai';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
 
@@ -234,7 +235,9 @@ module('buildPromptForModel', (hooks) => {
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
@@ -332,7 +335,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
@@ -416,7 +421,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: workspace-chooser
 Workspace: http://localhost:4201/experiments
@@ -487,7 +494,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(result[1]), 'Hey');
     assert.equal(
       result[2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
@@ -3487,7 +3496,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messageText(messages![1]), 'Command Definitions');
     assert.equal(
       messages![2].content,
-      `The user is currently viewing the following user interface:
+      `${TRAILING_CONTEXT_PREAMBLE}
+
+The user is currently viewing the following user interface:
 Room ID: !XuZQzeYAGZzFQFYUzQ:localhost
 Submode: interact
 The user has no open cards.
@@ -3839,7 +3850,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![1].role, 'user');
     assert.equal(messages![2].role, 'user');
     assert.ok(
-      messageText(messages![2]).startsWith('The user is currently viewing'),
+      messageText(messages![2]).startsWith(TRAILING_CONTEXT_PREAMBLE),
       'the context trails the conversation as its own message',
     );
     assert.notOk(
@@ -3870,7 +3881,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![3].role, 'user');
     assert.equal(messages![4].role, 'user');
     assert.ok(
-      messageText(messages![4]).startsWith('The user is currently viewing'),
+      messageText(messages![4]).startsWith(TRAILING_CONTEXT_PREAMBLE),
       'the context trails the conversation as its own message',
     );
     assert.notOk(
@@ -3924,7 +3935,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(messages![2].role, 'assistant');
     assert.equal(messages![3].role, 'user');
     assert.ok(
-      messageText(messages![3]).startsWith('The user is currently viewing'),
+      messageText(messages![3]).startsWith(TRAILING_CONTEXT_PREAMBLE),
       'the context trails the conversation as its own message',
     );
   });
