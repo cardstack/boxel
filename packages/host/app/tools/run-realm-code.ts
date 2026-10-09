@@ -13,7 +13,7 @@ import {
   type ViewedImage,
   type ViewOptions,
 } from '../lib/visual-capture';
-import { createWorkspace } from '../lib/workspaces';
+import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
 
 import LintAndFixTool from './lint-and-fix';
 
@@ -25,6 +25,7 @@ import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type RecentFilesService from '../services/recent-files-service';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -65,6 +66,17 @@ type CreateWorkspace = (input: {
   endpoint?: string;
 }) => Promise<{ url: string; name: string }>;
 
+// Deletes a workspace the current user owns and returns its URL.
+type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
+
+// A script that may delete a workspace names the call in its code. Such a
+// run always waits for the user's click (`neverAutoExecutesFor`), the same as
+// the delete-workspace tool, and only such a run may delete: a script that
+// reaches the call another way is refused, so no delete runs without a click.
+export function scriptDeletesWorkspaces(code: unknown): boolean {
+  return typeof code === 'string' && code.includes('realm.workspaces.delete');
+}
+
 // The host half of `realm.fs`: every call the script makes lands here, inside
 // one realm. Reads come from the realm on first use. A write saves the file
 // before the call returns, so a script that awaits each write sees each file
@@ -77,6 +89,11 @@ class RealmFsSession {
   readonly saved = new Set<string>();
   // Workspaces created by this run, in order.
   readonly createdWorkspaces: string[] = [];
+  // Workspaces deleted by this run, in order.
+  readonly deletedWorkspaces: string[] = [];
+  // Workspaces this run deleted that do not exist again: a later create at
+  // the same URL takes the URL out.
+  readonly goneWorkspaces = new Set<string>();
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // Calls and saves refused because the run had already ended.
@@ -99,6 +116,8 @@ class RealmFsSession {
     private listDirectory: ListDirectory,
     captureURL: CaptureURL,
     private createWorkspace: CreateWorkspace,
+    private deleteWorkspace: DeleteWorkspace,
+    private mayDeleteWorkspaces: boolean,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -283,7 +302,25 @@ class RealmFsSession {
           },
         );
         this.createdWorkspaces.push(created.url);
+        this.goneWorkspaces.delete(created.url);
         return created;
+      }
+      case 'workspaces.delete': {
+        if (!this.mayDeleteWorkspaces) {
+          throw new Error(
+            'realm.workspaces.delete must be called by that name in the script, so the user confirms the run before it starts',
+          );
+        }
+        let realmIdentifier = args[0];
+        if (typeof realmIdentifier !== 'string' || !realmIdentifier) {
+          throw new TypeError(
+            'realm.workspaces.delete expects the URL of a workspace',
+          );
+        }
+        let deleted = await this.deleteWorkspace(realmIdentifier);
+        this.deletedWorkspaces.push(deleted.url);
+        this.goneWorkspaces.add(deleted.url);
+        return { url: deleted.url, deleted: true };
       }
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
@@ -388,6 +425,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private recentFilesService: RecentFilesService;
   @service declare private toolService: ToolService;
 
   description =
@@ -395,6 +433,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'look at what it made with realm.capture, and can create workspaces ' +
     'with realm.workspaces.create.';
   static actionVerb = 'Run';
+
+  static neverAutoExecutesFor(
+    attributes: Record<string, unknown> | undefined,
+  ): boolean {
+    return scriptDeletesWorkspaces(attributes?.code);
+  }
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -443,6 +487,18 @@ export default class RunRealmCodeTool extends HostBaseTool<
           { matrixService: this.matrixService, realm: this.realm },
           workspaceInput,
         ),
+      (realmIdentifier) =>
+        deleteWorkspace(
+          {
+            matrixService: this.matrixService,
+            operatorModeStateService: this.operatorModeStateService,
+            realm: this.realm,
+            realmServer: this.realmServer,
+            recentFilesService: this.recentFilesService,
+          },
+          realmIdentifier,
+        ),
+      scriptDeletesWorkspaces(input.code),
     );
     let runnerResult;
     let deadline = new AbortController();
@@ -495,6 +551,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (session.createdWorkspaces.length > 0) {
         report += ` Workspaces already created by this run: ${session.createdWorkspaces.join(', ')}`;
       }
+      // A delete cannot be undone, so the model must know it happened.
+      if (session.deletedWorkspaces.length > 0) {
+        report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
+      }
       throw new Error(report);
     }
 
@@ -528,6 +588,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           }),
       ),
       createdWorkspaces: [...session.createdWorkspaces],
+      deletedWorkspaces: [...session.deletedWorkspaces],
     });
   }
 
@@ -550,7 +611,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // where validation of those files asks the model to fix them. Opening is
   // only for the UI, so a failure here does not fail the run.
   private async openCreatedWorkspace(session: RealmFsSession) {
-    let url = session.createdWorkspaces.at(-1);
+    let url = session.createdWorkspaces
+      .filter((created) => !session.goneWorkspaces.has(created))
+      .at(-1);
     if (!url || session.saved.size > 0) {
       return;
     }
