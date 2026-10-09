@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/choreo-player",
-  "version": "0.0.0",
+  "version": "0.1.0-unstable.0",
   "description": "A headless, externally clocked player for Choreo runs.",
   "keywords": [
     "animation",
