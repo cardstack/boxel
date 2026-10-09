@@ -32,6 +32,8 @@ const SylvaStage: TOC<StageSignature> = <template>
     @ground='#4a4d44'
     @resizable={{false}}
     @sizeKey='choreo-gallery:sylva-size'
+    @poster={{POSTER}}
+    @focus='50% 62%'
   >
     <:tile>
       {{! a photograph of the world, the title's lower third, and one

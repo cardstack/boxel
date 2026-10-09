@@ -5,7 +5,7 @@ import { motion } from 'glimmer-motion';
 
 import type { GalleryDemo } from '../demo';
 import type { GalleryNavigation } from '../lib/navigation';
-import type { Theater } from '../lib/theater';
+import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { CodeBox } from './code-box';
 import { DemoStage } from './demo-stage';
@@ -111,13 +111,14 @@ export class DemoPage extends Component<Signature> {
         {{#if @demo.slowmo}}
           <SpeedPicker @slug={{slug}} />
         {{/if}}
-        <div class='stage-row' data-test-stage-row>
+        <div class='stage-row' data-test-stage-row {{theaterView}}>
           <div
             class='stage-wrap'
             data-demo-stage
             data-test-stage
             data-well={{this.well}}
             {{motion id=(concat 'stage-' slug) role='stage'}}
+            {{@theater.stage}}
           >
             <DemoStage @demo={{@demo}} @face='stage' @theater={{@theater}} />
             {{! THE MARK, in theater only, where the site's bar has stepped out.
@@ -398,18 +399,25 @@ export class DemoPage extends Component<Signature> {
         flex-direction: column;
       }
 
+      /* EDGE TO EDGE: out of the page's gutter to the full width of the
+         site, which `theaterView` publishes as --site-w */
       .demo-body.is-theater .stage-row {
         order: -1;
         container-type: inline-size;
+        margin-inline: calc((100% - var(--site-w, 100%)) / 2);
       }
 
-      /* THE WELL'S ASPECT IS FOR A WELL. In theater the frame follows the
-         window, capped at a square so a portrait phone does not turn the film
-         into a tall strip; dvh follows the visible viewport as a phone's
-         browser chrome opens and closes. The picture reframes to this box. */
+      /* THE WELL'S ASPECT IS FOR A WELL. In theater the frame is as tall as
+         what the viewer can see of the card — the element that scrolls it,
+         published as --view-h, which in the host sits under the host's chrome
+         and the card's header — capped at a square so a portrait phone does
+         not turn the film into a tall strip. A document that scrolls itself
+         falls back to the window, where dvh follows the visible viewport as a
+         phone's browser chrome opens and closes. The picture reframes to this
+         box. */
       .demo-body.is-theater .stage-wrap {
         height: min(100vh, 100cqi);
-        height: min(100dvh, 100cqi);
+        height: min(var(--view-h, 100dvh), 100cqi);
         min-height: 0;
         max-height: none;
         aspect-ratio: auto;

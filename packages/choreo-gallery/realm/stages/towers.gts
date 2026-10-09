@@ -9,6 +9,8 @@ import { FilmTile } from '../shell/film-tile';
 /* one frame of the film, read back through the picture's own snapshot();
    the type over it is HTML, not baked in */
 const POSTER = realmFile('asset/towers-poster.webp');
+/* where the subject sits in that still: the tile and the page crop to it */
+const FOCUS = '32% 52%';
 /* the film's own inks: the keep's evening, its gold, its paper */
 const PALETTE =
   '--ft-key:#e0aa52;--ft-ink:rgba(255,247,232,0.97);' +
@@ -29,6 +31,8 @@ const TowersStage: TOC<StageSignature> = <template>
     @title='Towers — the film'
     @ground='#ecdcbc'
     @sizeKey='choreo-gallery:towers-size'
+    @poster={{POSTER}}
+    @focus={{FOCUS}}
   >
     <:tile>
       <FilmTile
@@ -37,7 +41,7 @@ const TowersStage: TOC<StageSignature> = <template>
         @line='Not a video — a film cut by a score'
         @name='Towers'
         @open={{@open}}
-        @focus='32% 52%'
+        @focus={{FOCUS}}
         @palette={{PALETTE}}
         @poster={{POSTER}}
       />
