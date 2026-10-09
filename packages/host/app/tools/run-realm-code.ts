@@ -431,7 +431,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, can ' +
     'look at what it made with realm.capture, and can create workspaces ' +
-    'with realm.workspaces.create.';
+    'with realm.workspaces.create. In a workspace the user can only read, ' +
+    'reads work and each write is refused.';
   static actionVerb = 'Run';
 
   static neverAutoExecutesFor(
@@ -470,8 +471,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let realmURL = this.realm.realmOf(
       rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
     );
-    if (!realmURL || !this.realm.canWrite(realmURL)) {
-      throw new Error(`The current user cannot write ${realmInput}`);
+    // A workspace the user can only read still runs: reads work, and each
+    // write is refused on its own.
+    if (!realmURL || !this.realm.canRead(realmURL)) {
+      throw new Error(`The current user cannot read ${realmInput}`);
     }
 
     let session = new RealmFsSession(
@@ -653,6 +656,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     content: string,
     expected: string | undefined,
   ): Promise<string> {
+    // The realm refuses the save anyway; this says why before the lint runs.
+    if (!this.realm.canWrite(url)) {
+      throw new Error(`You can only read this workspace: ${url} was not saved`);
+    }
     if (/\.(gts|ts)$/.test(url)) {
       let lint = await new LintAndFixTool(this.toolContext).execute({
         realm: this.realm.realmOf(rri(url))!,

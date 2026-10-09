@@ -711,3 +711,98 @@ await workspaces['del' + 'ete']('${oldWorkspace}');`;
     assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
   });
 });
+
+module(
+  'Integration | tools | run-realm-code | read-only workspace',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      autostart: true,
+      realmPermissions: { [testRealmURL]: ['read'] },
+    });
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        permissions: { '*': ['read'] },
+        contents: {
+          'task.json': '{ "title": "Old title" }\n',
+          'notes/first.md': '# First\n',
+        },
+      });
+      await getService('realm').login(testRealmURL);
+    });
+
+    test('a script reads a workspace the user can only read', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return {
+  text: await realm.fs.readText('task.json'),
+  exists: await realm.fs.exists('task.json'),
+  notes: await realm.fs.list('notes'),
+};`,
+      });
+
+      assert.deepEqual(result.files, [], 'nothing is saved');
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        text: '{ "title": "Old title" }\n',
+        exists: true,
+        notes: [{ name: 'first.md', path: 'notes/first.md', kind: 'file' }],
+      });
+    });
+
+    test('each write is refused, and the script goes on', async function (assert) {
+      let toolService = getService('tool-service');
+      let cardService = getService('card-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `let refused = [];
+try { await realm.fs.writeText('new.json', '{}'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.replace('task.json', 'Old', 'New'); } catch (e) { refused.push(e.message); }
+return { refused, text: await realm.fs.readText('task.json') };`,
+      });
+
+      assert.deepEqual(result.files, [], 'nothing is saved');
+      let { refused, text } = JSON.parse(result.scriptResult!);
+      assert.strictEqual(refused.length, 2, 'both writes are refused');
+      for (let message of refused) {
+        assert.true(
+          /You can only read this workspace/.test(message),
+          `the refusal says why: ${message}`,
+        );
+      }
+      assert.strictEqual(text, '{ "title": "Old title" }\n');
+      let source = await cardService.getSource(
+        new URL(`${testRealmURL}new.json`),
+      );
+      assert.strictEqual(
+        source.status,
+        404,
+        'the new file is not in the realm',
+      );
+    });
+
+    test('a write the script does not catch fails the run, and the report says nothing was saved', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.fs.writeText('new.json', '{}');`,
+        }),
+        /You can only read this workspace.*No file was saved/,
+      );
+    });
+  },
+);
