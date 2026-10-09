@@ -727,7 +727,7 @@ async function explainSearch(
       'failed',
     );
   }
-  let rules = await searchRules(core, invocation);
+  let rules = await searchRules(core, invocation, actor);
   if (scope.kind === 'scoped') {
     return {
       ...base,
@@ -758,9 +758,13 @@ async function explainSearch(
 // for the search's operation, matched as `policyQueryScope` matches them:
 // against the adoption chain the definition cache records beside each type. A
 // rule governing several of the types is listed once.
+// A grant is filterable for the caller the question names: a caller who isn't
+// signed in is scoped by a grant's reading for them, and only a grant whose
+// `where` names them has one.
 async function searchRules(
   core: OperationCore,
   invocation: { operation: string; types: readonly CodeRef[] },
+  actor: ScopeCaller,
 ): Promise<ExplainedRule[]> {
   let policy = await core.policy?.compiledPolicy();
   if (!policy || !core.policy) {
@@ -806,7 +810,9 @@ async function searchRules(
             }
           : {}),
         outcome: grant.where ? 'not-evaluated' : 'unconditional',
-        filterable: grant.filter !== undefined,
+        filterable:
+          (actor.kind === 'user' ? grant.filter : grant.anonymousFilter) !==
+          undefined,
       })),
     }));
 }

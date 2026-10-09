@@ -11,6 +11,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  DEFAULT_ANONYMOUS_RATE_LIMIT,
   IndexWriter,
   PermissionsContextName,
   rri,
@@ -104,6 +105,12 @@ const educationPolicy = policyDocument([
 
 // The character a policy issue's message marks its code spans with.
 const BACKTICK = '`';
+
+// What a grant's condition says to open it to callers who aren't signed in.
+const ANONYMOUS = 'actor() == "anonymous"';
+// How a grant that sets no limit of its own reads in a listing: the rate
+// limit the realm reports as the platform's.
+const PLATFORM_LIMIT_LINE = `${DEFAULT_ANONYMOUS_RATE_LIMIT.requests}/${DEFAULT_ANONYMOUS_RATE_LIMIT.windowSeconds} (platform default where unset)`;
 
 // A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
@@ -369,11 +376,11 @@ module('Integration | realm policy', function (hooks) {
         {
           targetType: { module: '../classroom', name: 'Classroom' },
           grants: [
-            { operation: 'read', anonymous: true },
+            { operation: 'read', where: ANONYMOUS },
             {
               operation: 'update',
-              anonymous: true,
-              actingUser: 'feedbackWriter',
+              where: ANONYMOUS,
+              actingUser: 'realmConfig("feedbackWriter")',
             },
             { operation: 'delete' },
           ],
@@ -391,7 +398,13 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom('[data-test-operation-grant-acting-user]')
       .exists({ count: 1 }, 'only the write names who it acts as')
-      .hasText('config.feedbackWriter');
+      .hasText('realmConfig("feedbackWriter")');
+    assert
+      .dom('[data-test-operation-grant-rate-limit]')
+      .exists(
+        { count: 2 },
+        'and each grant opened to them says what it limits them to',
+      );
   });
 
   test('a policy with no rules says it grants nothing', async function (assert) {
@@ -544,16 +557,14 @@ module('Integration | realm policy', function (hooks) {
       .dom('[data-test-policy-rule-grant] [data-test-policy-predicate-input]')
       .exists({ count: 4 }, "every grant's condition can be edited");
     assert
-      .dom('[data-test-policy-rule-grant] [data-test-field="anonymous"]')
+      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"]')
       .exists(
         { count: 4 },
-        'every grant can be opened to callers who are not signed in',
+        'every grant says who a write by a caller who is not signed in is made as',
       );
     assert
-      .dom('[data-test-policy-rule-grant] [data-test-field="actingUser"]')
-      .doesNotExist(
-        'a grant only for signed-in callers asks for no realm.json setting',
-      );
+      .dom('[data-test-policy-rule-grant] [data-test-field="blocklist"]')
+      .exists({ count: 4 }, 'and which addresses it refuses them from');
     assert
       .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
       .hasAttribute(
@@ -574,21 +585,13 @@ module('Integration | realm policy', function (hooks) {
     );
     await click(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`);
 
-    // The radio group lists false, then true.
-    let [, allowAnonymous] = document.querySelectorAll(
-      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="anonymous"] input[type="radio"]`,
+    await fillIn(
+      `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-policy-predicate-input]`,
+      ANONYMOUS,
     );
-    await click(allowAnonymous);
-    assert
-      .dom(
-        `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
-      )
-      .exists(
-        "a grant opened to callers who aren't signed in asks for the realm.json setting its writes are made as",
-      );
     await fillIn(
       `${ruleEditor(0)} [data-test-policy-rule-grant="2"] [data-test-field="actingUser"] input`,
-      'feedbackWriter',
+      'realmConfig("feedbackWriter")',
     );
 
     assert.deepEqual(
@@ -596,7 +599,7 @@ module('Integration | realm policy', function (hooks) {
       [
         'read always',
         `appendActivity where ${studentPredicate}`,
-        'update always anyone as config.feedbackWriter',
+        `update where ${ANONYMOUS} anyone as realmConfig("feedbackWriter") limit ${PLATFORM_LIMIT_LINE}`,
         `listMySchedules where ${providerPredicate}`,
       ],
       'each grant reads as it now stands',
@@ -606,16 +609,14 @@ module('Integration | realm policy', function (hooks) {
       grants: {
         operation: string;
         where: unknown;
-        anonymous?: boolean | null;
         actingUser?: string | null;
       }[];
     }[];
     assert.deepEqual(
       rules.map((rule) =>
-        rule.grants.map(({ operation, where, anonymous, actingUser }) => ({
+        rule.grants.map(({ operation, where, actingUser }) => ({
           operation,
           where,
-          anonymous: anonymous ?? false,
           actingUser: actingUser ?? null,
         })),
       ),
@@ -624,27 +625,23 @@ module('Integration | realm policy', function (hooks) {
           {
             operation: 'read',
             where: null,
-            anonymous: false,
             actingUser: null,
           },
           {
             operation: 'appendActivity',
             where: studentPredicate,
-            anonymous: false,
             actingUser: null,
           },
           {
             operation: 'update',
-            where: null,
-            anonymous: true,
-            actingUser: 'feedbackWriter',
+            where: ANONYMOUS,
+            actingUser: 'realmConfig("feedbackWriter")',
           },
         ],
         [
           {
             operation: 'listMySchedules',
             where: providerPredicate,
-            anonymous: false,
             actingUser: null,
           },
         ],
@@ -752,7 +749,7 @@ module('Integration | realm policy', function (hooks) {
     );
   }
 
-  test('an explanation for someone who is not signed in shows the limit, the blocklist, and who each grant opened to them writes as', async function (assert) {
+  test('an explanation for someone who is not signed in shows what each grant opened to them limits, blocks and writes as', async function (assert) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       permissions: {
@@ -762,9 +759,10 @@ module('Integration | realm policy', function (hooks) {
       contents: {
         'realm.json': realmConfigCardJSON({
           policy: `${testRealmURL}policies/classrooms`,
-          config: { submitter: '@testuser:localhost' },
-          anonymousRateLimit: { requests: 7, windowSeconds: 30 },
-          anonymousBlocklist: ['not an address'],
+          config: {
+            submitter: '@testuser:localhost',
+            blockedIps: 'not an address',
+          },
         }),
         'classroom.gts': classroomModule,
         'classrooms/room-204.json': classroom([TEACHER]),
@@ -772,14 +770,25 @@ module('Integration | realm policy', function (hooks) {
           {
             targetType: { module: '../classroom', name: 'Classroom' },
             grants: [
-              { operation: 'update', anonymous: true, actingUser: 'submitter' },
-              { operation: 'update', anonymous: true, actingUser: 'missing' },
-              // Reads the caller, so it is warned about.
               {
                 operation: 'update',
-                anonymous: true,
-                actingUser: 'submitter',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("submitter")',
+                blocklist: 'realmConfig("blockedIps")',
+                rateLimitRequests: '7',
+                rateLimitWindowSeconds: '30',
+              },
+              {
+                operation: 'update',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("missing")',
+              },
+              // Names an acting user without opening to such callers, so it
+              // is warned about.
+              {
+                operation: 'update',
                 where: teachesPredicate,
+                actingUser: 'realmConfig("submitter")',
               },
             ],
           },
@@ -794,32 +803,31 @@ module('Integration | realm policy', function (hooks) {
     await ask('', `${testRealmURL}classrooms/room-204`, 'update');
     assert.dom('[data-test-explanation-actor]').hasText('not signed in');
     assert
-      .dom('[data-test-explanation-reason]')
-      .hasText(
-        "This realm's blocklist has an entry that isn't an address or a range, so it turns away everyone who isn't signed in before the policy is checked.",
-      );
-    assert
       .dom('[data-test-explanation-anonymous-limit]')
-      .hasText('7 requests per 30 seconds from one address, set by this realm');
-    assert
-      .dom('[data-test-explanation-anonymous-blocklist]')
-      .includesText('"not an address"', 'names the entry to fix');
+      .hasText(
+        `${DEFAULT_ANONYMOUS_RATE_LIMIT.requests} requests per ${DEFAULT_ANONYMOUS_RATE_LIMIT.windowSeconds} seconds from one address, the platform default, for a grant that sets none`,
+      );
     assert.deepEqual(
       [
         ...document.querySelectorAll('[data-test-explanation-grant-anonymous]'),
       ].map((el) => el.textContent?.trim()),
       [
-        'Open to people who aren\'t signed in; their writes are made as @testuser:localhost (this realm\'s "submitter" setting).',
-        'Open to people who aren\'t signed in, but this realm\'s settings have no "missing", so this grant admits none of them.',
-        'Open to people who aren\'t signed in; their writes are made as @testuser:localhost (this realm\'s "submitter" setting).',
+        "Open to people who aren't signed in.",
+        'Their writes are made as @testuser:localhost.',
+        'Limit: 7 requests (set by this grant) per 30 seconds (set by this grant) from one address.',
+        "Its blocklist has entries that aren't an address or a range (\"not an address\"), so it turns away everyone who isn't signed in until it's fixed.",
+        "Open to people who aren't signed in.",
+        'Their writes: its "Write as" expression produced nothing, so this grant admits none of their writes.',
+        `Limit: ${DEFAULT_ANONYMOUS_RATE_LIMIT.requests} requests (the platform default) per ${DEFAULT_ANONYMOUS_RATE_LIMIT.windowSeconds} seconds (the platform default) from one address.`,
       ],
+      'only the grants opened to them carry these lines',
     );
     assert.deepEqual(
       [...document.querySelectorAll('[data-test-explanation-grant-issue]')].map(
         (el) => el.getAttribute('data-test-explanation-grant-issue'),
       ),
-      ['anonymous-grant-reads-actor'],
-      'the grant whose condition reads the caller carries its warning',
+      ['acting-user-never-used'],
+      'the grant that names an acting user it can never use carries its warning',
     );
   });
 

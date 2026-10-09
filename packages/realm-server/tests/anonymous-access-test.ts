@@ -5,7 +5,6 @@ import type Koa from 'koa';
 import {
   CLIENT_CLASS_HEADER,
   CLIENT_IP_HEADER,
-  DEFAULT_ANONYMOUS_RATE_LIMIT,
   INFRA_CLIENT_CLASS,
   isMatrixUserId,
   normalizeIP,
@@ -16,8 +15,19 @@ import {
   parseRateLimitSpec,
   rangesContain,
   rateLimitKey,
-  resolveAnonymousAccess,
 } from '@cardstack/runtime-common';
+import {
+  blocklistCloses,
+  compileGrantExpression,
+  readBlocklist,
+  readRateLimitPart,
+  settleTraffic,
+  type CompiledGrantExpression,
+  type GrantExpressionName,
+  type GrantExpressionParser,
+  type GrantTraffic,
+} from '@cardstack/runtime-common/card-operations/grant-expressions';
+import * as bxl from '@cardstack/bxl';
 import {
   clientAddress,
   clientAddressSettingsFromEnv,
@@ -29,6 +39,9 @@ const CALLER = '192.0.2.10';
 const FORGED = '198.51.100.7';
 const OUR_NAT = '203.0.113.5';
 const LOAD_BALANCER_PEER = '10.0.0.12';
+
+// The parser a realm compiles a grant's expressions with.
+const bxlParser = bxl as unknown as GrantExpressionParser;
 
 function contains(range: string, address: string) {
   let parsedRange = parseAddressRange(range);
@@ -175,52 +188,332 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(parseRateLimitSpec('120/0'), undefined);
       assert.strictEqual(parseRateLimitSpec(undefined), undefined);
     });
+  });
 
-    test("a realm's own limit overrides the platform's, and anything that isn't a limit leaves the platform's", function (assert) {
-      let platform = { requests: 50, windowSeconds: 10 };
-      let own = resolveAnonymousAccess(
-        { rateLimit: { requests: 5, windowSeconds: 60 } },
-        platform,
-      );
-      assert.deepEqual(own.limit, { requests: 5, windowSeconds: 60 });
-      assert.strictEqual(own.limitFrom, 'realm');
+  module("a grant's blocklist and rate limit", function () {
+    const PLATFORM = { requests: 50, windowSeconds: 10 };
 
-      let unset = resolveAnonymousAccess(
-        { rateLimit: { requests: null, windowSeconds: null } },
-        platform,
-      );
-      assert.deepEqual(unset.limit, platform, 'an unfilled field sets nothing');
-      assert.strictEqual(unset.limitFrom, 'platform');
+    function compiled(
+      name: GrantExpressionName,
+      source: string,
+    ): CompiledGrantExpression {
+      let outcome = compileGrantExpression(bxlParser, name, source);
+      if ('problem' in outcome) {
+        throw new Error(
+          `test fixture ${source} does not compile: ${outcome.problem}`,
+        );
+      }
+      return outcome;
+    }
 
-      let malformed = resolveAnonymousAccess(
-        { rateLimit: { requests: -1, windowSeconds: 60 } },
-        platform,
-      );
-      assert.deepEqual(malformed.limit, platform);
-      assert.strictEqual(malformed.limitFrom, 'platform');
+    function blocksAddress(traffic: GrantTraffic, address: string) {
+      return rangesContain(traffic.blocklist.ranges, parseIP(address)!);
+    }
 
+    test('a blocklist is a comma-separated string, a list, or a string holding a JSON list', function (assert) {
+      let csv = readBlocklist(`${CALLER}, 198.51.100.0/24`);
+      assert.deepEqual(csv.invalid, []);
+      assert.strictEqual(csv.ranges.length, 2);
+
+      let list = readBlocklist([CALLER, '198.51.100.0/24']);
+      assert.deepEqual(list.invalid, []);
       assert.deepEqual(
-        resolveAnonymousAccess({}).limit,
-        DEFAULT_ANONYMOUS_RATE_LIMIT,
-        'with no platform limit given, the built-in one applies',
+        list.ranges,
+        csv.ranges,
+        'a list reads as the string does',
+      );
+
+      let json = readBlocklist(` ["${CALLER}", "198.51.100.0/24"] `);
+      assert.deepEqual(json.invalid, []);
+      assert.deepEqual(
+        json.ranges,
+        csv.ranges,
+        'and so does a JSON list in a string',
       );
     });
 
-    test('a blocklist keeps the entries that parse and names the ones that do not', function (assert) {
-      let access = resolveAnonymousAccess({
-        blocklist: [CALLER, '198.51.100.0/24', 'not-an-address'],
-      });
-      assert.strictEqual(access.blocklist.length, 2);
-      assert.deepEqual(access.invalidBlocklistEntries, ['not-an-address']);
+    test('blank entries of a comma-separated blocklist are dropped, so an empty string blocks nobody', function (assert) {
+      let { ranges, invalid } = readBlocklist(`, ${CALLER},, ,`);
+      assert.strictEqual(ranges.length, 1);
+      assert.deepEqual(invalid, []);
+      assert.deepEqual(readBlocklist(''), { ranges: [], invalid: [] });
+      assert.deepEqual(readBlocklist('   '), { ranges: [], invalid: [] });
+      assert.deepEqual(readBlocklist([]), { ranges: [], invalid: [] });
+    });
+
+    test('a blocklist entry that is not an address, or a blocklist that is not a list, is invalid', function (assert) {
       assert.deepEqual(
-        resolveAnonymousAccess({ blocklist: CALLER }).invalidBlocklistEntries,
-        [JSON.stringify(CALLER)],
-        'a blocklist that is not a list is itself an invalid entry',
+        readBlocklist(`${CALLER}, the spammer`).invalid,
+        ['the spammer'],
+        'an entry that is not an address is named',
       );
       assert.deepEqual(
-        resolveAnonymousAccess({}).invalidBlocklistEntries,
-        [],
-        'no blocklist blocks nothing and is not invalid',
+        readBlocklist([CALLER, 7]).invalid,
+        ['7'],
+        'an entry of a list that is not a string',
+      );
+      assert.deepEqual(
+        readBlocklist(`["${CALLER}"`).invalid,
+        [`["${CALLER}"`],
+        'a string that starts a JSON list and is not one',
+      );
+      for (let value of [42, true, null, { ip: CALLER }]) {
+        assert.strictEqual(
+          readBlocklist(value).invalid.length,
+          1,
+          `${JSON.stringify(value)} is not a blocklist`,
+        );
+      }
+    });
+
+    test('half of a rate limit is a whole number within the bounds a limit has', function (assert) {
+      assert.strictEqual(readRateLimitPart('requests', 10), 10);
+      assert.strictEqual(readRateLimitPart('windowSeconds', 600), 600);
+      for (let [part, value] of [
+        ['requests', 0],
+        ['requests', -1],
+        ['requests', 1.5],
+        ['requests', 1_000_001],
+        ['requests', '10'],
+        ['requests', null],
+        ['windowSeconds', 0],
+        ['windowSeconds', 86_401],
+        ['windowSeconds', '60'],
+      ] as const) {
+        assert.strictEqual(
+          readRateLimitPart(part, value),
+          undefined,
+          `${JSON.stringify(value)} is no ${part}`,
+        );
+      }
+    });
+
+    test('a grant with neither blocks nobody and counts against the platform limit', async function (assert) {
+      let traffic = await settleTraffic({}, {}, PLATFORM);
+      assert.deepEqual(traffic.blocklist, { ranges: [], invalid: [] });
+      assert.false(blocklistCloses(traffic));
+      assert.deepEqual(traffic.limit, {
+        ...PLATFORM,
+        requestsFrom: 'platform',
+        windowSecondsFrom: 'platform',
+      });
+    });
+
+    test('a blocklist is read from the realm config or the policy card, in any of its forms', async function (assert) {
+      for (let [label, blockedIps] of [
+        ['a comma-separated string', `${CALLER}, 198.51.100.0/24`],
+        ['a list', [CALLER, '198.51.100.0/24']],
+        [
+          'a JSON list in a string',
+          JSON.stringify([CALLER, '198.51.100.0/24']),
+        ],
+      ] as const) {
+        let fromConfig = await settleTraffic(
+          { blocklist: compiled('blocklist', 'realmConfig("blockedIps")') },
+          { realmConfig: { blockedIps } },
+          PLATFORM,
+        );
+        assert.false(blocklistCloses(fromConfig), `${label}: is a blocklist`);
+        assert.true(
+          blocksAddress(fromConfig, CALLER),
+          `${label}: blocks the address`,
+        );
+        assert.true(
+          blocksAddress(fromConfig, '198.51.100.200'),
+          `${label}: and the range`,
+        );
+        assert.false(
+          blocksAddress(fromConfig, '192.0.2.11'),
+          `${label}: and nobody else`,
+        );
+      }
+      let fromPolicy = await settleTraffic(
+        { blocklist: compiled('blocklist', 'policy("blockedIps")') },
+        { realmConfig: {}, policy: { blockedIps: CALLER } },
+        PLATFORM,
+      );
+      assert.true(
+        blocksAddress(fromPolicy, CALLER),
+        'read from the policy card',
+      );
+      let written = await settleTraffic(
+        { blocklist: compiled('blocklist', `"${CALLER}"`) },
+        {},
+        PLATFORM,
+      );
+      assert.true(blocksAddress(written, CALLER), 'or written out');
+    });
+
+    test('a blocklist that is not a list of addresses closes the grant', async function (assert) {
+      let blocklist = compiled('blocklist', 'realmConfig("blockedIps")');
+      for (let [label, config] of [
+        [
+          'an entry that is not an address',
+          { blockedIps: `${CALLER}, the spammer` },
+        ],
+        ['a value of the wrong type', { blockedIps: 42 }],
+        ['a setting that is absent, which throws', {}],
+      ] as const) {
+        let traffic = await settleTraffic(
+          { blocklist },
+          { realmConfig: config },
+          PLATFORM,
+        );
+        assert.true(blocklistCloses(traffic), `${label}: closes the grant`);
+      }
+      let thrown = await settleTraffic(
+        { blocklist },
+        { realmConfig: {} },
+        PLATFORM,
+      );
+      assert.strictEqual(
+        typeof thrown.blocklist.failed,
+        'string',
+        'and says it failed',
+      );
+      let invalid = await settleTraffic(
+        { blocklist },
+        { realmConfig: { blockedIps: `${CALLER}, the spammer` } },
+        PLATFORM,
+      );
+      assert.deepEqual(
+        invalid.blocklist.invalid,
+        ['the spammer'],
+        'naming the entry',
+      );
+    });
+
+    test("each half of a rate limit is the grant's where it produces one, and the platform's otherwise", async function (assert) {
+      let requestsOnly = await settleTraffic(
+        {
+          rateLimitRequests: compiled(
+            'rateLimitRequests',
+            'realmConfig("requests")',
+          ),
+        },
+        { realmConfig: { requests: 5 } },
+        PLATFORM,
+      );
+      assert.deepEqual(requestsOnly.limit, {
+        requests: 5,
+        windowSeconds: PLATFORM.windowSeconds,
+        requestsFrom: 'grant',
+        windowSecondsFrom: 'platform',
+      });
+
+      let windowOnly = await settleTraffic(
+        {
+          rateLimitWindowSeconds: compiled(
+            'rateLimitWindowSeconds',
+            'policy("windowSeconds")',
+          ),
+        },
+        { realmConfig: {}, policy: { windowSeconds: 600 } },
+        PLATFORM,
+      );
+      assert.deepEqual(windowOnly.limit, {
+        requests: PLATFORM.requests,
+        windowSeconds: 600,
+        requestsFrom: 'platform',
+        windowSecondsFrom: 'grant',
+      });
+
+      let both = await settleTraffic(
+        {
+          rateLimitRequests: compiled('rateLimitRequests', '20'),
+          rateLimitWindowSeconds: compiled('rateLimitWindowSeconds', '600'),
+        },
+        {},
+        PLATFORM,
+      );
+      assert.deepEqual(both.limit, {
+        requests: 20,
+        windowSeconds: 600,
+        requestsFrom: 'grant',
+        windowSecondsFrom: 'grant',
+      });
+    });
+
+    test('a rate-limit expression that produces no limit leaves that half to the platform', async function (assert) {
+      let grant = {
+        rateLimitRequests: compiled(
+          'rateLimitRequests',
+          'realmConfig("requests")',
+        ),
+        rateLimitWindowSeconds: compiled(
+          'rateLimitWindowSeconds',
+          'realmConfig("windowSeconds")',
+        ),
+      };
+      for (let [label, config] of [
+        ['a string', { requests: '5', windowSeconds: '600' }],
+        ['out of bounds', { requests: 0, windowSeconds: 86_401 }],
+        ['not whole', { requests: 1.5, windowSeconds: 0.5 }],
+        ['absent, which throws', {}],
+      ] as const) {
+        let traffic = await settleTraffic(
+          grant,
+          { realmConfig: config },
+          PLATFORM,
+        );
+        assert.deepEqual(
+          traffic.limit,
+          {
+            ...PLATFORM,
+            requestsFrom: 'platform',
+            windowSecondsFrom: 'platform',
+          },
+          label,
+        );
+        assert.false(blocklistCloses(traffic), `${label}: closes nothing`);
+      }
+      let mixed = await settleTraffic(
+        grant,
+        { realmConfig: { requests: 5, windowSeconds: 'a minute' } },
+        PLATFORM,
+      );
+      assert.deepEqual(
+        mixed.limit,
+        {
+          requests: 5,
+          windowSeconds: PLATFORM.windowSeconds,
+          requestsFrom: 'grant',
+          windowSecondsFrom: 'platform',
+        },
+        'one half falls back without the other',
+      );
+    });
+
+    test('a blocklist or rate limit may not read the target or the caller', function (assert) {
+      for (let [name, source] of [
+        ['blocklist', 'instance("blockedIps")'],
+        ['rateLimitRequests', 'actor()'],
+      ] as const) {
+        let outcome = compileGrantExpression(bxlParser, name, source);
+        assert.strictEqual(
+          'code' in outcome ? outcome.code : undefined,
+          'grant-expression-reads-target',
+          `${name}: ${source}`,
+        );
+      }
+      let actingUser = compileGrantExpression(
+        bxlParser,
+        'actingUser',
+        'instance("submitter")',
+      );
+      assert.false(
+        'problem' in actingUser,
+        'an acting user may read the target',
+      );
+      let wrongType = compileGrantExpression(
+        bxlParser,
+        'rateLimitRequests',
+        '"lots"',
+      );
+      assert.strictEqual(
+        'code' in wrongType ? wrongType.code : undefined,
+        'grant-expression-wrong-type',
+        'a literal of the wrong kind is reported',
       );
     });
   });

@@ -7,6 +7,9 @@ import { setupDB } from './helpers/index.ts';
 
 const REALM = 'http://127.0.0.1:4444/feedback/';
 const OTHER_REALM = 'http://127.0.0.1:4444/articles/';
+// Grant ids as a compiled policy names them.
+const GRANT = 'grant-a';
+const OTHER_GRANT = 'grant-b';
 const CALLER = '192.0.2.10';
 const OTHER_CALLER = '192.0.2.11';
 const LIMIT = { requests: 3, windowSeconds: 60 };
@@ -31,6 +34,7 @@ module(basename(import.meta.filename), function () {
     function charge(
       overrides: Partial<{
         realmURL: string;
+        grantId: string;
         clientIP: string;
         cost: number;
         limit: typeof LIMIT;
@@ -38,6 +42,7 @@ module(basename(import.meta.filename), function () {
     ) {
       return limiter.charge({
         realmURL: REALM,
+        grantId: GRANT,
         clientIP: CALLER,
         limit: LIMIT,
         cost: 1,
@@ -77,6 +82,41 @@ module(basename(import.meta.filename), function () {
         await charge({ realmURL: OTHER_REALM }),
         { admitted: true, count: 1 },
         'and untouched in another',
+      );
+    });
+
+    test('each grant in a realm counts a caller on its own', async function (assert) {
+      for (let i = 0; i < LIMIT.requests; i++) {
+        await charge();
+      }
+      assert.false(
+        (await charge()).admitted,
+        'over the limit through one grant',
+      );
+      assert.deepEqual(
+        await charge({ grantId: OTHER_GRANT }),
+        { admitted: true, count: 1 },
+        'and untouched through another grant of the same realm',
+      );
+      assert.deepEqual(
+        await limiter.remaining({
+          realmURL: REALM,
+          grantId: OTHER_GRANT,
+          clientIP: CALLER,
+          limit: LIMIT,
+        }),
+        { admitted: true, count: 1 },
+        'whose budget is asked about on its own too',
+      );
+      assert.false(
+        (
+          await limiter.remaining({
+            realmURL: REALM,
+            grantId: GRANT,
+            clientIP: CALLER,
+            limit: LIMIT,
+          })
+        ).admitted,
       );
     });
 
@@ -129,6 +169,7 @@ module(basename(import.meta.filename), function () {
       await charge();
       await another.charge({
         realmURL: REALM,
+        grantId: GRANT,
         clientIP: CALLER,
         limit: LIMIT,
         cost: 1,
@@ -138,6 +179,7 @@ module(basename(import.meta.filename), function () {
         (
           await another.charge({
             realmURL: REALM,
+            grantId: GRANT,
             clientIP: CALLER,
             limit: LIMIT,
             cost: 1,
@@ -169,7 +211,7 @@ module(basename(import.meta.filename), function () {
       let rows: Record<string, unknown>[] = [];
       for (let attempt = 0; attempt < 50; attempt++) {
         rows = await dbAdapter.execute(
-          `SELECT client_ip FROM anonymous_rate_limits WHERE client_ip = '${CALLER}'`,
+          `SELECT client_ip FROM anonymous_grant_rate_limits WHERE client_ip = '${CALLER}'`,
         );
         if (rows.length === 0) {
           break;

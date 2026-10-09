@@ -38,8 +38,9 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
 // A newsroom realm nobody may read without signing in, governed by a policy
 // card in an Org realm. Its policy opens published articles to callers who
-// aren't signed in, and the stored bytes of the published ones too. A Library
-// realm's policy opens nothing to such callers.
+// aren't signed in, and the stored bytes of the published ones too, each grant
+// blocking and limiting such callers by what the newsroom's own `realm.json`
+// config says. A Library realm's policy opens nothing to such callers.
 const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
 const LIBRARY = 'http://127.0.0.1:4444/library/';
 const ORG = 'http://127.0.0.1:4444/org/';
@@ -105,6 +106,37 @@ function policyCard(
   });
 }
 
+// What a grant that opens published articles to callers who aren't signed in
+// says, with its blocklist and rate limit read from the newsroom's config.
+const PUBLISHED_TO_ANONYMOUS = {
+  where: 'actor() == "anonymous" and .status == "published"',
+  blocklist: 'realmConfig("blockedIps")',
+  rateLimitRequests: 'realmConfig("anonymousRequests")',
+  rateLimitWindowSeconds: 'realmConfig("anonymousWindowSeconds")',
+};
+
+const NEWSROOM_GRANTS = [
+  { operation: 'read', ...PUBLISHED_TO_ANONYMOUS },
+  // Reads the caller without naming the one who isn't signed in, so it never
+  // admits such a caller, even to an article they would otherwise be named on.
+  { operation: 'read', where: '.authorIds | any(. == actor())' },
+  { operation: 'readSource', ...PUBLISHED_TO_ANONYMOUS },
+  // Opts a write in to such callers as an acting user the newsroom's config
+  // doesn't name, so it never admits one.
+  {
+    operation: 'update',
+    where: 'actor() == "anonymous" and .status == "published"',
+    actingUser: 'realmConfig("submitter")',
+  },
+];
+// Where those grants are in the policy card, as a record names them.
+const READ_GRANT = 'rules[0].grants[0]';
+const READ_SOURCE_GRANT = 'rules[0].grants[2]';
+
+// The newsroom's config as the fixture writes it: a blocklist that blocks
+// nobody, and no rate limit, so each grant counts against the platform's.
+const NEWSROOM_CONFIG: Record<string, unknown> = { blockedIps: '' };
+
 const PUBLISHED = `${NEWSROOM}articles/published`;
 const DRAFT = `${NEWSROOM}articles/draft`;
 const MISSING = `${NEWSROOM}articles/nowhere`;
@@ -143,6 +175,7 @@ module(basename(import.meta.filename), function (hooks) {
             'realm.json': realmConfigCardJSON({
               name: 'Newsroom',
               policy: NEWSROOM_POLICY,
+              config: NEWSROOM_CONFIG,
             }),
             'article.gts': ARTICLE_MODULE,
             'articles/published.json': article('Polls open', 'published'),
@@ -175,33 +208,7 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(ORG),
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
-            'policies/newsroom.json': policyCard(ARTICLE, [
-              {
-                operation: 'read',
-                anonymous: true,
-                where: '.status == "published"',
-              },
-              // Reads the caller, so it never admits one who isn't signed in,
-              // even to an article they would otherwise be named on.
-              {
-                operation: 'read',
-                anonymous: true,
-                where: '.authorIds | any(. == actor())',
-              },
-              {
-                operation: 'readSource',
-                anonymous: true,
-                where: '.status == "published"',
-              },
-              // Opts a write in to such callers as an acting user the
-              // newsroom's config doesn't name, so it never admits one.
-              {
-                operation: 'update',
-                anonymous: true,
-                actingUser: 'submitter',
-                where: '.status == "published"',
-              },
-            ]),
+            'policies/newsroom.json': policyCard(ARTICLE, NEWSROOM_GRANTS),
             // Grants only signed-in callers.
             'policies/library.json': policyCard(BOOK, [{ operation: 'read' }]),
           },
@@ -273,20 +280,28 @@ module(basename(import.meta.filename), function (hooks) {
     return readCard(`${url}.json`, from, SupportedMimeType.CardSource);
   }
 
-  async function setNewsroomConfig(fields: {
-    anonymousRateLimit?: unknown;
-    anonymousBlocklist?: unknown;
-  }) {
+  // Sets what the newsroom's grants read from its config, over the fixture's.
+  async function setNewsroomConfig(config: Record<string, unknown>) {
     await newsroom.write(
       'realm.json',
       realmConfigCardJSON({
         name: 'Newsroom',
         policy: NEWSROOM_POLICY,
-        ...fields,
+        config: { ...NEWSROOM_CONFIG, ...config },
       }),
     );
     await newsroom.indexing();
-    await clearOfRateLimitWindowEdge(fields.anonymousRateLimit);
+    await clearOfRateLimitWindowEdge({
+      windowSeconds: config.anonymousWindowSeconds as number | undefined,
+    });
+  }
+
+  // The newsroom config that limits each grant to `requests` per window.
+  function limitOf(requests: number, windowSeconds = 600) {
+    return {
+      anonymousRequests: requests,
+      anonymousWindowSeconds: windowSeconds,
+    };
   }
 
   function unauthenticated(response: Response, label: string, assert: Assert) {
@@ -367,12 +382,10 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(articleRecords(), [], 'and is no anonymous caller');
   });
 
-  test('an address that uses up the limit gets 429 until the window turns, and nobody else is affected', async function (assert) {
-    await setNewsroomConfig({
-      anonymousRateLimit: { requests: 2, windowSeconds: 600 },
-    });
+  test("an address that uses up a grant's limit gets 429 until the window turns, and nobody else is affected", async function (assert) {
+    await setNewsroomConfig(limitOf(2));
     assert.strictEqual((await readCard(PUBLISHED)).status, 200);
-    assert.strictEqual((await readSource(PUBLISHED)).status, 200);
+    assert.strictEqual((await readCard(PUBLISHED)).status, 200);
     let over = await readCard(PUBLISHED);
     assert.strictEqual(over.status, 429, 'the third read is refused');
     assert.strictEqual(over.body.errors[0].code, 'rate-limited');
@@ -406,20 +419,50 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       {
         clientIP: limited[0].clientIP,
+        grant: limited[0].grant,
         limit: limited[0].limit,
         operation: limited[0].operation,
       },
       {
         clientIP: VISITOR,
-        limit: { requests: 2, windowSeconds: 600, from: 'realm' },
+        grant: READ_GRANT,
+        limit: {
+          requests: 2,
+          windowSeconds: 600,
+          requestsFrom: 'grant',
+          windowSecondsFrom: 'grant',
+        },
         operation: 'read',
       },
     );
   });
 
+  test('each grant counts the same address on its own, so one over its limit leaves the others alone', async function (assert) {
+    await setNewsroomConfig(limitOf(1));
+    assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      429,
+      'the read grant is used up',
+    );
+    assert.strictEqual(
+      (await readSource(PUBLISHED)).status,
+      200,
+      'the grant that opens the source has its own budget',
+    );
+    assert.deepEqual(
+      articleRecords().map((r) => ({ outcome: r.outcome, grant: r.grant })),
+      [
+        { outcome: 'admitted', grant: READ_GRANT },
+        { outcome: 'rate-limited', grant: READ_GRANT },
+        { outcome: 'admitted', grant: READ_SOURCE_GRANT },
+      ],
+    );
+  });
+
   test('a request no grant admits costs the caller nothing', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      ...limitOf(1),
     });
     for (let i = 0; i < 3; i++) {
       unauthenticated(await readCard(DRAFT), `refused probe ${i}`, assert);
@@ -435,16 +478,51 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a limit the realm sets nothing for is the platform default', async function (assert) {
+  test('a limit a grant leaves out is the platform default', async function (assert) {
     await readCard(PUBLISHED);
     let [admitted] = articleRecords();
     assert.strictEqual(admitted?.outcome, 'admitted');
-    assert.strictEqual(admitted?.limit?.from, 'platform');
+    assert.strictEqual(admitted?.limit?.requestsFrom, 'platform');
+    assert.strictEqual(admitted?.limit?.windowSecondsFrom, 'platform');
     assert.strictEqual(admitted?.count, 1);
   });
 
+  test('a limit and blocklist written on the realm config card itself do nothing', async function (assert) {
+    let realmConfig = JSON.parse(
+      realmConfigCardJSON({
+        name: 'Newsroom',
+        policy: NEWSROOM_POLICY,
+        config: NEWSROOM_CONFIG,
+      }),
+    );
+    realmConfig.data.attributes.anonymousRateLimit = {
+      requests: 1,
+      windowSeconds: 600,
+    };
+    realmConfig.data.attributes.anonymousBlocklist = [BLOCKED_RANGE];
+    await newsroom.write('realm.json', JSON.stringify(realmConfig));
+    await newsroom.indexing();
+
+    assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      200,
+      'a limit only the realm config names counts for nothing',
+    );
+    assert.strictEqual(
+      (await readCard(PUBLISHED, BLOCKED_VISITOR)).status,
+      200,
+      'and so does a blocklist only the realm config names',
+    );
+    assert.strictEqual(
+      articleRecords()[0]?.limit?.requestsFrom,
+      'platform',
+      'the grant counts against the platform default instead',
+    );
+  });
+
   test('a blocked address or range gets the 401 an unadmitted caller gets, whatever the grants say', async function (assert) {
-    await setNewsroomConfig({ anonymousBlocklist: [BLOCKED_RANGE] });
+    await setNewsroomConfig({ blockedIps: BLOCKED_RANGE });
     let blocked = await readCard(PUBLISHED, BLOCKED_VISITOR);
     unauthenticated(blocked, 'a blocked range', assert);
     assert.strictEqual(
@@ -463,7 +541,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a blocklist entry that is not an address closes the realm to callers who are not signed in', async function (assert) {
-    await setNewsroomConfig({ anonymousBlocklist: ['the spammer'] });
+    await setNewsroomConfig({ blockedIps: 'the spammer' });
     unauthenticated(await readCard(PUBLISHED), 'any address', assert);
     assert.strictEqual(
       articleRecords().find((r) => r.outcome === 'blocked')?.blockReason,
@@ -480,8 +558,8 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('the address is the one the load balancer appended, not one the caller wrote', async function (assert) {
     await setNewsroomConfig({
-      anonymousBlocklist: [BLOCKED_RANGE],
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      blockedIps: BLOCKED_RANGE,
+      ...limitOf(1),
     });
     let response = await readCard(PUBLISHED, `${VISITOR}, ${BLOCKED_VISITOR}`);
     unauthenticated(response, 'a forged earlier entry', assert);
@@ -562,7 +640,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a capability check answers a caller who is not signed in, counted once for each pair it asks about', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 4, windowSeconds: 600 },
+      ...limitOf(4),
     });
     let ask = (realm: string, targets: string[]) =>
       request
@@ -612,8 +690,8 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('our own services are measured and never limited or blocked', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
-      anonymousBlocklist: [`${OUR_SERVICES}/32`],
+      ...limitOf(1),
+      blockedIps: `${OUR_SERVICES}/32`,
     });
     for (let i = 0; i < 3; i++) {
       assert.strictEqual(
@@ -634,7 +712,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
   test('an address over its limit is turned away before anything it asks for runs, whatever it names', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      ...limitOf(1),
     });
     assert.strictEqual((await readCard(PUBLISHED)).status, 200);
     let before = newsroom.__testOnlyPolicyGateStats().predicateEvaluations;
@@ -675,7 +753,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a redirect, and a HEAD that finds nothing a grant opens, cost nothing', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      ...limitOf(1),
     });
     let redirect = await readCard(`${PUBLISHED}.json`);
     assert.strictEqual(redirect.status, 302, 'the .json spelling redirects');
@@ -710,7 +788,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a HEAD of a card a grant opens answers as its GET does, and is counted', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 2, windowSeconds: 600 },
+      ...limitOf(2),
     });
     let head = await request
       .head(new URL(PUBLISHED).pathname)
@@ -739,7 +817,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a caller cannot name its own address or claim to be one of our services', async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      ...limitOf(1),
     });
     let forged = () =>
       readCard(PUBLISHED)
@@ -763,7 +841,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("a stylesheet that goes with a card's markup is served, and counts for nothing", async function (assert) {
     await setNewsroomConfig({
-      anonymousRateLimit: { requests: 1, windowSeconds: 600 },
+      ...limitOf(1),
     });
     let interned = (await db.execute(
       `SELECT hash FROM scoped_css WHERE realm_url = $1 LIMIT 1`,

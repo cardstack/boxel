@@ -16,7 +16,10 @@ import { getService } from '@universal-ember/test-support';
 import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
-import type { LinkShapePolicy } from '@cardstack/runtime-common';
+import type {
+  AnonymousRateLimit,
+  LinkShapePolicy,
+} from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   cardDefComputedFields,
@@ -1368,6 +1371,7 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
+  anonymousRateLimit,
   enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
@@ -1391,6 +1395,10 @@ export async function setupIntegrationTestRealm({
   // does: relationships carry their links, but the targets behind them are
   // not side-loaded into `included`, so the reader resolves each one itself.
   linkShapePolicy?: LinkShapePolicy;
+  // The rate limit a policy grant counts callers who aren't signed in against
+  // where it sets none, as a realm server configures it. The realm reports it
+  // in its info. Unset, the platform's default.
+  anonymousRateLimit?: AnonymousRateLimit;
   // Judge the host's requests by the realm's ACL, as a deployed realm does.
   //
   // By default the realm answers every request as its own internal dispatch,
@@ -1436,6 +1444,7 @@ export async function setupIntegrationTestRealm({
     mockMatrixUtils,
     skipBootIndex,
     linkShapePolicy,
+    anonymousRateLimit,
     enforcePermissions,
     startMatrix,
     fileSizeLimitBytes,
@@ -1521,6 +1530,7 @@ async function setupTestRealm({
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
+  anonymousRateLimit,
   enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
@@ -1534,6 +1544,7 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
   linkShapePolicy?: LinkShapePolicy;
+  anonymousRateLimit?: AnonymousRateLimit;
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1672,6 +1683,7 @@ async function setupTestRealm({
     {
       ...(skipBootIndex ? { skipBootIndex } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
+      ...(anonymousRateLimit ? { anonymousRateLimit } : {}),
     },
   );
 
@@ -2638,10 +2650,6 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
-    // How the realm limits and blocks callers its policy admits without a
-    // session.
-    anonymousRateLimit?: { requests: number; windowSeconds: number };
-    anonymousBlocklist?: string[];
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2663,12 +2671,6 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
-  }
-  if (config.anonymousRateLimit !== undefined) {
-    attrs.anonymousRateLimit = config.anonymousRateLimit;
-  }
-  if (config.anonymousBlocklist !== undefined) {
-    attrs.anonymousBlocklist = config.anonymousBlocklist;
   }
   return JSON.stringify({
     data: {

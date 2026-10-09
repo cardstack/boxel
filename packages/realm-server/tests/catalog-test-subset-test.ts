@@ -73,19 +73,30 @@ module(basename(import.meta.filename), function (hooks) {
       grants: {
         operation: string;
         where: unknown;
-        anonymous: unknown;
         actingUser: unknown;
+        blocklist: unknown;
+        rateLimitRequests: unknown;
+        rateLimitWindowSeconds: unknown;
       }[];
     }[];
     assert.deepEqual(
       rules[0]?.grants,
       [
-        { operation: 'read', where: null, anonymous: false, actingUser: null },
+        {
+          operation: 'read',
+          where: null,
+          actingUser: null,
+          blocklist: null,
+          rateLimitRequests: null,
+          rateLimitWindowSeconds: null,
+        },
         {
           operation: 'appendActivity',
           where: { bxl: 'actor() in .teacherIds', snapshot: true },
-          anonymous: false,
           actingUser: null,
+          blocklist: null,
+          rateLimitRequests: null,
+          rateLimitWindowSeconds: null,
         },
       ],
       "the catalog definition's fields, including its serializer-backed predicate, round-trip",

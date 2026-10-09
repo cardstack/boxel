@@ -171,7 +171,6 @@
   "range-request-test.ts": 16.8,
   "read-index-drain-test.ts": 201.7,
   "realm-advisory-locks-test.ts": 3.6,
-  "realm-anonymous-access-test.ts": 8.2,
   "realm-auth-test.ts": 4,
   "realm-cleanup-transaction-test.ts": 0.2,
   "realm-endpoints-test.ts": 394.4,

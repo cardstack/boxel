@@ -162,22 +162,35 @@ function policyCard(rules: unknown[]) {
   });
 }
 
+// What a grant's `where` says to open it to callers who aren't signed in.
+const ANONYMOUS = 'actor() == "anonymous"';
+// The user a write by such a caller is made as, and the limit it counts
+// against, both read from the governed realm's own config.
+const SUBMITTER_WRITES = {
+  actingUser: 'realmConfig("submitter")',
+  rateLimitRequests: 'realmConfig("requests")',
+  rateLimitWindowSeconds: 'realmConfig("windowSeconds")',
+};
+
 const POLICY = policyCard([
   rule(PETITION, [
     {
       operation: 'sign',
-      anonymous: true,
-      actingUser: 'submitter',
-      where: '.status == "open"',
+      where: `${ANONYMOUS} and .status == "open"`,
+      ...SUBMITTER_WRITES,
     },
     { operation: 'close' },
-    { operation: 'claim', anonymous: true, actingUser: 'submitter' },
+    { operation: 'claim', where: ANONYMOUS, ...SUBMITTER_WRITES },
   ]),
   rule(SIGNUP, [
-    { operation: 'register', anonymous: true, actingUser: 'submitter' },
+    { operation: 'register', where: ANONYMOUS, ...SUBMITTER_WRITES },
   ]),
   rule(type(CIVIC, 'Ballot'), [
-    { operation: 'sign', anonymous: true, actingUser: 'missing' },
+    {
+      operation: 'sign',
+      where: ANONYMOUS,
+      actingUser: 'realmConfig("missing")',
+    },
   ]),
 ]);
 
@@ -273,9 +286,8 @@ module(basename(import.meta.filename), function (hooks) {
               rule(type(BOARD, 'Petition'), [
                 {
                   operation: 'sign',
-                  anonymous: true,
-                  actingUser: 'submitter',
-                  where: '.status == "open"',
+                  where: `${ANONYMOUS} and .status == "open"`,
+                  actingUser: 'realmConfig("submitter")',
                 },
               ]),
             ]),
@@ -382,18 +394,21 @@ module(basename(import.meta.filename), function (hooks) {
         ).data.attributes;
   }
 
-  async function setCivic(fields: { anonymousRateLimit?: unknown }) {
+  // Sets what the civic realm's grants read from its config, over the
+  // fixture's.
+  async function setCivic(config: Record<string, unknown>) {
     await civic.write(
       'realm.json',
       realmConfigCardJSON({
         name: 'Civic',
         policy: CIVIC_POLICY,
-        config: { submitter: SUBMITTER },
-        ...fields,
+        config: { submitter: SUBMITTER, ...config },
       }),
     );
     await civic.indexing();
-    await clearOfRateLimitWindowEdge(fields.anonymousRateLimit);
+    await clearOfRateLimitWindowEdge({
+      windowSeconds: config.windowSeconds,
+    });
   }
 
   function unauthenticated(response: Response, label: string, assert: Assert) {
@@ -588,7 +603,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a declared write is counted one unit, and one over the limit gets 429 and writes nothing', async function (assert) {
-    await setCivic({ anonymousRateLimit: { requests: 1, windowSeconds: 600 } });
+    await setCivic({ requests: 1, windowSeconds: 600 });
     assert.strictEqual((await sign(OPEN, 'Ada')).status, 200);
     let over = await sign(OPEN, 'Grace');
     assert.strictEqual(over.status, 429, over.text);
