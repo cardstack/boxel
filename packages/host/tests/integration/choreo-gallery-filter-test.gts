@@ -52,6 +52,13 @@ module('Integration | Choreo gallery | gallery filter', function (hooks) {
     await afterTheSwitch();
     const drag = catalog.filter((demo) => demo.group === 'Drag').length;
     assert.strictEqual(visible().length, drag, 'only the drag demos');
+    const fading = [...document.querySelectorAll<HTMLElement>('.card')].filter(
+      (card) => Number(getComputedStyle(card).opacity) <= 0.5,
+    );
+    assert.true(
+      fading.every((card) => card.inert),
+      `the cards on their way out take no input (${fading.length} leaving)`,
+    );
 
     await click(chip('All'));
     await afterTheSwitch();
@@ -59,6 +66,28 @@ module('Integration | Choreo gallery | gallery filter', function (hooks) {
       visible().length,
       catalog.length,
       `and back to all of them (dom=${document.querySelectorAll('.card').length})`,
+    );
+  });
+
+  /**
+   * A filtered-out tile should leave the DOM once its exit finishes. It does
+   * not while any leaving demo's Choreo region holds a run that is not done —
+   * Fold's run held paused at its end, Playhead's paused run, Build Order's
+   * playing one — because Presence releases its leavers as one batch, and the
+   * whole batch waits on them. Until a leaving subtree stops waiting on such a
+   * region, this is a todo: QUnit reports it the moment it starts passing.
+   */
+  test.todo('a filtered-out card leaves the DOM', async function (assert) {
+    await gallery.renderGallery();
+    await afterTheSwitch();
+    await click(chip('Drag'));
+    await afterTheSwitch();
+    await afterTheSwitch();
+    const drag = catalog.filter((demo) => demo.group === 'Drag').length;
+    assert.strictEqual(
+      document.querySelectorAll('.card').length,
+      drag,
+      'only the drag demos are still mounted',
     );
   });
 });
