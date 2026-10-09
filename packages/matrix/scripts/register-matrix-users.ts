@@ -30,6 +30,7 @@ const REALM_USERS = [
   'software_factory_realm',
   'test_realm',
   'openrouter_realm',
+  'choreo_gallery_realm',
 ];
 
 interface ExtraUser {
@@ -61,6 +62,12 @@ const EXTRA_USERS: ExtraUser[] = [
   },
   {
     username: 'homepage_writer',
+    password: 'password',
+    admin: false,
+    ensureUserRecord: true,
+  },
+  {
+    username: 'choreo_gallery_writer',
     password: 'password',
     admin: false,
     ensureUserRecord: true,
