@@ -60,6 +60,9 @@ const BOOTSTRAP = `
           call('fs.replace', [path, search, replacement]),
         writeText: (path, content) => call('fs.writeText', [path, content]),
       }),
+      cards: Object.freeze({
+        search: (query) => call('cards.search', [query]),
+      }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
     });
     delete globalThis.__realmURL;
@@ -121,6 +124,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.list',
   'fs.replace',
   'fs.writeText',
+  'cards.search',
   'capture',
 ]);
 

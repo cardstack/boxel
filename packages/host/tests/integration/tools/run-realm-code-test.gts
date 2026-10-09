@@ -18,10 +18,36 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+const otherRealmURL = 'http://test-realm/test2/';
+
+// A card instance written out by hand, so a test can match its exact text.
+function recipeJSON(
+  name: 'Recipe' | 'Chef',
+  attributes: Record<string, string>,
+  chef?: string,
+  module = '../recipe',
+): string {
+  return `${JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes,
+        ...(chef ? { relationships: { chef: { links: { self: chef } } } } : {}),
+        meta: { adoptsFrom: { module, name } },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    activeRealms: [testRealmURL, otherRealmURL],
+    autostart: true,
+  });
 
   // `realm.capture` captures through the realm server; this answers every
   // capture with a 1×1 PNG and records what was asked for.
@@ -72,6 +98,62 @@ module('Integration | tools | run-realm-code', function (hooks) {
 }
 `,
           'notes/first.md': '# First\n',
+          'recipe.gts': `
+            import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+
+            export class Chef extends CardDef {
+              static displayName = 'Chef';
+              @field name = contains(StringField);
+              @field cardTitle = contains(StringField, {
+                computeVia: function (this: Chef) {
+                  return this.name;
+                },
+              });
+            }
+
+            export class Recipe extends CardDef {
+              static displayName = 'Recipe';
+              @field name = contains(StringField);
+              @field cuisine = contains(StringField);
+              @field chef = linksTo(Chef);
+              @field cardTitle = contains(StringField, {
+                computeVia: function (this: Recipe) {
+                  return 'Recipe: ' + this.name;
+                },
+              });
+            }
+          `,
+          'Chef/ana.json': recipeJSON('Chef', { name: 'Ana' }),
+          'Recipe/pancakes.json': recipeJSON(
+            'Recipe',
+            { name: 'Pancakes', cuisine: 'unknown' },
+            '../Chef/ana',
+          ),
+          'Recipe/ramen.json': recipeJSON('Recipe', {
+            name: 'Ramen',
+            cuisine: 'Japanese',
+          }),
+          'Recipe/desserts/tiramisu.json': recipeJSON(
+            'Recipe',
+            { name: 'Tiramisu', cuisine: 'unknown' },
+            undefined,
+            '../../recipe',
+          ),
+        },
+      }),
+    );
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: otherRealmURL,
+        contents: {
+          'Recipe/elsewhere.json': recipeJSON(
+            'Recipe',
+            { name: 'Elsewhere', cuisine: 'unknown' },
+            undefined,
+            `${testRealmURL}recipe`,
+          ),
         },
       }),
     );
@@ -458,5 +540,176 @@ return found;`,
       }),
       /Directory not found/,
     );
+  });
+
+  module('realm.cards.search', function () {
+    const recipeRef = `{ module: ${JSON.stringify(`${testRealmURL}recipe`)}, name: 'Recipe' }`;
+
+    async function run(code: string) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+      return { result, value: JSON.parse(result.scriptResult!) };
+    }
+
+    test('returns each card as plain data the script can use', async function (assert) {
+      let { result, value } = await run(
+        `return await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });`,
+      );
+
+      assert.deepEqual(result.files, [], 'a search saves nothing');
+      assert.strictEqual(value.total, 1);
+      assert.false(value.truncated);
+      assert.strictEqual(value.cards.length, 1);
+      let [card] = value.cards;
+      assert.strictEqual(card.id, `${testRealmURL}Recipe/pancakes`);
+      assert.strictEqual(card.path, 'Recipe/pancakes.json');
+      assert.deepEqual(card.type, {
+        module: `${testRealmURL}recipe`,
+        name: 'Recipe',
+      });
+      assert.strictEqual(card.attributes.name, 'Pancakes');
+      assert.strictEqual(card.attributes.cuisine, 'unknown');
+      assert.strictEqual(
+        card.attributes.cardTitle,
+        'Recipe: Pancakes',
+        'computed values come from the index',
+      );
+      assert.strictEqual(
+        card.relationships.chef,
+        `${testRealmURL}Chef/ana`,
+        'a link is the full URL of the card it names',
+      );
+    });
+
+    test('a script can search, then read and edit every card it found', async function (assert) {
+      let { result, value } = await run(`
+const { cards } = await realm.cards.search({ filter: { eq: { cuisine: 'unknown' }, on: ${recipeRef} } });
+for (const card of cards) {
+  await realm.fs.replace(card.path, '"cuisine": "unknown"', '"cuisine": "Italian"');
+}
+return cards.map((card) => card.path);`);
+
+      assert.deepEqual(value, [
+        'Recipe/desserts/tiramisu.json',
+        'Recipe/pancakes.json',
+      ]);
+      assert.deepEqual(
+        result.files.map((file) => file.fileUrl),
+        [
+          `${testRealmURL}Recipe/desserts/tiramisu.json`,
+          `${testRealmURL}Recipe/pancakes.json`,
+        ],
+      );
+      let source = await getService('card-service').getSource(
+        new URL(`${testRealmURL}Recipe/desserts/tiramisu.json`),
+      );
+      assert.true(source.content.includes('"cuisine": "Italian"'));
+    });
+
+    test('a type from a result is a type a query can search for', async function (assert) {
+      let { value } = await run(`
+const { cards: [pancakes] } = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
+const { cards } = await realm.cards.search({ filter: { type: pancakes.type } });
+return cards.map((card) => card.path);`);
+
+      assert.deepEqual(value, [
+        'Recipe/desserts/tiramisu.json',
+        'Recipe/pancakes.json',
+        'Recipe/ramen.json',
+      ]);
+    });
+
+    test('pages through the results and says when a page cut the list', async function (assert) {
+      let { value } = await run(`
+const first = await realm.cards.search({ filter: { type: ${recipeRef} }, page: { size: 2 } });
+const second = await realm.cards.search({ filter: { type: ${recipeRef} }, page: { size: 2, number: 1 } });
+return { first, second };`);
+
+      assert.strictEqual(value.first.total, 3);
+      assert.true(value.first.truncated);
+      assert.deepEqual(
+        value.first.cards.map((card: { path: string }) => card.path),
+        ['Recipe/desserts/tiramisu.json', 'Recipe/pancakes.json'],
+      );
+      assert.true(value.second.truncated, 'the first page is not in it');
+      assert.deepEqual(
+        value.second.cards.map((card: { path: string }) => card.path),
+        ['Recipe/ramen.json'],
+      );
+    });
+
+    test('searches only the realm the script runs in', async function (assert) {
+      let { value } = await run(
+        `return (await realm.cards.search({ filter: { type: ${recipeRef} } })).cards.map((card) => card.id);`,
+      );
+      assert.false(
+        value.some((id: string) => id.startsWith(otherRealmURL)),
+        "another realm's cards are not returned",
+      );
+
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.cards.search({ filter: { type: ${recipeRef} }, realms: [${JSON.stringify(otherRealmURL)}] });`,
+        }),
+        /realm\.cards\.search searches only this realm/,
+      );
+    });
+
+    test('an invalid query rejects, and a script that catches it carries on', async function (assert) {
+      let { value } = await run(`
+let message;
+try { await realm.cards.search({ filter: { type: ${recipeRef} }, limit: 10 }); } catch (e) { message = e.message; }
+return { message, found: (await realm.cards.search({ filter: { type: ${recipeRef} } })).total };`);
+
+      assert.true(
+        /unknown field in query: limit/.test(value.message),
+        `the bad query was refused: ${value.message}`,
+      );
+      assert.strictEqual(value.found, 3, 'the next search still ran');
+    });
+
+    test('a search does not count toward the file limit', async function (assert) {
+      let { value } = await run(`
+await realm.cards.search({ filter: { type: ${recipeRef} } });
+let found = 0;
+for (let i = 0; i < 20; i++) {
+  if (!(await realm.fs.exists('missing-' + i + '.json'))) found++;
+}
+return found;`);
+
+      assert.strictEqual(value, 20);
+    });
+
+    test('a search a realm did not answer fails instead of finding nothing', async function (assert) {
+      let store = getService('store');
+      let searchEntries = store.searchEntries;
+      store.searchEntries = async () => ({
+        data: [],
+        meta: { page: { total: 0 }, incomplete: true },
+      });
+      try {
+        let toolService = getService('tool-service');
+        let command = new RunRealmCodeTool(toolService.toolContext);
+        await assert.rejects(
+          command.execute({
+            realm: testRealmURL,
+            roomId: '!room:example.com',
+            code: `await realm.cards.search({ filter: { type: ${recipeRef} } });`,
+          }),
+          /did not answer/,
+        );
+      } finally {
+        store.searchEntries = searchEntries;
+      }
+    });
   });
 });
