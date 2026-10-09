@@ -44,8 +44,9 @@ gallery. Their sources are `packages/choreo-film-app`, a small app that plays
 one film per document. `pnpm push` builds it into `film-app/` before it
 pushes the realm, with every script renamed `.mjs`, because the realm compiles
 `.js` files as card modules and serves `.mjs` files verbatim. The build is not
-committed; anything else that copies the realm (a deploy, say) runs
-`pnpm --filter choreo-film-app build:realm` first.
+committed: the realm-server image builds it into the realm before a deploy
+copies the realm, and the local stack builds it when `film-app/` is absent.
+`pnpm --filter choreo-film-app build:realm` rebuilds it.
 
 - In the grid a film is a poster (`shell/film-tile.gts`); its play control
   opens the film's page in theater.
@@ -70,9 +71,30 @@ the site frame's `<Choreo @route>` region sees each move as one render pass
 and flies the tile into the page. The gallery never writes the host's URL or
 title.
 
+## Where it's served
+
+The realm server mounts `realm/` as the realm `choreo-gallery`:
+
+| Environment | URL                                                  |
+| ----------- | ---------------------------------------------------- |
+| Production  | `https://app.boxel.ai/choreo-gallery/`               |
+| Staging     | `https://realms-staging.stack.cards/choreo-gallery/` |
+| Local       | `https://localhost:4201/choreo-gallery/`             |
+
+Each deploy copies `realm/` onto the realm's disk with `rsync --delete`
+(`setup:choreo-gallery-in-deployment` in `packages/realm-server`), so git is
+the realm's source of truth: staging follows `main`, production follows each
+production deploy, and an edit made in the app lasts only until the next
+deploy. The service account `choreo_gallery_realm` owns the realm,
+`choreo_gallery_writer` can read and write it, and everyone can read it.
+
 ## Developing
 
-Serve the realm from the local stack and push your edits to it.
+The local stack (`mise run dev-all` from the repository root) serves `realm/`
+itself at `https://localhost:4201/choreo-gallery/` and reindexes files as you
+save them. Set `SKIP_CHOREO_GALLERY=true` to leave it out of the stack.
+
+To work on a copy in a realm of your own instead, push the realm to it:
 
 1. Start the stack from the repository root: `mise run dev-all`.
 2. Install the Boxel CLI at the version CI uses:
