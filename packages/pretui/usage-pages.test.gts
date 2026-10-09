@@ -11,6 +11,7 @@ import { DEMOS_AGENT_QUESTION } from './components/agent-question.usage';
 import { DEMOS_AI_INSTRUCTIONS } from './components/ai-instructions.usage';
 import { DEMOS_ALERT_DIALOG } from './components/alert-dialog.usage';
 import { DEMOS_ALERT } from './components/alert.usage';
+import { DEMOS_AMBIENT_VIDEO } from './components/ambient-video.usage';
 import { DEMOS_AMOUNT_INPUT } from './components/amount-input.usage';
 import { DEMOS_ANGLE_DIAL } from './components/angle-dial.usage';
 import { DEMOS_ANIMATED_IMAGE } from './components/animated-image.usage';
@@ -303,6 +304,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_AI_INSTRUCTIONS,
   DEMOS_ALERT_DIALOG,
   DEMOS_ALERT,
+  DEMOS_AMBIENT_VIDEO,
   DEMOS_AMOUNT_INPUT,
   DEMOS_ANGLE_DIAL,
   DEMOS_ANIMATED_IMAGE,
