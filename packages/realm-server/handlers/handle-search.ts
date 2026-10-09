@@ -63,6 +63,7 @@ import {
 } from '../search-type-watermarks.ts';
 import type {
   CodeRef,
+  AnonymousCaller,
   DBAdapter,
   Realm,
   VirtualNetwork,
@@ -137,7 +138,7 @@ export default function handleSearch(opts: {
   let linkShapePolicy = opts.linkShapePolicy ?? LinkShapePolicy.pinned('full');
   let liveSearchCache = opts.liveSearchCache ?? new LiveSearchCache();
   return async function (ctxt: Koa.Context) {
-    let { realmList, grantCandidates, principal } =
+    let { realmList, grantCandidates, principal, anonymousCallers } =
       getMultiRealmAuthorization(ctxt);
     let payload = getSearchRequestPayload(ctxt);
     // Every realm the request names, in the order it names them, which is the
@@ -222,8 +223,9 @@ export default function handleSearch(opts: {
       // only once no realm the caller reads will mount. One the caller
       // reaches only through its policy reads the declaration on that realm's
       // own authority, the way the policy gate reads it. No policy admits a
-      // request that authenticated nobody, nor a realm-authority principal,
-      // so for either there are none of the latter.
+      // named query to a request that authenticated nobody, nor to a
+      // realm-authority principal, so for either there are none of the
+      // latter.
       let policyRealms = async () =>
         principal?.kind === 'user'
           ? await realmsThatMayNamePolicy(grantCandidates)
@@ -296,18 +298,39 @@ export default function handleSearch(opts: {
     // policy is asked about it.
     let readable = new Set(realmList);
     let candidates = new Set(grantCandidates);
+    // A request that authenticated nobody is counted by each realm that
+    // admitted it, against the address the request came from.
+    // It is counted only for a search the realm can run, so a request whose
+    // query won't parse is refused before any realm counts it.
+    let anonymousRequest = anonymousCallers
+      ? await fetchRequestFromContext(ctxt)
+      : undefined;
+    if (anonymousRequest) {
+      try {
+        parseSearchEntryQueryFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          await respondToInvalidSearch(ctxt, e);
+          return;
+        }
+        throw e;
+      }
+    }
     let access: RealmAccess = unresolved
       ? { readable: new Set(), scoped: new Map(), failed: unresolved }
       : await withSearchConnectionTenant(ctxt, named, () =>
           policyAccess(
             readable,
             consultPolicies
-              ? named.filter((realm) => candidates.has(realm))
+              ? [...new Set(named.filter((realm) => candidates.has(realm)))]
               : [],
             invocation,
             principal,
             realmsThatMayNamePolicy,
             mountRealms,
+            anonymousCallers && anonymousRequest
+              ? { callers: anonymousCallers, request: anonymousRequest }
+              : undefined,
           ),
         );
     // The realms this search does work for: those it reads rows from. Each
@@ -343,6 +366,13 @@ export default function handleSearch(opts: {
   // is a realm mounted when its `realm.json` names no policy: with no policy
   // there is nothing to ask, and it contributes nothing, as a realm whose
   // policy grants nothing does.
+  //
+  // A request that authenticated nobody is searched in each realm that
+  // admitted it (`anonymous`), and each counts the search against the
+  // caller's budget there once its grants have scoped it. A realm that turns
+  // the caller away, its budget spent or its count unreadable, is failed: its
+  // rows are withheld and the result is marked incomplete, while the other
+  // realms still answer.
   async function policyAccess(
     readable: Set<string>,
     grantCandidates: string[],
@@ -350,6 +380,7 @@ export default function handleSearch(opts: {
     principal: SearchPrincipal | undefined,
     realmsThatMayNamePolicy: (urls: string[]) => Promise<string[]>,
     mountRealms: MountRealms,
+    anonymous?: { callers: Map<string, AnonymousCaller>; request: Request },
   ): Promise<RealmAccess> {
     let access: RealmAccess = {
       readable,
@@ -372,15 +403,33 @@ export default function handleSearch(opts: {
           access.failed.add(url);
           return;
         }
+        let caller = anonymous?.callers.get(url);
+        if (anonymous && !caller) {
+          return;
+        }
+        if (caller?.turnedAway) {
+          access.failed.add(url);
+          return;
+        }
         try {
           let scope = await policyQueryScope(realm.operationCore, {
             ...invocation,
             principal,
             transport: 'federated-search',
           });
-          if (scope.kind === 'scoped') {
-            access.scoped.set(url, scope.filters);
+          if (scope.kind !== 'scoped') {
+            return;
           }
+          if (
+            anonymous &&
+            caller &&
+            (await realm.countAnonymousSearch(anonymous.request, caller))
+              .kind !== 'counted'
+          ) {
+            access.failed.add(url);
+            return;
+          }
+          access.scoped.set(url, scope.filters);
         } catch (e) {
           // Not a policy that could not be judged but a principal no policy
           // may be asked about, which only broken wiring gets here with. It
@@ -526,14 +575,7 @@ export default function handleSearch(opts: {
         : await parseRequest();
     } catch (e) {
       if (e instanceof SearchRequestError) {
-        // `invalid-query` / `invalid-render` are client request-shape errors
-        // → the JSON:API search-error body; anything else (bad method / JSON)
-        // → a plain bad request, the same split as the other search handlers.
-        if (e.code === 'invalid-query' || e.code === 'invalid-render') {
-          await setContextResponse(ctxt, buildSearchErrorResponse(e.message));
-        } else {
-          await sendResponseForBadRequest(ctxt, e.message);
-        }
+        await respondToInvalidSearch(ctxt, e);
         return;
       }
       throw e;
@@ -1154,4 +1196,19 @@ async function respondWithJobScopedSearchCache(
     }),
   );
   emitTelemetry();
+}
+
+// The answer to a search whose request is malformed. `invalid-query` and
+// `invalid-render` are client request-shape errors, answered with the JSON:API
+// search-error body; anything else (bad method / JSON) is a plain bad request,
+// the same split as the other search handlers.
+async function respondToInvalidSearch(
+  ctxt: Koa.Context,
+  e: SearchRequestError,
+): Promise<void> {
+  if (e.code === 'invalid-query' || e.code === 'invalid-render') {
+    await setContextResponse(ctxt, buildSearchErrorResponse(e.message));
+  } else {
+    await sendResponseForBadRequest(ctxt, e.message);
+  }
 }

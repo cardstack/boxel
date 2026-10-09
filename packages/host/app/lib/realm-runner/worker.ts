@@ -61,6 +61,10 @@ const BOOTSTRAP = `
         writeText: (path, content) => call('fs.writeText', [path, content]),
       }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
+      workspaces: Object.freeze({
+        create: (options) => call('workspaces.create', [options ?? {}]),
+        delete: (url) => call('workspaces.delete', [url]),
+      }),
     });
     delete globalThis.__realmURL;
   })();
@@ -122,6 +126,8 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.replace',
   'fs.writeText',
   'capture',
+  'workspaces.create',
+  'workspaces.delete',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a

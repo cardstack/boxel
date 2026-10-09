@@ -1,6 +1,7 @@
 // Pretui — UsageArgument: one documented argument row (doc lens: table row; prop lens: nothing).
 import Component from '@glimmer/component';
-import { isPresent } from '../internal/freestyle';
+import { VisuallyHidden } from './visually-hidden';
+import { isPresent, readOnlyText } from '../internal/freestyle';
 import type { ArgsMode } from '../internal/freestyle';
 
 // ── Freestyle::Usage::Argument (doc lens: table row; prop lens: nothing) ──
@@ -31,7 +32,7 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
     return isPresent(this.args.defaultValue);
   }
   get defaultText() {
-    return String(this.args.defaultValue);
+    return readOnlyText(this.args.defaultValue);
   }
   // yields print as {{name}}, css vars bare (names carry --), args as @name
   get sigilPre() {
@@ -44,61 +45,64 @@ export class UsageArgument extends Component<UsageArgumentSignature> {
   }
   <template>
     {{#if this.isDoc}}
-      <tr class='FreestyleUsageArgument'>
-        <td class='FreestyleUsageArgument-name'>
-          <span class='u-sig'>{{this.sigilPre}}</span>{{#if @name}}{{@name}}{{/if}}<span
-            class='u-sig'
-          >{{this.sigilPost}}</span>
-          {{#if @required}}<span class='u-req' title='Required'>*</span>{{/if}}
-        </td>
-        <td class='FreestyleUsageArgument-type'>{{this.typeLabel}}</td>
-        <td class='FreestyleUsageArgument-description'>{{@description}}</td>
-        <td class='FreestyleUsageArgument-default'>
+      <tr class='pretui-usage-arg' data-test-pretui-usage-arg>
+        {{! the name heads the row, so each cell is announced with it }}
+        <th scope='row' class='pretui-usage-arg-name'>
+          <span class='u-sig'>{{this.sigilPre}}</span>{{#if
+            @name
+          }}{{@name}}{{/if}}<span class='u-sig'>{{this.sigilPost}}</span>
+          {{#if @required}}<span
+              class='u-req'
+              aria-hidden='true'
+              data-test-pretui-usage-arg-required
+            >*</span><VisuallyHidden> (required)</VisuallyHidden>{{/if}}
+        </th>
+        <td class='pretui-usage-arg-type'>{{this.typeLabel}}</td>
+        <td><span
+            class='pretui-usage-arg-description-text'
+          >{{@description}}</span></td>
+        <td class='pretui-usage-arg-default'>
           {{#if this.shouldRenderDefaultValue}}
             {{this.defaultText}}
           {{else}}
-            <span class='u-none'>—</span>
+            —
           {{/if}}
         </td>
       </tr>
     {{/if}}
     <style scoped>
-      @layer PretComponent {
-        .FreestyleUsageArgument-name {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          white-space: nowrap;
-          width: 1%;
-        }
-        .u-sig {
-          color: var(--ink-3, var(--boxel-400));
-        }
-        .u-req {
-          color: var(--pretui-destructive-ink, var(--boxel-danger));
-        }
-        .FreestyleUsageArgument-type {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          color: var(--muted-foreground);
-          white-space: nowrap;
-          width: 1%;
-          text-transform: lowercase;
-        }
-        .FreestyleUsageArgument-description {
-          color: var(--foreground);
-          max-width: 520px;
-        }
-        .FreestyleUsageArgument-default {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui, 12px);
-          color: var(--muted-foreground);
-          text-align: right;
-          white-space: nowrap;
-          width: 1%;
-        }
-        .u-none {
-          color: var(--ink-3, var(--boxel-400));
-        }
+      .pretui-usage-arg {
+        --pretui-usage-arg-description-max-w: 32.5rem;
+      }
+      .pretui-usage-arg-name {
+        font-family: var(--font-mono);
+        font-weight: inherit;
+        white-space: nowrap;
+        width: 1%;
+      }
+      .u-sig {
+        color: var(--muted-foreground);
+      }
+      .u-req {
+        color: var(--destructive-ink);
+      }
+      .pretui-usage-arg-type {
+        font-family: var(--font-mono);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+        width: 1%;
+      }
+      /* on a span: table layout ignores max-width on a cell */
+      .pretui-usage-arg-description-text {
+        display: block;
+        max-width: var(--pretui-usage-arg-description-max-w);
+      }
+      .pretui-usage-arg-default {
+        font-family: var(--font-mono);
+        color: var(--muted-foreground);
+        text-align: end;
+        white-space: nowrap;
+        width: 1%;
       }
     </style>
   </template>

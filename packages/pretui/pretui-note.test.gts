@@ -22,7 +22,11 @@ module('Pretui | PretuiNote', function (hooks) {
       target: { id: targetId, componentName: 'Button' },
     };
     let fields = { note: NoteField };
-    await render(<template><Isolated @model={{model}} @fields={{fields}} @viewCard={{viewCard}} /></template>);
+    await render(
+      <template>
+        <Isolated @model={{model}} @fields={{fields}} @viewCard={{viewCard}} />
+      </template>,
+    );
     await click('[data-test-pretui-note-target]');
     assert.deepEqual(viewed, [targetId]);
   });

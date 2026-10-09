@@ -2,6 +2,16 @@ import { waitFor, waitUntil, click, fillIn, find } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import {
+  CardDef,
+  Component,
+  FieldDef,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, skip, test } from 'qunit';
@@ -49,17 +59,6 @@ import {
   setupOperatorModeStateCleanup,
   realmConfigCardJSON,
 } from '../../../helpers';
-import {
-  CardDef,
-  Component,
-  FieldDef,
-  contains,
-  linksTo,
-  linksToMany,
-  field,
-  setupBaseRealm,
-  StringField,
-} from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
@@ -81,7 +80,6 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
@@ -377,6 +375,43 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     );
     let roomId = await openAiAssistant();
     return roomId;
+  }
+
+  // A tool's result card renders at the end of a long asynchronous chain that
+  // `settled()` does not track end to end: the mock homeserver delivers each
+  // event on a bare `setTimeout`, room processing is an ember-concurrency
+  // task, the tool queue drains on a debounce, and the result card is
+  // downloaded and loaded from the store after the result event lands. The
+  // wait therefore needs a budget sized for that whole chain on a loaded CI
+  // runner, not the 1s `waitFor` default. The elapsed time is always logged,
+  // and a timeout logs where the chain stopped, so a slow run and a stalled
+  // one read differently in CI output.
+  const TOOL_RESULT_TIMEOUT_MS = 10_000;
+
+  async function waitForToolResult() {
+    let startedAt = performance.now();
+    try {
+      await waitFor('[data-test-tool-result-header]', {
+        timeout: TOOL_RESULT_TIMEOUT_MS,
+      });
+    } catch (e) {
+      let applyButtons = [
+        ...document.querySelectorAll('[data-test-tool-call-apply]'),
+      ].map((el) => el.getAttribute('data-test-tool-call-apply'));
+      console.error(
+        `[tool-result-wait] no result header after ${Math.round(
+          performance.now() - startedAt,
+        )}ms; messages=${
+          document.querySelectorAll('[data-test-message-idx]').length
+        }; applyStates=${JSON.stringify(applyButtons)} (a tool that reached "applied" points at the result card load; see any [tool-result-card] lines)`,
+      );
+      throw e;
+    }
+    console.log(
+      `[tool-result-wait] result header after ${Math.round(
+        performance.now() - startedAt,
+      )}ms`,
+    );
   }
 
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
@@ -840,7 +875,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
+    await waitForToolResult();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -886,7 +921,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]', { timeout: 10_000 });
+    await waitForToolResult();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -931,7 +966,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     // The result header and body share one light surface and foreground, so the
     // dark panel shows through neither the seam nor an unthemed result's text.
@@ -1016,7 +1051,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
@@ -1089,7 +1124,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     await click(
       '[data-test-tool-result-container] [data-test-more-options-button]',
@@ -1129,7 +1164,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
 
     assert
       .dom('[data-test-tool-result-container] [data-test-more-options-button]')
@@ -1171,7 +1206,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-tool-result-header]');
+    await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
@@ -3435,5 +3470,42 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         'done',
         "the script's own result stays out of the chat",
       );
+  });
+
+  test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    // The chat makes the result card asynchronously; wait for that card, so
+    // the assertion below runs after the chat has decided whether to show it.
+    let store = getService('store');
+    let addWithoutPersisting = store.addWithoutPersisting.bind(store);
+    let resultCardMade = new Promise<void>((resolve) => {
+      store.addWithoutPersisting = (async (
+        ...args: Parameters<typeof addWithoutPersisting>
+      ) => {
+        let card = await addWithoutPersisting(...args);
+        resolve();
+        return card;
+      }) as typeof store.addWithoutPersisting;
+    });
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-read-only',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: 'the file contents',
+        captures: [],
+      }),
+    });
+
+    await resultCardMade;
+    await settled();
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists('the tool row shows the call as applied');
+    assert
+      .dom('[data-test-tool-result-container]')
+      .doesNotExist('the read-only run has no result card');
   });
 });

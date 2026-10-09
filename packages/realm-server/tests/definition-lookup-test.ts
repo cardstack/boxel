@@ -19,7 +19,10 @@ import {
   rri,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { preWarmModulesTable } from '@cardstack/runtime-common/index-runner/prewarm-modules';
+import {
+  preWarmModulesTable,
+  realmCardModulesToWarm,
+} from '@cardstack/runtime-common/index-runner/prewarm-modules';
 import type { DependencyIndexRow } from '@cardstack/runtime-common/index-writer';
 import {
   setupPermissionedRealmsCached,
@@ -459,6 +462,66 @@ module(basename(import.meta.filename), function () {
         2,
         'prerenderModule was called a second time after invalidation',
       );
+    });
+
+    // An answer derived from definitions is kept while the generation holds
+    // the value it had before the definitions were read. The generation moves
+    // before an invalidation's delete, and again once it has committed: a
+    // reader between the two can still read the row being removed, and what
+    // it derives must not outlive the delete.
+    test('the definition generation moves before and after each invalidation’s delete', async function (assert) {
+      let lookup: CachingDefinitionLookup;
+      let atDelete: number[] = [];
+      let observed = new Proxy(dbAdapter, {
+        get(target, property) {
+          if (property === 'execute') {
+            return async (...args: Parameters<PgAdapter['execute']>) => {
+              let result = await target.execute(...args);
+              if (/DELETE FROM\s+modules/i.test(args[0])) {
+                atDelete.push(lookup.definitionGeneration());
+              }
+              return result;
+            };
+          }
+          let value = Reflect.get(target, property, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      lookup = new CachingDefinitionLookup(
+        observed,
+        mockRemotePrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      let invalidations: [string, () => Promise<unknown>][] = [
+        ['invalidate', () => lookup.invalidate(`${realmURL}person.gts`)],
+        ['clearRealmDefinitions', () => lookup.clearRealmDefinitions(realmURL)],
+        ['clearAllDefinitions', () => lookup.clearAllDefinitions()],
+      ];
+      for (let [name, invalidation] of invalidations) {
+        atDelete = [];
+        let before = lookup.definitionGeneration();
+        await invalidation();
+        assert.true(atDelete.length > 0, `${name} deletes rows`);
+        assert.true(
+          atDelete[0] > before,
+          `${name} moves the generation before its delete`,
+        );
+        assert.true(
+          lookup.definitionGeneration() > atDelete[atDelete.length - 1],
+          `${name} moves it again once its delete has committed`,
+        );
+      }
     });
 
     test('invalidates module cache entries without file extensions', async function (assert) {
@@ -3567,6 +3630,37 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("pre-warm sweep leaves out the modules the realm's ignore rules exclude", async function (assert) {
+      let files: Record<string, string> = {
+        'card.gts': '',
+        'card.test.gts': '',
+        'scripts/build.gts': '',
+        'notes.md': '',
+        '.boxelignore': '.boxelignore\n*.test.gts\nscripts/\n',
+      };
+      let reader: Reader = {
+        readFile: async (url: URL) => {
+          let path = url.href.slice(realmURL.length);
+          return path in files
+            ? { content: files[path], lastModified: 0, path }
+            : undefined;
+        },
+        readStream: () => {
+          throw new Error('reader should not stream in this test');
+        },
+        mtimes: async () =>
+          Object.fromEntries(
+            Object.keys(files).map((path) => [`${realmURL}${path}`, 1]),
+          ),
+      };
+
+      assert.deepEqual(
+        await realmCardModulesToWarm(new URL(realmURL), reader),
+        [`${realmURL}card.gts`],
+        'test files and scripts are not swept',
+      );
+    });
+
     test('pre-warm sweep warms only realm-own modules, skipping cross-realm deps', async function (assert) {
       // The populate keys every row on the job realm's cache context, while
       // the render-phase reader keys a module's row on the realm the module
@@ -3705,6 +3799,97 @@ module(basename(import.meta.filename), function () {
         `every persisted module row is realm-own (got: ${rows
           .map((row) => row.url)
           .join(', ')})`,
+      );
+    });
+
+    test('pre-warm sweep skips file deps that are not modules', async function (assert) {
+      let virtualNetwork = createVirtualNetwork();
+      let prerenderedModuleUrls: string[] = [];
+      let capturingPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderedModuleUrls.push(args.url);
+          return Promise.resolve({
+            id: 'example-id',
+            status: 'ready',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {},
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        capturingPrerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+
+      let markdownFile = `${realmURL}docs/accordion.md`;
+      let imageFile = `${realmURL}images/hero.png`;
+      let helperModule = `${realmURL}lib/helpers.ts`;
+      let dottedModule = `${realmURL}components/accordion.usage`;
+      let unusedReader: Reader = {
+        readFile: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        readStream: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+        mtimes: () => {
+          throw new Error('reader should not be consulted in this test');
+        },
+      };
+
+      await preWarmModulesTable({
+        realmURL: new URL(realmURL),
+        invalidations: [new URL(markdownFile)],
+        allRealmCardModules: [],
+        definitionLookup: workerLookup,
+        virtualNetwork,
+        reader: unusedReader,
+        getDependencyRows: async () =>
+          [
+            {
+              url: markdownFile,
+              type: 'file',
+              deps: [markdownFile, imageFile, helperModule, dottedModule],
+              hasError: false,
+              isDeleted: false,
+              errorDoc: null,
+            },
+          ] as DependencyIndexRow[],
+        getModuleCacheContext: async () => ({
+          resolvedRealmURL: realmURL,
+          cacheScope: 'realm-auth' as const,
+          authUserId: testUserId,
+        }),
+        prerenderUserId: testUserId,
+        jobPriority: 10,
+        jobInfo: {
+          jobId: 1,
+          reservationId: 1,
+          priority: 10,
+          queueWaitMs: null,
+          concurrencyGroup: null,
+          laneFamily: null,
+        },
+        log: logger('test-prewarm'),
+        perfLog: logger('test-prewarm-perf'),
+      });
+
+      assert.deepEqual(
+        prerenderedModuleUrls.sort(),
+        [helperModule, `${dottedModule}.gts`].sort(),
+        'only module deps were warmed; the markdown and image files were not',
       );
     });
   });

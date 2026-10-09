@@ -14,7 +14,6 @@ import {
   setupRealmServerEndpoints,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -22,7 +21,6 @@ const realmServerURL = 'http://test-realm/';
 
 module('Integration | tools | create-workspace', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupRealmServerEndpoints(hooks);
 

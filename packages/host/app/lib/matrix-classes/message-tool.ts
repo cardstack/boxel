@@ -23,6 +23,11 @@ import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
 
+// A tool class's per-call click rule (HostBaseTool.neverAutoExecutesFor).
+export type NeverAutoExecutesFor = (
+  attributes: Record<string, unknown> | undefined,
+) => boolean;
+
 // 'approved' is the user's approval of a call ai-bot holds for approval; the
 // call is then running (see `status`) until ai-bot's result lands.
 type ToolCallStatus =
@@ -63,6 +68,7 @@ export interface ToolResolution {
   requiresApproval: boolean;
   actionVerb: string;
   neverAutoExecutes: boolean;
+  neverAutoExecutesFor?: NeverAutoExecutesFor;
 }
 
 export type ToolResolver = (
@@ -91,6 +97,9 @@ export default class MessageTool {
     // The tool class declares that it must always wait for the user's
     // click, whatever the room's mode (see HostBaseTool.neverAutoExecutes).
     neverAutoExecutes: boolean = false,
+    // The same, for this call's input (see
+    // HostBaseTool.neverAutoExecutesFor).
+    neverAutoExecutesFor?: NeverAutoExecutesFor,
     // Resolves the tool from its name. Without one, the values above are the
     // tool's fixed resolution (a call ai-bot runs has nothing to resolve).
     resolver?: ToolResolver,
@@ -105,6 +114,7 @@ export default class MessageTool {
       requiresApproval,
       actionVerb,
       neverAutoExecutes,
+      neverAutoExecutesFor,
     };
     this.#resolver = resolver;
     if (resolver) {
@@ -205,10 +215,6 @@ export default class MessageTool {
     return this.resolution?.actionVerb ?? 'Apply';
   }
 
-  get neverAutoExecutes(): boolean {
-    return this.resolution?.neverAutoExecutes ?? false;
-  }
-
   @service declare toolService: ToolService;
   @service declare matrixService: MatrixService;
   @service declare store: StoreService;
@@ -225,6 +231,25 @@ export default class MessageTool {
   // readRealmFile). When set, the host records it in the timeline but never runs it.
   get executedBy() {
     return this.toolRequest.executedBy;
+  }
+
+  // Whether this call must wait for the user's click, whatever the room's
+  // mode. Read from the current arguments, so it is right once they finish
+  // streaming. False while the tool is still resolving; nothing runs a call
+  // automatically until it has resolved (the tool drain validates first).
+  get neverAutoExecutes(): boolean {
+    let resolution = this.resolution;
+    if (resolution?.neverAutoExecutes) {
+      return true;
+    }
+    let attributes = this.arguments?.attributes;
+    return (
+      resolution?.neverAutoExecutesFor?.(
+        attributes && typeof attributes === 'object'
+          ? (attributes as Record<string, unknown>)
+          : undefined,
+      ) === true
+    );
   }
 
   get argumentsError() {
@@ -326,8 +351,15 @@ export default class MessageTool {
         this.toolResultFileDef,
       );
       return cardDoc;
-    } catch {
-      // the command result card fragments might not be loaded yet
+    } catch (e) {
+      // the command result card fragments might not be loaded yet. The
+      // download is retried only when the tool's result file changes, so
+      // until then the result card stays hidden and this warning is the only
+      // trace of why.
+      console.warn(
+        `Unable to download the result card for tool call ${this.toolRequest.id} (${this.toolResultFileDef?.url}):`,
+        e,
+      );
       return undefined;
     }
   }

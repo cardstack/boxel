@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "reveal",
+      "title": "Reveal",
+      "group": "Scroll",
+      "lede": "An arrival happens once. An effect tracks the scroll.",
+      "apis": [
+        "whileInView",
+        "viewport.once",
+        "viewport.root",
+        "onViewportEnter"
+      ],
+      "sample": "{{! whileInView is a pose that plays when the element crosses into view.\n    Two viewport settings side by side, because the difference is the lesson:\n    the pours use once:true, so each arrives and then stays put however many\n    times you scroll past. The shift markers use once:false, so they leave when\n    they leave and play again on the way back.\n\n    The column scrolls inside the stage rather than with the page, so the\n    observer is handed that element as its root. Without it every row would\n    count as in view the moment the card is on screen. }}\n<div {{this.bind}}>            {{! the scroll container, captured as the root }}\n  {{#each this.entries key='key' as |entry|}}\n    {{#if entry.marker}}\n      <div {{motion initial=parked whileInView=passing\n                    viewport=(everyPass this.root) transition=sweep}}\n      >{{entry.marker}}</div>\n    {{else if entry.pour}}\n      {{! onViewportEnter is the escape hatch: the pose animates the element,\n          the callback counts the readout up on the same crossing }}\n      <article\n        {{motion\n          initial=resting\n          whileInView=arrived\n          viewport=(band this.root)\n          transition=rise\n          onViewportEnter=(fn this.count entry.pour)\n        }}\n      >\n        <b>{{entry.pour.label}}</b>\n        <small>{{entry.pour.shown}}°</small>\n        <i {{motion initial=flat whileInView=(bar entry.pour.fraction)\n                    viewport=(band this.root) transition=fill}}></i>\n      </article>\n    {{/if}}\n  {{/each}}\n</div>\n\n{{! amount is how much of a row has to be in the band before it counts as\n    arrived; once unhooks the observer after the first crossing }}\nfunction band(root)      { return { amount: 0.6, once: true,  root: { current: root } }; }\nfunction everyPass(root) { return { amount: 0.6, once: false, root: { current: root } }; }\n\n{{! onViewportEnter is the escape hatch for what a pose cannot do. The pose\n    animates the element; the callback runs your own code on the same crossing. }}\ncount = (pour) => {\n  const started = performance.now();\n  const tick = (now) => {\n    const t = Math.min((now - started) / 620, 1);\n    pour.shown = Math.round(pour.heat * (1 - (1 - t) ** 3));\n    if (t < 1) requestAnimationFrame(tick);\n  };\n  requestAnimationFrame(tick);\n};",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-reveal",
+        "concept": "An arrival should reveal the meaning of a value",
+        "why": "A row entering view brings its label, bar and numeric readout into attention. The bar uses a fixed domain, so a larger displayed value means the same thing in every row.",
+        "experiment": "Scroll one row into view, then compare it with another. Try Curtain call and Flash reveal while checking that the final values remain readable.",
+        "pitfall": "Normalizing each bar against a changing local maximum makes visually equal lengths mean different quantities.",
+        "combine": "Combine with parallax when continuous depth and discrete data arrivals serve different purposes."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

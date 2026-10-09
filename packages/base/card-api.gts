@@ -35,6 +35,7 @@ import {
   getAncestor,
   getMenuItems,
   getField,
+  hasNothingToShow,
   getSerializer,
   humanReadable,
   identifyCard,
@@ -101,6 +102,7 @@ import {
   referenceNamesFile,
   isDeclaredCaptureFormat,
   isValidCaptureName,
+  wellFormedFilename,
   DECLARED_CAPTURE_FORMATS,
   CAPTURE_NAME_MAX_LENGTH,
   CAPTURE_NAME_PATTERN,
@@ -122,6 +124,7 @@ import {
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
+import { untitledCardTitle } from './untitled-card-title';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
@@ -3123,7 +3126,25 @@ type PdfCaptureSpec = {
   useAsThumbnail?: undefined;
   // What invalidates the capture; see the raster note above.
   keyBy?: 'generation' | 'file-content';
+  // The name the document is saved under — in the browser's PDF viewer and on
+  // download — with `.pdf` appended. A string, or a function of the instance
+  // being captured, evaluated each time the capture's instance renders for
+  // capture, so it can read the instance's fields:
+  //
+  //   filename: (card: Statement) => `${card.accountName} ${card.period}`,
+  //
+  // Defaults to the card's `cardTitle` (a FileDef's `name`, minus its
+  // extension); a card whose title is still the untitled placeholder serves
+  // under its instance id. A function that throws or returns an empty value
+  // falls back to that default. The name steers serving only and is not part
+  // of the capture's identity: a change of name alone never changes the
+  // capture's URL, and a `keyBy: 'file-content'` slot whose bytes are
+  // unchanged carries its capture forward under the new name.
+  filename?: string | CaptureFilenameFunction;
 } & CaptureSpecSource;
+
+// `any` so an author can annotate the parameter as their own card class.
+type CaptureFilenameFunction = (instance: any) => string | null | undefined;
 
 export type CaptureSpec = RasterCaptureSpec | PdfCaptureSpec;
 
@@ -3137,6 +3158,7 @@ const DECLARED_CAPTURE_SPEC_FIELDS = new Set([
   'useAsThumbnail',
   'keyBy',
   'type',
+  'filename',
 ]);
 const DECLARED_CAPTURE_KEY_BY_VALUES = new Set(['generation', 'file-content']);
 const RASTER_OUTPUT_TYPES = new Set(['png', 'jpeg', 'webp']);
@@ -3226,6 +3248,15 @@ function assertValidCaptureSpec(
       );
     }
     if (
+      entry.filename !== undefined &&
+      typeof entry.filename !== 'function' &&
+      (typeof entry.filename !== 'string' || entry.filename.trim() === '')
+    ) {
+      throw new Error(
+        `${prefix}: filename must be a non-empty string or a function of the instance`,
+      );
+    }
+    if (
       entry.keyBy !== undefined &&
       !DECLARED_CAPTURE_KEY_BY_VALUES.has(entry.keyBy as string)
     ) {
@@ -3297,6 +3328,11 @@ function assertValidCaptureSpec(
     typeof entry.useAsThumbnail !== 'boolean'
   ) {
     throw new Error(`${prefix}: useAsThumbnail must be a boolean`);
+  }
+  if (entry.filename !== undefined) {
+    throw new Error(
+      `${prefix}: filename names a saved document and is only valid on a pdf capture (type: 'pdf')`,
+    );
   }
   if (
     entry.keyBy !== undefined &&
@@ -3416,9 +3452,12 @@ export function getCaptures(
 // page boundary to the capture engine: identical to the specs except the
 // capture-only component, which cannot serialize — it is flagged
 // `render: true` and re-resolved in-page by slot name when its capture
-// renders.
+// renders — and a pdf entry's `filename`, which is resolved against
+// `instance` when one is given (the render being captured) and left out
+// otherwise.
 export function serializeDeclaredCaptures(
   cardOrFileClass: typeof CardDef | typeof FileDef,
+  instance?: CardDef | FileDef,
 ): DeclaredCaptureRoster {
   let roster: DeclaredCaptureRoster = {};
   for (let [name, spec] of Object.entries(getCaptures(cardOrFileClass))) {
@@ -3451,9 +3490,71 @@ export function serializeDeclaredCaptures(
     } else {
       payload.format = spec.format;
     }
+    if (spec.type === 'pdf' && instance) {
+      let filename = resolveCaptureFilename(spec, instance);
+      if (filename !== undefined) {
+        payload.filename = filename;
+      }
+    }
     roster[name] = payload;
   }
   return roster;
+}
+
+// The longest name a roster carries. The serving route sanitizes and caps the
+// name it puts in a header; this bound only keeps an unbounded computed value
+// out of the index's capture manifest.
+const CAPTURE_FILENAME_ROSTER_MAX_LENGTH = 255;
+
+// A pdf slot's save-as name for one instance: the declaration's string or
+// function result, else the instance's default (see `PdfCaptureSpec.filename`).
+function resolveCaptureFilename(
+  spec: PdfCaptureSpec,
+  instance: CardDef | FileDef,
+): string | undefined {
+  let declared: unknown;
+  try {
+    declared =
+      typeof spec.filename === 'function'
+        ? spec.filename(instance)
+        : spec.filename;
+  } catch (e) {
+    console.warn(`capture filename function threw; using the default`, e);
+    declared = undefined;
+  }
+  return (
+    boundedCaptureFilename(declared) ??
+    boundedCaptureFilename(defaultCaptureFilename(instance))
+  );
+}
+
+// The instance's own name for itself: a FileDef's `name` minus its extension,
+// or a card's `cardTitle` — unless that is the untitled placeholder, which
+// says less than the instance id the serving route falls back to.
+function defaultCaptureFilename(
+  instance: CardDef | FileDef,
+): string | undefined {
+  if (instance instanceof FileDef) {
+    return instance.name?.replace(/\.[^.]+$/, '');
+  }
+  let title = instance.cardTitle;
+  return title === untitledCardTitle(instance.constructor as typeof CardDef)
+    ? undefined
+    : title;
+}
+
+function boundedCaptureFilename(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  let trimmed = wellFormedFilename(value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return [...trimmed].slice(0, CAPTURE_FILENAME_ROSTER_MAX_LENGTH).join('');
 }
 
 // Shared body of the `captureURLs` getter on CardDef and FileDef (two
@@ -4148,7 +4249,7 @@ export class CardDef extends BaseDef {
     computeVia: function (this: CardDef) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
-        : `Untitled ${this.constructor.displayName}`;
+        : untitledCardTitle(this.constructor as typeof CardDef);
     },
   });
   @field cardDescription = contains(StringField, {
@@ -4292,6 +4393,14 @@ export class CardDef extends BaseDef {
 
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     return getDefaultCardMenuItems(this, params);
+  }
+
+  // Whether this card, rendered as a tool's result in the AI assistant chat,
+  // has nothing in it for the user to look at. A result type with its own
+  // embedded view answers true for a result that view would render empty, and
+  // the chat then leaves the card out.
+  get [hasNothingToShow](): boolean {
+    return false;
   }
 }
 

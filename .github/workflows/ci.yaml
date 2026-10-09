@@ -135,6 +135,7 @@ jobs:
             choreo:
               - *shared
               - 'packages/choreo/**'
+              - 'packages/choreo-film-app/**'
               - 'packages/choreo-gallery/**'
               - 'packages/choreo-player/**'
               - 'packages/choreo-test-app/**'
@@ -179,6 +180,9 @@ jobs:
               # is installable), so a pin-only change has to run that suite.
               - '.claude-plugin/marketplace.json'
               - '.agents/plugins/marketplace.json'
+              # boxel-cli bundles these packages' source for `boxel parse`.
+              - 'packages/glimmer-motion/**'
+              - 'packages/choreo/**'
             bxl:
               # The suite is self-contained — plain objects under Node, no
               # stack and no browser — so it stays cheap even when the
@@ -519,11 +523,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
-      # Reads the TypeScript sources and the guides directly, so it needs no
-      # build.
-      - name: Check guide coverage
-        run: pnpm run docs:check
-        working-directory: packages/choreo-gallery
       # The gallery resolves these packages through their built output
       # (package.json#exports maps into dist/ and declarations/). glimmer-motion
       # builds first: choreo's declarations build resolves it the same way.
@@ -534,33 +533,66 @@ jobs:
           (cd packages/glimmer-motion && pnpm run build)
           (cd packages/choreo && pnpm run build)
           (cd packages/choreo-player && pnpm run build)
-      # npm consumers resolve every subpath to the built output, without the
-      # `developing:choreo` condition the workspace builds from source with.
-      - name: Check the packed glimmer-motion and Choreo exports
+      # npm consumers resolve every subpath to the built output. For
+      # glimmer-motion and choreo that means without the `developing:choreo`
+      # condition the workspace builds from source with. Each check packs its
+      # package and resolves every module's subpath against the tarball, so a
+      # `files` / `exports` mismatch fails here instead of on install.
+      - name: Check the packed glimmer-motion, Choreo and Choreo Player exports
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: |
           (cd packages/glimmer-motion && pnpm run check:packed-exports)
           (cd packages/choreo && pnpm run check:packed-exports)
+          (cd packages/choreo-player && pnpm run check:packed-exports)
       - name: Choreo Player unit tests
         if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
         run: pnpm run test:unit
         working-directory: packages/choreo-player
-      # The realm output test reads dist-realm/, and the theater sizing test
-      # reads the scoped stylesheet the build generates.
-      - name: Build Choreo Gallery and its realm
-        id: build-gallery
-        if: ${{ !cancelled() && steps.build-libs.outcome == 'success' }}
-        run: pnpm run build && pnpm run build:realm
-        working-directory: packages/choreo-gallery
-      - name: Choreo Gallery realm output tests
-        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
-        run: pnpm run test:realm
-        working-directory: packages/choreo-gallery
+      # The release decisions choreo-player-publish.yml runs on, as pure
+      # functions under Node.
+      - name: Choreo Player release script tests
+        if: ${{ !cancelled() }}
+        run: pnpm run test:release
+        working-directory: packages/choreo-player
+      # Reads choreo-test-app's stylesheet directly, so it needs no build.
       # Playwright launches the runner's preinstalled Google Chrome (the
       # script's default `chrome` channel), so no browser download is needed.
       - name: Choreo Gallery theater sizing test
-        if: ${{ !cancelled() && steps.build-gallery.outcome == 'success' }}
+        if: ${{ !cancelled() }}
         run: pnpm run test:theater-sizing
+        working-directory: packages/choreo-gallery
+
+  # The gallery realm's *.test.gts files. The realm's lint and its content
+  # check run in ci-lint.yaml.
+  choreo-gallery-test:
+    name: Choreo Gallery Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: choreo-gallery-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+      # The boxel-cli test engine mounts realm/ as an in-memory realm and
+      # drives the host test harness bundled with that CLI release, so no
+      # workspace install or realm-server is needed. The harness must shim
+      # glimmer-motion and Choreo, which 0.8.0-unstable.0 is the first release
+      # to do. The pin decides which host harness the tests run against; bump
+      # it deliberately.
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@0.8.0-unstable.0
+      # The browser revision must match the CLI's own @playwright/test pin,
+      # so install through the CLI's nested playwright binary.
+      - name: Install Chromium
+        run: |
+          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Run tests
+        run: boxel test realm
         working-directory: packages/choreo-gallery
 
   # glimmer-motion's own QUnit suite, which compiles the package from source.
@@ -576,6 +608,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      # The lockstep release decisions glimmer-motion-choreo-publish.yml runs
+      # on, as pure functions under Node.
+      - name: Release script tests
+        run: pnpm test:release
+        working-directory: packages/glimmer-motion
       - name: Run test suite
         run: pnpm test
         working-directory: packages/glimmer-motion
@@ -598,6 +635,30 @@ jobs:
       - name: Run test suite
         run: pnpm test
         working-directory: packages/choreo
+
+  # The film app's QUnit suite: the reference films' scores against their
+  # golden fixtures. It compiles glimmer-motion and Choreo from source through
+  # the `developing:choreo` export condition. Then the realm build `pnpm push`
+  # makes, so a change that breaks it fails here rather than at deploy.
+  choreo-film-app-test:
+    name: Choreo Film App Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.choreo == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: choreo-film-app-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run test suite
+        run: pnpm test
+        working-directory: packages/choreo-film-app
+      - name: Build the film app into the gallery realm
+        if: ${{ !cancelled() }}
+        run: pnpm build:realm
+        working-directory: packages/choreo-film-app
 
   # The QUnit suite for the gallery demos, which lives in choreo-test-app.
   choreo-test-app-test:

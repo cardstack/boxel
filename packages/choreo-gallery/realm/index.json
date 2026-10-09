@@ -1,0 +1,254 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Choreo",
+        "summary": "Motion, choreographed: the glimmer-motion and Choreo gallery."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "./theme"
+        }
+      },
+      "demos.0": {
+        "links": {
+          "self": "./demos/playhead"
+        }
+      },
+      "demos.1": {
+        "links": {
+          "self": "./demos/lightbox"
+        }
+      },
+      "demos.2": {
+        "links": {
+          "self": "./demos/inbox"
+        }
+      },
+      "demos.3": {
+        "links": {
+          "self": "./demos/inline-edit"
+        }
+      },
+      "demos.4": {
+        "links": {
+          "self": "./demos/sequence"
+        }
+      },
+      "demos.5": {
+        "links": {
+          "self": "./demos/interrupt"
+        }
+      },
+      "demos.6": {
+        "links": {
+          "self": "./demos/slides"
+        }
+      },
+      "demos.7": {
+        "links": {
+          "self": "./demos/mockup"
+        }
+      },
+      "demos.8": {
+        "links": {
+          "self": "./demos/sylva"
+        }
+      },
+      "demos.9": {
+        "links": {
+          "self": "./demos/towers"
+        }
+      },
+      "demos.10": {
+        "links": {
+          "self": "./demos/camera"
+        }
+      },
+      "demos.11": {
+        "links": {
+          "self": "./demos/presentation"
+        }
+      },
+      "demos.12": {
+        "links": {
+          "self": "./demos/wires"
+        }
+      },
+      "demos.13": {
+        "links": {
+          "self": "./demos/escort"
+        }
+      },
+      "demos.14": {
+        "links": {
+          "self": "./demos/grid"
+        }
+      },
+      "demos.15": {
+        "links": {
+          "self": "./demos/tabs"
+        }
+      },
+      "demos.16": {
+        "links": {
+          "self": "./demos/far"
+        }
+      },
+      "demos.17": {
+        "links": {
+          "self": "./demos/crossing"
+        }
+      },
+      "demos.18": {
+        "links": {
+          "self": "./demos/subdivision"
+        }
+      },
+      "demos.19": {
+        "links": {
+          "self": "./demos/drag"
+        }
+      },
+      "demos.20": {
+        "links": {
+          "self": "./demos/rack"
+        }
+      },
+      "demos.21": {
+        "links": {
+          "self": "./demos/sheet"
+        }
+      },
+      "demos.22": {
+        "links": {
+          "self": "./demos/split"
+        }
+      },
+      "demos.23": {
+        "links": {
+          "self": "./demos/reorder"
+        }
+      },
+      "demos.24": {
+        "links": {
+          "self": "./demos/layout"
+        }
+      },
+      "demos.25": {
+        "links": {
+          "self": "./demos/lists"
+        }
+      },
+      "demos.26": {
+        "links": {
+          "self": "./demos/stagger"
+        }
+      },
+      "demos.27": {
+        "links": {
+          "self": "./demos/trail"
+        }
+      },
+      "demos.28": {
+        "links": {
+          "self": "./demos/jump"
+        }
+      },
+      "demos.29": {
+        "links": {
+          "self": "./demos/keyframes"
+        }
+      },
+      "demos.30": {
+        "links": {
+          "self": "./demos/circle-loop"
+        }
+      },
+      "demos.31": {
+        "links": {
+          "self": "./demos/long-take"
+        }
+      },
+      "demos.32": {
+        "links": {
+          "self": "./demos/sagrada"
+        }
+      },
+      "demos.33": {
+        "links": {
+          "self": "./demos/grip"
+        }
+      },
+      "demos.34": {
+        "links": {
+          "self": "./demos/gestures"
+        }
+      },
+      "demos.35": {
+        "links": {
+          "self": "./demos/presence"
+        }
+      },
+      "demos.36": {
+        "links": {
+          "self": "./demos/parallax"
+        }
+      },
+      "demos.37": {
+        "links": {
+          "self": "./demos/enter"
+        }
+      },
+      "demos.38": {
+        "links": {
+          "self": "./demos/reveal"
+        }
+      },
+      "demos.39": {
+        "links": {
+          "self": "./demos/drift"
+        }
+      },
+      "demos.40": {
+        "links": {
+          "self": "./demos/hang"
+        }
+      },
+      "demos.41": {
+        "links": {
+          "self": "./demos/header"
+        }
+      },
+      "demos.42": {
+        "links": {
+          "self": "./demos/fold"
+        }
+      },
+      "demos.43": {
+        "links": {
+          "self": "./demos/path"
+        }
+      },
+      "demos.44": {
+        "links": {
+          "self": "./demos/pointer"
+        }
+      },
+      "demos.45": {
+        "links": {
+          "self": "./demos/build-order"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./gallery",
+        "name": "ChoreoGallery"
+      }
+    }
+  }
+}

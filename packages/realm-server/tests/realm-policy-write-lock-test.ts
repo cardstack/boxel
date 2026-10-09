@@ -445,6 +445,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 2,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 2,
+          lockedTypeReads: 4,
         },
         'each write’s predicate was evaluated once, under the lock',
       );
@@ -540,6 +542,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 2,
+          lockedTypeReads: 4,
         },
         'neither write rested on a predicate',
       );
@@ -726,6 +730,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 2,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 4,
+          lockedTypeReads: 4,
         },
         'both predicates were evaluated under the lock',
       );
@@ -1251,6 +1257,8 @@ module(basename(import.meta.filename), function (hooks) {
         pendingDischarges: 0,
         definitionLookups: 0,
         snapshotReads: 0,
+        ancestorDefinitionReads: 0,
+        lockedTypeReads: 0,
       });
     });
   });

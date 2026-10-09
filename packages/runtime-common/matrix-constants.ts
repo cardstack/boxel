@@ -105,16 +105,15 @@ export function getToolDefinitions<T = unknown>(
 ): T[] | undefined {
   return content?.toolDefinitions ?? content?.commandDefinitions;
 }
-export const APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE =
-  'app.boxel.codePatchResult';
-export const APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE = 'app.boxel.codePatchResult';
-export const APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE =
-  'app.boxel.codePatchAnnotation';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE =
   'app.boxel.codePatchCorrectness';
 export const APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE =
   'app.boxel.codePatchCorrectnessAnnotation';
 export const APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE = 'app.boxel.debug';
+// Posted by ai-bot when a room's prompt outgrows the model's context window.
+// It carries a summary of the history up to and including `upToEventId`; the
+// prompt uses the summary in place of that history from then on.
+export const APP_BOXEL_COMPACTION_EVENT_TYPE = 'app.boxel.compaction';
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 // `eventType` carried inside a realm-server-event body (see send-event.ts /

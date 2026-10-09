@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "far",
+      "title": "Far match",
+      "group": "Choreo",
+      "lede": "One name, three scenes.",
+      "apis": ["Choreo @id", "far match", "counterpart"],
+      "sample": "{{! Three bays, three <Choreo> regions. A region reconciles its OWN\n    participants and nothing else — that is what makes nesting work, and it is\n    why a piece leaving one and arriving in another is normally a death here\n    and an unrelated birth there.\n\n    Every region that will animate this pass announces while Glimmer is still\n    rendering. Then all of them MEASURE, then ids are MATCHED across regions,\n    then each RUNs its own timeline. Three phases, no frame in between. }}\n{{#each bays as |bay|}}\n  <Choreo @id={{bay.id}} as |c|>\n    <div {{motion id=bay.id role='bay'}}>\n      {{#each (this.piecesIn bay.id) key='id' as |piece|}}\n        {{! the same bare id in every bay is what lets the barrier pair the two\n            halves. Prefixing it with the bay is the whole of ‘off’. }}\n        <button {{motion id=(this.idFor piece bay.id) role='piece'}}>\n          {{piece.label}}\n        </button>\n      {{/each}}\n    </div>\n\n    <c.Parallel>\n      {{! One rule covers both halves, because to a region they are the same\n          job: every piece that is somewhere new moves there. A neighbour\n          closing a gap has a small delta; a piece that arrived from another\n          bay has the delta between two bays — and only because the barrier\n          handed it the sender’s bounds to start from. }}\n      <c.Move @of={{c.moved 'piece'}} @spring={{carry}} @size={{false}} />\n\n      {{! a property may be a function of the sprite, and ‘did you come from\n          another region’ is exactly what counterpart answers }}\n      <c.Hold @of={{c.moved 'piece'}} @zIndex={{layer}} />\n\n      {{! with matching on, neither of these fires: the sender is let go\n          quietly by its own region, and the receiver is kept, not inserted }}\n      <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @duration={{0.2}} />\n      <c.Tween @of={{c.inserted 'piece'}} @opacity={{array 0 1}} @duration={{0.26}} />\n\n      <c.Move @of={{c.moved 'bay'}} @spring={{settle}} />\n    </c.Parallel>\n  </Choreo>\n{{/each}}\n\nconst layer = (sprite) => (sprite.counterpart ? 6 : 1);",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-regions",
+        "concept": "Identity can cross a region boundary",
+        "why": "A matching bare id leaving one region and arriving in another pairs across the render pass. The receiver carries the previous bounds, while each region retains its own scene ownership.",
+        "experiment": "Move an item between bays and interrupt the flight. Toggle matching to compare one continuous move with separate removal and insertion.",
+        "pitfall": "Prefixing the id with the region name prevents the cross-region identity match.",
+        "combine": "Combine with beacons for toolbar destinations that are locations rather than receiving items."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

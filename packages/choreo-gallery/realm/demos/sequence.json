@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "sequence",
+      "title": "Sequence",
+      "group": "Choreo",
+      "lede": "Fade, then move, then fade. Layers held for exactly that long.",
+      "apis": ["Choreo", "Sequence", "Hold", "Move"],
+      "sample": "<Choreo as |c|>\n  <button\n    {{motion\n      id=card.id\n      role=(roleOf card this.open)\n      layout=true\n      transition=soft\n    }}\n  >\n    {{! SCALE CORRECTION, and easy to miss. The card grows from a square tile\n        to a 16:9 hero by TRANSFORM, so scaleX and scaleY differ wildly and\n        everything inside inherits that scale — text comes out smeared. A\n        child with its own layout is measured in its own right, and\n        projection undoes whatever scale its parent is applying. }}\n    <span {{motion layout=true transition=soft}}>{{card.label}}</span>\n\n    {{#if open}}\n      <span {{motion id=detailsId role='card-content' layout=true}}>…</span>\n    {{/if}}\n  </button>\n\n  <c.Sequence>\n    {{! Layers, held for the rest of the sequence and released the moment it\n        ends — no timers to clear, no flags left set if you click again }}\n    <c.Hold @of={{c.role 'card'}} @zIndex={{1}} />\n    <c.Hold @of={{c.role 'hero'}} @zIndex={{2}} />\n\n    <c.Parallel>\n      <c.Hold  @of={{c.removed 'card-content'}} @zIndex={{1}} />\n      <c.Tween @of={{c.removed 'card-content'}} @opacity={{0}} @duration={{0.22}} />\n    </c.Parallel>\n\n    {{! The geometry belongs to projection (layout=true), because animating a\n        grid item's width would distort every track around it. Choreo owns\n        the ORDERING. The Wait holds the sequence open for the length of that\n        move, and the new details fade in partway THROUGH it — so the card\n        arrives already carrying its content. }}\n    <c.Parallel>\n      <c.Wait  @of={{c.all}} @duration={{0.56}} />\n      <c.Tween\n        @of={{c.inserted 'card-content'}}\n        @opacity={{array 0 1}} @delay={{0.17}} @duration={{0.3}}\n      />\n    </c.Parallel>\n  </c.Sequence>\n</Choreo>",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-timelines",
+        "concept": "Order and geometry have separate owners",
+        "why": "The outgoing details fade before movement and the incoming details appear afterward. Layout projection owns the grid-item geometry; Choreo owns the phases and temporary stacking order.",
+        "experiment": "Switch the open card twice before the first sequence settles. Watch which detail leaves first and whether the new selection becomes the final state.",
+        "pitfall": "Animating a grid item's width directly can disturb every track. Do not add a second geometry animation over layout projection.",
+        "combine": "Combine with gates when a person should advance a sequence one idea at a time."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

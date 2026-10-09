@@ -1,5 +1,7 @@
 import { visit, waitFor } from '@ember/test-helpers';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -16,16 +18,6 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
 } from '../helpers';
-
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  setupBaseRealm,
-  StringField,
-} from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -53,8 +45,6 @@ module('Acceptance | prerender | persistence block', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
   });
-
-  setupBaseRealm(hooks);
 
   const RENDER_OPTIONS_SEGMENT = encodeURIComponent(
     JSON.stringify({ clearCache: true } as RenderRouteOptions),

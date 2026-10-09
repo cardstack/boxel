@@ -1,18 +1,13 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { waitFor } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import {
-  CardDef,
-  contains,
-  field,
-  MarkdownField,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -129,7 +124,6 @@ function createMonacoStub(): MonacoStub {
 
 module('Integration | markdown highlighting error scenarios', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let originalLoader: unknown;

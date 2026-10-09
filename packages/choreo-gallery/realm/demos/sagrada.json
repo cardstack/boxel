@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "sagrada",
+      "title": "Sagrada Família",
+      "group": "Film",
+      "lede": "A hundred and forty-four years of a basilica, composited live in the browser and cut by a score — with a clock in years on the rail, and a picture that is a pure function of it.",
+      "apis": ["<Film>", "@seek='exact'", "@clock", "c.Camera3D"],
+      "sample": "{{! THE FILM IS A CONSTRUCT. The shot list is data and <Film> is\n    the editor that plays it: one camera step for the whole picture, one\n    cue per beat, and the type, the grade, the seams, the narration and\n    the mix all hung off the same clock. What the film supplies is the\n    script and a picture to point at. }}\n<Film @seek='exact' @clock={{this.clock}} @over='everything'>\n  <:picture as |register|>\n    <IframePicture @register={{register}}\n      @src={{this.src}} @assets={{this.assets}} @standing={{T_TODAY}} />\n  </:picture>\n  <:default as |f|>\n    <f.Spine @join='dip'>…the score: chapters, shots, joins…</f.Spine>\n  </:default>\n  <:gate as |f|>…the door, in the film's own type…</:gate>\n  <:end as |f|>…the back matter…</:end>\n</Film>\n\n// ONE BEAT IS ONE SHOT, and every field is a FACT about the shot rather\n// than a keyframe — which is what lets an agent direct the film by\n// editing a table, and a person direct it by dragging one number.\n{ id: 'gaudi', ch: 2, mode: 'plate', ticks: 8,\n  cam:   { dolly: 0.86, lookY: 14, pitch: 6, yaw: 214 },\n  toCam: { dolly: 0.92, lookY: 18, pitch: 9, yaw: 226 },\n  join: 'dip', grade: 'ash', lut: 'plate',\n  vo: 'On the seventh of June 1926, Gaudí is hit by a tram.' }\n\n// @seek='exact' takes the spring out of the lens and makes the whole\n// film a pure function of one number: scrub anywhere and the frame is\n// correct, because every beat asserts its complete state and inherits\n// nothing. A seek that lands inside a seam re-makes the outgoing frame\n// first, so the dissolve plays from its middle exactly as it would have\n// played into it.\nrun.time = t;              // the score\nplate.time = t - beatStart(i);  // and the type, on the same clock",
+      "slowmo": false,
+      "theater": true,
+      "walkthrough": [
+        {
+          "label": "The shot list — one entry",
+          "note": "The same table Towers uses, written in years. Every field is a fact about the shot; the build clock is authored through the film's own year-to-seconds map, so the number on screen and the state of the stone can never disagree.",
+          "source": "{\n  id: 'gaudi',\n  ch: 2,\n  ticks: 8,\n  mode: 'plate',\n  join: 'dip',               // the architect dies: the seam goes to black\n  grade: 'ash',\n  lut: 'plate',\n  cam:   { dolly: 0.86, lookY: 14, pitch: 6, yaw: 214 },\n  toCam: { dolly: 0.92, lookY: 18, pitch: 9, yaw: 226 },\n  build: tAt(1926),          // where the stone stands, in film time\n  stamp: { at: 0.03, y: 1926 },   // the year, enormous, in the scene\n  vo: 'On the seventh of June 1926, Gaudí is hit by a tram.',\n}"
+        },
+        {
+          "label": "The clock, in years",
+          "note": "Hand the construct one of these and the rail under the picture stops being a progress bar and becomes a date rule: the head rides it, the chapters are doors on it, and the readout says the year rather than the minute. Towers has no clock, so its rail is time.",
+          "source": "const CLOCK = {\n  span: [1882, 2034],\n  tAt:    (year) => …,   // the film's unit  →  page seconds\n  yearAt: (t)    => …,   // and back, for the readout on the rail\n};"
+        },
+        {
+          "label": "The record the script is held to",
+          "note": "Dates follow the published history, and the film says so out loud when it runs past it: the record ends at the centenary and what follows is the plan. This is the table the beats are authored against.",
+          "source": "const RECORD = [\n  { year: 1882,      what: 'Cripta',            en: 'CRYPT' },\n  { year: 1883,      what: 'Gaudí pren l’obra', en: 'GAUDÍ TAKES OVER' },\n  { year: 1926,      what: 'Mor Gaudí',         en: 'GAUDÍ DIES' },\n  { year: 1936,      what: 'Guerra Civil',      en: 'WORKS HALTED' },\n  { year: [1954, 76], what: 'Façana de la Passió', en: 'PASSION FAÇADE' },\n  { year: 2021,      what: 'L’estel s’encén',  en: 'THE STAR OF MARY LIT' },\n  { year: 2026,      what: 'Centenari de Gaudí', en: 'CENTENARY MASS' },\n];"
+        }
+      ],
+      "lesson": {
+        "guide": "film-picture",
+        "concept": "Framing and treatment can vary without rebuilding the model",
+        "why": "The film requests picture operations from the architectural renderer. Rig height changes the camera relationship, while grade strength changes treatment rather than geometry.",
+        "experiment": "Compare Cathedral gaze and Stone study at a held view. Identify which visible change comes from camera height and which comes from grading.",
+        "pitfall": "Treating asset readiness as a fixed delay can produce blank starts on a slower device.",
+        "combine": "Combine with trace and world annotations when the narration refers to a particular architectural feature."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../stages/sagrada",
+        "name": "SagradaDemo"
+      }
+    }
+  }
+}

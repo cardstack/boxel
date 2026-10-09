@@ -7,7 +7,7 @@
 `createChoreoPlayer()` accepts a `runs` function. The function is called again for operations so a newly compiled or replaced run can become the current owner. An optional duration can be a number or a function; otherwise the player uses the longest owned run.
 
 ```ts title="Component logic excerpt"
-import { createChoreoPlayer } from 'choreo-player';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 
 const player = createChoreoPlayer({
   runs: () => (currentRun ? [currentRun] : []),

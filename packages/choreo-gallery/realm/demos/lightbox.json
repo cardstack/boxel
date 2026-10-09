@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "lightbox",
+      "title": "Lightbox",
+      "group": "Layout",
+      "lede": "Extra fields dissolve. The plate goes home.",
+      "apis": ["layoutId", "LayoutGroup", "Presence"],
+      "sample": "{{! Two layoutId pairs, not one: the plate carries the tile's shape, and the\n    LABEL travels on its own so it can grow at its own rate. Both boxes are\n    shrink-to-fit, so they differ only in font-size — same aspect ratio, so\n    the text scales cleanly instead of stretching. }}\n<button {{on 'click' (fn this.choose photo)}}>\n  <span {{motion layoutId=(cardId photo.id) transition=spring}}>\n    <span {{motion layoutId=(nameId photo.id) transition=spring}}>\n      {{photo.label}}\n    </span>\n  </span>\n</button>\n\n<Presence @items={{this.overlay}} @key={{keyOf}} as |photo h|>\n  {{! the scrim is a plain fade — it has no counterpart to morph into }}\n  <button {{motion presence=h initial=fade animate=fadeOn exit=fade}}></button>\n\n  <span {{motion layoutId=(cardId photo.id) transition=spring}}>\n    <span {{motion layoutId=(nameId photo.id) transition=spring}}>\n      {{photo.label}}\n    </span>\n    {{! only the big version has these, so they dissolve rather than travel }}\n    <dl {{motion presence=h initial=fade animate=fadeOn exit=fade}}></dl>\n  </span>\n</Presence>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-layout",
+        "concept": "Identity survives a change of context",
+        "why": "The thumbnail and detail share layout identity. The expanding content carries attention while a slower scrim establishes the modal context; the exit has a different, shorter fade.",
+        "experiment": "Open two different photos and close during expansion. Compare Dreamy expansion with Quick peek and watch the background settle after the content.",
+        "pitfall": "Reading the selected photo from live state during its exit can replace the departing content.",
+        "combine": "Combine with presence to retain outgoing content and with camera when the original grid should stay visible."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../stages/lightbox",
+        "name": "LightboxDemo"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { rri } from '@cardstack/runtime-common';
+import { captureOutputContentType, rri } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 
@@ -19,16 +19,20 @@ interface CaptureSpecBody {
   deviceScaleFactor?: number;
   fullPage?: boolean;
   clip?: { x: number; y: number; width: number; height: number };
+  type?: 'pdf';
+  media?: 'print';
 }
 
 // One capture as the endpoint reports it. `url` is the durable served URL the
-// capture persisted under — the only reference this tool consumes.
+// capture persisted under — the only reference this tool consumes. A pdf
+// capture reports `pageCount` and null pixel dimensions.
 interface EndpointCapture {
   name: string | null;
   url: string | null;
   width: number | null;
   height: number | null;
   deviceScaleFactor: number | null;
+  pageCount?: number;
 }
 
 export default class CaptureTool extends HostBaseTool<
@@ -40,9 +44,10 @@ export default class CaptureTool extends HostBaseTool<
 
   static actionVerb = 'Capture';
   description =
-    'Capture a rendered card. The capture is persisted to the media cache ' +
-    'and its served URL is returned into the room, where it renders inline; ' +
-    'fetch the URL to inspect the render.';
+    'Capture a rendered card as a PNG image (the default) or, with ' +
+    'type "pdf", as a paged PDF document; media "print" lays a PDF out under ' +
+    "the card's print CSS. The capture is persisted to the media cache and " +
+    'its served URL is returned into the room; fetch the URL to inspect it.';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -96,7 +101,7 @@ export default class CaptureTool extends HostBaseTool<
     }
 
     let captureSpec = this.buildCaptureSpec(input);
-    let hasGeometry = Object.keys(captureSpec).length > 0;
+    let hasSpec = Object.keys(captureSpec).length > 0;
 
     // Realm-JWT auth: send the card realm's token as the bearer. The endpoint
     // stays on `jwtMiddleware`, which validates a realm token the same as a
@@ -141,10 +146,10 @@ export default class CaptureTool extends HostBaseTool<
             cardId: cardURL,
             format: normalizedFormat,
             // We only ever want the served URL — never the bytes. Every capture
-            // this tool makes is canonical (format + geometry), so it persists
+            // this tool makes is canonical (format + capture spec), so it persists
             // and answers with a `captures[].url`.
             includeBase64: false,
-            ...(hasGeometry ? { captureSpec } : {}),
+            ...(hasSpec ? { captureSpec } : {}),
           },
         },
       }),
@@ -167,9 +172,12 @@ export default class CaptureTool extends HostBaseTool<
 
     let body: any = await response.json();
     let attrs = body?.data?.attributes;
+    let outputLabel = captureSpec.type === 'pdf' ? 'PDF' : 'PNG';
     if (!attrs || attrs.status !== 'ready') {
       let detail = attrs?.error ?? JSON.stringify(body);
-      throw new Error(`Capture job did not produce a PNG: ${detail}`);
+      throw new Error(
+        `Capture job did not produce a ${outputLabel}: ${detail}`,
+      );
     }
 
     let endpointCaptures: EndpointCapture[] = Array.isArray(attrs.captures)
@@ -196,13 +204,16 @@ export default class CaptureTool extends HostBaseTool<
     // tool knows — it becomes the rendered image's alt text in the room.
     let cardTitle = (card as any).cardTitle as string | undefined;
     let fallbackName = `${cardTitle ?? cardURL} (${normalizedFormat})`;
+    let contentType = captureOutputContentType(captureSpec.type ?? 'png');
     let captures = endpointCaptures.map(
       (capture) =>
         new Capture({
           name: capture.name ?? fallbackName,
           url: capture.url ?? '',
+          contentType,
           width: capture.width ?? undefined,
           height: capture.height ?? undefined,
+          pageCount: capture.pageCount ?? undefined,
         }),
     );
 
@@ -229,8 +240,48 @@ export default class CaptureTool extends HostBaseTool<
       clipY,
       clipWidth,
       clipHeight,
+      type,
+      media,
     } = input;
     let spec: CaptureSpecBody = {};
+
+    let normalizedType = type?.trim() || 'png';
+    if (normalizedType !== 'png' && normalizedType !== 'pdf') {
+      throw new Error(`type must be "png" or "pdf" (got: ${type}).`);
+    }
+    let normalizedMedia = media?.trim() || 'screen';
+    if (normalizedMedia !== 'screen' && normalizedMedia !== 'print') {
+      throw new Error(`media must be "screen" or "print" (got: ${media}).`);
+    }
+    if (normalizedType === 'pdf') {
+      // A pdf paginates the whole settled render onto paper, so the raster
+      // geometry has nothing to act on; the endpoint refuses it too, but a
+      // local message names the tool's own fields.
+      let rasterFields = {
+        viewportWidth,
+        viewportHeight,
+        deviceScaleFactor,
+        fullPage: fullPage === true ? true : undefined,
+        clipX,
+        clipY,
+        clipWidth,
+        clipHeight,
+      };
+      let given = Object.entries(rasterFields)
+        .filter(([, value]) => value != null)
+        .map(([field]) => field);
+      if (given.length > 0) {
+        throw new Error(
+          `type "pdf" cannot be combined with ${given.join(', ')}: a PDF paginates the whole render onto paper.`,
+        );
+      }
+      spec.type = 'pdf';
+    }
+    // The defaults ('png', 'screen') stay off the spec, matching how the
+    // endpoint elides them from the capture identity.
+    if (normalizedMedia === 'print') {
+      spec.media = 'print';
+    }
 
     if (viewportWidth != null || viewportHeight != null) {
       if (viewportWidth == null || viewportHeight == null) {

@@ -6,6 +6,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { CardsGrid } from '@cardstack/base/cards-grid';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -21,7 +22,6 @@ import {
   withCachedRealmSetup,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -36,8 +36,6 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
   });
 
   let { createAndJoinRoom } = mockMatrixUtils;
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     createAndJoinRoom({

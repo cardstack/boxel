@@ -1,5 +1,12 @@
 import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -19,18 +26,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const HOST_URL = `${testRealmURL}Host/anchor`;
 
@@ -47,7 +44,6 @@ module('Integration | query-field page opt-in', function (hooks) {
   let cardApi: typeof import('@cardstack/base/card-api');
 
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -123,8 +119,8 @@ module('Integration | query-field page opt-in', function (hooks) {
     async () => await loader.import('@cardstack/base/card-api'),
   );
 
-  async function loadHost(): Promise<CardDefType> {
-    let host = (await getService('store').get(HOST_URL)) as CardDefType;
+  async function loadHost(): Promise<CardDef> {
+    let host = (await getService('store').get(HOST_URL)) as CardDef;
     await settled();
     return host;
   }

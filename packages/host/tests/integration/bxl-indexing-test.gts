@@ -11,7 +11,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import {
   bxlTrackingCardSource,
   bxlTrackingPol100Doc,
@@ -45,7 +44,6 @@ import { setupRenderingTest } from '../helpers/setup';
 // tracking-realm fixture.
 module('Integration | bxl indexing', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let realm: Realm;
 

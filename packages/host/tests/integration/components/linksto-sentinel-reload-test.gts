@@ -1,5 +1,15 @@
 import { settled, waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  getRelationshipMembershipState,
+  linksTo,
+  linksToMany,
+  updateFromSerialized,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -23,21 +33,8 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  getRelationshipMembershipState,
-  linksTo,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-  updateFromSerialized,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const MANGO = `${testRealmURL}Pet/mango`;
 const GHOST = `${testRealmURL}Pet/ghost`;
@@ -71,7 +68,6 @@ function personDoc(): LooseSingleCardDocument {
 
 module('Integration | linksTo sentinel reload', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -140,22 +136,22 @@ module('Integration | linksTo sentinel reload', function (hooks) {
     };
   }
 
-  async function loadHassan(): Promise<CardDefType> {
+  async function loadHassan(): Promise<CardDef> {
     storeService.addReference(PERSON);
     await storeService.flush();
-    return storeService.peek(PERSON) as CardDefType;
+    return storeService.peek(PERSON) as CardDef;
   }
 
   // Read both relationships the way a render does, driving the lazy loads.
-  function readLinks(person: CardDefType) {
+  function readLinks(person: CardDef) {
     (person as any).pet;
     (person as any).pets;
   }
 
-  function petKind(person: CardDefType): string {
+  function petKind(person: CardDef): string {
     return getRelationshipMembershipState(person, 'pet').membership![0].kind;
   }
-  function petsKinds(person: CardDefType): string[] {
+  function petsKinds(person: CardDef): string[] {
     return getRelationshipMembershipState(person, 'pets').membership!.map(
       (s) => s.kind,
     );

@@ -12,6 +12,41 @@ import {
 
 import { tracked } from '@glimmer/tracking';
 
+import Base64ImageField from '@cardstack/base/base64-image';
+import BigIntegerField from '@cardstack/base/big-integer';
+import BooleanField from '@cardstack/base/boolean';
+import {
+  CardDef,
+  Component,
+  contains,
+  containsMany,
+  field,
+  FieldDef,
+  flushLogs,
+  getFieldDescription,
+  getQueryableValue,
+  linksTo,
+  linksToMany,
+  MaybeBase64Field,
+  queryableValue,
+  subscribeToChanges,
+  unsubscribeFromChanges,
+  ReadOnlyField,
+  instanceOf,
+  CardInfoField,
+  Theme,
+} from '@cardstack/base/card-api';
+import CodeRefField from '@cardstack/base/code-ref';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import EmailField from '@cardstack/base/email';
+import EthereumAddressField from '@cardstack/base/ethereum-address';
+import { FileDef } from '@cardstack/base/file-api';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
 import Plane from '@cardstack/boxel-icons/plane';
 import { getService } from '@universal-ember/test-support';
 import format from 'date-fns/format';
@@ -48,42 +83,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../../helpers';
-import {
-  Base64ImageField,
-  BigIntegerField,
-  BooleanField,
-  CardDef,
-  CodeRefField,
-  Component,
-  contains,
-  containsMany,
-  DateField,
-  DateTimeField,
-  EmailField,
-  EthereumAddressField,
-  field,
-  FieldDef,
-  FileDef,
-  flushLogs,
-  getFieldDescription,
-  getQueryableValue,
-  linksTo,
-  linksToMany,
-  MarkdownField,
-  MaybeBase64Field,
-  NumberField,
-  PhoneNumberField,
-  queryableValue,
-  setupBaseRealm,
-  StringField,
-  subscribeToChanges,
-  TextAreaField,
-  unsubscribeFromChanges,
-  ReadOnlyField,
-  instanceOf,
-  CardInfoField,
-  Theme,
-} from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -95,7 +94,6 @@ let loader: Loader;
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;

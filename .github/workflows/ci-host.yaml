@@ -13,7 +13,10 @@ on:
       - "packages/bxl/**"
       # Host's tests compile these packages' source.
       - "packages/choreo/**"
+      - "packages/choreo-player/**"
       - "packages/glimmer-motion/**"
+      # Host's tests load the gallery's cards from their realm source.
+      - "packages/choreo-gallery/**"
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
       - "packages/runtime-common/**"
@@ -513,6 +516,9 @@ jobs:
           name: host-live-test-report
           path: junit/host-live.xml
           retention-days: 30
+      - name: Realm boot index times
+        if: ${{ !cancelled() }}
+        run: mise run ci:realm-index-times /tmp/server.log "live tests"
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
@@ -974,6 +980,9 @@ jobs:
           name: memory-report-${{ matrix.shardIndex }}
           path: /tmp/memory-report-${{ matrix.shardIndex }}.json
           retention-days: 30
+      - name: Realm boot index times
+        if: ${{ !cancelled() }}
+        run: mise run ci:realm-index-times /tmp/server.log "shard ${{ matrix.shardIndex }}"
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log

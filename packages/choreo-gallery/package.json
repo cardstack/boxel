@@ -5,43 +5,9 @@
   "engines": {
     "node": ">=22.16.0"
   },
-  "description": "Generated Boxel adaptation of the canonical Choreo gallery.",
+  "description": "The Choreo gallery, authored as Boxel realm content in realm/.",
   "license": "MIT",
-  "exports": {
-    ".": {
-      "types": "./declarations/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./*": {
-      "types": "./declarations/*.d.ts",
-      "default": "./dist/*.js"
-    },
-    "./addon-main.js": "./addon-main.cjs"
-  },
-  "typesVersions": {
-    "*": {
-      "*": [
-        "declarations/*",
-        "declarations/*/index"
-      ]
-    }
-  },
-  "files": [
-    "addon-main.cjs",
-    "declarations",
-    "dist",
-    "public",
-    "styles"
-  ],
   "scripts": {
-    "build": "node scripts/sync-gallery.mjs && node scripts/scope-css.mjs && rollup --config",
-    "build:realm": "node scripts/build-boxel-realm.mjs",
-    "docs:check": "node tools/check-guide-coverage.mjs",
-    "lint:types": "node scripts/sync-gallery.mjs && ember-tsc --noEmit",
-    "test:boxel": "node scripts/test-boxel-runtime.mjs",
-    "test:realm": "node --test tests/realm-output.test.mjs",
-    "test:theater-sizing": "node scripts/test-theater-sizing.mjs",
-    "start": "node scripts/scope-css.mjs && rollup --config --watch",
     "format": "prettier . --cache --write",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\" --prefixColors auto",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\" --prefixColors auto && pnpm run format",
@@ -49,56 +15,40 @@
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --cache",
-    "lint:js:fix": "eslint . --fix"
-  },
-  "dependencies": {
-    "@cardstack/choreo": "workspace:*",
-    "@chenglou/pretext": "^0.0.8",
-    "choreo-player": "workspace:*",
-    "decorator-transforms": "catalog:",
-    "dialkit": "^2.0.0",
-    "ember-modifier": "^4.3.0",
-    "glimmer-motion": "workspace:*",
-    "marked": "^18.0.11",
-    "motion": "catalog:",
-    "motion-dom": "catalog:",
-    "three": "^0.185.1",
-    "three-149": "npm:three@0.149.0"
+    "lint:js:fix": "eslint . --fix",
+    "lint:realm": "node tools/check-realm.mjs",
+    "lint:types": "ember-tsc --noEmit",
+    "push": "pnpm --filter choreo-film-app build:realm && boxel realm push realm",
+    "test": "boxel test realm",
+    "test:theater-sizing": "node scripts/test-theater-sizing.mjs"
   },
   "devDependencies": {
-    "@babel/core": "catalog:",
-    "@babel/plugin-transform-typescript": "catalog:",
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/choreo": "workspace:*",
+    "@cardstack/choreo-player": "workspace:*",
     "@cardstack/choreo-eslint-config": "workspace:*",
-    "@ember/library-tsconfig": "^1.1.3",
-    "@embroider/addon-dev": "^8.0.0",
-    "@embroider/addon-shim": "^1.8.9",
+    "@cardstack/local-types": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@ember/test-helpers": "catalog:",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
     "@glint/ember-tsc": "catalog:",
     "@glint/template": "catalog:",
-    "@rollup/plugin-babel": "catalog:",
-    "@rollup/plugin-json": "6.1.0",
-    "@types/three": "^0.185.4",
-    "babel-plugin-ember-template-compilation": "catalog:",
+    "@types/qunit": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "concurrently": "catalog:",
+    "ember-modifier": "^4.3.0",
     "ember-source": "catalog:",
     "ember-template-lint": "catalog:",
-    "esbuild": "^0.25.0",
     "eslint": "^9.39.4",
-    "glimmer-scoped-css": "catalog:",
+    "glimmer-motion": "workspace:*",
     "globals": "^15.15.0",
     "playwright": "1.61.0",
-    "postcss": "^8.5.28",
-    "postcss-selector-parser": "^7.1.0",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "rollup": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
     "typescript": "catalog:"
-  },
-  "ember-addon": {
-    "type": "addon",
-    "version": 2,
-    "main": "addon-main.cjs",
-    "app-js": {}
   }
 }

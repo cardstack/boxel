@@ -1,3 +1,8 @@
+import * as cardAPI from '@cardstack/base/card-api';
+import { CardDef, FieldDef } from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -6,15 +11,6 @@ import { DEFINITION_FREE_BASE_OPERATIONS } from '@cardstack/runtime-common/card-
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
-import {
-  setupBaseRealm,
-  cardAPI,
-  CardDef,
-  FieldDef,
-  FileDef,
-  StringField,
-  DateField,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -58,7 +54,6 @@ function expectTypeEquals<Expected, Actual>(
 
 module('Integration | operations', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import('@cardstack/base/card-api'),

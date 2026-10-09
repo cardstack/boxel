@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
-# Push alert rule groups in `provisioning/alerting/` to a hosted Grafana
-# via the provisioning HTTP API. grafanactl doesn't manage alert rules
+# Push alert rule groups in `provisioning/alerting/`, plus the contact
+# points and rule groups in `provisioning/alerting-hosted/<env>/`, to a hosted
+# Grafana via the provisioning HTTP API. grafanactl doesn't manage alert rules
 # (its `resources list` covers App Platform kinds only — dashboards,
 # folders, playlists, etc.), and locally docker-compose mounts
 # `provisioning/alerting/` into the container so Grafana provisions from
 # the file directly. This script only runs against staging / production.
 #
 # Usage:
-#   ./scripts/apply-alerting.sh --env <local|staging|production>
+#   ./scripts/apply-alerting.sh --env <local|staging|production> [--preflight]
+#
+#   --preflight  only check that every ${VAR} the env's files reference is
+#                set, then exit without contacting Grafana. apply.sh runs this
+#                before it pushes anything, so a missing secret cannot leave
+#                a partial apply. A normal run makes the same check first too.
 #
 # Required env vars (staging / production only). The CI apply workflow
 # (.github/workflows/observability-apply-{staging,production}.yml) fetches
@@ -15,6 +21,8 @@
 # run, source ./scripts/grafanactl-env.sh first.
 #
 #   GRAFANA_TOKEN — service-account token (SecureString)
+#   Plus every ${VAR} the env's files reference, e.g. DISCORD_ALARMS_WEBHOOK
+#   for provisioning/alerting-hosted/staging/contact-points/.
 #
 # What it pushes:
 #   - Each `.json` in `provisioning/alerting/` is read as the standard
@@ -42,6 +50,7 @@ usage_error() { echo "error: $1" >&2; exit 2; }
 fail() { echo "error: $1" >&2; exit 1; }
 
 env_name=""
+preflight=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
@@ -52,6 +61,10 @@ while [[ $# -gt 0 ]]; do
     --env=*)
       env_name="${1#--env=}"
       [[ -n "$env_name" ]] || usage_error "--env requires a value"
+      shift
+      ;;
+    --preflight)
+      preflight=1
       shift
       ;;
     *) usage_error "unknown option: $1";;
@@ -72,14 +85,50 @@ case "$env_name" in
     ;;
 esac
 
+cd "$(dirname "$0")/.."
+
+shopt -s nullglob
+# provisioning/alerting/ applies to every environment, and docker-compose
+# mounts it for local Grafana too. provisioning/alerting-hosted/<env>/ holds
+# what exists in one hosted environment only: rules for a service that runs
+# there alone, and contact points whose secrets come from that
+# environment's SSM. Contact points go first, so a rule that routes to one
+# can find it.
+hosted_dir="provisioning/alerting-hosted/${env_name}"
+contact_point_files=("${hosted_dir}"/contact-points/*.json)
+rule_files=(provisioning/alerting/*.json "${hosted_dir}"/rules/*.json)
+
+# Fail before any push when a file this run would push references a ${VAR}
+# that is not set, naming every missing one at once. resolve_placeholders
+# below makes the same check per group, but only when it reaches that group,
+# after earlier files have been pushed.
+check_placeholders() {
+  local f name missing=()
+  for f in "${contact_point_files[@]}" "${rule_files[@]}"; do
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      [[ -n "${!name:-}" ]] || missing+=("\${${name}} (${f})")
+    done < <(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' "$f" | sed -E 's/^\$\{(.*)\}$/\1/' | sort -u)
+  done
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf 'error: not set (or empty) in environment; CI fetches these from SSM in observability-apply-%s.yml:\n' "$env_name" >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    exit 1
+  fi
+}
+
+check_placeholders
+if [[ -n "$preflight" ]]; then
+  echo "apply-alerting: preflight ok (env=${env_name})" >&2
+  exit 0
+fi
+
 for cmd in yq jq curl envsubst; do
   command -v "$cmd" >/dev/null \
     || fail "missing dependency: ${cmd}. Install via brew (yq, jq, gettext for envsubst) or apt (yq, jq, gettext-base)."
 done
 
 [[ -n "${GRAFANA_TOKEN:-}" ]] || fail "GRAFANA_TOKEN not set; run \`source ./scripts/grafanactl-env.sh ${env_name}\` first"
-
-cd "$(dirname "$0")/.."
 
 # Pull the per-env Grafana server URL from grafanactl's committed config so
 # this script and grafanactl always agree on the target host.
@@ -162,13 +211,49 @@ upsert_group() {
   esac
 }
 
-shopt -s nullglob
-files=(provisioning/alerting/*.json)
-[[ "${#files[@]}" -gt 0 ]] || { echo "no alert-rule-group json files found" >&2; exit 0; }
+# A contact point is created when its uid is new and replaced otherwise.
+# The provisioning API has no single upsert call for contact points, so look
+# the uid up first.
+upsert_contact_point() {
+  local uid="$1" body="$2"
+  local method url http_status response existing
+  existing="$(curl -sS --fail-with-body \
+    -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+    "${grafana_server}/api/v1/provisioning/contact-points")" \
+    || fail "listing contact points failed: ${existing}"
+  if jq -e --arg uid "$uid" 'any(.[]; .uid == $uid)' <<<"$existing" >/dev/null; then
+    method=PUT
+    url="${grafana_server}/api/v1/provisioning/contact-points/${uid}"
+  else
+    method=POST
+    url="${grafana_server}/api/v1/provisioning/contact-points"
+  fi
 
-echo "apply-alerting: env=${env_name} server=${grafana_server} files=${#files[@]}" >&2
+  response="$(mktemp -t alerting-response.XXXXXX)"
+  http_status="$(curl -sS -o "$response" -w '%{http_code}' -X "$method" \
+    -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -H "X-Disable-Provenance: true" \
+    --data-binary "$body" \
+    "$url")"
 
-for f in "${files[@]}"; do
+  case "$http_status" in
+    2??)
+      echo "  ↻ contact point ${uid} (${method})" >&2
+      rm -f "$response"
+      ;;
+    *)
+      # The body carries the webhook URL, so print only the server's message.
+      echo "  ✗ contact point ${uid} → HTTP ${http_status}" >&2
+      jq -r '.message // empty' "$response" 2>/dev/null | sed 's/^/    /' >&2 || true
+      rm -f "$response"
+      fail "contact point push failed"
+      ;;
+  esac
+}
+
+push_rule_groups() {
+  local f="$1" raw resolved folder_uid group_name interval_raw interval_secs body
   echo "→ ${f}" >&2
   # Each file is `apiVersion: 1` + `groups: [...]`. Pull groups out as
   # JSON one per line, envsubst them so ${VAR} placeholders resolve, then
@@ -195,6 +280,31 @@ for f in "${files[@]}"; do
 
     upsert_group "$folder_uid" "$group_name" "$body"
   done
+}
+
+push_contact_points() {
+  local f="$1" raw resolved uid body
+  echo "→ ${f}" >&2
+  # Same file shape as Grafana file provisioning: `contactPoints[].receivers[]`.
+  # The API takes one receiver at a time, named after its contact point.
+  jq -c '.contactPoints[] | .name as $name | .receivers[] | . + {name: $name}' "$f" \
+    | while IFS= read -r raw; do
+      resolved="$(resolve_placeholders "$raw" "$f")"
+      uid="$(jq -r '.uid' <<<"$resolved")"
+      [[ -n "$uid" && "$uid" != "null" ]] || fail "${f}: receiver missing 'uid'"
+      body="$(jq -c '{uid, name, type, settings, disableResolveMessage}' <<<"$resolved")"
+      upsert_contact_point "$uid" "$body"
+    done
+}
+
+echo "apply-alerting: env=${env_name} server=${grafana_server} contact-point files=${#contact_point_files[@]} rule files=${#rule_files[@]}" >&2
+
+for f in "${contact_point_files[@]}"; do
+  push_contact_points "$f"
+done
+
+for f in "${rule_files[@]}"; do
+  push_rule_groups "$f"
 done
 
 echo "apply-alerting: done" >&2

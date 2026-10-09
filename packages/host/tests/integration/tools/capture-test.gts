@@ -16,7 +16,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -43,7 +42,6 @@ interface CapturedRequest {
 
 module('Integration | tools | capture', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -256,6 +254,102 @@ module('Integration | tools | capture', function (hooks) {
       geometryURL,
       'a geometry capture returns its own durable served URL',
     );
+  });
+
+  test('a pdf capture sends type and media and returns the document with its page count', async function (assert) {
+    let pdfURL = `${servedURL}?media=print&type=pdf`;
+    respondWith = async () =>
+      readyResponse({
+        status: 'ready',
+        width: null,
+        height: null,
+        contentType: 'application/pdf',
+        pageCount: 3,
+        captures: [
+          {
+            name: null,
+            url: pdfURL,
+            width: null,
+            height: null,
+            deviceScaleFactor: null,
+            pageCount: 3,
+          },
+        ],
+      });
+
+    let command = new CaptureTool(getService('tool-service').toolContext);
+    let result = await command.execute({
+      card: await getPet(),
+      format: 'isolated',
+      type: 'pdf',
+      media: 'print',
+    });
+
+    assert.deepEqual(
+      captured.body?.data?.attributes?.captureSpec,
+      { type: 'pdf', media: 'print' },
+      'type and media ride the captureSpec',
+    );
+    assert.strictEqual(result.captures[0].url, pdfURL);
+    assert.strictEqual(result.captures[0].contentType, 'application/pdf');
+    assert.strictEqual(result.captures[0].pageCount, 3);
+    assert.strictEqual(
+      result.captures[0].width,
+      undefined,
+      'a pdf has no pixel width',
+    );
+  });
+
+  test('a png capture reports its content type and sends no type or media', async function (assert) {
+    let command = new CaptureTool(getService('tool-service').toolContext);
+    let result = await command.execute({
+      card: await getPet(),
+      format: 'isolated',
+      type: 'png',
+      media: 'screen',
+    });
+    assert.strictEqual(
+      captured.body?.data?.attributes?.captureSpec,
+      undefined,
+      'the defaults stay off the spec',
+    );
+    assert.strictEqual(result.captures[0].contentType, 'image/png');
+  });
+
+  test('a pdf capture refuses raster geometry before any request', async function (assert) {
+    let command = new CaptureTool(getService('tool-service').toolContext);
+    await assert.rejects(
+      command.execute({
+        card: await getPet(),
+        format: 'isolated',
+        type: 'pdf',
+        viewportWidth: 800,
+        viewportHeight: 600,
+      }),
+      /type "pdf" cannot be combined with viewportWidth, viewportHeight/,
+    );
+    assert.strictEqual(captured.method, null, 'no request was made');
+  });
+
+  test('an unsupported type or media is rejected before any request', async function (assert) {
+    let command = new CaptureTool(getService('tool-service').toolContext);
+    await assert.rejects(
+      command.execute({
+        card: await getPet(),
+        format: 'isolated',
+        type: 'gif',
+      }),
+      /type must be "png" or "pdf"/,
+    );
+    await assert.rejects(
+      command.execute({
+        card: await getPet(),
+        format: 'isolated',
+        media: 'tv',
+      }),
+      /media must be "screen" or "print"/,
+    );
+    assert.strictEqual(captured.method, null, 'no request was made');
   });
 
   test('a clip region is sent only when all four edges are provided', async function (assert) {

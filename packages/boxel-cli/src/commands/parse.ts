@@ -33,6 +33,7 @@ import { FG_RED, DIM, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
 import { findBoxelCliRoot } from '../lib/find-package-root.ts';
 import { validateRealmRelativePath } from '../lib/realm-relative-path.ts';
+import { motionEntryPointPaths } from '../lib/motion-entry-points.ts';
 import { search } from './search.ts';
 
 /**
@@ -120,6 +121,21 @@ const RUNTIME_COMMON_PATH = BUNDLED_TYPES_DIR
 const BXL_PATH = BUNDLED_TYPES_DIR
   ? join(BUNDLED_TYPES_DIR, 'bxl')
   : join(PACKAGES_PATH, 'bxl', 'src');
+// glimmer-motion and `@cardstack/choreo` are card-facing too (the host
+// shims both into realms) and are bundled as source on the same terms:
+// with the `developing:choreo` export condition their `exports` resolve to
+// `src`, so the aliases target it in both layouts.
+const GLIMMER_MOTION_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'glimmer-motion')
+  : join(PACKAGES_PATH, 'glimmer-motion', 'src');
+const CHOREO_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'choreo')
+  : join(PACKAGES_PATH, 'choreo', 'src');
+// `@cardstack/choreo-player` is shimmed for cards that drive Choreo runs from
+// an external clock, and is bundled as source on the same terms.
+const CHOREO_PLAYER_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'choreo-player')
+  : join(PACKAGES_PATH, 'choreo-player', 'src');
 // Ambient module decls for paths boxel-cli doesn't ship full types
 // for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
 // by `scripts/build-types.ts`. Only present in published / built
@@ -779,6 +795,13 @@ export async function runGlintCheck(
           '@cardstack/runtime-common/*': [`${RUNTIME_COMMON_PATH}/*`],
           '@cardstack/bxl': [`${BXL_PATH}/index`],
           '@cardstack/bxl/*': [`${BXL_PATH}/*`],
+          // Only the shimmed entry points, not a `/*` pattern: another
+          // subpath must fail to resolve, since no shim would serve it.
+          ...motionEntryPointPaths({
+            glimmerMotion: GLIMMER_MOTION_PATH,
+            choreo: CHOREO_PATH,
+            choreoPlayer: CHOREO_PLAYER_PATH,
+          }),
           '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
           '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
           // The host registers each tool module under both its

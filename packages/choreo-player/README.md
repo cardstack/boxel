@@ -1,4 +1,4 @@
-# choreo-player
+# @cardstack/choreo-player
 
 A dependency-free, headless transport for externally clocking public Choreo
 runs. It builds around `@cardstack/choreo`; it does not patch Choreo, emulate a
@@ -7,8 +7,12 @@ GSAP timeline, or bundle a renderer.
 ## Install
 
 ```bash
-pnpm add choreo-player
+pnpm add @cardstack/choreo-player
 ```
+
+Releases go out under two dist-tags: `unstable`, published as changes land, and
+`latest`, cut deliberately from one of those prereleases.
+`pnpm add @cardstack/choreo-player@unstable` follows the former.
 
 Your application supplies the `@cardstack/choreo` version that yields the runs.
 The player uses a structural five-member run contract and has no runtime
@@ -17,7 +21,7 @@ dependency on either `@cardstack/choreo` or HyperFrames.
 ## Own and control runs explicitly
 
 ```ts
-import { createChoreoPlayer } from 'choreo-player';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 
 let scoreRun = null;
 
@@ -90,7 +94,7 @@ Bind the application's complete frame transaction to HyperFrames' native
 awaited seek event:
 
 ```ts
-import { bindHyperframes } from 'choreo-player/hyperframes';
+import { bindHyperframes } from '@cardstack/choreo-player/hyperframes';
 
 const disconnect = bindHyperframes({
   renderAt: renderFrameAt,

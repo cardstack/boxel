@@ -1,6 +1,8 @@
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -10,13 +12,6 @@ import { Command } from '@cardstack/runtime-common';
 import RealmService from '@cardstack/host/services/realm';
 
 import { testRealmURL, testRealmInfo } from '../../helpers';
-import {
-  CardDef,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
 class StubRealmService extends RealmService {
@@ -30,7 +25,6 @@ class StubRealmService extends RealmService {
 
 module('Integration | tools | commands-calling', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let toolContext: CommandContext;
 
   hooks.beforeEach(function (this: RenderingTestContext) {

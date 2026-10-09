@@ -5,6 +5,8 @@ import { render, settled, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -38,13 +40,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  StringField,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -80,7 +75,6 @@ module('Integration | search-entries resource', function (hooks) {
   let realm2: Realm;
 
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

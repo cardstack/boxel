@@ -1,3 +1,6 @@
+import { CardDef } from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -19,21 +22,11 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  CardDef,
-  FileDef,
-  StringField,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
-
-import type {
-  CardDef as CardDefType,
-  FileDef as FileDefType,
-} from '@cardstack/base/card-api';
+import type { FileDef as FileDefType } from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
 
 // ============================================================================
@@ -216,7 +209,6 @@ function recordingTransport(opts?: {
 
 module('Integration | operations invocation', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(hooks, async () =>
     getService('loader-service').loader.import('@cardstack/base/card-api'),
@@ -260,7 +252,7 @@ module('Integration | operations invocation', function (hooks) {
   // error predicate rather than testing for a `status` member: the card under
   // test declares that field, and a member test would read every instance of it
   // as an error.
-  async function cardAt(localPath: string): Promise<CardDefType> {
+  async function cardAt(localPath: string): Promise<CardDef> {
     return loaded(
       await getService('store').get(`${testRealmURL}${localPath}`),
       localPath,
@@ -834,7 +826,6 @@ module('Integration | operations invocation', function (hooks) {
 // are only while nothing has reset the loader underneath them.
 module('Integration | operations invocation types', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCardLogs(hooks, async () =>
     getService('loader-service').loader.import('@cardstack/base/card-api'),
   );

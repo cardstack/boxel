@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "presence",
+      "title": "Presence",
+      "group": "Animate",
+      "lede": "Swap a notice. Watch the gap.",
+      "apis": ["Presence", "mode", "exit"],
+      "sample": "{{! The same list, the same poses, three modes — the only difference is\n    what happens to the SPACE while one leaves and the next arrives.\n      sync      both animate at once, and they overlap\n      wait      the leaver finishes before the newcomer starts\n      popLayout the leaver is lifted out of flow, so the gap closes now\n    'Up next' below is the tell: it only moves under popLayout. }}\n<Presence\n  @items={{this.items}}\n  @key={{keyOf}}\n  @mode={{@mode}}\n  {{! the first render is the resting state, not an entrance }}\n  @initial={{false}}\n  as |notice h|\n>\n  <article\n    {{motion\n      presence=h\n      initial=(to opacity=0 y=18)\n      animate=(to opacity=1 y=0)\n      exit=(to opacity=0 y=-28)\n    }}\n  >{{notice.title}}</article>\n</Presence>\n\n{{! not in the Presence — it just gets out of the way, on its own spring }}\n<div {{motion layout=true transition=restMove}}>Up next</div>",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "core-presence",
+        "concept": "Exit lifetime affects layout as well as visibility",
+        "why": "Presence retains removed content until its longest exit finishes. Sync, wait and popLayout differ in when arrivals and surrounding layout can proceed.",
+        "experiment": "Remove a notice in each mode. Watch its slot after opacity falls, then change the exit timing to see how an invisible leaver can still occupy space.",
+        "pitfall": "A long transform after a short fade leaves an invisible item holding layout. Keep the exit's visual and structural lifetimes intentional.",
+        "combine": "Combine with layout for neighbour movement and preserve the yielded item's data throughout exit."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

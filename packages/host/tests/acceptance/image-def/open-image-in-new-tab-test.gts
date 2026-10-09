@@ -69,9 +69,9 @@ module(
         submode: Submodes.Interact,
       });
 
-      await waitFor(`img[src="${imageUrl}"]`);
+      await waitFor(`img[src^="${imageUrl}?rev="]`);
       assert
-        .dom(`img[src="${imageUrl}"]`)
+        .dom(`img[src^="${imageUrl}?rev="]`)
         .exists(
           'the ImageDef isolated template renders the image at its realm URL',
         );

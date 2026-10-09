@@ -368,7 +368,12 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(issues, [], `${source}: no issue`);
       assert.deepEqual(
         grant?.where,
-        { source, canonical: grant?.where?.canonical, snapshot: true },
+        {
+          source,
+          canonical: grant?.where?.canonical as string,
+          snapshot: true,
+          ...(source.includes('actor()') ? { readsActor: true as const } : {}),
+        },
         `${source}: judged against the snapshot`,
       );
     }

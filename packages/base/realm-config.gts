@@ -507,9 +507,9 @@ function isUnnamed(row: SettingRow): boolean {
 }
 
 // One row of the settings editor while the author is in it. The map is built
-// from the rows on every keystroke rather than edited in place: a key renamed
-// a character at a time would otherwise walk the value across a new map entry
-// per keystroke and lose it at the first collision.
+// from the rows each time it is written rather than edited in place: a key
+// renamed in place would otherwise walk the value across a new map entry and
+// lose it at the first collision.
 interface SettingRow {
   id: number;
   key: string;
@@ -532,6 +532,24 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
   }));
 
   private nextId = this.rows.length;
+
+  // Whether a row's name has changed since the map was last written. A name
+  // is written once the author finishes it, not a character at a time: the
+  // card saves what it is given, and a setting named `appr` on the way to
+  // `approver` is a setting the realm would hold, and a program reading
+  // `approver` would miss, for as long as the author takes to type the rest.
+  private namePending = false;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    // A name still being typed when the editor goes away is written then,
+    // so leaving the card does not drop it.
+    registerDestructor(this, () => {
+      if (this.namePending) {
+        this.commit();
+      }
+    });
+  }
 
   // Bound rather than written inline: a Matrix id in an attribute string reads
   // to the template linter as a path it should have been given as a binding.
@@ -573,7 +591,16 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
   }
 
   @action private setKey(index: number, key: string) {
-    this.replace(index, { key });
+    this.rows = this.rows.map((row, at) =>
+      at === index ? { ...row, key } : row,
+    );
+    this.namePending = true;
+  }
+
+  @action private commitKeys() {
+    if (this.namePending) {
+      this.commit();
+    }
   }
 
   @action private setText(index: number, text: string) {
@@ -604,6 +631,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
   // stored JSON would do with the duplicate anyway; the advisory above the
   // table is what tells the author the shadowed row is not being read.
   private commit() {
+    this.namePending = false;
     // Built on a null prototype so every name is an own key. A plain object
     // would answer a setting named `__proto__` by invoking the prototype
     // setter — the setting would vanish, and a structured value would become
@@ -645,6 +673,7 @@ class RealmSettingsEdit extends Component<typeof RealmSettingsField> {
                   <BoxelInput
                     @value={{row.key}}
                     @onInput={{fn this.setKey row.index}}
+                    @onChange={{this.commitKeys}}
                     @disabled={{not @canEdit}}
                     @placeholder='approver'
                     data-test-setting-key={{row.index}}

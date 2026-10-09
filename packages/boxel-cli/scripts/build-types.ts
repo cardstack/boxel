@@ -59,6 +59,20 @@
  *                                   already compile against. The suites
  *                                   live in `packages/bxl/tests`, so
  *                                   `src` needs no test filtering.
+ * - `bundled-types/glimmer-motion/` — `packages/glimmer-motion/src/*`,
+ *                                   backing the `glimmer-motion` path
+ *                                   alias. Card-facing: the host shims it
+ *                                   into realms. Source for the same
+ *                                   reason as bxl: under the
+ *                                   `developing:choreo` export condition
+ *                                   the package's `exports` resolve to
+ *                                   `src`, so that's the type surface.
+ * - `bundled-types/choreo/`      — `packages/choreo/src/*`, backing the
+ *                                   `@cardstack/choreo` path alias, on the
+ *                                   same terms as glimmer-motion.
+ * - `bundled-types/choreo-player/` — `packages/choreo-player/src/*`, backing
+ *                                   the `@cardstack/choreo-player` path
+ *                                   alias, on the same terms.
  *
  * This script runs from the monorepo only. The resulting tree is
  * committed-via-publish (`files` in package.json includes
@@ -562,6 +576,30 @@ const VENDORS: Vendor[] = [
     name: 'bxl',
     from: join(MONOREPO_PACKAGES, 'bxl', 'src'),
     to: join(PACKAGE_ROOT, 'bundled-types', 'bxl'),
+    filter: skipMonorepoArtifacts,
+  },
+  {
+    // glimmer-motion and `@cardstack/choreo` are card-facing (the host
+    // shims both into realms) and are bundled as source, like bxl, so
+    // parse resolves them without boxel-cli depending on their npm
+    // releases. Their own third-party imports (framer-motion, motion-dom,
+    // motion-utils) are ordinary boxel-cli dependencies. Reached through
+    // the path aliases in parse.ts.
+    name: 'glimmer-motion',
+    from: join(MONOREPO_PACKAGES, 'glimmer-motion', 'src'),
+    to: join(PACKAGE_ROOT, 'bundled-types', 'glimmer-motion'),
+    filter: skipMonorepoArtifacts,
+  },
+  {
+    name: 'choreo',
+    from: join(MONOREPO_PACKAGES, 'choreo', 'src'),
+    to: join(PACKAGE_ROOT, 'bundled-types', 'choreo'),
+    filter: skipMonorepoArtifacts,
+  },
+  {
+    name: 'choreo-player',
+    from: join(MONOREPO_PACKAGES, 'choreo-player', 'src'),
+    to: join(PACKAGE_ROOT, 'bundled-types', 'choreo-player'),
     filter: skipMonorepoArtifacts,
   },
 ];

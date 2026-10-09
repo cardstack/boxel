@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -18,7 +17,6 @@ import type * as CardApiModule from '@cardstack/base/card-api';
 // reading formats.
 module('Integration | generic file def fallback preview', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let FileDef: typeof CardApiModule.FileDef;

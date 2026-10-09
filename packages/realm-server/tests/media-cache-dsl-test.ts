@@ -30,8 +30,15 @@ import {
   asExpressions,
   canonicalCaptureIdentityQuery,
   canonicalCaptureIdentityString,
+  captureContentDisposition,
+  captureDispositionURL,
   captureSpecHash,
   checkPdfCaptureBounds,
+  contentDispositionFor,
+  declaredCaptureSpecHash,
+  filenameFromContentDisposition,
+  sanitizeCaptureFilename,
+  takeCaptureDispositionParams,
   countPdfPages,
   findMediaCacheEntry,
   pdfFilenameFor,
@@ -572,6 +579,233 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('sanitizeCaptureFilename reduces a requested name to one safe component', function (assert) {
+      assert.strictEqual(
+        sanitizeCaptureFilename('Q3 Statement', 'pdf'),
+        'Q3 Statement.pdf',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('Q3 Statement.PDF', 'pdf'),
+        'Q3 Statement.pdf',
+        'an existing extension is not doubled, whatever its case',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('a\r\nSet-Cookie: x=1', 'pdf'),
+        'a Set-Cookie: x=1.pdf',
+        'CR/LF never survive into a header value',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('../../etc/passwd', 'pdf'),
+        '-..-etc-passwd.pdf',
+        'path separators become dashes and leading dots are dropped',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('Relevé de compte', 'pdf'),
+        'Relevé de compte.pdf',
+        'non-ASCII survives',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('x'.repeat(500), 'pdf'),
+        `${'x'.repeat(120)}.pdf`,
+        'the stem is capped in code points',
+      );
+      assert.strictEqual(
+        sanitizeCaptureFilename('報'.repeat(200), 'pdf'),
+        `${'報'.repeat(80)}.pdf`,
+        'and in UTF-8 bytes, so a 3-byte script stops at 240 bytes',
+      );
+      let halfEmoji = 'Trip \u{1F3D6} notes'.slice(0, 6);
+      assert.strictEqual(
+        sanitizeCaptureFilename(halfEmoji, 'pdf'),
+        'Trip \uFFFD.pdf',
+        'a lone surrogate becomes U+FFFD',
+      );
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: false,
+          filename: sanitizeCaptureFilename(halfEmoji, 'pdf')!,
+        }),
+        `inline; filename="Trip _.pdf"; filename*=UTF-8''Trip%20%EF%BF%BD.pdf`,
+        'and the name still encodes',
+      );
+      assert.strictEqual(sanitizeCaptureFilename('  \n ', 'pdf'), undefined);
+      assert.strictEqual(sanitizeCaptureFilename('.pdf', 'pdf'), undefined);
+    });
+
+    test('captureContentDisposition sends an ASCII fallback and an exact UTF-8 name when they differ', function (assert) {
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: false,
+          filename: 'Q3 Statement.pdf',
+        }),
+        'inline; filename="Q3 Statement.pdf"',
+        'a plain ASCII name needs no filename*',
+      );
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: true,
+          filename: 'Relevé — Q3.pdf',
+        }),
+        `attachment; filename="Releve _ Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20%E2%80%94%20Q3.pdf`,
+      );
+      assert.strictEqual(
+        captureContentDisposition({
+          attachment: false,
+          filename: `Bob's "100%" (final).pdf`,
+        }),
+        `inline; filename="Bob's _100__ (final).pdf"; filename*=UTF-8''Bob%27s%20%22100%25%22%20%28final%29.pdf`,
+        'quotes, backslashes and percent signs stay out of the quoted string',
+      );
+    });
+
+    test('filenameFromContentDisposition reads back what captureContentDisposition writes', function (assert) {
+      for (let filename of [
+        'Q3 Statement.pdf',
+        'Relevé — Q3.pdf',
+        `Bob's "100%" (final).pdf`,
+        '報告書.pdf',
+      ]) {
+        assert.strictEqual(
+          filenameFromContentDisposition(
+            captureContentDisposition({ attachment: true, filename }),
+          ),
+          filename,
+        );
+      }
+      assert.strictEqual(
+        filenameFromContentDisposition('attachment; filename=plain.pdf'),
+        'plain.pdf',
+      );
+      assert.strictEqual(
+        filenameFromContentDisposition(
+          captureContentDisposition({
+            attachment: true,
+            filename: `a; filename*=UTF-8''evil.pdf`,
+          }),
+        ),
+        `a; filename*=UTF-8''evil.pdf`,
+        'text inside the quoted name is never read as a parameter',
+      );
+      assert.strictEqual(filenameFromContentDisposition('inline'), undefined);
+      assert.strictEqual(filenameFromContentDisposition(null), undefined);
+    });
+
+    test('takeCaptureDispositionParams removes the disposition params and reads them', function (assert) {
+      let searchParams = params('name=statement&download&filename=Q3');
+      let parsed = takeCaptureDispositionParams(searchParams);
+      assert.deepEqual(parsed, {
+        disposition: { attachment: true, filename: 'Q3' },
+      });
+      assert.strictEqual(
+        searchParams.toString(),
+        'name=statement',
+        'only the addressing remains',
+      );
+
+      assert.deepEqual(takeCaptureDispositionParams(params('download=0')), {
+        disposition: { attachment: false },
+      });
+      assert.deepEqual(takeCaptureDispositionParams(params('type=pdf')), {
+        disposition: { attachment: false },
+      });
+      let bad = takeCaptureDispositionParams(params('download=yes'));
+      assert.deepEqual(bad, {
+        error: {
+          field: 'download',
+          message: 'download must be "1", "true", "0", or "false"',
+        },
+      });
+      let repeated = takeCaptureDispositionParams(
+        params('filename=a&filename=b'),
+      );
+      assert.deepEqual(repeated, {
+        error: {
+          field: 'filename',
+          message: 'filename may only be given once',
+        },
+      });
+    });
+
+    test('captureDispositionURL sets the disposition params, replacing any already present', function (assert) {
+      assert.strictEqual(
+        captureDispositionURL(
+          'http://realm.test/_capture/card-1?name=statement&filename=old',
+          { attachment: true, filename: ' Q3 Statement ' },
+        ),
+        'http://realm.test/_capture/card-1?name=statement&download=1&filename=Q3+Statement',
+      );
+      assert.strictEqual(
+        captureDispositionURL(
+          'http://realm.test/_capture/card-1?type=pdf&download=1',
+          { attachment: false, filename: '' },
+        ),
+        'http://realm.test/_capture/card-1?type=pdf',
+      );
+    });
+
+    test('contentDispositionFor prefers the request, then the declaration, then the source URL', function (assert) {
+      let pdf = {
+        contentType: 'application/pdf',
+        sourceURL: 'http://realm.test/demo/Statement/4884f71e',
+      };
+      assert.strictEqual(
+        contentDispositionFor({ entry: pdf }),
+        'inline; filename="4884f71e.pdf"',
+      );
+      assert.strictEqual(
+        contentDispositionFor({ entry: pdf, declaredFilename: 'Acme Q3' }),
+        'inline; filename="Acme Q3.pdf"',
+      );
+      assert.strictEqual(
+        contentDispositionFor({
+          entry: pdf,
+          declaredFilename: 'Acme Q3',
+          disposition: { attachment: true, filename: 'Mine' },
+        }),
+        'attachment; filename="Mine.pdf"',
+      );
+      assert.strictEqual(
+        contentDispositionFor({
+          entry: pdf,
+          declaredFilename: 'Acme Q3',
+          disposition: { attachment: false, filename: '\n' },
+        }),
+        'inline; filename="Acme Q3.pdf"',
+        'a requested name that sanitizes to nothing falls through',
+      );
+
+      let png = {
+        contentType: 'image/png',
+        sourceURL: 'http://realm.test/demo/Statement/4884f71e',
+      };
+      assert.strictEqual(
+        contentDispositionFor({ entry: png }),
+        undefined,
+        'an image carries no disposition unless asked',
+      );
+      assert.strictEqual(
+        contentDispositionFor({
+          entry: png,
+          disposition: { attachment: true },
+        }),
+        'attachment; filename="4884f71e.png"',
+      );
+    });
+
+    test('a declared filename is not part of the capture identity', async function (assert) {
+      assert.strictEqual(
+        await declaredCaptureSpecHash('statement', {
+          format: 'isolated',
+          type: 'pdf',
+          filename: 'Acme Q3',
+        }),
+        await declaredCaptureSpecHash('statement', {
+          format: 'isolated',
+          type: 'pdf',
+        }),
+      );
+    });
+
     test('output type and media are identity axes: each non-default value is its own cache key', async function (assert) {
       // Constructed directly rather than parsed: this pins the identity layer
       // itself — each non-default axis value keys its own capture —
@@ -611,6 +845,9 @@ module(basename(import.meta.filename), function () {
     // The captureSpec each stub render received, so tests can assert the
     // parsed geometry actually reaches the capture engine.
     let capturedSpecs: unknown[];
+    // The renderOptions each stub render received, so tests can assert which
+    // rendering (card or file) a capture went through.
+    let capturedRenderOptions: unknown[];
     // When set, in-flight captures park on it — the lever for the sync-wait
     // timeout test.
     let captureGate: Deferred<void> | undefined;
@@ -641,6 +878,7 @@ module(basename(import.meta.filename), function () {
         adapter = new FakeMediaCacheAdapter();
         captureCalls = 0;
         capturedSpecs = [];
+        capturedRenderOptions = [];
         captureGate = undefined;
         captureFailure = undefined;
         virtualNetwork = new VirtualNetwork();
@@ -676,9 +914,11 @@ module(basename(import.meta.filename), function () {
       let prerenderer = {
         prerenderCapture: async (args: {
           captureSpec?: unknown;
+          renderOptions?: unknown;
         }): Promise<CapturePrerenderResponse> => {
           captureCalls++;
           capturedSpecs.push(args.captureSpec ?? null);
+          capturedRenderOptions.push(args.renderOptions ?? null);
           if (captureGate) {
             await captureGate.promise;
           }
@@ -763,6 +1003,32 @@ module(basename(import.meta.filename), function () {
           file_alias: `${REALM_URL}${localPath}`,
           realm_url: REALM_URL,
           type: 'instance',
+          generation,
+          last_modified: Date.now(),
+          resource_created_at: Date.now(),
+          is_deleted: false,
+          pristine_doc: { attributes: {} },
+        },
+        { jsonFields: ['pristine_doc'] },
+      );
+      await query(
+        dbAdapter,
+        insert('boxel_index', nameExpressions, valueExpressions),
+      );
+    }
+
+    // A file's own index row, keyed by its extension-intact URL. `alias`
+    // defaults to that URL; a `.json` file's row carries the extensionless id.
+    async function seedFileRow(
+      localPath: string,
+      { generation = 1, alias }: { generation?: number; alias?: string } = {},
+    ) {
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          url: `${REALM_URL}${localPath}`,
+          file_alias: alias ?? `${REALM_URL}${localPath}`,
+          realm_url: REALM_URL,
+          type: 'file',
           generation,
           last_modified: Date.now(),
           resource_created_at: Date.now(),
@@ -1594,6 +1860,194 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a declared pdf serves under its manifest filename, and the request can ask for a download or a different name', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+        sourceGeneration: 1,
+        bytes: PDF_BYTES,
+        contentType: 'application/pdf',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        statement: {
+          specHash: 'declared-statement-spec',
+          objectKey: entry.objectKey,
+          contentType: 'application/pdf',
+          pageCount: 2,
+          byteSize: PDF_BYTES.byteLength,
+          filename: 'Relevé Q3',
+        },
+      });
+
+      let inline = await get('_capture/card-1?name=statement');
+      assert.strictEqual(inline.status, 200);
+      assert.strictEqual(
+        inline.headers.get('content-disposition'),
+        `inline; filename="Releve Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20Q3.pdf`,
+        'the manifest filename names the document',
+      );
+
+      let download = await get('_capture/card-1?name=statement&download=1');
+      assert.strictEqual(download.status, 200);
+      assert.strictEqual(
+        download.headers.get('content-disposition'),
+        `attachment; filename="Releve Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20Q3.pdf`,
+      );
+
+      let renamed = await get(
+        '_capture/card-1?name=statement&download&filename=My%20Statement',
+      );
+      assert.strictEqual(renamed.status, 200);
+      assert.strictEqual(
+        renamed.headers.get('content-disposition'),
+        'attachment; filename="My Statement.pdf"',
+        'the request filename overrides the declared one',
+      );
+      assert.strictEqual(
+        renamed.headers.get('etag'),
+        `"${entry.objectKey}"`,
+        'the same object serves whatever the disposition',
+      );
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(renamed.nodeStream!))],
+        [...PDF_BYTES],
+      );
+      assert.strictEqual(captureCalls, 0, 'disposition never triggers capture');
+    });
+
+    test('a declared pdf whose manifest records no filename serves under the source URL segment', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+        sourceGeneration: 1,
+        bytes: PDF_BYTES,
+        contentType: 'application/pdf',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-statement-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        statement: {
+          specHash: 'declared-statement-spec',
+          objectKey: entry.objectKey,
+          contentType: 'application/pdf',
+        },
+      });
+
+      let response = await get('_capture/card-1?name=statement');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(
+        response.headers.get('content-disposition'),
+        'inline; filename="card-1.pdf"',
+      );
+    });
+
+    test('a declared image downloads only when asked, under its content type extension', async function (assert) {
+      await seedInstanceRow('card-1');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: REALM_AUTHORITY_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+      });
+      let entry = (await findMediaCacheEntry(dbAdapter, {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: 'declared-hero-spec',
+      }))!;
+      await seedManifestRow('card-1', {
+        hero: {
+          specHash: 'declared-hero-spec',
+          objectKey: entry.objectKey,
+          contentType: 'image/png',
+          width: 800,
+          height: 600,
+          deviceScaleFactor: 2,
+        },
+      });
+
+      let plain = await get('_capture/card-1?name=hero');
+      assert.strictEqual(plain.headers.get('content-disposition'), null);
+
+      let download = await get('_capture/card-1?name=hero&download=true');
+      assert.strictEqual(
+        download.headers.get('content-disposition'),
+        'attachment; filename="card-1.png"',
+      );
+    });
+
+    test('a pdf GET honors the disposition params on the capture miss and on the ledger hit', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let rendered = await get(
+        '_capture/card-1?type=pdf&download=1&filename=Q3%20Statement',
+      );
+      assert.strictEqual(rendered.status, 200);
+      assert.strictEqual(
+        rendered.headers.get('content-disposition'),
+        'attachment; filename="Q3 Statement.pdf"',
+      );
+      assert.strictEqual(captureCalls, 1);
+
+      let hit = await get('_capture/card-1?type=pdf&filename=Other');
+      assert.strictEqual(hit.status, 200);
+      assert.strictEqual(
+        hit.headers.get('content-disposition'),
+        'inline; filename="Other.pdf"',
+      );
+      assert.strictEqual(
+        captureCalls,
+        1,
+        'the disposition params are not part of the capture identity',
+      );
+    });
+
+    test('disposition parameter errors are 400s naming the param', async function (assert) {
+      await seedInstanceRow('card-1');
+
+      let badDownload = await get('_capture/card-1?name=hero&download=maybe');
+      assert.strictEqual(badDownload.status, 400);
+      assert.true((await badDownload.text()).includes('download must be'));
+
+      let repeated = await get(
+        '_capture/card-1?type=pdf&filename=a&filename=b',
+      );
+      assert.strictEqual(repeated.status, 400);
+      assert.true(
+        (await repeated.text()).includes('filename may only be given once'),
+      );
+
+      let mixed = await get(
+        '_capture/card-1?name=hero&download=1&format=embedded',
+      );
+      assert.strictEqual(mixed.status, 400);
+      assert.true(
+        (await mixed.text()).includes('name cannot be combined'),
+        'only the disposition params are exempt from name exclusivity',
+      );
+    });
+
     test('a name serves the exact object its manifest advertises, not a newer ledger row', async function (assert) {
       await seedInstanceRow('card-1');
       let olderBytes = PNG_BYTES;
@@ -1934,6 +2388,249 @@ module(basename(import.meta.filename), function () {
         "another reader isn't served it, and the closed gate renders nothing new for them",
       );
       assert.strictEqual(captureCalls, 1, 'nothing rendered for them either');
+    });
+
+    test('a POSTed file capture serves back to its requester on its GET URL, and to no other reader', async function (assert) {
+      await seedFileRow('brand/guide.html');
+      await startWorker();
+
+      let response = await postCapture({
+        realmURL: REALM_URL,
+        fileURL: `${REALM_URL}brand/guide.html`,
+        format: 'isolated',
+      });
+      assert.strictEqual(response.status, 201);
+      assert.strictEqual(captureCalls, 1);
+      let served = response.body.data.attributes.captures?.[0]?.url as string;
+      assert.strictEqual(
+        served,
+        `${REALM_URL}_capture/brand/guide.html`,
+        "the served URL keeps the file's extension",
+      );
+
+      let getResponse = await get(served.slice(REALM_URL.length), 'GET', {
+        Authorization: `Bearer ${realmSession(OWNER)}`,
+      });
+      assert.strictEqual(getResponse.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(getResponse.nodeStream!))],
+        [...PNG_BYTES],
+      );
+      assert.strictEqual(
+        captureCalls,
+        1,
+        "the requester's GET is a pure ledger hit on the POSTed capture",
+      );
+      assert.true(
+        getResponse.headers.get('cache-control')?.startsWith('private,'),
+        `no shared cache may hold one reader's capture: ${getResponse.headers.get('cache-control')}`,
+      );
+
+      let anonymous = await get(served.slice(REALM_URL.length));
+      assert.strictEqual(
+        anonymous.status,
+        403,
+        "another reader isn't served it, and the closed gate renders nothing new for them",
+      );
+      assert.strictEqual(captureCalls, 1, 'nothing rendered for them either');
+    });
+
+    test('an open realm captures a file on demand through its file rendering, keyed by the file row', async function (assert) {
+      await seedFileRow('brand/guide.html', { generation: 4 });
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_capture/brand/guide.html');
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(response.nodeStream!))],
+        [...PNG_BYTES],
+      );
+      assert.strictEqual(captureCalls, 1);
+      assert.true(
+        (capturedRenderOptions[0] as { fileRender?: boolean } | null)
+          ?.fileRender,
+        'the capture renders the file, not a card',
+      );
+      let entry = await findMediaCacheEntry(dbAdapter, {
+        servedTo: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}brand/guide.html`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 4,
+      });
+      assert.strictEqual(entry?.lane, 'on-demand');
+
+      let second = await get('_capture/brand/guide.html');
+      assert.strictEqual(second.status, 200);
+      assert.strictEqual(captureCalls, 1, 'the second request is a pure hit');
+
+      // An edit bumps the file row's generation, which is part of the key.
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET generation = 5 WHERE url = '${REALM_URL}brand/guide.html'`,
+      ]);
+      let edited = await get('_capture/brand/guide.html');
+      assert.strictEqual(edited.status, 200);
+      assert.strictEqual(captureCalls, 2, 'the edited file re-captured');
+    });
+
+    test('a deleted file stops serving its captures', async function (assert) {
+      await seedFileRow('brand/guide.html');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}brand/guide.html`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      assert.strictEqual(
+        (await get('_capture/brand/guide.html')).status,
+        200,
+        'the live file serves its capture',
+      );
+
+      await query(dbAdapter, [
+        `UPDATE boxel_index SET is_deleted = TRUE WHERE url = '${REALM_URL}brand/guide.html'`,
+      ]);
+
+      assert.strictEqual((await get('_capture/brand/guide.html')).status, 404);
+    });
+
+    test("a card's .json spelling addresses its file row, and the extensionless id its instance", async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedFileRow('card-1.json', { alias: `${REALM_URL}card-1` });
+      let isolated = await captureSpecHash({ format: 'isolated' });
+      let fileBytes = new TextEncoder().encode('file-capture-bytes');
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: isolated,
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+      await putMedia(dbAdapter, adapter, {
+        renderedAs: ANONYMOUS_RENDER,
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1.json`,
+        captureSpecHash: isolated,
+        sourceGeneration: 1,
+        bytes: fileBytes,
+        contentType: 'image/png',
+        lane: 'on-demand',
+      });
+
+      let card = await get('_capture/card-1');
+      assert.strictEqual(card.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(card.nodeStream!))],
+        [...PNG_BYTES],
+        'the extensionless id serves the card capture',
+      );
+      let file = await get('_capture/card-1.json');
+      assert.strictEqual(file.status, 200);
+      assert.deepEqual(
+        [...(await nodeStreamToBuffer(file.nodeStream!))],
+        [...fileBytes],
+        'the extension spelling serves the file capture',
+      );
+    });
+
+    test("a .json path never stands in for the card's extensionless id", async function (assert) {
+      // The `.json` spelling names the file; a card's captures key on its id.
+      await seedInstanceRow('card-1');
+      await seedCaptureDrawnAs(ANONYMOUS_RENDER);
+
+      let response = await get('_capture/card-1.json');
+      assert.strictEqual(response.status, 404);
+    });
+
+    test('a card id ending in a registered extension serves on that spelling when no file shares it', async function (assert) {
+      // The card `notes.md.json` has the id `notes.md`.
+      await seedInstanceRow('notes.md');
+      await startWorker();
+
+      let response = await postCapture({
+        realmURL: REALM_URL,
+        cardId: `${REALM_URL}notes.md`,
+        format: 'isolated',
+      });
+      assert.strictEqual(response.status, 201);
+      let served = response.body.data.attributes.captures?.[0]?.url as string;
+      assert.strictEqual(served, `${REALM_URL}_capture/notes.md`);
+
+      let getResponse = await get(served.slice(REALM_URL.length), 'GET', {
+        Authorization: `Bearer ${realmSession(OWNER)}`,
+      });
+      assert.strictEqual(getResponse.status, 200);
+      assert.strictEqual(captureCalls, 1, 'the GET is a ledger hit');
+      assert.notOk(
+        (capturedRenderOptions[0] as { fileRender?: boolean } | null)
+          ?.fileRender,
+        'the capture rendered the card',
+      );
+    });
+
+    test('a spelling a live card and a live file share names neither, on either surface', async function (assert) {
+      await seedInstanceRow('notes.md');
+      await seedFileRow('notes.md');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      for (let attributes of [
+        { cardId: `${REALM_URL}notes.md` },
+        { fileURL: `${REALM_URL}notes.md` },
+      ]) {
+        let response = await postCapture({
+          realmURL: REALM_URL,
+          format: 'isolated',
+          ...attributes,
+        });
+        assert.strictEqual(response.status, 201);
+        let served = response.body.data.attributes.captures?.[0]?.url;
+        assert.notOk(served, `${Object.keys(attributes)[0]}: no served URL`);
+      }
+      assert.strictEqual(captureCalls, 2, 'both captures still rendered');
+      let rows = (await query(dbAdapter, [
+        `SELECT 1 FROM media_cache_ledger WHERE source_url = '${REALM_URL}notes.md'`,
+      ])) as unknown[];
+      assert.strictEqual(rows.length, 0, 'and neither persisted');
+
+      let getResponse = await get('_capture/notes.md');
+      assert.strictEqual(getResponse.status, 404);
+      assert.strictEqual(captureCalls, 2, 'the GET rendered nothing');
+    });
+
+    test('an extensionless file is never captured through the GET route', async function (assert) {
+      // `notes` is spelled like a card id, so its capture would key as a card
+      // capture of `notes`.
+      await seedFileRow('notes');
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_capture/notes');
+      assert.strictEqual(response.status, 404);
+      assert.strictEqual(captureCalls, 0);
+    });
+
+    test('a file path does not land on another file row by its alias', async function (assert) {
+      // A file row's alias drops `.json`, so `guide.html.json`'s row carries
+      // `guide.html` as its alias. A request for `guide.html` names a
+      // different file, which that row must not answer for.
+      await seedFileRow('guide.html.json', {
+        alias: `${REALM_URL}guide.html`,
+      });
+      await seedRealmConfigRow(true);
+      await startWorker();
+
+      let response = await get('_capture/guide.html');
+      assert.strictEqual(response.status, 404);
+      assert.strictEqual(captureCalls, 0);
     });
 
     test('a timed-out custom-spec POST persists anyway; the retry answers from the ledger', async function (assert) {

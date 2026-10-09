@@ -1,5 +1,13 @@
 import { waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  getDataBucket,
+  linksTo,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -19,19 +27,9 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  getDataBucket,
-  linksTo,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // The contract under test is the *userland* JS shape of `card.linkField`:
@@ -40,7 +38,7 @@ import type * as FieldSupportModule from '@cardstack/base/field-support';
 // is the diagnostic surface — covered by get-relationship-test — and is
 // deliberately not exercised here. Sentinels are inspected via the data bucket
 // (where they live) rather than the getter, since the getter never returns one.
-function bucketEntry(instance: CardDefType, fieldName: string): unknown {
+function bucketEntry(instance: CardDef, fieldName: string): unknown {
   return getDataBucket(instance).get(fieldName);
 }
 
@@ -66,7 +64,7 @@ function makeCards() {
 
 async function createPerson(
   relationships: LooseCardResource['relationships'],
-): Promise<CardDefType & { pet: unknown; petName: string | undefined }> {
+): Promise<CardDef & { pet: unknown; petName: string | undefined }> {
   let store = getService('store');
   let resource: LooseCardResource = {
     attributes: { firstName: 'Hassan' },
@@ -77,7 +75,7 @@ async function createPerson(
     resource,
     { data: resource },
     new URL(testRealmURL),
-  )) as CardDefType & { pet: unknown; petName: string | undefined };
+  )) as CardDef & { pet: unknown; petName: string | undefined };
 }
 
 let loader: Loader;
@@ -86,7 +84,6 @@ let isLinkNotFound: (typeof FieldSupportModule)['isLinkNotFound'];
 
 module('Integration | linksTo singular JS-access contract', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -145,7 +142,7 @@ module('Integration | linksTo singular JS-access contract', function (hooks) {
       return entry != null && typeof entry === 'object' && 'id' in entry;
     });
 
-    let resolved = bucketEntry(person, 'pet') as CardDefType;
+    let resolved = bucketEntry(person, 'pet') as CardDef;
     assert.strictEqual(
       person.pet,
       resolved,

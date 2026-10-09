@@ -1,6 +1,23 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { click } from '@ember/test-helpers';
 
+import {
+  field,
+  contains,
+  containsMany,
+  CardDef,
+  Component,
+  serializeCard,
+  createFromSerialized,
+  getQueryableValue,
+  linksTo,
+} from '@cardstack/base/card-api';
+import enumField, {
+  enumOptions,
+  enumValues,
+  enumConfig,
+} from '@cardstack/base/enum';
+import StringField from '@cardstack/base/string';
 import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
 import MinusIcon from '@cardstack/boxel-icons/minus';
@@ -22,23 +39,6 @@ import {
   setupIntegrationTestRealm,
   testModuleRealm,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  StringField,
-  field,
-  contains,
-  containsMany,
-  CardDef,
-  Component,
-  serializeCard,
-  createFromSerialized,
-  getQueryableValue,
-  enumField,
-  enumOptions,
-  enumValues,
-  enumConfig,
-  linksTo,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -48,7 +48,6 @@ let loader: Loader;
 
 module('Integration | enumField', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
@@ -65,8 +64,6 @@ module('Integration | enumField', function (hooks) {
 
   test('edit renders a dropdown with the enum options', async function (assert) {
     assert.expect(4);
-
-    // enumField available via base-realm helpers
 
     // This assertion makes the test fail early until enumField exists
     assert.strictEqual(
@@ -113,7 +110,6 @@ module('Integration | enumField', function (hooks) {
   test('programmatic set outside options does not throw (UI remains constrained)', async function (assert) {
     assert.expect(2);
 
-    // via base-realm helpers
     const PriorityField = enumField(StringField, {
       options: ['High', 'Medium', 'Low'],
     });
@@ -136,7 +132,6 @@ module('Integration | enumField', function (hooks) {
   test('enumValues helper returns configured options', async function (assert) {
     assert.expect(2);
 
-    // via base-realm helpers
     const PriorityField = enumField(StringField, {
       options: ['High', 'Medium', 'Low'],
     });
@@ -158,7 +153,6 @@ module('Integration | enumField', function (hooks) {
   test('containsMany renders dropdowns for each enum item and supports add', async function (assert) {
     assert.expect(4);
 
-    // via base-realm helpers
     const PriorityField = enumField(StringField, {
       options: ['High', 'Medium', 'Low'],
     });
@@ -201,7 +195,6 @@ module('Integration | enumField', function (hooks) {
   test('containsMany programmatic set outside options does not throw', async function (assert) {
     assert.expect(1);
 
-    // via base-realm helpers
     const PriorityField = enumField(StringField, {
       options: ['High', 'Medium', 'Low'],
     });
@@ -241,7 +234,7 @@ module('Integration | enumField', function (hooks) {
 
     // Single value
     let t1 = new Task({ priority: 'Medium' });
-    let doc1 = serializeCard(t1);
+    let doc1 = serializeCard(t1, {});
     let t1b = (await createFromSerialized(
       doc1.data,
       doc1,
@@ -251,7 +244,7 @@ module('Integration | enumField', function (hooks) {
 
     // Plural values
     let t2 = new Task({ priorities: ['Low', 'High'] });
-    let doc2 = serializeCard(t2);
+    let doc2 = serializeCard(t2, {});
     let t2b = (await createFromSerialized(
       doc2.data,
       doc2,
@@ -333,7 +326,7 @@ module('Integration | enumField', function (hooks) {
     });
 
     // serialize null
-    let doc = serializeCard(t);
+    let doc = serializeCard(t, {});
     assert.ok(doc.data?.attributes, 'has attributes');
     let attrPriority = (doc.data!.attributes as any).priority;
     assert.strictEqual(
@@ -376,7 +369,7 @@ module('Integration | enumField', function (hooks) {
 
     // Array with null element serializes with null preserved
     let t2 = new Task({ priorities: [null as any, 'Medium'] });
-    let doc = serializeCard(t2);
+    let doc = serializeCard(t2, {});
     assert.ok(doc.data?.attributes, 'has attributes');
     let arr = (doc.data!.attributes as any).priorities as any[];
     assert.ok(Array.isArray(arr), 'serialized priorities is an array');
@@ -725,7 +718,7 @@ module('Integration | enumField', function (hooks) {
     );
 
     // Round-trip serialization preserves null
-    let doc = serializeCard(t);
+    let doc = serializeCard(t, {});
     let t2 = (await createFromSerialized(
       doc.data,
       doc,
@@ -842,7 +835,7 @@ module('Integration | enumField', function (hooks) {
     );
 
     // Round-trip (array containing null should persist)
-    let doc = serializeCard(t);
+    let doc = serializeCard(t, {});
     let t2 = (await createFromSerialized(
       doc.data,
       doc,

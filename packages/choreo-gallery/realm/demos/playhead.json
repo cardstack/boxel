@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "playhead",
+      "title": "Playhead",
+      "group": "Timeline",
+      "lede": "A hand that clicks for you. Drag the playhead and watch it think.",
+      "apis": ["c.run", "run.time", "@name", "at()", "c.Spring"],
+      "sample": "// The score IS the template: holds and walks in sequence flow, each press\n// a NAMED dip of the hand, and the app's own value changes anchored to the\n// press by name — `at 'press-express' 0.55` is the moment the finger lands.\n<c.Sequence>\n  <c.Wait @of={{hand}} @duration={{0.34}} />\n  <c.Tween @of={{hand}} @x={{this.walkX 'home' 'express'}}\n    @y={{this.walkY 'home' 'express'}} @duration={{0.62}} />\n  <c.Tween @name='press-express' @of={{hand}}\n    @scale={{array 1 0.74 1}} @duration={{0.22}} />\n  <c.Spring @at={{at 'press-express' 0.55}}\n    @of={{pill}} @x={{array 0 127}} @spring={{PILL}} />\n  …\n</c.Sequence>\n\n// One description of what a press does. The buttons run it on click, and\n// the transport folds it over the presses behind the playhead — so a\n// scrubbed state cannot drift from a clicked one.\nfunction press(state, cue) {\n  switch (cue) {\n    case 'express': return { ...state, speed: 'express' };\n    case 'wrap':    return { ...state, wrap: !state.wrap };\n    …\n  }\n}\n\n// PLAYING — run.play(). The transport reads run.time and fires a real\n// .click() on the real control as each press's moment goes by; the app's\n// own handler is what changes the app.\nthis.stage.querySelector(`[data-cue=\"${cue}\"]`).click();\n\n// SCORED — run.pause(); run.time = t. A scrubbed frame is the library's\n// computed still: every spring stood exactly where the score says t looks\n// like, in either direction. The old private sampler — a poseAt re-running\n// Motion's generator — is deleted whole.\n\n// LIVE — touch a control yourself and the template swaps the score for a\n// handful of state-target springs: the app behaves like the plain app it\n// is, and Play, Reset or the scrubber take the scene back by recomputing.\n{{#if this.isLive}}\n  <c.Spring @of={{pill}} @x={{this.pillX}} @spring={{PILL}} />\n{{else}}\n  …the score…\n{{/if}}",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "film-transport",
+        "concept": "One state reducer serves clicks and seeking",
+        "why": "Buttons and the transport use the same semantic actions. Seeking folds the actions before the requested time into application state, so the view and the score cannot silently describe different apps.",
+        "experiment": "Open a control, scrub before its action, then forward again. Compare the reconstructed selection and switch state with an ordinary click.",
+        "pitfall": "Replaying old pointer events at wall-clock speed makes backward seeking depend on history.",
+        "combine": "Combine with build-order when a reproducible app interaction needs named visual beats."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -1,5 +1,7 @@
 import { fillIn, triggerEvent } from '@ember/test-helpers';
 
+import { field, contains, CardDef } from '@cardstack/base/card-api';
+import PhoneNumberField from '@cardstack/base/phone-number';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -10,13 +12,6 @@ import {
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { provideConsumeContext, setupCardLogs } from '../helpers';
-import {
-  setupBaseRealm,
-  PhoneNumberField,
-  field,
-  contains,
-  CardDef,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -26,7 +21,6 @@ const phoneSelector = `[data-test-field="phone"] [data-test-boxel-phone-input]`;
 
 module('Integration | PhoneNumberField', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupMockMatrix(hooks);
 
   hooks.beforeEach(function () {

@@ -1,3 +1,16 @@
+import {
+  CardDef,
+  Component,
+  contains,
+  containsMany,
+  field,
+  FieldDef,
+  linksTo,
+  linksToMany,
+  isCard,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -13,26 +26,11 @@ import {
   withHeldSave,
   type TestContextWithSave,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  containsMany,
-  field,
-  FieldDef,
-  StringField,
-  NumberField,
-  setupBaseRealm,
-  linksTo,
-  linksToMany,
-  isCard,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Command | patch-fields', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });

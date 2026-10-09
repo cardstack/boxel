@@ -1,5 +1,17 @@
 import { waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  FieldDef,
+  getDataBucket,
+  getRelationshipMembershipState,
+  linksTo,
+  linksToMany,
+  serializeCard,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -18,19 +30,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  FieldDef,
-  getDataBucket,
-  getRelationshipMembershipState,
-  linksTo,
-  linksToMany,
-  serializeCard,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -58,9 +57,6 @@ const GHOST = `${testRealmURL}Pet/ghost`;
 const MANGO = `${testRealmURL}Pet/mango`;
 const PUBLISHER_GHOST = `${testRealmURL}Publisher/ghost`;
 
-// The base-realm helpers (CardDef, field, …) are only populated once
-// `setupBaseRealm` has run, so cards must be declared inside a test rather than
-// at module scope.
 function makeCards() {
   class Pet extends CardDef {
     @field firstName = contains(StringField);
@@ -112,7 +108,6 @@ module(
   'Integration | linksTo sentinel serialization round-trip',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

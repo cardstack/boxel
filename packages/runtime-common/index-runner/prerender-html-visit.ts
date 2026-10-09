@@ -6,7 +6,6 @@ import {
   cardSourceForVisit,
   delay,
   flattenPrerenderHtmlVisitMeta,
-  hasCardExtension,
   isBrowserTestEnv,
   isCardResource,
   jobIdentity,
@@ -72,6 +71,7 @@ const SPAWNING_PASS_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
   preWarmModulesTable,
+  realmCardModulesToWarm,
   resolveModuleCacheContext,
 } from './prewarm-modules.ts';
 
@@ -271,9 +271,7 @@ export async function runPrerenderHtmlPass({
   if (preWarm && !isBrowserTestEnv()) {
     let preWarmStart = Date.now();
     try {
-      let filesystemMtimes = await reader.mtimes();
-      let allRealmCardModules =
-        Object.keys(filesystemMtimes).filter(hasCardExtension);
+      let allRealmCardModules = await realmCardModulesToWarm(realmURL, reader);
       // Info, not debug: the sweep can hold this worker for minutes on a
       // module-heavy realm, and with few workers everything queued behind it
       // waits that long. CI logs need the sweep's span attributable without a
@@ -872,7 +870,13 @@ export async function persistDeclaredCaptures({
     if (entry.carriedForward) {
       let prior = priorManifest?.[entry.name];
       if (prior) {
-        manifest[entry.name] = prior;
+        // The bytes carry forward; the filename follows this render's
+        // instance, so a metadata-only edit still renames the download.
+        let { filename: _priorFilename, ...carried } = prior;
+        manifest[entry.name] = {
+          ...carried,
+          ...(entry.filename !== undefined ? { filename: entry.filename } : {}),
+        };
       } else {
         errors.push({
           name: entry.name,
@@ -932,6 +936,9 @@ export async function persistDeclaredCaptures({
               deviceScaleFactor: entry.deviceScaleFactor,
             }),
         ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
+        ...(isPdf && entry.filename !== undefined
+          ? { filename: entry.filename }
+          : {}),
         ...(entry.keyBy === 'file-content' && contentHash
           ? { sourceContentHash: contentHash }
           : {}),

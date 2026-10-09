@@ -1,5 +1,15 @@
 import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -17,29 +27,13 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  linksTo,
-  linksToMany,
-  NumberField,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-
 const PARENT_URL = `${testRealmURL}Parent/one`;
 const CHILD_URL = `${testRealmURL}Child/one`;
 
-// The cards are declared inside a helper rather than at module scope because
-// the base-realm helpers (CardDef, field, …) are only populated once
-// `setupBaseRealm` has run.
 function makeCards() {
   class Person extends CardDef {
     static displayName = 'Person';
@@ -94,7 +88,6 @@ module('Integration | nested query-field rendering', function (hooks) {
   let queryFieldSupport: typeof import('@cardstack/base/query-field-support');
 
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -184,7 +177,7 @@ module('Integration | nested query-field rendering', function (hooks) {
   }
 
   test('a link target renders its own query-backed field', async function (this: RenderingTestContext, assert) {
-    let parent = (await getService('store').get(PARENT_URL)) as CardDefType;
+    let parent = (await getService('store').get(PARENT_URL)) as CardDef;
     await settled();
 
     let element = await renderCard(loader, parent, 'isolated');
@@ -234,7 +227,7 @@ module('Integration | nested query-field rendering', function (hooks) {
     let globals = globalThis as unknown as { __boxelRenderContext?: boolean };
     globals.__boxelRenderContext = true;
     try {
-      let parent = (await getService('store').get(PARENT_URL)) as CardDefType;
+      let parent = (await getService('store').get(PARENT_URL)) as CardDef;
       await settled();
 
       let element = await renderCard(loader, parent, 'isolated');
@@ -255,7 +248,7 @@ module('Integration | nested query-field rendering', function (hooks) {
 
   test('the field the document does resolve is the one that was asked for', async function (this: RenderingTestContext, assert) {
     let { getRelationshipMembershipState } = cardApi;
-    let child = (await getService('store').get(CHILD_URL)) as CardDefType;
+    let child = (await getService('store').get(CHILD_URL)) as CardDef;
     await settled();
 
     let response = await getService('network').authedFetch(CHILD_URL, {
@@ -278,10 +271,8 @@ module('Integration | nested query-field rendering', function (hooks) {
     let { peekQueryFieldSearchResource } = queryFieldSupport;
     let searches = countSearches();
     try {
-      let parent = (await getService('store').get(
-        PARENT_URL,
-      )) as CardDefType & {
-        child: CardDefType;
+      let parent = (await getService('store').get(PARENT_URL)) as CardDef & {
+        child: CardDef;
       };
       await settled();
 
@@ -317,10 +308,8 @@ module('Integration | nested query-field rendering', function (hooks) {
     let { peekQueryFieldSearchResource } = queryFieldSupport;
     let searches = countSearches();
     try {
-      let parent = (await getService('store').get(
-        PARENT_URL,
-      )) as CardDefType & {
-        child: CardDefType & { matches: unknown[] };
+      let parent = (await getService('store').get(PARENT_URL)) as CardDef & {
+        child: CardDef & { matches: unknown[] };
       };
       await settled();
       let child = parent.child;
@@ -364,8 +353,8 @@ module('Integration | nested query-field rendering', function (hooks) {
 
   test('a snapshot of a side-loaded card records its rollup, not a zero', async function (this: RenderingTestContext, assert) {
     let cardService = getService('card-service');
-    let parent = (await getService('store').get(PARENT_URL)) as CardDefType & {
-      child: CardDefType & { matchCount: number };
+    let parent = (await getService('store').get(PARENT_URL)) as CardDef & {
+      child: CardDef & { matchCount: number };
     };
     await settled();
     let child = parent.child;
@@ -394,7 +383,7 @@ module('Integration | nested query-field rendering', function (hooks) {
   });
 
   test('a rollup over a side-loaded query field reports its true count', async function (this: RenderingTestContext, assert) {
-    let parent = (await getService('store').get(PARENT_URL)) as CardDefType;
+    let parent = (await getService('store').get(PARENT_URL)) as CardDef;
     await settled();
 
     let element = await renderCard(loader, parent, 'isolated');

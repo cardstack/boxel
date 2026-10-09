@@ -1,6 +1,8 @@
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -16,13 +18,6 @@ import {
   testRealmInfo,
   testRealmURL,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -38,7 +33,6 @@ class StubRealmService extends RealmService {
 module('Integration | tools | create-listing-pr-request', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupBaseRealm(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

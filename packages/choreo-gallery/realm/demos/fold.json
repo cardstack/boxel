@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "fold",
+      "title": "Fold",
+      "group": "Timeline",
+      "lede": "Scrub back through orders the timeline does not own.",
+      "apis": ["c.Perform", "@onPerform", "@onPerformReset", "run.time"],
+      "sample": "// A COMMAND is not an animation. It is a statement of state the score\n// hands to the app, and the app is what changes. The law is one line:\n// the set of commands at or before the clock IS the commanded state.\n<c.Sequence>\n  {{#each SCHEDULE as |cmd|}}\n    <c.Perform @action={{cmd.action}} @target={{cmd.target}}\n      @payload={{cmd.payload}} />\n    <c.Wait @duration={{cmd.hold}} />\n  {{/each}}\n</c.Sequence>\n\n// The host owns the state; the region only tells it what was ordered.\n<Choreo @onPerform={{this.dispatch}} @onPerformReset={{this.reset}} as |c|>\n\ndispatch = (command) => {\n  switch (command.action) {\n    case 'gas.set':     this.state.gas = Number(command.payload); break;\n    case 'soak.start':  this.state.soak = true;  break;  // LATCHES\n    case 'cone.drop':   this.state.cone = true;  break;  // LATCHES\n  }\n};\n\n// A seek BACKWARDS lands here first, and Choreo replays the remaining\n// prefix after it. So a scrub is a re-derivation, not an undo — and the\n// difference between a correct host and a broken one is this method.\nreset = () => { this.state = { ...COLD }; };\n\n// Refuse to do that work and the replay lands on stale state. The absolute\n// settings overwrite themselves and look fine; `soak` and `cone` stay\n// latched from a future that no longer exists. That is the No-reset toggle.\n\n// The host's state is NOT tracked. onPerform fires DURING the region's\n// pass; a tracked write there re-renders the region, replays the pass, and\n// cancels the run that was dispatching. The chamber is painted by hand\n// from custom properties instead — Build Order's discipline.\nel.style.setProperty('--kf-gas', String(s.gas));",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-commands",
+        "concept": "Commands and their ledger can come from one schedule",
+        "why": "One command array generates both Perform steps and the displayed ledger. Each command's moment is derived from the holds before it, avoiding a second independent set of timestamps.",
+        "experiment": "Play, seek backward across a command, and advance again. Compare the visible ledger with the actual folded state.",
+        "pitfall": "An arbitrary side effect is not automatically reversible; define how the command's semantic state is rebuilt at a timestamp.",
+        "combine": "Combine with playhead so ordinary button actions and recorded actions use the same reducer."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

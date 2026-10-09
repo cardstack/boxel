@@ -121,6 +121,8 @@ jobs:
           fetch BOXEL_DB_USER          /staging/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /staging/boxel/GRAFANA_DB_PASSWORD  --with-decryption
           fetch GRAFANA_SECRET         /staging/boxel/GRAFANA_SECRET       --with-decryption
+          # provisioning/alerting-hosted/staging/contact-points/discord-alarms.json
+          fetch DISCORD_ALARMS_WEBHOOK /staging/boxel-grafana/discord_alarms_webhook --with-decryption
 
       - name: Lint
         # Belt-and-suspenders: ci-lint.yaml runs the same lint at PR time

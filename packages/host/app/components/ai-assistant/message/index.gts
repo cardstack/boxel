@@ -24,7 +24,7 @@ import {
 
 import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
-import type { Message } from '@cardstack/host/lib/matrix-classes/message';
+import type { MessageCompaction } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -33,6 +33,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import AiBotMessage from './aibot-message';
 import Attachments from './attachments';
+import CompactionStatus from './compaction-status';
 import Meta from './meta';
 import UserMessage from './user-message';
 
@@ -50,9 +51,7 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
-    isLastAssistantMessage: boolean;
     isMostRecentMessage?: boolean;
-    userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -80,6 +79,7 @@ interface Signature {
     isCodePatchCorrectness?: boolean;
     commands?: MessageTool[];
     usage?: TokenUsage;
+    compaction?: MessageCompaction;
   };
   Blocks: { default: [] };
 }
@@ -456,6 +456,9 @@ export default class AiAssistantMessage extends Component<Signature> {
       {{/unless}}
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
+          {{#if @compaction}}
+            <CompactionStatus @compaction={{@compaction}} />
+          {{/if}}
           {{#if this.hasBotMessage}}
             <AiBotMessage
               @monacoSDK={{@monacoSDK}}
@@ -463,12 +466,10 @@ export default class AiAssistantMessage extends Component<Signature> {
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
-              @isLastAssistantMessage={{@isLastAssistantMessage}}
-              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @reasoning={{if
-                @reasoningContent
+                this.reasoningContent
                 (hash
-                  content=@reasoningContent
+                  content=this.reasoningContent
                   isExpanded=this.isReasoningExpanded
                   updateExpanded=this.updateReasoningExpanded
                 )
@@ -627,8 +628,20 @@ export default class AiAssistantMessage extends Component<Signature> {
     </style>
   </template>
 
+  // The "Thinking..." placeholder stands for work not yet visible; while a
+  // compaction runs, its own row says what the assistant is doing instead.
+  private get reasoningContent() {
+    if (
+      this.args.compaction?.status === 'running' &&
+      isThinkingMessage(this.args.reasoningContent)
+    ) {
+      return null;
+    }
+    return this.args.reasoningContent;
+  }
+
   private get hasBotMessage() {
-    return this.args.messageHTMLParts?.length || this.args.reasoningContent;
+    return this.args.messageHTMLParts?.length || this.reasoningContent;
   }
 
   // The provider's token counts for the turn that produced this message.

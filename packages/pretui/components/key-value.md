@@ -14,7 +14,7 @@ Element: HTMLDListElement
 
 **It renders a real `<dl>`/`<dt>`/`<dd>`**, which is the correct markup for name/value pairs and is what most implementations of this pattern get wrong (a grid of `<div>`s carries no relationship).
 
-**The two-column alignment is `grid-template-columns: max-content 1fr` on the `<dl>` itself**, with the `<dt>`/`<dd>` pairs flowing into it. That is the good version of this layout: keys size to the longest key and stop, values take the rest, and every row aligns — without a fixed label width, without a wrapper per row, and without the `<dl>` losing its semantics to a `display: flex` on each pair. `align-items: center` means a single-line key sits centred against a multi-line value.
+**The two-column alignment is `grid-template-columns: max-content 1fr` on the `<dl>` itself**, with the `<dt>`/`<dd>` pairs flowing into it. That is the good version of this layout: keys size to the longest key and stop, values take the rest, and every row aligns — without a fixed label width, without a wrapper per row, and without the `<dl>` losing its semantics to a `display: flex` on each pair. `align-items: center` means a single-line key sits centered against a multi-line value.
 
 **`@layout` picks one of three arrangements**, landing as `data-layout`:
 
@@ -22,7 +22,7 @@ Element: HTMLDListElement
 - `'stacked'` puts each key above its value in a single column, for a narrow side panel or a value too long to sit beside its key. `'vertical'` is accepted as an alias. The markup stays a flat run of `<dt>`/`<dd>`.
 - `'inline'` sets the pairs side by side on one line and wraps them onto the next when space runs out, for a compact strip such as a period's start, end and term. Each pair sits in a `<div>`, so a key always wraps together with its value. HTML allows a `<div>` around each `<dt>`/`<dd>` group in a `<dl>`, and the list keeps its semantics.
 
-**`@labelStyle='eyebrow'`** sets the keys in the theme's eyebrow role: the `--boxel-eyebrow-*` font, size, weight, line height and tracking a themed card provides, uppercase. Outside a themed card it falls back to the kit's own mono eyebrow. It lands as `data-label-style`.
+**`@labelStyle='eyebrow'`** sets the keys in the theme's eyebrow role: the `--boxel-eyebrow-*` font, size, weight, line height and tracking, uppercase. Inside a card those come from the card's theme, and outside one from the `theme.css` defaults. It lands as `data-label-style`.
 
 **The keys' typography has its own properties**, `--pretui-kv-label-*` (see Theming). Set them on the KeyValue, through a class, or on any ancestor; they win over `@labelStyle`. A caller restyles the keys this way rather than reaching into the `<dt>` with `:deep()`.
 
@@ -55,27 +55,27 @@ Gaps:
 - **Values are plain text with no type information.** A date, an id and a name are announced identically. Using `<:value>` to wrap machine values in **Token** (`<code>`) gives the reader a hint; nothing does it for you.
 - **No empty-value handling.** An item with `value: ''` renders an empty `<dd>`, announced as nothing — indistinguishable from a value the reader missed. **FormField** has `@emptyText` (default `'—'`) for exactly this; KeyValue has no equivalent and should.
 - **Long values do not truncate and keys do not wrap-protect.** A very long key expands the `max-content` column and squeezes every value in the list, which at narrow widths becomes a **WCAG 1.4.10 Reflow** problem. `@layout='stacked'` or `'inline'` avoids it, but the default layout does not switch on its own.
-- **Keys in `--muted-foreground` are at the edge of 1.4.3.** The default keys are `--text-ui` (0.75rem). Outside a themed card, `@labelStyle='eyebrow'` sets them smaller, at `--text-ui-xs` (0.6875rem) and uppercase, in the same `--muted-foreground`. That is still normal-size text, so the bar stays 4.5:1 and the smaller size leaves less margin. Measured with the shipped seasons' tokens, the key ink against `--card` is 5.23:1 (SS26), 4.50:1 (AW26) and 5.98:1 (SS27) in light, and 7.08:1, 7.06:1 and 7.86:1 in dark. Against `--background` it is 4.89:1, **3.56:1** and 5.30:1 in light, and 7.64:1, 8.52:1 and 8.54:1 in dark. So a KeyValue placed straight on the page background in AW26 light falls below 4.5:1 with either key style, and on `--card` AW26 light is right at the line. Inside a themed card the card's theme sets the ink; check it there.
+- **Keys in `--muted-foreground` have less contrast margin than the values.** The default keys are in the ui-label role (0.75rem with the default theme). `@labelStyle='eyebrow'` sets them smaller, at the eyebrow role's 0.6875rem and uppercase, in the same `--muted-foreground`. That is still normal-size text, so the bar stays 4.5:1 and the smaller size leaves less margin. With the default theme the key ink is 6.91:1 against `--card` and `--background` in light, and 5.57:1 against `--card` and 7.61:1 against `--background` in dark, so both key styles pass. Inside a themed card the card's theme sets the ink; check it there.
 - Nothing is focusable, correctly — unless you yield interactive content into `<:value>`, which then joins the tab order in reading order.
 
 ## Theming
 
-`--muted-foreground` (keys), `--text-ui` (0.75rem, keys), `--text-ui-md` (0.78125rem, values), `--space-6` (the column gap, and the gap between inline pairs, 1.1875rem), and a fixed 0.4375rem row gap. The eyebrow keys read `--boxel-eyebrow-font-family`, `--boxel-eyebrow-font-size`, `--boxel-eyebrow-font-weight`, `--boxel-eyebrow-line-height` and `--boxel-eyebrow-letter-spacing`, falling back to `--font-mono`, `--text-ui-xs` and `--track-eyebrow`.
+`--muted-foreground` and the ui-label role (`--boxel-ui-label-*`) for the keys, `--boxel-sp-lg` (the column gap, and the gap between inline pairs) and `--boxel-sp-2xs` (the row gap). The values set no typography of their own, so they inherit the surrounding text: the body role inside a card. The eyebrow keys read `--boxel-eyebrow-font-family`, `--boxel-eyebrow-font-size`, `--boxel-eyebrow-font-weight`, `--boxel-eyebrow-line-height` and `--boxel-eyebrow-letter-spacing`.
 
 The keys' own properties, each unset by default:
 
 - `--pretui-kv-label-color` (unset: `--muted-foreground`)
-- `--pretui-kv-label-font-family`
-- `--pretui-kv-label-font-size` (unset: `--text-ui`)
-- `--pretui-kv-label-font-weight`
-- `--pretui-kv-label-line-height` (unset: 1.125rem)
-- `--pretui-kv-label-letter-spacing`
+- `--pretui-kv-label-font-family` (unset: `--boxel-ui-label-font-family`)
+- `--pretui-kv-label-font-size` (unset: `--boxel-ui-label-font-size`)
+- `--pretui-kv-label-font-weight` (unset: `--boxel-ui-label-font-weight`)
+- `--pretui-kv-label-line-height` (unset: `--boxel-ui-label-line-height`)
+- `--pretui-kv-label-letter-spacing` (unset: `--boxel-ui-label-letter-spacing`)
 - `--pretui-kv-label-text-transform`
 
-Those without a default inherit while unset, or take the eyebrow value with `@labelStyle='eyebrow'`.
+With `@labelStyle='eyebrow'`, the unset typography properties take the eyebrow role instead and the text transform becomes uppercase. The color stays `--muted-foreground`.
 
 The arrangement is `@layout`, not a token, and there is still no way to set a fixed key column or right-align keys.
 
-Because keys use `--muted-foreground` and values inherit `--foreground`, the key/value distinction is carried by ink weight and size alone. A season that compresses its grey ramp will make the two columns read as one; keep at least a step between them.
+Because keys use `--muted-foreground` and values inherit `--foreground`, the key/value distinction is carried by ink, weight and size. A theme that compresses its gray ramp will make the two columns read as one; keep at least a step between them.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

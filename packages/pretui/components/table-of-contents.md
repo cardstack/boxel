@@ -62,12 +62,14 @@ Gaps:
 - **`@level` indents but carries no semantics.** A level-3 item is visually nested under a level-2 one and is announced as a sibling. `aria-level` on the list items, or real nesting, would convey the document's structure.
 - **The link targets must actually exist.** `href="#id"` pointing at a missing element silently does nothing, and nothing validates it.
 - **Fragment navigation moves focus** to the target element only if it is focusable or has `tabindex="-1"` — a plain `<h2>` receives _scroll_ but not _focus_ in several browsers, so a keyboard user clicking a TOC link may find focus still in the TOC. Adding `tabindex="-1"` to headings at the call site is the fix. In button mode focus always stays on the button; a caller that wants it to follow should focus the section after scrolling.
-- **Target size**: TOC links are small text with tight vertical rhythm, likely below WCAG **2.5.8**'s 24×24 minimum.
+- **Target size**: rows are small text; block padding of `--boxel-sp-3xs` plus the inherited line-height should land near WCAG **2.5.8**'s 24px minimum, but this is derived from the CSS, not measured, and a tighter inherited line-height would fall below it.
 
 ## Theming
 
-`--muted-foreground` (resting links), `--foreground` (active link), the marker's fill (the accent bar — a season's `--primary` or the SlidingHighlight tokens), `--border`, `--text-ui-sm`/`--text-ui-md`, and `--_level` (the per-item indent step, set inline from `@level`).
+`--muted-foreground` (resting links), `--foreground` (active link), `--hover` (row hover fill), `--primary-ink` (the marker bar), `--border` (the rail), `--ring` (focus outline), `--boxel-font-size-xs`, `--boxel-sp-*` and `--boxel-border-radius-sm` (row type, padding, gap and radius), and `--_level` (the per-item indent step, set inline from `@level`). The rail, marker and indent sit on the inline-start side, so they move to the right under a right-to-left writing direction. The hover fill applies only on a device with a hovering pointer, so a tapped row on a touch screen does not keep it.
 
-Because the marker is absolutely positioned and measured, a season that changes link line-height or padding gets a correctly-resized marker for free — the `ResizeObserver` handles reflow. A season that hides the marker entirely, however, leaves `aria-current` as the only active signal and ink weight as the only visual one; keep at least one strong visual channel.
+Because the marker is absolutely positioned and measured, a theme that changes link line-height or padding gets a correctly-resized marker for free — the `ResizeObserver` handles reflow. A theme that hides the marker entirely, however, leaves `aria-current` as the only active signal and ink weight as the only visual one; keep at least one strong visual channel.
+
+The rail gap and the per-level indent are caller knobs, `--pretui-toc-rail-gap` and `--pretui-toc-indent`, defaulting to `--boxel-sp-sm`. Rows take `--boxel-sp-3xs` block padding, which keeps a row near the WCAG 2.5.8 24px target at the inherited line-height (computed from the CSS, not measured).
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

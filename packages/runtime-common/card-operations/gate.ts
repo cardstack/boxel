@@ -13,6 +13,8 @@ import { routesForField } from '../searchable-routes.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
+import type { ActingUserResolution } from './acting-users.ts';
+import type { AnonymousAccessSettings } from '../anonymous-access.ts';
 import type { AdmissionSubject, BxlMutationModule } from './executors.ts';
 import type {
   GateTrace,
@@ -183,6 +185,14 @@ export interface OperationPolicyAccess {
     card: string,
     document: Record<string, unknown>,
   ): Promise<{ compiled: CompiledRealmPolicy; reads: string[] }>;
+  // Who an acting-user key names in the realm's current `realm.json`
+  // `config`, and whether that user may write the realm (see
+  // `ActingUsers`). A realm without it admits no write by a caller who isn't
+  // signed in.
+  actingUser?(key: string): Promise<ActingUserResolution>;
+  // How the realm limits and blocks callers who aren't signed in, from its
+  // `realm.json` and the platform default. An explain reports it.
+  anonymousAccess?(): Promise<AnonymousAccessSettings>;
 }
 
 // The target as the gate judges it. It holds what the realm resolved, and
@@ -193,9 +203,13 @@ export type GateSubject =
   // A type a create mints from, matched on the adoption chain the definition
   // cache records beside the definition the type resolved to: the type and
   // every type it descends from up to the root of its family, `CardDef` for a
-  // card. A card's row goes one step further, to `BaseDef`, so a rule on
-  // `BaseDef` matches every stored card and grants no create. A type the realm
-  // cannot resolve never gets here. Resolution refuses it first, as not found.
+  // card, so a rule on `CardDef` covers every create. A card's row goes one
+  // step further, to `BaseDef`, but a rule on `BaseDef` compiles to no grants:
+  // its entry is recorded as a field def, which carries no built-in operation
+  // and declares none, so the compile drops each grant on it as
+  // `unknown-operation`. A rule on any field def fares the same, but for an
+  // operation that def declares itself. A type the realm cannot resolve never
+  // gets here. Resolution refuses it first, as not found.
   | { kind: 'type'; types: string[] }
   // A stored path that names no card. Only a stored-bytes read is matched
   // against one, and it resolves what the path actually holds for itself:
@@ -213,7 +227,13 @@ export type GateSubject =
 // trace the gate records into.
 export type GateScope = Pick<
   OperationScope,
-  'caller' | 'coarseDeclined' | 'peekInstance' | 'trace' | 'advisory' | 'route'
+  | 'caller'
+  | 'coarseDeclined'
+  | 'peekInstance'
+  | 'trace'
+  | 'advisory'
+  | 'route'
+  | 'actingUsers'
 >;
 
 // The gate's refusal. It carries nothing, since what a refusal says is the
@@ -333,12 +353,23 @@ export interface StoredCardCheck {
 //
 // `snapshotReads` counts the index rows read to judge a predicate against the
 // snapshot. A predicate that reads the stored source alone reads none.
+//
+// `ancestorDefinitionReads` counts the definitions read to learn whether a
+// type in a target's adoption chain declares an operation `nonGrantable`, at
+// the gate and in the search lane alike. A chain whose answer is remembered
+// reads none.
+//
+// `lockedTypeReads` counts the definition reads that type a stored card under
+// the write lock: the type keys its bytes name, and the adoption chain the
+// policy-card rule judges.
 export interface PolicyGateStats {
   policyLoads: number;
   predicateEvaluations: number;
   pendingDischarges: number;
   definitionLookups: number;
   snapshotReads: number;
+  ancestorDefinitionReads: number;
+  lockedTypeReads: number;
 }
 
 const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
@@ -352,6 +383,8 @@ export function policyGateStats(core: OperationCore): PolicyGateStats {
       pendingDischarges: 0,
       definitionLookups: 0,
       snapshotReads: 0,
+      ancestorDefinitionReads: 0,
+      lockedTypeReads: 0,
     };
     statsByCore.set(core, stats);
   }
@@ -621,6 +654,26 @@ async function decide(
     core.policy,
     notes ? notes.alongside(trace) : trace,
   );
+  // A caller who isn't signed in is admitted only by a grant that opts in to
+  // them. Every other grant was written for signed-in callers, and admitting
+  // anyone at all through one would widen it past what its author wrote.
+  if (scope.caller.kind === 'anonymous') {
+    matched = matched.filter(({ grant }) => grant.anonymous);
+    // An operation whose program, template or output reads `actor()` has no
+    // actor to read for such a caller, and is refused before it runs, so a
+    // grant that opens it to one admits nobody. The definition is the one the
+    // target's own type resolves, which may be a subtype's redeclaration of
+    // what a grant on its parent opened.
+    if (matched.length > 0 && definition.readsActor) {
+      return refuse('reads-actor');
+    }
+    // Such a caller's write is made as the user its grant names, so a grant
+    // whose acting user doesn't resolve to one who may write the realm admits
+    // nothing.
+    if (isWrite(base)) {
+      matched = await withActingUsers(scope, matched);
+    }
+  }
   if (matched.length === 0) {
     return refuse('no-grant');
   }
@@ -669,6 +722,7 @@ async function decide(
   let matchedOn: MatchedOn = { base, targetType: types[0] };
   let unconditional = matched.find(({ grant }) => !grant.where);
   if (unconditional) {
+    await admittedAs(scope, unconditional);
     return { kind: 'granted', grant: unconditional, matchedOn, ...lockCheck };
   }
   if (isWrite(base)) {
@@ -972,6 +1026,14 @@ async function queryKeptOutOfReach(
 // grant on `FileDef` would answer "not found" for an empty path and "not
 // permitted" for a card's, which says which cards exist.
 //
+// A path the realm ignores is matched by nothing too: anything in a `.git` or
+// `node_modules` directory at any depth, a partial write, and whatever the
+// `.gitignore` at the realm's root names. The realm never indexes or lists such a path, so
+// no grant reaches its bytes, and it is refused as an empty path is. A caller
+// the realm ACL lets read still reads it, since that read never reaches the
+// gate. The `.gitignore` is a data file like any other, so a grant on `FileDef`
+// serves it unless its own patterns name it.
+//
 // The bytes judged here and the bytes the executor serves are two reads of
 // one path, so a write landing between them is served under this judgment —
 // the same window a read's predicate has between being evaluated and the
@@ -989,6 +1051,9 @@ async function storedBytesSubject(
   let fileURL = pathsFor(core).fileURL(localPath);
   let codeRef = policyFileDefCodeRef(localPath);
   if (!codeRef) {
+    return undefined;
+  }
+  if (await core.isIgnored(fileURL)) {
     return undefined;
   }
   if (extensionOfName(localPath) === '.json') {
@@ -1193,6 +1258,36 @@ export async function dischargePendingDecision(
   if (!('grant' in admission)) {
     throw gateRefusal(core, admission, pending.target, pending.name);
   }
+  await admittedAs(scope, admission);
+}
+
+// The grants among `matched` whose acting user resolves to one who may write
+// the realm. A grant that opts a write in to callers who aren't signed in
+// always names a key (`anonymous-write-without-acting-user` otherwise), so one
+// that names none admits nothing here.
+async function withActingUsers(
+  scope: GateScope,
+  matched: MatchedGrant[],
+): Promise<MatchedGrant[]> {
+  let resolved = await Promise.all(
+    matched.map(async (candidate) => {
+      let key = candidate.grant.anonymous?.actingUserKey;
+      return key && 'user' in (await scope.actingUsers.resolve(key));
+    }),
+  );
+  return matched.filter((_candidate, index) => resolved[index]);
+}
+
+// Records the user a write by a caller who isn't signed in is made as, once
+// a grant has admitted it.
+async function admittedAs(
+  scope: GateScope,
+  { grant }: MatchedGrant,
+): Promise<void> {
+  let key = grant.anonymous?.actingUserKey;
+  if (scope.caller.kind === 'anonymous' && key) {
+    await scope.actingUsers.admittedThrough(key);
+  }
 }
 
 // The write lock's decision record, naming what the gate matched the write on.
@@ -1369,6 +1464,13 @@ async function firstHolding(
     if (!where) {
       return candidate;
     }
+    // A predicate that reads the caller never holds for a caller who has no
+    // actor, so it is not evaluated for one: asked, it would throw for want of
+    // an actor, and turn a grant that doesn't apply into a fault.
+    if (actor === undefined && where.readsActor) {
+      scope.trace?.evaluated(candidate.grant, 'did-not-hold');
+      continue;
+    }
     stats.predicateEvaluations++;
     let started = performance.now();
     // A predicate judged against the snapshot does not hold for a target with
@@ -1467,20 +1569,46 @@ export async function authorizationCardIds(
 // subclass that redeclares one of its operations would drop a flag nothing
 // else records. Only the lookup's own "no such type" counts as the realm
 // having no definition; any other failure to read one answers yes as well.
+//
+// The answer depends on the chain's definitions alone, so it is remembered
+// while the lookup's definition generation holds the value it had before the
+// definitions were read, and for at most `MAX_REMEMBERED_MS`. An edit in this
+// process moves the generation, so the next invocation after it reads the
+// ancestors afresh. An edit in a peer process moves it when that process's
+// invalidation notice arrives, and a notice can be lost. The age bound is
+// what keeps a lost notice from leaving a flag unread indefinitely. An answer
+// that rests on a type it could not read is never remembered: it refuses
+// now, and the next invocation reads again.
 export async function nonGrantableInChain(
   core: OperationCore,
   types: string[],
   name: string,
   from = 0,
 ): Promise<boolean> {
+  let lookup = core.definitionLookup;
+  let generation = lookup.definitionGeneration?.();
+  let key = [core.realmURL, name, from, ...types].join('\n');
+  let remembered =
+    generation === undefined
+      ? undefined
+      : nonGrantableAnswers.get(lookup)?.get(key);
+  if (
+    remembered &&
+    remembered.generation === generation &&
+    Date.now() - remembered.at < MAX_REMEMBERED_MS
+  ) {
+    return remembered.nonGrantable;
+  }
+  let at = Date.now();
   let relativeTo = new URL(core.realmURL);
   let read = async (codeRef: ResolvedCodeRef) => {
     let resolved = core.resolveCodeRef(codeRef, relativeTo);
     if (!resolved) {
       return undefined;
     }
+    policyGateStats(core).ancestorDefinitionReads++;
     try {
-      return await core.definitionLookup.lookupDefinition(resolved);
+      return await lookup.lookupDefinition(resolved);
     } catch (e: unknown) {
       if (isFilterRefersToNonexistentTypeError(e)) {
         return undefined;
@@ -1494,7 +1622,7 @@ export async function nonGrantableInChain(
         () => undefined,
       );
       if (!type) {
-        return true;
+        return 'unreadable' as const;
       }
       let operations = type.definition.operations;
       return Boolean(
@@ -1504,8 +1632,34 @@ export async function nonGrantableInChain(
       );
     }),
   );
-  return answers.includes(true);
+  let nonGrantable = answers.some((answer) => answer !== false);
+  if (generation !== undefined && !answers.includes('unreadable')) {
+    let remembering = nonGrantableAnswers.get(lookup);
+    if (!remembering || remembering.size >= MAX_REMEMBERED_ANSWERS) {
+      remembering = new Map();
+      nonGrantableAnswers.set(lookup, remembering);
+    }
+    remembering.set(key, { generation, at, nonGrantable });
+  }
+  return nonGrantable;
 }
+
+// What `nonGrantableInChain` last answered for a realm, an operation and a
+// chain, per definition lookup, with the definition generation it read under
+// and when it began reading. A lookup's map starts over once it holds
+// `MAX_REMEMBERED_ANSWERS`, which bounds it without tracking which answers are
+// still asked for.
+const nonGrantableAnswers = new WeakMap<
+  OperationCore['definitionLookup'],
+  Map<string, { generation: number; at: number; nonGrantable: boolean }>
+>();
+const MAX_REMEMBERED_ANSWERS = 10_000;
+
+// How long a remembered answer holds whatever the generation says. It is the
+// five seconds the compiled-policy cache allows an entry between
+// revalidations, for the same reason: it bounds how stale a missed
+// invalidation notice can leave the answer.
+export const MAX_REMEMBERED_MS = 5_000;
 
 // Whether an operation would reach a policy card: read one, read its stored
 // bytes, change one, or mint one. `types` is the target's adoption chain: a
@@ -2027,6 +2181,18 @@ async function lockedCard(
   if (!storedType) {
     return undefined;
   }
+  // The chain comes from the definition cache rather than the row, which lags
+  // a module edit the way it lags a card's: a type that now extends
+  // `RealmPolicy` makes its cards policy cards before they are indexed again.
+  // It is read beside the type keys rather than after them, since the lock is
+  // held for both.
+  let stats = policyGateStats(core);
+  stats.lockedTypeReads++;
+  let chainRead: Promise<string[] | undefined> | undefined;
+  if (check.changesCard) {
+    stats.lockedTypeReads++;
+    chainRead = recordedChain(core, storedType);
+  }
   let keys: string[];
   try {
     keys = await core.policy.typeKeys(storedType);
@@ -2036,12 +2202,8 @@ async function lockedCard(
   if (!keys.includes(check.matchedType)) {
     return undefined;
   }
-  if (check.changesCard) {
-    // The chain comes from the definition cache rather than the row, which
-    // lags a module edit the way it lags a card's: a type that now extends
-    // `RealmPolicy` makes its cards policy cards before they are indexed
-    // again.
-    let chain = await recordedChain(core, storedType);
+  if (chainRead) {
+    let chain = await chainRead;
     if (!chain || core.policy.isPolicyCard(chain)) {
       return undefined;
     }

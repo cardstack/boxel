@@ -24,6 +24,7 @@
     "strict": true,
     "experimentalDecorators": true,
     "resolveJsonModule": true,
+    "customConditions": ["developing:choreo"],
     "skipLibCheck": true,
     "paths": {
       "lodash": ["node_modules/@types/lodash-es"],

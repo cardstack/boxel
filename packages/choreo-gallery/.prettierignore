@@ -1,23 +1,9 @@
 node_modules/
-dist/
-dist-tests/
-declarations/
-dist-*/
 tmp/
-# Boxel copies are generated from the already-linted gallery sources.
-public/**
-styles/**
-src/components/*
-!src/components/gallery-site.gts
-!src/components/site-frame.gts
-!src/components/demo-stage.gts
-!src/components/special-stages.gts
-!src/components/host-link.gts
-!src/components/raw-document-frame.gts
-src/lib/*
-!src/lib/theme.ts
-!src/lib/host-navigation.ts
+out/
 # the film-graph sketches: proposals in a syntax that does not exist yet
 docs/film-graph/*.gts
 docs/film-graph/*.mjs
-out/
+# the film app's build (choreo-film-app), and the films' vendored and generated media
+realm/film-app/
+realm/asset/

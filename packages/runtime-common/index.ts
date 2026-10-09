@@ -1449,6 +1449,10 @@ export type DeclaredCaptureResult = {
   outputType: CaptureOutputType;
   keyBy: 'generation' | 'file-content';
   useAsThumbnail?: boolean;
+  // The name a pdf slot's document is saved under, as the roster resolved it
+  // against this render's instance. Rides fresh and carried-forward results
+  // alike, so a carried-forward entry still follows a rename.
+  filename?: string;
   base64?: string;
   carriedForward?: boolean;
   // Wall-clock of the render + capture that produced this slot's bytes.
@@ -1860,7 +1864,6 @@ export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
 export * from './constants.ts';
-export * from './search-replace-markers.ts';
 export * from './helpers/const.ts';
 export * from './document.ts';
 export * from './matrix-constants.ts';
@@ -1876,6 +1879,7 @@ export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
 export * from './capture-perf.ts';
 export * from './capture-spec.ts';
+export * from './capture-disposition.ts';
 export * from './capture-url-token.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
@@ -1888,6 +1892,7 @@ export * from './tasks/index.ts';
 export * from './worker.ts';
 export * from './stream.ts';
 export * from './realm.ts';
+export type { AnonymousCaller, AnonymousCount } from './anonymous-admission.ts';
 export * from './realm-index-updater.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';

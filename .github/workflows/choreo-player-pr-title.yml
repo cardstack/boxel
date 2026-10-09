@@ -1,0 +1,96 @@
+name: PR Title Check [choreo-player]
+
+# Validates that PRs touching packages/choreo-player/** carry a
+# conventional-commit title (feat:, fix:, chore:, …). choreo-player-publish.yml
+# reads the merged PR's title to decide the version bump, so this check is the
+# contract that keeps that flow working: without a recognized prefix a merge
+# publishes nothing, silently.
+#
+# The `preview` job is a dry run of that decision: it runs the publish
+# workflow's release computation against this PR's title and diff, and writes
+# the version the merge would publish into the job summary.
+#
+# Path-scoped — it does not run for PRs that leave choreo-player alone. Don't
+# make it a required status check in branch protection: a required check on a
+# path-filtered workflow leaves every unrelated PR pending forever.
+#
+# No `merge_group:` trigger — `paths:` is not honored on merge_group events, so
+# adding it would block unrelated PRs in the merge queue on a
+# choreo-player-scoped title check. If merge queues are adopted and this needs
+# to gate them, put a changed-files step inside the job instead.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    paths:
+      - "packages/choreo-player/**"
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      # Sparse-checkout the one file that defines the allowed prefixes. The
+      # post-merge classifier (choreo-player-publish.yml, via
+      # compute-release.ts) reads the same file, so the gate and the classifier
+      # stay in lockstep.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: packages/choreo-player/scripts/release/release-prefixes.json
+          sparse-checkout-cone-mode: false
+
+      - id: types
+        run: |
+          {
+            echo 'list<<__EOF__'
+            node -e 'console.log(Object.keys(require("./packages/choreo-player/scripts/release/release-prefixes.json")).join("\n"))'
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: ${{ steps.types.outputs.list }}
+          requireScope: false
+          subjectPattern: ^.+$
+
+  preview:
+    name: Preview the release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The default pull_request checkout is the merge of this PR into its
+      # base, so its first parent is the base tip and the diff between them is
+      # exactly what the merge would push to main. Full history and tags let
+      # compute-release.ts resolve the stable base from choreo-player-v* tags.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: ./.github/actions/init
+
+      - name: Compute the release this merge would publish
+        working-directory: packages/choreo-player
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          RESULT=$(PUSH_SHA=$(git rev-parse HEAD) NODE_NO_WARNINGS=1 node scripts/release/compute-release.ts)
+          echo "Compute result: $RESULT"
+          VERSION=$(echo "$RESULT" | jq -r '.nextVersion // ""')
+          {
+            echo "### Release preview"
+            echo
+            if [ -n "$VERSION" ]; then
+              echo "Merging this PR publishes \`@cardstack/choreo-player@$VERSION\` under the \`unstable\` dist-tag."
+            else
+              echo "Merging this PR publishes nothing: its title asks for no release, or it changes nothing the tarball ships."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

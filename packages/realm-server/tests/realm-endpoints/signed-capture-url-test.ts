@@ -373,6 +373,50 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('a token binds the download and filename params with the rest of the URL', async function (assert) {
+      let signedUrl = await mintOne(
+        'some-card?name=statement&download=1&filename=Q3%20Statement',
+      );
+      let signed = new URL(signedUrl);
+      let response = await request
+        .get(signed.pathname + signed.search)
+        .set('Accept', 'application/pdf');
+      assert.strictEqual(
+        response.status,
+        404,
+        'the token verifies, and the disposition params clear the name-exclusivity check',
+      );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        `private, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        'the response is the capture miss',
+      );
+
+      let token = tokenFrom(signedUrl);
+      let renamed = await request
+        .get(
+          `/_capture/some-card?name=statement&download=1&filename=Other&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
+            token,
+          )}`,
+        )
+        .set('Accept', 'application/pdf');
+      assert.strictEqual(renamed.status, 401, 'another filename is refused');
+
+      let bareToken = tokenFrom(await mintOne('some-card?name=statement'));
+      let added = await request
+        .get(
+          `/_capture/some-card?name=statement&download=1&${CAPTURE_URL_TOKEN_PARAM}=${encodeURIComponent(
+            bareToken,
+          )}`,
+        )
+        .set('Accept', 'application/pdf');
+      assert.strictEqual(
+        added.status,
+        401,
+        'a token minted without the params does not verify with them',
+      );
+    });
+
     test('the mint endpoint refuses what it must', async function (assert) {
       let auth = createJWT(testRealm, 'mary', ['read']);
       let nonCapture = await mint(request, [`${testRealm.url}some-card`], auth);

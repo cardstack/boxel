@@ -4,11 +4,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
-import {
-  markdownToHtml,
-  splitCodePatchFencesGluedToProse,
-  widenFencesAroundCodePatches,
-} from '@cardstack/runtime-common/marked-sync';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import {
   parseHtmlContent,
@@ -21,6 +17,13 @@ import type MessageTool from './message-tool';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { TokenUsage } from '@cardstack/base/matrix-event';
 import type { EventStatus } from 'matrix-js-sdk';
+
+// A compaction ai-bot runs before this answer: it summarizes the earlier
+// conversation when the prompt is too long for the model.
+export interface MessageCompaction {
+  status: 'running' | 'done' | 'failed';
+  summary?: string;
+}
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -91,6 +94,9 @@ export class Message implements RoomMessageInterface {
   // Tracked because the counts arrive on a late streamed edit, after the
   // message is already rendered.
   @tracked private _usage?: TokenUsage;
+  // Set from the room's compaction events, which arrive while the answer is
+  // already rendered.
+  @tracked compaction?: MessageCompaction;
 
   //This property is used for testing purpose
   instanceId: string;
@@ -232,17 +238,10 @@ export class Message implements RoomMessageInterface {
     if (!this.body) {
       return this.body;
     }
-    return markdownToHtml(
-      widenFencesAroundCodePatches(
-        splitCodePatchFencesGluedToProse(
-          escapeHtmlOutsideCodeBlocks(this.body)!,
-        ),
-      ),
-      {
-        sanitize: false,
-        escapeHtmlInCodeBlocks: true,
-      },
-    );
+    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body)!, {
+      sanitize: false,
+      escapeHtmlInCodeBlocks: true,
+    });
   }
 
   /*
