@@ -1,8 +1,8 @@
 # Advanced orchestration: choose by dependency
 
 Use `choreo-scene` for the basic changeset and timeline. For these more specific
-problems, read the matching guide under `test-app/app/content/guides/` and inspect
-the real example. Do not load the entire API inventory into the prompt.
+problems, read the matching guide under
+`packages/choreo-test-app/app/content/guides/` and inspect the real example. Do not load the entire API inventory into the prompt.
 
 | Problem                                           | Concept / guide                                                           | Example                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
@@ -25,7 +25,8 @@ backward. A gesture includes release velocity that cannot be recovered from a
 layout box. A continuous simulation keeps its own integration model; Choreo
 explains its discrete structural changes (drift and hang demonstrate this boundary).
 
-For a teaching task, use `test-app/app/content/demo-lessons.json` to locate the
-specific experiment and pitfall, then verify them against the source. API names
+For a teaching task, use the demo's `lesson` in
+`packages/choreo-gallery/realm/demos/<id>.json` to locate the specific
+experiment and pitfall, then verify them against the source. API names
 being indexed or a demo being embedded does not establish that a concept has
 been taught. Add only the missing explanation, not a duplicate general tutorial.

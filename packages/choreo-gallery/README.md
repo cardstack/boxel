@@ -7,7 +7,9 @@ their data, and the modules they import. Cards import `glimmer-motion` and
 
 The rest of the package is tooling and source material that is not served:
 `tools/` (the realm check and the film and widget tools), `scripts/`,
-`docs/`, `notes/` and `agent-skills/`.
+`docs/` and `notes/`. The agent skills for working on the libraries and the
+gallery are in the monorepo's `.claude/skills/` (`motion-pattern` routes to
+the rest).
 
 ## The realm
 

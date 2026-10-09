@@ -2,9 +2,11 @@
 name: motion-layout
 description: >-
   Layout animation (FLIP) and shared-element transitions: layout=true for an
-  element whose box changes, layoutId to morph one element into another
-  (tabs indicator, thumbnail-to-lightbox), LayoutGroup for grids and
-  filtered lists. Use when things move because the layout changed.
+  element whose box changes, layoutId to morph one element into another (tabs
+  indicator, thumbnail-to-lightbox), LayoutGroup for grids and filtered lists.
+  Use when things move because the layout changed, in glimmer-motion / Choreo
+  code in this repo (packages/glimmer-motion, packages/choreo, the Choreo
+  gallery and test app, host UI that animates with them).
 ---
 
 # Layout moved: `layout`, `layoutId`, `<LayoutGroup>`
@@ -28,7 +30,8 @@ time. This is the tabs indicator, thumbnail → lightbox, row → detail.
 **`<LayoutGroup @id='tabs'>`** — namespaces `layoutId`s and hosts the render
 detector: any render pass inside it snapshots every projection node before
 the DOM changes. A filtered/reordered grid wants `<LayoutGroup>` around it
-with `layout=true` on each card (see `gallery.gts` — cards fly to new seats
+with `layout=true` on each card (see
+`packages/choreo-gallery/realm/shell/gallery-grid.gts` — cards fly to new seats
 while their content keeps running).
 
 ## Rules
@@ -57,5 +60,6 @@ while their content keeps running).
 - Whole-page navigation morph → `motion-page-transition` (but NOT if the
   content is live — layout animation keeps it running; snapshots freeze it).
 
-Canonical demos: `lightbox.gts`, `shared-tabs.gts`, `layout-toggle.gts`
-(Curves — radius/shadow correction), `gallery.gts` (the filter grid).
+Canonical demos, in `packages/choreo-test-app/app/components/examples/`: `lightbox.gts`,
+`shared-tabs.gts`, `layout-toggle.gts` (Curves — radius/shadow correction);
+and `packages/choreo-gallery/realm/shell/gallery-grid.gts` (the filter grid).

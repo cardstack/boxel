@@ -3,8 +3,10 @@ name: motion-element
 description: >-
   Single-element animation with the {{motion}} modifier: initial/animate,
   transitions, keyframes, variants, stagger, hover/tap/focus gestures, motion
-  values, SVG. Use when one element animates on its own — including the three
-  Glimmer-specific rules that silently break motion when violated.
+  values, SVG. Use when one element animates on its own in glimmer-motion /
+  Choreo code in this repo (packages/glimmer-motion, packages/choreo, the
+  Choreo gallery and test app, host UI that animates with them) — including
+  the three Glimmer-specific rules that silently break motion when violated.
 ---
 
 # One element: the `{{motion}}` modifier
@@ -48,15 +50,32 @@ import { motion, to, spring } from 'glimmer-motion';
 
 Anything updating at pointer/frame rate (a follower, a scrub readout, a
 progress fill) must NOT go through tracked state — that is a render per
-frame. Make a `motionValue`, bind it once through `style=(styles …)`, and
-write to it (`.set()` animates via `animateMotionValue`/springs, `.jump()`
-teleports — the scrub case):
+frame. Make a `motionValue`, bind it once through an object passed to
+`style=`, and drive it: `.set(v)` writes a value, `animate(this.x, v, transition)` animates
+to one (a spring chasing the pointer), `.jump(v)` teleports and stops what
+was driving it (the scrub case):
 
 ```gts
-import { motionValue } from 'motion-dom';
+import { animate, motionValue, spring } from 'glimmer-motion';
+
+const tight = spring({ visualDuration: 0.2, bounce: 0 });
+
 x = motionValue(0);
-// template: {{motion style=(styles x=this.x)}}
+dot = { x: this.x };
+follow = (to: number) => void animate(this.x, to, tight);
+// template: {{motion style=this.dot}}
 ```
+
+Bind motion values through a plain object field, as the demos do. The
+`styles` helper's value type is `MotionValue<never>`, which a
+`MotionValue<number>` doesn't satisfy, so `(styles x=this.x)` fails Glint
+even though it runs.
+
+glimmer-motion re-exports motion-dom's imperative surface (`motionValue`,
+`MotionValue`, `animate`, `transformValue`, `styleEffect`, `frame`); import
+those from `glimmer-motion`, not `motion-dom` or `motion`, so they share the
+engine `{{motion}}` runs on. That curated list is glimmer-motion API: adding a
+name to it is an API change.
 
 `follow-pointer.gts` (springs chasing a value) and `playhead.gts`
 (`.jump()` on scrub — a scrubbed frame is a still, nothing in flight) are
@@ -75,7 +94,7 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
    drag/animate while the code around it runs perfectly.
    ```gts
    {{! ✗ }} <div style={{this.accent}} {{motion drag=true}} />
-   {{! ✓ }} <div {{motion style=this.accent drag=true}} />
+   {{! ✓ }} <div {{motion style=(styles background=this.accent) drag=true}} />
    ```
 2. **Declare what you want tweened/corrected.** A stylesheet
    `border-radius` is invisible to the engine, so a layout-animating tile
@@ -86,7 +105,7 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
 
 ## Canonical demos
 
-`test-app/app/components/examples/`: `stagger.gts`, `trail.gts`,
+`packages/choreo-test-app/app/components/examples/`: `stagger.gts`, `trail.gts`,
 `keyframes.gts`, `gestures.gts`, `enter.gts`, `path-draw.gts` (SVG
 `pathLength`), `follow-pointer.gts` (motion values + springs).
 
