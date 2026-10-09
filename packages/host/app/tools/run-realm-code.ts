@@ -1,6 +1,11 @@
 import { service } from '@ember/service';
 
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  isCardErrorJSONAPI,
+  logger,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -15,6 +20,7 @@ import {
 } from '../lib/visual-capture';
 
 import LintAndFixTool from './lint-and-fix';
+import ShowCardTool from './show-card';
 
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
@@ -24,6 +30,7 @@ import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -259,6 +266,15 @@ class RealmFsSession {
     return url.endsWith('/') ? url : `${url}/`;
   }
 
+  // The card a script names to show, as its instance URL without `.json`.
+  // Takes the same path forms as a file, with or without the extension.
+  cardURL(path: unknown): string {
+    if (typeof path !== 'string') {
+      throw new TypeError('`show` must be a card path string');
+    }
+    return this.resolve('show', path).replace(/\.json$/, '');
+  }
+
   private relative(url: string): string {
     return url.slice(this.realmURL.length);
   }
@@ -310,11 +326,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
   @service declare private toolService: ToolService;
 
   description =
     'Run safe Realm code that reads and edits realm source files, and can ' +
-    'look at what it made with realm.capture.';
+    'look at what it made with realm.capture. Return { show: "<card path>" } ' +
+    'to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
 
   async getInputType() {
@@ -412,8 +430,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     clearTimeout(deadlineTimer);
     session.close();
     await session.idle();
+    let shown = await this.showCard(session, runnerResult.scriptResult);
     let commandModule = await this.loadToolModule();
     return new commandModule.RunRealmCodeResult({
+      ...shown,
       files: [...session.saved].map(
         (fileUrl) =>
           new commandModule.RealmCodeFileResult({
@@ -450,6 +470,48 @@ export default class RunRealmCodeTool extends HostBaseTool<
         : [],
     );
     return [...saved, ...uploadedImages(result.captures)];
+  }
+
+  // A script returns `{ show: 'Path/to-card' }` to open that card when the
+  // run ends. The sandbox has no access to the UI: the host opens the card,
+  // and only after it checks that the path is in this run's realm and is a
+  // card instance that exists. A card that cannot be shown does not fail the
+  // run; the result says why, next to the files it saved.
+  private async showCard(
+    session: RealmFsSession,
+    scriptResult: string,
+  ): Promise<{ shownCard?: string; showError?: string }> {
+    let value: unknown;
+    try {
+      value = JSON.parse(scriptResult);
+    } catch {
+      return {};
+    }
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !('show' in value)
+    ) {
+      return {};
+    }
+    let cardId: string;
+    try {
+      cardId = session.cardURL((value as { show: unknown }).show);
+      let source = await this.cardService.getSource(new URL(`${cardId}.json`));
+      if (source.status !== 200) {
+        throw new Error(`Card not found: ${cardId}`);
+      }
+      let card = await this.store.get(cardId);
+      if (isCardErrorJSONAPI(card)) {
+        throw new Error(`${cardId} is not a card instance: ${card.message}`);
+      }
+      await new ShowCardTool(this.toolContext).execute({ cardId });
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      return { showError: `The card was not shown. ${message}` };
+    }
+    return { shownCard: cardId };
   }
 
   private async captureURL(

@@ -504,6 +504,10 @@ export class RunRealmCodeResult extends CardDef {
   // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
+  // The card the script asked to show with `return { show: path }`, once it
+  // is open, or why it could not be shown.
+  @field shownCard = contains(StringField);
+  @field showError = contains(StringField);
 
   // A run that saved no files and took no captures, such as one that only
   // read, has nothing for the chat to show. Its script result goes to the
