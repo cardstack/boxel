@@ -42,6 +42,13 @@ if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
   pnpm --dir=../boxel-homepage-realm boxel-homepage:setup
 fi
 
+# The Choreo gallery's films run from an app built into the realm, which isn't
+# committed. It's built once, when absent, rather than on every start;
+# `pnpm --filter choreo-film-app build:realm` rebuilds it.
+if [ -z "${SKIP_CHOREO_GALLERY:-}" ] && [ ! -f ../choreo-gallery/realm/film-app/index.html ]; then
+  pnpm --dir=../choreo-film-app build:realm
+fi
+
 # The catalog realm is served from one of two places. By default it is the
 # full boxel-catalog clone, merged with the pinned test subset: subset files
 # the clone lacks are added to it, so boxel's tests find the definitions they
@@ -65,6 +72,7 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
+START_CHOREO_GALLERY=$(if [ -z "${SKIP_CHOREO_GALLERY:-}" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=true
 if [ "${SKIP_CATALOG:-}" = "true" ]; then
   START_CATALOG=""
@@ -167,6 +175,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
   ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  ${START_CHOREO_GALLERY:+--path='../choreo-gallery/realm'} \
+  ${START_CHOREO_GALLERY:+--username='choreo_gallery_realm'} \
+  ${START_CHOREO_GALLERY:+--fromUrl="${REALM_BASE_URL}/choreo-gallery/"} \
+  ${START_CHOREO_GALLERY:+--toUrl="${REALM_BASE_URL}/choreo-gallery/"} \
   \
   --path='../pretui' \
   --username='pretui_realm' \

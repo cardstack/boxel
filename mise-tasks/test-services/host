@@ -87,6 +87,7 @@ fi
 # here with it torn down. Keep the two values in step.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
+  SKIP_CHOREO_GALLERY=true \
   SKIP_CATALOG="$SKIP_CATALOG" \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \

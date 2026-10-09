@@ -18,7 +18,8 @@ esac
 
 # Build readiness URLs for all enabled realms.
 # boxel-homepage is excluded: its source repo (cardstack/boxel-home) is private
-# and inaccessible to CI without extra credentials.
+# and inaccessible to CI without extra credentials. choreo-gallery is excluded
+# because no test stack serves it, so its rows would only lengthen this job.
 READINESS_URLS=""
 for realm in base catalog skills submissions experiments openrouter software-factory; do
   READINESS_URLS="${READINESS_URLS:+${READINESS_URLS}|}${REALM_READY_SCHEME}://${REALM_HOST}/${realm}/${READY_PATH}"
@@ -67,6 +68,7 @@ CACHE_INDEX_WORKER_COUNT="${CACHE_INDEX_WORKER_COUNT:-2}"
 export WORKER_ALL_PRIORITY_COUNT="$CACHE_INDEX_WORKER_COUNT"
 
 SKIP_BOXEL_HOMEPAGE=true \
+  SKIP_CHOREO_GALLERY=true \
   NODE_NO_WARNINGS=1 \
   run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development &
 SERVICES_PID=$!
