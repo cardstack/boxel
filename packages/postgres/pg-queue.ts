@@ -51,6 +51,7 @@ import {
 import {
   isExclusiveLane,
   laneFamilyOf,
+  type JobsAlias,
 } from '@cardstack/runtime-common/jobs/lane-family';
 import { flattenErrorForJsonb } from './flatten-error-for-jsonb.ts';
 import { WorkLoop } from './work-loop.ts';
@@ -501,11 +502,17 @@ const MAX_RESERVATION_COUNT_PER_JOB = 2;
 //
 // The cap does not move for a lower-tier exclusive job of the family, pending or
 // running. Halving a family's writer concurrency to hand a lower-tier job a turn
-// is the same tier inversion the barrier and the running-exclusive rule refuse,
-// and it is not what gives that job its turn: a family's writer lanes are idle
-// the large majority of the time, because an incremental pass is short relative
-// to the gaps between saves, so the family empties on its own between passes.
-// Raising concurrency drains its backlog sooner and so empties it sooner still.
+// is the same tier inversion the barrier and the running-exclusive rule refuse.
+//
+// It does cost that job its one reliable chance to start, and the replacement is
+// an operator's reindex rather than anything the queue arranges. A lower-tier
+// exclusive job needs the family *simultaneously* idle, and a single writer lane
+// manufactured that: the lane drained, the family was briefly empty, and the
+// oldest pending row in it — the exclusive job — was there to be claimed. Two
+// lanes make a coincident gap rarer, and on a realm that keeps saving there may
+// be none at all. So a system-tier pass is not guaranteed to run; it waits for
+// the realm to go quiet. To run one on demand, publish it at the user tier,
+// where the barrier below holds the writers off and the family drains for it.
 const MAX_CONCURRENT_WRITER_LANES_PER_FAMILY = 2;
 
 // A row's lane and family as non-null keys for the claim query. See the
@@ -522,7 +529,7 @@ function familyKey(alias: 'j'): string {
 // system tier (see the tier table in runtime-common's queue.ts). The
 // high-priority worker pool floors at the bottom of the user-initiated tier, so
 // only the all-priority pool can claim a system-tier job.
-function isUserInitiatedTier(alias: 'j' | 'p' | 'a'): string {
+function isUserInitiatedTier(alias: JobsAlias): string {
   return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
 }
 

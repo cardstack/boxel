@@ -2998,11 +2998,11 @@ module(basename(import.meta.filename), function () {
       });
       await started('writer');
       assert.deepEqual(
+        { writerRanOn: floorOf('writer'), events: familyEvents() },
         {
-          writerRanOn: floorOf('writer'),
-          passFinished: familyEvents().includes('exclusive finish'),
+          writerRanOn: highPriority,
+          events: ['exclusive start', 'writer start'],
         },
-        { writerRanOn: highPriority, passFinished: false },
         'a high-priority runner took the save while the pass was still running',
       );
     });
@@ -3054,11 +3054,11 @@ module(basename(import.meta.filename), function () {
       });
       await started('writer');
       assert.deepEqual(
+        { writerRanOn: floorOf('writer'), events: familyEvents() },
         {
-          writerRanOn: floorOf('writer'),
-          passFinished: familyEvents().includes('exclusive finish'),
+          writerRanOn: highPriority,
+          events: ['exclusive start', 'writer start'],
         },
-        { writerRanOn: highPriority, passFinished: false },
         'the user-tier render ran while the system-tier one held the family',
       );
     });
