@@ -513,8 +513,14 @@ function chooseFromScratchCoalesceDecision(
   // change. An already-running from-scratch read its mtimes snapshot
   // before that clear, so attaching this publish to it would let the
   // caller observe a successful job that did NOT actually re-render
-  // the swapped files. Force a fresh row instead.
-  if (!incomingClearsLastModified(incoming.args)) {
+  // the swapped files. Force a fresh row instead. The same holds for every
+  // pass a realm publish enqueues (`awaitedByPublish`), with or without the
+  // clear: the publish has just swapped in new files, and an already-running
+  // pass may have read the file mtimes before that swap.
+  if (
+    !incomingClearsLastModified(incoming.args) &&
+    !argsAwaitedByPublish(incoming.args)
+  ) {
     for (let candidate of inFlightCandidates) {
       if (candidate.jobType === incoming.jobType) {
         return { type: 'join', jobId: candidate.id };
