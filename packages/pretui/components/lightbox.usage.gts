@@ -183,7 +183,7 @@ class LightboxUsage extends Component {
         />
         <Args.String
           @name='thumbnailSizes'
-          @defaultValue='auto, (max-width: 600px) 50vw, 25vw'
+          @defaultValue='(max-width: 600px) 50vw, 25vw'
           @description="The sizes attribute for tiles whose asset carries a thumbnailSrcset, so a phone fetches a small thumbnail and a desktop a larger one. Each asset may also carry srcset for the open image; PhotoSwipe sizes that to the width it displays."
         />
         <Args.Bool

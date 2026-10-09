@@ -11,7 +11,7 @@ It owns the zoom engine, which is why **Gallery** does not: running two lightbox
 @sections?         — {title?, caption?, assets}[]: one grid per chapter, ONE viewer over all of them
 @layout?           — 'grid' (default) | 'justified': equal-height rows, edge to edge, uncropped
 @rowHeight?        — target row height for 'justified'. Default 'clamp(96px, 16vw, 200px)'
-@thumbnailSizes?   — `sizes` for tiles with a thumbnailSrcset. Default 'auto, (max-width: 600px) 50vw, 25vw'
+@thumbnailSizes?   — `sizes` for tiles with a thumbnailSrcset. Default '(max-width: 600px) 50vw, 25vw'
 @filmstrip?        — a thumbnail rail along the bottom of the open viewer. Default false
 @download?         — a save button in the viewer's toolbar. Default false
 @columns?          — fixed column count; omit for a responsive auto-fill grid

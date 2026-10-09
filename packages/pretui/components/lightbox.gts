@@ -513,8 +513,8 @@ export interface LightboxSignature {
     rowHeight?: string;
     /** The `sizes` for tiles that carry a `thumbnailSrcset`: how wide a tile
      * is drawn, so the browser fetches the smallest candidate that stays
-     * sharp. Default `auto, (max-width: 600px) 50vw, 25vw`; `auto` lets a
-     * browser that supports it measure the lazy tile itself. */
+     * sharp. Default `(max-width: 600px) 50vw, 25vw`. Not `auto`: Chromium
+     * treats a list led by `auto` as 100vw and fetches the largest file. */
     thumbnailSizes?: string;
     /** Wrap from the last image to the first. Default `true`. */
     loop?: boolean;
@@ -582,7 +582,7 @@ export class Lightbox extends Component<LightboxSignature> implements LightboxEn
   thumbFor = (index: number): string => this.items[index]?.thumb ?? '';
   thumbSrcsetFor = (index: number): string | undefined => this.items[index]?.thumbSrcset;
   get thumbnailSizes(): string {
-    return this.args.thumbnailSizes ?? 'auto, (max-width: 600px) 50vw, 25vw';
+    return this.args.thumbnailSizes ?? '(max-width: 600px) 50vw, 25vw';
   }
   srcFor = (index: number): string => this.items[index]?.src ?? '';
   labelFor = (index: number): string => this.items[index]?.position ?? '';
