@@ -1,4 +1,10 @@
-import { click, find, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  find,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
@@ -114,6 +120,92 @@ module('Integration | Choreo gallery | films', function (hooks) {
       .dom('[data-demo-stage]')
       .hasAttribute('data-well', 'wide', 'Towers asks for a wide well');
     assert.dom('.tw-face .film-grip').exists('the frame can be resized');
+  });
+
+  test('the film’s poster stands in its frame’s place until the film’s first frame is up', async function (assert) {
+    await renderFilm('towers', 'TowersDemo', 'isolated');
+    assert
+      .dom('.tw-face [data-test-film-poster]')
+      .hasAttribute(
+        'src',
+        `${testRealmURL}asset/towers-poster.webp`,
+        'the page’s stage shows the film’s still from its first render',
+      );
+
+    await waitFor('.tw-face iframe.film-frame');
+    let frame = find('.tw-face iframe.film-frame') as HTMLIFrameElement;
+    await waitUntil(() => frame.contentDocument?.readyState === 'complete');
+    assert
+      .dom(frame)
+      .doesNotHaveAttribute(
+        'data-film-shown',
+        'the frame stays clear of the poster while the film loads',
+      );
+
+    // the film app posts this from inside its own document once its picture
+    // is seated (choreo-film-app's lib/first-frame)
+    (frame.contentWindow as Window & typeof globalThis).eval(
+      "parent.postMessage({ type: 'choreo-film:first-frame' }, '*')",
+    );
+    await waitUntil(() => frame.hasAttribute('data-film-shown'));
+    assert
+      .dom(frame)
+      .hasAttribute('data-film-shown', '', 'the film comes up over its poster');
+    assert
+      .dom('.tw-face [data-test-film-poster]')
+      .exists('the poster stays under the frame');
+  });
+
+  test('a film’s page leaving takes its frame down before the swap, so the poster is what flies', async function (assert) {
+    let { ChoreoGallery } = (await loader.import(`${testRealmURL}gallery`)) as {
+      ChoreoGallery: new (attrs: Record<string, unknown>) => CardDefType;
+    };
+    let module = (await loader.import(`${testRealmURL}stages/towers`)) as {
+      TowersDemo: new (attrs: Record<string, unknown>) => CardDefType;
+    };
+    let gallery = new ChoreoGallery({
+      demos: [
+        new module.TowersDemo({
+          slug: 'towers',
+          title: 'towers',
+          group: 'Film',
+          lede: 'The towers film',
+          apis: [],
+          sample: '',
+          slowmo: false,
+          theater: true,
+        }),
+      ],
+    });
+    await renderCard(loader, gallery, 'isolated');
+    await click('[data-test-gallery-tile-link="towers"]');
+    await waitFor('.tw-face iframe.film-frame');
+
+    // what the page held at the moment its frame went
+    let pageWhenFrameWent: boolean | undefined;
+    let observer = new MutationObserver(() => {
+      if (
+        pageWhenFrameWent === undefined &&
+        !document.querySelector('.tw-face iframe.film-frame')
+      ) {
+        pageWhenFrameWent = Boolean(
+          document.querySelector('[data-test-demo-body]'),
+        );
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    try {
+      await triggerEvent('[data-gallery-home]', 'click');
+      await waitUntil(() => !document.querySelector('[data-test-demo-body]'), {
+        timeout: 8000,
+      });
+    } finally {
+      observer.disconnect();
+    }
+    assert.true(
+      pageWhenFrameWent,
+      'the frame was gone while the page was still showing, with its poster in its place',
+    );
   });
 
   test('the stage’s controls keep their own ink, type and cursor inside the site', async function (assert) {
