@@ -496,11 +496,21 @@ export class AttachedImageField extends FieldDef {
   @field height = contains(NumberField);
 }
 
+// A `realm.ui` action the script asked for. The host does it after the
+// script finishes; `status` is 'done' or 'failed'.
+export class RealmCodeUiActionResult extends FieldDef {
+  @field action = contains(StringField);
+  @field target = contains(StringField);
+  @field status = contains(StringField);
+  @field detail = contains(StringField);
+}
+
 export class RunRealmCodeResult extends CardDef {
   static displayName = 'Realm Code Result';
 
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
+  @field uiActions = containsMany(RealmCodeUiActionResult);
   // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);

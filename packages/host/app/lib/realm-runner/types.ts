@@ -13,7 +13,11 @@ export type RealmRunnerCallMethod =
   | 'workspaces.delete'
   | 'room.enableSkills'
   | 'room.disableSkills'
-  | 'room.setModel';
+  | 'room.setModel'
+  | 'ui.switchSubmode'
+  | 'ui.openFile'
+  | 'ui.previewFormat'
+  | 'ui.openWorkspace';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,

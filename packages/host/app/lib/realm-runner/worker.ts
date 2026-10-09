@@ -65,6 +65,13 @@ const BOOTSTRAP = `
         create: (options) => call('workspaces.create', [options ?? {}]),
         delete: (url) => call('workspaces.delete', [url]),
       }),
+      ui: Object.freeze({
+        switchSubmode: (submode) => call('ui.switchSubmode', [submode]),
+        openFile: (path) => call('ui.openFile', [path]),
+        previewFormat: (path, format) =>
+          call('ui.previewFormat', [path, format]),
+        openWorkspace: () => call('ui.openWorkspace', []),
+      }),
     });
     globalThis.room = Object.freeze({
       enableSkills: (ids) => call('room.enableSkills', [ids]),
@@ -136,6 +143,10 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'room.enableSkills',
   'room.disableSkills',
   'room.setModel',
+  'ui.switchSubmode',
+  'ui.openFile',
+  'ui.previewFormat',
+  'ui.openWorkspace',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a
