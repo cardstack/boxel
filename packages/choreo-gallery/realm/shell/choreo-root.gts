@@ -21,6 +21,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
   <div
     class='choreo-site'
     data-choreo-site
+    data-test-choreo-site
     data-theme={{theme.resolved}}
     ...attributes
   >

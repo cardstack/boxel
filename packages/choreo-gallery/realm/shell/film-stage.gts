@@ -197,7 +197,7 @@ export class FilmStage extends Component<Signature> {
   private toggleTheater = () => this.args.theater?.toggle();
 
   <template>
-    <div class='film-face' ...attributes>
+    <div class='film-face' data-test-film={{@film}} ...attributes>
       {{#if this.isStage}}
         {{! the demo page's face: the film in a frame, tweened in — the heavy
           world stays in its own document and unmounts whole }}
@@ -218,6 +218,7 @@ export class FilmStage extends Component<Signature> {
                 type='button'
                 class='film-theater-btn'
                 data-film-theater
+                data-test-theater-enter
                 {{on 'click' this.toggleTheater}}
               >⛶ Theater mode</button>
             {{/unless}}

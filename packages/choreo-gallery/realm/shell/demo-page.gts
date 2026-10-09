@@ -50,7 +50,11 @@ export class DemoPage extends Component<Signature> {
         re-ORDERED to the front without being re-PARENTED. Moving an iframe in
         the DOM reloads it, and a film that restarts when you ask to see it
         bigger is not a film you can watch. }}
-      <div class='demo-body {{if this.inTheater "is-theater"}}'>
+      <div
+        class='demo-body {{if this.inTheater "is-theater"}}'
+        data-test-demo-body
+        data-test-theater={{this.inTheater}}
+      >
         <article class='demo-head' data-demo={{slug}}>
           {{#if @nav}}
             {{! the pager is at the foot of the page, past the code — a long way
@@ -107,10 +111,11 @@ export class DemoPage extends Component<Signature> {
         {{#if @demo.slowmo}}
           <SpeedPicker @slug={{slug}} />
         {{/if}}
-        <div class='stage-row'>
+        <div class='stage-row' data-test-stage-row>
           <div
             class='stage-wrap'
             data-demo-stage
+            data-test-stage
             data-well={{this.well}}
             {{motion id=(concat 'stage-' slug) role='stage'}}
           >
@@ -124,6 +129,7 @@ export class DemoPage extends Component<Signature> {
                 <button
                   type='button'
                   class='theater-built'
+                  data-test-theater-exit
                   {{on 'click' this.leaveTheater}}
                 >How this is built</button>
               </div>

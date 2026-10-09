@@ -19,8 +19,7 @@
     "lint:realm": "node tools/check-realm.mjs",
     "lint:types": "ember-tsc --noEmit",
     "push": "pnpm --filter choreo-film-app build:realm && boxel realm push realm",
-    "test": "boxel test realm",
-    "test:theater-sizing": "node scripts/test-theater-sizing.mjs"
+    "test": "boxel test realm"
   },
   "devDependencies": {
     "@cardstack/boxel-icons": "workspace:*",
