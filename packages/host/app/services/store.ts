@@ -99,6 +99,7 @@ import {
   type RealmResourceIdentifier,
   type Saved,
   type VirtualNetwork,
+  X_BOXEL_LINK_SHAPE_HEADER,
 } from '@cardstack/runtime-common';
 
 import CardStore, {
@@ -1476,6 +1477,10 @@ export default class StoreService extends Service implements StoreInterface {
       // unknown, so search nothing rather than fanning out to every realm.
       // Host callers leave it unset and keep the all-realms fallback.
       cardInitiated?: boolean;
+      // Asks the server for each row's relationships as links only, without
+      // the linked cards' own resources in `included[]` — for a caller that
+      // reads the rows' data and never resolves what they link to.
+      linksOnly?: boolean;
     },
   ): Promise<SearchEntryResults> {
     let searchRealms = opts?.cardInitiated
@@ -1484,7 +1489,9 @@ export default class StoreService extends Service implements StoreInterface {
     if (searchRealms.length === 0) {
       return { data: [], meta: { page: { total: 0 } } };
     }
-    return await this.fetchSearchEntryDoc(query, searchRealms);
+    return await this.fetchSearchEntryDoc(query, searchRealms, {
+      linksOnly: opts?.linksOnly,
+    });
   }
 
   // Selective inflate for a `<SearchResults>` consumer of `searchEntries`:
@@ -1947,6 +1954,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchEntryDoc(
     query: SearchEntryWireQuery,
     realms: string[],
+    opts?: { linksOnly?: boolean },
   ): Promise<SearchEntryResults> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
@@ -1968,6 +1976,9 @@ export default class StoreService extends Service implements StoreInterface {
             ...jobIdHeader(),
             ...jobPriorityHeader(),
             ...loggingCorrelationIdHeader(),
+            ...(opts?.linksOnly
+              ? { [X_BOXEL_LINK_SHAPE_HEADER]: 'links-only' }
+              : {}),
           },
           body: JSON.stringify({ ...query, realms }),
         },

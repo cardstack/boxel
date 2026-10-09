@@ -1,6 +1,20 @@
 import { service } from '@ember/service';
 
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  assertQuery,
+  isResolvedCodeRef,
+  logger,
+  resourceIdentity,
+  rri,
+  searchEntryWireQueryFromQuery,
+  SupportedMimeType,
+  type CardResource,
+  type EntryCollectionDocument,
+  type Query,
+  type Relationship,
+  type Saved,
+  type SearchEntryWireQuery,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -14,7 +28,10 @@ import {
   type ViewOptions,
 } from '../lib/visual-capture';
 
+import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
+
 import LintAndFixTool from './lint-and-fix';
+import { composeSearchEntriesQuery } from './search-entries';
 
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
@@ -24,6 +41,7 @@ import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -32,6 +50,15 @@ const log = logger('tools:run-realm-code');
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
+// How many cards one `realm.cards.search` answers with when the query names no
+// page size, and the most it answers with whatever the query asks for.
+const DEFAULT_SEARCH_RESULTS = 50;
+const MAX_SEARCH_RESULTS = 100;
+// A search's answer is parsed inside the sandbox, within its memory limit, so
+// it is bounded by size as well as by count. A page past this size is refused
+// with the page size that fits, rather than cut: a cut page's remaining cards
+// would be out of reach of every page number.
+const MAX_SEARCH_RESULT_SIZE = 1_000_000;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -55,6 +82,30 @@ type DirectoryEntry = { name: string; kind: 'file' | 'directory' };
 type ListDirectory = (
   url: string,
 ) => Promise<{ status: number; entries: DirectoryEntry[] }>;
+
+// Runs one search in the run's realm and answers with the entry document.
+type SearchCards = (
+  query: SearchEntryWireQuery,
+) => Promise<EntryCollectionDocument>;
+
+// Resolves a reference — a URL, a realm's prefix-form identifier, or a path
+// relative to `base` — to a URL.
+type ResolveURL = (reference: string, base?: string) => string;
+
+// One card a search found, as plain data. `id` is the card's URL and `path`
+// its file relative to the realm root, which `realm.fs` takes. The type and
+// links are full URLs, so a type can go back into a query's `on` or `type`.
+// The data is the index's: attributes carry computed values too, so it is not
+// the file's text. `relationships` is keyed by field path as the card's own
+// document keys it, so a `linksToMany` field's links are `field.0`,
+// `field.1`, and so on. A search never matches a card that failed to index.
+interface FoundCard {
+  id: string;
+  path: string;
+  type?: { module: string; name: string };
+  attributes: Record<string, unknown>;
+  relationships: Record<string, string | null>;
+}
 
 // The host half of `realm.fs`: every call the script makes lands here, inside
 // one realm. Reads come from the realm on first use. A write saves the file
@@ -83,6 +134,8 @@ class RealmFsSession {
     ) => Promise<{ status: number; content: string }>,
     private writeFile: WriteFile,
     private listDirectory: ListDirectory,
+    private search: SearchCards,
+    private resolveURL: ResolveURL,
     captureURL: CaptureURL,
   ) {
     this.captures = new RealmCaptures(captureURL);
@@ -203,6 +256,10 @@ class RealmFsSession {
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
       }
+      // A search reads no file content, so it does not count toward
+      // MAX_FILES.
+      case 'cards.search':
+        return await this.searchCards(args[0]);
       case 'capture': {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
@@ -263,6 +320,105 @@ class RealmFsSession {
     return url.slice(this.realmURL.length);
   }
 
+  private async searchCards(raw: unknown): Promise<{
+    cards: FoundCard[];
+    total: number;
+    truncated: boolean;
+  }> {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new TypeError('realm.cards.search expects a query object');
+    }
+    if ('realm' in raw || 'realms' in raw) {
+      throw new Error(
+        'realm.cards.search searches only this realm; to search another realm, run code in that realm',
+      );
+    }
+    let query = pruneEmptyQueryParts(raw as Query);
+    assertQuery(query);
+    let requested = query.page?.size;
+    let size =
+      typeof requested === 'number' && Number.isFinite(requested)
+        ? Math.min(Math.max(Math.floor(requested), 1), MAX_SEARCH_RESULTS)
+        : DEFAULT_SEARCH_RESULTS;
+    let wireQuery = searchEntryWireQueryFromQuery(
+      composeSearchEntriesQuery(query, 'cards').query,
+      { fields: ['item'], scope: 'cards' },
+    );
+    wireQuery.page = { ...wireQuery.page, size };
+    let doc = await this.search(wireQuery);
+    // A realm that fails to answer is reported in the result, not thrown.
+    // Answering with no cards would read as a search that found none.
+    if (doc.meta.incomplete) {
+      throw new Error(
+        `The search in ${this.realmURL} did not answer; no cards were returned`,
+      );
+    }
+
+    let items = new Map<string, CardResource<Saved>>();
+    for (let resource of doc.included ?? []) {
+      if (resource.type === 'card') {
+        items.set(resourceIdentity(resource.type, resource.id), resource);
+      }
+    }
+    let cards: FoundCard[] = [];
+    let resultSize = 0;
+    for (let entry of doc.data) {
+      let itemRef = entry.relationships?.item?.data;
+      let item =
+        itemRef && items.get(resourceIdentity(itemRef.type, itemRef.id));
+      let card = entry.id && item ? this.foundCard(entry.id, item) : undefined;
+      if (!card) {
+        continue;
+      }
+      resultSize += JSON.stringify(card).length;
+      if (resultSize > MAX_SEARCH_RESULT_SIZE) {
+        throw new Error(
+          cards.length > 0
+            ? `This page of cards is too large to return; search again with page.size ${cards.length} or less`
+            : `The card ${card.path} is too large to return from a search; read it with realm.fs.readText`,
+        );
+      }
+      cards.push(card);
+    }
+    let total = doc.meta.page.total;
+    let start = (wireQuery.page.number ?? 0) * size;
+    // More cards match than this page and the pages before it hold.
+    let truncated = start + doc.data.length < total;
+    return { cards, total, truncated };
+  }
+
+  private foundCard(
+    entryId: string,
+    item: CardResource<Saved>,
+  ): FoundCard | undefined {
+    let id = this.resolveURL(entryId);
+    if (!id.startsWith(this.realmURL)) {
+      return undefined;
+    }
+    let file = this.relative(id);
+    let path = file.endsWith('.json') ? file : `${file}.json`;
+    // An item's references are relative to its own id.
+    let adoptsFrom = item.meta.adoptsFrom;
+    let type = isResolvedCodeRef(adoptsFrom)
+      ? {
+          module: this.resolveURL(adoptsFrom.module, id),
+          name: adoptsFrom.name,
+        }
+      : undefined;
+    let relationships: FoundCard['relationships'] = {};
+    for (let [field, value] of Object.entries(item.relationships ?? {})) {
+      let self = (value as Relationship | null)?.links?.self;
+      relationships[field] = self ? this.resolveURL(self, id) : null;
+    }
+    return {
+      id,
+      path,
+      ...(type ? { type } : {}),
+      attributes: item.attributes ?? {},
+      relationships,
+    };
+  }
+
   private async load(url: string): Promise<string | undefined> {
     if (this.known.has(url)) {
       return this.known.get(url);
@@ -310,11 +466,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
   @service declare private toolService: ToolService;
 
   description =
-    'Run safe Realm code that reads and edits realm source files, and can ' +
-    'look at what it made with realm.capture.';
+    'Run safe Realm code that reads and edits realm source files, finds ' +
+    'cards with realm.cards.search, and can look at what it made with ' +
+    'realm.capture.';
   static actionVerb = 'Run';
 
   async getInputType() {
@@ -357,6 +515,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
       (url) => this.listDirectory(url),
+      // The run reads only the rows' own data, so the linked cards' resources
+      // are not asked for.
+      (query) =>
+        this.store.searchEntries(query, [realmURL], { linksOnly: true }),
+      (reference, base) =>
+        this.network.virtualNetwork.resolveURL(reference, base).href,
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
     );
