@@ -19,8 +19,23 @@ import { modifier } from 'ember-modifier';
  * `rootMargin` is generous on purpose. A demo that starts the instant its top
  * edge crosses the fold arrives already moving; one that waits for the exact
  * boundary arrives frozen and then jerks into life a frame later, which reads
- * as a bug rather than as an optimisation.
+ * as a bug rather than as an optimisation. The margin is measured against the
+ * element that actually scrolls the stage — in the host that is the stack item
+ * the card sits in, not the viewport — so a stage just below the item's edge is
+ * already running when it scrolls in.
  */
+function scrollRoot(el: Element): Element | null {
+  let node = el.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 function roomOwner(el: Element): HTMLElement | null {
   const local = el.closest<HTMLElement>('[data-widget-active]');
   if (local) {
@@ -52,10 +67,13 @@ export function observeStage(
       tell(visible);
     }
   };
-  const io = new IntersectionObserver((entries) => {
-    intersecting = entries.some((entry) => entry.isIntersecting);
-    update();
-  }, options);
+  const io = new IntersectionObserver(
+    (entries) => {
+      intersecting = entries.some((entry) => entry.isIntersecting);
+      update();
+    },
+    { root: scrollRoot(el), ...options },
+  );
   const changes = new MutationObserver(update);
   if (owner) {
     changes.observe(owner, {
