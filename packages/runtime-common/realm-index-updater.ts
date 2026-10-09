@@ -140,6 +140,7 @@ export class RealmIndexUpdater {
   // alongside an in-flight from-scratch (no gate a write waits on covers
   // from-scratch jobs).
   #ignoreDataVersion = 0;
+  #ignoreRulesLoad: Promise<void> | undefined;
   #stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -222,22 +223,29 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
-  // Reads the realm-root ignore rules from disk. The rules otherwise arrive
-  // only with a from-scratch result, so a realm that boots on an existing
-  // index would ignore nothing, and a replica that didn't run the pass after
-  // an ignore file changed would keep applying the old rules.
-  async loadIgnoreRules(
-    readFileAsText: (name: string) => Promise<string | undefined>,
-  ): Promise<void> {
-    let rules: string[] = [];
-    for (let name of REALM_IGNORE_FILES) {
-      let content = await readFileAsText(name);
-      if (content) {
-        rules.push(content);
+  // Applies the realm-root ignore rules read from disk. The rules otherwise
+  // arrive only with a from-scratch result, so a realm that boots on an
+  // existing index would ignore nothing, and a replica that didn't run the pass
+  // after an ignore file changed would keep applying the old rules. `read`
+  // returns undefined when the files are unchanged since the last load. The
+  // load is registered before `read` starts, so a pass enqueued meanwhile
+  // waits for it before it snapshots the rules.
+  loadIgnoreRules(read: () => Promise<string[] | undefined>): Promise<void> {
+    let load = (async () => {
+      let rules = await read();
+      if (rules === undefined) {
+        return;
       }
-    }
-    this.#ignoreData =
-      rules.length > 0 ? { [this.realmURL.href]: rules.join('\n') } : {};
+      this.#ignoreData =
+        rules.length > 0 ? { [this.realmURL.href]: rules.join('\n') } : {};
+    })();
+    this.#ignoreRulesLoad = load.catch(() => {});
+    return load;
+  }
+
+  // Settles once any in-flight `loadIgnoreRules` has applied its rules.
+  async ignoreRulesLoaded(): Promise<void> {
+    await this.#ignoreRulesLoad;
   }
 
   async isNewIndex(): Promise<boolean> {
@@ -575,6 +583,7 @@ export class RealmIndexUpdater {
       ),
     };
     this.#incrementalIndexingDeferreds.set(indexingDeferred, pendingPass);
+    await this.#ignoreRulesLoad;
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
     try {

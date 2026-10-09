@@ -509,6 +509,7 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import {
+  REALM_IGNORE_FILES,
   RealmIndexUpdater,
   type IncrementalIndexMeta,
   type IndexChange,
@@ -2525,6 +2526,8 @@ export class Realm {
   #disableModuleCaching = false;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
+  // The root ignore files' mtimes when their rules were last read.
+  #ignoreFilesSignature: string | undefined;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
@@ -7534,10 +7537,27 @@ export class Realm {
 
   // Applies the realm's ignore rules read from disk: on a boot with no
   // from-scratch pass, and on a replica told another one changed the index.
+  // Rereads only when a root ignore file's mtime moved since the last load,
+  // since this runs on every index swap.
   async #loadIgnoreRules() {
-    await this.#realmIndexUpdater.loadIgnoreRules(
-      async (name) => (await this.readFileAsText(name))?.content,
-    );
+    await this.#realmIndexUpdater.loadIgnoreRules(async () => {
+      let mtimes = await Promise.all(
+        REALM_IGNORE_FILES.map((name) => this.#adapter.lastModified(name)),
+      );
+      let signature = mtimes.map((mtime) => mtime ?? '-').join(',');
+      if (signature === this.#ignoreFilesSignature) {
+        return undefined;
+      }
+      let rules: string[] = [];
+      for (let name of REALM_IGNORE_FILES) {
+        let content = (await this.readFileAsText(name))?.content;
+        if (content) {
+          rules.push(content);
+        }
+      }
+      this.#ignoreFilesSignature = signature;
+      return rules;
+    });
   }
 
   // TODO get rid of this
@@ -14404,6 +14424,7 @@ export class Realm {
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
+    await this.#realmIndexUpdater.ignoreRulesLoaded();
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
