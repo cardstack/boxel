@@ -321,6 +321,10 @@ Common issues are:
         if (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE) {
           roomTurns.stop(room.roomId);
         }
+        // The run can be stopped from here on, including while it waits for
+        // an interrupted generation, its turn in the room, or the room lock.
+        let thisRoomTurn = roomTurns.begin(room.roomId);
+        roomTurn = thisRoomTurn;
 
         // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
@@ -385,8 +389,6 @@ Common issues are:
           releaseRoomTurn();
           return;
         }
-        roomTurn = roomTurns.begin(room.roomId);
-        let thisRoomTurn = roomTurn;
 
         let resolveGenerationCompletion!: () => void;
         let generationCompletionPromise = new Promise<void>((resolve) => {
@@ -584,6 +586,15 @@ Common issues are:
               // out.
               ...botTools.map((tool) => tool.name),
             ]);
+            // The user stopped the loop after this run read the room; that
+            // stop is not in the history, so it holds the correctness check
+            // as well as the generation here.
+            if (thisRoomTurn.stopped) {
+              if (responder.responseEventId) {
+                await responder.finalize({ isCanceled: true });
+              }
+              return;
+            }
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -591,13 +602,6 @@ Common issues are:
               );
             }
             if (!promptParts.shouldRespond) {
-              return;
-            }
-            // The user stopped the loop while this run read the room.
-            if (thisRoomTurn.stopped) {
-              if (responder.responseEventId) {
-                await responder.finalize({ isCanceled: true });
-              }
               return;
             }
             // if debug, send message with promptParts and event list

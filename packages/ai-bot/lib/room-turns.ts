@@ -1,8 +1,9 @@
-// A handler run for a room, from the moment it holds the room lock until its
-// last bot-tool call is fulfilled. The room's history is read once, at the
-// start, so a stop that lands later is not in it; marking the run is how the
-// stop still reaches the parts of it that come after — the generation that
-// has not started yet, and the bot-tool calls waiting to run.
+// A handler run for a room, from the moment its event arrives until its last
+// bot-tool call is fulfilled. The room's history is read once, and only up to
+// the run's own event, so a stop that lands later is not in it; marking the
+// run is how the stop still reaches the parts of it that come after — the
+// correctness check or generation that has not started yet, and the bot-tool
+// calls waiting to run.
 export interface RoomTurn {
   readonly stopped: boolean;
 }
