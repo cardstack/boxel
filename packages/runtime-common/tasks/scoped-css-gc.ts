@@ -9,8 +9,10 @@ import {
 import { sweepUnreferencedScopedCSS } from '../scoped-css-gc.ts';
 
 // The cron fan-out enqueues one job per realm holding `scoped_css` rows,
-// each in that realm's indexing concurrency group so the sweep serializes
-// with the realm's index passes.
+// each in that realm's indexing concurrency group so the sweep orders against
+// the family's other exclusive work. The family's writer lanes outrank it and
+// run past it, so what keeps the sweep safe is its grace window rather than
+// the lane — see `sweepUnreferencedScopedCSS`.
 export interface ScopedCssGcArgs extends JSONTypes.Object {
   realmUrl: string;
 }
@@ -55,11 +57,11 @@ export { scopedCssGc };
 
 // Reclaims the realm's `scoped_css` rows no live index row references — the
 // hashes superseded stylesheet versions left behind, which incremental
-// passes produce continually and nothing else deletes. Runs inside the
-// realm's indexing concurrency group and behind the grace window
-// `sweepUnreferencedScopedCSS` documents, which together make the scan safe
-// against in-flight and resumable index passes. A sweep over a fully-live
-// table deletes nothing.
+// passes produce continually and nothing else deletes. The grace window
+// `sweepUnreferencedScopedCSS` documents is what makes the scan safe against
+// in-flight, concurrent and resumable index passes; it is applied to the
+// delete as well as the scan. A sweep over a fully-live table deletes
+// nothing.
 const scopedCssGc: Task<ScopedCssGcArgs, ScopedCssGcResult> = ({
   dbAdapter,
   reportStatus,
