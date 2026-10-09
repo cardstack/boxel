@@ -212,6 +212,31 @@ function toItem(
 
 // ── The engine modifier ──────────────────────────────────────────────────
 
+/** PhotoSwipe's own view of a viewer's lifecycle, which its types omit. */
+interface PhotoSwipeLifecycle {
+  isDestroying?: boolean;
+  opener?: { isOpen?: boolean };
+  close: () => void;
+  destroy: () => void;
+}
+
+/**
+ * Close a viewer whatever state it is in. PhotoSwipe's close() is a no-op
+ * until the opening zoom has finished, and its destroy() only routes through
+ * close(), so a viewer that is still opening could neither be dismissed nor
+ * torn down. Returns true when it was torn down at once rather than animated.
+ */
+function dismissViewer(pswp: unknown): boolean {
+  const viewer = pswp as PhotoSwipeLifecycle;
+  if (viewer.opener?.isOpen) {
+    viewer.close();
+    return false;
+  }
+  viewer.isDestroying = true;
+  viewer.destroy();
+  return true;
+}
+
 /** Everything the modifier needs, read once at setup. Kept as an interface so
  * the component and the modifier cannot drift. */
 export interface LightboxEngineHost {
@@ -375,10 +400,16 @@ const photoswipeGallery = modifier(
     // phase, so a host that also binds Escape on the document (Boxel's card
     // stack closes the card) never sees the keypress that closed a photo.
     const escapeFirst = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && lightbox.pswp) {
-        event.stopPropagation();
-        event.preventDefault();
-        lightbox.pswp.close();
+      const pswp = lightbox.pswp;
+      if (event.key !== 'Escape' || !pswp) {
+        return;
+      }
+      event.stopPropagation();
+      event.preventDefault();
+      // An animated close reports through the 'close' event; a viewer torn
+      // down mid-opening never dispatches it, so report it here.
+      if (dismissViewer(pswp)) {
+        host.handleClose();
       }
     };
     lightbox.on('afterInit', () =>
@@ -398,6 +429,13 @@ const photoswipeGallery = modifier(
       // Closes any open viewer, removes the delegated listener, drops the DOM
       // and — because PhotoSwipe removes its own <html> class on close — never
       // strands page scroll.
+      // A viewer still opening (or mid-close) would survive lightbox.destroy()
+      // and strand its root, focus trap and window.pswp; tear it down first.
+      if (lightbox.pswp) {
+        const viewer = lightbox.pswp as unknown as PhotoSwipeLifecycle;
+        viewer.isDestroying = true;
+        viewer.destroy();
+      }
       lightbox.destroy();
       releaseStyles();
     };
