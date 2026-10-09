@@ -511,6 +511,10 @@ export class RunRealmCodeResult extends CardDef {
   // What the run changed in the room with `room.*`, one line per change, made
   // after the script finished.
   @field roomChanges = containsMany(StringField);
+  // The card the script asked to show with `return { show: path }`, once it
+  // is open, or why it could not be shown.
+  @field shownCard = contains(StringField);
+  @field showError = contains(StringField);
 
   // A run that saved no files, took no captures and changed nothing in the
   // room, such as one that only read, has nothing for the chat to show. Its
