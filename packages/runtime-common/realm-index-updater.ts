@@ -222,6 +222,24 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
+  // Reads the realm-root ignore rules from disk. The rules otherwise arrive
+  // only with a from-scratch result, so a realm that boots on an existing
+  // index would ignore nothing, and a replica that didn't run the pass after
+  // an ignore file changed would keep applying the old rules.
+  async loadIgnoreRules(
+    readFileAsText: (name: string) => Promise<string | undefined>,
+  ): Promise<void> {
+    let rules: string[] = [];
+    for (let name of REALM_IGNORE_FILES) {
+      let content = await readFileAsText(name);
+      if (content) {
+        rules.push(content);
+      }
+    }
+    this.#ignoreData =
+      rules.length > 0 ? { [this.realmURL.href]: rules.join('\n') } : {};
+  }
+
   async isNewIndex(): Promise<boolean> {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
@@ -232,17 +250,23 @@ export class RealmIndexUpdater {
   // wide: blocking one on from-scratch is unsafe under reindex storms, where
   // a queued from-scratch can sit behind hundreds of jobs and stall every
   // PATCH for hours.
+  // A pass can start another while it settles (a changed ignore file starts a
+  // from-scratch pass), so the wait repeats until nothing is pending.
   indexing() {
-    let pending = [
+    let pendingPasses = () => [
       ...this.#incrementalIndexingDeferreds.keys(),
       ...this.#fullIndexingDeferreds.keys(),
     ];
-    if (pending.length === 0) {
+    if (pendingPasses().length === 0) {
       return undefined;
     }
-    return Promise.all(pending.map((deferred) => deferred.promise)).then(
-      () => undefined,
-    );
+    return (async () => {
+      let pending = pendingPasses();
+      while (pending.length > 0) {
+        await Promise.all(pending.map((deferred) => deferred.promise));
+        pending = pendingPasses();
+      }
+    })();
   }
 
   // Names each pass `indexing()` is waiting on: its queue job, job type, the
@@ -411,9 +435,17 @@ export class RealmIndexUpdater {
     );
   }
 
+  // Set by the realm, which runs the pass through its own reindex so the
+  // pass's invalidations reach its subscribers and its peer replicas.
+  onIgnoreRulesChanged: (() => void) | undefined;
+
   // Not awaited by the write that changed the rules: the gates a request
   // waits on never cover a from-scratch pass (see `indexing`).
   #rereadIgnoreRules() {
+    if (this.onIgnoreRulesChanged) {
+      this.onIgnoreRulesChanged();
+      return;
+    }
     this.publishFullIndex().completed.catch((e: any) => {
       this.#log.warn(
         `Rereading the ignore rules of ${this.realmURL.href} failed: ${e?.message}`,

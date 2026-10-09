@@ -2942,6 +2942,8 @@ export class Realm {
       dbAdapter,
       queue,
     });
+    this.#realmIndexUpdater.onIgnoreRulesChanged = () =>
+      this.#reindexForIgnoreRules();
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
@@ -4216,6 +4218,11 @@ export class Realm {
   // private state.
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
+    void this.#loadIgnoreRules().catch((err: unknown) => {
+      this.#log.warn(
+        `reloading the ignore rules of ${this.url} failed: ${String(err)}`,
+      );
+    });
     this.#cachedHostRoutingMap = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
@@ -7465,6 +7472,7 @@ export class Realm {
     if (this.#skipBootIndex) {
       // Mount-and-serve only: no from-scratch index, even on a new index.
       // Definitions resolve lazily via the prerenderer on first lookup.
+      await this.#loadIgnoreRules();
     } else if (isNewIndex || this.#fullIndexOnStartup) {
       if (this.#fullIndexOnStartup) {
         // CS-11245: bootstrap realms (kind='bootstrap': base,
@@ -7503,10 +7511,32 @@ export class Realm {
         indexType: 'full',
         realmURL: this.url,
       });
+    } else {
+      await this.#loadIgnoreRules();
     }
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
+    );
+  }
+
+  // A changed root ignore file: the from-scratch pass rereads the rules and
+  // broadcasts what it hid or revealed, and the cache wipe after it tells the
+  // peer replicas to reread the rules too.
+  #reindexForIgnoreRules() {
+    let { completed } = this.startReindex();
+    completed
+      .then(() => this.clearRealmIndexCachesAndBroadcast())
+      .catch(() => {
+        // startReindex logs its own failure
+      });
+  }
+
+  // Applies the realm's ignore rules read from disk: on a boot with no
+  // from-scratch pass, and on a replica told another one changed the index.
+  async #loadIgnoreRules() {
+    await this.#realmIndexUpdater.loadIgnoreRules(
+      async (name) => (await this.readFileAsText(name))?.content,
     );
   }
 
