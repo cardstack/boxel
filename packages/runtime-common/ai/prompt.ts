@@ -81,6 +81,7 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
+import { stopInForce } from './stop.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
@@ -231,9 +232,14 @@ export async function getPromptParts(
     eventList,
     client,
   );
-  let shouldRespond = getShouldRespond(history);
-  let pendingCodePatchCorrectnessChecks =
-    collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
+  // A stop holds the whole loop, including the correctness check a code
+  // patch would otherwise kick off. constructHistory keeps only messages and
+  // tool results, so the stop is read from the raw event list.
+  let stopped = stopInForce(eventList, aiBotUserId) !== undefined;
+  let shouldRespond = !stopped && getShouldRespond(history);
+  let pendingCodePatchCorrectnessChecks = stopped
+    ? undefined
+    : collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
   if (!shouldRespond) {
     return {
       shouldRespond: false,

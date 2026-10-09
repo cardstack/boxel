@@ -49,6 +49,8 @@ import {
   releasedToolCalls,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
+import { publishCanceledResults } from './lib/bot-tools/results.ts';
+import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
@@ -86,6 +88,10 @@ let log = logger('ai-bot');
 // The approved bot-tool calls this process has taken on running (see
 // ApprovalClaims).
 const approvalClaims = new ApprovalClaims();
+
+// The handler runs in flight per room, so a stop reaches the parts of a run
+// that come after its history was read (see RoomTurns).
+const roomTurns = new RoomTurns();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -242,6 +248,7 @@ Common issues are:
     async function (event, room, toStartOfTimeline) {
       let eventId = event.getId()!;
       let releaseRoomTurn: (() => void) | undefined;
+      let roomTurn: RoomTurn | undefined;
 
       try {
         // Ensure that the event body we have is a string
@@ -311,6 +318,10 @@ Common issues are:
           });
         }
 
+        if (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE) {
+          roomTurns.stop(room.roomId);
+        }
+
         // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
         if (
@@ -374,6 +385,8 @@ Common issues are:
           releaseRoomTurn();
           return;
         }
+        roomTurn = roomTurns.begin(room.roomId);
+        let thisRoomTurn = roomTurn;
 
         let resolveGenerationCompletion!: () => void;
         let generationCompletionPromise = new Promise<void>((resolve) => {
@@ -580,6 +593,13 @@ Common issues are:
             if (!promptParts.shouldRespond) {
               return;
             }
+            // The user stopped the loop while this run read the room.
+            if (thisRoomTurn.stopped) {
+              if (responder.responseEventId) {
+                await responder.finalize({ isCanceled: true });
+              }
+              return;
+            }
             // if debug, send message with promptParts and event list
             if (isInDebugMode(eventList, aiBotUserId)) {
               // create files in memory
@@ -730,6 +750,11 @@ Common issues are:
               lastGeneratedChunkId: generationId,
               completionPromise: generationCompletionPromise,
             });
+            // A stop that landed while the request was being prepared found
+            // no runner to abort.
+            if (thisRoomTurn.stopped) {
+              runner.abort();
+            }
 
             let completion = await profTime(
               eventId,
@@ -932,12 +957,17 @@ Common issues are:
                   call.type === 'function' && call.function.name === toolName,
               );
               if (calls.length > 0) {
-                await turn.fulfill(calls, {
+                let target = {
                   client,
                   roomId: room.roomId,
                   requestEventId: pendingFulfillRequestEventId,
                   agentId: pendingFulfillAgentId,
-                });
+                };
+                if (thisRoomTurn.stopped) {
+                  await publishCanceledResults(calls, target);
+                } else {
+                  await turn.fulfill(calls, target);
+                }
               }
             }
           }
@@ -954,6 +984,9 @@ Common issues are:
         return;
       } finally {
         releaseRoomTurn?.();
+        if (room && roomTurn) {
+          roomTurns.end(room.roomId, roomTurn);
+        }
       }
     },
   );
