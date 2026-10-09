@@ -7,7 +7,11 @@ export type RealmRunnerCallMethod =
   | 'fs.list'
   | 'fs.replace'
   | 'fs.writeText'
-  | 'capture';
+  | 'capture'
+  | 'ui.switchSubmode'
+  | 'ui.openFile'
+  | 'ui.previewFormat'
+  | 'ui.openWorkspace';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,

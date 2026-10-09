@@ -72,6 +72,22 @@ module('Integration | tools | run-realm-code', function (hooks) {
 }
 `,
           'notes/first.md': '# First\n',
+          'pet.gts': `
+            import { CardDef, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+              @field name = contains(StringField);
+            }
+          `,
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: { name: 'Mango' },
+              meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+            },
+          },
         },
       }),
     );
@@ -458,5 +474,133 @@ return found;`,
       }),
       /Directory not found/,
     );
+  });
+
+  test('realm.ui actions run in order after the script finishes', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let queued = await realm.ui.openFile('pet.gts');
+await realm.ui.previewFormat('Pet/mango', 'fitted');
+return queued;`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      action: 'openFile',
+      runs: 'after the script finishes',
+    });
+    assert.deepEqual(
+      result.uiActions.map(({ action, target, status }) => ({
+        action,
+        target,
+        status,
+      })),
+      [
+        {
+          action: 'openFile',
+          target: `${testRealmURL}pet.gts`,
+          status: 'done',
+        },
+        {
+          action: 'previewFormat',
+          target: `${testRealmURL}Pet/mango (fitted)`,
+          status: 'done',
+        },
+      ],
+    );
+    assert.strictEqual(operatorModeStateService.state.submode, 'code');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}pet.gts`,
+    );
+    assert.strictEqual(
+      operatorModeStateService.state.moduleInspector,
+      'preview',
+    );
+    let selection = getService('playground-panel-service').getSelection(
+      `${testRealmURL}pet/Pet`,
+    );
+    assert.strictEqual(selection?.cardId, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(selection?.format, 'fitted');
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ui.switchSubmode('interact');`,
+    });
+    assert.strictEqual(operatorModeStateService.state.submode, 'interact');
+  });
+
+  test('realm.ui opens a file the same run wrote', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('notes/second.md', '# Second\\n');
+await realm.ui.openFile('notes/second.md');`,
+    });
+
+    assert.strictEqual(result.uiActions[0]?.status, 'done');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}notes/second.md`,
+    );
+  });
+
+  test('realm.ui refuses a missing file, a path outside the realm, and a file that is not a card', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let run = (code: string) =>
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+
+    await assert.rejects(
+      run(`await realm.ui.openFile('missing.gts');`),
+      /File not found/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.openFile('../elsewhere.gts');`),
+      /Path must be relative to the realm root/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.previewFormat('task', 'isolated');`),
+      /Not a card instance/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.previewFormat('Pet/mango', 'head');`),
+      /one of these formats/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.switchSubmode('host');`),
+      /expects 'interact' or 'code'/,
+    );
+  });
+
+  test('a failed run does not do its realm.ui actions', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let submodeBefore = operatorModeStateService.state.submode;
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.ui.openFile('pet.gts');
+throw new Error('stop here');`,
+      }),
+      /stop here/,
+    );
+    assert.strictEqual(operatorModeStateService.state.submode, submodeBefore);
   });
 });

@@ -1,6 +1,11 @@
 import { service } from '@ember/service';
 
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  logger,
+  rri,
+  SupportedMimeType,
+  type Format,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -15,6 +20,9 @@ import {
 } from '../lib/visual-capture';
 
 import LintAndFixTool from './lint-and-fix';
+import OpenWorkspaceTool from './open-workspace';
+import PreviewFormatTool from './preview-format';
+import SwitchSubmodeTool from './switch-submode';
 
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
@@ -51,6 +59,29 @@ type WriteFile = (
 
 type DirectoryEntry = { name: string; kind: 'file' | 'directory' };
 
+const MAX_UI_ACTIONS = 10;
+const PREVIEW_FORMATS: Format[] = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'atom',
+  'edit',
+];
+
+// A `realm.ui` call the script made. The sandbox has no access to the UI, so
+// the call only records what to do; the host does each action, in order,
+// once the script has finished.
+type UiAction =
+  | { action: 'switchSubmode'; submode: 'interact' | 'code' }
+  | { action: 'openFile'; url: string }
+  | {
+      action: 'previewFormat';
+      cardId: string;
+      modulePath: string;
+      format: Format;
+    }
+  | { action: 'openWorkspace' };
+
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
   url: string,
@@ -68,6 +99,8 @@ class RealmFsSession {
   readonly saved = new Set<string>();
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
+  // What `realm.ui` asked for, in the order the script asked.
+  readonly uiActions: UiAction[] = [];
   // Calls and saves refused because the run had already ended.
   private refused = 0;
   private queue: Promise<unknown> = Promise.resolve();
@@ -207,6 +240,63 @@ class RealmFsSession {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
       }
+      case 'ui.switchSubmode': {
+        let submode = args[0];
+        if (submode !== 'interact' && submode !== 'code') {
+          throw new TypeError(
+            "realm.ui.switchSubmode expects 'interact' or 'code'",
+          );
+        }
+        return this.queueUiAction({ action: 'switchSubmode', submode });
+      }
+      case 'ui.openFile': {
+        let url = this.resolve(method, args[0]);
+        if (!(await this.exists(url))) {
+          throw new Error(`File not found: ${url}`);
+        }
+        return this.queueUiAction({ action: 'openFile', url });
+      }
+      case 'ui.previewFormat': {
+        let [path, format = 'isolated'] = args;
+        if (
+          typeof format !== 'string' ||
+          !PREVIEW_FORMATS.includes(format as Format)
+        ) {
+          throw new TypeError(
+            `realm.ui.previewFormat expects a card path and one of these formats: ${PREVIEW_FORMATS.join(', ')}`,
+          );
+        }
+        // A card is named by its instance path, with or without `.json`.
+        let url = this.resolve(method, path);
+        let fileURL = url.endsWith('.json') ? url : `${url}.json`;
+        let content = await this.load(fileURL);
+        if (content === undefined) {
+          throw new Error(`Card not found: ${fileURL}`);
+        }
+        let module: unknown;
+        try {
+          module = JSON.parse(content)?.data?.meta?.adoptsFrom?.module;
+        } catch {
+          // reported below
+        }
+        if (typeof module !== 'string') {
+          throw new Error(`Not a card instance: ${fileURL}`);
+        }
+        // `adoptsFrom` names the module without its extension, as code mode
+        // does for a card definition.
+        let modulePath = new URL(module, fileURL).href;
+        if (!/\.(gts|ts)$/.test(modulePath)) {
+          modulePath = `${modulePath}.gts`;
+        }
+        return this.queueUiAction({
+          action: 'previewFormat',
+          cardId: fileURL.slice(0, -'.json'.length),
+          modulePath,
+          format: format as Format,
+        });
+      }
+      case 'ui.openWorkspace':
+        return this.queueUiAction({ action: 'openWorkspace' });
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -257,6 +347,29 @@ class RealmFsSession {
       typeof path === 'string' && path.endsWith('/') ? path.slice(0, -1) : path,
     );
     return url.endsWith('/') ? url : `${url}/`;
+  }
+
+  private queueUiAction(action: UiAction) {
+    if (this.uiActions.length >= MAX_UI_ACTIONS) {
+      throw new Error(
+        `Realm code may ask for at most ${MAX_UI_ACTIONS} realm.ui actions`,
+      );
+    }
+    this.uiActions.push(action);
+    return { action: action.action, runs: 'after the script finishes' };
+  }
+
+  // Unlike `load`, this reads no content into the run, so it neither counts
+  // toward MAX_FILES nor refuses a large file.
+  private async exists(url: string): Promise<boolean> {
+    if (this.known.has(url)) {
+      return this.known.get(url) !== undefined;
+    }
+    let source = await this.readSource(url);
+    if (source.status !== 200 && source.status !== 404) {
+      throw new Error(`Unable to read ${url}: ${source.status}`);
+    }
+    return source.status === 200;
   }
 
   private relative(url: string): string {
@@ -413,7 +526,18 @@ export default class RunRealmCodeTool extends HostBaseTool<
     session.close();
     await session.idle();
     let commandModule = await this.loadToolModule();
+    // UI actions run only after a run that succeeded, and after every file
+    // it saved, so what they open is what the run left.
+    let uiActions = [];
+    for (let action of session.uiActions) {
+      uiActions.push(
+        new commandModule.RealmCodeUiActionResult(
+          await this.applyUiAction(action, realmURL),
+        ),
+      );
+    }
     return new commandModule.RunRealmCodeResult({
+      uiActions,
       files: [...session.saved].map(
         (fileUrl) =>
           new commandModule.RealmCodeFileResult({
@@ -450,6 +574,56 @@ export default class RunRealmCodeTool extends HostBaseTool<
         : [],
     );
     return [...saved, ...uploadedImages(result.captures)];
+  }
+
+  // An action that fails does not fail the run: its files are saved already.
+  // The result names the failure, and later actions still run.
+  private async applyUiAction(
+    action: UiAction,
+    realmURL: string,
+  ): Promise<{
+    action: string;
+    target?: string;
+    status: string;
+    detail?: string;
+  }> {
+    let target: string | undefined;
+    try {
+      switch (action.action) {
+        case 'switchSubmode':
+          target = action.submode;
+          await new SwitchSubmodeTool(this.toolContext).execute({
+            submode: action.submode,
+          });
+          break;
+        case 'openFile':
+          target = action.url;
+          await new SwitchSubmodeTool(this.toolContext).execute({
+            submode: 'code',
+            codePath: action.url,
+          });
+          break;
+        case 'previewFormat':
+          target = `${action.cardId} (${action.format})`;
+          await new PreviewFormatTool(this.toolContext).execute({
+            cardId: action.cardId,
+            format: action.format,
+            modulePath: action.modulePath,
+          });
+          break;
+        case 'openWorkspace':
+          target = realmURL;
+          await new OpenWorkspaceTool(this.toolContext).execute({
+            realmIdentifier: realmURL,
+          });
+          break;
+      }
+      return { action: action.action, target, status: 'done' };
+    } catch (error) {
+      let detail = error instanceof Error ? error.message : String(error);
+      log.debug(`realm.ui.${action.action} failed: ${detail}`);
+      return { action: action.action, target, status: 'failed', detail };
+    }
   }
 
   private async captureURL(

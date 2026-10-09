@@ -61,6 +61,13 @@ const BOOTSTRAP = `
         writeText: (path, content) => call('fs.writeText', [path, content]),
       }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
+      ui: Object.freeze({
+        switchSubmode: (submode) => call('ui.switchSubmode', [submode]),
+        openFile: (path) => call('ui.openFile', [path]),
+        previewFormat: (path, format) =>
+          call('ui.previewFormat', [path, format]),
+        openWorkspace: () => call('ui.openWorkspace', []),
+      }),
     });
     delete globalThis.__realmURL;
   })();
@@ -122,6 +129,10 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.replace',
   'fs.writeText',
   'capture',
+  'ui.switchSubmode',
+  'ui.openFile',
+  'ui.previewFormat',
+  'ui.openWorkspace',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a
