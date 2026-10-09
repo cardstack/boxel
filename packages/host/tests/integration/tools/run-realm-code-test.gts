@@ -213,6 +213,116 @@ return await realm.capture('seen.json');`,
     assert.strictEqual(source.content, '{\n  "title": "New task"\n}\n');
   });
 
+  test('realm.fs.writeBytes saves the decoded bytes of a new binary file', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let saved = await realm.fs.writeBytes('images/dot.png', ${JSON.stringify(PNG_BASE64)});
+return { saved, exists: await realm.fs.exists('images/dot.png') };`,
+    });
+
+    let expected = Uint8Array.from(atob(PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      saved: { path: 'images/dot.png', size: expected.byteLength, saved: true },
+      exists: true,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status, file.detail]),
+      [[`${testRealmURL}images/dot.png`, 'saved', 'Binary file saved.']],
+    );
+    let response = await network.authedFetch(
+      new URL('images/dot.png', testRealmURL),
+    );
+    assert.strictEqual(response.status, 200);
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(expected),
+      'the realm holds the decoded bytes',
+    );
+  });
+
+  test('realm.fs.writeBytes accepts a base64 data URL', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.fs.writeBytes('dot.png', ${JSON.stringify(
+        `data:image/png;base64,${PNG_BASE64}`,
+      )});`,
+    });
+
+    assert.true(JSON.parse(result.scriptResult!).saved);
+  });
+
+  test('realm.fs.writeBytes refuses a file that exists, and content that is not base64', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('task.json', ${JSON.stringify(PNG_BASE64)});`,
+      }),
+      /File already exists/,
+      'refuses an existing text file',
+    );
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});`,
+    });
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});`,
+      }),
+      /File already exists/,
+      'refuses an existing binary file',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('bad.png', 'not base64!');`,
+      }),
+      /not valid base64/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.readText('dot.png');`,
+      }),
+      /is a binary file/,
+      'readText names a binary file instead of failing on its status',
+    );
+  });
+
+  test('realm.fs.writeBytes refuses a file over the size limit', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    // The script builds the base64 itself: it is larger than the code limit.
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('big.bin', 'AAAA'.repeat(700000));`,
+      }),
+      /at most 2000000 bytes per file.*No file was saved/,
+    );
+  });
+
   test('resolves paths against the realm root', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');

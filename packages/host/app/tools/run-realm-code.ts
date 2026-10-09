@@ -32,6 +32,16 @@ const log = logger('tools:run-realm-code');
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
+// realm.fs.writeBytes limits, in decoded bytes. The 8 MB sandbox memory holds
+// the base64 string and its JSON-encoded copy, so one file cannot get much
+// larger than this anyway.
+const MAX_BINARY_FILE_SIZE = 2_000_000;
+const MAX_BINARY_BYTES_PER_RUN = 5_000_000;
+const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
+const DATA_URL_PREFIX_RE = /^data:[^,]*;base64,/i;
+// Content types the realm serves for files whose content is not text.
+const BINARY_CONTENT_TYPE_RE =
+  /^(?:(?:image|audio|video|font)\/(?!svg\+xml)|application\/(?:octet-stream|pdf|zip|gzip|wasm)\b)/i;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -48,6 +58,11 @@ type WriteFile = (
   content: string,
   expected: string | undefined,
 ) => Promise<string>;
+
+// Saves one binary file that did not exist.
+type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
+
+const BINARY = Symbol('binary');
 
 type DirectoryEntry = { name: string; kind: 'file' | 'directory' };
 
@@ -66,6 +81,11 @@ class RealmFsSession {
   private known = new Map<string, string | undefined>();
   // Files saved by this run, in the order of their first save.
   readonly saved = new Set<string>();
+  // Binary files this run knows exist: found by a lookup or saved by
+  // realm.fs.writeBytes. They are not in `known`, since their content is not
+  // text, but they count toward MAX_FILES.
+  readonly binary = new Set<string>();
+  private binaryBytes = 0;
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // Calls and saves refused because the run had already ended.
@@ -78,10 +98,13 @@ class RealmFsSession {
 
   constructor(
     private realmURL: string,
-    private readSource: (
-      url: string,
-    ) => Promise<{ status: number; content: string }>,
+    private readSource: (url: string) => Promise<{
+      status: number;
+      content: string;
+      contentType: string | null;
+    }>,
     private writeFile: WriteFile,
+    private writeBinaryFile: WriteBinaryFile,
     private listDirectory: ListDirectory,
     captureURL: CaptureURL,
   ) {
@@ -132,7 +155,7 @@ class RealmFsSession {
       }
       case 'fs.exists': {
         let url = this.resolve(method, args[0]);
-        return (await this.load(url)) !== undefined;
+        return (await this.lookup(url)) !== undefined;
       }
       // A listing reads no file content, so it does not count toward
       // MAX_FILES.
@@ -203,6 +226,39 @@ class RealmFsSession {
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
       }
+      case 'fs.writeBytes': {
+        let url = this.resolve(method, args[0]);
+        let bytes = decodeBase64(args[1]);
+        if (bytes.byteLength > MAX_BINARY_FILE_SIZE) {
+          throw new Error(
+            `realm.fs.writeBytes accepts at most ${MAX_BINARY_FILE_SIZE} bytes per file: ${url} is ${bytes.byteLength} bytes`,
+          );
+        }
+        if (this.binaryBytes + bytes.byteLength > MAX_BINARY_BYTES_PER_RUN) {
+          throw new Error(
+            `realm.fs.writeBytes accepts at most ${MAX_BINARY_BYTES_PER_RUN} bytes per run`,
+          );
+        }
+        // Only creates, the same as realm.fs.writeText.
+        if ((await this.lookup(url)) !== undefined) {
+          throw new Error(`File already exists: ${url}`);
+        }
+        if (this.closed) {
+          this.refused += 1;
+          throw new Error(`The run has ended; ${url} was not saved`);
+        }
+        await this.writeBinaryFile(url, bytes);
+        this.binaryBytes += bytes.byteLength;
+        // The lookup above recorded the file as missing.
+        this.known.delete(url);
+        this.binary.add(url);
+        this.saved.add(url);
+        return {
+          path: this.relative(url),
+          size: bytes.byteLength,
+          saved: true,
+        };
+      }
       case 'capture': {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
@@ -264,13 +320,35 @@ class RealmFsSession {
   }
 
   private async load(url: string): Promise<string | undefined> {
+    let content = await this.lookup(url);
+    if (content === BINARY) {
+      throw new Error(`${url} is a binary file; realm.fs reads only text`);
+    }
+    return content;
+  }
+
+  // A text file's content, BINARY for a binary file, or undefined for a file
+  // that does not exist.
+  private async lookup(
+    url: string,
+  ): Promise<string | typeof BINARY | undefined> {
     if (this.known.has(url)) {
       return this.known.get(url);
     }
-    if (this.known.size >= MAX_FILES) {
+    if (this.binary.has(url)) {
+      return BINARY;
+    }
+    if (this.known.size + this.binary.size >= MAX_FILES) {
       throw new Error(`Realm code may touch at most ${MAX_FILES} files`);
     }
     let source = await this.readSource(url);
+    if (
+      source.status === 200 &&
+      BINARY_CONTENT_TYPE_RE.test(source.contentType ?? '')
+    ) {
+      this.binary.add(url);
+      return BINARY;
+    }
     if (source.status !== 200 && source.status !== 404) {
       throw new Error(`Unable to read ${url}: ${source.status}`);
     }
@@ -298,6 +376,28 @@ class RealmFsSession {
     this.known.set(url, saved);
     this.saved.add(url);
   }
+}
+
+// Accepts plain base64, with or without line breaks, or a base64 data URL.
+function decodeBase64(value: unknown): Uint8Array {
+  if (typeof value !== 'string') {
+    throw new TypeError(
+      'realm.fs.writeBytes expects a path and a base64 string',
+    );
+  }
+  let base64 = value.replace(DATA_URL_PREFIX_RE, '').replace(/\s+/g, '');
+  if (base64.length === 0) {
+    throw new Error('realm.fs.writeBytes requires non-empty content');
+  }
+  if (base64.length % 4 === 1 || !BASE64_RE.test(base64)) {
+    throw new Error('realm.fs.writeBytes content is not valid base64');
+  }
+  let binary = atob(base64);
+  let bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 export default class RunRealmCodeTool extends HostBaseTool<
@@ -356,6 +456,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.cardService.getSource(new URL(url)),
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
+      (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
       (url) => this.listDirectory(url),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
@@ -419,8 +520,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
           new commandModule.RealmCodeFileResult({
             fileUrl,
             status: 'saved',
-            detail:
-              'Source saved; correctness validation will run after this tool result.',
+            detail: session.binary.has(fileUrl)
+              ? 'Binary file saved.'
+              : 'Source saved; correctness validation will run after this tool result.',
           }),
       ),
       scriptResult: runnerResult.scriptResult,
@@ -510,6 +612,55 @@ export default class RunRealmCodeTool extends HostBaseTool<
       clientRequestId,
     });
     return content;
+  }
+
+  // Checks the file still does not exist, and saves the bytes as they are.
+  private async writeBinaryFile(
+    roomId: string,
+    url: string,
+    bytes: Uint8Array,
+  ): Promise<void> {
+    let current = await this.cardService.getSource(new URL(url));
+    if (current.status !== 404) {
+      throw new Error(`File appeared while the script ran: ${url}`);
+    }
+    let clientRequestId = this.toolService.trackAiAssistantCardRequest({
+      action: 'run-realm-code',
+      roomId,
+      fileUrl: url,
+    });
+    if (clientRequestId) {
+      this.cardService.clientRequestIds.add(clientRequestId);
+    }
+    let response = await this.network.authedFetch(url, {
+      method: 'POST',
+      headers: {
+        // The realm routes a binary upload by this content type.
+        'Content-Type': 'application/octet-stream',
+        ...(clientRequestId
+          ? { 'X-Boxel-Client-Request-Id': clientRequestId }
+          : {}),
+      },
+      body: new Blob([bytes as BlobPart]),
+    });
+    if (!response.ok) {
+      let text = '';
+      try {
+        text = (await response.text()).slice(0, 500);
+      } catch {
+        // The status is enough to report.
+      }
+      let wafRule = response.headers.get('x-blocked-by-waf-rule');
+      throw new Error(
+        [
+          `Unable to save ${url}: ${response.status} ${response.statusText}`,
+          wafRule ? `WAF rule: ${wafRule}` : null,
+          text || null,
+        ]
+          .filter(Boolean)
+          .join(' | '),
+      );
+    }
   }
 
   private async listDirectory(
