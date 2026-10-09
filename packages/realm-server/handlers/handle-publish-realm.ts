@@ -774,7 +774,11 @@ export default function handlePublishRealm({
           // cards through a query does not render again when only the
           // matching cards change. A full render does not make those results
           // current either: its queries run against the committed index,
-          // which does not yet hold the rows the pass writes.
+          // which does not yet hold the rows the pass writes. In the same
+          // way, a card that renders `realmInfo.lastPublishedAt` keeps the
+          // time of the publish that last rendered it; no base template
+          // shows it for a published realm, and rendering every card on
+          // every publish to keep it current is the cost this skip avoids.
           let renderEveryCard =
             isNewRealm ||
             previousPublishedAt < PROCESS_STARTED_AT ||
