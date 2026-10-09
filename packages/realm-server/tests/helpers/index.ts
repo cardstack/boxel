@@ -346,6 +346,7 @@ export const testRealmInfo = {
   publishable: null,
   lastPublishedAt: null,
   includePrerenderedDefaultRealmIndex: null,
+  anonymousRateLimitDefault: { requests: 300, windowSeconds: 60 },
 };
 
 import {
@@ -3534,10 +3535,6 @@ export function realmConfigCardJSON(
     // The pointer to the realm's policy card. Typed loosely so a test can
     // write a malformed one.
     policy?: unknown;
-    // How the realm limits and blocks callers its policy admits without a
-    // session. Typed loosely so a test can write malformed ones.
-    anonymousRateLimit?: unknown;
-    anonymousBlocklist?: unknown;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3562,12 +3559,6 @@ export function realmConfigCardJSON(
   }
   if (config.policy !== undefined) {
     attrs.policy = config.policy;
-  }
-  if (config.anonymousRateLimit !== undefined) {
-    attrs.anonymousRateLimit = config.anonymousRateLimit;
-  }
-  if (config.anonymousBlocklist !== undefined) {
-    attrs.anonymousBlocklist = config.anonymousBlocklist;
   }
   return JSON.stringify({
     data: {
