@@ -4,6 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import {
+  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_FALLBACK_MODELS,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -72,6 +78,14 @@ module('Integration | tools | run-realm-code', function (hooks) {
 }
 `,
           'notes/first.md': '# First\n',
+          'skills/test-skill/SKILL.md': `---
+name: Test Skill
+description: A skill a script turns on
+boxel:
+  kind: skill
+---
+# Test Skill
+`,
         },
       }),
     );
@@ -458,5 +472,117 @@ return found;`,
       }),
       /Directory not found/,
     );
+  });
+
+  module('room actions', function (hooks) {
+    let roomId: string;
+    let skillId = `${testRealmURL}skills/test-skill/SKILL.md`;
+    let model = DEFAULT_FALLBACK_MODELS[0].modelId;
+
+    hooks.beforeEach(async function () {
+      await getService('matrix-service').ready;
+      roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-actions',
+      });
+    });
+
+    test('room actions change the room after the script finishes', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `return {
+  skills: await room.enableSkills([${JSON.stringify(skillId)}]),
+  model: await room.setModel(${JSON.stringify(model)}),
+};`,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        skills: { enable: [skillId], appliedAfterRun: true },
+        model: { model, appliedAfterRun: true },
+      });
+      let skills = mockMatrixUtils.getRoomState(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skills.enabledSkillCards.map((file: any) => file.sourceUrl),
+        [skillId],
+        'the skill is enabled',
+      );
+      assert.strictEqual(
+        mockMatrixUtils.getRoomState(roomId, APP_BOXEL_ACTIVE_LLM)?.model,
+        model,
+        'the model is set',
+      );
+      assert.deepEqual(result.roomChanges, [
+        `Enabled skills: ${skillId}`,
+        `Model set to ${model}`,
+      ]);
+
+      await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `await room.disableSkills([${JSON.stringify(skillId)}]);`,
+      });
+      skills = mockMatrixUtils.getRoomState(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(skills.enabledSkillCards, [], 'the skill is disabled');
+      assert.deepEqual(
+        skills.disabledSkillCards.map((file: any) => file.sourceUrl),
+        [skillId],
+      );
+    });
+
+    test('a run that fails makes no room change', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await room.enableSkills([${JSON.stringify(skillId)}]);
+throw new Error('stop');`,
+        }),
+        /stop\. No file was saved\. The room changes it asked for were not made\./,
+      );
+      assert.notOk(
+        mockMatrixUtils
+          .getRoomEvents(roomId)
+          .some((event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE),
+        'the room skills are not changed',
+      );
+    });
+
+    test('room actions refuse a skill that does not exist and an unknown model', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await room.enableSkills([${JSON.stringify(`${testRealmURL}notes/first.md`)}]);`,
+        }),
+        /Not a skill card or skill markdown file/,
+      );
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await room.setModel('no-such/model');`,
+        }),
+        /Unknown model: no-such\/model/,
+      );
+    });
   });
 });
