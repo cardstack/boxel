@@ -181,3 +181,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/choreo-gallery
+      - name: Lint Choreo Film App
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/choreo-film-app

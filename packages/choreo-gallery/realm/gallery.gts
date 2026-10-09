@@ -10,6 +10,7 @@ import { setMotionSpeed } from 'glimmer-motion';
 import { GalleryDemo, GROUPS } from './demo';
 import { Crossing } from './lib/crossing';
 import type { GalleryNavigation } from './lib/navigation';
+import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
 import { GalleryGrid } from './shell/gallery-grid';
@@ -34,6 +35,7 @@ class Isolated extends Component<typeof ChoreoGallery> {
   /** null is the gallery; a slug is that demo's page */
   @tracked private slug: string | null = null;
   readonly crossing = new Crossing();
+  readonly theater = new Theater();
 
   willDestroy() {
     super.willDestroy();
@@ -73,6 +75,8 @@ class Isolated extends Component<typeof ChoreoGallery> {
     }
     this.crossing.begin(this.slug, slug);
     this.slug = slug;
+    // theater belongs to the page it was entered on
+    this.theater.enter(false);
     // the clock is global, so it goes back to normal with every page — a
     // stage with no speed control must never be left mysteriously slow
     setMotionSpeed(1);
@@ -80,19 +84,30 @@ class Isolated extends Component<typeof ChoreoGallery> {
 
   goHome = () => this.go(null);
 
-  nav: GalleryNavigation = { go: this.go, hrefFor: this.hrefFor };
+  openInTheater = (slug: string) => {
+    this.go(slug);
+    this.theater.enter(true);
+  };
+
+  nav: GalleryNavigation = {
+    go: this.go,
+    hrefFor: this.hrefFor,
+    openInTheater: this.openInTheater,
+  };
 
   <template>
     <SiteFrame
       @crossing={{this.crossing}}
       @homeHref={{this.homeHref}}
       @goHome={{this.goHome}}
+      @theater={{this.theater}}
     >
       {{#if this.current}}
         <DemoPage
           @demo={{this.current}}
           @nav={{this.nav}}
           @near={{this.near}}
+          @theater={{this.theater}}
         />
       {{else}}
         <GalleryGrid
