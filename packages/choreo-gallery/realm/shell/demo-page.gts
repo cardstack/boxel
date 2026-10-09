@@ -594,6 +594,193 @@ export class DemoPage extends Component<Signature> {
         color: var(--copper-ink);
       }
 
+      /* a code box inside a note is the same object as the one above the
+         dive; only its spacing changes, because the column owns the gaps */
+      .demo-body :deep(.dd .sample) {
+        margin-top: 0;
+      }
+
+      /* the notes' type, lifted a step in the dark palette, where the
+         page-mixed greys above sit too far back */
+      .choreo-site:not([data-theme='light']) .demo-body :deep(.dive-head h2),
+      .choreo-site:not([data-theme='light']) .demo-body :deep(.dd-col strong) {
+        color: #e6dfd6;
+      }
+
+      .choreo-site:not([data-theme='light']) .demo-body :deep(.dive-lede),
+      .choreo-site:not([data-theme='light']) .demo-body :deep(.dd-col p) {
+        color: #d2c9bf;
+      }
+
+      .choreo-site:not([data-theme='light']) .demo-body :deep(.dd h3) {
+        color: #d4cbc2;
+      }
+
+      /* The notes' diagrams: a shared vocabulary of plates, boxes, rules and
+         labels, drawn in each note's inline SVG and styled once here. */
+      .demo-body :deep(.dd-fig) {
+        margin: 2px 0 0;
+        padding: 16px 16px 13px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        /* a light tint, capped at 4%: a dark tint over an already dark page
+           does not read as a surface of its own */
+        background: rgba(var(--surface-tint-rgb), 0.04);
+        /* a wide drawing scrolls inside its own box rather than the page */
+        overflow-x: auto;
+      }
+
+      .demo-body :deep(.dd-fig figcaption) {
+        max-width: 76ch;
+        margin-top: 13px;
+        padding-top: 11px;
+        border-top: 1px solid var(--line);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        line-height: 1.6;
+        color: var(--ink-faint);
+      }
+
+      .demo-body :deep(.dd-fig figcaption b) {
+        font-weight: 500;
+        color: var(--ink-dim);
+      }
+
+      /* Capped, so a drawing stays subordinate to the prose it explains. At full
+         page width a 900-unit viewBox renders its 11px labels larger than the 14px
+         body text, which makes the diagram read as the main event. */
+      .demo-body :deep(.dg) {
+        display: block;
+        width: 100%;
+        /* below this the labels collide; the figure scrolls instead of squashing */
+        min-width: 560px;
+        max-width: 760px;
+        height: auto;
+        margin: 0 auto;
+      }
+
+      .demo-body :deep(.dg-plate) {
+        fill: var(--bg);
+        stroke: var(--line);
+      }
+
+      .demo-body :deep(.dg-box) {
+        fill: var(--bg-elev);
+        stroke: var(--line-strong);
+      }
+
+      .demo-body :deep(.dg-boxcop) {
+        fill: var(--bg-elev);
+        stroke: var(--copper);
+      }
+
+      .demo-body :deep(.dg-hot) {
+        fill: rgba(255, 59, 31, 0.16);
+        stroke: var(--ember);
+      }
+
+      .demo-body :deep(.dg-band) {
+        fill: rgba(var(--ink-rgb), 0.04);
+      }
+
+      .demo-body :deep(.dg-rule) {
+        fill: none;
+        stroke: var(--line-strong);
+      }
+
+      .demo-body :deep(.dg-hair) {
+        fill: none;
+        stroke: var(--line);
+      }
+
+      .demo-body :deep(.dg-cop) {
+        fill: none;
+        stroke: var(--copper);
+      }
+
+      .demo-body :deep(.dg-emberline) {
+        fill: none;
+        stroke: var(--ember);
+      }
+
+      .demo-body :deep(.dg-hotline) {
+        fill: none;
+        stroke: var(--ember-hot);
+        stroke-width: 2;
+      }
+
+      .demo-body :deep(.dg-inkline) {
+        fill: none;
+        stroke: var(--ink);
+        stroke-width: 1.6;
+      }
+
+      .demo-body :deep(.dg-dash) {
+        stroke-dasharray: 3 3;
+      }
+
+      .demo-body :deep(.dg-dot) {
+        fill: var(--ember-hot);
+      }
+
+      .demo-body :deep(.dg-copdot) {
+        fill: var(--copper);
+      }
+
+      .demo-body :deep(.dg-faintdot) {
+        fill: var(--ink-faint);
+      }
+
+      .demo-body :deep(.dg-arrow) {
+        fill: var(--ink-faint);
+      }
+
+      .demo-body :deep(.dg-hand) {
+        fill: var(--ink);
+        stroke: var(--bg);
+        stroke-width: 0.8;
+      }
+
+      .demo-body :deep(.dg-t) {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        fill: var(--ink);
+      }
+
+      .demo-body :deep(.dg-t.is-hot) {
+        fill: var(--ember-hot);
+      }
+
+      .demo-body :deep(.dg-t.is-dim) {
+        fill: var(--ink-dim);
+      }
+
+      .demo-body :deep(.dg-t.is-faint) {
+        fill: var(--ink-faint);
+      }
+
+      .demo-body :deep(.dg-t.is-cop) {
+        fill: var(--copper);
+      }
+
+      .demo-body :deep(.dg-eb) {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 1.4px;
+        fill: var(--ink-faint);
+      }
+
+      .demo-body :deep(.dg-h) {
+        font-family: var(--font-display);
+        font-size: 15px;
+        font-weight: 700;
+        fill: var(--ink);
+      }
+
+      .demo-body :deep(.dg-h.is-hot) {
+        fill: var(--ember-hot);
+      }
+
       .walk {
         margin-top: 26px;
       }

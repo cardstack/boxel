@@ -35,8 +35,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../demo",
-        "name": "GalleryDemo"
+        "module": "../stages/grip",
+        "name": "GripDemo"
       }
     }
   }

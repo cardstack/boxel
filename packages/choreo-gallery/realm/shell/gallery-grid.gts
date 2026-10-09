@@ -326,6 +326,9 @@ export class GalleryGrid extends Component<Signature> {
             class={{if (this.veiled demo.slug) 'card is-veiled' 'card'}}
             {{! the crossing finds the tile it lands on by this attribute }}
             data-gallery-tile={{demo.slug}}
+            {{! a leaving tile is on its way out: it takes no pointer, focus or
+              screen reader, so nothing reaches a tile that is fading away }}
+            inert={{unless h.isPresent true}}
             {{motion
               role='card'
               presence=h
