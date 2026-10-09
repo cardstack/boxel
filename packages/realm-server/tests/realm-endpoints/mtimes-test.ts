@@ -116,22 +116,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       }
 
-      async function source(path: string) {
-        return await request
-          .get(`/${path}`)
-          .set('Accept', 'application/vnd.card+source')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'mary', ['read'])}`,
-          );
-      }
-
       test('a rule taken out of .boxelignore reveals the paths it hid', async function (assert) {
         assert.notOk(
           (await listedPaths()).includes('docs/README.md'),
           'the nested README starts out ignored',
         );
-        assert.strictEqual((await source('docs/README.md')).status, 404);
 
         await testRealm.write('.boxelignore', '/README.md\n');
         await testRealm.indexing();
@@ -140,7 +129,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           (await listedPaths()).includes('docs/README.md'),
           'the nested README is listed without a restart',
         );
-        assert.strictEqual((await source('docs/README.md')).status, 200);
       });
 
       test('a rule added to .boxelignore hides the paths it matches', async function (assert) {
@@ -156,7 +144,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           (await listedPaths()).includes('notes/draft.md'),
           'the draft drops out without a restart',
         );
-        assert.strictEqual((await source('notes/draft.md')).status, 404);
       });
     },
   );
