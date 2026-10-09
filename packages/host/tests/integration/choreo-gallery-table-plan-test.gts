@@ -14,18 +14,18 @@
  * a pan session advances on Motion's frameloop, so a drag only happens where
  * `requestAnimationFrame` is actually running.
  */
-import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'ember-qunit';
-import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Grip } from 'test-app/components/examples/grip';
 
 import {
   $,
-  setupFixtureViewport,
+  frames,
+  setupChoreoGalleryTest,
+  setupStageViewport,
+  sleep,
   trigger,
-  wait,
-} from '../helpers/layout-fixture';
+} from '../helpers/choreo-gallery-stage';
+
+import type { ComponentLike } from '@glint/template';
 
 const CARD = '.tp-card';
 const GRIP = '.tp-grip';
@@ -35,17 +35,6 @@ const seats = () => document.querySelectorAll('.tp-seat').length;
 const cards = () => document.querySelectorAll(CARD).length;
 const tally = () => $('.tp-tally').textContent!.trim();
 const firstName = () => $(`${CARD} .tp-who b`).textContent!.trim();
-
-/**
- * `onDragEnd` is dispatched through `frame.update`, so it runs on Motion's
- * frameloop rather than in the pointerup handler — and `settled()` knows
- * nothing about that loop. Every release has to be followed by real frames.
- */
-const frames = (n: number) =>
-  new Promise<void>((resolve) => {
-    const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
-    requestAnimationFrame(step);
-  });
 
 /**
  * Lift a guest by the corner tab and let go over `to`.
@@ -65,7 +54,7 @@ async function carry(to: { x: number; y: number } | null) {
   const anchor = $('.tp-tables').getBoundingClientRect();
 
   trigger(grip, 'pointerdown', start.width / 2, start.height / 2);
-  await wait(20);
+  await sleep(20);
 
   // The delta is measured from the CARD's centre, because that is what the
   // drop is hit-tested against — and the card follows the pointer one for one
@@ -83,13 +72,16 @@ async function carry(to: { x: number; y: number } | null) {
       rest(),
       'pointermove',
       x0 + (dx * i) / STEPS,
-      y0 + (dy * i) / STEPS
+      y0 + (dy * i) / STEPS,
     );
     // two frames per move: one for the session to read it, one for the drag to
     // write it. With one, the card tracks about a third of the travel.
     await frames(2);
   }
   trigger(rest(), 'pointerup', x0 + dx, y0 + dy);
+  // `onDragEnd` is dispatched through `frame.update`, so it runs on Motion's
+  // frameloop rather than in the pointerup handler — and `settled()` knows
+  // nothing about that loop. Every release has to be followed by real frames.
   await frames(4);
 }
 
@@ -101,13 +93,19 @@ const centreOf = (index: number) => {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 };
 
-module('Integration | table plan', function (hooks) {
-  setupRenderingTest(hooks);
-  setupMotion(hooks);
-  setupFixtureViewport(hooks);
+let gallery: ReturnType<typeof setupChoreoGalleryTest>;
+let Grip: ComponentLike;
+
+module('Integration | Choreo gallery | table plan', function (hooks) {
+  gallery = setupChoreoGalleryTest(hooks);
+  setupStageViewport(hooks);
+
+  hooks.beforeEach(async function () {
+    Grip = await gallery.stage('grip', 'Grip');
+  });
 
   test('a guest dropped on a table takes a chair', async function (assert) {
-    await render(<template><Grip /></template>);
+    await gallery.renderStage(Grip);
 
     assert.strictEqual(cards(), 12, 'twelve on the list');
     assert.strictEqual(seats(), 0, 'and nobody seated');
@@ -127,7 +125,7 @@ module('Integration | table plan', function (hooks) {
    * "nothing happened" is the right outcome rather than a bug.
    */
   test('a guest dropped on nothing comes back', async function (assert) {
-    await render(<template><Grip /></template>);
+    await gallery.renderStage(Grip);
 
     await carry({ x: 500, y: 2 });
 
@@ -135,7 +133,7 @@ module('Integration | table plan', function (hooks) {
     assert.strictEqual(cards(), 12, 'and nobody left the list');
     assert.true(
       $('.tp-note').textContent!.includes('that was not a table'),
-      'and the stage says why'
+      'and the stage says why',
     );
   });
 
@@ -146,7 +144,7 @@ module('Integration | table plan', function (hooks) {
    * learn.
    */
   test('a seated guest can be carried back to the list', async function (assert) {
-    await render(<template><Grip /></template>);
+    await gallery.renderStage(Grip);
 
     await carry(centreOf(0));
     assert.strictEqual(seats(), 1, 'seated');
@@ -159,7 +157,7 @@ module('Integration | table plan', function (hooks) {
     const anchor = $('.tp-tables').getBoundingClientRect();
 
     trigger(chair, 'pointerdown', c.width / 2, c.height / 2);
-    await wait(20);
+    await sleep(20);
     const x0 = c.left + c.width / 2 - anchor.left;
     const y0 = c.top + c.height / 2 - anchor.top;
     const dx = r.left + r.width / 2 - (c.left + c.width / 2);
@@ -176,7 +174,7 @@ module('Integration | table plan', function (hooks) {
   });
 
   test('a full table refuses the fifth guest', async function (assert) {
-    await render(<template><Grip /></template>);
+    await gallery.renderStage(Grip);
 
     for (let i = 0; i < 4; i++) {
       await carry(centreOf(0));
@@ -189,7 +187,7 @@ module('Integration | table plan', function (hooks) {
     assert.strictEqual(cards(), 8, 'and is still on the list');
     assert.true(
       $('.tp-note').textContent!.includes('full'),
-      'and the stage says why'
+      'and the stage says why',
     );
   });
 
@@ -200,23 +198,23 @@ module('Integration | table plan', function (hooks) {
    * every other drag callback is too late to be useful for that.
    */
   test('taking hold of a guest lights the tables that have room', async function (assert) {
-    await render(<template><Grip /></template>);
+    await gallery.renderStage(Grip);
 
     assert.strictEqual(
       document.querySelectorAll(`${TABLE}.is-live`).length,
       0,
-      'nothing is lit before a hand is on anybody'
+      'nothing is lit before a hand is on anybody',
     );
 
     const grip = $(`${CARD} ${GRIP}`);
     const r = grip.getBoundingClientRect();
     trigger(grip, 'pointerdown', r.width / 2, r.height / 2);
-    await wait(30);
+    await sleep(30);
 
     assert.strictEqual(
       document.querySelectorAll(`${TABLE}.is-live`).length,
       3,
-      'all three light at pointerdown, before any movement at all'
+      'all three light at pointerdown, before any movement at all',
     );
 
     trigger(grip, 'pointerup', r.width / 2, r.height / 2);

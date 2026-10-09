@@ -1,15 +1,17 @@
-import { find, render, triggerEvent, waitUntil } from '@ember/test-helpers';
+import { find, triggerEvent, waitUntil } from '@ember/test-helpers';
+
 import { setMotionSpeed } from 'glimmer-motion';
 import {
   animationsSettled,
   bounds,
   isMotionIdle,
-  setupMotion,
   whatIsBusy,
 } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Subdivision } from 'test-app/components/examples/subdivision';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+
+import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+
+import type { ComponentLike } from '@glint/template';
 
 /**
  * The demo sizes itself in CONTAINER units — `.ex` is the query container
@@ -40,25 +42,16 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
  *   the transition so being mid-flight is a fact rather than a hope — the
  *   speed is reset for us by `setupMotion`'s beforeEach.
  *
- * A third cause outlived both, and it was not this file's fault: fixture
- * tests used to hide the app stylesheet by setting `link.disabled`, which
- * detaches the sheet and reattaches it a few frames later rather than on the
- * clearing statement. This is the only test that reads its geometry out of
- * that stylesheet, so it was the only one that noticed, and what it measured
- * was an untouched `button` — 95x21. `setupFixtureViewport` mutes with
- * `media` now, which is synchronous both ways. `appCss` is reported below so
- * that a fourth cause has to name itself.
+ * A third cause outlived both, and it was not this file's fault: this test
+ * reads its geometry out of the demo's own stylesheet, so a window in which
+ * that stylesheet is out of the cascade measures an untouched `button` —
+ * 95x21 — rather than the grid. `stageCss` is reported below so that a
+ * fourth cause has to name itself.
  */
 async function mount() {
-  await render(
-    <template>
-      <div data-test-stage style="position:relative;width:600px;height:500px">
-        <Subdivision />
-      </div>
-    </template>
-  );
+  await gallery.renderStage(Subdivision, { width: 600, height: 500 });
   await animationsSettled();
-  const stage = find('[data-test-stage]') as HTMLElement;
+  const stage = find('.choreo-stage-well') as HTMLElement;
   // Wait for a real TILE, not a real grid.
   //
   // `.subdivide` is `height: min(72cqh, 300px)`, and `cqh` reads 0 until the
@@ -70,7 +63,7 @@ async function mount() {
   await waitUntil(
     () => {
       const t = stage.querySelector(
-        '[data-test-tile="atlas"]'
+        '[data-test-tile="atlas"]',
       ) as HTMLElement | null;
       if (!t) {
         return false;
@@ -78,30 +71,30 @@ async function mount() {
       const box = t.getBoundingClientRect();
       return box.width > 20 && box.height > 20;
     },
-    { timeout: 4000 }
+    { timeout: 4000 },
   ).catch(() => {
     // fall through: the assertions below report the box they actually got,
     // which is the diagnostic this test exists to give
   });
   const root = stage.querySelector(
-    '[data-test-subdivision]'
+    '[data-test-subdivision]',
   ) as HTMLElement | null;
   const grid = root?.querySelector('[data-test-grid]') as HTMLElement | null;
   const tile = root?.querySelector(
-    '[data-test-tile="atlas"]'
+    '[data-test-tile="atlas"]',
   ) as HTMLElement | null;
   const seam = root?.querySelector(
-    '[data-test-seam="col"]'
+    '[data-test-seam="col"]',
   ) as HTMLElement | null;
   return { grid, root, seam, stage, tile };
 }
 
 /**
- * whether the app stylesheet is in the cascade at all: `.ex` is `absolute`
- * there and `static` everywhere else, so one computed value separates "the
- * demo laid out wrong" from "the demo had no CSS".
+ * whether the stage's scoped stylesheet is in the cascade at all: `.ex` is
+ * `absolute` there and `static` everywhere else, so one computed value
+ * separates "the demo laid out wrong" from "the demo had no CSS".
  */
-function appCss(root: HTMLElement | null) {
+function stageCss(root: HTMLElement | null) {
   return root ? getComputedStyle(root).position : '(no root)';
 }
 
@@ -109,30 +102,38 @@ function report(parts: Record<string, unknown>) {
   return JSON.stringify(parts);
 }
 
-module('Integration | motion | subdivision', function (hooks) {
-  setupRenderingTest(hooks);
-  setupMotion(hooks);
+let gallery: ReturnType<typeof setupChoreoGalleryTest>;
+let Subdivision: ComponentLike;
+
+module('Integration | Choreo gallery | subdivision', function (hooks) {
+  gallery = setupChoreoGalleryTest(hooks);
+
+  hooks.beforeEach(async function () {
+    Subdivision = await gallery.stage('subdivision', 'Subdivision');
+  });
 
   test('evening a seam commits a new column split', async function (assert) {
     const { grid, root, seam, stage, tile } = await mount();
-    assert.ok(grid && tile && seam, 'the fixture mounted its grid, tile, seam');
+    const mounted = Boolean(grid && tile && seam);
+    assert.true(mounted, 'the fixture mounted its grid, tile, seam');
     if (!grid || !tile || !seam) {
-      return;
+      throw new Error('the fixture has no grid, tile or seam to measure');
     }
 
     const tileBox = bounds(tile);
+    const real = tileBox.width > 20 && tileBox.height > 20;
     assert.true(
-      tileBox.width > 20 && tileBox.height > 20,
+      real,
       `the demo came up with real tiles ${report({
-        appCss: appCss(root),
         grid: bounds(grid),
         stage: bounds(stage),
+        stageCss: stageCss(root),
         tile: tileBox,
-      })}`
+      })}`,
     );
     assert.true(
       grid.contains(tile),
-      'the measured tile belongs to this fixture’s grid'
+      'the measured tile belongs to this fixture’s grid',
     );
 
     const before = bounds(tile);
@@ -144,20 +145,21 @@ module('Integration | motion | subdivision', function (hooks) {
       Math.abs(after.width - before.width) > 8,
       `the tile resizes ${report({
         after,
-        appCss: appCss(root),
         before,
         grid: bounds(grid),
         stage: bounds(stage),
+        stageCss: stageCss(root),
         tileConnected: tile.isConnected,
-      })}`
+      })}`,
     );
   });
 
   test('evening a seam springs the tiles rather than snapping them', async function (assert) {
     const { seam, tile } = await mount();
-    assert.ok(tile && seam, 'the fixture mounted its tile and seam');
+    const mounted = Boolean(tile && seam);
+    assert.true(mounted, 'the fixture mounted its tile and seam');
     if (!tile || !seam) {
-      return;
+      throw new Error('the fixture has no tile or seam to measure');
     }
 
     // Stretch the transition so "still moving one frame later" is a fact
@@ -171,7 +173,7 @@ module('Integration | motion | subdivision', function (hooks) {
     try {
       await triggerEvent(seam, 'dblclick');
       const reduced = window.matchMedia(
-        '(prefers-reduced-motion: reduce)'
+        '(prefers-reduced-motion: reduce)',
       ).matches;
       if (!reduced) {
         // A projection animation starts on the frame AFTER the layout change,
@@ -184,13 +186,13 @@ module('Integration | motion | subdivision', function (hooks) {
             started ||= !isMotionIdle();
             return started;
           },
-          { timeout: 2000 }
+          { timeout: 2000 },
         ).catch(() => undefined);
         assert.true(
           started,
           `the seam animated rather than snapping: ${
             whatIsBusy().join('; ') || '(nothing ever reported busy)'
-          }`
+          }`,
         );
       }
       await animationsSettled({ timeout: 12000 });

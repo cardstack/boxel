@@ -1,9 +1,14 @@
-import { click, render } from '@ember/test-helpers';
+import { click } from '@ember/test-helpers';
+
 import { LayoutGroup } from 'glimmer-motion';
-import { setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Sheet } from 'test-app/components/examples/sheet';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+
+import {
+  frames,
+  setupChoreoGalleryTest,
+} from '../helpers/choreo-gallery-stage';
+
+import type { ComponentLike } from '@glint/template';
 
 /**
  * Every distinct reading over a wall-clock window.
@@ -17,7 +22,7 @@ async function watch(read: () => number, ms = 260) {
   const until = performance.now() + ms;
   while (performance.now() < until) {
     seen.add(read());
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await frames(1);
   }
   return [...seen];
 }
@@ -47,12 +52,18 @@ async function stepAndWatch() {
   return { before, readings, after: tileX() };
 }
 
-module('Integration | motion | sheet standalone', function (hooks) {
-  setupRenderingTest(hooks);
-  setupMotion(hooks);
+let gallery: ReturnType<typeof setupChoreoGalleryTest>;
+let Sheet: ComponentLike;
+
+module('Integration | Choreo gallery | sheet standalone', function (hooks) {
+  gallery = setupChoreoGalleryTest(hooks);
+
+  hooks.beforeEach(async function () {
+    Sheet = await gallery.stage('sheet', 'Sheet');
+  });
 
   test('the tiles tween to their new seats with no LayoutGroup above', async function (assert) {
-    await render(<template><Sheet /></template>);
+    await gallery.renderStage(Sheet);
     await rest();
 
     const seen = await stepAndWatch();
@@ -60,24 +71,23 @@ module('Integration | motion | sheet standalone', function (hooks) {
     assert.notStrictEqual(
       seen.before,
       seen.after,
-      `the tile does move: ${dump}`
+      `the tile does move: ${dump}`,
     );
     const between = seen.readings.filter(
       (v) =>
         v !== seen.before &&
         v !== seen.after &&
         v > Math.min(seen.before, seen.after) &&
-        v < Math.max(seen.before, seen.after)
+        v < Math.max(seen.before, seen.after),
     );
     assert.ok(between.length > 0, `it travels rather than snapping: ${dump}`);
   });
 
   test('and the same inside a LayoutGroup, as the gallery renders it', async function (assert) {
-    await render(
-      <template>
-        <LayoutGroup><Sheet /></LayoutGroup>
-      </template>
-    );
+    const Grouped = <template>
+      <LayoutGroup><Sheet /></LayoutGroup>
+    </template>;
+    await gallery.renderStage(Grouped);
     await rest();
 
     const seen = await stepAndWatch();
@@ -85,14 +95,14 @@ module('Integration | motion | sheet standalone', function (hooks) {
     assert.notStrictEqual(
       seen.before,
       seen.after,
-      `the tile does move: ${dump}`
+      `the tile does move: ${dump}`,
     );
     const between = seen.readings.filter(
       (v) =>
         v !== seen.before &&
         v !== seen.after &&
         v > Math.min(seen.before, seen.after) &&
-        v < Math.max(seen.before, seen.after)
+        v < Math.max(seen.before, seen.after),
     );
     assert.ok(between.length > 0, `it travels rather than snapping: ${dump}`);
   });

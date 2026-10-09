@@ -4,12 +4,18 @@
  * the presses behind the playhead. The old private sampler is gone; these
  * pin what replaced it.
  */
-import type { ChoreoRun } from '@cardstack/choreo';
-import { setupChoreo } from '@cardstack/choreo/test-support';
-import { render, settled, waitUntil } from '@ember/test-helpers';
-import { setupRenderingTest } from 'ember-qunit';
+import { settled, waitUntil } from '@ember/test-helpers';
+
 import { module, test } from 'qunit';
-import { Playhead } from 'test-app/components/examples/playhead';
+
+import {
+  frames,
+  setupChoreoGalleryTest,
+} from '../helpers/choreo-gallery-stage';
+
+import type { ChoreoRun } from '@cardstack/choreo';
+
+import type { ComponentLike } from '@glint/template';
 
 function run(): ChoreoRun | null {
   const stage = document.querySelector('.ph-stage') as
@@ -30,34 +36,32 @@ function scrubTo(seconds: number) {
   range.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
 }
 
-const frames = (n: number) =>
-  new Promise<void>((resolve) => {
-    const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
-    requestAnimationFrame(step);
+module('Integration | Choreo gallery | playhead transport', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+  let Playhead: ComponentLike;
+
+  hooks.beforeEach(async function () {
+    Playhead = await gallery.stage('playhead', 'Playhead');
   });
 
-module('Integration | choreo | playhead transport', function (hooks) {
-  setupRenderingTest(hooks);
-  setupChoreo(hooks);
-
   test('the parked opening, a scrub, and the fold', async function (assert) {
-    await render(<template><Playhead /></template>);
+    await gallery.renderStage(Playhead);
     await waitUntil(() => run() != null, { timeout: 4000 });
     await frames(6);
 
     const r = run()!;
     assert.ok(
       Math.abs(r.duration - 6.16) < 0.05,
-      `the score compiles to its full length — ${r.duration.toFixed(2)}s`
+      `the score compiles to its full length — ${r.duration.toFixed(2)}s`,
     );
     assert.ok(
       r.time < 0.2,
-      `parked near zero, waiting for Play — at ${r.time.toFixed(2)}`
+      `parked near zero, waiting for Play — at ${r.time.toFixed(2)}`,
     );
     assert.strictEqual(
       document.querySelectorAll('.ph-mark').length,
       4,
-      'four press marks, read back from the compiled cues'
+      'four press marks, read back from the compiled cues',
     );
 
     // scrub past express, wrap and place: the fold has all three pressed
@@ -65,11 +69,11 @@ module('Integration | choreo | playhead transport', function (hooks) {
     await frames(6);
     assert.true(
       styleOf('.ph-pill').includes('127'),
-      `the pill sits at Express — got '${styleOf('.ph-pill')}'`
+      `the pill sits at Express — got '${styleOf('.ph-pill')}'`,
     );
     assert.true(
       styleOf('.ph-receipt').includes('opacity: 1'),
-      `the receipt is up — got '${styleOf('.ph-receipt')}'`
+      `the receipt is up — got '${styleOf('.ph-receipt')}'`,
     );
     assert.dom('[data-cue="express"]').hasClass('is-on');
     assert.dom('[data-cue="wrap"]').hasAttribute('aria-pressed', 'true');
@@ -79,11 +83,11 @@ module('Integration | choreo | playhead transport', function (hooks) {
     await frames(6);
     assert.false(
       styleOf('.ph-pill').includes('127'),
-      `the pill is home again — got '${styleOf('.ph-pill')}'`
+      `the pill is home again — got '${styleOf('.ph-pill')}'`,
     );
     assert.true(
       styleOf('.ph-receipt').includes('opacity: 0'),
-      `the receipt is down — got '${styleOf('.ph-receipt')}'`
+      `the receipt is down — got '${styleOf('.ph-receipt')}'`,
     );
     assert.dom('[data-cue="standard"]').hasClass('is-on');
 
@@ -92,7 +96,7 @@ module('Integration | choreo | playhead transport', function (hooks) {
   });
 
   test('played, paused mid-flight, scrubbed home: the whole scene rewinds', async function (assert) {
-    await render(<template><Playhead /></template>);
+    await gallery.renderStage(Playhead);
     await waitUntil(() => run() != null, { timeout: 4000 });
     await frames(6);
 
@@ -112,11 +116,11 @@ module('Integration | choreo | playhead transport', function (hooks) {
     const r = run()!;
     assert.ok(
       r.time < 0.05,
-      `the playhead stands at zero (${r.time.toFixed(2)})`
+      `the playhead stands at zero (${r.time.toFixed(2)})`,
     );
     assert.true(
       styleOf('.ph-receipt').includes('opacity: 0'),
-      `the receipt rewinds away — got '${styleOf('.ph-receipt')}'`
+      `the receipt rewinds away — got '${styleOf('.ph-receipt')}'`,
     );
     // COMPUTED, not the inline attribute: a resurrected fill:both
     // animation overrides inline style, and reading the attribute is
@@ -124,7 +128,7 @@ module('Integration | choreo | playhead transport', function (hooks) {
     assert.strictEqual(
       getComputedStyle(document.querySelector('.ph-receipt')!).opacity,
       '0',
-      'the receipt is invisible on screen, not just in the attribute'
+      'the receipt is invisible on screen, not just in the attribute',
     );
     // the hand stands at home: the FIRST walk's first keyframe, read
     // back from the compiled cues rather than hard-coding the layout
@@ -132,7 +136,7 @@ module('Integration | choreo | playhead transport', function (hooks) {
       .filter(
         (cue) =>
           cue.sprite.id === 'hand' &&
-          Array.isArray((cue.target as { x?: number[] } | undefined)?.x)
+          Array.isArray((cue.target as { x?: number[] } | undefined)?.x),
       )
       .sort((a, b) => a.start - b.start)[0]!;
     const home = {
@@ -141,10 +145,12 @@ module('Integration | choreo | playhead transport', function (hooks) {
     };
     const hand =
       document.querySelector<HTMLElement>('.ph-hand')?.style.transform ?? '';
-    assert.true(
+    const atHome =
       hand.includes(`translateX(${home.x}px)`) &&
-        hand.includes(`translateY(${home.y}px)`),
-      `the hand waits at home again — got '${hand}', home (${home.x}, ${home.y})`
+      hand.includes(`translateY(${home.y}px)`);
+    assert.true(
+      atHome,
+      `the hand waits at home again — got '${hand}', home (${home.x}, ${home.y})`,
     );
 
     run()?.cancel();
@@ -152,7 +158,7 @@ module('Integration | choreo | playhead transport', function (hooks) {
   });
 
   test('played to the end, the park is clean: nothing resurrected stands', async function (assert) {
-    await render(<template><Playhead /></template>);
+    await gallery.renderStage(Playhead);
     await waitUntil(() => run() != null, { timeout: 4000 });
     await frames(6);
 
@@ -169,12 +175,12 @@ module('Integration | choreo | playhead transport', function (hooks) {
     assert.strictEqual(
       getComputedStyle(receipt).opacity,
       '0',
-      'at the park, the dialog is gone on SCREEN — done pressed it away'
+      'at the park, the dialog is gone on SCREEN — done pressed it away',
     );
     assert.strictEqual(
       receipt.getAnimations().length,
       0,
-      'no stale animation stands on the receipt at the park'
+      'no stale animation stands on the receipt at the park',
     );
 
     run()?.cancel();
@@ -182,7 +188,7 @@ module('Integration | choreo | playhead transport', function (hooks) {
   });
 
   test('playing dispatches real clicks; a live hand takes the scene', async function (assert) {
-    await render(<template><Playhead /></template>);
+    await gallery.renderStage(Playhead);
     await waitUntil(() => run() != null, { timeout: 4000 });
     await frames(6);
 
@@ -193,7 +199,7 @@ module('Integration | choreo | playhead transport', function (hooks) {
         document
           .querySelector('[data-cue="express"]')
           ?.classList.contains('is-on') ?? false,
-      { timeout: 4000 }
+      { timeout: 4000 },
     );
     assert.dom('[data-cue="express"]').hasClass('is-on');
 
@@ -214,13 +220,13 @@ module('Integration | choreo | playhead transport', function (hooks) {
             .querySelector('.ph-transport')
             ?.classList.contains('is-off') ?? true
         ),
-      { timeout: 4000 }
+      { timeout: 4000 },
     );
     await frames(8);
     assert.dom('[data-cue="express"]').hasClass('is-on');
     assert.true(
       styleOf('.ph-pill').includes('127'),
-      `the score's answer at 2.0s stands — got '${styleOf('.ph-pill')}'`
+      `the score's answer at 2.0s stands — got '${styleOf('.ph-pill')}'`,
     );
 
     run()?.cancel();

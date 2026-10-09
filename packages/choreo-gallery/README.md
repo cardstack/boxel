@@ -116,5 +116,7 @@ The guides themselves, and the guide pages that embed the demos, are still
 
 Tests that load the gallery's cards from their realm source run in the host
 suite, `packages/host/tests/integration/choreo-*-test.gts`, through
-`tests/helpers/choreo-gallery.ts`: the films' faces and theater, and the
-feature reel under an external clock.
+`tests/helpers/choreo-gallery.ts` and `tests/helpers/choreo-gallery-stage.gts`:
+every stage rendering on its own, each demo's behaviour, the gallery site and
+its crossing between the grid and a demo page, the films' faces and theater,
+and the feature reel under an external clock.

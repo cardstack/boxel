@@ -9,28 +9,24 @@
  * schedule is an absolute setting that re-derives correctly by accident, so a
  * test that only checked `gas` would pass against a broken host.
  */
-import { setupChoreo } from '@cardstack/choreo/test-support';
-import { concat } from '@ember/helper';
-import { htmlSafe } from '@ember/template';
-import { render, settled } from '@ember/test-helpers';
-import { setupRenderingTest } from 'ember-qunit';
+import { settled } from '@ember/test-helpers';
+
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Fold } from 'test-app/components/examples/fold';
 
-import { setupFixtureViewport } from '../helpers/layout-fixture';
+import {
+  frames,
+  setupChoreoGalleryTest,
+  setupStageViewport,
+} from '../helpers/choreo-gallery-stage';
+
+import type { ComponentLike } from '@glint/template';
 
 /** the score's own length: five 0.9s holds and a 0.5s tail */
 const DURATION = 5;
 
 /** the moment the demo argues with: after `damper.open`, before both latches */
 const PROBE = 1.2;
-
-const frames = (n: number) =>
-  new Promise<void>((resolve) => {
-    const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
-    requestAnimationFrame(step);
-  });
 
 /**
  * A replay swaps the run, and the new one does not exist until Ember has
@@ -46,6 +42,8 @@ async function restart(app: Host) {
 }
 
 interface Host {
+  /** the demo's Choreo region, whose run the demo drives */
+  c?: { run: { cancel(): void } | null };
   play: () => void;
   replay: () => void;
   resets: number;
@@ -65,7 +63,7 @@ interface Host {
  * broken case would pass for the wrong reason.
  */
 async function fired(honours = true) {
-  await render(<template><Fold /></template>);
+  await gallery.renderStage(Fold);
   const el = document.querySelector('.kf-stage') as HTMLElement & {
     fold?: Host;
   };
@@ -80,17 +78,23 @@ async function fired(honours = true) {
   return app;
 }
 
-module('Integration | examples | fold', function (hooks) {
-  setupRenderingTest(hooks);
-  setupFixtureViewport(hooks);
-  setupChoreo(hooks);
+let gallery: ReturnType<typeof setupChoreoGalleryTest>;
+let Fold: ComponentLike;
+
+module('Integration | Choreo gallery | fold', function (hooks) {
+  gallery = setupChoreoGalleryTest(hooks);
+  setupStageViewport(hooks);
+
+  hooks.beforeEach(async function () {
+    Fold = await gallery.stage('fold', 'Fold');
+  });
 
   test('a seek to the end leaves the whole schedule applied', async function (assert) {
     const app = await fired();
     assert.deepEqual(
       app.state,
       { cone: true, damper: true, gas: 0, soak: true },
-      'every command landed: the latches are set and gas.off took gas back to 0'
+      'every command landed: the latches are set and gas.off took gas back to 0',
     );
   });
 
@@ -101,7 +105,7 @@ module('Integration | examples | fold', function (hooks) {
     assert.deepEqual(
       app.state,
       { cone: false, damper: true, gas: 2, soak: false },
-      'at 1.2s: gas re-derived to 2, damper still open, both latches cleared'
+      'at 1.2s: gas re-derived to 2, damper still open, both latches cleared',
     );
     assert.strictEqual(app.resets, 1, 'the host was reset exactly once');
   });
@@ -113,28 +117,28 @@ module('Integration | examples | fold', function (hooks) {
     assert.deepEqual(
       app.state,
       { cone: true, damper: true, gas: 0, soak: true },
-      'the broken host still ran the whole schedule forward'
+      'the broken host still ran the whole schedule forward',
     );
     app.seek(PROBE);
     await frames(6);
     assert.deepEqual(
       app.state,
       { cone: true, damper: true, gas: 2, soak: true },
-      `gas re-derives by accident — soak and cone are the ones left wrong (got ${JSON.stringify(app.state)}, resets ${app.resets})`
+      `gas re-derives by accident — soak and cone are the ones left wrong (got ${JSON.stringify(app.state)}, resets ${app.resets})`,
     );
     assert.strictEqual(app.resets, 0, 'and it never counted a reset');
   });
 
   test('play at the end starts over from cold rather than seeking back', async function (assert) {
     const app = await fired();
-    assert.strictEqual(app.state.cone, true, 'the run is parked at its end');
+    assert.true(app.state.cone, 'the run is parked at its end');
     app.play();
     await settled();
     await frames(4);
     assert.deepEqual(
       app.state,
       { cone: false, damper: false, gas: 0, soak: false },
-      'the kiln is cold again: a fresh run, not a rewind through the old one'
+      'the kiln is cold again: a fresh run, not a rewind through the old one',
     );
     assert.strictEqual(app.resets, 0, 'and the reset count starts over too');
   });
@@ -151,7 +155,7 @@ module('Integration | examples | fold', function (hooks) {
     assert.deepEqual(
       app.state,
       { cone: false, damper: false, gas: 0, soak: false },
-      'the broken host is cold again, because nothing was rewound'
+      'the broken host is cold again, because nothing was rewound',
     );
   });
 
@@ -167,28 +171,29 @@ module('Integration | examples | fold', function (hooks) {
    */
   const fits = (label: string, w: number, h: number) =>
     test(`the whole scene fits ${label} without clipping`, async function (assert) {
-      await render(
-        <template>
-          <div
-            style={{htmlSafe
-              (concat "position:relative;width:" w "px;height:" h "px")
-            }}
-          >
-            <Fold />
-          </div>
-        </template>
-      );
+      await gallery.renderStage(Fold, { width: w, height: h });
+      // The score starts when the stage comes into view, and the demo holds
+      // its run paused at the end rather than letting it finish. Run to the
+      // end and stopped, the scene is measured at rest with every command
+      // applied.
+      const handle = (
+        document.querySelector('.kf-stage') as HTMLElement & { fold?: Host }
+      ).fold!;
+      await restart(handle);
+      handle.seek(DURATION);
+      await frames(6);
+      handle.c?.run?.cancel();
       await animationsSettled();
 
       const stage = document.querySelector('.kf-stage') as HTMLElement;
       const kids = [...stage.children].filter(
-        (el) => (el as HTMLElement).offsetHeight > 0
+        (el) => (el as HTMLElement).offsetHeight > 0,
       ) as HTMLElement[];
       // the scene's own rows, not the region's full-height internals
       const own = kids.filter((el) => el.className.startsWith('kf-'));
       const top = Math.min(...own.map((el) => el.offsetTop));
       const bottom = Math.max(
-        ...own.map((el) => el.offsetTop + el.offsetHeight)
+        ...own.map((el) => el.offsetTop + el.offsetHeight),
       );
       const report = JSON.stringify({
         bottom,
@@ -203,7 +208,7 @@ module('Integration | examples | fold', function (hooks) {
       assert.true(top >= -1, `nothing overflows the top ${report}`);
       assert.true(
         bottom <= stage.clientHeight + 1,
-        `nothing overflows the bottom ${report}`
+        `nothing overflows the bottom ${report}`,
       );
     });
 
@@ -221,7 +226,7 @@ module('Integration | examples | fold', function (hooks) {
     assert.deepEqual(
       app.state,
       once,
-      'idempotent: the same clock, the same state'
+      'idempotent: the same clock, the same state',
     );
     assert.strictEqual(app.resets, resets, 'and no second reset');
   });

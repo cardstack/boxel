@@ -20,30 +20,21 @@
  * these fails it is naming a real leak, not a flaky measurement — the assertions
  * are all counts and rest states, never bounds.
  */
+import { settled } from '@ember/test-helpers';
+
 import {
   orphanCount,
-  setupChoreo,
   strandedTransforms,
 } from '@cardstack/choreo/test-support';
-import { render, settled } from '@ember/test-helpers';
-import { setupRenderingTest } from 'ember-qunit';
 import { setMotionSpeed } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Enter } from 'test-app/components/examples/enter';
-import { FarMatch } from 'test-app/components/examples/far-match';
-import { Interrupt } from 'test-app/components/examples/interrupt';
-import { Lightbox } from 'test-app/components/examples/lightbox';
-import { Lists } from 'test-app/components/examples/lists';
-import { PresenceModes } from 'test-app/components/examples/presence-modes';
-import { Sequence } from 'test-app/components/examples/sequence';
-import { SharedTabs } from 'test-app/components/examples/shared-tabs';
-import { Slides } from 'test-app/components/examples/slides';
-import { SplitView } from 'test-app/components/examples/split-view';
-import { Trail } from 'test-app/components/examples/trail';
 
-import { setupFixtureViewport } from '../../helpers/layout-fixture';
-import { sleep } from '../../helpers/motion';
+import {
+  setupChoreoGalleryTest,
+  setupStageViewport,
+  sleep,
+} from '../helpers/choreo-gallery-stage';
 
 // NOT find(): that scopes the query INSIDE the testing container, so it can
 // never match the container itself
@@ -52,7 +43,7 @@ const root = () => document.querySelector('#ember-testing') as HTMLElement;
 /** every button a person could hit on this stage */
 const targets = (selector: string) =>
   [...root().querySelectorAll<HTMLElement>(selector)].filter(
-    (el) => !(el as HTMLButtonElement).disabled
+    (el) => !(el as HTMLButtonElement).disabled,
   );
 
 /**
@@ -100,8 +91,9 @@ async function returnToRest(selector?: string) {
 interface Stage {
   /** what a person clicks on this stage */
   clicks: string;
+  /** the stage's export from its gallery module */
+  component: string;
   name: string;
-  render: () => Promise<void>;
   /**
    * Something to click until it is gone, to put the stage back the way it was
    * found. Only a stage that can be left open needs one.
@@ -116,79 +108,95 @@ interface Stage {
    * one, and chasing them cost a day.
    */
   rest?: string;
+  /** the stage's module in the gallery realm: `stages/<slug>` */
+  slug: string;
 }
 
 const stages: Stage[] = [
   {
     clicks: '.study-card',
+    component: 'Sequence',
     name: 'Sequence',
-    render: () => render(<template><Sequence /></template>),
     rest: '.study-card.is-open',
+    slug: 'sequence',
   },
   {
     clicks: '.list-name',
+    component: 'Lists',
     name: 'Lists',
-    render: () => render(<template><Lists /></template>),
+    slug: 'lists',
   },
   {
     clicks: '.piece',
+    component: 'FarMatch',
     name: 'Far match',
-    render: () => render(<template><FarMatch /></template>),
+    slug: 'far',
   },
   {
     clicks: '.slot',
+    component: 'Interrupt',
     name: 'Interruption',
-    render: () => render(<template><Interrupt /></template>),
+    slug: 'interrupt',
   },
   {
     clicks: '.slides-dot, .slides-next',
+    component: 'Slides',
     name: 'Slides',
-    render: () => render(<template><Slides /></template>),
+    slug: 'slides',
   },
   {
     clicks: '.replay',
+    component: 'SplitView',
     name: 'Split view',
-    render: () => render(<template><SplitView /></template>),
+    slug: 'split',
   },
   {
     clicks: '.replay',
+    component: 'Enter',
     name: 'Enter',
-    render: () => render(<template><Enter /></template>),
+    slug: 'enter',
   },
   {
     clicks: '.replay',
+    component: 'PresenceModes',
     name: 'Presence',
-    render: () => render(<template><PresenceModes /></template>),
+    slug: 'presence',
   },
   {
     clicks: '.replay, .crumb-btn',
+    component: 'Trail',
     name: 'Trail',
-    render: () => render(<template><Trail /></template>),
+    slug: 'trail',
   },
   {
     clicks: '.tab',
+    component: 'SharedTabs',
     name: 'Shared tabs',
-    render: () => render(<template><SharedTabs /></template>),
+    slug: 'tabs',
   },
   {
     clicks: '.shot, .lightbox-close',
+    component: 'Lightbox',
     name: 'Lightbox',
-    render: () => render(<template><Lightbox /></template>),
     rest: '.lightbox-close',
+    slug: 'lightbox',
   },
 ];
 
-module('Integration | choreo | rapid interruption', function (hooks) {
-  setupRenderingTest(hooks);
-  setupFixtureViewport(hooks);
-  setupChoreo(hooks);
+module('Integration | Choreo gallery | rapid interruption', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+  setupStageViewport(hooks);
+
+  async function renderStage(stage: Stage) {
+    await gallery.renderStage(await gallery.stage(stage.slug, stage.component));
+  }
 
   for (const stage of stages) {
     // three gaps: inside the first phase, mid-flight, and around the end of a
     // run — the three places an interruption lands differently
     for (const gap of [0, 60, 220]) {
       test(`${stage.name} survives 10 clicks ${gap}ms apart`, async function (assert) {
-        await stage.render();
+        await renderStage(stage);
         await animationsSettled();
         const before = root().querySelectorAll('*').length;
 
@@ -198,17 +206,17 @@ module('Integration | choreo | rapid interruption', function (hooks) {
         assert.strictEqual(
           orphanCount(),
           0,
-          'no leaver stranded in an orphan layer'
+          'no leaver stranded in an orphan layer',
         );
         assert.deepEqual(
           strandedTransforms(),
           [],
-          'no element kept a transform'
+          'no element kept a transform',
         );
         const after = root().querySelectorAll('*').length;
-        assert.ok(
+        assert.true(
           after <= before + 2,
-          `the DOM did not accumulate (${before} -> ${after})`
+          `the DOM did not accumulate (${before} -> ${after})`,
         );
       });
     }
@@ -223,7 +231,7 @@ module('Integration | choreo | rapid interruption', function (hooks) {
   for (const stage of stages.slice(0, 4)) {
     test(`${stage.name} survives interruption in slow motion`, async function (assert) {
       setMotionSpeed(5);
-      await stage.render();
+      await renderStage(stage);
       await animationsSettled();
       await hammer(stage.clicks, 6, 120);
       setMotionSpeed(1);

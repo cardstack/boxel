@@ -1,20 +1,29 @@
-import { click, render } from '@ember/test-helpers';
-import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
+import { click } from '@ember/test-helpers';
+
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Sheet } from 'test-app/components/examples/sheet';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+
+import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+
+import type { ComponentLike } from '@glint/template';
 
 /** the sheet's own y, read off the element rather than off the props */
 function offset(el: Element) {
   return Math.round(new DOMMatrix(getComputedStyle(el).transform).m42);
 }
 
-module('Integration | motion | sheet', function (hooks) {
-  setupRenderingTest(hooks);
-  setupMotion(hooks);
+let gallery: ReturnType<typeof setupChoreoGalleryTest>;
+let Sheet: ComponentLike;
+
+module('Integration | Choreo gallery | sheet', function (hooks) {
+  gallery = setupChoreoGalleryTest(hooks);
+
+  hooks.beforeEach(async function () {
+    Sheet = await gallery.stage('sheet', 'Sheet');
+  });
 
   test('a step moves the sheet to the next detent', async function (assert) {
-    await render(<template><Sheet /></template>);
+    await gallery.renderStage(Sheet);
     await animationsSettled();
 
     const sheet = document.querySelector('.sheet')!;
@@ -35,7 +44,7 @@ module('Integration | motion | sheet', function (hooks) {
   });
 
   test('the four targets are re-laid-out, never re-created', async function (assert) {
-    await render(<template><Sheet /></template>);
+    await gallery.renderStage(Sheet);
     await animationsSettled();
 
     const first = [...document.querySelectorAll('.share-tile')];

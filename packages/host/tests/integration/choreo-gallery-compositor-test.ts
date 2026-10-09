@@ -1,15 +1,19 @@
 /**
- * The C1 composition host (docs/choreo-composition.md, Phase C1) — the
- * contract, proven with synthetic actors and a fake run so nothing here
- * depends on a template. The host owns the composition clock, a semantic
- * action bus, timed cues folded through `t`, parameter automation, and
- * `renderAt` as one transaction. Cues are semantic commands, not
- * callbacks: seeking past one includes its state, seeking before it
- * excludes it, and repeated seeks are idempotent.
+ * The composition host behind the feature reel — the contract, proven with
+ * synthetic actors and a fake run so nothing here depends on a template. The
+ * host owns the composition clock, a semantic action bus, timed cues folded
+ * through `t`, parameter automation, and `renderAt` as one transaction. Cues
+ * are semantic commands, not callbacks: seeking past one includes its state,
+ * seeking before it excludes it, and repeated seeks are idempotent.
  */
 import { module, test } from 'qunit';
-import type { CompositorRun } from 'test-app/lib/compositor';
-import { createCompositor } from 'test-app/lib/compositor';
+
+import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+
+import type * as CompositorModuleType from '../../../choreo-gallery/realm/reel/compositor';
+
+type CompositorModule = typeof CompositorModuleType;
+type CompositorRun = CompositorModuleType.CompositorRun;
 
 /** A run that records the transport ops the host performs on it. */
 class FakeRun implements CompositorRun {
@@ -25,7 +29,15 @@ class FakeRun implements CompositorRun {
   }
 }
 
-module('Integration | compositor host', function () {
+module('Integration | Choreo gallery | compositor host', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+  let createCompositor: CompositorModule['createCompositor'];
+
+  hooks.beforeEach(async function () {
+    ({ createCompositor } =
+      await gallery.import<CompositorModule>('reel/compositor'));
+  });
+
   test('cues fold through t: forward applies, backward resets and replays', async function (assert) {
     const log: string[] = [];
     const run = new FakeRun();
@@ -77,7 +89,7 @@ module('Integration | compositor host', function () {
     assert.deepEqual(
       log,
       ['lightbox-reset', 'inbox-reset', 'open:3'],
-      'a backward seek resets and folds the remaining prefix'
+      'a backward seek resets and folds the remaining prefix',
     );
 
     // backward before everything: reset only
@@ -86,7 +98,7 @@ module('Integration | compositor host', function () {
     assert.deepEqual(
       log,
       ['lightbox-reset', 'inbox-reset'],
-      'before the first cue the fold is empty'
+      'before the first cue the fold is empty',
     );
   });
 
@@ -121,7 +133,7 @@ module('Integration | compositor host', function () {
     assert.strictEqual(values.progress!.length, 1, 'past from, it samples');
     assert.true(
       Math.abs(values.progress![0]! - 1.7) < 1e-9,
-      `sampled at t - from (${String(values.progress![0])})`
+      `sampled at t - from (${String(values.progress![0])})`,
     );
 
     // the preview fold: cues would fire, but parameters are capture
@@ -131,7 +143,7 @@ module('Integration | compositor host', function () {
     assert.deepEqual(
       values.time,
       [],
-      'a parameters-off fold leaves every channel untouched'
+      'a parameters-off fold leaves every channel untouched',
     );
   });
 
@@ -176,7 +188,7 @@ module('Integration | compositor host', function () {
     assert.strictEqual(
       snap.recentActions.at(-1)?.action,
       'compose',
-      'snapshot: the sent action is on the record'
+      'snapshot: the sent action is on the record',
     );
   });
 
@@ -191,13 +203,13 @@ module('Integration | compositor host', function () {
     assert.throws(
       () => compositor.send({ action: 'compose', target: 'nobody' }),
       /nobody/,
-      'a missing actor names itself'
+      'a missing actor names itself',
     );
     compositor.register('inbox', { actions: {} });
     assert.throws(
       () => compositor.send({ action: 'vanish', target: 'inbox' }),
       /vanish/,
-      'a missing action names itself'
+      'a missing action names itself',
     );
   });
 
@@ -255,7 +267,7 @@ module('Integration | compositor host', function () {
     assert.deepEqual(
       presence,
       [false, true, false],
-      'a backward seek unmounts it again'
+      'a backward seek unmounts it again',
     );
     assert.deepEqual(seeks, [3, 5], 'and never seeks an absent clip');
   });
@@ -299,11 +311,11 @@ module('Integration | compositor host', function () {
     await compositor.renderAt(5);
     assert.true(
       log.includes('a-present:false'),
-      'remove (the default) unmounts past the window'
+      'remove (the default) unmounts past the window',
     );
-    assert.true(
-      !log.some((l) => l.startsWith('b')),
-      'freeze stays mounted (no presence change) and writes nothing further'
+    assert.false(
+      log.some((l) => l.startsWith('b')),
+      'freeze stays mounted (no presence change) and writes nothing further',
     );
   });
 
@@ -332,12 +344,12 @@ module('Integration | compositor host', function () {
     assert.deepEqual(
       presence,
       [true],
-      'presence is structure: preview flips it'
+      'presence is structure: preview flips it',
     );
     assert.deepEqual(
       seeks,
       [],
-      'seeking is capture reconstruction: preview skips it'
+      'seeking is capture reconstruction: preview skips it',
     );
   });
 
@@ -414,13 +426,13 @@ module('Integration | compositor host', function () {
     const settle = log.indexOf('settle');
     const out = log.indexOf('a-present:false');
     const incoming = log.indexOf('b-present:true');
-    assert.true(sample !== -1, 'the edited sourceOut sample is written');
+    assert.notStrictEqual(sample, -1, 'the edited sourceOut sample is written');
     assert.true(sample < settle, 'the sample precedes the paint barrier');
     assert.true(settle < out, 'nothing unmounts before the sample painted');
     assert.strictEqual(
       Math.abs(out - incoming),
       1,
-      'the flip lands as one adjacent pair — one render pass'
+      'the flip lands as one adjacent pair — one render pass',
     );
   });
 
@@ -460,13 +472,13 @@ module('Integration | compositor host', function () {
     await compositor.foldTo(1.5, { parameters: false });
     assert.false(
       log.some((l) => l.startsWith('a:')),
-      'a playing demo already stands at the boundary — preview never seeks'
+      'a playing demo already stands at the boundary — preview never seeks',
     );
     assert.false(log.includes('settle'), 'and never waits a paint barrier');
     assert.deepEqual(
       log.filter((l) => l.includes('present')),
       ['a-present:false', 'b-present:true'],
-      'the flip itself is structure and folds in preview too'
+      'the flip itself is structure and folds in preview too',
     );
   });
 });

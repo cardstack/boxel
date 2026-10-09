@@ -8,7 +8,13 @@
  * next apostrophe anywhere in the sample, which was most of the sample.
  */
 import { module, test } from 'qunit';
-import { highlightSample } from 'test-app/lib/highlight';
+
+import { choreoGalleryContents } from '../helpers/choreo-gallery';
+import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+
+import type * as HighlightModule from '../../../choreo-gallery/realm/lib/highlight';
+
+let highlightSample: (typeof HighlightModule)['highlightSample'];
 
 const html = (source: string) => highlightSample(source).toString();
 
@@ -17,11 +23,28 @@ function spans(source: string, cls: string): string[] {
   const el = document.createElement('div');
   el.innerHTML = html(source);
   return [...el.querySelectorAll(`.syn-${cls}`)].map(
-    (s) => s.textContent ?? ''
+    (s) => s.textContent ?? '',
   );
 }
 
-module('Unit | highlight', function () {
+/** every demo instance in the gallery realm, with its usage example */
+function demoSamples(): { sample: string; slug: string }[] {
+  return Object.entries(choreoGalleryContents())
+    .filter(([path]) => /^demos\/[^/]+\.json$/.test(path))
+    .map(([, source]) => {
+      let { attributes } = JSON.parse(source as string).data;
+      return { slug: attributes.slug, sample: attributes.sample ?? '' };
+    });
+}
+
+module('Integration | Choreo gallery | highlight', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+
+  hooks.beforeEach(async function () {
+    ({ highlightSample } =
+      await gallery.import<typeof HighlightModule>('lib/highlight'));
+  });
+
   test('an apostrophe in prose does not open a string', function (assert) {
     const source = [
       "<:gate as |f|>…the door, in the film's own type…</:gate>",
@@ -32,7 +55,7 @@ module('Unit | highlight', function () {
     assert.deepEqual(
       spans(source, 'string'),
       ["'gaudi'"],
-      'the only string is the real one; the apostrophe is punctuation'
+      'the only string is the real one; the apostrophe is punctuation',
     );
   });
 
@@ -40,7 +63,7 @@ module('Unit | highlight', function () {
     assert.deepEqual(
       spans("vo: 'On the seventh of June 1926.'", 'string'),
       ["'On the seventh of June 1926.'"],
-      'and it is one span, not one per word'
+      'and it is one span, not one per word',
     );
   });
 
@@ -49,7 +72,7 @@ module('Unit | highlight', function () {
     assert.deepEqual(spans(source, 'string'), [], 'no string at all');
     assert.true(
       html(source).includes('const'),
-      'and the code after it is still tokenised'
+      'and the code after it is still tokenised',
     );
   });
 
@@ -57,18 +80,19 @@ module('Unit | highlight', function () {
     const tags = spans('<:gate as |f|>hi</:gate>', 'tag');
     assert.true(
       tags.length > 0,
-      `<:gate> is read as a tag rather than loose atoms (${tags.join('|')})`
+      `<:gate> is read as a tag rather than loose atoms (${tags.join('|')})`,
     );
   });
 
-  test('every sample in the catalog highlights without a runaway string', async function (assert) {
-    const { catalog } = await import('test-app/lib/catalog');
-    const runaway = catalog
+  test('every demo sample highlights without a runaway string', async function (assert) {
+    const samples = demoSamples();
+    assert.true(samples.length > 40, `read ${samples.length} demo samples`);
+    const runaway = samples
       .map((demo) => ({
-        id: demo.id,
+        id: demo.slug,
         longest: Math.max(
           0,
-          ...spans(demo.sample, 'string').map((s) => s.length)
+          ...spans(demo.sample, 'string').map((s) => s.length),
         ),
       }))
       /* a string longer than a line of code is one that swallowed the
@@ -78,7 +102,7 @@ module('Unit | highlight', function () {
     assert.deepEqual(
       runaway.map((r) => `${r.id} (${r.longest})`),
       [],
-      'no sample has a string span that ran past its line'
+      'no sample has a string span that ran past its line',
     );
   });
 });

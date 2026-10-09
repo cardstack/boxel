@@ -4,7 +4,6 @@
  * margin, cubics derived every frame. Versions reflow the copy; the
  * selected pair shows its thread (first comment on by default).
  */
-import { setupChoreo } from '@cardstack/choreo/test-support';
 import {
   click,
   find,
@@ -12,16 +11,24 @@ import {
   triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
-import { setupRenderingTest } from 'ember-qunit';
+
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { Wires } from 'test-app/components/examples/wires';
 
-import { nextFrame } from '../../helpers/motion';
+import {
+  frames,
+  setupChoreoGalleryTest,
+} from '../helpers/choreo-gallery-stage';
 
-module('Integration | choreo | wires', function (hooks) {
-  setupRenderingTest(hooks);
-  setupChoreo(hooks);
+import type { ComponentLike } from '@glint/template';
+
+module('Integration | Choreo gallery | wires', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+  let Wires: ComponentLike;
+
+  hooks.beforeEach(async function () {
+    Wires = await gallery.stage('wires', 'Wires');
+  });
 
   /**
    * The resting threads are DERIVED geometry: the modifier waits a frame
@@ -45,13 +52,7 @@ module('Integration | choreo | wires', function (hooks) {
    * sideways and is otherwise the same construct.
    */
   test('the threads still draw when the comments stack under the note', async function (assert) {
-    await render(
-      <template>
-        <div style="position:relative;width:360px;height:620px">
-          <Wires />
-        </div>
-      </template>
-    );
+    await gallery.renderStage(Wires, { width: 360, height: 620 });
     await animationsSettled();
     await restingCount(2);
     assert.strictEqual(resting(), 2, 'two resting threads at phone width');
@@ -60,7 +61,7 @@ module('Integration | choreo | wires', function (hooks) {
     const margin = find('.wires-margin') as HTMLElement;
     assert.true(
       margin.offsetTop >= copy.offsetTop + copy.offsetHeight - 2,
-      'the comments are laid out below the note, not beside it'
+      'the comments are laid out below the note, not beside it',
     );
     const board = find('.wires-board') as HTMLElement;
     // offsetWidth, not a rect: QUnit scales #ember-testing, so every
@@ -69,7 +70,7 @@ module('Integration | choreo | wires', function (hooks) {
     assert.strictEqual(
       getComputedStyle(board).gridTemplateColumns.split(' ').length,
       1,
-      'the board is one column'
+      'the board is one column',
     );
     assert.true(
       copy.offsetWidth > 200,
@@ -77,7 +78,7 @@ module('Integration | choreo | wires', function (hooks) {
         board: board.offsetWidth,
         cols: getComputedStyle(board).gridTemplateColumns,
         copy: copy.offsetWidth,
-      })}`
+      })}`,
     );
 
     const paths = [
@@ -85,19 +86,18 @@ module('Integration | choreo | wires', function (hooks) {
     ];
     assert.true(
       paths.every((p) => p.getTotalLength() > 0),
-      'every thread has real length — the ends were found'
+      'every thread has real length — the ends were found',
     );
   });
 
   test('a version pass keeps a live tether inside a moving comment', async function (assert) {
-    await render(<template><Wires /></template>);
+    await gallery.renderStage(Wires);
     await animationsSettled();
     await restingCount(2);
     assert.strictEqual(resting(), 2, 'V1 draws two resting threads');
 
     await click('[data-test-wires-v="V2"]');
-    await nextFrame();
-    await nextFrame();
+    await frames(1);
     const path = find('[data-choreo-tether]') as SVGPathElement | null;
     assert.ok(path, 'the run draws tethers for the window');
     const d = path!.getAttribute('d') ?? '';
@@ -112,7 +112,7 @@ module('Integration | choreo | wires', function (hooks) {
       : tBox.left - layer.getBoundingClientRect().left;
     assert.true(
       Math.abs(endX - localX) < 10,
-      `the wire ends in the moving comment (${endX} vs ${localX})`
+      `the wire ends in the moving comment (${endX} vs ${localX})`,
     );
     await animationsSettled();
     assert.dom('[data-test-wires-note="hed"]').exists();
@@ -125,12 +125,26 @@ module('Integration | choreo | wires', function (hooks) {
     // the follow loop repaints — subtracting raw client rects baked that
     // scale into the ink and every thread stood off its mark for the
     // whole flight. The fixture is the flight reduced to one wrapper.
+    const { ChoreoRoot } = await gallery.import<{
+      ChoreoRoot: ComponentLike<{
+        Blocks: { default: [] };
+        Element: HTMLDivElement;
+      }>;
+    }>('shell/choreo-root');
+    const Stage = Wires;
     const Carried = <template>
-      <div
-        style="transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0"
-      >
-        <Wires />
-      </div>
+      <ChoreoRoot>
+        <div
+          style='transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0'
+        >
+          <div
+            class='choreo-stage-well'
+            style='position: relative; width: 1000px; height: 660px; container-name: platter; container-type: size; overflow: clip;'
+          >
+            <Stage />
+          </div>
+        </div>
+      </ChoreoRoot>
     </template>;
     await render(<template><Carried /></template>);
     await animationsSettled();
@@ -143,29 +157,29 @@ module('Integration | choreo | wires', function (hooks) {
     const inverse = t.ownerSVGElement!.getScreenCTM()!.inverse();
     const r = mark.getBoundingClientRect();
     const p = new DOMPoint(r.right, r.top + r.height / 2).matrixTransform(
-      inverse
+      inverse,
     );
     const err = Math.hypot(p.x - Number(m[1]), p.y - Number(m[2]));
     assert.true(
       err < 2,
-      `the thread starts ON its mark under the transform (${err.toFixed(1)}px off)`
+      `the thread starts ON its mark under the transform (${err.toFixed(1)}px off)`,
     );
   });
 
   test('stepping back removes the inserted comment; the first pair stays selected', async function (assert) {
-    await render(<template><Wires /></template>);
+    await gallery.renderStage(Wires);
     await animationsSettled();
     await restingCount(2);
     const host = find('[data-test-wires]') as HTMLElement;
     assert.strictEqual(
       host.getAttribute('data-hot'),
       'gauge',
-      'the first comment is selected on load'
+      'the first comment is selected on load',
     );
     const first = find('.wires-thread[data-thread="gauge"]') as Element;
     assert.true(
       parseFloat(getComputedStyle(first).opacity) > 0.5,
-      'its thread is drawn at rest'
+      'its thread is drawn at rest',
     );
 
     await click('[data-test-wires-v="V2"]');
@@ -181,7 +195,7 @@ module('Integration | choreo | wires', function (hooks) {
     assert.strictEqual(
       host.getAttribute('data-hot'),
       'edition',
-      'hover moves the selection without a rerender'
+      'hover moves the selection without a rerender',
     );
     const thread = find('.wires-thread[data-thread="edition"]') as Element;
     // Selecting is an attribute write; SHOWING the thread is a 180ms CSS
