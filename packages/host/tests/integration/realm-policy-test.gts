@@ -411,6 +411,53 @@ module('Integration | realm policy', function (hooks) {
       );
   });
 
+  test('an anonymous write without an acting user carries a warning', async function (assert) {
+    await renderPolicyNamed('policies/public', [
+      {
+        targetType: { module: '../classroom', name: 'Classroom' },
+        grants: [{ operation: 'update', where: ANONYMOUS }],
+      },
+    ]);
+
+    assert
+      .dom(
+        '[data-test-policy-grant-warning-message="anonymous-write-without-acting-user"]',
+      )
+      .exists()
+      .includesText('needs an');
+  });
+
+  test('an anonymous write editor shows Realm Config-backed rate limits', async function (assert) {
+    await setupPolicyRealm({
+      'policies/public.json': policyDocument([
+        {
+          targetType: { module: '../classroom', name: 'Classroom' },
+          grants: [
+            {
+              operation: 'update',
+              where: ANONYMOUS,
+              rateLimitRequests: 'realmConfig("publicRequests")',
+              rateLimitWindowSeconds: 'realmConfig("publicWindow")',
+            },
+          ],
+        },
+      ]),
+    });
+    let policy = await loadPolicy('policies/public');
+    provideConsumeContext(PermissionsContextName, {
+      canWrite: true,
+      canRead: true,
+    });
+    await renderCard(loader, policy, 'edit');
+
+    assert
+      .dom('[data-test-field="rateLimitRequests"] input')
+      .hasValue('realmConfig("publicRequests")');
+    assert
+      .dom('[data-test-field="rateLimitWindowSeconds"] input')
+      .hasValue('realmConfig("publicWindow")');
+  });
+
   test('a policy with no rules says it grants nothing', async function (assert) {
     await setupPolicyRealm({ 'policies/empty.json': policyDocument([]) });
     let policy = await loadPolicy('policies/empty');
