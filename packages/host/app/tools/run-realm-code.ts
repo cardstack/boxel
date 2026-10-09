@@ -55,8 +55,9 @@ const MAX_FILE_SIZE = 500_000;
 const DEFAULT_SEARCH_RESULTS = 50;
 const MAX_SEARCH_RESULTS = 100;
 // A search's answer is parsed inside the sandbox, within its memory limit, so
-// it is bounded by size as well as by count. Cards past this size are left
-// out and the answer says it was cut.
+// it is bounded by size as well as by count. A page past this size is refused
+// with the page size that fits, rather than cut: a cut page's remaining cards
+// would be out of reach of every page number.
 const MAX_SEARCH_RESULT_SIZE = 1_000_000;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
@@ -95,15 +96,15 @@ type ResolveURL = (reference: string, base?: string) => string;
 // its file relative to the realm root, which `realm.fs` takes. The type and
 // links are full URLs, so a type can go back into a query's `on` or `type`.
 // The data is the index's: attributes carry computed values too, so it is not
-// the file's text. A card that failed to index carries `error` instead of
-// its data.
+// the file's text. `relationships` is keyed by field path as the card's own
+// document keys it, so a `linksToMany` field's links are `field.0`,
+// `field.1`, and so on. A search never matches a card that failed to index.
 interface FoundCard {
   id: string;
   path: string;
   type?: { module: string; name: string };
-  attributes?: Record<string, unknown>;
-  relationships?: Record<string, string | null | (string | null)[]>;
-  error?: string;
+  attributes: Record<string, unknown>;
+  relationships: Record<string, string | null>;
 }
 
 // The host half of `realm.fs`: every call the script makes lands here, inside
@@ -371,12 +372,19 @@ class RealmFsSession {
       }
       resultSize += JSON.stringify(card).length;
       if (resultSize > MAX_SEARCH_RESULT_SIZE) {
-        break;
+        throw new Error(
+          cards.length > 0
+            ? `This page of cards is too large to return; search again with page.size ${cards.length} or less`
+            : `The card ${card.path} is too large to return from a search; read it with realm.fs.readText`,
+        );
       }
       cards.push(card);
     }
     let total = doc.meta.page.total;
-    return { cards, total, truncated: cards.length < total };
+    let start = (wireQuery.page.number ?? 0) * size;
+    // More cards match than this page and the pages before it hold.
+    let truncated = start + doc.data.length < total;
+    return { cards, total, truncated };
   }
 
   private foundCard(
@@ -397,23 +405,10 @@ class RealmFsSession {
           name: adoptsFrom.name,
         }
       : undefined;
-    if (item.meta.error) {
-      return {
-        id,
-        path,
-        ...(type ? { type } : {}),
-        error: item.meta.error.error.message,
-      };
-    }
-    let link = (relationship: Relationship) =>
-      relationship.links?.self
-        ? this.resolveURL(relationship.links.self, id)
-        : null;
-    let relationships: NonNullable<FoundCard['relationships']> = {};
+    let relationships: FoundCard['relationships'] = {};
     for (let [field, value] of Object.entries(item.relationships ?? {})) {
-      relationships[field] = Array.isArray(value)
-        ? value.map(link)
-        : link(value as Relationship);
+      let self = (value as Relationship | null)?.links?.self;
+      relationships[field] = self ? this.resolveURL(self, id) : null;
     }
     return {
       id,

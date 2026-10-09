@@ -26,13 +26,21 @@ function recipeJSON(
   attributes: Record<string, string>,
   chef?: string,
   module = '../recipe',
+  helpers: string[] = [],
 ): string {
+  let relationships: Record<string, { links: { self: string } }> = {};
+  if (chef) {
+    relationships.chef = { links: { self: chef } };
+  }
+  helpers.forEach((helper, index) => {
+    relationships[`helpers.${index}`] = { links: { self: helper } };
+  });
   return `${JSON.stringify(
     {
       data: {
         type: 'card',
         attributes,
-        ...(chef ? { relationships: { chef: { links: { self: chef } } } } : {}),
+        ...(Object.keys(relationships).length ? { relationships } : {}),
         meta: { adoptsFrom: { module, name } },
       },
     },
@@ -99,7 +107,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
 `,
           'notes/first.md': '# First\n',
           'recipe.gts': `
-            import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+            import { contains, field, linksTo, linksToMany, CardDef } from "@cardstack/base/card-api";
             import StringField from "@cardstack/base/string";
 
             export class Chef extends CardDef {
@@ -117,6 +125,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
               @field name = contains(StringField);
               @field cuisine = contains(StringField);
               @field chef = linksTo(Chef);
+              @field helpers = linksToMany(Chef);
               @field cardTitle = contains(StringField, {
                 computeVia: function (this: Recipe) {
                   return 'Recipe: ' + this.name;
@@ -130,10 +139,13 @@ module('Integration | tools | run-realm-code', function (hooks) {
             { name: 'Pancakes', cuisine: 'unknown' },
             '../Chef/ana',
           ),
-          'Recipe/ramen.json': recipeJSON('Recipe', {
-            name: 'Ramen',
-            cuisine: 'Japanese',
-          }),
+          'Recipe/ramen.json': recipeJSON(
+            'Recipe',
+            { name: 'Ramen', cuisine: 'Japanese' },
+            undefined,
+            '../recipe',
+            ['../Chef/ana'],
+          ),
           'Recipe/desserts/tiramisu.json': recipeJSON(
             'Recipe',
             { name: 'Tiramisu', cuisine: 'unknown' },
@@ -586,6 +598,14 @@ return found;`,
       );
     });
 
+    test('a linksToMany field reports each link under its field path', async function (assert) {
+      let { value } = await run(
+        `return (await realm.cards.search({ filter: { eq: { name: 'Ramen' }, on: ${recipeRef} } })).cards[0].relationships;`,
+      );
+
+      assert.strictEqual(value['helpers.0'], `${testRealmURL}Chef/ana`);
+    });
+
     test('a script can search, then read and edit every card it found', async function (assert) {
       let { result, value } = await run(`
 const { cards } = await realm.cards.search({ filter: { eq: { cuisine: 'unknown' }, on: ${recipeRef} } });
@@ -636,7 +656,10 @@ return { first, second };`);
         value.first.cards.map((card: { path: string }) => card.path),
         ['Recipe/desserts/tiramisu.json', 'Recipe/pancakes.json'],
       );
-      assert.true(value.second.truncated, 'the first page is not in it');
+      assert.false(
+        value.second.truncated,
+        'no card matches past the last page',
+      );
       assert.deepEqual(
         value.second.cards.map((card: { path: string }) => card.path),
         ['Recipe/ramen.json'],
