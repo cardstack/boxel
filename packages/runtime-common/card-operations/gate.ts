@@ -1396,7 +1396,8 @@ export async function pendingWriteHolds(
   core: OperationCore,
   pending: PendingWrite,
 ): Promise<boolean> {
-  return !(await storedWriteRefusal(core, pending));
+  let admission = await pendingWriteAdmission(core, pending);
+  return admission !== undefined && 'grant' in admission;
 }
 
 // The refusal `pendingWriteHolds` finds, in the words the lock would refuse
@@ -1407,18 +1408,35 @@ export async function storedWriteRefusal(
   core: OperationCore,
   pending: PendingWrite,
 ): Promise<OperationFailure | undefined> {
+  let admission = await pendingWriteAdmission(core, pending);
+  if (admission === undefined) {
+    return notPermitted(pending.target, pending.name);
+  }
+  return 'grant' in admission
+    ? undefined
+    : gateRefusal(core, admission, pending.target, pending.name);
+}
+
+// The grant that would admit a pending write against its stored target, or
+// its refusal. The rehearsal uses the request's scope and trace, so explain
+// reports the same grant that passed every predicate and acting-user check.
+export async function pendingWriteAdmission(
+  core: OperationCore,
+  pending: PendingWrite,
+): Promise<Admission | undefined> {
   let { target } = pending;
   let url = target.kind === 'instance' ? parseURL(target.url) : undefined;
   if (!url) {
-    return notPermitted(target, pending.name);
+    return undefined;
   }
   let source = await core.readFileAsText(
     `${localPathFor(core, url)}.json` as LocalPath,
   );
-  return await pendingWriteRefusal(
+  return await admits(
     core,
     pending,
     source === undefined ? undefined : { id: url.href, source },
+    'rehearsal',
   );
 }
 

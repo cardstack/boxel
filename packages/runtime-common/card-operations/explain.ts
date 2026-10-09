@@ -29,7 +29,7 @@ import {
   gateRefusal,
   matchingGrants,
   namesPolicyCard,
-  pendingWriteHolds,
+  pendingWriteAdmission,
   type GateDecision,
   type MatchedGrant,
 } from './gate.ts';
@@ -978,16 +978,14 @@ async function explain(
   if (decision.kind === 'granted') {
     admitting = decision.grant;
   } else {
-    let holds = await pendingWriteHolds(core, {
+    let admission = await pendingWriteAdmission(core, {
       target,
       name: question.operation,
       decision,
       scope,
     });
-    if (holds) {
-      admitting = decision.grants.find(
-        ({ grant }) => trace.outcomes.get(grant) === 'held',
-      );
+    if (admission && 'grant' in admission) {
+      admitting = admission;
     }
   }
   let explained = withRules(base, trace);
