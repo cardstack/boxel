@@ -323,6 +323,9 @@ export class AmbientVideo extends Component<AmbientVideoSignature> {
     el.playsInline = true;
     el.setAttribute('playsinline', '');
     el.setAttribute('webkit-playsinline', '');
+    // Glint's video attribute types do not know disablepictureinpicture, so
+    // it is set here rather than in the template.
+    el.setAttribute('disablepictureinpicture', '');
 
     let onReady = () => this.tryPlay();
     let onPlaying = () => this.setState('playing');
@@ -427,7 +430,6 @@ export class AmbientVideo extends Component<AmbientVideoSignature> {
         muted
         playsinline
         preload='auto'
-        disablepictureinpicture
         disableremoteplayback
         tabindex='-1'
         aria-hidden='true'
