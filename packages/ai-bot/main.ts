@@ -49,6 +49,8 @@ import {
   releasedToolCalls,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
+import { publishCanceledResults } from './lib/bot-tools/results.ts';
+import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
@@ -86,6 +88,10 @@ let log = logger('ai-bot');
 // The approved bot-tool calls this process has taken on running (see
 // ApprovalClaims).
 const approvalClaims = new ApprovalClaims();
+
+// The handler runs in flight per room, so a stop reaches the parts of a run
+// that come after its history was read (see RoomTurns).
+const roomTurns = new RoomTurns();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -242,6 +248,7 @@ Common issues are:
     async function (event, room, toStartOfTimeline) {
       let eventId = event.getId()!;
       let releaseRoomTurn: (() => void) | undefined;
+      let roomTurn: RoomTurn | undefined;
 
       try {
         // Ensure that the event body we have is a string
@@ -310,6 +317,14 @@ Common issues are:
             ts: event.event.origin_server_ts,
           });
         }
+
+        if (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE) {
+          roomTurns.stop(room.roomId);
+        }
+        // The run can be stopped from here on, including while it waits for
+        // an interrupted generation, its turn in the room, or the room lock.
+        let thisRoomTurn = roomTurns.begin(room.roomId);
+        roomTurn = thisRoomTurn;
 
         // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
@@ -571,6 +586,15 @@ Common issues are:
               // out.
               ...botTools.map((tool) => tool.name),
             ]);
+            // The user stopped the loop after this run read the room; that
+            // stop is not in the history, so it holds the correctness check
+            // as well as the generation here.
+            if (thisRoomTurn.stopped) {
+              if (responder.responseEventId) {
+                await responder.finalize({ isCanceled: true });
+              }
+              return;
+            }
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -730,6 +754,11 @@ Common issues are:
               lastGeneratedChunkId: generationId,
               completionPromise: generationCompletionPromise,
             });
+            // A stop that landed while the request was being prepared found
+            // no runner to abort.
+            if (thisRoomTurn.stopped) {
+              runner.abort();
+            }
 
             let completion = await profTime(
               eventId,
@@ -932,12 +961,17 @@ Common issues are:
                   call.type === 'function' && call.function.name === toolName,
               );
               if (calls.length > 0) {
-                await turn.fulfill(calls, {
+                let target = {
                   client,
                   roomId: room.roomId,
                   requestEventId: pendingFulfillRequestEventId,
                   agentId: pendingFulfillAgentId,
-                });
+                };
+                if (thisRoomTurn.stopped) {
+                  await publishCanceledResults(calls, target);
+                } else {
+                  await turn.fulfill(calls, target);
+                }
               }
             }
           }
@@ -954,6 +988,9 @@ Common issues are:
         return;
       } finally {
         releaseRoomTurn?.();
+        if (room && roomTurn) {
+          roomTurns.end(room.roomId, roomTurn);
+        }
       }
     },
   );

@@ -18,6 +18,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
+import { stopInForce } from '@cardstack/runtime-common/ai/stop';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -303,6 +304,31 @@ export class RoomResource extends Resource<Args> {
       message = parent;
     }
     return message;
+  }
+
+  /**
+   * The assistant message whose loop the user stopped, while that stop is in
+   * force (see `stopInForce`): its tools that have not started never run, and
+   * Stop is no longer offered for it. Read from the room's events rather than
+   * kept per tab, so every client and every reload agrees.
+   *
+   * While a stop is in force no person has written since it, and ai-bot
+   * starts no new answer, so the stopped message is the latest one from the
+   * bot. Timestamps aren't compared: a stop's local echo carries this
+   * client's clock, which can disagree with the server's.
+   */
+  @cached
+  get stoppedMessageEventId(): string | undefined {
+    if (!stopInForce(this.sortedEvents, this.matrixService.aiBotUserId)) {
+      return undefined;
+    }
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      let message = this.messages[i];
+      if (message.author.userId === this.matrixService.aiBotUserId) {
+        return message.eventId;
+      }
+    }
+    return undefined;
   }
 
   @cached

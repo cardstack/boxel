@@ -57,6 +57,7 @@ import {
   stringifyErrorForLog,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
 import type { Query } from '@cardstack/runtime-common/query';
 
@@ -262,7 +263,12 @@ export default class Room extends Component<Signature> {
                 @cancel={{this.cancelActionBar}}
                 @acceptingAll={{this.isAcceptingAll}}
                 @acceptingAllLabel={{this.acceptingAllLabel}}
-                @generatingResults={{this.generatingResults}}
+                @generatingResults={{this.assistantLoopActive}}
+                @generatingLabel={{if
+                  this.generatingResults
+                  'Generating results'
+                  'Running tools'
+                }}
                 @stop={{perform this.stopGeneratingTask}}
                 @stopping={{this.stopGeneratingTask.isRunning}}
                 @showUnreadIndicator={{this.showUnreadIndicator}}
@@ -2136,6 +2142,42 @@ export default class Room extends Component<Signature> {
     return !lastMessage.isStreamingFinished;
   }
 
+  // The assistant's loop is under way for its last message: the answer is
+  // still streaming, or a tool that runs without the user's click has no
+  // result yet, after which ai-bot starts the next turn on its own. Stop is
+  // offered for all of it, and a stop ends the loop. A host tool runs only in
+  // the client that sent the request, so only that client counts it as
+  // running; elsewhere the tool shows as an ordinary call.
+  @cached
+  private get assistantLoopActive() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (
+      !lastMessage ||
+      lastMessage.author.userId !== this.matrixService.aiBotUserId ||
+      lastMessage.isCanceled ||
+      this.args.roomResource.stoppedMessageEventId === lastMessage.eventId
+    ) {
+      return false;
+    }
+    if (!lastMessage.isStreamingFinished) {
+      return true;
+    }
+    let activeMode = this.args.roomResource.getActiveLLMModeForMessage(
+      lastMessage.eventId,
+    );
+    let isOwnedByCurrentAgent =
+      lastMessage.agentId === this.matrixService.agentId;
+    return lastMessage.tools.some(
+      (tool) =>
+        (tool.status === 'ready' ||
+          tool.status === 'applying' ||
+          tool.status === undefined) &&
+        !tool.awaitsApproval &&
+        (tool.executedBy === AI_BOT_EXECUTOR ||
+          isAutoExecutableTool(tool, activeMode, isOwnedByCurrentAgent)),
+    );
+  }
+
   @cached
   private get displayActionBar() {
     let lastMessage = this.messages[this.messages.length - 1];
@@ -2148,7 +2190,7 @@ export default class Room extends Component<Signature> {
     }
     return (
       this.showUnreadIndicator ||
-      this.generatingResults ||
+      this.assistantLoopActive ||
       this.readyTools.length > 0 ||
       this.isAcceptingAll
     );

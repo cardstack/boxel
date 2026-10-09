@@ -14,6 +14,7 @@ import {
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -27,6 +28,7 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -3004,6 +3006,276 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .exists(
         'manual approval bar still renders for commands that need user approval',
       );
+    assert
+      .dom('[data-test-stop-generating]')
+      .doesNotExist(
+        'nothing runs until the user approves, so there is no Stop',
+      );
+  });
+
+  // Passes every tool's validation, after `release()` when held, and records
+  // each tool result the host sends (still sending it).
+  function stubToolValidation({ held = false } = {}) {
+    let toolService = getService('tool-service');
+    let matrixService = getService('matrix-service');
+    let release!: () => void;
+    let released = held
+      ? new Promise<void>((resolve) => (release = resolve))
+      : Promise.resolve();
+    let originalValidate = toolService.validate;
+    toolService.validate = async () => {
+      await released;
+      return true;
+    };
+    let results: Array<{
+      toolCallId: string;
+      status: string;
+      failureReason?: string;
+    }> = [];
+    let originalSend = matrixService.sendToolResultEvent;
+    matrixService.sendToolResultEvent = async function (
+      this: typeof matrixService,
+      params: Parameters<typeof originalSend>[0],
+    ) {
+      results.push({
+        toolCallId: params.toolCallId,
+        status: params.status,
+        failureReason: params.failureReason,
+      });
+      return originalSend.call(this, params);
+    };
+    return {
+      results,
+      release: () => release?.(),
+      restore() {
+        release?.();
+        toolService.validate = originalValidate;
+        matrixService.sendToolResultEvent = originalSend;
+      },
+    };
+  }
+
+  function checkCorrectnessCall(toolCallId: string) {
+    return {
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: toolCallId, name: 'checkCorrectness', arguments: '{}' },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    };
+  }
+
+  // The answer streams, the user stops it, and the answer's final edit then
+  // carries a tool call — a call the stop has to keep from starting.
+  async function stopWhileStreaming(
+    roomId: string,
+    toolCallId: string,
+    stop: () => Promise<void>,
+  ) {
+    let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Checking',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-stop-generating]');
+    await stop();
+    await waitUntil(
+      () => !document.querySelector('[data-test-stop-generating]'),
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Checking correctness',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      ...checkCorrectnessCall(toolCallId),
+      'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+    });
+  }
+
+  test('Stop is offered while a tool of the answer runs', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation({ held: true });
+    try {
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'checking correctness',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        ...checkCorrectnessCall('running-tool'),
+      });
+      await waitFor('[data-test-stop-generating]');
+      assert
+        .dom('[data-test-ai-assistant-action-bar]')
+        .containsText('Running tools', 'the bar says tools are running');
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('a tool the user stopped before it started never runs', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      await stopWhileStreaming(roomId, 'stopped-before-run', () =>
+        click('[data-test-stop-generating]'),
+      );
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(stub.results),
+        JSON.stringify([
+          {
+            toolCallId: 'stopped-before-run',
+            status: 'canceled',
+            failureReason: STOPPED_TOOL_CALL_REASON,
+          },
+        ]),
+        'the tool is answered as canceled instead of run',
+      );
+      assert
+        .dom('[data-test-tool-call-apply="canceled"]')
+        .exists('the tool reads as canceled');
+      assert
+        .dom('[data-test-stop-generating]')
+        .doesNotExist('Stop is not offered again for the stopped loop');
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("a stop sent from the user's other client keeps a tool here from starting", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      await stopWhileStreaming(roomId, 'stopped-elsewhere', async () => {
+        simulateRemoteMessage(
+          roomId,
+          '@testuser:localhost',
+          {},
+          { type: APP_BOXEL_STOP_GENERATING_EVENT_TYPE },
+        );
+      });
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status }) => ({
+            toolCallId,
+            status,
+          })),
+        ),
+        JSON.stringify([
+          { toolCallId: 'stopped-elsewhere', status: 'canceled' },
+        ]),
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('a stop whose timestamp reads earlier than the answer still stops that answer', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      // A stop's local echo carries the client's clock, which can run behind
+      // the server's; here it reads earlier than every other event.
+      await stopWhileStreaming(
+        roomId,
+        'stopped-with-skewed-clock',
+        async () => {
+          simulateRemoteMessage(
+            roomId,
+            '@testuser:localhost',
+            {},
+            {
+              type: APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+              origin_server_ts: 1,
+            },
+          );
+        },
+      );
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status }) => ({
+            toolCallId,
+            status,
+          })),
+        ),
+        JSON.stringify([
+          { toolCallId: 'stopped-with-skewed-clock', status: 'canceled' },
+        ]),
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("Stop is not offered for a tool another of the user's clients runs", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'checking correctness',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'other-client-tool', name: 'checkCorrectness', arguments: '{}' },
+      ],
+      data: { context: { agentId: 'another-client-agent' } },
+    });
+    await waitFor('[data-test-accept-all]');
+    assert
+      .dom('[data-test-stop-generating]')
+      .doesNotExist('only the client that runs the tool offers Stop for it');
+    assert
+      .dom('[data-test-accept-all]')
+      .exists('this client offers the call like any other');
+  });
+
+  test('a message from the user after a stop lets the next tools run', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      await stopWhileStreaming(roomId, 'stopped-first', () =>
+        click('[data-test-stop-generating]'),
+      );
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
+        body: 'try again',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+      });
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'checking correctness again',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        ...checkCorrectnessCall('after-new-message'),
+      });
+      await waitUntil(
+        () => stub.results.some((r) => r.toolCallId === 'after-new-message'),
+        { timeout: 20000 },
+      );
+      await settled();
+      assert.notStrictEqual(
+        stub.results.find((r) => r.toolCallId === 'after-new-message')?.status,
+        'canceled',
+        'the stop no longer applies after the user writes again',
+      );
+    } finally {
+      stub.restore();
+    }
   });
 
   // A tool that returns the target card itself (show-card, get-card, ...)
