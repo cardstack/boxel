@@ -108,9 +108,11 @@ const BACKTICK = '`';
 
 // What a grant's condition says to open it to callers who aren't signed in.
 const ANONYMOUS = 'actor() == "anonymous"';
-// How a grant that sets no limit of its own reads in a listing: the rate
-// limit the realm reports as the platform's.
-const PLATFORM_LIMIT_LINE = `${DEFAULT_ANONYMOUS_RATE_LIMIT.requests}/${DEFAULT_ANONYMOUS_RATE_LIMIT.windowSeconds} (platform default where unset)`;
+// The limit the realm serving these policies reports as the platform's, which
+// a grant that sets none of its own counts callers against.
+const PLATFORM_LIMIT = { requests: 17, windowSeconds: 45 };
+// How such a grant reads in a listing.
+const PLATFORM_LIMIT_LINE = `${PLATFORM_LIMIT.requests}/${PLATFORM_LIMIT.windowSeconds} (platform default where unset)`;
 
 // A realm whose policy lets a teacher delete the classrooms they teach. The
 // grant that fails comes first, so the answer shows a predicate that did not
@@ -195,6 +197,9 @@ module('Integration | realm policy', function (hooks) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents,
+      // Not the platform's own default, so a view that shows this number is
+      // reading what the realm reports rather than a constant of its own.
+      anonymousRateLimit: PLATFORM_LIMIT,
     });
     return realm;
   }
@@ -567,12 +572,12 @@ module('Integration | realm policy', function (hooks) {
     assert
       .dom(`${ruleEditor(0)} [data-test-rate-limit-requests-default]`)
       .includesText(
-        `${DEFAULT_ANONYMOUS_RATE_LIMIT.requests}`,
+        `${PLATFORM_LIMIT.requests}`,
         'the rate-limit fields say what applies when they are left empty',
       );
     assert
       .dom(`${ruleEditor(0)} [data-test-rate-limit-window-default]`)
-      .includesText(`${DEFAULT_ANONYMOUS_RATE_LIMIT.windowSeconds}`);
+      .includesText(`${PLATFORM_LIMIT.windowSeconds}`);
     assert
       .dom(`${ruleEditor(1)} [data-test-policy-rule-remove-grant="0"]`)
       .hasAttribute(

@@ -1414,6 +1414,10 @@ async function compileDocument(
       // one, so a grant written for signed-in callers never starts admitting
       // anyone, whatever its `where` would say for one.
       let opensToAnonymous = outcome?.namesAnonymous ?? false;
+      // Set where the grant names such a caller but its operation reads
+      // `actor()`. The grant opens nothing to them for that reason alone, so
+      // what it says about them is reported once, against the operation.
+      let readsActorForAnonymous = false;
       if (opensToAnonymous) {
         // A named query runs a stored query on the search lane, where a
         // grant's filter is all that scopes it, so it stays a contract for
@@ -1444,6 +1448,7 @@ async function compileDocument(
             `this grant's \`where\` names \`"anonymous"\`, but ${resolved.name}'s \`${operation}\` uses \`actor()\`, which a caller who isn't signed in can't run, so it never admits one. It still applies to signed-in callers. To open it to anyone, declare an operation that doesn't read \`actor()\`; a write such a caller makes is made as the user \`actingUser\` names`,
           );
           opensToAnonymous = false;
+          readsActorForAnonymous = true;
         }
       }
       let expressions = await compileExpressions(grant, grantPath);
@@ -1485,6 +1490,7 @@ async function compileDocument(
       }
       if (
         expressions.actingUser &&
+        !readsActorForAnonymous &&
         !(anonymous?.actingUser && isWrite(granted.base))
       ) {
         issue(

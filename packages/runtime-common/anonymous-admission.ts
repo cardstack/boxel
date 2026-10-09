@@ -571,7 +571,17 @@ export class AnonymousAdmission {
       }
     }
     if (withBudget.length > 0) {
-      caller.grants = withBudget;
+      // A grant whose budget is spent stays eligible, because which grant
+      // admits a request isn't known until its target is: a request only that
+      // grant would have admitted has to be answered as over the limit rather
+      // than as one no grant admits. Its charge is what answers it, once the
+      // gate has said which grant admitted it. The ones with budget left come
+      // first, so a request no grant said it admitted — a stylesheet drawn by
+      // markup the realm already served — is charged to one that can take it.
+      caller.grants = [
+        ...withBudget,
+        ...caller.grants.filter((grant) => !withBudget.includes(grant)),
+      ];
       return undefined;
     }
     let first = caller.grants[0];
