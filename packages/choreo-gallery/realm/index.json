@@ -13,6 +13,11 @@
           "self": "./theme"
         }
       },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": "./asset/og.png"
+        }
+      },
       "demos.0": {
         "links": {
           "self": "./demos/playhead"
