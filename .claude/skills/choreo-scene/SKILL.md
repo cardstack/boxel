@@ -2,10 +2,12 @@
 name: choreo-scene
 description: >-
   Scene-level choreography with <Choreo>: changeset-driven timelines over a
-  whole render pass. Use when several elements must be sequenced ("fade out,
-  THEN move, THEN fade in"), when z-index must hold for the span of a step,
-  when one element's motion derives from another's measured bounds, or when
-  something flies to/from a beacon (a place, not an element).
+  whole render pass. Use in glimmer-motion / Choreo code in this repo
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  host UI that animates with them) when several elements must be sequenced
+  ("fade out, THEN move, THEN fade in"), when z-index must hold for the span
+  of a step, when one element's motion derives from another's measured bounds,
+  or when something flies to/from a beacon (a place, not an element).
 ---
 
 # A whole scene: `<Choreo>`
@@ -48,7 +50,7 @@ import { motion, spring } from 'glimmer-motion';
   steps are in `choreo-create/references/advanced-orchestration.md` and
   `spatial-and-film.md`.
 - **Every time arg is seconds**: `@duration`, `@delay`, `@stagger` (the
-  old `@ms` / `@overlap` spellings throw with the new name). Name a step
+  `@ms` / `@overlap` spellings throw, naming the seconds arg). Name a step
   with `@name` and place another against it with `@at={{at 'name' 0.4}}`
   or `{{after 'name'}}` (`at` / `after` from `@cardstack/choreo`).
 - Selectors: `c.all` / `c.kept` / `c.inserted` / `c.removed` (optional role

@@ -3,8 +3,10 @@ name: motion-drag
 description: >-
   Drag, pan, and reorder: draggable elements with constraints/elastic/
   momentum, drag controls, swipe-to-dismiss, bottom sheets, and
-  ReorderGroup/ReorderItem lists and grids. Use for any pointer-driven
-  movement of elements — including touch-action rules for mobile.
+  ReorderGroup/ReorderItem lists and grids. Use for pointer-driven movement of
+  elements in glimmer-motion / Choreo code in this repo
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  host UI that animates with them) — including touch-action rules for mobile.
 ---
 
 # Drag and reorder

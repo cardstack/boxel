@@ -16,9 +16,8 @@ site frame wraps the page in `<Choreo @route={{true}} @quiet={{true}}
 (`packages/choreo-gallery/realm/shell/site-frame.gts`). Moving between the grid and a demo
 page is state inside the gallery card, not a host route change, so the
 region sees each move as one render pass and the gallery never writes the
-host's URL or title. The old 435-line `animateView` orchestration is
-deleted; `animateView` remains only for MPA/cross-document transitions
-where snapshotting is the point.
+host's URL or title. `animateView` is for transitions where a snapshot is
+the point (`motion-page-transition`); it is not part of this crossing.
 
 The tiles and their stages are in `packages/choreo-gallery/realm/shell/gallery-grid.gts`,
 the demo page in `packages/choreo-gallery/realm/shell/demo-page.gts`. The standalone Ember
@@ -166,8 +165,8 @@ other demos mount, once, latched permanently. All three acts are in
 
 ## Died with animateView
 
-The veil and its light-mode exception (today's `.card.is-veiled` is a
-different thing: the return trip's counterpart tile), the root snapshot
+The veil and its light-mode exception (`.card.is-veiled` is unrelated: it
+marks the return trip's counterpart tile), the root snapshot
 and its never-name-the-grid rule, the nesting freeze (never name a
 container of named things), coextensive-pair blits, `whenEnded`'s poll,
 `--gm-morph` and every `::view-transition` rule. The Shared Layout
@@ -183,4 +182,4 @@ mode, and the return trip.
 
 Related: `choreo-scene` (the timeline language), `choreo-regions`
 (nested regions and far matching), `motion-page-transition` (animateView,
-for MPA).
+for intentional snapshot transitions).

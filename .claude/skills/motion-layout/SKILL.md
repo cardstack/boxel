@@ -2,9 +2,11 @@
 name: motion-layout
 description: >-
   Layout animation (FLIP) and shared-element transitions: layout=true for an
-  element whose box changes, layoutId to morph one element into another
-  (tabs indicator, thumbnail-to-lightbox), LayoutGroup for grids and
-  filtered lists. Use when things move because the layout changed.
+  element whose box changes, layoutId to morph one element into another (tabs
+  indicator, thumbnail-to-lightbox), LayoutGroup for grids and filtered lists.
+  Use when things move because the layout changed, in glimmer-motion / Choreo
+  code in this repo (packages/glimmer-motion, packages/choreo, the Choreo
+  gallery and test app, host UI that animates with them).
 ---
 
 # Layout moved: `layout`, `layoutId`, `<LayoutGroup>`

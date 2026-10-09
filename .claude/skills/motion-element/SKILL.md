@@ -3,8 +3,10 @@ name: motion-element
 description: >-
   Single-element animation with the {{motion}} modifier: initial/animate,
   transitions, keyframes, variants, stagger, hover/tap/focus gestures, motion
-  values, SVG. Use when one element animates on its own — including the three
-  Glimmer-specific rules that silently break motion when violated.
+  values, SVG. Use when one element animates on its own in glimmer-motion /
+  Choreo code in this repo (packages/glimmer-motion, packages/choreo, the
+  Choreo gallery and test app, host UI that animates with them) — including
+  the three Glimmer-specific rules that silently break motion when violated.
 ---
 
 # One element: the `{{motion}}` modifier
@@ -77,9 +79,7 @@ name to it is an API change.
 
 `follow-pointer.gts` (springs chasing a value) and `playhead.gts`
 (`.jump()` on scrub — a scrubbed frame is a still, nothing in flight) are
-the two reference implementations. Both demos import `motionValue` from
-`motion-dom` and `animate` from `motion`; write new code against the
-`glimmer-motion` re-exports instead.
+the two reference implementations.
 
 Global tempo: durations you hand-roll (a `setTimeout` matching a spring)
 must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from

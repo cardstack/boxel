@@ -3,8 +3,10 @@ name: motion-scroll
 description: >-
   Scroll-linked and viewport-triggered animation: parallax, scroll progress
   bars, reveal-on-scroll, hide-on-scroll headers, in-view triggers. Use when
-  motion is driven by scroll position or by an element entering the
-  viewport.
+  motion is driven by scroll position or by an element entering the viewport,
+  in glimmer-motion / Choreo code in this repo (packages/glimmer-motion,
+  packages/choreo, the Choreo gallery and test app, host UI that animates with
+  them).
 ---
 
 # Scroll-driven motion

@@ -2,9 +2,11 @@
 name: choreo-regions
 description: >-
   Nested <Choreo> regions and far matching: composing multiple scenes in one
-  tree, and flying one identity from one region into another (Boxel-style
-  card moves between panels, workspaces, bays). Use when a UI has more than
-  one <Choreo>, when deciding where region boundaries go, or when an element
+  tree, and flying one identity from one region into another (an item moving
+  between panels, workspaces, bays). Use in glimmer-motion / Choreo code in
+  this repo (packages/glimmer-motion, packages/choreo, the Choreo gallery and
+  test app, host UI that animates with them) when a UI has more than one
+  <Choreo>, when deciding where region boundaries go, or when an element
   leaving one region must arrive in another as one continuous flight.
 ---
 

@@ -4,7 +4,9 @@ description: >-
   Enter/exit animation with <Presence> (AnimatePresence): animating elements
   as they are added to or removed from the DOM — lists, toasts, modals,
   wizards. Use whenever an element must animate OUT, or when choosing between
-  sync/wait/popLayout modes.
+  sync/wait/popLayout modes, in glimmer-motion / Choreo code in this repo
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  host UI that animates with them).
 ---
 
 # Arriving and leaving: `<Presence>`

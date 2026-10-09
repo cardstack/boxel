@@ -3,9 +3,11 @@ name: motion-testing
 description: >-
   Testing animated UI with glimmer-motion/test-support (setupMotion,
   animationsSettled, bounds, shape) and @cardstack/choreo/test-support
-  (setupChoreo, orphanCount, strandedTransforms). Use
-  when writing or debugging any test that renders motion elements, Presence,
-  layout animation, or Choreo — and to avoid sleep()-based flake.
+  (setupChoreo, orphanCount, strandedTransforms). Use when writing or
+  debugging a test that renders motion elements, Presence, layout animation,
+  or Choreo in glimmer-motion / Choreo code in this repo
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  host UI that animates with them) — and to avoid sleep()-based flake.
 ---
 
 # Testing motion
