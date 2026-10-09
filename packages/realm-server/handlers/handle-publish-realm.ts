@@ -24,7 +24,18 @@ import fsExtra from 'fs-extra';
 // Async fs ops only: the publish handler runs these inside the request, and a
 // synchronous copy/move of a whole realm directory would freeze the Node event
 // loop, stalling every other concurrent request until it finished.
-const { copy, readJson, writeJson, remove, pathExists, move } = fsExtra;
+const {
+  copy,
+  readJson,
+  writeJson,
+  remove,
+  pathExists,
+  move,
+  readFile,
+  readdir,
+  stat,
+  utimes,
+} = fsExtra;
 
 import {
   fetchRequestFromContext,
@@ -278,6 +289,66 @@ async function dropRealmPolicyPointer(realmPath: string): Promise<void> {
   await writeJson(realmJsonPath, realmConfigDoc, { spaces: 2 });
 }
 
+// A deploy restarts this process. A realm last published before this moment
+// was rendered by host and base code that may have changed since, so its
+// republish renders every card again. A restart without a deploy costs one
+// such full render too.
+const PROCESS_STARTED_AT = Date.now() - process.uptime() * 1000;
+
+async function readRealmConfig(realmPath: string): Promise<Buffer | undefined> {
+  let realmJsonPath = join(realmPath, 'realm.json');
+  return (await pathExists(realmJsonPath))
+    ? await readFile(realmJsonPath)
+    : undefined;
+}
+
+function sameRealmConfig(a: Buffer | undefined, b: Buffer | undefined) {
+  return a === undefined || b === undefined ? a === b : a.equals(b);
+}
+
+// The copy keeps every file's mtime, so the index skips the files that did
+// not change since the last publish. The publish then rewrites the copied
+// realm.json (dropRealmPolicyPointer, ensureRealmIndexBoilerplateOptIn), and
+// each write stamps it with the current time. Give it the source file's mtime
+// back, so an unchanged realm.json also reads as unchanged.
+async function restoreRealmConfigMtime(
+  sourceRealmPath: string,
+  publishedRealmPath: string,
+): Promise<void> {
+  let sourceRealmJsonPath = join(sourceRealmPath, 'realm.json');
+  let publishedRealmJsonPath = join(publishedRealmPath, 'realm.json');
+  if (
+    !(await pathExists(sourceRealmJsonPath)) ||
+    !(await pathExists(publishedRealmJsonPath))
+  ) {
+    return;
+  }
+  let { atime, mtime } = await stat(sourceRealmJsonPath);
+  await utimes(publishedRealmJsonPath, atime, mtime);
+}
+
+// The index keeps file mtimes in whole seconds. A file written in the second
+// the previous publish copied it, and written again later in that same
+// second, keeps its mtime in the index and reads as unchanged. Stamp each
+// file modified at or after the second the previous publish started its copy
+// with the current time, so the index renders it again. Such a file renders
+// once more at the next republish, since its index row then holds the stamp
+// and not the source mtime.
+async function touchFilesModifiedSince(
+  dir: string,
+  since: number,
+  now = new Date(),
+): Promise<void> {
+  for (let entry of await readdir(dir, { withFileTypes: true })) {
+    let path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await touchFilesModifiedSince(path, since, now);
+    } else if (entry.isFile() && (await stat(path)).mtimeMs >= since) {
+      await utimes(path, now, now);
+    }
+  }
+}
+
 export default function handlePublishRealm({
   dbAdapter,
   definitionLookup,
@@ -484,12 +555,16 @@ export default function handlePublishRealm({
       // mounts the (re-)published realm on its first request. The
       // response is 202 Accepted with status:'pending'; the client polls
       // /<publishedRealmURL>/_readiness-check to learn when it's ready.
-      let { lastPublishedAt, publishedRealmId, isNewRealm } =
+      let { lastPublishedAt, publishedRealmId, isNewRealm, renderEveryCard } =
         await dbAdapter.withWriteLock(publishedRealmURL, async () => {
           let existingRows = (await query(dbAdapter, [
-            `SELECT disk_id, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
+            `SELECT disk_id, owner_username, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
-          ])) as { disk_id: string; owner_username: string }[];
+          ])) as {
+            disk_id: string;
+            owner_username: string;
+            last_published_at: string | number | null;
+          }[];
           let isNewRealm = existingRows.length === 0;
 
           let publishedRealmId: string;
@@ -533,6 +608,12 @@ export default function handlePublishRealm({
           let sourceRealmPath = sourceRealm.dir;
           let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
           let publishedRealmPath = join(publishedDir, publishedRealmId);
+          let previousRealmConfig = isNewRealm
+            ? undefined
+            : await readRealmConfig(publishedRealmPath);
+          let previousPublishedAt = Number(
+            existingRows[0]?.last_published_at ?? 0,
+          );
 
           // Copy source to a temporary directory first, then swap it into
           // place so that a failed copy doesn't destroy the existing
@@ -547,7 +628,19 @@ export default function handlePublishRealm({
           let backupPath = `${publishedRealmPath}.backup`;
           await remove(tempCopyPath);
           await remove(backupPath);
-          await copy(sourceRealmPath, tempCopyPath);
+          // Recorded before the copy, so the next republish knows from which
+          // second on a copied file's mtime is ambiguous (see
+          // touchFilesModifiedSince).
+          let publishStartedAt = Date.now();
+          await copy(sourceRealmPath, tempCopyPath, {
+            preserveTimestamps: true,
+          });
+          if (!isNewRealm) {
+            await touchFilesModifiedSince(
+              tempCopyPath,
+              Math.floor(previousPublishedAt / 1000) * 1000,
+            );
+          }
           try {
             await dropRealmPolicyPointer(tempCopyPath);
             if (await pathExists(publishedRealmPath)) {
@@ -601,6 +694,23 @@ export default function handlePublishRealm({
           // card (/realm.json) on disk before the reindex below picks
           // it up.
           await ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
+          await restoreRealmConfigMtime(sourceRealmPath, publishedRealmPath);
+
+          // A republish renders again only the files that changed since the
+          // last publish, and the files that depend on them. The published
+          // URL is the same as last time, so the rows of unchanged cards
+          // already hold it. Render every card when that is not enough: a
+          // new realm has no rows; realm.json feeds realm info (og:title and
+          // more) into cards that do not depend on it in the index; and code
+          // deployed since the last publish can render the same files
+          // differently.
+          let renderEveryCard =
+            isNewRealm ||
+            previousPublishedAt < PROCESS_STARTED_AT ||
+            !sameRealmConfig(
+              previousRealmConfig,
+              await readRealmConfig(publishedRealmPath),
+            );
 
           // Clear stale modules cache for the published realm (including
           // error entries from a previous publish) before the reindex's
@@ -617,7 +727,7 @@ export default function handlePublishRealm({
           // their own next invalidation arrived.
           await definitionLookup.clearRealmDefinitions(publishedRealmURL);
 
-          let lastPublishedAt = Date.now().toString();
+          let lastPublishedAt = publishStartedAt.toString();
           try {
             await upsertPublishedRealmInRegistry(dbAdapter, {
               publishedRealmURL,
@@ -678,8 +788,8 @@ export default function handlePublishRealm({
           // lazy-mounts it and start()'s from-scratch pass coalesces with
           // this job. For a republish already mounted here, the post-lock
           // fullIndex below tracks completion for readiness. clearLastModified
-          // forces every row to re-render even though file copies preserve
-          // mtimes.
+          // forces every row to re-render even where its mtime did not
+          // change.
           await enqueueReindexRealmJob(
             publishedRealmURL,
             realmUsername,
@@ -689,10 +799,15 @@ export default function handlePublishRealm({
             // This publish is blocked on the published realm's HTML (readiness
             // gates on it), so the prerender-html job this pass spawns runs
             // co-equal with indexing rather than one tier below.
-            { clearLastModified: true, awaitedByPublish: true },
+            { clearLastModified: renderEveryCard, awaitedByPublish: true },
           );
 
-          return { lastPublishedAt, publishedRealmId, isNewRealm };
+          return {
+            lastPublishedAt,
+            publishedRealmId,
+            isNewRealm,
+            renderEveryCard,
+          };
         });
 
       // Mount the published realm on this instance so it is served as soon as
@@ -723,7 +838,7 @@ export default function handlePublishRealm({
         // Republish: the realm already has index rows, so start() does NOT
         // re-index them and #startedUp resolves without reflecting the swapped
         // files — readinessCheck must instead wait on indexing(). Register a
-        // tracked clearLastModified reindex SYNCHRONOUSLY (before the 202) so
+        // tracked reindex SYNCHRONOUSLY (before the 202) so
         // indexing() reflects it and readiness can't report ready before the
         // reindex lands. Get the mounted realm, or mount it first when this
         // instance is cold (e.g. after a restart, or the publish landed on an
@@ -738,7 +853,7 @@ export default function handlePublishRealm({
         if (publishedRealm) {
           void publishedRealm
             .fullIndex(userInitiatedPriority, {
-              clearLastModified: true,
+              clearLastModified: renderEveryCard,
               // Republish is awaiting this HTML for readiness, so its render
               // runs co-equal with indexing (see prerenderHtmlPriority).
               awaitedByPublish: true,

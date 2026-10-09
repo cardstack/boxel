@@ -12,6 +12,7 @@ const {
   readJsonSync,
   writeJsonSync,
   removeSync,
+  utimesSync,
 } = fsExtra;
 import { basename, join } from 'path';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -1505,6 +1506,163 @@ module(basename(import.meta.filename), function () {
           await publishedSearchDocMatches(initialName),
           'published index no longer references the initial sentinel once readiness reports ready',
         );
+      });
+
+      module('republishing a realm', function (hooks) {
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
+        let sourceRealmFsPath: string;
+        let publish: () => Promise<void>;
+        let readCardRow: (
+          name: string,
+        ) => Promise<{ indexedAt: string; renderedAt: string; head: string }>;
+        let cardJson = (name: string) => ({
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        });
+        // Card files written well before the publish, so their mtimes are
+        // not in the second the publish starts its copy (see
+        // touchFilesModifiedSince in the publish handler).
+        let writeCard = (fileName: string, name: string) => {
+          let path = join(sourceRealmFsPath, fileName);
+          writeJsonSync(path, cardJson(name));
+          let past = new Date(Date.now() - 60_000);
+          utimesSync(path, past, past);
+        };
+
+        hooks.beforeEach(async function () {
+          let sourceRealmURL = new URL(sourceRealmUrlString);
+          sourceRealmFsPath = join(
+            dir.name,
+            'realm_server_3',
+            ...sourceRealmURL.pathname.split('/').filter(Boolean),
+          );
+          let auth = `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`;
+          publish = async () => {
+            let response = await request
+              .post('/_publish-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', auth)
+              .send(
+                JSON.stringify({
+                  sourceRealmURL: sourceRealmUrlString,
+                  publishedRealmURL,
+                }),
+              );
+            if (response.status !== 202) {
+              throw new Error(`publish failed with status ${response.status}`);
+            }
+            await testRealmServer.testingOnlyReconcile();
+            await waitUntil(
+              async () =>
+                (
+                  await request
+                    .get(
+                      `${new URL(publishedRealmURL).pathname}_readiness-check?awaitPrerenderHtml=true`,
+                    )
+                    .set('Host', new URL(publishedRealmURL).host)
+                    .set('Accept', 'application/vnd.api+json')
+                ).status === 200,
+              {
+                timeout: 120_000,
+                interval: 500,
+                timeoutMessage:
+                  'published realm never passed its readiness check',
+              },
+            );
+          };
+          readCardRow = async (name: string) => {
+            let [row] = (await dbAdapter.execute(
+              `SELECT i.indexed_at, h.rendered_at, h.head_html
+                 FROM boxel_index i
+                 JOIN prerendered_html h
+                   ON h.url = i.url AND h.realm_url = i.realm_url AND h.type = i.type
+                 WHERE i.realm_url = $1
+                   AND i.type = 'instance'
+                   AND i.url = $2`,
+              { bind: [publishedRealmURL, `${publishedRealmURL}${name}.json`] },
+            )) as {
+              indexed_at: string;
+              rendered_at: string;
+              head_html: string | null;
+            }[];
+            if (!row) {
+              throw new Error(
+                `no index row for ${name} in the published realm`,
+              );
+            }
+            return {
+              indexedAt: String(row.indexed_at),
+              renderedAt: String(row.rendered_at),
+              head: row.head_html ?? '',
+            };
+          };
+        });
+
+        test('it renders again only the cards that changed', async function (assert) {
+          assert.timeout(300_000);
+          writeCard('changed-card.json', 'Changed card, first version');
+          writeCard('unchanged-card.json', 'Unchanged card');
+          await publish();
+          let unchangedBefore = await readCardRow('unchanged-card');
+
+          writeCard('changed-card.json', 'Changed card, second version');
+          await publish();
+
+          let changedAfter = await readCardRow('changed-card');
+          let unchangedAfter = await readCardRow('unchanged-card');
+          assert.true(
+            changedAfter.head.includes('Changed card, second version'),
+            'the changed card is rendered again',
+          );
+          assert.strictEqual(
+            unchangedAfter.indexedAt,
+            unchangedBefore.indexedAt,
+            'the unchanged card is not indexed again',
+          );
+          assert.strictEqual(
+            unchangedAfter.renderedAt,
+            unchangedBefore.renderedAt,
+            'the unchanged card is not rendered again',
+          );
+          assert.true(
+            unchangedAfter.head.includes(
+              `property="og:url" content="${publishedRealmURL}unchanged-card"`,
+            ),
+            `the unchanged card keeps the published URL in its head: ${unchangedAfter.head}`,
+          );
+        });
+
+        test('it renders every card again when realm.json changed', async function (assert) {
+          assert.timeout(300_000);
+          writeCard('unchanged-card.json', 'Unchanged card');
+          await publish();
+          let unchangedBefore = await readCardRow('unchanged-card');
+
+          let realmJsonPath = join(sourceRealmFsPath, 'realm.json');
+          let realmConfig = readJsonSync(realmJsonPath);
+          realmConfig.data.attributes.name = 'Renamed Realm';
+          writeJsonSync(realmJsonPath, realmConfig);
+          await publish();
+
+          let unchangedAfter = await readCardRow('unchanged-card');
+          assert.notStrictEqual(
+            unchangedAfter.renderedAt,
+            unchangedBefore.renderedAt,
+            'the unchanged card is rendered again',
+          );
+        });
       });
 
       // The in-process readiness gates only see indexing this instance
