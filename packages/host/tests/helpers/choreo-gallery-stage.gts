@@ -9,6 +9,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import { setupBaseRealm } from './base-realm';
 import { choreoGalleryContents } from './choreo-gallery';
 import { setupMockMatrix } from './mock-matrix';
+import { renderCard } from './render-component';
 import { setupRenderingTest } from './setup';
 
 import {
@@ -19,7 +20,42 @@ import {
   type RealmContents,
 } from './index';
 
+import type * as DemoModule from '../../../choreo-gallery/realm/demo';
+import type * as GalleryModule from '../../../choreo-gallery/realm/gallery';
 import type { ComponentLike } from '@glint/template';
+
+/** a card instance document in the gallery realm, as much as the tests read */
+export interface GalleryInstance {
+  data: {
+    attributes: Record<string, unknown> & {
+      group?: string;
+      lesson?: Record<string, unknown>;
+      slug?: string;
+      walkthrough?: Record<string, unknown>[];
+    };
+    meta: { adoptsFrom: { module: string; name: string } };
+    relationships?: Record<string, { links: { self: string } }>;
+  };
+}
+
+const CONTENTS = choreoGalleryContents();
+
+/** an instance document of the gallery realm, by its path: `demos/fold.json` */
+export function galleryInstance(path: string): GalleryInstance {
+  return JSON.parse(CONTENTS[path] as string) as GalleryInstance;
+}
+
+/** the slugs of the demos the gallery's index links, in the order it links them */
+export const GALLERY_DEMOS: string[] = Object.entries(
+  galleryInstance('index.json').data.relationships ?? {},
+)
+  .map(([key, { links }]) => ({
+    at: Number(/^demos\.(\d+)$/.exec(key)?.[1] ?? NaN),
+    slug: links.self.replace(/^\.\/demos\//, ''),
+  }))
+  .filter(({ at }) => !Number.isNaN(at))
+  .sort((a, b) => a.at - b.at)
+  .map(({ slug }) => slug);
 
 /**
  * A rendering test over the Choreo gallery realm: the gallery's own source is
@@ -68,6 +104,40 @@ export function setupChoreoGalleryTest(
     /** a module of the gallery realm, by its path there: `stages/fold` */
     async import<T = Record<string, unknown>>(path: string): Promise<T> {
       return (await gallery.loader.import(`${testRealmURL}${path}`)) as T;
+    },
+
+    /**
+     * Render the gallery card, isolated, linking every demo its index links.
+     * The test realm is not indexed, so the card is built from the realm's own
+     * instance documents rather than loaded through the store.
+     */
+    async renderGallery() {
+      let { DemoLesson, WalkthroughStep } =
+        await gallery.import<typeof DemoModule>('demo');
+      let demos = await Promise.all(
+        GALLERY_DEMOS.map(async (slug) => {
+          let { data } = galleryInstance(`demos/${slug}.json`);
+          let { module, name } = data.meta.adoptsFrom;
+          let classes = await gallery.import<
+            Record<string, new (attrs: object) => DemoModule.GalleryDemo>
+          >(module.replace(/^\.\.\//, ''));
+          let { lesson, walkthrough, ...attributes } = data.attributes;
+          return new classes[name]!({
+            ...attributes,
+            lesson: lesson ? new DemoLesson(lesson) : undefined,
+            walkthrough: (walkthrough ?? []).map(
+              (step) => new WalkthroughStep(step),
+            ),
+          });
+        }),
+      );
+      let { ChoreoGallery } =
+        await gallery.import<typeof GalleryModule>('gallery');
+      await renderCard(
+        gallery.loader,
+        new ChoreoGallery({ demos }),
+        'isolated',
+      );
     },
 
     /** a named export of one of the gallery's stage modules */

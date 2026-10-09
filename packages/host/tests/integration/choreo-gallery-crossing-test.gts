@@ -16,41 +16,13 @@ import { click, waitUntil } from '@ember/test-helpers';
 import { liveAll } from '@cardstack/choreo/test-support';
 import { module, test } from 'qunit';
 
-import { choreoGalleryContents } from '../helpers/choreo-gallery';
 import {
   frames,
+  GALLERY_DEMOS,
   setupChoreoGalleryTest,
 } from '../helpers/choreo-gallery-stage';
-import { renderCard } from '../helpers/render-component';
 
-import type * as DemoModule from '../../../choreo-gallery/realm/demo';
-import type * as GalleryModule from '../../../choreo-gallery/realm/gallery';
 import type * as TempoModule from '../../../choreo-gallery/realm/lib/tempo';
-
-interface Instance {
-  data: {
-    attributes: Record<string, unknown> & {
-      lesson?: Record<string, unknown>;
-      walkthrough?: Record<string, unknown>[];
-    };
-    meta: { adoptsFrom: { module: string; name: string } };
-    relationships?: Record<string, { links: { self: string } }>;
-  };
-}
-
-const CONTENTS = choreoGalleryContents();
-const instance = (path: string) =>
-  JSON.parse(CONTENTS[path] as string) as Instance;
-
-/** the demos the gallery's index links, in the order it links them */
-const LINKED = Object.entries(instance('index.json').data.relationships ?? {})
-  .map(([key, { links }]) => ({
-    at: Number(/^demos\.(\d+)$/.exec(key)?.[1] ?? NaN),
-    slug: links.self.replace(/^\.\/demos\//, ''),
-  }))
-  .filter(({ at }) => !Number.isNaN(at))
-  .sort((a, b) => a.at - b.at)
-  .map(({ slug }) => slug);
 
 /** the site frame's own region — the page — not some demo's */
 const PAGE = '.page-shell > [data-choreo]';
@@ -81,32 +53,6 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
     tempoModule.setTempo(tempo);
   }
 
-  /** the gallery card, built from the realm's own index and demo instances */
-  async function renderGallery() {
-    let { DemoLesson, WalkthroughStep } =
-      await gallery.import<typeof DemoModule>('demo');
-    let demos = await Promise.all(
-      LINKED.map(async (slug) => {
-        let { data } = instance(`demos/${slug}.json`);
-        let { module, name } = data.meta.adoptsFrom;
-        let classes = await gallery.import<
-          Record<string, new (attrs: object) => DemoModule.GalleryDemo>
-        >(module.replace(/^\.\.\//, ''));
-        let { lesson, walkthrough, ...attributes } = data.attributes;
-        return new classes[name]!({
-          ...attributes,
-          lesson: lesson ? new DemoLesson(lesson) : undefined,
-          walkthrough: (walkthrough ?? []).map(
-            (step) => new WalkthroughStep(step),
-          ),
-        });
-      }),
-    );
-    let { ChoreoGallery } =
-      await gallery.import<typeof GalleryModule>('gallery');
-    await renderCard(gallery.loader, new ChoreoGallery({ demos }), 'isolated');
-  }
-
   hooks.beforeEach(async function () {
     await setTempo('smooth');
   });
@@ -115,7 +61,7 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
   });
 
   test('opening a demo flies the card apart; the landing is clean', async function (assert) {
-    await renderGallery();
+    await gallery.renderGallery();
     await frames(6);
 
     await click("[data-gallery-tile='playhead'] .card-meta");
@@ -159,7 +105,7 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
   });
 
   test('going home leaves nothing stranded at a seeded opacity', async function (assert) {
-    await renderGallery();
+    await gallery.renderGallery();
     await frames(6);
     // the gallery AT REST, tile by tile: the flight is measured against
     // each card's own height, not against its neighbours'. Cards differ
@@ -178,7 +124,7 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
     await click('.back-all');
     assert.strictEqual(
       liveAll('[data-gallery-tile]').length,
-      LINKED.length,
+      GALLERY_DEMOS.length,
       'home again',
     );
     await frames(3);
@@ -291,7 +237,7 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
   });
 
   test('two round trips in a row leave the grid exactly as it was', async function (assert) {
-    await renderGallery();
+    await gallery.renderGallery();
     await frames(6);
     const rest = [...document.querySelectorAll<HTMLElement>('.card')].map(
       (el) => Math.round(el.offsetHeight),
@@ -329,7 +275,7 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
 
   test('instant means instant: no run, no orphans, and the route still changes', async function (assert) {
     await setTempo('instant');
-    await renderGallery();
+    await gallery.renderGallery();
     await frames(6);
 
     await click("[data-gallery-tile='playhead'] .card-meta");
@@ -350,7 +296,7 @@ module('Integration | Choreo gallery | crossing', function (hooks) {
   });
 
   test('demo to demo: the crossing runs and the pills hold their seat', async function (assert) {
-    await renderGallery();
+    await gallery.renderGallery();
     await frames(6);
     await click("[data-gallery-tile='playhead'] .card-meta");
     await waitUntil(() => !crossingActive(), { timeout: 8000 });
