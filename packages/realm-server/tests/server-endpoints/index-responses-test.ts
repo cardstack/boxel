@@ -4,11 +4,13 @@ import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import type { RealmHttpServer as Server } from '../../server.ts';
-import { dirSync, type DirResult } from 'tmp';
+import { dirSync } from 'tmp';
 import {
   DEFAULT_PERMISSIONS,
   systemInitiatedPriority,
   type DBAdapter,
+  type QueuePublisher,
+  type QueueRunner,
   type Realm,
   rri,
 } from '@cardstack/runtime-common';
@@ -27,11 +29,12 @@ import {
   runTestRealmServer,
   setupDB,
   setupPermissionedRealmCached,
+  setupTestDatabaseTemplate,
   waitUntil,
 } from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import fsExtra from 'fs-extra';
-const { ensureDirSync } = fsExtra;
+const { copySync, ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 // A single readiness request holds for as long as its own gates take:
@@ -41,12 +44,12 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 // one in flight, so a poll can overshoot its budget by a whole request.
 const READINESS_POLL_TIMEOUT_MS = 90_000;
 
-// Budget for a publish setup hook: realm boot, the fixture writes, the
-// from-scratch index of the published copy, its render, and the settle that
-// follows. Sized against the worst case those add up to — the readiness poll
-// plus one request's overshoot, plus the settle, plus the write traffic
-// before either — so a stalled stage is reported by the wait that owns it
-// rather than by QUnit's stageless timeout.
+// Budget for a published-realm module's per-test setup hook: realm boot on
+// the template copy, then the readiness poll. The poll alone can outlast the
+// suite-wide `QUnit.config.testTimeout`, so the hook gets a budget past it,
+// and a stall is reported by the poll's own message rather than by QUnit's
+// stageless timeout. The template build that publishes the realm runs under
+// `setupTestDatabaseTemplate`'s own budget.
 const PUBLISHED_REALM_SETUP_TIMEOUT_MS = 300_000;
 
 // Wait for a freshly published realm to be both indexed and rendered.
@@ -120,6 +123,217 @@ async function waitForPublishedRealmReady(
         `published realm ${publishedRealmHost}${publishedRealmPath} never passed its readiness check; last response: ${lastStatus}`,
     },
   );
+}
+
+// The realm files each published-realm template indexed, by setup name. The
+// template database is cached for the life of the test process, and so is
+// this map, so a test always finds the files its template's registry rows
+// point at.
+const publishedRealmTemplateFiles = new Map<string, string>();
+
+// A realm server with one source realm, published once into a template
+// database, indexed and rendered. Each test copies the template's realm files
+// to a fresh realms root, starts the server on a copy of the template, and
+// waits for the published realm to answer ready. `onSetup` receives what the
+// test needs once that is done.
+function setupPublishedRealm(
+  hooks: NestedHooks,
+  {
+    setup,
+    sourceRealmName,
+    endpoint,
+    publishedRealmURL,
+    cards,
+    onSetup,
+  }: {
+    // Names the template, and the realms root directory.
+    setup: string;
+    sourceRealmName: string;
+    endpoint: string;
+    publishedRealmURL: string;
+    // The card documents to write into the source realm before it is
+    // published, in order, keyed by the path each is written to.
+    cards: (sourceRealmURL: string) => [path: string, doc: object][];
+    onSetup: (args: { request: SuperTest<Test>; dbAdapter: PgAdapter }) => void;
+  },
+) {
+  let ownerUserId = '@mango:localhost';
+  let publishedRealmHost = new URL(publishedRealmURL).host;
+  let publishedRealmPath = new URL(publishedRealmURL).pathname;
+  let rootName = `realm_server_${setup.replace(/\W+/g, '_')}`;
+  let testRealmHttpServer: Server;
+  let testRealmServer: Awaited<
+    ReturnType<typeof runTestRealmServer>
+  >['testRealmServer'];
+  let request: SuperTest<Test>;
+  let dbAdapter: PgAdapter;
+  let authorization = () =>
+    `Bearer ${createRealmServerJWT(
+      { user: ownerUserId, sessionRoom: 'session-room-test' },
+      realmSecretSeed,
+    )}`;
+
+  async function start(
+    {
+      dbAdapter: _dbAdapter,
+      publisher,
+      runner,
+    }: {
+      dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+    },
+    realmsRootPath: string,
+  ) {
+    dbAdapter = _dbAdapter;
+    let testRealmDir = join(realmsRootPath, 'test');
+    ensureDirSync(testRealmDir);
+    ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
+      virtualNetwork: createVirtualNetwork(),
+      testRealmDir,
+      fileSystem: {},
+      realmsRootPath,
+      realmURL: new URL('http://127.0.0.1:4444/test/'),
+      dbAdapter: _dbAdapter,
+      publisher,
+      runner,
+      matrixURL,
+      permissions: {
+        '*': ['read', 'write'],
+        [ownerUserId]: DEFAULT_PERMISSIONS,
+      },
+      domainsForPublishedRealms: {
+        boxelSpace: 'localhost',
+        boxelSite: 'localhost:4444',
+      },
+    }));
+    request = supertest(testRealmHttpServer);
+  }
+
+  async function stop() {
+    await closeServer(testRealmHttpServer);
+  }
+
+  async function publish() {
+    let createResponse = await request
+      .post('/_create-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', authorization())
+      .send(
+        JSON.stringify({
+          data: {
+            type: 'realm',
+            attributes: { name: sourceRealmName, endpoint },
+          },
+        }),
+      );
+    if (createResponse.status !== 202) {
+      throw new Error(
+        `/_create-realm failed with status ${createResponse.status}: ` +
+          (createResponse.text ||
+            (createResponse.body ? JSON.stringify(createResponse.body) : '')),
+      );
+    }
+    let sourceRealmURL: string = createResponse.body.data.id;
+    let sourceRealmPath = new URL(sourceRealmURL).pathname;
+
+    // Make the source realm publicly accessible.
+    await dbAdapter.execute(`
+      INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+      VALUES ('${sourceRealmURL}', '*', true, true, true)
+    `);
+
+    for (let [path, doc] of cards(sourceRealmURL)) {
+      let response = await request
+        .post(`${sourceRealmPath}${path}`)
+        .set('Accept', 'application/vnd.card+source')
+        .send(JSON.stringify(doc));
+      if (response.status !== 204) {
+        throw new Error(
+          `Failed to write ${path}: ${response.status} ${response.text}`,
+        );
+      }
+    }
+
+    // Publishing triggers a full from-scratch index of the published copy.
+    let publishResponse = await request
+      .post('/_publish-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', authorization())
+      .send(
+        JSON.stringify({
+          sourceRealmURL,
+          publishedRealmURL,
+        }),
+      );
+    if (publishResponse.status !== 202) {
+      throw new Error(
+        `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+      );
+    }
+
+    // `_publish-realm` returns 202 before indexing finishes. Drive a
+    // reconcile pass to mount the published realm, then wait for it to report
+    // ready, so the template holds indexed, rendered content.
+    await testRealmServer.testingOnlyReconcile();
+    await waitForPublishedRealmReady(
+      request,
+      dbAdapter,
+      publishedRealmURL,
+      publishedRealmPath,
+      publishedRealmHost,
+    );
+    // Readiness clears once every row's HTML is live for its generation; the
+    // job that wrote it finalizes a moment later. Settle the channel so the
+    // assertions never race that tail, and so a render that rejected fails
+    // here instead of surfacing as a missing-markup assertion.
+    await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURL);
+  }
+
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: { file: import.meta.filename, setup },
+    build: async (args) => {
+      let realmsRootPath = join(dirSync().name, rootName);
+      publishedRealmTemplateFiles.set(setup, realmsRootPath);
+      await start(args, realmsRootPath);
+      await publish();
+      return stop;
+    },
+  });
+
+  hooks.beforeEach(function (assert) {
+    // QUnit arms one timeout per hook promise, and this one applies to the
+    // setup hook below.
+    assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
+  });
+  setupDB(hooks, {
+    templateDatabase,
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      let templateFiles = publishedRealmTemplateFiles.get(setup);
+      if (!templateFiles) {
+        throw new Error(
+          `the '${setup}' template database has no realm files: its build did not run in this test process`,
+        );
+      }
+      let realmsRootPath = join(dirSync().name, rootName);
+      copySync(templateFiles, realmsRootPath);
+      await start({ dbAdapter, publisher, runner }, realmsRootPath);
+      // Mount the published realm the template registered, and hold until it
+      // answers ready on this copy.
+      await testRealmServer.testingOnlyReconcile();
+      await waitForPublishedRealmReady(
+        request,
+        dbAdapter,
+        publishedRealmURL,
+        publishedRealmPath,
+        publishedRealmHost,
+      );
+      onSetup({ request, dbAdapter });
+    },
+    afterEach: stop,
+  });
 }
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
@@ -1615,210 +1829,68 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Published realm: theme icon links after _publish-realm',
     function (hooks) {
-      let testRealmHttpServer: Server;
-      let testRealmServer: Awaited<
-        ReturnType<typeof runTestRealmServer>
-      >['testRealmServer'];
       let request: SuperTest<Test>;
       let dbAdapter: PgAdapter;
-      let dir: DirResult;
-      let sourceRealmUrlString: string;
-      let publishedRealmURLString: string;
-      let publishedRealmHost: string;
-      let publishedRealmPath: string;
-      let ownerUserId = '@mango:localhost';
+      let publishedRealmURLString =
+        'http://themetest.localhost:4444/theme-source/';
+      let publishedRealmHost = new URL(publishedRealmURLString).host;
+      let publishedRealmPath = new URL(publishedRealmURLString).pathname;
 
-      hooks.beforeEach(function (assert) {
-        // QUnit arms one timeout per hook promise, so the whole publish setup
-        // below — realm boot, the writes, the from-scratch index, and the
-        // render — shares a single window, and the suite-wide
-        // `QUnit.config.testTimeout` is too small to hold it. Raise it past
-        // the waits inside that hook so their timeout messages, which name the
-        // stage that stalled, are what a failure reports rather than QUnit's
-        // stageless "test timed out".
-        assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
-        dir = dirSync();
-      });
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, _publisher, _runner) => {
-          dbAdapter = _dbAdapter;
-          let virtualNetwork = createVirtualNetwork();
-          let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
-          ensureDirSync(testRealmDir);
-          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            fileSystem: {},
-            realmsRootPath: join(dir.name, 'realm_server_theme'),
-            realmURL: new URL('http://127.0.0.1:4444/test/'),
-            dbAdapter: _dbAdapter,
-            publisher: _publisher,
-            runner: _runner,
-            matrixURL,
-            permissions: {
-              '*': ['read', 'write'],
-              [ownerUserId]: DEFAULT_PERMISSIONS,
+      setupPublishedRealm(hooks, {
+        setup: 'theme icon links',
+        sourceRealmName: 'Theme Source Realm',
+        endpoint: 'theme-source',
+        publishedRealmURL: publishedRealmURLString,
+        cards: (sourceRealmURL) => [
+          // A BrandGuide theme card with a custom icon.
+          [
+            'brand-guide-theme.json',
+            {
+              data: {
+                type: 'card',
+                id: `${sourceRealmURL}brand-guide-theme`,
+                attributes: {
+                  markUsage: {
+                    socialMediaProfileIcon:
+                      'https://example.com/published-theme-icon.png',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/brand-guide',
+                    name: 'default',
+                  },
+                },
+              },
             },
-            domainsForPublishedRealms: {
-              boxelSpace: 'localhost',
-              boxelSite: 'localhost:4444',
+          ],
+          // A card that links to the BrandGuide via cardInfo.theme.
+          [
+            'themed-card.json',
+            {
+              data: {
+                type: 'card',
+                id: `${sourceRealmURL}themed-card`,
+                attributes: { cardInfo: {} },
+                relationships: {
+                  'cardInfo.theme': {
+                    links: {
+                      self: `${sourceRealmURL}brand-guide-theme`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
             },
-          }));
-          request = supertest(testRealmHttpServer);
-
-          // Create a publishable source realm
-          let endpoint = 'theme-source';
-          let createResponse = await request
-            .post('/_create-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'realm',
-                  attributes: { name: 'Theme Source Realm', endpoint },
-                },
-              }),
-            );
-
-          if (createResponse.status !== 202) {
-            throw new Error(
-              `/_create-realm failed with status ${createResponse.status}: ` +
-                (createResponse.text ||
-                  (createResponse.body
-                    ? JSON.stringify(createResponse.body)
-                    : '')),
-            );
-          }
-
-          sourceRealmUrlString = createResponse.body.data.id;
-          let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
-
-          // Make the source realm publicly accessible
-          await _dbAdapter.execute(`
-            INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-            VALUES ('${sourceRealmUrlString}', '*', true, true, true)
-          `);
-
-          // Write a BrandGuide theme card with a custom icon
-          let themeResponse = await request
-            .post(`${sourceRealmPath}brand-guide-theme.json`)
-            .set('Accept', 'application/vnd.card+source')
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'card',
-                  id: `${sourceRealmUrlString}brand-guide-theme`,
-                  attributes: {
-                    markUsage: {
-                      socialMediaProfileIcon:
-                        'https://example.com/published-theme-icon.png',
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '@cardstack/base/brand-guide',
-                      name: 'default',
-                    },
-                  },
-                },
-              }),
-            );
-          if (themeResponse.status !== 204) {
-            throw new Error(
-              `Failed to write brand-guide-theme: ${themeResponse.status} ${themeResponse.text}`,
-            );
-          }
-
-          // Write a card that links to the BrandGuide via cardInfo.theme
-          let cardResponse = await request
-            .post(`${sourceRealmPath}themed-card.json`)
-            .set('Accept', 'application/vnd.card+source')
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'card',
-                  id: `${sourceRealmUrlString}themed-card`,
-                  attributes: { cardInfo: {} },
-                  relationships: {
-                    'cardInfo.theme': {
-                      links: {
-                        self: `${sourceRealmUrlString}brand-guide-theme`,
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '@cardstack/base/card-api',
-                      name: 'CardDef',
-                    },
-                  },
-                },
-              }),
-            );
-          if (cardResponse.status !== 204) {
-            throw new Error(
-              `Failed to write themed-card: ${cardResponse.status} ${cardResponse.text}`,
-            );
-          }
-
-          // Publish the source realm — this triggers a full from-scratch reindex
-          publishedRealmURLString =
-            'http://themetest.localhost:4444/theme-source/';
-          publishedRealmHost = new URL(publishedRealmURLString).host;
-          publishedRealmPath = new URL(publishedRealmURLString).pathname;
-
-          let publishResponse = await request
-            .post('/_publish-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                sourceRealmURL: sourceRealmUrlString,
-                publishedRealmURL: publishedRealmURLString,
-              }),
-            );
-          if (publishResponse.status !== 202) {
-            throw new Error(
-              `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
-            );
-          }
-
-          // `_publish-realm` returns 202 before indexing finishes. Drive a
-          // reconcile pass to mount the published realm, then wait for it to
-          // report ready, so the assertions below query indexed, rendered
-          // content.
-          await testRealmServer.testingOnlyReconcile();
-          await waitForPublishedRealmReady(
-            request,
-            dbAdapter,
-            publishedRealmURLString,
-            publishedRealmPath,
-            publishedRealmHost,
-          );
-          // Readiness clears once every row's HTML is live for its generation;
-          // the job that wrote it finalizes a moment later. Settle the channel
-          // so the assertions never race that tail, and so a render that
-          // rejected fails here instead of surfacing as a missing-markup
-          // assertion.
-          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
-        },
-        afterEach: async () => {
-          await closeServer(testRealmHttpServer);
+          ],
+        ],
+        onSetup(args) {
+          ({ request, dbAdapter } = args);
         },
       });
 
@@ -1888,216 +1960,84 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Published realm: host routing rules + trailing-slash canonicalization',
     function (hooks) {
-      let testRealmHttpServer: Server;
-      let testRealmServer: Awaited<
-        ReturnType<typeof runTestRealmServer>
-      >['testRealmServer'];
       let request: SuperTest<Test>;
       let dbAdapter: PgAdapter;
-      let dir: DirResult;
-      let sourceRealmUrlString: string;
-      let publishedRealmURLString: string;
-      let publishedRealmHost: string;
-      let publishedRealmPath: string;
-      let ownerUserId = '@mango:localhost';
+      let publishedRealmURLString =
+        'http://routingtest.localhost:4444/routing-source/';
+      let publishedRealmHost = new URL(publishedRealmURLString).host;
+      let publishedRealmPath = new URL(publishedRealmURLString).pathname;
 
-      hooks.beforeEach(function (assert) {
-        // Same single-window-per-hook reasoning as the theme module above.
-        assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
-        dir = dirSync();
-      });
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, _publisher, _runner) => {
-          dbAdapter = _dbAdapter;
-          let virtualNetwork = createVirtualNetwork();
-          let testRealmDir = join(dir.name, 'realm_server_routing', 'test');
-          ensureDirSync(testRealmDir);
-          ({ testRealmHttpServer, testRealmServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            fileSystem: {},
-            realmsRootPath: join(dir.name, 'realm_server_routing'),
-            realmURL: new URL('http://127.0.0.1:4444/test/'),
-            dbAdapter: _dbAdapter,
-            publisher: _publisher,
-            runner: _runner,
-            matrixURL,
-            permissions: {
-              '*': ['read', 'write'],
-              [ownerUserId]: DEFAULT_PERMISSIONS,
-            },
-            domainsForPublishedRealms: {
-              boxelSpace: 'localhost',
-              boxelSite: 'localhost:4444',
-            },
-          }));
-          request = supertest(testRealmHttpServer);
-
-          // Create a publishable source realm.
-          let endpoint = 'routing-source';
-          let createResponse = await request
-            .post('/_create-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'realm',
-                  attributes: { name: 'Routing Source Realm', endpoint },
-                },
-              }),
-            );
-          if (createResponse.status !== 202) {
-            throw new Error(
-              `/_create-realm failed with status ${createResponse.status}: ` +
-                (createResponse.text ||
-                  (createResponse.body
-                    ? JSON.stringify(createResponse.body)
-                    : '')),
-            );
-          }
-
-          sourceRealmUrlString = createResponse.body.data.id;
-          let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
-
-          // Make the source realm publicly readable.
-          await _dbAdapter.execute(`
-            INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
-            VALUES ('${sourceRealmUrlString}', '*', true, true, true)
-          `);
-
+      setupPublishedRealm(hooks, {
+        setup: 'host routing rules',
+        sourceRealmName: 'Routing Source Realm',
+        endpoint: 'routing-source',
+        publishedRealmURL: publishedRealmURLString,
+        cards: (sourceRealmURL) => [
           // The routed instance lives in a subdirectory. Its id is
           // <realm>/pages/pricing, which is deliberately NOT the routed path
           // (<realm>/pricing) — so a 200 on /pricing can only come from the
           // routing map, never from the card-id fallback.
-          let instanceResponse = await request
-            .post(`${sourceRealmPath}pages/pricing.json`)
-            .set('Accept', 'application/vnd.card+source')
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'card',
-                  id: `${sourceRealmUrlString}pages/pricing`,
-                  attributes: { cardInfo: { name: 'Pricing' } },
-                  meta: {
-                    adoptsFrom: {
-                      module: '@cardstack/base/card-api',
-                      name: 'CardDef',
-                    },
+          [
+            'pages/pricing.json',
+            {
+              data: {
+                type: 'card',
+                id: `${sourceRealmURL}pages/pricing`,
+                attributes: { cardInfo: { name: 'Pricing' } },
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/card-api',
+                    name: 'CardDef',
                   },
                 },
-              }),
-            );
-          if (instanceResponse.status !== 204) {
-            throw new Error(
-              `Failed to write pages/pricing: ${instanceResponse.status} ${instanceResponse.text}`,
-            );
-          }
-
+              },
+            },
+          ],
           // Overwrite realm.json with a routing rule mapping the bare
           // sub-path /pricing to the subdirectory instance. Writing realm.json
           // re-indexes the RealmConfig card, so the routing map picks the rule
           // up (and, after publish, the published realm's own index does too).
-          let realmConfigResponse = await request
-            .post(`${sourceRealmPath}realm.json`)
-            .set('Accept', 'application/vnd.card+source')
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'card',
-                  attributes: {
-                    cardInfo: { name: 'Routing Source Realm' },
-                    hostRoutingRules: [
-                      { path: '/' },
-                      { path: '/pricing' },
-                      // Redirect rules: a realm-relative target using
-                      // the default status code, and an external
-                      // target with an explicit permanent code.
-                      { path: '/tos', redirectTo: '/terms' },
-                      {
-                        path: '/external',
-                        redirectTo: 'https://example.com/landing',
-                        statusCode: 301,
-                      },
-                    ],
+          [
+            'realm.json',
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardInfo: { name: 'Routing Source Realm' },
+                  hostRoutingRules: [
+                    { path: '/' },
+                    { path: '/pricing' },
+                    // Redirect rules: a realm-relative target using
+                    // the default status code, and an external
+                    // target with an explicit permanent code.
+                    { path: '/tos', redirectTo: '/terms' },
+                    {
+                      path: '/external',
+                      redirectTo: 'https://example.com/landing',
+                      statusCode: 301,
+                    },
+                  ],
+                },
+                relationships: {
+                  'hostRoutingRules.0.instance': {
+                    links: { self: './index' },
                   },
-                  relationships: {
-                    'hostRoutingRules.0.instance': {
-                      links: { self: './index' },
-                    },
-                    'hostRoutingRules.1.instance': {
-                      links: { self: './pages/pricing' },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '@cardstack/base/realm-config',
-                      name: 'RealmConfig',
-                    },
+                  'hostRoutingRules.1.instance': {
+                    links: { self: './pages/pricing' },
                   },
                 },
-              }),
-            );
-          if (realmConfigResponse.status !== 204) {
-            throw new Error(
-              `Failed to write realm.json: ${realmConfigResponse.status} ${realmConfigResponse.text}`,
-            );
-          }
-
-          // Publish the source realm — triggers a full from-scratch reindex of
-          // the published copy.
-          publishedRealmURLString =
-            'http://routingtest.localhost:4444/routing-source/';
-          publishedRealmHost = new URL(publishedRealmURLString).host;
-          publishedRealmPath = new URL(publishedRealmURLString).pathname;
-
-          let publishResponse = await request
-            .post('/_publish-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                sourceRealmURL: sourceRealmUrlString,
-                publishedRealmURL: publishedRealmURLString,
-              }),
-            );
-          if (publishResponse.status !== 202) {
-            throw new Error(
-              `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
-            );
-          }
-
-          await testRealmServer.testingOnlyReconcile();
-          await waitForPublishedRealmReady(
-            request,
-            dbAdapter,
-            publishedRealmURLString,
-            publishedRealmPath,
-            publishedRealmHost,
-          );
-          // Readiness clears once every row's HTML is live for its generation;
-          // the job that wrote it finalizes a moment later. Settle the channel
-          // so the assertions never race that tail, and so a render that
-          // rejected fails here instead of surfacing as a wrong-status
-          // assertion.
-          await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
-        },
-        afterEach: async () => {
-          await closeServer(testRealmHttpServer);
+                meta: {
+                  adoptsFrom: {
+                    module: '@cardstack/base/realm-config',
+                    name: 'RealmConfig',
+                  },
+                },
+              },
+            },
+          ],
+        ],
+        onSetup(args) {
+          ({ request, dbAdapter } = args);
         },
       });
 

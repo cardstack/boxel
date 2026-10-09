@@ -2,6 +2,9 @@ import { fillIn, typeIn, focus, settled } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
+import BigIntegerField from '@cardstack/base/big-integer';
+import { field, contains, CardDef } from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -20,14 +23,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import {
-  BigIntegerField,
-  NumberField,
-  field,
-  contains,
-  CardDef,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -36,7 +31,6 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
 

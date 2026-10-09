@@ -2,15 +2,15 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import { Switch } from '@cardstack/boxel-ui/components';
 import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
+import Moon from '@cardstack/boxel-icons/moon';
+import Sun from '@cardstack/boxel-icons/sun';
 import { realmURL } from 'https://cardstack.com/base/card-api';
-import { Popover } from './popover';
 import { Select } from './select';
-import { SegmentedControl } from './segmented-control';
 
-// Wraps a page in a theme island with a Light/Dark/Auto switch, built the
+// Wraps a page in a theme island with a dark mode switch, built the
 // way the monorepo's own theme cards preview themselves (see
 // base/default-templates/theme-dashboard.gts). No custom theming code: the
 // outer div stamps data-theme, which theme.css translates into the
@@ -30,15 +30,8 @@ import { SegmentedControl } from './segmented-control';
 // and the element reset) which the frame then has to undo. The scoping
 // helpers are the part that was actually wanted.
 //
-// 'Auto' stamps no attribute, so the island follows the ambient host
-// scheme. Components never branch on dark — the flip is
-// entirely token re-resolution.
-
-const THEME_MODES = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
+// Components never branch on dark — the flip is entirely token
+// re-resolution.
 
 interface ThemeLike {
   id?: string;
@@ -53,144 +46,90 @@ export interface ThemeFrameSignature {
   Args: {
     // the Theme card linked from the page card's cardInfo (model.cardTheme)
     theme?: ThemeLike | null;
-    // pass @context to enable the season selector: the frame queries the
-    // realm for every Theme instance so all shipped seasons are choosable
+    // pass @context to enable the theme selector: the frame queries the
+    // realm for every Theme instance so each one can be previewed
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     context?: any;
-    // false hides the frame's own pill — for pages that place the yielded
-    // collapsed control in their own header instead
+    // false hides the frame's own bar — for pages that place the yielded
+    // controls in their own header instead
     bar?: boolean;
   };
-  // yields two header-seatable controls: [collapsed popover trigger,
-  // expanded inline segmented+select] — pages pick their presentation
+  // yields the controls (dark mode switch, and the theme select when the
+  // realm has more than one theme) for pages that seat them in a header
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Blocks: { default: [any, any] };
+  Blocks: { default: [any] };
   Element: HTMLDivElement;
 }
 
-// The collapsed presentation: one small ◐ button; mode + season live in a
-// Popover that opens on demand.
-interface ThemePopoverControlsSignature {
+// The same switch the base ThemeDashboard's ModeToggle renders, so a theme
+// previews light and dark the way it does everywhere else in Boxel.
+interface ThemeControlsSignature {
   Args: { frame: ThemeFrame };
   Element: HTMLSpanElement;
 }
 
-// The expanded presentation: mode segmented + season select side by side,
-// for pages that give theme controls a permanent seat in their header.
-const ThemeInlineControls: TemplateOnlyComponent<ThemePopoverControlsSignature> =
-  <template>
-    <span class='pretui-theme-inline' data-test-pretui-theme-bar ...attributes>
-      <SegmentedControl
-        @options={{THEME_MODES}}
-        @value={{@frame.mode}}
-        @onValueChange={{@frame.setMode}}
-      />
-      {{#if @frame.showThemeSelect}}
-        <span class='pretui-theme-inline-pick'>
-          <Select
-            @options={{@frame.themeOptions}}
-            @value={{@frame.activeThemeId}}
-            @onValueChange={{@frame.pickTheme}}
-          />
-        </span>
-      {{/if}}
-    </span>
-    <style scoped>
-      @layer PretComponent {
-        .pretui-theme-inline {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .pretui-theme-inline-pick {
-          min-width: 170px;
-          font-size: var(--text-ui, 12px);
-        }
-      }
-    </style>
-  </template>
-;
+const ThemeControls: TemplateOnlyComponent<ThemeControlsSignature> = <template>
+  <span
+    class='pretui-theme-controls'
+    role='group'
+    aria-label='Theme preview'
+    data-test-pretui-theme-bar
+    ...attributes
+  >
+    <Switch
+      @isEnabled={{@frame.isDarkMode}}
+      @onChange={{@frame.toggleDarkMode}}
+      @size='touch'
+      @checkedIcon={{Moon}}
+      @uncheckedIcon={{Sun}}
+      @label='Dark mode'
+      data-test-pretui-theme-mode
+    />
+    {{#if @frame.showThemeSelect}}
+      <span class='pretui-theme-pick' data-test-pretui-theme-pick>
+        <Select
+          @options={{@frame.themeOptions}}
+          @value={{@frame.activeThemeId}}
+          @onValueChange={{@frame.pickTheme}}
+          @label='Theme'
+        />
+      </span>
+    {{else if @frame.activeTheme}}
+      <span
+        class='pretui-theme-name'
+        data-test-pretui-theme-name
+      >{{@frame.themeName}}</span>
+    {{/if}}
+  </span>
+  <style scoped>
+    @layer PretComponent {
+      .pretui-theme-controls {
+        --pretui-theme-pick-min-w: 11.25rem;
 
-const ThemePopoverControls: TemplateOnlyComponent<ThemePopoverControlsSignature> =
-  <template>
-    <Popover @placement='bottom-end' @label='Theme' ...attributes>
-      <:trigger as |open toggle|>
-        <button
-          type='button'
-          class='pretui-theme-trigger'
-          data-state={{if open 'open'}}
-          title='Theme — {{@frame.themeName}}'
-          aria-label='Theme controls'
-          {{on 'click' toggle}}
-        >◐</button>
-      </:trigger>
-      <:default>
-        <div class='pretui-theme-pop' data-test-pretui-theme-bar>
-          <span class='pretui-theme-pop-cap'>Mode</span>
-          <SegmentedControl
-            @options={{THEME_MODES}}
-            @value={{@frame.mode}}
-            @onValueChange={{@frame.setMode}}
-          />
-          {{#if @frame.showThemeSelect}}
-            <span class='pretui-theme-pop-cap'>Season</span>
-            <Select
-              @options={{@frame.themeOptions}}
-              @value={{@frame.activeThemeId}}
-              @onValueChange={{@frame.pickTheme}}
-            />
-          {{else}}
-            <span class='pretui-theme-name'>{{@frame.themeName}}</span>
-          {{/if}}
-        </div>
-      </:default>
-    </Popover>
-    <style scoped>
-      @layer PretComponent {
-        .pretui-theme-trigger {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 26px;
-          height: 26px;
-          border: 0;
-          border-radius: var(--radius-chip, 6px);
-          background: transparent;
-          color: var(--muted-foreground);
-          font-size: 14px;
-          line-height: 1;
-          cursor: pointer;
-        }
-        .pretui-theme-trigger:hover,
-        .pretui-theme-trigger[data-state='open'] {
-          background: var(--hover, var(--boxel-100));
-          color: var(--foreground);
-        }
-        .pretui-theme-pop {
-          display: grid;
-          gap: 8px;
-          min-width: 210px;
-        }
-        .pretui-theme-pop-cap {
-          font-size: var(--text-ui-xs, 11px);
-          font-weight: 600;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: var(--muted-foreground);
-        }
-        .pretui-theme-name {
-          font-size: var(--text-ui, 12px);
-          color: var(--muted-foreground);
-        }
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
-    </style>
-  </template>
-;
+      .pretui-theme-pick {
+        min-width: var(--pretui-theme-pick-min-w);
+      }
+      .pretui-theme-name {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+    }
+  </style>
+</template>;
 
 export class ThemeFrame extends Component<ThemeFrameSignature> {
-  @tracked mode: string = 'auto';
+  // Starts light, like ThemeDashboard: the Boxel chrome around the island
+  // has fixed colors, so the switch previews dark rather than following the OS.
+  @tracked isDarkMode = false;
   @tracked selectedThemeId: string | undefined;
-  setMode = (v: string) => (this.mode = v);
+  // a toggle, not a setter: the Switch in the CLI test harness passes its
+  // click event to @onChange, not a boolean
+  toggleDarkMode = () => (this.isDarkMode = !this.isDarkMode);
   pickTheme = (v: string) => (this.selectedThemeId = v);
 
   // All Theme instances in the linked theme's realm. Absent context
@@ -246,7 +185,7 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   }
 
   get dataTheme() {
-    return this.mode === 'auto' ? undefined : this.mode;
+    return this.isDarkMode ? 'dark' : 'light';
   }
   get themeCss() {
     return this.activeTheme?.cssVariables ?? undefined;
@@ -260,7 +199,7 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
     return themeScope(this.activeThemeId, this.themeCss) ?? guidFor(this);
   }
   get themeName() {
-    return this.activeTheme?.cardTitle ?? 'No theme';
+    return this.activeTheme?.cardTitle ?? 'Untitled theme';
   }
   get showBar() {
     return this.args.bar ?? true;
@@ -288,34 +227,20 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
           {{! template-lint-enable require-scoped-style }}
         {{/if}}
         {{#if this.showBar}}
-          <div class='pretui-theme-bar' data-test-pretui-theme-bar>
-            <SegmentedControl
-              @options={{THEME_MODES}}
-              @value={{this.mode}}
-              @onValueChange={{this.setMode}}
-            />
-            {{#if this.showThemeSelect}}
-              <div class='pretui-theme-pick'>
-                <Select
-                  @options={{this.themeOptions}}
-                  @value={{this.activeThemeId}}
-                  @onValueChange={{this.pickTheme}}
-                />
-              </div>
-            {{else}}
-              <span class='pretui-theme-name'>{{this.themeName}}</span>
-            {{/if}}
+          <div class='pretui-theme-bar'>
+            <ThemeControls @frame={{this}} />
           </div>
         {{/if}}
-        {{yield
-          (component ThemePopoverControls frame=this)
-          (component ThemeInlineControls frame=this)
-        }}
+        {{yield (component ThemeControls frame=this)}}
       </div>
     </div>
     <style scoped>
       @layer PretComponent {
+        /* a column, so the surface grows to fill the frame: a percentage
+           min-height can't, since the frame's own height isn't definite */
         .pretui-theme-frame {
+          display: flex;
+          flex-direction: column;
           min-height: 100%;
         }
         /* the scoped theme channel only carries custom properties, so the
@@ -326,31 +251,20 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
         .pretui-theme-frame[data-theme='light'] {
           color-scheme: light;
         }
+        /* the island's tokens flip below the card's own surface, so the island
+           applies its own background, foreground and font, or the card's show
+           through */
         .pretui-theme-surface {
-          min-height: 100%;
+          flex: 1 0 auto;
+          background-color: var(--background);
+          color: var(--foreground);
+          font-family: var(--font-sans);
         }
+        /* in-flow, not sticky: pages may carry their own sticky top bar */
         .pretui-theme-bar {
-          /* in-flow (not sticky): pages may carry their own sticky top bar
-             (the workbench format) and the bar must not collide with it.
-             No box of its own — the segmented control and select carry their
-             own rounded chrome, and wrapping rounded controls in another
-             rounded container reads as double chrome. */
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 8px;
           width: fit-content;
-          margin: 10px 0 0 10px;
-        }
-        .pretui-theme-name {
-          font-size: var(--text-ui, 12px);
-          letter-spacing: var(--track-ui, 0.01em);
-          color: var(--muted-foreground);
-          white-space: nowrap;
-        }
-        .pretui-theme-pick {
-          min-width: 180px;
-          font-size: var(--text-ui, 12px);
+          margin-block-start: var(--boxel-sp-xs);
+          margin-inline-start: var(--boxel-sp-xs);
         }
       }
     </style>

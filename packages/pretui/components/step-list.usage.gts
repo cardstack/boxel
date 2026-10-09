@@ -68,7 +68,7 @@ class StepListUsage extends Component {
   <template>
     <FreestyleUsage
       @name='StepList'
-      @description="Step-progress rail in two presentations. 'steps' (default) is Spectrum's structure — numbered markers, connector lines, aria-current on the active step; 'track' is the segmented bar rail, one filled bar per stage with the caption beneath, for a pipeline read at a glance rather than walked through. Both share one <ol>, one state palette and one piece of wiring that matters: every step carries visually hidden state text ('Completed', 'Not completed', 'Error'), so completion is never conveyed by colour alone. States derive from @current or arrive explicitly per step; error is a Pretui addition. Reach for it whenever a fixed sequence of stages has to report where it stands — and set @summary when the reader needs the count as well as the shape."
+      @description="Step-progress rail in two presentations. 'steps' (default) is Spectrum's structure — numbered markers, connector lines, aria-current on the active step; 'track' is the segmented bar rail, one filled bar per stage with the caption beneath, for a pipeline read at a glance rather than walked through. Both share one <ol>, one state palette and one piece of wiring that matters: every step carries visually hidden state text ('Completed', 'Not completed', 'Error'), so completion is never conveyed by color alone. States derive from @current or arrive explicitly per step; error is a Pretui addition. Reach for it whenever a fixed sequence of stages has to report where it stands — and set @summary when the reader needs the count as well as the shape."
       @source={{this.usage}}
     >
       <:example>

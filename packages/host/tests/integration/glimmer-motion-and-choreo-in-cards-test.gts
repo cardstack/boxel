@@ -14,7 +14,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -83,7 +82,6 @@ const motionCardsSource = `
 
 module('Integration | glimmer-motion and Choreo in cards', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupChoreo(hooks);
   let loader: Loader;
 

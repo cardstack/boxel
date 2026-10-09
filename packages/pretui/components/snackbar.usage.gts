@@ -1,6 +1,7 @@
 // Pretui — Snackbar usage page.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { FreestyleUsage } from './freestyle-usage';
+import CheckIcon from '@cardstack/boxel-icons/check';
 import { Button } from './button';
 import { Snackbar } from './snackbar';
 
@@ -12,8 +13,8 @@ const SnackbarUsage: TemplateOnlyComponent = <template>
   >
     <:example>
       <Snackbar @title='Lot saved' @message='B-103 is ready for review'>
-        <:icon>✓</:icon>
-        <:action><Button @variant='ghost'>Review</Button></:action>
+        <:icon><CheckIcon width='14' height='14' aria-hidden='true' /></:icon>
+        <:action><Button @tone='neutral' @appearance='plain'>Review</Button></:action>
       </Snackbar>
     </:example>
     <:api as |Args|>

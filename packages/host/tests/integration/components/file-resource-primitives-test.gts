@@ -16,7 +16,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as CardApiModule from '@cardstack/base/card-api';
@@ -24,7 +23,6 @@ import type * as FileResourcesModule from '@cardstack/base/file-formats/file-res
 
 module('Integration | FileDef resource primitives', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let FileDef: typeof CardApiModule.FileDef;

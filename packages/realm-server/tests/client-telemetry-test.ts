@@ -1,14 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename, join } from 'path';
-import type { PgAdapter } from '@cardstack/postgres';
+import { basename } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import {
   setupDB,
-  runTestRealmServer,
-  createVirtualNetwork,
-  fixtureDir,
-  matrixURL,
+  setupSimpleRealmServerTemplate,
+  startSimpleRealmServer,
   closeServer,
   realmSecretSeed,
 } from './helpers/index.ts';
@@ -17,11 +14,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { dirSync, type DirResult } from 'tmp';
-import fsExtra from 'fs-extra';
-const { copySync, ensureDirSync } = fsExtra;
 
-const testRealmURL = new URL('http://127.0.0.1:0/test/');
 const AUTHED_USER = 'matrix-user-id';
 
 // Collect the JSON lines the handler emits on the boxel:client-perf channel
@@ -71,39 +64,26 @@ module(basename(import.meta.filename), function () {
   module('client telemetry endpoint', function (hooks) {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
-    let dbAdapter: PgAdapter;
     let token: RealmServerTokenClaim;
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
+    async function stop() {
+      await closeServer(testRealmServer);
+    }
+
+    let templateDatabase = setupSimpleRealmServerTemplate(hooks);
 
     setupDB(hooks, {
-      beforeEach: async (_dbAdapter, publisher, runner) => {
-        dbAdapter = _dbAdapter;
-        let testRealmDir = join(dir.name, 'realm_server_telemetry', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_telemetry'),
-            realmURL: testRealmURL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
+      templateDatabase,
+      beforeEach: async (dbAdapter, publisher, runner) => {
+        testRealmServer = await startSimpleRealmServer({
+          dbAdapter,
+          publisher,
+          runner,
+        });
         request = supertest(testRealmServer);
         token = { user: AUTHED_USER, sessionRoom: 'test-session' };
       },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
-      },
+      afterEach: stop,
     });
 
     function post(opts?: { authed?: boolean }) {

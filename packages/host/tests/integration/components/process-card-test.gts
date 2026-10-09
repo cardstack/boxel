@@ -1,15 +1,14 @@
+import { ProcessCard } from '@cardstack/base/process-card';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { ProcessCard, setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Card | process-card', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
 

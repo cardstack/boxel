@@ -4,17 +4,17 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { ProgressBar } from './progress-bar';
 
-// The hue knob's choices: the default plus the state hues every season
-// defines. Info and attention are the kit's `--pretui-*` tokens; the seasons
-// do not define a bare `--info` or `--attention`.
+// The hue knob's choices: the default plus the state hues the theme contract
+// defines. `--attention` and `--info` are contract tokens, so every option here
+// resolves under the boxel theme.
 const DEFAULT_HUE = 'var(--primary)';
 const HUES = [
   DEFAULT_HUE,
   'var(--success)',
   'var(--warning)',
-  'var(--pretui-attention)',
+  'var(--attention)',
   'var(--destructive)',
-  'var(--pretui-info)',
+  'var(--info)',
 ];
 
 // ── ProgressBar ← progress-bar/usage.gts ─────────────────────────────────
@@ -136,7 +136,7 @@ class ProgressBarUsage extends GlimmerComponent {
         />
         <Args.String
           @name='hue'
-          @description='Any CSS colour for the fill and lit segments, typically a state hue. Sets --pretui-progress-hue, which can also be set on any ancestor; defaults to --primary (Pretui addition).'
+          @description='Any CSS color for the fill and lit segments, typically a state hue. Sets --pretui-progress-hue, which can also be set on any ancestor; defaults to --primary (Pretui addition).'
           @value={{this.hue}}
           @options={{HUES}}
           @defaultValue={{DEFAULT_HUE}}
@@ -154,14 +154,14 @@ class ProgressBarUsage extends GlimmerComponent {
         <Css.Basic
           @name='pretui-progress-hue'
           @type='color'
-          @description='Colour of the fill and the lit segments. Set on the bar or any ancestor, or through @hue.'
+          @description='Color of the fill and the lit segments. Set on the bar or any ancestor, or through @hue.'
           @defaultValue='var(--primary)'
         />
       </:cssVars>
     </FreestyleUsage>
     <style scoped>
       .bar-col {
-        width: min(100%, 320px);
+        width: min(100%, 20rem);
       }
     </style>
   </template>

@@ -10,13 +10,11 @@ import { UNKNOWN_REALM_NAME } from '@cardstack/host/services/realm';
 import type RealmService from '@cardstack/host/services/realm';
 
 import { setupLocalIndexing, testRealmURL } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | services | realm-service info()', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

@@ -28,7 +28,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -71,7 +70,6 @@ module(`Integration | query field search throttle`, function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     cardApi = await loader.import('@cardstack/base/card-api');

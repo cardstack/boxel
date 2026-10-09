@@ -1,6 +1,7 @@
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { ToolField, Skill } from '@cardstack/base/skill';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -21,7 +22,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -77,7 +77,6 @@ module('Integration | tools | migrate-skill', function (hooks) {
 
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
-  setupBaseRealm(hooks);
   setupOnSave(hooks);
 
   setupCardLogs(

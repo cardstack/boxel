@@ -31,6 +31,17 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.strictEqual(el.dataset.size, 'm', 'the default size is emitted as m');
   });
 
+  test('@message renders in a paragraph and the block in a div', async function (assert) {
+    await render(
+      <template>
+        <EmptyState @title='a' @message='plain' data-test-arg />
+        <EmptyState @title='b' data-test-block>rich <em>text</em></EmptyState>
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-arg] .pretui-empty-msg')?.tagName, 'P');
+    assert.strictEqual(q('[data-test-block] .pretui-empty-msg')?.tagName, 'DIV');
+  });
+
   test('EmptyState drops the texture on request', async function (assert) {
     await render(<template><EmptyState @title='Nothing here' @texture={{false}} /></template>);
     assert.notOk(q('.pretui-empty-texture'));

@@ -13,7 +13,6 @@ import {
   testRealmURL,
   visitOperatorMode,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -44,8 +43,6 @@ module('Acceptance | workspace hosting', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
-
-  setupBaseRealm(hooks);
 
   let publishCalls: { sourceRealmURL: string; publishedRealmURL: string }[];
   let unpublishCalls: string[];

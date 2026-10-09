@@ -18,9 +18,9 @@ Quantitative completion: how much of a known task is done. Two renders from one 
 
 `@valueText` is the announced reading of the value when the number alone would mislead (a run that ended early fills every segment, but "6 of 6" is not what happened). It changes what assistive tech hears, not what the header shows. In stepped mode it defaults to `@count`; a continuous bar announces a percentage unless `@valueText` is given, since its count ("300 files") need not carry the total.
 
-`@hue` paints the fill (and the lit segments) in any CSS colour, typically a state hue: `@hue='var(--warning)'`. It is the same one-colour arg as Meter's and Chip's `@hue`, and like theirs it writes a per-component custom property, `--pretui-progress-hue`, on the root, so the same knob can also be set on any ancestor, or in a caller's `style`. A caller's `style` attribute replaces the component's own, so a bar that takes a `style` carries the knob in it rather than in `@hue`.
+`@hue` paints the fill (and the lit segments) in any CSS color, typically a state hue: `@hue='var(--warning)'`. It is the same one-color arg as Meter's and Chip's `@hue`, and like theirs it writes a per-component custom property, `--pretui-progress-hue`, on the root, so the same knob can also be set on any ancestor, or in a caller's `style`. A caller's `style` attribute replaces the component's own, so a bar that takes a `style` carries the knob in it rather than in `@hue`.
 
-`min-width: 4px` on a non-zero fill is the detail that stops 1% from rendering as nothing — a bar that shows no progress when progress exists is worse than no bar.
+`min-width: 0.25rem` on a non-zero fill is the detail that stops 1% from rendering as nothing — a bar that shows no progress when progress exists is worse than no bar.
 
 ## Prior art
 
@@ -45,14 +45,14 @@ What it does:
 Gaps, and they are the kind that pass review by looking present:
 
 - **No announcement on change.** A progress bar that advances silently is correct for a fast operation and unhelpful for a slow one; there is no live region and no hook for one.
-- **The fill fails WCAG 1.4.11 Non-text Contrast (3:1) against its track in the shipped light seasons.** The fill (`--pretui-progress-hue`, default `--primary`) sits on `--inset` with no border, and stepped mode tells lit from unlit segments by that colour alone. Measured against light `--inset`: the default `--primary` is 1.20:1 in SS26 (3.37:1 in AW26, 4.84:1 in SS27); `--warning` is 2.14, 1.58 and 2.01:1; AW26's `--pretui-attention` is 1.45:1 and its `--destructive` 2.90:1; SS26's `--success` and `--pretui-info` are 2.55 and 2.70:1. Every dark-mode pair passes, at 5.20:1 or higher.
-- The 4px bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.
+- **The fill fails WCAG 1.4.11 Non-text Contrast (3:1) against its track in the boxel light default theme.** The fill (`--pretui-progress-hue`, default `--primary`) sits on `--inset` with no border, and stepped mode tells lit from unlit segments by that color alone. In the boxel light default, `--primary` (`--boxel-teal`, `#00ffba`) on `--inset` (`#f5f5f5`) is 1.2:1, against the 3:1 that 1.4.11 requires; a lighter track cannot fix it (teal on white is 1.31:1), so a light-theme `3 / 6` bar reads as empty. The dark default passes (10.2:1 on `#302d3b`). The fill has to darken in light mode.
+- The 0.25rem bar height is below any comfortable pointer target, but nothing here is interactive, so 2.5.8 does not apply.
 
 ## Theming
 
-`--pretui-progress-hue` (the fill and lit segments; defaults to `--primary`, set by `@hue` or on any ancestor), `--inset` (track and unlit segments), `--muted-foreground` (label), `--foreground` (count), `--font-mono` + `--text-ui-xs` (the count's tabular-figure voice), `--text-ui-sm`, `--pretui-dur-morph` / `--pretui-ease-morph` (the fill transition, shared with the kit's other value animations).
+`--pretui-progress-hue` (the fill and lit segments; defaults to `--primary`, set by `@hue` or on any ancestor), `--inset` (track and unlit segments), `--muted-foreground` (label), `--foreground` (count), `--font-mono` + `--boxel-font-size-2xs` (the count's tabular-figure voice), `--boxel-font-size-xs` (the header), `--pretui-dur-morph` / `--pretui-ease-morph` (optional knobs for the fill transition; nothing in the boxel theme defines them, so the fallbacks `300ms` and `ease-out` apply unless a caller sets them). The fill and step transitions are turned off under `prefers-reduced-motion: reduce`.
 
-The 4px height, 2px radius and 3px step gap are fixed. A season must keep `--primary` (and a caller any `--pretui-progress-hue` it sets) and `--inset` clearly separable in luminance, not just in hue — that separation is the entire signal in stepped mode. The shipped light seasons do not yet meet 3:1 there (see Accessibility); their dark modes do.
+The 0.25rem height, `--boxel-border-radius-2xs` radius and `--boxel-sp-5xs` step gap are fixed. The theme (the boxel default and any card's Theme) must keep `--primary` (and a caller any `--pretui-progress-hue` it sets) and `--inset` at 3:1 or more in luminance, not just different in hue — that separation is the entire signal in stepped mode. The boxel light default does not meet it today (`--primary` on `--inset` is 1.2:1, see Accessibility); the dark default does.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

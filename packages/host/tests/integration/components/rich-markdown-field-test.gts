@@ -9,6 +9,9 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import { RichMarkdownField } from '@cardstack/base/rich-markdown';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -29,20 +32,11 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
 } from '../../helpers';
-import {
-  setupBaseRealm,
-  CardDef,
-  Component,
-  StringField,
-  RichMarkdownField,
-  contains,
-  field,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { BaseDef, CardDef as CardDefType } from '@cardstack/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 let loader: Loader;
 
@@ -50,8 +44,6 @@ module('Integration | RichMarkdownField', function (hooks) {
   setupRenderingTest(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     let permissions: Permissions = {
@@ -472,9 +464,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
     try {
       let store = getService('store');
-      let article = (await store.get(
-        `${testRealmURL}article-1`,
-      )) as CardDefType;
+      let article = (await store.get(`${testRealmURL}article-1`)) as CardDef;
       let refs = (article as any).body?.cardReferenceUrls;
       assert.deepEqual(
         refs,

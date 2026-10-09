@@ -1,4 +1,4 @@
-// Pretui — SlidingHighlight: the travelling selection indicator and the modifier that measures it.
+// Pretui — SlidingHighlight: the traveling selection indicator and the modifier that measures it.
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
@@ -138,7 +138,7 @@ export interface SlidingHighlightSignature {
 }
 
 /**
- * The travelling indicator. Render it inside a container carrying
+ * The traveling indicator. Render it inside a container carrying
  * `{{slidingHighlight}}`; it needs no arguments to work. Its block is a slot
  * for callers who want to paint the indicator themselves (a gradient, a
  * texture) while keeping the travel.
@@ -151,7 +151,7 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
     let bits: string[] = [];
     if (this.args.duration !== undefined) {
       bits.push(
-        `--pretui-highlight-duration: ${seconds(this.args.duration, 0.22)}`,
+        `--pretui-highlight-duration: ${seconds(this.args.duration, 0.18)}`,
       );
     }
     {
@@ -195,39 +195,40 @@ export class SlidingHighlight extends Component<SlidingHighlightSignature> {
           z-index: 0;
           transition-property: transform, width, height, opacity;
           /* --init is present only for the first measurement (see the
-             modifier); the chain then falls through to the caller's duration,
-             then to the kit's snap default. */
+             modifier); the chain then falls through to the caller's duration */
           transition-duration: var(
             --pretui-highlight-init,
-            var(--pretui-highlight-duration, var(--pretui-dur-snap, 180ms))
+            var(--pretui-highlight-duration, 180ms)
           );
           transition-timing-function: var(
             --pretui-highlight-ease,
-            var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1))
+            cubic-bezier(0.23, 1, 0.32, 1)
           );
         }
+        /* a strong edge, so the pill reads even when its track blends into
+           the surface behind it */
         .pretui-highlight[data-variant='pill'] {
-          background: var(--card);
-          box-shadow: var(
-            --pretui-shadow-control,
-            0 0 0 1px var(--border),
-            0 1px 2px rgb(16 24 40 / 0.1)
-          );
+          background-color: var(--card);
+          box-shadow:
+            0 0 0 1px var(--border-strong),
+            var(--shadow-sm);
         }
         .pretui-highlight[data-variant='soft'] {
-          background: color-mix(
+          background-color: color-mix(
             in oklch,
             var(--primary) 14%,
             var(--card)
           );
         }
+        /* a line is drawn in the -ink, which holds 3:1 on the surface; the
+           --primary fill does not */
         .pretui-highlight[data-variant='outline'] {
-          box-shadow: 0 0 0 1px var(--primary);
+          box-shadow: 0 0 0 1px var(--primary-ink);
         }
         .pretui-highlight[data-variant='underline'] {
           height: var(--pretui-highlight-thickness, 2px);
           border-radius: var(--pretui-highlight-radius, 1px);
-          background: var(--primary);
+          background-color: var(--primary-ink);
           /* ride the bottom edge of the active item's box */
           transform: translate(
             var(--pretui-highlight-x, 0px),

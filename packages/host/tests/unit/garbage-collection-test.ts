@@ -1,6 +1,15 @@
 import { registerDestructor } from '@ember/destroyable';
 import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -15,26 +24,14 @@ import CardStore, {
 } from '@cardstack/host/lib/gc-card-store';
 
 import { saveCard, testRealmURL } from '../helpers';
-import {
-  CardDef,
-  FileDef,
-  contains,
-  field,
-  linksTo,
-  linksToMany,
-  StringField,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type { CardDef as CardInstance } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
 
 let loader: Loader;
 
 module('Unit | identity-context garbage collection', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let api: typeof CardAPI;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
@@ -68,11 +65,11 @@ module('Unit | identity-context garbage collection', function (hooks) {
     hassan,
   }: {
     store: CardStore;
-    jade: CardInstance;
-    queenzy: CardInstance;
-    germaine: CardInstance;
-    boris: CardInstance;
-    hassan: CardInstance;
+    jade: CardDef;
+    queenzy: CardDef;
+    germaine: CardDef;
+    boris: CardDef;
+    hassan: CardDef;
   }) {
     await saveCard(jade, `${testRealmURL}jade`, loader, store);
     await saveCard(queenzy, `${testRealmURL}queenzy`, loader, store);
@@ -84,11 +81,11 @@ module('Unit | identity-context garbage collection', function (hooks) {
   async function setupTest(
     doSave?: (args: {
       store: CardStore;
-      jade: CardInstance;
-      queenzy: CardInstance;
-      germaine: CardInstance;
-      boris: CardInstance;
-      hassan: CardInstance;
+      jade: CardDef;
+      queenzy: CardDef;
+      germaine: CardDef;
+      boris: CardDef;
+      hassan: CardDef;
     }) => Promise<void>,
   ) {
     class Person extends CardDef {
@@ -706,7 +703,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     referenceCount.clear();
     store.reset();
 
-    let Person = hassan.constructor as typeof CardInstance;
+    let Person = hassan.constructor as typeof CardDef;
     let alpha = new Person({ name: 'Alpha' });
     let beta = new Person({ name: 'Beta' });
     (alpha as any).bestFriend = beta;

@@ -1,5 +1,6 @@
 // Pretui — UsageNumber: a number argument with its knob.
 import Component from '@glimmer/component';
+import { guidFor } from '@ember/object/internals';
 import { Input } from './input';
 import { Slider } from './slider';
 import { UsageArgument } from './usage-argument';
@@ -44,6 +45,13 @@ export class UsageNumber extends Component<UsageNumberSignature> {
   get textValue() {
     return this.args.value == null ? undefined : String(this.args.value);
   }
+  controlId = `${guidFor(this)}-control`;
+  // the rail labels the text field; Slider names itself with @label
+  get labelFor() {
+    return this.hasControl && !this.shouldRenderRangeInput
+      ? this.controlId
+      : undefined;
+  }
   onSlide = (v: number) => {
     this.args.onInput?.(v);
   };
@@ -53,10 +61,14 @@ export class UsageNumber extends Component<UsageNumberSignature> {
   <template>
     {{#if this.isProp}}
       {{#unless @hideControls}}
-        <PropRow @label={{@name}} @required={{@required}}>
+        <PropRow
+          @label={{@name}}
+          @required={{@required}}
+          @controlId={{this.labelFor}}
+        >
           {{#if this.hasControl}}
             {{#if this.shouldRenderRangeInput}}
-              <span class='numrange'>
+              <div class='numrange'>
                 <Slider
                   @value={{this.numValue}}
                   @min={{@min}}
@@ -66,13 +78,16 @@ export class UsageNumber extends Component<UsageNumberSignature> {
                   @onValueChange={{this.onSlide}}
                 />
                 <span class='numrange-readout'>{{@value}}</span>
-              </span>
+              </div>
             {{else}}
               <Input
                 @type='number'
                 @value={{this.textValue}}
                 @onInput={{this.onText}}
-                aria-label={{@name}}
+                @controlId={{this.controlId}}
+                min={{@min}}
+                max={{@max}}
+                step={{@step}}
               />
             {{/if}}
           {{else}}
@@ -90,22 +105,22 @@ export class UsageNumber extends Component<UsageNumberSignature> {
       />
     {{/if}}
     <style scoped>
-      @layer PretComponent {
-        .numrange {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .numrange > :first-child {
-          flex: 1;
-        }
-        .numrange-readout {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui-sm, 11.5px);
-          min-width: 30px;
-          text-align: right;
-          font-variant-numeric: tabular-nums;
-        }
+      .numrange {
+        --numrange-readout-min-w: 1.875rem;
+
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .numrange > :first-child {
+        flex: 1;
+      }
+      .numrange-readout {
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        min-width: var(--numrange-readout-min-w);
+        text-align: end;
+        font-variant-numeric: tabular-nums;
       }
     </style>
   </template>

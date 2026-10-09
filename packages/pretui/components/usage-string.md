@@ -34,8 +34,8 @@ No pattern of its own; it renders one of two kit controls plus a table row.
 
 Gaps:
 
-- **The knob's label is the property-row rail, not a `<label for>`.** Verify the label and the control are actually associated — a property list of unlabelled Inputs and Selects is the most likely failure here, and neither **Input** nor **Select** generates its own name. Both accept `@controlId`, so the fix is available.
-- **`@required` must reach the accessible name**, not only render an asterisk — the fix **FormField** already made in the forms territory.
+- **The rail is the control's `<label for>`**, so the visible argument name is the control's accessible name, and clicking it focuses the Input. The Select's trigger takes the same label through `aria-labelledby`.
+- **`@required`** adds a visually hidden "(required)" beside the asterisk, so it is part of the label, the same fix **FormField** made.
 - **Changing a knob re-renders the example silently.** No live region announces the effect, so a screen-reader user changing `@size` from `md` to `lg` gets no confirmation that anything happened. This belongs to **FreestyleUsage** but is felt here.
 - **Free-text mode has no format guidance.** A string argument expecting a CSS length or an ISO date offers a bare Input with no hint (**WCAG 3.3.2**), and `@description` lives in the _other_ lens — so the docs table has the explanation and the knob does not.
 - **The two lenses are not linked.** A reader in the property list has no route to the row documenting the same argument.
@@ -43,6 +43,4 @@ Gaps:
 
 ## Theming
 
-**Select** and **Input** token sets for the control, **Table**'s for the doc row, plus the property rail's label voice (`--muted-foreground`, the mono eyebrow treatment) and **Token**'s for the type and default value.
-
-Nothing of its own. Because the property list is dense and its labels are small, a season should verify the rail's ink against `--card` at the eyebrow size — this is a surface read closely by people comparing values, and it is one of the smallest text sizes in the kit.
+**Select** and **Input** token sets for the control, **Table**'s for the doc row, and the property rail's label: mono at `--boxel-font-size-xs` in `--muted-foreground`, which measures 6.9:1 on `--card` in light and 5.6:1 in dark.
