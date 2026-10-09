@@ -3,7 +3,8 @@
 #
 # Wraps render-preview.sh (changed-dashboard filtering + UID rewriting) and
 # `grafanactl resources push`. Used by the observability-preview.yml workflow
-# on PR open/synchronize/reopen.
+# on PR open/synchronize/reopen, once per environment (see
+# ci-apply-preview.sh).
 #
 # Usage:
 #   ./scripts/apply-preview.sh --pr <n> --base-ref <ref> [--env staging|local|production]
