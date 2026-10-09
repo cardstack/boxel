@@ -61,6 +61,7 @@ function userMessage(eventId: string, body: string): DiscreteMatrixEvent {
 function botMessageWithToolCalls(
   eventId: string,
   toolCallIds: string[],
+  toolName = 'searchCardsByTypeAndTitle',
 ): DiscreteMatrixEvent {
   return {
     type: 'm.room.message',
@@ -74,7 +75,7 @@ function botMessageWithToolCalls(
       data: { context: { functions: [] } },
       [APP_BOXEL_TOOL_REQUESTS_KEY]: toolCallIds.map((id) => ({
         id,
-        name: 'searchCardsByTypeAndTitle',
+        name: toolName,
         arguments: JSON.stringify({ attributes: { title: 'Author' } }),
       })),
     },
@@ -198,6 +199,31 @@ module('stop holds the assistant loop', (hooks) => {
       fakeMatrixClient as any,
     );
     assert.true(shouldRespond);
+  });
+
+  test('a canceled correctness check does not hold the room after the user writes again', async (assert) => {
+    let eventList = [
+      userMessage('user-1', 'fix the card'),
+      botMessageWithToolCalls('bot-1', ['check-1'], 'checkCorrectness'),
+      stopEvent('stop-1'),
+      toolResult(
+        'result-1',
+        'bot-1',
+        'check-1',
+        'canceled',
+        'The user stopped the assistant before this tool call ran.',
+      ),
+      userMessage('user-2', 'try again'),
+    ];
+    let { shouldRespond } = await getPromptParts(
+      eventList,
+      BOT,
+      fakeMatrixClient as any,
+    );
+    assert.true(
+      shouldRespond,
+      'a canceled check is answered, so it does not wait for another result',
+    );
   });
 
   test('a canceled call reads as canceled to the model, with its reason', async (assert) => {

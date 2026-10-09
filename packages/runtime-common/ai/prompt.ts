@@ -466,7 +466,12 @@ function isTerminalToolResultEventFor(
     return false;
   }
   let status = event.content['m.relates_to']?.key;
-  return status === 'applied' || status === 'failed' || status === 'invalid';
+  return (
+    status === 'applied' ||
+    status === 'failed' ||
+    status === 'invalid' ||
+    status === 'canceled'
+  );
 }
 
 async function getEnabledSkills(
