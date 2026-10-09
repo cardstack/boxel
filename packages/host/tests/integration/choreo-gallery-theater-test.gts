@@ -28,9 +28,9 @@ const FILM_PAGE =
   '<!doctype html><html><head><title>Film</title></head><body></body></html>';
 
 const FILMS = [
-  { slug: 'towers', className: 'TowersDemo', face: 'tw-face' },
-  { slug: 'sagrada', className: 'SagradaDemo', face: 'sg-face' },
-  { slug: 'sylva', className: 'SylvaDemo', face: 'sy-face' },
+  { slug: 'towers', className: 'TowersDemo' },
+  { slug: 'sagrada', className: 'SagradaDemo' },
+  { slug: 'sylva', className: 'SylvaDemo' },
 ] as const;
 
 // portrait phones, a landscape phone, and a desktop window
@@ -139,35 +139,39 @@ module('Integration | Choreo gallery | theater', function (hooks) {
     await renderCard(loader, gallery, 'isolated');
     await animationsSettled();
 
-    await click('[data-gallery-tile="towers"] .card-meta');
-    await waitFor('.tw-face [data-film-theater]');
+    await click('[data-test-gallery-tile-link="towers"]');
+    await waitFor('[data-test-film="towers"] [data-test-theater-enter]');
     await animationsSettled();
     assert
-      .dom('.choreo-site')
-      .doesNotHaveClass('is-theater', 'the film opens on its page');
+      .dom('[data-test-choreo-site]')
+      .doesNotHaveAttribute('data-test-theater', 'the film opens on its page');
 
-    await click('[data-film-theater]');
-    assert.dom('.choreo-site').hasClass('is-theater', 'the site is in theater');
+    await click('[data-test-theater-enter]');
     assert
-      .dom('[data-film-theater]')
+      .dom('[data-test-choreo-site]')
+      .hasAttribute('data-test-theater', '', 'the site is in theater');
+    assert
+      .dom('[data-test-theater-enter]')
       .doesNotExist('the way in does not overlap the way out');
-    assert.dom('.theater-built').isVisible('the way out stays on screen');
+    assert
+      .dom('[data-test-theater-exit]')
+      .isVisible('the way out stays on screen');
   });
 
-  for (let { slug, className, face } of FILMS) {
+  for (let { slug, className } of FILMS) {
     test(`${slug}: in theater the stage fills the window, capped at a square`, async function (assert) {
       await renderCard(loader, await film(slug, className), 'isolated');
-      await waitFor(`.${face} [data-film-theater]`);
-      await click('[data-film-theater]');
+      await waitFor(`[data-test-film="${slug}"] [data-test-theater-enter]`);
+      await click('[data-test-theater-enter]');
       await animationsSettled();
-      let page = document.querySelector('[data-choreo-site]')!;
-      assert.dom('.demo-body').hasClass('is-theater');
+      let page = document.querySelector('[data-test-choreo-site]')!;
+      assert.dom('[data-test-demo-body]').hasAttribute('data-test-theater');
 
       for (let [width, height] of VIEWPORTS) {
         let iframe = layOutAt(page, width, height);
         try {
           let doc = iframe.contentDocument!;
-          let row = doc.querySelector('.stage-row') as HTMLElement;
+          let row = doc.querySelector('[data-test-stage-row]') as HTMLElement;
           let rowStyle = iframe.contentWindow!.getComputedStyle(row);
           // the stage row is the size container; its content box is 100cqi
           let rowWidth =
@@ -175,7 +179,7 @@ module('Integration | Choreo gallery | theater', function (hooks) {
             parseFloat(rowStyle.paddingLeft) -
             parseFloat(rowStyle.paddingRight);
           let stage = doc
-            .querySelector(`.stage-wrap:has(.${face})`)!
+            .querySelector(`[data-test-stage]:has([data-test-film="${slug}"])`)!
             .getBoundingClientRect();
 
           assert.true(

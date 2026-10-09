@@ -58,7 +58,10 @@ export class SiteFrame extends Component<Signature> {
   });
 
   <template>
-    <ChoreoRoot class='app-shell {{if @theater.on "is-theater"}}'>
+    <ChoreoRoot
+      class='app-shell {{if @theater.on "is-theater"}}'
+      data-test-theater={{@theater.on}}
+    >
       <header class='topbar'>
         <GalleryLink
           @href={{@homeHref}}

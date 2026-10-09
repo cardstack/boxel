@@ -354,6 +354,7 @@ export class GalleryGrid extends Component<Signature> {
               @href={{@nav.hrefFor demo.slug}}
               @onFollow={{fn @nav.go demo.slug}}
               class='card-meta'
+              data-test-gallery-tile-link={{demo.slug}}
             >
               <span
                 class='card-group'
