@@ -15,6 +15,9 @@ import {
   userInitiatedPriority,
   deriveRealmName,
   notifyAllFileChanges,
+  baseRealm,
+  effectiveHasError,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
@@ -325,6 +328,67 @@ async function restoreRealmConfigMtime(
   }
   let { atime, mtime } = await stat(sourceRealmJsonPath);
   await utimes(publishedRealmJsonPath, atime, mtime);
+}
+
+// The index compares only this realm's own files, so nothing renders a
+// published row again when a card or module it depends on in another realm
+// changes (the catalog, or a different workspace). Base realm code ships with
+// a deploy, which PROCESS_STARTED_AT covers, and so does the code outside any
+// realm that rows depend on (host packages, icons, CDN modules).
+async function dependsOnOtherRealms(
+  dbAdapter: DBAdapter,
+  virtualNetwork: VirtualNetwork,
+  publishedRealmURL: string,
+): Promise<boolean> {
+  let deps = (
+    (await query(dbAdapter, [
+      `SELECT DISTINCT d.dep FROM boxel_index i, jsonb_array_elements_text(i.deps) AS d(dep)
+         WHERE i.is_deleted IS NOT TRUE AND i.realm_url =`,
+      param(publishedRealmURL),
+      `AND NOT starts_with(d.dep,`,
+      param(publishedRealmURL),
+      `)`,
+    ])) as { dep: string }[]
+  ).map(({ dep }) => dep);
+  if (deps.length === 0) {
+    return false;
+  }
+  let otherRealms = (
+    (await query(dbAdapter, [`SELECT url FROM realm_registry`])) as {
+      url: string;
+    }[]
+  )
+    .map(({ url }) => url)
+    .filter((url) => url !== publishedRealmURL && url !== baseRealm.url);
+  return deps.some((dep) => {
+    // A prefix-form dependency (`@cardstack/catalog/…`) names its realm only
+    // through the virtual network.
+    let href = dep.startsWith('@')
+      ? virtualNetwork.realmForReference(dep)
+      : dep;
+    return (
+      href !== undefined && otherRealms.some((realm) => href.startsWith(realm))
+    );
+  });
+}
+
+// The index's mtime check reads only boxel_index.has_error, but a render
+// error (a render timeout, a render that throws, a visit failure past the
+// reconcile sweep's retry cap) lives on prerendered_html, and the row keeps it
+// until its URL is invalidated again. Clear the mtime of every row whose
+// effective error state is set, so the pass renders it again even though its
+// file did not change.
+async function invalidateErroredRows(
+  dbAdapter: DBAdapter,
+  publishedRealmURL: string,
+): Promise<void> {
+  await query(dbAdapter, [
+    `UPDATE boxel_index AS i SET last_modified = NULL
+       FROM prerendered_html AS ph
+       WHERE ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+         AND ${effectiveHasError()} AND i.realm_url =`,
+    param(publishedRealmURL),
+  ]);
 }
 
 // The index keeps file mtimes in whole seconds. A file written in the second
@@ -701,16 +765,28 @@ export default function handlePublishRealm({
           // URL is the same as last time, so the rows of unchanged cards
           // already hold it. Render every card when that is not enough: a
           // new realm has no rows; realm.json feeds realm info (og:title and
-          // more) into cards that do not depend on it in the index; and code
+          // more) into cards that do not depend on it in the index; code
           // deployed since the last publish can render the same files
-          // differently.
+          // differently; and rows that read from another realm can be out of
+          // date however this realm's files changed.
+          //
+          // Query results are not dependencies, so a card that lists other
+          // cards through a query does not render again when only the
+          // matching cards change. A full render does not make those results
+          // current either: its queries run against the committed index,
+          // which does not yet hold the rows the pass writes.
           let renderEveryCard =
             isNewRealm ||
             previousPublishedAt < PROCESS_STARTED_AT ||
             !sameRealmConfig(
               previousRealmConfig,
               await readRealmConfig(publishedRealmPath),
-            );
+            ) ||
+            (await dependsOnOtherRealms(
+              dbAdapter,
+              virtualNetwork,
+              publishedRealmURL,
+            ));
 
           // Clear stale modules cache for the published realm (including
           // error entries from a previous publish) before the reindex's
@@ -790,6 +866,9 @@ export default function handlePublishRealm({
           // fullIndex below tracks completion for readiness. clearLastModified
           // forces every row to re-render even where its mtime did not
           // change.
+          if (!renderEveryCard) {
+            await invalidateErroredRows(dbAdapter, publishedRealmURL);
+          }
           await enqueueReindexRealmJob(
             publishedRealmURL,
             realmUsername,

@@ -1527,14 +1527,27 @@ module(basename(import.meta.filename), function () {
             },
           },
         });
-        // Card files written well before the publish, so their mtimes are
-        // not in the second the publish starts its copy (see
+        // The realm server runs in this process, so this is the moment its
+        // publish handler compares a realm's last publish against.
+        let processStartedAt = () => Date.now() - process.uptime() * 1000;
+        // Card files written before the server process started, so their
+        // mtimes are not in the second a publish starts its copy (see
         // touchFilesModifiedSince in the publish handler).
-        let writeCard = (fileName: string, name: string) => {
+        let writeCard = (
+          fileName: string,
+          name: string,
+          mtime = new Date(processStartedAt() - 60_000),
+        ) => {
           let path = join(sourceRealmFsPath, fileName);
           writeJsonSync(path, cardJson(name));
-          let past = new Date(Date.now() - 60_000);
-          utimesSync(path, past, past);
+          utimesSync(path, mtime, mtime);
+        };
+        let lastPublishedAt = async () => {
+          let [row] = (await dbAdapter.execute(
+            `SELECT last_published_at FROM realm_registry WHERE url = $1`,
+            { bind: [publishedRealmURL] },
+          )) as { last_published_at: string }[];
+          return Number(row.last_published_at);
         };
 
         hooks.beforeEach(async function () {
@@ -1617,7 +1630,11 @@ module(basename(import.meta.filename), function () {
           await publish();
           let unchangedBefore = await readCardRow('unchanged-card');
 
-          writeCard('changed-card.json', 'Changed card, second version');
+          writeCard(
+            'changed-card.json',
+            'Changed card, second version',
+            new Date(),
+          );
           await publish();
 
           let changedAfter = await readCardRow('changed-card');
@@ -1659,6 +1676,173 @@ module(basename(import.meta.filename), function () {
           let unchangedAfter = await readCardRow('unchanged-card');
           assert.notStrictEqual(
             unchangedAfter.renderedAt,
+            unchangedBefore.renderedAt,
+            'the unchanged card is rendered again',
+          );
+        });
+
+        test('it renders a card again that changed in the second the previous publish copied it', async function (assert) {
+          assert.timeout(300_000);
+          writeCard('changed-card.json', 'Changed card, first version');
+          await publish();
+
+          // The index holds the first version's mtime as the second the
+          // publish started its copy, and the second version is written in
+          // that same second, so both mtimes read the same in the index.
+          let copySecond = Math.floor((await lastPublishedAt()) / 1000);
+          await dbAdapter.execute(
+            `UPDATE boxel_index SET last_modified = $1 WHERE realm_url = $2 AND url = $3`,
+            {
+              bind: [
+                copySecond,
+                publishedRealmURL,
+                `${publishedRealmURL}changed-card.json`,
+              ],
+            },
+          );
+          writeCard(
+            'changed-card.json',
+            'Changed card, second version',
+            new Date(copySecond * 1000 + 500),
+          );
+          await publish();
+
+          assert.true(
+            (await readCardRow('changed-card')).head.includes(
+              'Changed card, second version',
+            ),
+            'the changed card is rendered again',
+          );
+        });
+
+        test('it renders every card again when the last publish was before the server process started', async function (assert) {
+          assert.timeout(300_000);
+          writeCard('unchanged-card.json', 'Unchanged card');
+          await publish();
+          let unchangedBefore = await readCardRow('unchanged-card');
+
+          await dbAdapter.execute(
+            `UPDATE realm_registry SET last_published_at = $1 WHERE url = $2`,
+            {
+              bind: [Math.floor(processStartedAt()) - 1000, publishedRealmURL],
+            },
+          );
+          await publish();
+
+          assert.notStrictEqual(
+            (await readCardRow('unchanged-card')).renderedAt,
+            unchangedBefore.renderedAt,
+            'the unchanged card is rendered again',
+          );
+        });
+
+        test('it renders an unchanged card again when its HTML holds a render error', async function (assert) {
+          assert.timeout(300_000);
+          writeCard('unchanged-card.json', 'Unchanged card');
+          writeCard('other-card.json', 'Other card');
+          await publish();
+          let otherBefore = await readCardRow('other-card');
+
+          // A render error lands on prerendered_html only; the card's
+          // boxel_index row stays clean.
+          await dbAdapter.execute(
+            `UPDATE prerendered_html SET error_doc = $1::jsonb WHERE realm_url = $2 AND url = $3`,
+            {
+              bind: [
+                JSON.stringify({ message: 'planted render error' }),
+                publishedRealmURL,
+                `${publishedRealmURL}unchanged-card.json`,
+              ],
+            },
+          );
+          await publish();
+
+          let [row] = (await dbAdapter.execute(
+            `SELECT error_doc FROM prerendered_html WHERE realm_url = $1 AND url = $2`,
+            {
+              bind: [
+                publishedRealmURL,
+                `${publishedRealmURL}unchanged-card.json`,
+              ],
+            },
+          )) as { error_doc: unknown }[];
+          assert.strictEqual(
+            row.error_doc,
+            null,
+            'the render error is replaced by a fresh render',
+          );
+          assert.strictEqual(
+            (await readCardRow('other-card')).renderedAt,
+            otherBefore.renderedAt,
+            'a card without an error is not rendered again',
+          );
+        });
+
+        test('it renders every card again when a card depends on another realm', async function (assert) {
+          assert.timeout(300_000);
+          let otherRealmResponse = await request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    name: 'Other Realm',
+                    endpoint: `other-realm-${uuidv4()}`,
+                  },
+                },
+              }),
+            );
+          let otherRealmURL: string = otherRealmResponse.body.data.id;
+          await dbAdapter.execute(
+            `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+               VALUES ($1, '*', true, false, false)`,
+            { bind: [otherRealmURL] },
+          );
+          copySync(
+            join(fixtureDir('simple'), 'person.gts'),
+            join(
+              dir.name,
+              'realm_server_3',
+              ...new URL(otherRealmURL).pathname.split('/').filter(Boolean),
+              'person.gts',
+            ),
+          );
+          writeCard('unchanged-card.json', 'Unchanged card');
+          let personPath = join(
+            sourceRealmFsPath,
+            'person-from-other-realm.json',
+          );
+          writeJsonSync(personPath, {
+            data: {
+              type: 'card',
+              attributes: { firstName: 'Other realm person' },
+              meta: {
+                adoptsFrom: {
+                  module: `${otherRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+            },
+          });
+          let past = new Date(processStartedAt() - 60_000);
+          utimesSync(personPath, past, past);
+          await publish();
+          let unchangedBefore = await readCardRow('unchanged-card');
+
+          await publish();
+
+          assert.notStrictEqual(
+            (await readCardRow('unchanged-card')).renderedAt,
             unchangedBefore.renderedAt,
             'the unchanged card is rendered again',
           );
