@@ -35,6 +35,9 @@ function rest() {
   return new Promise((resolve) => setTimeout(resolve, 900));
 }
 
+/** the containing block the leavers' popLayout positions against */
+const positioned = htmlSafe('position: relative');
+
 /**
  * A leaver whose subtree holds `layoutId`s of its own.
  *
@@ -43,8 +46,6 @@ function rest() {
  * the only member of its stack — nothing else on the page shares the id, so
  * there is no counterpart and no crossfade to hand over to.
  */
-/** the containing block the leavers' popLayout positions against */
-const positioned = htmlSafe('position: relative');
 
 module('Integration | Choreo gallery | a lone stack', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
