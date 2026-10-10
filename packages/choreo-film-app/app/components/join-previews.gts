@@ -1,4 +1,4 @@
-import type { Join } from '@cardstack/choreo/film';
+import { type Join, PRESENTATIONS } from '@cardstack/choreo/film';
 import { registerDestructor } from '@ember/destroyable';
 import Component from '@glimmer/component';
 
@@ -9,25 +9,9 @@ import Component from '@glimmer/component';
  */
 export const PREVIEW_JOIN = 'choreo-film:preview-join';
 
-/* every join the film can exhibit; a Record so a join added to the
-   vocabulary is a type error here until it is listed */
-const JOINS: Record<Join, true> = {
-  blend: true,
-  blur: true,
-  cut: true,
-  defocus: true,
-  dip: true,
-  flash: true,
-  iris: true,
-  luma: true,
-  melt: true,
-  sweep: true,
-  whip: true,
-  wipe: true,
-};
-
+/* one of the film's own twelve seams, by name */
 function isJoin(value: unknown): value is Join {
-  return typeof value === 'string' && Object.hasOwn(JOINS, value);
+  return typeof value === 'string' && Object.hasOwn(PRESENTATIONS, value);
 }
 
 /**
