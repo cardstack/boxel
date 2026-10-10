@@ -69,7 +69,18 @@ class Isolated extends Component<typeof ChoreoGallery> {
       ? this.homeHref
       : (this.demos.find((demo) => demo.slug === slug)?.id ?? this.homeHref);
 
-  go = (slug: string | null) => {
+  go = (slug: string | null) => this.move(slug, false);
+
+  goHome = () => this.go(null);
+
+  openInTheater = (slug: string) => this.move(slug, true);
+
+  /**
+   * Move to a page, in theater or not. The mode goes to the swap rather than
+   * being set after this returns, because the swap can wait a frame on the
+   * leaving page's curtain.
+   */
+  private move(slug: string | null, theater: boolean) {
     this.moves++;
     if (slug === this.slug) {
       if (slug === null) {
@@ -85,31 +96,24 @@ class Isolated extends Component<typeof ChoreoGallery> {
       let move = this.moves;
       requestAnimationFrame(() => {
         if (move === this.moves) {
-          this.cross(slug);
+          this.cross(slug, theater);
         }
       });
       return;
     }
-    this.cross(slug);
-  };
+    this.cross(slug, theater);
+  }
 
   /** the page swap itself, which the site frame's region animates */
-  private cross(slug: string | null) {
+  private cross(slug: string | null, theater: boolean) {
     this.crossing.begin(this.slug, slug);
     this.slug = slug;
     // theater belongs to the page it was entered on
-    this.theater.reset();
+    this.theater.reset(theater);
     // the clock is global, so it goes back to normal with every page — a
     // stage with no speed control must never be left mysteriously slow
     setMotionSpeed(1);
   }
-
-  goHome = () => this.go(null);
-
-  openInTheater = (slug: string) => {
-    this.go(slug);
-    this.theater.reset(true);
-  };
 
   nav: GalleryNavigation = {
     go: this.go,
