@@ -216,6 +216,16 @@ export default class HostModeStackItem extends Component<Signature> {
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
+        /* The top card is content-sized (height: auto, see
+           styleForStackedCard) with an 80cqh floor so the page scrolls as a
+           page. But a percentage height never resolves against min-height, so
+           an isolated template that fills its container (height: 100%,
+           container-type: size, cqh units) had nothing to fill and collapsed
+           to its padding. A grid area IS definite for its item even when the
+           grid's own height is auto: the single 1fr row hands the card the
+           floor when content is short and still grows when it is tall. */
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
       }
 
       .host-mode-stack-item:not(.buried) {
