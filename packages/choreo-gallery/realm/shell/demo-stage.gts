@@ -17,7 +17,12 @@ export class DemoStage extends Component<Signature> {
 
   <template>
     {{#if this.Stage}}
-      <this.Stage @face={{@face}} @open={{@open}} @theater={{@theater}} />
+      <this.Stage
+        @face={{@face}}
+        @filmLink={{@filmLink}}
+        @open={{@open}}
+        @theater={{@theater}}
+      />
     {{else}}
       <div class='stage-pending' data-stage-pending>
         <span>Stage coming soon</span>

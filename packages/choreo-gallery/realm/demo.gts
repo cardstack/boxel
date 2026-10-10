@@ -9,8 +9,10 @@ import {
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
+import type { Join } from '@cardstack/choreo/film';
 import type { ComponentLike } from '@glint/template';
 
+import type { FilmLink } from './lib/film-link';
 import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
@@ -38,10 +40,20 @@ export interface StageSignature {
   Args: {
     /** `tile` in the gallery grid and summaries; `stage` on the demo page */
     face?: 'stage' | 'tile';
+    /** the demo page's line to its film, for a film stage to attach to */
+    filmLink?: FilmLink;
     /** opens the demo's page in theater, from a tile */
     open?: () => void;
     /** the demo page's theater, for a film stage to enter and leave */
     theater?: Theater;
+  };
+}
+
+/** what a demo's notes are told: how to play a join over the stage's film */
+export interface NotesSignature {
+  Args: {
+    /** set while a film is attached to the demo page's stage */
+    preview?: (join: Join) => void;
   };
 }
 
@@ -218,7 +230,7 @@ export class GalleryDemo extends CardDef {
   /** the shape of the demo page's well, when the stage needs its own */
   static well: StageWell | undefined;
   /** how the demo works, rendered under the usage example (a Deep Dive) */
-  static notes: ComponentLike | undefined;
+  static notes: ComponentLike<NotesSignature> | undefined;
 
   /** the demo's id in the catalog, and the instance's filename */
   @field slug = contains(StringField);

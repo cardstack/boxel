@@ -1,17 +1,18 @@
-import type { Join } from '@cardstack/choreo/film';
 import type { TOC } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
+import type { NotesSignature } from '../demo';
+
 /**
  * Deep dive for the Sagrada film — the wall plate under the exhibit, on
  * the house dive template (see notes/towers.gts). The one film-only
- * element is the strip of live junction triggers, wired to the film's
- * previewJoin through @preview.
+ * element is the strip of live junction triggers: @preview plays a join
+ * over the film in the stage above. The demo page passes it while the
+ * film's frame is attached, so the strip shows before the film can play
+ * anything: a join plays once the viewer has opened the film.
  */
-const SagradaNotes: TOC<{
-  Args: { preview?: (join: Join) => void };
-}> = <template>
+const SagradaNotes: TOC<NotesSignature> = <template>
   <section class='dive' aria-label='How it works'>
     <header class='dive-head'>
       <p class='dive-kicker'>The cutting room</p>
@@ -142,8 +143,8 @@ const SagradaNotes: TOC<{
       <h3>The junctions, live</h3>
       <div class='dd-col'>
         <p>
-          Each button plays one join over the running picture — no beat change,
-          no snap — the transition itself, exhibited.
+          Open the film above, and each button plays one join over the running
+          picture — no beat change, no snap — the transition itself, exhibited.
         </p>
         {{#if @preview}}
           <p class='dd-joins'>
@@ -182,8 +183,7 @@ const SagradaNotes: TOC<{
           </p>
         {{else}}
           <p class='dd-fn'>
-            The strip is live on the film itself: open the picture above in
-            Theater and the buttons play each join over the running frame.
+            The strip appears here once the film above is on the page.
           </p>
         {{/if}}
       </div>
