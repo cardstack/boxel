@@ -7,6 +7,7 @@ export type RealmRunnerCallMethod =
   | 'fs.list'
   | 'fs.replace'
   | 'fs.writeText'
+  | 'cards.get'
   | 'capture'
   | 'workspaces.create'
   | 'workspaces.delete';
