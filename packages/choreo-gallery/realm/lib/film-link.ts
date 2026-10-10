@@ -19,7 +19,11 @@ export const PREVIEW_JOIN = 'choreo-film:preview-join';
 export class FilmLink {
   @tracked private film: Window | null = null;
 
-  /** whether a film is attached to hear a preview */
+  /**
+   * whether a film's frame is attached. That is not whether a preview
+   * plays: the film's document has to load, and the viewer has to open
+   * the film, before a posted join is heard
+   */
   get live(): boolean {
     return this.film !== null;
   }

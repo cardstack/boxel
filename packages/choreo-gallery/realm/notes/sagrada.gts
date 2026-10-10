@@ -8,8 +8,9 @@ import type { NotesSignature } from '../demo';
  * Deep dive for the Sagrada film — the wall plate under the exhibit, on
  * the house dive template (see notes/towers.gts). The one film-only
  * element is the strip of live junction triggers: @preview plays a join
- * over the film in the stage above, which the demo page passes while the
- * film's frame is there to hear it.
+ * over the film in the stage above. The demo page passes it while the
+ * film's frame is attached, so the strip shows before the film can play
+ * anything: a join plays once the viewer has opened the film.
  */
 const SagradaNotes: TOC<NotesSignature> = <template>
   <section class='dive' aria-label='How it works'>
@@ -142,8 +143,8 @@ const SagradaNotes: TOC<NotesSignature> = <template>
       <h3>The junctions, live</h3>
       <div class='dd-col'>
         <p>
-          Each button plays one join over the running picture — no beat change,
-          no snap — the transition itself, exhibited.
+          Open the film above, and each button plays one join over the running
+          picture — no beat change, no snap — the transition itself, exhibited.
         </p>
         {{#if @preview}}
           <p class='dd-joins'>
@@ -182,8 +183,7 @@ const SagradaNotes: TOC<NotesSignature> = <template>
           </p>
         {{else}}
           <p class='dd-fn'>
-            The strip appears here once the film above has loaded, and each
-            button plays its join over the running frame.
+            The strip appears here once the film above is on the page.
           </p>
         {{/if}}
       </div>

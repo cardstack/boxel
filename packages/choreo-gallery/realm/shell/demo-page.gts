@@ -46,7 +46,10 @@ export class DemoPage extends Component<Signature> {
 
   leaveTheater = () => this.args.theater.enter(false);
 
-  /** the notes' join triggers, while a film is there to play them */
+  /**
+   * the notes' join triggers, while the stage's film frame is attached; a
+   * join plays only once the viewer has opened that film
+   */
   get preview() {
     return this.filmLink.live ? this.filmLink.preview : undefined;
   }

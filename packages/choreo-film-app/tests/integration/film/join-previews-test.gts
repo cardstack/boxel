@@ -24,8 +24,9 @@ module('Integration | film | join previews', function (hooks) {
     const preview = (join: Join) => played.push(join);
     await render(<template><JoinPreviews @preview={{preview}} /></template>);
 
-    post({ type: PREVIEW_JOIN, join: 'wipe' }, window.parent);
-    post({ type: PREVIEW_JOIN, join: 'iris' }, window.parent);
+    // the wire spelling the gallery's FilmLink sends, not this side's constant
+    post({ type: 'choreo-film:preview-join', join: 'wipe' }, window.parent);
+    post({ type: 'choreo-film:preview-join', join: 'iris' }, window.parent);
 
     assert.deepEqual(played, ['wipe', 'iris']);
   });

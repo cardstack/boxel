@@ -8,8 +8,9 @@ import type { NotesSignature } from '../demo';
  * Deep dive for the Towers film — the wall plate under the exhibit.
  * Follows the house dive template (see notes/sylva.gts); the one film-only
  * element is the strip of live junction triggers: @preview plays a join
- * over the film in the stage above, which the demo page passes while the
- * film's frame is there to hear it.
+ * over the film in the stage above. The demo page passes it while the
+ * film's frame is attached, so the strip shows before the film can play
+ * anything: a join plays once the viewer has opened the film.
  */
 const TowersNotes: TOC<NotesSignature> = <template>
   <section class='dive' aria-label='How it works'>
@@ -118,8 +119,9 @@ const TowersNotes: TOC<NotesSignature> = <template>
           with its last velocity, so both shots move under the dissolve. The
           wipe's sweep is two compositor transforms — a masked sheet slides, the
           still inside slides back — because a mask that moves repaints a
-          full-resolution frame every tick and stutters. Click any of these and
-          it happens upstairs, right now, over whatever is playing:
+          full-resolution frame every tick and stutters. Open the film above,
+          then click any of these and it happens upstairs, right now, over
+          whatever is playing:
         </p>
         {{#if @preview}}
           <div class='dd-joins'>
@@ -148,7 +150,7 @@ const TowersNotes: TOC<NotesSignature> = <template>
           </div>
         {{else}}
           <p>
-            (The live triggers appear here once the film above has loaded.)
+            (The live triggers appear here once the film above is on the page.)
           </p>
         {{/if}}
         <p>
