@@ -890,6 +890,10 @@ export default class ToolService extends Service {
       // that un-sticks the UI and the waiting ai-bot is only sent once this
       // settles.
       let performTool = async (): Promise<CardDef | undefined> => {
+        // A manual run can start before the tool's command is resolved, or
+        // after it resolved to no command while its declaring skill was still
+        // loading.
+        await command.resolve({ retryUnresolved: true });
         // If we don't find it in the one-offs, start searching for
         // one in the skills we can construct
         let toolCodeRef = command.codeRef;
@@ -1112,6 +1116,22 @@ export default class ToolService extends Service {
     } else if (command.name === 'patchCardInstance') {
       // special case for patchCardInstance command
       return true;
+    }
+
+    // The message's tool list is complete as soon as its event is applied, but
+    // each tool's command is resolved separately (it loads the declaring
+    // skill), so wait for the resolution of the request's current name here —
+    // inside validation's own timeout. A name that resolved to no command is
+    // tried again: the skill declaring it may have loaded since.
+    if (!error && command.name !== CHECK_CORRECTNESS_COMMAND_NAME) {
+      this.markValidationStep(command, `resolve tool ${command.name}`);
+      try {
+        await command.resolve({ retryUnresolved: true });
+      } catch (e) {
+        error = `The tool for this "${command.name}" call could not be prepared (${
+          e instanceof Error ? e.message : String(e)
+        }), so the call was not run.`;
+      }
     }
 
     let toolCodeRef = command.codeRef;

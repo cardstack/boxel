@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn, find } from '@ember/test-helpers';
+import { waitFor, waitUntil, click, fillIn, find } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -18,11 +18,13 @@ import { module, skip, test } from 'qunit';
 
 import {
   buildToolFunctionNameFromResolvedRef,
+  Deferred,
   isCardInstance,
   rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -34,6 +36,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -45,6 +48,7 @@ import {
   withCachedRealmSetup,
   setupRealmCacheTeardown,
   addSkillToAiAssistant,
+  delay,
   percySnapshot,
   testRealmURL,
   setupCardLogs,
@@ -105,8 +109,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     })(),
   });
 
-  let { createAndJoinRoom, simulateRemoteMessage, getRoomEvents } =
-    mockMatrixUtils;
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    simulateToDeviceEvent,
+    getRoomEvents,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -2452,6 +2460,555 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       matrixService.agentId = originalAgentId;
       (matrixService as any).sendToolResultEvent = originalSend;
     }
+  });
+
+  // The tool-resolution race tests below use a host tool from a skill that is
+  // not enabled in the room: the model learned about it from an earlier
+  // readRealmFile result. Resolving that tool loads the skill through the
+  // store, and nothing else in the room loads it, so holding that load holds
+  // exactly this tool's resolution.
+  const discoveredSkillUrl = `${testRealmURL}Skill/boxel-environment`;
+  const discoveredHostToolName = buildToolFunctionNameFromResolvedRef({
+    module: '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+    name: 'default',
+  });
+
+  // The readRealmFile result that teaches the room the host tool.
+  function simulateDiscoveredToolResult(roomId: string) {
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: 'earlier-skill-read',
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: 'earlier-bot-message',
+        },
+        data: {
+          attachedFiles: [],
+          discoveredTools: [
+            {
+              sourceSkillUrl: discoveredSkillUrl,
+              codeRef: {
+                module:
+                  '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+                name: 'default',
+              },
+              functionName: discoveredHostToolName,
+              requiresApproval: false,
+              definition: {
+                type: 'function',
+                function: {
+                  name: discoveredHostToolName,
+                  description: 'Read a file',
+                  parameters: { type: 'object', properties: {} },
+                },
+              },
+            },
+          ],
+        },
+      },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+    );
+  }
+
+  // Seeds the readRealmFile result that teaches the room the host tool, then
+  // the streaming bot message a later final edit replaces. Returns that
+  // message's event id.
+  async function seedDiscoveredHostToolTurn(roomId: string) {
+    let agentId = getService('matrix-service').agentId;
+    simulateDiscoveredToolResult(roomId);
+
+    let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      data: { context: { agentId } },
+    });
+    await settled();
+    return streamingEventId;
+  }
+
+  // Holds every store load of the discovered skill until released, so every
+  // resolution of its tool stays in flight.
+  function holdDiscoveredSkillLoads() {
+    let store = getService('store');
+    let release = new Deferred<void>();
+    let heldLoads = 0;
+    let originalGet = store.get;
+    (store as any).get = async (id: string, ...rest: unknown[]) => {
+      if (id === discoveredSkillUrl) {
+        heldLoads++;
+        await release.promise;
+      }
+      return (originalGet as any).call(store, id, ...rest);
+    };
+    return {
+      get heldLoads() {
+        return heldLoads;
+      },
+      async reached() {
+        await waitUntil(() => heldLoads > 0, {
+          timeout: 5000,
+          timeoutMessage:
+            'the final edit never started resolving the discovered host tool (no load of its skill within 5s)',
+        });
+      },
+      release() {
+        release.fulfill();
+        (store as any).get = originalGet;
+      },
+    };
+  }
+
+  // Fails every store load of the discovered skill, so its tool never
+  // resolves to a command.
+  function failDiscoveredSkillLoads() {
+    let store = getService('store');
+    let originalGet = store.get;
+    (store as any).get = async (id: string, ...rest: unknown[]) => {
+      if (id === discoveredSkillUrl) {
+        throw new Error('simulated skill load failure');
+      }
+      return (originalGet as any).call(store, id, ...rest);
+    };
+    return {
+      restore() {
+        (store as any).get = originalGet;
+      },
+    };
+  }
+
+  function finalEditWithHostTool(
+    streamingEventId: string,
+    body: string,
+    toolRequests: Record<string, unknown>[],
+  ) {
+    return {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        ...toolRequests,
+        {
+          id: 'slow-host-read',
+          name: discoveredHostToolName,
+          arguments: JSON.stringify({
+            attributes: { fileIdentifier: `${testRealmURL}hello.txt` },
+          }),
+        },
+      ],
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: streamingEventId,
+      },
+      data: { context: { agentId: getService('matrix-service').agentId } },
+    };
+  }
+
+  // Waits until the tool drain is validating the request — which, while its
+  // tool's resolution is held, means it is waiting on that resolution.
+  async function drainIsValidating(toolCallId: string) {
+    let toolService = getService('tool-service') as any;
+    await waitUntil(() => toolService.validationSteps.has(toolCallId), {
+      timeout: 5000,
+      timeoutMessage: `the tool drain never started validating ${toolCallId}`,
+    });
+  }
+
+  test('a host tool whose resolution outlasts a room-processing restart still runs', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    let hold = holdDiscoveredSkillLoads();
+    try {
+      // The finished message carries a bot-run tool followed by the host
+      // tool, whose resolution now waits on the held skill load.
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', [
+          {
+            id: 'bot-run-read',
+            name: 'readRealmFile',
+            arguments: JSON.stringify({ path: 'hello.txt' }),
+            executedBy: AI_BOT_EXECUTOR,
+          },
+        ]),
+      );
+      await hold.reached();
+
+      // The bot's own result for its tool lands while the host tool is still
+      // being resolved, restarting room processing and letting the tool drain
+      // run before the resolution finishes.
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'bot-run-read',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: streamingEventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+      await drainIsValidating('slow-host-read');
+      assert.strictEqual(
+        hold.heldLoads,
+        1,
+        'neither the restarted room pass nor the drain starts a second resolution',
+      );
+    } finally {
+      hold.release();
+    }
+    await settled();
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(
+      hostToolResults.length,
+      1,
+      'the host tool resolved after the restart is run and its result posted',
+    );
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'applied',
+      'the host tool ran successfully',
+    );
+    assert
+      .dom('[data-test-tool-call-apply="applying"]')
+      .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  // Pins isStreamingFinished as a synchronous content flag, independent of
+  // tool resolution: the preview gate in
+  // RoomResource.hydrateResponseStreamPreview reads it to drop a stale
+  // preview, so a straggler preview arriving while the final edit's tool is
+  // still resolving must not overwrite the finalized body.
+  test('a response-stream preview that arrives while the final edit resolves its tools does not overwrite it', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+    let matrixService = getService('matrix-service');
+
+    let hold = holdDiscoveredSkillLoads();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'The final answer.', []),
+      );
+      await hold.reached();
+
+      // A late to-device preview for the same turn arrives while the final
+      // edit's tool resolution is held.
+      simulateToDeviceEvent(
+        APP_BOXEL_RESPONSE_STREAM_EVENT_TYPE,
+        {
+          roomId,
+          parentEventId: streamingEventId,
+          sequence: 99,
+          body: 'A stale preview.',
+          reasoning: '',
+          toolRequests: [],
+        },
+        matrixService.aiBotUserId,
+      );
+      await delay(100);
+    } finally {
+      hold.release();
+    }
+    await settled();
+
+    let message = matrixService.roomResources
+      .get(roomId)!
+      .messageForEventId(streamingEventId)!;
+    assert.strictEqual(
+      message.body,
+      'The final answer.',
+      'the final edit keeps its body',
+    );
+    assert.true(message.isStreamingFinished, 'the message stays finished');
+    assert
+      .dom(`[data-test-room="${roomId}"]`)
+      .doesNotContainText('A stale preview.');
+  });
+
+  test('a host tool whose command never resolves gets a terminal invalid result and the room keeps processing', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    let fail = failDiscoveredSkillLoads();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      fail.restore();
+    }
+    await settled();
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(
+      hostToolResults.length,
+      1,
+      'exactly one terminal result is posted for the request that never resolved',
+    );
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'invalid',
+      'the unresolvable tool is reported invalid',
+    );
+    assert
+      .dom('[data-test-tool-call-apply="applying"]')
+      .doesNotExist('no tool is left spinning in the applying state');
+
+    // The failing resolution must not poison room processing: a later bot
+    // message in the same room still loads and renders.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Still alive',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: { context: { agentId: getService('matrix-service').agentId } },
+    });
+    await settled();
+    assert
+      .dom(`[data-test-room="${roomId}"]`)
+      .containsText('Still alive', 'the room keeps processing later events');
+  });
+
+  test('a host tool renamed by the final edit runs as the renamed tool, not the stale one', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // A streamed chunk names the request with a name that is not complete
+    // yet, which resolves to no command.
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'slow-host-read', name: 'read-file-for' },
+      ],
+      'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+      data: { context: { agentId: getService('matrix-service').agentId } },
+    });
+    await settled();
+
+    let hold = holdDiscoveredSkillLoads();
+    try {
+      // The final edit renames it to the discovered host tool, whose
+      // resolution is held.
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await hold.reached();
+      await drainIsValidating('slow-host-read');
+      assert.strictEqual(
+        getRoomEvents(roomId).filter(
+          (event) =>
+            event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+            event.content.commandRequestId === 'slow-host-read',
+        ).length,
+        0,
+        'the drain waits for the renamed tool instead of validating the stale name',
+      );
+    } finally {
+      hold.release();
+    }
+    await settled();
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(hostToolResults.length, 1, 'exactly one result');
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'applied',
+      'the renamed tool ran',
+    );
+  });
+
+  test('a call that already has a result is not answered again when its command no longer resolves', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // As on a reload that replays history: the finished request and its
+    // result arrive together, while its command no longer resolves.
+    let fail = failDiscoveredSkillLoads();
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'slow-host-read',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: streamingEventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+      await settled();
+    } finally {
+      fail.restore();
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.deepEqual(
+      hostToolResults.map((event) => event.content['m.relates_to']?.key),
+      ['applied'],
+      'only the existing result, no contradictory invalid',
+    );
+  });
+
+  test('a call whose command fails to load gets a terminal invalid result saying it could not be prepared', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let streamingEventId = await seedDiscoveredHostToolTurn(roomId);
+
+    // The declaring skill loads, but importing the tool's command module
+    // throws, so resolving the tool rejects rather than finding no command.
+    // Patched on the prototype so a loader reset mid-test is covered too.
+    let loaderPrototype = Object.getPrototypeOf(
+      getService('loader-service').loader,
+    );
+    let originalImport = loaderPrototype.import;
+    loaderPrototype.import = async function (
+      this: unknown,
+      moduleId: string,
+      ...rest: unknown[]
+    ) {
+      if (String(moduleId).includes('read-file-for-ai-assistant')) {
+        throw new Error('simulated command module load failure');
+      }
+      return originalImport.call(this, moduleId, ...rest);
+    };
+    try {
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        finalEditWithHostTool(streamingEventId, 'Reading', []),
+      );
+      await settled();
+    } finally {
+      loaderPrototype.import = originalImport;
+    }
+
+    let hostToolResults = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'slow-host-read',
+    );
+    assert.strictEqual(hostToolResults.length, 1, 'exactly one result');
+    assert.strictEqual(
+      hostToolResults[0]?.content['m.relates_to']?.key,
+      'invalid',
+      'the call is reported invalid',
+    );
+    assert.true(
+      String(hostToolResults[0]?.content.failureReason).includes(
+        'could not be prepared (simulated command module load failure)',
+      ),
+      `the reason names the load failure: ${hostToolResults[0]?.content.failureReason}`,
+    );
+    assert
+      .dom('[data-test-tool-call-apply="applying"]')
+      .doesNotExist('no tool is left spinning in the applying state');
+  });
+
+  test("another agent's call that first resolved to no command is resolved again when its request finishes", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let otherAgentContext = { context: { agentId: 'another-agent' } };
+
+    // Another agent's turn streams a call to the host tool before the room
+    // has learned where that tool is declared, so it resolves to no command.
+    let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'other-agent-read', name: discoveredHostToolName },
+      ],
+      data: otherAgentContext,
+    });
+    await settled();
+    let roomResource = getService('matrix-service').roomResources.get(roomId)!;
+    let tool = () =>
+      roomResource
+        .messageForEventId(streamingEventId)!
+        .tools.find((t) => t.id === 'other-agent-read')!;
+    assert.strictEqual(tool().codeRef, undefined, 'no command is found yet');
+
+    // The result that declares the tool lands, then the request finishes.
+    simulateDiscoveredToolResult(roomId);
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'other-agent-read',
+          name: discoveredHostToolName,
+          arguments: JSON.stringify({
+            attributes: { fileIdentifier: `${testRealmURL}hello.txt` },
+          }),
+        },
+      ],
+      'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+      data: otherAgentContext,
+    });
+    await settled();
+
+    assert.strictEqual(
+      tool().codeRef?.module,
+      '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+      "the finished call resolves to its command in a tab whose drain doesn't run it",
+    );
+    assert.strictEqual(tool().actionVerb, 'Send', "the command's action verb");
+    assert.strictEqual(
+      getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === 'other-agent-read',
+      ).length,
+      0,
+      "this tab does not run another agent's call",
+    );
   });
 
   test('Accept All bar still renders for a command that requires user approval', async function (assert) {
