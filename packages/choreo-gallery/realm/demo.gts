@@ -85,7 +85,7 @@ class Isolated extends Component<typeof GalleryDemo> {
 
   <template>
     <ChoreoRoot class='standalone'>
-      <div class='page'>
+      <div class='page {{if this.theater.on "is-theater"}}'>
         <DemoPage @demo={{this.demo}} @theater={{this.theater}} />
       </div>
     </ChoreoRoot>
@@ -98,6 +98,11 @@ class Isolated extends Component<typeof GalleryDemo> {
         width: min(var(--page), calc(100% - 48px));
         margin: 0 auto;
         padding: 40px 0 64px;
+      }
+
+      /* theater opens on the picture, not on a band of ground above it */
+      .page.is-theater {
+        padding-top: 0;
       }
     </style>
   </template>

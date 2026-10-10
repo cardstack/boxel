@@ -258,6 +258,19 @@ export class SiteFrame extends Component<Signature> {
         display: none;
       }
 
+      /* and it comes back as a fade, not a cut: the bar returns in the same
+         render that takes the film out of theater, and its blur would
+         otherwise land at once over whatever is moving beneath it */
+      .app-shell:not(.is-theater) .topbar {
+        animation: topbar-in 0.32s var(--ease) both;
+      }
+
+      @keyframes topbar-in {
+        from {
+          opacity: 0;
+        }
+      }
+
       .app-shell.is-theater .page {
         padding-top: 0;
       }

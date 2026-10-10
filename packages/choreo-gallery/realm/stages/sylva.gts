@@ -9,6 +9,9 @@ import { FilmStage } from '../shell/film-stage';
 
 /* a photograph of the world, the original's own frame */
 const POSTER = realmFile('asset/sylva-poster.webp');
+/* where the subject sits in that still: the tile and the page crop to it */
+const FOCUS = '50% 62%';
+const FOCUS_STYLE = htmlSafe(`object-position:${FOCUS}`);
 /* the theater door in the world's own greens */
 const DOOR = htmlSafe(
   '--film-btn-rim:rgba(126,214,160,0.4);--film-btn-ground:rgba(6,18,12,0.62);' +
@@ -32,12 +35,19 @@ const SylvaStage: TOC<StageSignature> = <template>
     @ground='#4a4d44'
     @resizable={{false}}
     @sizeKey='choreo-gallery:sylva-size'
+    @poster={{POSTER}}
+    @focus={{FOCUS}}
   >
     <:tile>
       {{! a photograph of the world, the title's lower third, and one
         translucent door into the theater }}
       <div class='sy-tile'>
-        <img class='sy-tile-poster' src={{POSTER}} alt='' />
+        <img
+          class='sy-tile-poster'
+          src={{POSTER}}
+          alt=''
+          style={{FOCUS_STYLE}}
+        />
         <div class='sy-tile-scrim' aria-hidden='true'></div>
         {{! the original's own play control: a dark disc with an iridescent
           rim, a quiet outer ring, and nothing to read }}
@@ -75,7 +85,6 @@ const SylvaStage: TOC<StageSignature> = <template>
       width: 100%;
       height: 100%;
       object-fit: cover;
-      object-position: 50% 62%;
     }
 
     .sy-tile-scrim {

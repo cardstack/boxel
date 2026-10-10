@@ -10,6 +10,7 @@ import { setMotionSpeed } from 'glimmer-motion';
 import { GalleryDemo, GROUPS } from './demo';
 import { Crossing } from './lib/crossing';
 import type { GalleryNavigation } from './lib/navigation';
+import { factor } from './lib/tempo';
 import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
@@ -36,6 +37,8 @@ class Isolated extends Component<typeof ChoreoGallery> {
   @tracked private slug: string | null = null;
   readonly crossing = new Crossing();
   readonly theater = new Theater();
+  /** counts moves, so a move waiting on a curtain knows it was superseded */
+  private moves = 0;
 
   willDestroy() {
     super.willDestroy();
@@ -66,28 +69,51 @@ class Isolated extends Component<typeof ChoreoGallery> {
       ? this.homeHref
       : (this.demos.find((demo) => demo.slug === slug)?.id ?? this.homeHref);
 
-  go = (slug: string | null) => {
+  go = (slug: string | null) => this.move(slug, false);
+
+  goHome = () => this.go(null);
+
+  openInTheater = (slug: string) => this.move(slug, true);
+
+  /**
+   * Move to a page, in theater or not. The mode goes to the swap rather than
+   * being set after this returns, because the swap can wait a frame on the
+   * leaving page's curtain.
+   */
+  private move(slug: string | null, theater: boolean) {
+    this.moves++;
     if (slug === this.slug) {
       if (slug === null) {
         this.crossing.scrollToTop();
       }
       return;
     }
+    // A film's page drops its curtain a frame ahead of the swap, so the
+    // crossing flies the film's poster rather than a frame that reloads in
+    // flight. A newer move supersedes the one waiting on the curtain.
+    if (this.current?.theater && !this.theater.curtain && factor() !== 0) {
+      this.theater.curtain = true;
+      let move = this.moves;
+      requestAnimationFrame(() => {
+        if (move === this.moves) {
+          this.cross(slug, theater);
+        }
+      });
+      return;
+    }
+    this.cross(slug, theater);
+  }
+
+  /** the page swap itself, which the site frame's region animates */
+  private cross(slug: string | null, theater: boolean) {
     this.crossing.begin(this.slug, slug);
     this.slug = slug;
     // theater belongs to the page it was entered on
-    this.theater.enter(false);
+    this.theater.reset(theater);
     // the clock is global, so it goes back to normal with every page — a
     // stage with no speed control must never be left mysteriously slow
     setMotionSpeed(1);
-  };
-
-  goHome = () => this.go(null);
-
-  openInTheater = (slug: string) => {
-    this.go(slug);
-    this.theater.enter(true);
-  };
+  }
 
   nav: GalleryNavigation = {
     go: this.go,

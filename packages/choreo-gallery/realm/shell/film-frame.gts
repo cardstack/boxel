@@ -1,6 +1,8 @@
 import { registerDestructor } from '@ember/destroyable';
+import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
 
 import { realmFile } from '../lib/realm-url';
@@ -8,8 +10,15 @@ import { realmFile } from '../lib/realm-url';
 /** where the film app's build lives in this realm (see choreo-film-app) */
 const FILM_APP = realmFile('film-app/');
 
-const FRAME_FROM = { opacity: 0, scale: 0.97 } as const;
-const FRAME_TO = { opacity: 1, scale: 1 } as const;
+/** what the film app posts once its first frame is up (its lib/first-frame) */
+const FIRST_FRAME = 'choreo-film:first-frame';
+
+/* a film that never says so still comes up, this long after its document
+   has loaded: the poster must not stand in front of a running film forever */
+const FIRST_FRAME_DEADLINE_MS = 8000;
+
+const FRAME_HIDDEN = { opacity: 0 } as const;
+const FRAME_SHOWN = { opacity: 1 } as const;
 const FRAME_IN = { duration: 0.5, ease: [0.22, 1, 0.36, 1] } as const;
 
 export type FilmName = 'sagrada' | 'sylva' | 'towers';
@@ -33,15 +42,36 @@ interface Signature {
  * app's page is fetched as card source and mounted through `srcdoc`, with a
  * `<base>` at the app's directory so its scripts and media resolve against
  * the realm. The root element names the film the app plays.
+ *
+ * The frame stays transparent until the film posts that its first frame is
+ * up: whatever the frame sits on — the film's poster, in `FilmStage` — is
+ * what shows while the world loads, and the film fades in over a still of
+ * itself.
+ *
+ * The film's own requests carry no realm session. Where the host's auth
+ * service worker controls the frame it adds one, but a browser that leaves
+ * `srcdoc` documents uncontrolled (Firefox) sends them bare, so from a realm
+ * that is not publicly readable the film cannot load its scripts. That case
+ * is named in the frame rather than left as a blank one.
  */
 export class FilmFrame extends Component<Signature> {
   @tracked source?: string;
   @tracked error?: string;
+  /** the film has posted its first frame (or run out of time to) */
+  @tracked shown = false;
+  private publicReadable = false;
+  private frameEl?: HTMLIFrameElement;
+  private deadline?: ReturnType<typeof setTimeout>;
   private abort = new AbortController();
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner as never, args);
-    registerDestructor(this, () => this.abort.abort());
+    window.addEventListener('message', this.onMessage);
+    registerDestructor(this, () => {
+      this.abort.abort();
+      window.removeEventListener('message', this.onMessage);
+      clearTimeout(this.deadline);
+    });
     void this.load();
   }
 
@@ -54,6 +84,8 @@ export class FilmFrame extends Component<Signature> {
       if (!response.ok) {
         throw new Error(`film-app/index.html: ${response.status}`);
       }
+      this.publicReadable =
+        response.headers.get('x-boxel-realm-public-readable') === 'true';
       let html = await response.text();
       this.source = html
         .replace(/<html(?=[\s>])/i, `<html data-film="${this.args.film}"`)
@@ -69,6 +101,58 @@ export class FilmFrame extends Component<Signature> {
     }
   }
 
+  private frame = modifier((element: HTMLIFrameElement) => {
+    this.frameEl = element;
+    return () => {
+      if (this.frameEl === element) {
+        this.frameEl = undefined;
+      }
+    };
+  });
+
+  private onMessage = (event: MessageEvent) => {
+    if (
+      event.source &&
+      event.source === this.frameEl?.contentWindow &&
+      (event.data as { type?: unknown } | null)?.type === FIRST_FRAME
+    ) {
+      this.show();
+    }
+  };
+
+  private onLoad = () => {
+    if (!this.publicReadable && !this.controlled()) {
+      this.error =
+        'this browser loads a film without your realm session, so it plays here only from a publicly readable realm';
+      this.source = undefined;
+      return;
+    }
+    clearTimeout(this.deadline);
+    this.deadline = setTimeout(() => this.show(), FIRST_FRAME_DEADLINE_MS);
+  };
+
+  /** whether the host's auth service worker is handling the film's requests */
+  private controlled(): boolean {
+    try {
+      return Boolean(
+        this.frameEl?.contentWindow?.navigator.serviceWorker?.controller,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private show() {
+    clearTimeout(this.deadline);
+    if (!this.shown) {
+      this.shown = true;
+    }
+  }
+
+  get pose() {
+    return this.shown ? FRAME_SHOWN : FRAME_HIDDEN;
+  }
+
   <template>
     {{#if this.source}}
       <iframe
@@ -77,14 +161,15 @@ export class FilmFrame extends Component<Signature> {
         sandbox='allow-scripts allow-same-origin allow-pointer-lock'
         allow='autoplay; fullscreen'
         allowfullscreen
-        {{motion initial=FRAME_FROM animate=FRAME_TO transition=FRAME_IN}}
+        data-film-shown={{this.shown}}
+        {{this.frame}}
+        {{on 'load' this.onLoad}}
+        {{motion initial=FRAME_HIDDEN animate=this.pose transition=FRAME_IN}}
         ...attributes
       ></iframe>
     {{else if this.error}}
       <p class='film-status' role='alert'>Unable to load the film:
         {{this.error}}</p>
-    {{else}}
-      <p class='film-status' role='status'>Loading the film…</p>
     {{/if}}
     <style scoped>
       .film-status {
@@ -97,8 +182,10 @@ export class FilmFrame extends Component<Signature> {
         font-family: var(--font-mono);
         font-size: 11px;
         letter-spacing: 0.14em;
+        text-align: center;
         text-transform: uppercase;
-        color: rgba(255, 250, 242, 0.8);
+        color: rgba(255, 250, 242, 0.92);
+        background: rgba(14, 12, 10, 0.72);
       }
     </style>
   </template>

@@ -53,17 +53,29 @@ committed; anything else that copies the realm (a deploy, say) runs
   card source and mounts it through `srcdoc`, naming the film on its root
   element. A film's picture page (`asset/towers-model.html`,
   `asset/sagrada-model.html`) reaches the picture the same way.
-- Theater brings the stage to the front of the page at the window's height.
-  It is state held by the gallery card (or a demo card opened on its own), so
-  it never changes the host's URL, and the frame is never re-parented.
+- The page's stage shows the film's poster under the frame. The frame stays
+  clear until the film posts `choreo-film:first-frame` to the page
+  (`choreo-film-app`'s `lib/first-frame.ts`), so the film fades in over a
+  still of itself. When the page leaves, the frame is taken down a frame
+  ahead of the crossing and the poster is what flies back to the tile:
+  moving an iframe reloads it, and the crossing moves what leaves.
+- Theater brings the stage to the front of the page, edge to edge across the
+  card and as tall as what the viewer can see of it (the element that scrolls
+  the card, which in the host sits under the host's chrome and the card's
+  header). The stage glides between its page box and its theater box. Theater
+  is state held by the gallery card (or a demo card opened on its own), so it
+  never changes the host's URL, and the frame is never re-parented.
 
 CI builds the film app into the realm in the Choreo Film App Tests job, so a
 change that breaks that build fails there rather than at deploy.
 
 The film documents load their scripts and media with plain requests, without
 the viewer's realm session, so the films play only from a realm everyone can
-read. The deployed gallery is publicly readable; give a development realm the
-same read permission for `*`.
+read. Chrome hands a `srcdoc` frame to the host's auth service worker, which
+adds the session, so a private realm can appear to work there; Firefox does
+not, and the frame says the realm must be publicly readable. The deployed
+gallery is publicly readable; give a development realm the same read
+permission for `*`.
 
 Moving between the grid and a demo page is state inside the gallery card, so
 the site frame's `<Choreo @route>` region sees each move as one render pass

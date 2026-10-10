@@ -13,6 +13,7 @@ import {
   VO_GAIN,
   WORLD_TYPE,
 } from 'choreo-film-app/lib/films/towers';
+import { firstFrame } from 'choreo-film-app/lib/first-frame';
 import { tuneNumber } from 'choreo-film-app/lib/tuning';
 
 // Declare the film variables before asynchronous picture loading.
@@ -101,6 +102,9 @@ export default class TowerFilm extends Component<{
       other, the wordmark tracks in, and the seal stamps last — the same
       seal-red the lineup stamps with. }}
       <:gate as |f|>
+        {{! the door stands on the picture once it is seated: tell the page
+        that framed this film, which is holding its poster up until then }}
+        {{#if f.ready}}<span hidden {{firstFrame}}></span>{{/if}}
         <span class="cf-gate-vert" aria-hidden="true">天守 — 構造の研究</span>
         <div class="cf-gate-in cf-matter">
           <i class="cf-mg-rule" aria-hidden="true"></i>

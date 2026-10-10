@@ -24,8 +24,14 @@ interface Size {
 interface Signature {
   Args: StageSignature['Args'] & {
     film: FilmName;
+    /** where the subject sits in the poster, as `object-position`; the tile
+     *  crops the same still to the same point */
+    focus?: string;
     /** the well's ground, showing around a hand-sized frame */
     ground: string;
+    /** a still of the film, standing in the frame's place until the film's
+     *  first frame is up and again while the page leaves */
+    poster: string;
     /** whether the frame has a corner grip; it does unless this is false */
     resizable?: boolean;
     /** where a hand-set frame size is remembered, per viewer */
@@ -43,7 +49,8 @@ interface Signature {
 /**
  * A film's two faces in the gallery. In the grid it is the poster the `tile`
  * block draws: no WebGL in a tile. On the demo page it is the film itself in
- * a frame, with a door into theater and a corner grip that resizes the frame.
+ * a frame over that poster, with a door into theater and a corner grip that
+ * resizes the frame.
  * In theater both controls stand down: the frame is the window.
  */
 export class FilmStage extends Component<Signature> {
@@ -103,6 +110,17 @@ export class FilmStage extends Component<Signature> {
   /** a hand-set size applies on the page; in theater the frame is the window */
   get sized(): Size | null {
     return this.inTheater || !this.resizable ? null : this.size;
+  }
+
+  get posterStyle() {
+    return this.args.focus
+      ? htmlSafe(`object-position:${this.args.focus}`)
+      : undefined;
+  }
+
+  /** the page is leaving: the film has stood down and its poster flies */
+  get curtain() {
+    return this.args.theater?.curtain === true;
   }
 
   get frameStyle() {
@@ -199,8 +217,9 @@ export class FilmStage extends Component<Signature> {
   <template>
     <div class='film-face' data-test-film={{@film}} ...attributes>
       {{#if this.isStage}}
-        {{! the demo page's face: the film in a frame, tweened in — the heavy
-          world stays in its own document and unmounts whole }}
+        {{! the demo page's face: the film in a frame, faded in over its
+          poster — the heavy world stays in its own document and unmounts
+          whole }}
         <div
           class='film-embed
             {{if this.sized "is-sized"}}
@@ -208,7 +227,19 @@ export class FilmStage extends Component<Signature> {
           style={{this.frameStyle}}
           {{this.well}}
         >
-          <FilmFrame class='film-frame' @film={{@film}} @title={{@title}} />
+          {{! the poster is the film's still, under the frame: it is what
+            shows while the film loads, and what the crossing flies — a frame
+            can't ride the crossing out, because moving an iframe reloads it }}
+          <img
+            class='film-poster'
+            src={{@poster}}
+            alt=''
+            style={{this.posterStyle}}
+            data-test-film-poster
+          />
+          {{#unless this.curtain}}
+            <FilmFrame class='film-frame' @film={{@film}} @title={{@title}} />
+          {{/unless}}
           {{#if @theater}}
             {{#unless this.inTheater}}
               {{! UPPER RIGHT, where the mark stands in theater: the way in and
@@ -281,12 +312,23 @@ export class FilmStage extends Component<Signature> {
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
       }
 
+      /* the still fills the frame the way the film does, cropped to the
+         point its tile crops it to */
+      .film-poster {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: 50% 42%;
+      }
+
       .film-embed :deep(.film-frame) {
+        position: relative;
         display: block;
         width: 100%;
         height: 100%;
         border: 0;
-        transform-origin: 50% 60%;
       }
 
       /* while the hand is on the grip the iframe stands aside, so the
