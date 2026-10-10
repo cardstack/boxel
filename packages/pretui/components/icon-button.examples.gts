@@ -10,6 +10,12 @@ import {
   seedFrom,
 } from '../examples-kit';
 import type { ExampleSpec } from '../examples-kit';
+import ChevronLeftIcon from '@cardstack/boxel-icons/chevron-left';
+import ChevronRightIcon from '@cardstack/boxel-icons/chevron-right';
+import CopyIcon from '@cardstack/boxel-icons/copy';
+import EllipsisIcon from '@cardstack/boxel-icons/ellipsis';
+import PencilIcon from '@cardstack/boxel-icons/pencil';
+import XIcon from '@cardstack/boxel-icons/x';
 import { IconButton } from './icon-button';
 
 // ── IconButton ───────────────────────────────────────────────────────────
@@ -20,24 +26,24 @@ const ibtSupplier = pick(IBT, 1, SUPPLIERS);
 const IconButtonToolbar: TemplateOnlyComponent = <template>
   <Row>
     <Lab>{{ibtTea}}</Lab>
-    <IconButton @variant='ghost' @label='Edit'>✎</IconButton>
-    <IconButton @variant='ghost' @label='Duplicate'>⧉</IconButton>
-    <IconButton @variant='ghost' @label='More'>⋯</IconButton>
+    <IconButton @appearance='plain' @label='Edit' @icon={{PencilIcon}} />
+    <IconButton @appearance='plain' @label='Duplicate' @icon={{CopyIcon}} />
+    <IconButton @appearance='plain' @label='More' @icon={{EllipsisIcon}} />
   </Row>
 </template>;
 
 const IconButtonRemove: TemplateOnlyComponent = <template>
   <Row>
     <Lab>{{ibtSupplier}}</Lab>
-    <IconButton @variant='destructive' @label='Remove supplier'>✕</IconButton>
+    <IconButton @tone='danger' @appearance='accent' @label='Remove supplier' @icon={{XIcon}} />
   </Row>
 </template>;
 
 const IconButtonPager: TemplateOnlyComponent = <template>
   <Row>
-    <IconButton @variant='secondary' @label='Previous page'>‹</IconButton>
+    <IconButton @label='Previous page' @icon={{ChevronLeftIcon}} />
     <Mono>3 / 7</Mono>
-    <IconButton @variant='secondary' @label='Next page'>›</IconButton>
+    <IconButton @label='Next page' @icon={{ChevronRightIcon}} />
   </Row>
 </template>;
 

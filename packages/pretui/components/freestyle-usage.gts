@@ -90,7 +90,8 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
                 <CopyButton
                   @text={{@source}}
                   @label='Copy usage'
-                  @variant='ghost'
+                  @appearance='plain'
+                  class='wb-copy'
                 />
               </div>
             {{/if}}
@@ -282,7 +283,8 @@ export const FreestyleUsage: TemplateOnlyComponent<FreestyleUsageSignature> =
         color: var(--muted-foreground);
         white-space: pre;
       }
-      .wb-codestrip > :last-child {
+      /* by class, since CopyButton's status region follows it as a sibling */
+      .wb-codestrip > .wb-copy {
         flex: none;
         margin-inline-start: auto;
       }
