@@ -61,14 +61,14 @@ module('Pretui | components/rule-row', function (hooks) {
     await render(<template><RuleRow @rule={{RULE}} @status='fail' @statusDetail='Total is 12,480' @onChange={{noop}} /></template>);
     assert.strictEqual(row().dataset['status'], 'fail');
     assert.strictEqual(row().querySelector('[data-test-pretui-rule-status]')?.textContent?.trim(), 'Failing');
-    assert.strictEqual(row().querySelector('.rr-detail')?.textContent?.trim(), 'Total is 12,480');
+    assert.strictEqual(row().querySelector('[data-test-pretui-rule-detail]')?.textContent?.trim(), 'Total is 12,480');
   });
 
   test('without a model the expression is shown as authored and never rewritten', async function (assert) {
     let seen: GuideRule[] = [];
     const onChange = (r: GuideRule) => seen.push(r);
     await render(<template><RuleRow @rule={{RULE}} @onChange={{onChange}} /></template>);
-    assert.ok(row().querySelector('.rr-nomodel'), 'says why there is no visual editor');
+    assert.ok(row().querySelector('[data-test-pretui-rule-no-model]'), 'says why there is no visual editor');
     assert.strictEqual(row().querySelector('[data-test-pretui-expression-builder]'), null);
     assert.strictEqual(expression().textContent?.trim(), 'Total <= Budget');
 
@@ -103,8 +103,8 @@ module('Pretui | components/rule-row', function (hooks) {
   test('offers the target path as a select when resources are known', async function (assert) {
     const noop = () => {};
     await render(<template><RuleRow @rule={{RULE}} @resources={{RESOURCES}} @onChange={{noop}} /></template>);
-    assert.ok(document.querySelector('[data-test-pretui-rule-path] .pretui-selecttrigger'), 'a Select, not free text');
-    assert.true(document.querySelector('[data-test-pretui-rule-path] .pretui-selecttrigger')?.textContent?.includes('Total'));
+    assert.ok(document.querySelector('[data-test-pretui-rule-path] [data-test-pretui-select-trigger]'), 'a Select, not free text');
+    assert.true(document.querySelector('[data-test-pretui-rule-path] [data-test-pretui-select-trigger]')?.textContent?.includes('Total'));
   });
 
   test('shows a remove control only when given a handler, named after the rule', async function (assert) {
