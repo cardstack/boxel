@@ -413,11 +413,13 @@ export class DemoPage extends Component<Signature> {
          and the card's header — capped at a square so a portrait phone does
          not turn the film into a tall strip. A document that scrolls itself
          falls back to the window, where dvh follows the visible viewport as a
-         phone's browser chrome opens and closes. The picture reframes to this
-         box. */
+         phone's browser chrome opens and closes. The window caps it either
+         way: the scroller is the nearest ancestor set to scroll, and one that
+         grows with its content would publish the whole page's height. The
+         picture reframes to this box. */
       .demo-body.is-theater .stage-wrap {
         height: min(100vh, 100cqi);
-        height: min(var(--view-h, 100dvh), 100cqi);
+        height: min(var(--view-h, 100dvh), 100dvh, 100cqi);
         min-height: 0;
         max-height: none;
         aspect-ratio: auto;
