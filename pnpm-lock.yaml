@@ -478,8 +478,8 @@ catalogs:
       specifier: ^11.3.0
       version: 11.3.5
     glimmer-scoped-css:
-      specifier: ^0.8.1
-      version: 0.8.1
+      specifier: ^0.9.0
+      version: 0.9.0
     glob:
       specifier: ^11.0.1
       version: 11.1.0
@@ -1701,7 +1701,7 @@ importers:
         version: 3.3.0(@typescript-eslint/parser@8.67.0(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3))(eslint@9.39.5(supports-color@8.1.1))(supports-color@8.1.1)(typescript@5.9.3)
       glimmer-scoped-css:
         specifier: 'catalog:'
-        version: 0.8.1(supports-color@8.1.1)
+        version: 0.9.0(supports-color@8.1.1)
       globals:
         specifier: ^15.14.0
         version: 15.15.0
@@ -1942,7 +1942,7 @@ importers:
         version: 8.2.6(eslint@8.57.1(supports-color@8.1.1))
       glimmer-scoped-css:
         specifier: 'catalog:'
-        version: 0.8.1(supports-color@8.1.1)
+        version: 0.9.0(supports-color@8.1.1)
       prettier:
         specifier: 'catalog:'
         version: 3.8.4
@@ -3411,7 +3411,7 @@ importers:
         version: link:../glimmer-motion
       glimmer-scoped-css:
         specifier: 'catalog:'
-        version: 0.8.1(supports-color@8.1.1)
+        version: 0.9.0(supports-color@8.1.1)
       ignore:
         specifier: 'catalog:'
         version: 5.3.2
@@ -3914,7 +3914,7 @@ importers:
         version: 11.3.5
       glimmer-scoped-css:
         specifier: 'catalog:'
-        version: 0.8.1(supports-color@8.1.1)
+        version: 0.9.0(supports-color@8.1.1)
       glob:
         specifier: 'catalog:'
         version: 11.1.0
@@ -4199,7 +4199,7 @@ importers:
         version: 5.0.2
       glimmer-scoped-css:
         specifier: 'catalog:'
-        version: 0.8.1(supports-color@8.1.1)
+        version: 0.9.0(supports-color@8.1.1)
       http-status-codes:
         specifier: 'catalog:'
         version: 2.3.0
@@ -12113,8 +12113,8 @@ packages:
   github-slugger@2.0.0:
     resolution: {integrity: sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw==}
 
-  glimmer-scoped-css@0.8.1:
-    resolution: {integrity: sha512-7n6kQr9+2yqMVWc1b04XlGQ1Eb4Ctq0FmPUVAeo/RhHU9De04zymEw4DI4fqZenLYF/AbnaDiLk9jrnv0kS/FA==}
+  glimmer-scoped-css@0.9.0:
+    resolution: {integrity: sha512-7xQtolwLmghhxq5ptyg9AkZQq1LkjmrsDixnzkqzyWsTOckjc24LoF9RgtIMmoaCnlwBN+uIX94tV0p6/MWVhw==}
 
   glob-parent@5.1.2:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
@@ -27460,7 +27460,7 @@ snapshots:
 
   github-slugger@2.0.0: {}
 
-  glimmer-scoped-css@0.8.1(supports-color@8.1.1):
+  glimmer-scoped-css@0.9.0(supports-color@8.1.1):
     dependencies:
       '@embroider/addon-shim': 1.10.3(supports-color@8.1.1)
       js-string-escape: 1.0.1
