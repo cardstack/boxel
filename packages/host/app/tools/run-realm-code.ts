@@ -77,6 +77,20 @@ export function scriptDeletesWorkspaces(code: unknown): boolean {
   return typeof code === 'string' && code.includes('realm.workspaces.delete');
 }
 
+// Calls that need write access to the run's workspace. A Record over every
+// method, so a new method does not type-check until it is listed here. The
+// workspace calls act on other workspaces and keep their own checks.
+const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
+  'fs.readText': false,
+  'fs.exists': false,
+  'fs.list': false,
+  'fs.replace': true,
+  'fs.writeText': true,
+  capture: false,
+  'workspaces.create': false,
+  'workspaces.delete': false,
+};
+
 // The host half of `realm.fs`: every call the script makes lands here, inside
 // one realm. Reads come from the realm on first use. A write saves the file
 // before the call returns, so a script that awaits each write sees each file
@@ -118,6 +132,7 @@ class RealmFsSession {
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
     private mayDeleteWorkspaces: boolean,
+    private mayWrite: boolean,
   ) {
     this.captures = new RealmCaptures(captureURL);
   }
@@ -134,6 +149,12 @@ class RealmFsSession {
       if (this.closed) {
         this.refused += 1;
         throw new Error('The run has ended; this realm call was not made');
+      }
+      // The realm refuses the write anyway; this says why before any work.
+      if (REQUIRES_WRITE[method] && !this.mayWrite) {
+        throw new Error(
+          `You can only read this workspace; realm.${method} was not run`,
+        );
       }
       return this.dispatch(method, args);
     });
@@ -431,7 +452,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, can ' +
     'look at what it made with realm.capture, and can create workspaces ' +
-    'with realm.workspaces.create.';
+    'with realm.workspaces.create. In a workspace the user can only read, ' +
+    'reads work and each write is refused.';
   static actionVerb = 'Run';
 
   static neverAutoExecutesFor(
@@ -470,8 +492,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let realmURL = this.realm.realmOf(
       rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
     );
-    if (!realmURL || !this.realm.canWrite(realmURL)) {
-      throw new Error(`The current user cannot write ${realmInput}`);
+    // Read and write are separate grants, and either one is enough to run:
+    // in a workspace the user can only read, each write is refused on its
+    // own, and in one the user can only write, the realm refuses each read.
+    if (
+      !realmURL ||
+      !(this.realm.canRead(realmURL) || this.realm.canWrite(realmURL))
+    ) {
+      throw new Error(`The current user cannot read or write ${realmInput}`);
     }
 
     let session = new RealmFsSession(
@@ -499,6 +527,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           realmIdentifier,
         ),
       scriptDeletesWorkspaces(input.code),
+      this.realm.canWrite(realmURL),
     );
     let runnerResult;
     let deadline = new AbortController();
