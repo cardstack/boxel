@@ -473,10 +473,15 @@ module(basename(import.meta.filename), function () {
 
       let failing = compiled('blocklist', 'realmConfig("blockedIps")');
       let beforeFailing = grantExpressionPreparations();
-      await settleTraffic(
+      let unset = await settleTraffic(
         { blocklist: failing },
         { realmConfig: {} },
         PLATFORM,
+      );
+      assert.strictEqual(
+        unset.blocklist.failed,
+        'BxlTransformError (evaluate)',
+        'an absent setting throws when the expression runs',
       );
       let fixed = await settleTraffic(
         { blocklist: failing },
