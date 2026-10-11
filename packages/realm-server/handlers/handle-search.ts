@@ -412,9 +412,14 @@ export default function handleSearch(opts: {
           return;
         }
         try {
+          // A caller who isn't signed in is judged only by the grants this
+          // realm's admission let their address in through, and the one that
+          // scopes the search is the one it is counted against.
           let scope = await policyQueryScope(realm.operationCore, {
             ...invocation,
-            principal,
+            principal: caller
+              ? { kind: 'anonymous', request: caller.request }
+              : principal,
             transport: 'federated-search',
           });
           if (scope.kind !== 'scoped') {

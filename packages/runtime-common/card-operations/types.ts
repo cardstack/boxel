@@ -550,25 +550,46 @@ export type PolicyIssueCode =
   // under, so this is recorded independently of
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
   | 'render-reaches-ungranted-type'
-  // A grant that opts in to admitting callers who aren't signed in on an
-  // operation whose base isn't one of `ANONYMOUS_ELIGIBLE_OPERATIONS`, or on a
-  // named query. An operation a type declares on an eligible base, under its
-  // own name or a base operation's, is eligible. The grant is left out.
+  // A grant whose `where` names the caller who isn't signed in
+  // (`"anonymous"`) on an operation whose base isn't one of
+  // `ANONYMOUS_ELIGIBLE_OPERATIONS`, or on a named query. An operation a type
+  // declares on an eligible base, under its own name or a base operation's, is
+  // eligible. The grant is left out.
   | 'anonymous-not-base-operation'
-  // A grant that opts in to admitting callers who aren't signed in on a write,
-  // without naming the `realm.json` setting that says which user the write is
-  // made as. The grant is left out.
+  // A grant on a write whose `where` names the caller who isn't signed in, and
+  // that has no `actingUser` saying which user such a caller's writes are made
+  // as. The grant is kept for signed-in callers, and admits no write by a
+  // caller who isn't signed in.
   | 'anonymous-write-without-acting-user'
-  // A grant that opts in to admitting callers who aren't signed in, whose
-  // `where` reads `actor()`, or whose operation's program, template or output
-  // does. The realm evaluates neither for a caller with no actor, so the grant
+  // A grant whose `where` names the caller who isn't signed in, on an operation
+  // whose program, template or output reads `actor()`. The realm refuses such
+  // an operation to a caller who isn't signed in before it runs, so the grant
   // never admits one. It is kept for signed-in callers.
-  | 'anonymous-grant-reads-actor';
+  | 'anonymous-grant-reads-actor'
+  // An `actingUser` that is never used: on a grant whose `where` never names
+  // the caller who isn't signed in, whose writes are made as themselves, or on
+  // a grant for an operation that doesn't write. The grant is kept.
+  | 'acting-user-never-used'
+  // An `actingUser`, `blocklist`, `rateLimitRequests` or
+  // `rateLimitWindowSeconds` that doesn't parse, is empty, or uses something a
+  // grant can't use. The grant is left out.
+  | 'invalid-grant-expression'
+  // A `blocklist` or rate-limit expression that reads the target
+  // (`instance()`), or any of them that reads `actor()`. They are settled
+  // before the target is read, for a caller whose actor is always
+  // `"anonymous"`. The grant is left out.
+  | 'grant-expression-reads-target'
+  // An expression that is a single value of the wrong kind for its field, so
+  // it can never do what the field is for. The grant is kept: a blocklist
+  // that can't be read refuses every caller the grant would admit, an acting
+  // user that can't be one admits no write, and a rate limit that can't be one
+  // is the platform's.
+  | 'grant-expression-wrong-type';
 
 // The base operations a grant may open to callers who aren't signed in, under
 // their own names or through an operation a type declares on one of them. Such
-// an operation is one invocation of its base, run with no actor, and a write
-// it makes is made as the user the grant's `actingUser` names. A named query
+// an operation is one invocation of its base, and a write it makes is made as
+// the user the grant's `actingUser` names. A named query
 // is the exception: it runs a stored query on the search lane, and stays a
 // contract for signed-in callers.
 export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
@@ -587,7 +608,10 @@ export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
 export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'grant-reaches-ungranted-type',
   'render-reaches-ungranted-type',
+  'anonymous-write-without-acting-user',
   'anonymous-grant-reads-actor',
+  'acting-user-never-used',
+  'grant-expression-wrong-type',
 ]);
 
 export type PolicyIssueSeverity = 'inactive' | 'warning';
@@ -1032,21 +1056,16 @@ export interface PolicyExplanation {
   // Present for a question asked about a search: what the target realm's
   // policy composes into it.
   search?: ExplainedSearch;
-  // Present for a question asked about a caller who isn't signed in: how the
-  // target realm limits and blocks such callers, from its `realm.json`.
+  // Present for a question asked about a caller who isn't signed in: the
+  // rate limit a grant that sets none counts such callers against.
   anonymous?: ExplainedAnonymousAccess;
 }
 
 // How a realm treats callers who aren't signed in, as an explain reports it.
 export interface ExplainedAnonymousAccess {
-  // How many requests one address may make in a window, and whether that is
-  // the realm's own setting (`anonymousRateLimit`) or the platform's default.
-  limit: { requests: number; windowSeconds: number };
-  limitFrom: 'realm' | 'platform';
-  // `anonymousBlocklist` entries that are neither an address nor a range, as
-  // written. While there is any, the realm admits no caller who isn't signed
-  // in at all.
-  invalidBlocklistEntries: string[];
+  // The platform's limit, which applies to every grant that leaves a rate-limit
+  // expression out, or whose expression produces no limit.
+  platformLimit: { requests: number; windowSeconds: number };
 }
 
 // ============================================================================
@@ -1158,10 +1177,6 @@ export type PolicyExplanationReason =
   // Where the ACL lets anyone invoke it, the realm refuses the invocation
   // with a 401 before it runs.
   | 'reads-actor'
-  // The caller isn't signed in, and the target realm's `anonymousBlocklist`
-  // has an entry that is neither an address nor a range, which closes the
-  // realm to every such caller whatever the policy grants.
-  | 'blocklist-invalid'
   // The realm names a policy it cannot load.
   | 'policy-unloadable';
 
@@ -1193,20 +1208,55 @@ export interface ExplainedGrant {
   // is what it composes into the search. One whose predicate has none admits
   // no search (`policy-not-filterable`). Absent on the direct lane.
   filterable?: boolean;
-  // Present where the grant opts in to callers who aren't signed in. For one
-  // on a write, the `realm.json` `config` key its writes are made under, and
-  // either the user that key names or why it names no one who may write the
-  // realm, in which case the grant admits no such caller.
-  anonymous?: {
-    actingUserKey?: string;
-    actingUser?: string;
-    actingUserFailure?: 'key-missing' | 'not-a-matrix-id' | 'no-write';
-  };
+  // Present where the grant's `where` names the caller who isn't signed in:
+  // each of its expressions as written, and what it produced.
+  anonymous?: ExplainedGrantAnonymous;
   // What compiling the policy recorded against this grant: the warnings it
   // still applies under. A grant an issue left out of the policy isn't here
   // to carry it, and appears only in the policy's own issues.
   issues?: PolicyIssue[];
 }
+
+export interface ExplainedGrantAnonymous {
+  // For a grant on a write: the user such a caller's writes are made as, or
+  // why its `actingUser` names no one who may write the realm. An expression
+  // that reads the target is reported with what it produced for the target
+  // the question named, where the gate got as far as asking.
+  actingUser?: {
+    expression?: string;
+    user?: string;
+    failure?: ActingUserFailure;
+  };
+  // The addresses the grant refuses. `invalid` holds what isn't an address or
+  // a range, and `failed` says why the expression produced nothing; with
+  // either, the grant admits no caller who isn't signed in.
+  blocklist?: {
+    expression: string;
+    entries?: string[];
+    invalid?: string[];
+    failed?: string;
+  };
+  // The limit the grant counts such callers against, each half from its
+  // expression where that produced one and from the platform's limit
+  // otherwise.
+  rateLimit: {
+    requests: number;
+    windowSeconds: number;
+    requestsFrom: 'grant' | 'platform';
+    windowSecondsFrom: 'grant' | 'platform';
+    requestsExpression?: string;
+    windowSecondsExpression?: string;
+  };
+}
+
+// Why a grant's `actingUser` names no one a write can be made as:
+// - `expression-failed`: the expression produced no value.
+// - `not-a-matrix-id`: it produced something that isn't a Matrix user id.
+// - `no-write`: the user it names may not write the realm.
+export type ActingUserFailure =
+  | 'expression-failed'
+  | 'not-a-matrix-id'
+  | 'no-write';
 
 export type ExplainedGrantOutcome =
   // A grant with no condition. It admits the invocation outright.

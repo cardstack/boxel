@@ -26,6 +26,7 @@ export const testRealmInfo: RealmInfo = {
   publishable: null,
   lastPublishedAt: null,
   includePrerenderedDefaultRealmIndex: null,
+  anonymousRateLimitDefault: { requests: 300, windowSeconds: 60 },
 };
 
 // `/_federated-info` serves `testRealmInfo`'s shape plus these realm-lifecycle

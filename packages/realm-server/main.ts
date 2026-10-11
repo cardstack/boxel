@@ -194,9 +194,10 @@ const PRERENDER_COALESCE_ACROSS_PROCESSES =
 const linkShapePolicy = buildLinkShapePolicy();
 
 // The rate limit callers a realm's policy admits without a session get, as
-// `requests/windowSeconds`, wherever the realm's own `realm.json` sets none.
-// Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`. A value that is not a limit stops the
-// server rather than leaving every realm on a limit nobody chose.
+// `requests/windowSeconds`, through every policy grant that sets none of its
+// own. Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`. Every realm reports it in its
+// info, so a policy's editor can show it. A value that is not a limit stops
+// the server rather than leaving every realm on a limit nobody chose.
 const anonymousRateLimit = process.env.BOXEL_ANONYMOUS_RATE_LIMIT
   ? parseRateLimitSpec(process.env.BOXEL_ANONYMOUS_RATE_LIMIT)
   : undefined;

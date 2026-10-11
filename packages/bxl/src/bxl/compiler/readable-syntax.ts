@@ -486,7 +486,12 @@ const TRAILING_ARRAY_PACKED_VARIADIC_FORMULAS = new Map<string, number>([
  * The match is against the lower-cased name, so each entry is spelled that
  * way — `realmConfig` appears here as `realmconfig`.
  */
-const KEY_NAME_ARGUMENT_CALLS = new Set(['instance', 'params', 'realmconfig']);
+const KEY_NAME_ARGUMENT_CALLS = new Set([
+  'instance',
+  'params',
+  'policy',
+  'realmconfig',
+]);
 
 const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',

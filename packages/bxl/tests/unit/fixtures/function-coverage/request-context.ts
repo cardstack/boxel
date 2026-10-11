@@ -1,6 +1,6 @@
 /**
- * The request-context builtins: `params`, `actor`, `instance` and
- * `realmConfig`.
+ * The request-context builtins: `params`, `actor`, `instance`,
+ * `realmConfig` and `policy`.
  *
  * These read no arguments beyond a key name — their whole answer comes from
  * the context the host scoped around the evaluation — so each case supplies
@@ -22,6 +22,7 @@ const context = {
   actor: 'user:ada',
   instance: { id: 'https://example.test/Post/1', commentCount: 4 },
   realmConfig: { approver: 'user:mae', escalateAfterDays: 3 },
+  policy: { blockedIps: '192.0.2.1, 198.51.100.0/24', title: 'Front desk' },
 };
 
 /** The document a program is editing, which none of these builtins read. */
@@ -278,6 +279,43 @@ const cases: CoverageCase[] = [
     source: 'realmConfig(3)',
     context,
     throws: /takes a key name as a string, not number/,
+  },
+  {
+    covers: 'policy/1',
+    source: 'policy("blockedIps")',
+    input: editedDocument,
+    context,
+    expected: '192.0.2.1, 198.51.100.0/24',
+  },
+  {
+    covers: 'policy/0',
+    source: 'policy() | .title',
+    input: editedDocument,
+    context,
+    expected: 'Front desk',
+  },
+  {
+    covers: 'policy/0',
+    // A field the policy card doesn't have is read as absent through the
+    // whole object, so a program can supply its own default.
+    source: 'policy() | .rateLimit // 60',
+    context,
+    expected: 60,
+  },
+  {
+    covers: 'policy/1',
+    source: 'policy("rateLimit")',
+    context,
+    throws:
+      /asks for "rateLimit", which is not in the policy card.*"blockedIps", "title".*Use `policy\(\)`/,
+  },
+  {
+    covers: 'policy/0',
+    // A host evaluating outside a policy supplies no policy card, and a
+    // program reading one is told so rather than handed `null`.
+    source: 'policy()',
+    context: { realmConfig: context.realmConfig },
+    throws: /needs the policy card/,
   },
 ];
 

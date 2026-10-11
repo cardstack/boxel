@@ -17,7 +17,10 @@ import {
   type PolicySearchScopeEvent,
 } from './telemetry.ts';
 import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
+import type { AnonymousRequest } from './anonymous-request.ts';
+import { ANONYMOUS_ACTOR } from './grant-expressions.ts';
 import {
+  opensToAnonymous,
   realmPolicyRef,
   type CompiledOperationGrant,
   type CompiledRealmPolicy,
@@ -115,10 +118,23 @@ const DENIED: PolicyQueryScope = { kind: 'denied' };
 // principal is a request that authenticated nobody, which the realm admitted
 // because its policy opens `query` to such callers. Any other is the user its
 // session names, including a render a user asked for.
+//
+// An anonymous principal carries the request's anonymous admission where the
+// realm made one: only the grants it lets the caller's address in through
+// scope the search, and the ones that do are recorded on it, so the search is
+// counted against the first. Without one, every grant that opens `query` to
+// such callers scopes it.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
   | { kind: 'realm-authority'; user: string }
-  | { kind: 'anonymous' };
+  | { kind: 'anonymous'; request?: AnonymousRequest };
+
+// Who a search's grants are judged for: a signed-in user, or a caller who
+// isn't signed in, through the request's anonymous admission where there is
+// one.
+type Searcher =
+  | { kind: 'user'; actor: string }
+  | { kind: 'anonymous'; request: AnonymousRequest | undefined };
 
 // The principal a request authenticated as, or none for a request that
 // authenticated nobody.
@@ -218,7 +234,9 @@ export async function policyQueryScope(
       core,
       operation,
       types,
-      principal.kind === 'user' ? principal.user : undefined,
+      principal.kind === 'user'
+        ? { kind: 'user', actor: principal.user }
+        : { kind: 'anonymous', request: principal.request },
       contributed,
     );
   } catch (e: unknown) {
@@ -229,6 +247,15 @@ export async function policyQueryScope(
     contributed.length = 0;
   }
   record(scope.kind === 'scoped' ? 'scoped' : 'none');
+  if (
+    principal.kind === 'anonymous' &&
+    !invocation.advisory &&
+    !invocation.hypothetical
+  ) {
+    for (let { grant } of contributed) {
+      await principal.request?.admittedThrough(grant);
+    }
+  }
   return scope;
 }
 
@@ -255,7 +282,7 @@ async function scopeFor(
   core: OperationCore,
   operation: string,
   types: readonly CodeRef[],
-  actor: string | undefined,
+  searcher: Searcher,
   contributed: MatchedGrant[],
 ): Promise<PolicyQueryScope> {
   let distinct = [
@@ -267,7 +294,7 @@ async function scopeFor(
   if (distinct.length === 1) {
     return await withoutAuthorization(
       core,
-      await typeScope(core, operation, distinct[0], actor, contributed),
+      await typeScope(core, operation, distinct[0], searcher, contributed),
     );
   }
   // Each type's contributions are kept apart while the types are judged at
@@ -276,7 +303,7 @@ async function scopeFor(
   let perType = distinct.map((): MatchedGrant[] => []);
   let scopes = await Promise.all(
     distinct.map((on, index) =>
-      typeScope(core, operation, on, actor, perType[index]),
+      typeScope(core, operation, on, searcher, perType[index]),
     ),
   );
   contributed.push(...perType.flat());
@@ -345,7 +372,7 @@ async function typeScope(
   core: OperationCore,
   operation: string,
   on: CodeRef,
-  actor: string | undefined,
+  searcher: Searcher,
   contributed: MatchedGrant[],
 ): Promise<PolicyQueryScope> {
   let policy = await core.policy?.compiledPolicy();
@@ -365,7 +392,13 @@ async function typeScope(
   if (ownDeclaration(entry.definition, operation)?.nonGrantable) {
     return DENIED;
   }
-  let granted = await grantFilters(policy, entry.types, operation, actor, core);
+  let granted = await grantFilters(
+    policy,
+    entry.types,
+    operation,
+    searcher,
+    core,
+  );
   if (granted.length === 0) {
     return DENIED;
   }
@@ -416,10 +449,10 @@ function ownDeclaration(
 
 // Every matching grant's filter, with the caller filled in, in the grammar the
 // engine runs, each comparison in it kept from judging a card whose type reads
-// the compared path differently from the rule's type. For a caller with no
-// actor, one who isn't signed in, only a grant that opts in to such callers
-// matches, and never one whose filter reads the caller, which has no one to
-// stand for.
+// the compared path differently from the rule's type. For a caller who isn't
+// signed in, only a grant whose `where` names them matches, through the filter
+// it reads as for them, and only where the request's anonymous admission lets
+// their address in through it.
 //
 // A compiled filter stands the caller as the `{ $ref: 'actor' }` marker a
 // declared query uses, so filling one in is the substitution a named query
@@ -432,22 +465,25 @@ async function grantFilters(
   policy: CompiledRealmPolicy,
   types: string[],
   operation: string,
-  actor: string | undefined,
+  searcher: Searcher,
   core: OperationCore,
 ): Promise<{ filter: Filter; matched: MatchedGrant }[]> {
   let matched = await matchingGrants(policy, types, operation, core.policy!);
   let filters: { filter: Filter; matched: MatchedGrant }[] = [];
   for (let candidate of matched) {
     let { grant } = candidate;
-    if (!grant.filter) {
-      continue;
-    }
-    if (actor === undefined && (!grant.anonymous || grant.where?.readsActor)) {
+    let filter =
+      searcher.kind === 'user'
+        ? grant.filter
+        : opensToAnonymous(grant) && (searcher.request?.admits(grant) ?? true)
+          ? grant.anonymousFilter
+          : undefined;
+    if (!filter) {
       continue;
     }
     let bound = lowerQueryOperation(
-      { base: 'query', query: { filter: grant.filter } },
-      actor === undefined ? {} : { actor },
+      { base: 'query', query: { filter } },
+      { actor: searcher.kind === 'user' ? searcher.actor : ANONYMOUS_ACTOR },
     );
     if (!bound.filter) {
       throw new Error(
