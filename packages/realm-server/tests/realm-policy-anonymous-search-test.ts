@@ -521,6 +521,48 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  test('where two grants scope the same search, one over its limit leaves the other to admit it', async function (assert) {
+    await setLimit(newsroom, 1);
+    let policy = JSON.parse(policyCard(NEWSROOM, true));
+    // Opens what the realm's anonymous grant does, with a budget of its own
+    // written out on the grant.
+    policy.data.attributes.rules[0].grants.push({
+      operation: 'query',
+      where: 'actor() == "anonymous" and .status == "published"',
+      rateLimitRequests: '1',
+      rateLimitWindowSeconds: '600',
+    });
+    await org.write('policies/newsroom.json', JSON.stringify(policy));
+    await org.indexing();
+    let first = await realmSearch(NEWSROOM);
+    let second = await realmSearch(NEWSROOM);
+    assert.deepEqual(
+      [first.status, second.status],
+      [200, 200],
+      'the second search is admitted by the grant with budget left',
+    );
+    assert.deepEqual(
+      ids(second),
+      [`${NEWSROOM}articles/published`],
+      'with the rows that grant admits',
+    );
+    assert.strictEqual(
+      (await realmSearch(NEWSROOM)).status,
+      429,
+      'and the third finds both spent',
+    );
+    assert.deepEqual(
+      records
+        .filter((r) => r.route.endsWith('/_search'))
+        .map((r) => ({ outcome: r.outcome, grant: r.grant })),
+      [
+        { outcome: 'admitted', grant: ANONYMOUS_ARTICLE_GRANT },
+        { outcome: 'admitted', grant: 'rules[0].grants[3]' },
+        { outcome: 'rate-limited', grant: ANONYMOUS_ARTICLE_GRANT },
+      ],
+    );
+  });
+
   test('a blocked address is told to authenticate', async function (assert) {
     assert.strictEqual(
       (await realmSearch(NEWSROOM, BLOCKED_VISITOR)).status,

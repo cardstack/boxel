@@ -570,6 +570,11 @@ export type PolicyIssueCode =
   // the caller who isn't signed in, whose writes are made as themselves, or on
   // a grant for an operation that doesn't write. The grant is kept.
   | 'acting-user-never-used'
+  // An `actingUser` that reads the target (`instance()`) on a grant that
+  // creates cards, where the target is the card the caller sends, so the
+  // caller chooses who their write is made as from among the users who may
+  // write the realm. The grant is kept.
+  | 'acting-user-from-submitted-card'
   // An `actingUser`, `blocklist`, `rateLimitRequests` or
   // `rateLimitWindowSeconds` that doesn't parse, is empty, or uses something a
   // grant can't use. The grant is left out.
@@ -611,6 +616,7 @@ export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'anonymous-write-without-acting-user',
   'anonymous-grant-reads-actor',
   'acting-user-never-used',
+  'acting-user-from-submitted-card',
   'grant-expression-wrong-type',
 ]);
 

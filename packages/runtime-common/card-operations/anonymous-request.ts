@@ -42,6 +42,7 @@ export type ActingUserResolver = (
 export class AnonymousRequest {
   #resolve: ActingUserResolver;
   #eligible: ReadonlySet<string> | undefined;
+  #spent: ReadonlySet<string>;
   // An expression that doesn't read the target names the same user for every
   // write of the request, so it is resolved once per grant.
   #resolved = new Map<string, Promise<ActingUserResolution>>();
@@ -59,10 +60,17 @@ export class AnonymousRequest {
 
   // `eligible` holds the ids of the grants the caller's address may be
   // admitted through. Without it, every grant that opens anything to such
-  // callers may admit them.
-  constructor(resolve: ActingUserResolver, eligible?: ReadonlySet<string>) {
+  // callers may admit them. `spent` holds the eligible grants whose rate limit
+  // the address has used up: they admit only what no grant with budget left
+  // does, so the request is answered as over that grant's limit.
+  constructor(
+    resolve: ActingUserResolver,
+    eligible?: ReadonlySet<string>,
+    spent: ReadonlySet<string> = new Set(),
+  ) {
     this.#resolve = resolve;
     this.#eligible = eligible;
+    this.#spent = spent;
   }
 
   // Whether `grant` may admit this request.
@@ -72,6 +80,26 @@ export class AnonymousRequest {
       id !== undefined &&
       (this.#eligible === undefined || this.#eligible.has(id))
     );
+  }
+
+  // Whether the caller's address has used up `grant`'s rate limit.
+  spent(grant: CompiledOperationGrant): boolean {
+    let id = grant.anonymous?.id;
+    return id !== undefined && this.#spent.has(id);
+  }
+
+  // `items` with those whose grant has budget left first, each group in the
+  // order given. Grants union, so which one admits doesn't change what is
+  // admitted, only which limit is charged; one with budget left is charged
+  // wherever it admits.
+  withBudgetFirst<T>(
+    items: readonly T[],
+    grantOf: (item: T) => CompiledOperationGrant,
+  ): T[] {
+    return [
+      ...items.filter((item) => !this.spent(grantOf(item))),
+      ...items.filter((item) => this.spent(grantOf(item))),
+    ];
   }
 
   async actingUser(
@@ -159,9 +187,3 @@ export class AnonymousRequest {
     return this.#lastResolved.get(grant.path);
   }
 }
-
-// Unresolvable: a realm that supplies no way to resolve acting users admits no
-// write by a caller who isn't signed in.
-export const NO_ACTING_USER: ActingUserResolver = async () => ({
-  failure: 'expression-failed',
-});
