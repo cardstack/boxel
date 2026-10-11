@@ -493,6 +493,42 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('where two grants admit the same card, one over its limit leaves the other to admit it', async function (assert) {
+    await setNewsroomConfig(limitOf(1));
+    // Admits what the read grant does, with a budget of its own written out
+    // on the grant.
+    let alsoPublished = {
+      operation: 'read',
+      where: 'actor() == "anonymous" and .status == "published"',
+      rateLimitRequests: '2',
+      rateLimitWindowSeconds: '600',
+    };
+    await org.write(
+      'policies/newsroom.json',
+      policyCard(ARTICLE, [...NEWSROOM_GRANTS, alsoPublished]),
+    );
+    await org.indexing();
+    let statuses = [];
+    for (let i = 0; i < 4; i++) {
+      statuses.push((await readCard(PUBLISHED)).status);
+    }
+    assert.deepEqual(
+      statuses,
+      [200, 200, 200, 429],
+      'each grant admits as many reads as its own limit allows',
+    );
+    assert.deepEqual(
+      articleRecords().map((r) => ({ outcome: r.outcome, grant: r.grant })),
+      [
+        { outcome: 'admitted', grant: READ_GRANT },
+        { outcome: 'admitted', grant: 'rules[0].grants[4]' },
+        { outcome: 'admitted', grant: 'rules[0].grants[4]' },
+        { outcome: 'rate-limited', grant: READ_GRANT },
+      ],
+      'each read is charged to a grant with budget left, until none has any',
+    );
+  });
+
   test('a request no grant admits costs the caller nothing', async function (assert) {
     await setNewsroomConfig({
       ...limitOf(1),

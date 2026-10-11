@@ -69,7 +69,7 @@ export type GrantExpressionValue =
   // stored value.
   | { failed: string };
 
-export async function evaluateGrantExpression(
+async function evaluateGrantExpression(
   expression: CompiledGrantExpression,
   context: GrantExpressionContext,
 ): Promise<GrantExpressionValue> {

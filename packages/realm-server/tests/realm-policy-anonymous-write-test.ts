@@ -1098,4 +1098,70 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(created.status, 201, created.text);
     assert.ok(board, 'the board realm is up');
   });
+
+  test("a realm anyone may read answers a capability check through the grants the caller's address may use", async function (assert) {
+    let feedback = { module: `${BOARD}newsroom`, name: 'Feedback' };
+    let blockedVisitor = '198.51.100.7';
+    // Creating feedback is closed to one range, and another write grant that
+    // range may use opens nothing it asks about.
+    await org.write(
+      'policies/board.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            rules: [
+              rule(feedback, [
+                {
+                  operation: 'create',
+                  where: ANYONE_NOT_SIGNED_IN,
+                  actingUser: 'realmConfig("submitter")',
+                  blocklist: '"198.51.100.0/24"',
+                },
+                {
+                  operation: 'update',
+                  where: ANYONE_NOT_SIGNED_IN,
+                  actingUser: 'realmConfig("submitter")',
+                },
+              ]),
+            ],
+          },
+          meta: { adoptsFrom: REALM_POLICY },
+        },
+      }),
+    );
+    await org.indexing();
+    let ask = (from: string) =>
+      request
+        .post(`${new URL(BOARD).pathname}_capabilities`)
+        .set('Accept', SupportedMimeType.JSON)
+        .set('Content-Type', SupportedMimeType.JSON)
+        .set('X-Forwarded-For', from)
+        .send({ checks: [{ target: feedback, operation: 'create' }] });
+    let open = await ask(VISITOR);
+    assert.strictEqual(open.status, 200, open.text);
+    assert.true(open.body.checks[0].allowed, 'an address the grant lets in');
+    let closed = await ask(blockedVisitor);
+    assert.strictEqual(closed.status, 200, closed.text);
+    assert.false(
+      closed.body.checks[0].allowed,
+      'an address the create grant refuses is told it may not create',
+    );
+    let created = await request
+      .post(new URL(BOARD).pathname)
+      .set('Accept', SupportedMimeType.CardJson)
+      .set('X-Forwarded-For', blockedVisitor)
+      .send(
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { message: 'Hello board' },
+            meta: {
+              adoptsFrom: { module: rri(`${BOARD}newsroom`), name: 'Feedback' },
+            },
+          },
+        }),
+      );
+    assert.strictEqual(created.status, 401, 'as the create itself is refused');
+  });
 });

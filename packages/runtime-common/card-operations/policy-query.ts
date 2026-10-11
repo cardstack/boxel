@@ -122,7 +122,7 @@ const DENIED: PolicyQueryScope = { kind: 'denied' };
 // An anonymous principal carries the request's anonymous admission where the
 // realm made one: only the grants it lets the caller's address in through
 // scope the search, and the ones that do are recorded on it, so the search is
-// counted against the first. Without one, every grant that opens `query` to
+// counted against one of them. Without one, every grant that opens `query` to
 // such callers scopes it.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
@@ -132,9 +132,15 @@ export type SearchPrincipal =
 // Who a search's grants are judged for: a signed-in user, or a caller who
 // isn't signed in, through the request's anonymous admission where there is
 // one.
+// `withBudgetOnly` leaves out the grants whose rate limit the caller's address
+// has used up.
 type Searcher =
   | { kind: 'user'; actor: string }
-  | { kind: 'anonymous'; request: AnonymousRequest | undefined };
+  | {
+      kind: 'anonymous';
+      request: AnonymousRequest | undefined;
+      withBudgetOnly?: boolean;
+    };
 
 // The principal a request authenticated as, or none for a request that
 // authenticated nobody.
@@ -239,6 +245,26 @@ export async function policyQueryScope(
         : { kind: 'anonymous', request: principal.request },
       contributed,
     );
+    // A grant whose rate limit the caller's address has used up scopes a
+    // search only where no grant with budget left does, so its rows are
+    // served only to a request that is answered as over its limit.
+    let request =
+      principal.kind === 'anonymous' ? principal.request : undefined;
+    if (
+      request &&
+      scope.kind === 'scoped' &&
+      contributed.some(({ grant }) => request.spent(grant)) &&
+      contributed.some(({ grant }) => !request.spent(grant))
+    ) {
+      contributed.length = 0;
+      scope = await scopeFor(
+        core,
+        operation,
+        types,
+        { kind: 'anonymous', request, withBudgetOnly: true },
+        contributed,
+      );
+    }
   } catch (e: unknown) {
     record('failed');
     throw e;
@@ -475,7 +501,9 @@ async function grantFilters(
     let filter =
       searcher.kind === 'user'
         ? grant.filter
-        : opensToAnonymous(grant) && (searcher.request?.admits(grant) ?? true)
+        : opensToAnonymous(grant) &&
+            (searcher.request?.admits(grant) ?? true) &&
+            !(searcher.withBudgetOnly && searcher.request?.spent(grant))
           ? grant.anonymousFilter
           : undefined;
     if (!filter) {

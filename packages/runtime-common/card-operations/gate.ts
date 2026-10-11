@@ -670,9 +670,12 @@ async function decide(
   // admitting anyone at all through one would widen it past what its author
   // wrote.
   if (scope.caller.kind === 'anonymous') {
-    matched = matched.filter(
-      ({ grant }) =>
-        opensToAnonymous(grant) && scope.anonymousRequest.admits(grant),
+    matched = scope.anonymousRequest.withBudgetFirst(
+      matched.filter(
+        ({ grant }) =>
+          opensToAnonymous(grant) && scope.anonymousRequest.admits(grant),
+      ),
+      ({ grant }) => grant,
     );
     // An operation whose program, template or output reads `actor()` is
     // refused to such a caller before it runs, so a grant that opens it to
@@ -1591,7 +1594,7 @@ async function firstHolding(
       emitPolicySnapshotRead({
         kind: 'policy-snapshot-read',
         realmURL: core.realmURL,
-        actor: actor ?? null,
+        actor: scope.caller.kind === 'user' ? scope.caller.actor : null,
         operation: candidate.grant.operation,
         targetType: {
           module: candidate.rule.targetType.module,
