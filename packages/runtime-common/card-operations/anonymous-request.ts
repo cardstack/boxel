@@ -89,9 +89,10 @@ export class AnonymousRequest {
   }
 
   // `items` with those whose grant has budget left first, each group in the
-  // order given. Grants union, so which one admits doesn't change what is
-  // admitted, only which limit is charged; one with budget left is charged
-  // wherever it admits.
+  // order given. Grants union, so which one admits doesn't change whether the
+  // invocation is admitted. It decides which limit is charged, and for a
+  // write, which grant's acting user the write is made as: one with budget
+  // left wherever it admits.
   withBudgetFirst<T>(
     items: readonly T[],
     grantOf: (item: T) => CompiledOperationGrant,

@@ -132,15 +132,9 @@ export type SearchPrincipal =
 // Who a search's grants are judged for: a signed-in user, or a caller who
 // isn't signed in, through the request's anonymous admission where there is
 // one.
-// `withBudgetOnly` leaves out the grants whose rate limit the caller's address
-// has used up.
 type Searcher =
   | { kind: 'user'; actor: string }
-  | {
-      kind: 'anonymous';
-      request: AnonymousRequest | undefined;
-      withBudgetOnly?: boolean;
-    };
+  | { kind: 'anonymous'; request: AnonymousRequest | undefined };
 
 // The principal a request authenticated as, or none for a request that
 // authenticated nobody.
@@ -245,26 +239,6 @@ export async function policyQueryScope(
         : { kind: 'anonymous', request: principal.request },
       contributed,
     );
-    // A grant whose rate limit the caller's address has used up scopes a
-    // search only where no grant with budget left does, so its rows are
-    // served only to a request that is answered as over its limit.
-    let request =
-      principal.kind === 'anonymous' ? principal.request : undefined;
-    if (
-      request &&
-      scope.kind === 'scoped' &&
-      contributed.some(({ grant }) => request.spent(grant)) &&
-      contributed.some(({ grant }) => !request.spent(grant))
-    ) {
-      contributed.length = 0;
-      scope = await scopeFor(
-        core,
-        operation,
-        types,
-        { kind: 'anonymous', request, withBudgetOnly: true },
-        contributed,
-      );
-    }
   } catch (e: unknown) {
     record('failed');
     throw e;
@@ -425,6 +399,13 @@ async function typeScope(
     searcher,
     core,
   );
+  // A grant whose rate limit the caller's address has used up scopes a type
+  // only where no grant with budget left scopes it. A type it alone scopes
+  // keeps it, and the search is then answered as over that grant's limit.
+  let request = searcher.kind === 'anonymous' ? searcher.request : undefined;
+  if (request && granted.some(({ matched }) => !request.spent(matched.grant))) {
+    granted = granted.filter(({ matched }) => !request.spent(matched.grant));
+  }
   if (granted.length === 0) {
     return DENIED;
   }
@@ -501,9 +482,7 @@ async function grantFilters(
     let filter =
       searcher.kind === 'user'
         ? grant.filter
-        : opensToAnonymous(grant) &&
-            (searcher.request?.admits(grant) ?? true) &&
-            !(searcher.withBudgetOnly && searcher.request?.spent(grant))
+        : opensToAnonymous(grant) && (searcher.request?.admits(grant) ?? true)
           ? grant.anonymousFilter
           : undefined;
     if (!filter) {

@@ -414,8 +414,9 @@ export class RealmPolicyCache {
   // Cost matters here because this runs for every request the ACL rejects
   // for missing credentials, and the realm's own renders send such requests
   // while it indexes. So before compiling anything, we read the raw policy
-  // card from the index and look for a grant whose `where` names `"anonymous"`, and
-  // remember the answer as long as a compile is kept. If there isn't one, we
+  // card from the index and look for a grant whose `where` could name the
+  // caller who isn't signed in (`opensAnythingToAnonymous`), and remember the
+  // answer as long as a compile is kept. If there isn't one, we
   // return "none" without compiling. If a fresh compile is already cached, we
   // skip that check and use it directly.
   async anonymousAdmission(): Promise<AnonymousOpenings> {
