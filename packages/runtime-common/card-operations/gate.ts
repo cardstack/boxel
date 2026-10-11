@@ -2312,7 +2312,7 @@ async function evaluate(
   actor: string | undefined,
 ): Promise<'holds' | 'fails' | 'threw'> {
   try {
-    let program = preparedPredicate(await loadBxlTransform(), where);
+    let program = preparedPredicate(core, await loadBxlTransform(), where);
     let realmConfig = where.canonical.includes('realmConfig')
       ? await core.realmConfig()
       : undefined;
@@ -2349,7 +2349,17 @@ const preparedPredicates = new WeakMap<
   PreparedTransformProgram
 >();
 
+// How many predicate programs the gate has prepared for a core. Separate from
+// `PolicyGateStats`, which counts the work a decision does: a steady policy
+// prepares each predicate once however many decisions evaluate it.
+const preparationsByCore = new WeakMap<OperationCore, number>();
+
+export function policyPredicatePreparations(core: OperationCore): number {
+  return preparationsByCore.get(core) ?? 0;
+}
+
 function preparedPredicate(
+  core: OperationCore,
   bxl: BxlTransformModule,
   where: CompiledPolicyPredicate,
 ): PreparedTransformProgram {
@@ -2359,6 +2369,7 @@ function preparedPredicate(
       syntax: 'solidified',
     });
     preparedPredicates.set(where, program);
+    preparationsByCore.set(core, policyPredicatePreparations(core) + 1);
   }
   return program;
 }

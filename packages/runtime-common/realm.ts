@@ -290,6 +290,7 @@ import {
   storedWriteRefusal,
   type PendingWrite,
   policyGateStats,
+  policyPredicatePreparations,
   policyUnavailable,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
@@ -16059,6 +16060,10 @@ export class Realm {
 
   __testOnlyPolicyGateStats(): PolicyGateStats {
     return { ...policyGateStats(this.operationCore) };
+  }
+
+  __testOnlyPolicyPredicatePreparations(): number {
+    return policyPredicatePreparations(this.operationCore);
   }
 
   // The cache reads the policy card straight from the index, not through a
