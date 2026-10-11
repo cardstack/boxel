@@ -481,11 +481,10 @@ export class AnonymousAdmission {
   }
 
   // Counts `cost` invocations by `caller` against the budget its address has
-  // through the grant that admitted the request, and records what came of
-  // it. That is the first grant to admit one of its invocations, or where
-  // none has said so, such as a stylesheet drawn by markup the realm already
-  // served, the first that could have. A caller of ours is recorded and never
-  // counted.
+  // through the grant that admitted the request (`chargedGrant`), and records
+  // what came of it. Where no grant has said it admitted anything, such as a
+  // stylesheet drawn by markup the realm already served, that is the first
+  // that could have. A caller of ours is recorded and never counted.
   async chargeCaller(
     request: Request,
     caller: AnonymousCaller,
