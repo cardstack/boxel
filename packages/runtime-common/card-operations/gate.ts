@@ -35,7 +35,11 @@ import type {
   CompiledPolicyRule,
   CompiledRealmPolicy,
 } from './policy.ts';
-import { loadBxlTransform } from './transforms.ts';
+import {
+  loadBxlTransform,
+  type BxlTransformModule,
+  type PreparedTransformProgram,
+} from './transforms.ts';
 import {
   OperationFailure,
   isDefinitionFreeBaseOperation,
@@ -2308,20 +2312,15 @@ async function evaluate(
   actor: string | undefined,
 ): Promise<'holds' | 'fails' | 'threw'> {
   try {
-    let bxl = await loadBxlTransform();
+    let program = preparedPredicate(await loadBxlTransform(), where);
     let realmConfig = where.canonical.includes('realmConfig')
       ? await core.realmConfig()
       : undefined;
-    let answer = bxl.runBxlTransform(
-      where.canonical,
-      subject.input,
-      {
-        ...(actor === undefined ? {} : { actor }),
-        ...(subject.instance ? { instance: subject.instance } : {}),
-        ...(realmConfig === undefined ? {} : { realmConfig }),
-      },
-      { syntax: 'solidified' },
-    );
+    let answer = program.run(subject.input, {
+      ...(actor === undefined ? {} : { actor }),
+      ...(subject.instance ? { instance: subject.instance } : {}),
+      ...(realmConfig === undefined ? {} : { realmConfig }),
+    });
     return answer === true ? 'holds' : 'fails';
   } catch (e: unknown) {
     if (subject.input === undefined) {
@@ -2338,6 +2337,30 @@ async function evaluate(
     );
     return 'threw';
   }
+}
+
+// Each predicate's program, parsed and checked once and run for every subject
+// it judges. Keyed on the compiled predicate, so a program lives exactly as
+// long as the compiled policy that holds it, and a recompiled policy prepares
+// its own. A predicate that fails to prepare is not held, and throws again on
+// its next evaluation, as one that throws on every subject does.
+const preparedPredicates = new WeakMap<
+  CompiledPolicyPredicate,
+  PreparedTransformProgram
+>();
+
+function preparedPredicate(
+  bxl: BxlTransformModule,
+  where: CompiledPolicyPredicate,
+): PreparedTransformProgram {
+  let program = preparedPredicates.get(where);
+  if (!program) {
+    program = bxl.prepareBxlTransform(where.canonical, {
+      syntax: 'solidified',
+    });
+    preparedPredicates.set(where, program);
+  }
+  return program;
 }
 
 // A caller who may not read the realm is told of a predicate's fault as a card

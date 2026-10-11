@@ -9,6 +9,7 @@ import type { BxlTransformError } from '../../src/transform.ts';
 import {
   checkBxlTransform,
   isBxlTransformError,
+  prepareBxlTransform,
   runBxlTransform,
   type BxlTransformContext,
 } from '../../src/transform.ts';
@@ -35,7 +36,125 @@ const CONTEXT: BxlTransformContext = {
   instance: { title: 'Q3 report', status: 'open' },
 };
 
+// What a run answered, or the phase and message it was refused with, so a
+// prepared program and a one-shot run can be compared value for value.
+function outcome(body: () => unknown): unknown {
+  try {
+    return { value: body() };
+  } catch (error) {
+    ok(isBxlTransformError(error), `expected a transform error, got ${error}`);
+    return { phase: error.phase, message: error.message };
+  }
+}
+
+// A policy predicate's shape: it reads the caller, the stored card and the
+// realm's settings, and throws on a card whose `owners` cannot be searched.
+const PREDICATE =
+  '(.owners | index(actor())) != null or .status == realmConfig().openStatus or instance("public") == true';
+
+const PREDICATE_RUNS: { input: unknown; context: BxlTransformContext }[] = [
+  {
+    input: { owners: [ACTOR], status: 'closed' },
+    context: { actor: ACTOR, instance: { public: false }, realmConfig: {} },
+  },
+  {
+    input: { owners: ['@other:example.com'], status: 'closed' },
+    context: { actor: ACTOR, instance: { public: false }, realmConfig: {} },
+  },
+  {
+    input: { owners: [], status: 'open' },
+    context: {
+      actor: ACTOR,
+      instance: { public: false },
+      realmConfig: { openStatus: 'open' },
+    },
+  },
+  {
+    input: { owners: [], status: 'closed' },
+    context: { actor: ACTOR, instance: { public: true }, realmConfig: {} },
+  },
+  {
+    input: { owners: 42, status: 'closed' },
+    context: { actor: ACTOR, instance: { public: false }, realmConfig: {} },
+  },
+  {
+    input: { owners: [ACTOR], status: 'closed' },
+    context: { instance: { public: false }, realmConfig: {} },
+  },
+];
+
 const cases: Case[] = [
+  {
+    name: 'a prepared program answers each run as a one-shot run of the same source does',
+    run: () => {
+      let prepared = prepareBxlTransform(PREDICATE, { syntax: 'readable' });
+      let expected = PREDICATE_RUNS.map(({ input, context }) =>
+        outcome(() =>
+          runBxlTransform(PREDICATE, input, context, { syntax: 'readable' }),
+        ),
+      );
+      deepStrictEqual(
+        expected.map((entry) => Object.keys(entry as object)[0]),
+        ['value', 'value', 'value', 'value', 'phase', 'phase'],
+        'the runs cover answers and refusals',
+      );
+      deepStrictEqual(
+        expected.map((entry) => (entry as { value?: unknown }).value),
+        [true, false, true, true, undefined, undefined],
+      );
+      deepStrictEqual(
+        PREDICATE_RUNS.map(({ input, context }) =>
+          outcome(() => prepared.run(input, context)),
+        ),
+        expected,
+      );
+      // Runs are independent of each other: the same program run again, in
+      // the opposite order, gives each value the same answer.
+      deepStrictEqual(
+        [...PREDICATE_RUNS]
+          .reverse()
+          .map(({ input, context }) =>
+            outcome(() => prepared.run(input, context)),
+          ),
+        [...expected].reverse(),
+      );
+    },
+  },
+  {
+    name: 'a prepared program refuses several values the way a one-shot run does',
+    run: () => {
+      let prepared = prepareBxlTransform('.[]');
+      for (let input of [[1], [1, 2], []]) {
+        deepStrictEqual(
+          outcome(() => prepared.run(input)),
+          outcome(() => runBxlTransform('.[]', input)),
+        );
+      }
+    },
+  },
+  {
+    name: 'preparing refuses what a one-shot run refuses, in the same phase',
+    run: () => {
+      for (let source of ['{', '.a = 1', 'input']) {
+        deepStrictEqual(
+          outcome(() => prepareBxlTransform(source)),
+          outcome(() => runBxlTransform(source, {})),
+          source,
+        );
+      }
+      strictEqual(caught(() => prepareBxlTransform('{')).phase, 'parse');
+      strictEqual(caught(() => prepareBxlTransform('.a = 1')).phase, 'profile');
+    },
+  },
+  {
+    name: 'a prepared program keeps the runtime budget it was prepared with',
+    run: () => {
+      let prepared = prepareBxlTransform('[range(1000000)] | length', {
+        runtimeLimits: { maxSteps: 50 },
+      });
+      strictEqual(caught(() => prepared.run(null)).phase, 'evaluate');
+    },
+  },
   {
     name: 'a projection keeps the keys it names and drops the rest',
     run: () => {

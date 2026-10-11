@@ -68,19 +68,30 @@ export interface TransformProgramError extends Error {
   phase: 'parse' | 'profile' | 'evaluate';
 }
 
+export interface TransformProgramContext {
+  params?: Record<string, unknown>;
+  actor?: string;
+  instance?: Record<string, unknown>;
+  realmConfig?: Record<string, unknown>;
+}
+
+// A program parsed and checked once, run over many values.
+export interface PreparedTransformProgram {
+  run(input: unknown, context?: TransformProgramContext): unknown;
+}
+
 export interface BxlTransformModule {
   isBxlTransformError(err: unknown): err is TransformProgramError;
   runBxlTransform(
     source: string,
     input: unknown,
-    context?: {
-      params?: Record<string, unknown>;
-      actor?: string;
-      instance?: Record<string, unknown>;
-      realmConfig?: Record<string, unknown>;
-    },
+    context?: TransformProgramContext,
     options?: { syntax?: 'readable' | 'solidified' },
   ): unknown;
+  prepareBxlTransform(
+    source: string,
+    options?: { syntax?: 'readable' | 'solidified' },
+  ): PreparedTransformProgram;
 }
 
 // Resolved once per process. The module is pure and stateless, so holding it
