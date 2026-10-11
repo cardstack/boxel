@@ -243,7 +243,9 @@ module(basename(import.meta.filename), function () {
     let reader = getReader(
       async () => {
         requests++;
-        return new Response('hello', { status: 200 });
+        let stream = new PassThrough();
+        setImmediate(() => stream.destroy(new Error('stream exploded')));
+        return okResponseWithNodeStream(stream);
       },
       realmURL,
       { stallTimeoutMs: 50 },
@@ -251,9 +253,61 @@ module(basename(import.meta.filename), function () {
 
     await assert.rejects(
       reader.readFile(new URL(`${realmURL}page.txt`)),
-      /has no 'last-modified' header/,
+      /stream exploded/,
     );
     assert.strictEqual(requests, 1, 'tried once');
+  });
+
+  test('readFile reads a response with no last-modified header, dating it when it was read', async function (assert) {
+    let requests = 0;
+    let reader = getReader(
+      async () => {
+        requests++;
+        return new Response('hello', { status: 200 });
+      },
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    let before = Math.floor(Date.now() / 1000);
+    let result = await reader.readFile(new URL(`${realmURL}page.txt`));
+    let after = Math.floor(Date.now() / 1000);
+
+    assert.strictEqual(requests, 1, 'tried once');
+    assert.strictEqual(result?.content, 'hello', 'the body is read');
+    let lastModified = result?.lastModified ?? -1;
+    assert.ok(
+      lastModified >= before,
+      `lastModified ${lastModified} is no earlier than the read`,
+    );
+    assert.ok(
+      lastModified <= after,
+      `lastModified ${lastModified} is no later than the read`,
+    );
+    assert.strictEqual(result?.path, 'page.txt', 'the path is still resolved');
+  });
+
+  test('readStream reads a response with no last-modified header', async function (assert) {
+    let reader = getReader(
+      async () => new Response('hello', { status: 200 }),
+      realmURL,
+      { stallTimeoutMs: 50 },
+    );
+
+    let before = Math.floor(Date.now() / 1000);
+    let result = await reader.readStream(new URL(`${realmURL}page.txt`));
+    let after = Math.floor(Date.now() / 1000);
+
+    assert.ok(result, 'the stream is returned');
+    let lastModified = result?.lastModified ?? -1;
+    assert.ok(
+      lastModified >= before,
+      `lastModified ${lastModified} is no earlier than the read`,
+    );
+    assert.ok(
+      lastModified <= after,
+      `lastModified ${lastModified} is no later than the read`,
+    );
   });
 
   test('readStream abandons a response that never arrives', async function (assert) {

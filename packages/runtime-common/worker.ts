@@ -566,17 +566,28 @@ export function getReader(
     url: URL,
   ): { lastModified: number; created: number; path: string } => {
     let lastModifiedRfc7321 = response.headers.get('last-modified');
-    if (!lastModifiedRfc7321) {
-      throw new Error(`Response for ${url.href} has no 'last-modified' header`);
+    let lastModified: number;
+    if (lastModifiedRfc7321) {
+      // This is RFC-7321 format which is the last modified date format used in HTTP headers
+      lastModified = unixTime(
+        parse(
+          lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
+          'EEE, dd MMM yyyy HH:mm:ssX',
+          new Date(),
+        ).getTime(),
+      );
+    } else {
+      // The body is the file's content whether or not the response dates it,
+      // so a missing date costs only precision, never the read. The time it
+      // was read is no earlier than the content's own, and where it differs
+      // from the modification time the realm reports for the file, the next
+      // pass that compares the realm's modification times with the index
+      // reads the file again and records its real one.
+      readerLog.warn(
+        `Response for ${url.href} has no 'last-modified' header; using the time it was read`,
+      );
+      lastModified = unixTime(Date.now());
     }
-    // This is RFC-7321 format which is the last modified date format used in HTTP headers
-    let lastModified = unixTime(
-      parse(
-        lastModifiedRfc7321.replace(/ GMT$/, 'Z'),
-        'EEE, dd MMM yyyy HH:mm:ssX',
-        new Date(),
-      ).getTime(),
-    );
 
     let createdRfc7321 = response.headers.get('x-created');
     let created: number;
