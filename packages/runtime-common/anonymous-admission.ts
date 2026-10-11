@@ -93,10 +93,10 @@ export interface AnonymousCaller {
   // never limited or blocked.
   infra: boolean;
   counted: AnonymousDispatch['counted'];
-  // The grants that may admit the request, in the order the policy card holds
-  // them: each one opening what the route runs whose blocklist lets the
-  // caller's address in and, for a request that is counted, whose budget for
-  // it isn't used up. Only these are asked about it.
+  // The grants that may admit the request: each one opening what the route
+  // runs whose blocklist lets the caller's address in. For a request that is
+  // counted, the ones with budget left come first, each group in the order
+  // the policy card holds them. Only these are asked about it.
   grants: AdmittingGrant[];
   // Which of those admitted the request, and who its writes are made as.
   request: AnonymousRequest;
@@ -119,6 +119,8 @@ export interface AdmittingGrant {
   id: string;
   path: string;
   limit: GrantRateLimit;
+  // Set where the caller's address has used up this grant's limit.
+  spent?: true;
 }
 
 // What came of counting an anonymous caller's invocation against its
@@ -336,6 +338,7 @@ export class AnonymousAdmission {
     caller.request = new AnonymousRequest(
       this.#env.actingUser,
       new Set(caller.grants.map(({ id }) => id)),
+      new Set(caller.grants.filter(({ spent }) => spent).map(({ id }) => id)),
     );
     return caller;
   }
@@ -564,6 +567,7 @@ export class AnonymousAdmission {
       if (outcome.admitted) {
         withBudget.push(grant);
       } else {
+        grant.spent = true;
         retryAfterSeconds = Math.min(
           retryAfterSeconds ?? Infinity,
           outcome.retryAfterSeconds,
@@ -574,10 +578,11 @@ export class AnonymousAdmission {
       // A grant whose budget is spent stays eligible, because which grant
       // admits a request isn't known until its target is: a request only that
       // grant would have admitted has to be answered as over the limit rather
-      // than as one no grant admits. Its charge is what answers it, once the
-      // gate has said which grant admitted it. The ones with budget left come
-      // first, so a request no grant said it admitted — a stylesheet drawn by
-      // markup the realm already served — is charged to one that can take it.
+      // than as one no grant admits. It admits only where no grant with budget
+      // left does (`AnonymousRequest.spent`), and its charge is what answers
+      // the request then. The ones with budget left come first, so a request
+      // no grant said it admitted — a stylesheet drawn by markup the realm
+      // already served — is charged to one that can take it.
       caller.grants = [
         ...withBudget,
         ...caller.grants.filter((grant) => !withBudget.includes(grant)),
@@ -666,16 +671,15 @@ export class AnonymousAdmission {
   }
 }
 
-// The grant a caller's request is counted against: the first of its grants to
-// admit one of the request's invocations, or the first that could have.
+// The grant a caller's request is counted against: a grant whose budget is
+// spent where one admitted any of the request's invocations, since nothing
+// with budget left would have, and otherwise the first of its grants to admit
+// one, or the first that could have.
 function chargedGrant(caller: AnonymousCaller): AdmittingGrant {
-  for (let id of caller.request.admittedGrants) {
-    let grant = caller.grants.find((candidate) => candidate.id === id);
-    if (grant) {
-      return grant;
-    }
-  }
-  return caller.grants[0];
+  let admitted = caller.request.admittedGrants
+    .map((id) => caller.grants.find((candidate) => candidate.id === id))
+    .filter((grant): grant is AdmittingGrant => grant !== undefined);
+  return admitted.find(({ spent }) => spent) ?? admitted[0] ?? caller.grants[0];
 }
 
 // Marks the request as having served what its caller asked for (see

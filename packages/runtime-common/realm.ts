@@ -6698,20 +6698,29 @@ export class Realm {
       write.refusal,
       requestContext,
     );
-    if (
-      policyJudgesWrite ||
-      requestContext.anonymousCaller ||
-      (write.refusal instanceof CoarseAuthenticationRequired &&
-        !requestContext.authenticatedUser &&
-        (await this.#anonymous.callerFor(request, ANONYMOUS_WRITE_CHECK)))
-    ) {
+    // A caller the realm let in through its ACL rather than its policy has
+    // had no anonymous admission made for the request, so one is made for its
+    // writes here. Its pairs are judged through the grants it settles, as the
+    // writes themselves would be.
+    let writeCaller =
+      !policyJudgesWrite &&
+      !requestContext.anonymousCaller &&
+      write.refusal instanceof CoarseAuthenticationRequired &&
+      !requestContext.authenticatedUser
+        ? await this.#anonymous.callerFor(request, ANONYMOUS_WRITE_CHECK)
+        : undefined;
+    if (policyJudgesWrite || requestContext.anonymousCaller || writeCaller) {
       // The realm asks whether a caller it declined a write could read the
       // realm only where its policy judges the write
       // (`#recordCoarsePermission`), so any other write is declined outright
       // even where the ACL lets them read.
-      return coarseDeclined === 'writes' && !policyJudgesWrite
-        ? { coarseDeclined, writesDeclinedOutright: true }
-        : { coarseDeclined };
+      return {
+        coarseDeclined,
+        ...(coarseDeclined === 'writes' && !policyJudgesWrite
+          ? { writesDeclinedOutright: true as const }
+          : {}),
+        ...(writeCaller ? { anonymousRequest: writeCaller.request } : {}),
+      };
     }
     return {
       coarseDeclined,

@@ -1071,6 +1071,17 @@ module(basename(import.meta.filename), function (hooks) {
         { operation: 'read', where: '.teacherIds | any(. == actor())' },
         { operation: 'read', where: `${ANYONE} or .status == "open"` },
         { operation: 'read', where: '.status == "anonymous"' },
+        // The comparison written either way round, and turned over.
+        { operation: 'read', where: '"anonymous" == actor()' },
+        { operation: 'read', where: 'NOT(actor() != "anonymous")' },
+        // A guard that only ever keeps such a caller out, on operations that
+        // couldn't be opened to one or would need an acting user if they were.
+        { operation: 'read', where: 'actor() != "anonymous"' },
+        {
+          operation: 'listOpen',
+          where: 'actor() != "anonymous" and .status == "open"',
+        },
+        { operation: 'update', where: 'actor() != "anonymous"' },
       ]),
     );
     let policy = await compiled();
@@ -1086,10 +1097,60 @@ module(basename(import.meta.filename), function (hooks) {
         { path: 'rules[0].grants[2]', opens: false },
         { path: 'rules[0].grants[3]', opens: true },
         { path: 'rules[0].grants[4]', opens: false },
+        { path: 'rules[0].grants[5]', opens: true },
+        { path: 'rules[0].grants[6]', opens: true },
+        { path: 'rules[0].grants[7]', opens: false },
+        { path: 'rules[0].grants[8]', opens: false },
+        { path: 'rules[0].grants[9]', opens: false },
       ],
-      'only the grant whose where names the caller who is not signed in admits one',
+      'only a grant whose where can hold for the caller who is not signed in admits one; a guard that keeps them out is a signed-in grant',
     );
     assert.deepEqual(policy?.anonymous, { operations: ['read'], writes: [] });
+  });
+
+  test('an acting user read from the card a create sends is warned about, since the caller chooses it', async function (assert) {
+    await writeTo(
+      org,
+      'policies/education.json',
+      policyCard([
+        {
+          operation: 'create',
+          where: ANYONE,
+          actingUser: 'instance().teacherIds[0]',
+        },
+        {
+          operation: 'update',
+          where: ANYONE,
+          actingUser: 'instance().teacherIds[0]',
+        },
+        {
+          operation: 'create',
+          where: ANYONE,
+          actingUser: 'realmConfig("feedbackWriter")',
+        },
+      ]),
+    );
+    let policy = await compiled();
+    assert.deepEqual(
+      policy?.issues.map(({ code, path, severity }) => ({
+        code,
+        path,
+        severity,
+      })),
+      [
+        {
+          code: 'acting-user-from-submitted-card',
+          path: 'rules[0].grants[0].actingUser',
+          severity: 'warning',
+        },
+      ],
+      'only the create whose acting user reads the card it is sent is warned about',
+    );
+    assert.strictEqual(
+      policy?.rules[0]?.grants[0]?.anonymous?.actingUser?.source,
+      'instance().teacherIds[0]',
+      'and the grant is kept',
+    );
   });
 
   test("a grant's anonymous id is its content, so it survives a recompile and a move within the card", async function (assert) {

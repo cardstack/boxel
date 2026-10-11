@@ -320,10 +320,11 @@ const NO_OPERATIONS: AnonymousOpenings = {
 };
 
 // Whether any grant in a policy card's attributes, as stored, could name the
-// caller who isn't signed in: whether its `where` holds the text
-// `"anonymous"`. A card where none does opens nothing to such callers however
-// it compiles, so this answers for it without compiling. One where some grant
-// might is compiled to find out what that grant opens.
+// caller who isn't signed in: whether its `where` holds the text `anonymous`,
+// or a string escape that could spell it. A card where none does opens
+// nothing to such callers however it compiles, so this answers for it without
+// compiling. One where some grant might is compiled to find out what that
+// grant opens.
 function opensAnythingToAnonymous(attributes: unknown): boolean {
   let rules = (attributes as { rules?: unknown } | undefined)?.rules;
   return (
@@ -337,7 +338,10 @@ function opensAnythingToAnonymous(attributes: unknown): boolean {
             typeof where === 'string'
               ? where
               : (where as { bxl?: unknown } | null)?.bxl;
-          return typeof source === 'string' && source.includes('"anonymous"');
+          return (
+            typeof source === 'string' &&
+            (source.includes(ANONYMOUS_ACTOR) || source.includes('\\'))
+          );
         }),
     )
   );
@@ -1150,24 +1154,30 @@ async function compileDocument(
             parser.validateBxlAst(node, options),
         },
       );
-    // A grant that names the caller who isn't signed in reads differently for
-    // such a caller and for a signed-in one, and a search knows which it is
-    // serving before it composes the grant. So each reading is settled and
-    // compiled on its own, and a part of the predicate that can never hold for
-    // one of them is no part of that one's filter.
+    // A search knows which kind of caller it is serving before it composes
+    // the grant, and a signed-in caller is never `"anonymous"`, so what that
+    // settles is folded away before the predicate is compiled, as a guard
+    // such as `actor() != "anonymous"` is. A grant that names the caller who
+    // isn't signed in reads differently for such a caller, so that reading is
+    // settled and compiled on its own too, and a part of the predicate that
+    // can never hold for one of them is no part of that one's filter.
     let readings: { caller: 'signed-in' | 'anonymous'; body: unknown }[] =
-      grant.anonymous && predicate
+      predicate
         ? [
             {
               caller: 'signed-in',
               body: settleActor(predicate.body, 'signed-in'),
             },
-            {
-              caller: 'anonymous',
-              body: settleActor(predicate.body, 'anonymous'),
-            },
+            ...(grant.anonymous
+              ? [
+                  {
+                    caller: 'anonymous' as const,
+                    body: settleActor(predicate.body, 'anonymous'),
+                  },
+                ]
+              : []),
           ]
-        : [{ caller: 'signed-in', body: predicate?.body ?? true }];
+        : [{ caller: 'signed-in', body: true }];
     let compiled = { ...grant };
     for (let { caller, body } of readings) {
       if (body === false) {
@@ -1505,6 +1515,13 @@ async function compileDocument(
           isWrite(granted.base)
             ? `\`actingUser\` is used only for a write by a caller who isn't signed in, and this grant's \`where\` never names \`"anonymous"\`, so it admits no such caller. A signed-in caller's writes are made as themselves.\n\nTo admit callers who aren't signed in, name them in \`where\`, such as \`actor() == "anonymous"\``
             : `\`actingUser\` is used only for a write by a caller who isn't signed in, and \`${operation}\` doesn't write`,
+        );
+      }
+      if (anonymous?.actingUser?.readsInstance && granted.base === 'create') {
+        issue(
+          'acting-user-from-submitted-card',
+          `${grantPath}.actingUser`,
+          `\`actingUser\` reads \`instance()\`, and on a create that is the card the caller sends, so a caller who isn't signed in chooses who the card is created as: any user who may write the realm.\n\nTo make every such write as one user, read them from somewhere the caller can't set, such as \`realmConfig("publicWriter")\` or a field on the policy card`,
         );
       }
       if (!where || !outcome) {
@@ -2170,7 +2187,12 @@ async function compilePredicate(source: string): Promise<
     canonical: program.canonicalSource,
     body: program.body,
     readsActor: callsActor(bxl, program.body),
-    namesAnonymous: namesAnonymous(bxl, program.body),
+    // A comparison that only ever keeps such a caller out, such as
+    // `actor() != "anonymous"`, guards a grant written for signed-in callers
+    // rather than opening it to anyone else.
+    namesAnonymous:
+      namesAnonymous(bxl, program.body) &&
+      settleActor(program.body, 'anonymous') !== false,
   };
 }
 
