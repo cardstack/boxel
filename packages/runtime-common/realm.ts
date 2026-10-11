@@ -2258,6 +2258,8 @@ export interface RealmAdapter {
   ): Promise<LintResult>;
 }
 
+const DEFAULT_PUBLISHED_ROBOTS_TXT = 'User-agent: *\nAllow: /\n';
+
 interface Options {
   // The rate limit a realm's anonymous callers get when its `realm.json` sets
   // none. Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`.
@@ -2271,6 +2273,11 @@ interface Options {
   linkShapePolicy?: LinkShapePolicy;
   disableModuleCaching?: true;
   fullIndexOnStartup?: true;
+  // The realm is a published snapshot of a source realm, served to the public
+  // as a site. Nobody authors in it, so an error it answers a caller it cannot
+  // identify carries no server stack (see `createResponse`), and a crawler's
+  // `/robots.txt` gets a default answer when the realm holds none.
+  published?: true;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2381,6 +2388,11 @@ export type RequestContext = {
   // in place of running what the caller asked for, and gives every refusal
   // ahead of that as the realm gives it while active.
   archivedSeal?: ArchivedRealmError;
+  // Set for a dispatch made from inside the realm-server process (a worker's
+  // or definition lookup's in-process fetch), which never reaches the realm
+  // ACL and so records no identity. Every other context, including one a
+  // route builds for itself, is treated as an outside caller.
+  realmInternal?: true;
 };
 
 // What answers a request once it is routed: the answer itself, not yet run,
@@ -2523,6 +2535,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #published = false;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
@@ -2772,6 +2785,10 @@ export class Realm {
     return this.#virtualNetwork;
   }
 
+  get isPublished(): boolean {
+    return this.#published;
+  }
+
   constructor(
     {
       url,
@@ -2861,6 +2878,7 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#published = Boolean(opts?.published);
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -7666,6 +7684,9 @@ export class Realm {
     let requestContext = await this.createRequestContext(requiredPermission, {
       asksBothLanes: localPath === CAPABILITIES_PATH,
     });
+    if (isLocal) {
+      requestContext.realmInternal = true;
+    }
 
     try {
       let dispatch = this.#routeRequest(request, localPath, requestContext);
@@ -8548,7 +8569,23 @@ export class Realm {
           });
           break;
         }
-        case 'not-found':
+        case 'not-found': {
+          // Every crawler asks a site for its robots.txt, so a published realm
+          // that holds none answers with rules allowing everything — what a
+          // crawler assumes of a 404 anyway — rather than an error document.
+          response =
+            this.#published && localPath === 'robots.txt'
+              ? createResponse({
+                  body: DEFAULT_PUBLISHED_ROBOTS_TXT,
+                  init: {
+                    status: 200,
+                    headers: { 'content-type': 'text/plain; charset=utf-8' },
+                  },
+                  requestContext,
+                })
+              : result.response;
+          break;
+        }
         case 'non-module':
         case 'shimmed': {
           response = result.response;
