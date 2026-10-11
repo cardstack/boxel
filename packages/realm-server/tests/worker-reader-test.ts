@@ -49,6 +49,12 @@ function stalledBodyResponse(sent: string, declared: string): Response {
   );
 }
 
+function mtimesResponse(mtimes: { [url: string]: number }): Response {
+  return new Response(JSON.stringify({ data: { attributes: { mtimes } } }), {
+    status: 200,
+  });
+}
+
 function completeResponse(content: string): Response {
   return new Response(content, { status: 200, headers: lastModifiedHeaders });
 }
@@ -78,12 +84,16 @@ module(basename(import.meta.filename), function () {
     );
   });
 
-  test('readFile propagates non-ENOENT body read failures', async function (assert) {
+  test('readFile propagates non-ENOENT body read failures without reading again', async function (assert) {
+    // An in-process realm's body is a local file stream with no network
+    // beneath it, so a failure reading it is not one a fresh request gets
+    // past.
+    let requests = 0;
     let stream = new PassThrough();
-    let reader = getReader(
-      async () => okResponseWithNodeStream(stream),
-      realmURL,
-    );
+    let reader = getReader(async () => {
+      requests++;
+      return okResponseWithNodeStream(stream);
+    }, realmURL);
 
     let readPromise = reader.readFile(new URL(`${realmURL}unlucky.txt`));
     setImmediate(() => stream.destroy(new Error('stream exploded')));
@@ -93,6 +103,7 @@ module(basename(import.meta.filename), function () {
       /stream exploded/,
       'a body read failure that is not a missing file still rejects',
     );
+    assert.strictEqual(requests, 1, 'tried once');
   });
 
   test('readFile returns undefined for a not-ok response', async function (assert) {
@@ -238,33 +249,54 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(result?.content, 'hello');
   });
 
-  test('readFile does not retry a failure a fresh request cannot fix', async function (assert) {
-    let requests = 0;
+  test("readFile dates a response with no last-modified header by the realm's modification time", async function (assert) {
+    let fileRequests = 0;
+    let mtimesRequests = 0;
     let reader = getReader(
-      async () => {
-        requests++;
-        let stream = new PassThrough();
-        setImmediate(() => stream.destroy(new Error('stream exploded')));
-        return okResponseWithNodeStream(stream);
+      async (input) => {
+        if (String(input) === `${realmURL}_mtimes`) {
+          mtimesRequests++;
+          return mtimesResponse({
+            [`${realmURL}page.txt`]: 1730768523,
+            [`${realmURL}other.txt`]: 1730768600,
+          });
+        }
+        fileRequests++;
+        return new Response('hello', { status: 200 });
       },
       realmURL,
       { stallTimeoutMs: 50 },
     );
 
-    await assert.rejects(
-      reader.readFile(new URL(`${realmURL}page.txt`)),
-      /stream exploded/,
+    let result = await reader.readFile(new URL(`${realmURL}page.txt`));
+    let other = await reader.readFile(new URL(`${realmURL}other.txt`));
+
+    assert.strictEqual(fileRequests, 2, 'each file is read once');
+    assert.strictEqual(result?.content, 'hello', 'the body is read');
+    assert.strictEqual(result?.path, 'page.txt', 'the path is resolved');
+    assert.strictEqual(
+      result?.lastModified,
+      1730768523,
+      "lastModified is the realm's modification time for the file",
     );
-    assert.strictEqual(requests, 1, 'tried once');
+    assert.strictEqual(
+      other?.lastModified,
+      1730768600,
+      "a second file is dated by its own entry in the realm's times",
+    );
+    assert.strictEqual(
+      mtimesRequests,
+      1,
+      "the realm's modification times are fetched once per reader",
+    );
   });
 
-  test('readFile reads a response with no last-modified header, dating it when it was read', async function (assert) {
-    let requests = 0;
+  test('readFile dates a response with no last-modified header for a file the realm does not list by when it was read', async function (assert) {
     let reader = getReader(
-      async () => {
-        requests++;
-        return new Response('hello', { status: 200 });
-      },
+      async (input) =>
+        String(input) === `${realmURL}_mtimes`
+          ? mtimesResponse({})
+          : new Response('hello', { status: 200 }),
       realmURL,
       { stallTimeoutMs: 50 },
     );
@@ -273,7 +305,6 @@ module(basename(import.meta.filename), function () {
     let result = await reader.readFile(new URL(`${realmURL}page.txt`));
     let after = Math.floor(Date.now() / 1000);
 
-    assert.strictEqual(requests, 1, 'tried once');
     assert.strictEqual(result?.content, 'hello', 'the body is read');
     let lastModified = result?.lastModified ?? -1;
     assert.ok(
@@ -284,29 +315,25 @@ module(basename(import.meta.filename), function () {
       lastModified <= after,
       `lastModified ${lastModified} is no later than the read`,
     );
-    assert.strictEqual(result?.path, 'page.txt', 'the path is still resolved');
   });
 
-  test('readStream reads a response with no last-modified header', async function (assert) {
+  test("readStream dates a response with no last-modified header by the realm's modification time", async function (assert) {
     let reader = getReader(
-      async () => new Response('hello', { status: 200 }),
+      async (input) =>
+        String(input) === `${realmURL}_mtimes`
+          ? mtimesResponse({ [`${realmURL}page.txt`]: 1730768523 })
+          : new Response('hello', { status: 200 }),
       realmURL,
       { stallTimeoutMs: 50 },
     );
 
-    let before = Math.floor(Date.now() / 1000);
     let result = await reader.readStream(new URL(`${realmURL}page.txt`));
-    let after = Math.floor(Date.now() / 1000);
 
     assert.ok(result, 'the stream is returned');
-    let lastModified = result?.lastModified ?? -1;
-    assert.ok(
-      lastModified >= before,
-      `lastModified ${lastModified} is no earlier than the read`,
-    );
-    assert.ok(
-      lastModified <= after,
-      `lastModified ${lastModified} is no later than the read`,
+    assert.strictEqual(
+      result?.lastModified,
+      1730768523,
+      "lastModified is the realm's modification time for the file",
     );
   });
 

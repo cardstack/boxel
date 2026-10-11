@@ -561,10 +561,13 @@ export function getReader(
   }: { stallTimeoutMs?: number } = {},
 ): Reader {
   let readerLog = logger('worker');
-  let parseResponseMetadata = (
+  // The realm's own record of every file's modification time, fetched at most
+  // once per reader and only when a response does not date its content.
+  let realmMtimes: Promise<{ [url: string]: number }> | undefined;
+  let parseResponseMetadata = async (
     response: Response,
     url: URL,
-  ): { lastModified: number; created: number; path: string } => {
+  ): Promise<{ lastModified: number; created: number; path: string }> => {
     let lastModifiedRfc7321 = response.headers.get('last-modified');
     let lastModified: number;
     if (lastModifiedRfc7321) {
@@ -578,15 +581,22 @@ export function getReader(
       );
     } else {
       // The body is the file's content whether or not the response dates it,
-      // so a missing date costs only precision, never the read. The time it
-      // was read is no earlier than the content's own, and where it differs
-      // from the modification time the realm reports for the file, the next
-      // pass that compares the realm's modification times with the index
-      // reads the file again and records its real one.
+      // so a missing date costs only precision, never the read. The date is
+      // taken from the realm's own modification times instead: that is the
+      // value a from-scratch index compares the indexed row against, so a
+      // file read this way is not invalidated again while it is unchanged. A
+      // file the realm does not list is dated by when it was read, which is
+      // no earlier than its content.
+      realmMtimes ??= reader.mtimes().catch(() => ({}));
+      let mtime = (await realmMtimes)[url.href];
       readerLog.warn(
-        `Response for ${url.href} has no 'last-modified' header; using the time it was read`,
+        `Response for ${url.href} has no 'last-modified' header; using ${
+          mtime != null
+            ? "the realm's modification time"
+            : 'the time it was read'
+        }`,
       );
-      lastModified = unixTime(Date.now());
+      lastModified = mtime ?? unixTime(Date.now());
     }
 
     let createdRfc7321 = response.headers.get('x-created');
@@ -703,7 +713,7 @@ export function getReader(
     await response.body?.cancel().catch(() => undefined);
   };
 
-  return {
+  let reader: Reader = {
     readFile: (url: URL) =>
       withRetries('readFile', url, async (watchdog, progress) => {
         let response = await fetchSource(url, watchdog, progress);
@@ -753,7 +763,7 @@ export function getReader(
           }
           throw err;
         }
-        let { lastModified, created, path } = parseResponseMetadata(
+        let { lastModified, created, path } = await parseResponseMetadata(
           response,
           url,
         );
@@ -803,7 +813,7 @@ export function getReader(
           stream = new Uint8Array();
         }
 
-        let { lastModified, created, path } = parseResponseMetadata(
+        let { lastModified, created, path } = await parseResponseMetadata(
           response,
           url,
         );
@@ -883,4 +893,5 @@ export function getReader(
       return mtimes;
     },
   };
+  return reader;
 }
