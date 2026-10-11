@@ -2360,8 +2360,11 @@ export type RequestContext = {
   // policy grants to. Identity, not authority, like `authenticatedUser`.
   realmAuthority?: true;
   // A token the public path verified without the checks above, which that
-  // path skips because nothing it serves reads them. `#sessionPrincipal`
-  // runs them, for a request that turns out to need a principal.
+  // path skips because nothing it serves turns on them. The one thing the
+  // token's identity decides there is whether a published realm's error keeps
+  // its stack (see `withholdsErrorStacks`), for which a signature the
+  // realm-server issued is enough. `#sessionPrincipal` runs the checks, for a
+  // request that turns out to need a principal.
   unvouchedSession?: {
     user: string;
     iat: number;

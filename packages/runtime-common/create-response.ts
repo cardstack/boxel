@@ -81,10 +81,13 @@ export function createResponse({
 
 // A server stack names the realm-server's internal file layout, functions and
 // dependency versions. A published realm is a public site, so its error
-// responses keep that only for a caller it can identify — a verified session,
-// such as a signed-in user or the prerender indexing the realm — and for its
-// own in-process dispatches. Everyone else (crawlers, link-preview bots,
-// scanners) gets the error without it. The withheld stack is not lost: an
+// responses keep that only for a caller it can identify — any session the
+// realm-server signed, such as a signed-in Boxel user or the prerender
+// indexing the realm — and for its own in-process dispatches. On a public
+// realm a token is checked only for its signature, so a session minted for
+// another realm, or one revoked but not yet expired, still counts: the line
+// is between Boxel accounts and everyone else. Everyone else (crawlers,
+// link-preview bots, scanners) gets the error without it. The withheld stack is not lost: an
 // errored card's is stored in its index entry, and a handler's unexpected
 // exception is logged by the router.
 export function withholdsErrorStacks(
