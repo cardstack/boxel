@@ -16,6 +16,7 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
+import { grantExpressionPreparations } from '@cardstack/runtime-common/card-operations/grant-expressions';
 import {
   setAnonymousRequestSink,
   type AnonymousRequestEvent,
@@ -434,6 +435,38 @@ module(basename(import.meta.filename), function (hooks) {
         },
         operation: 'read',
       },
+    );
+  });
+
+  test("a grant's blocklist and limit are prepared once and settled for every request", async function (assert) {
+    await setNewsroomConfig(limitOf(50));
+    assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    let before = grantExpressionPreparations();
+    for (let i = 0; i < 3; i++) {
+      assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    }
+    assert.strictEqual(
+      grantExpressionPreparations() - before,
+      0,
+      'the later reads prepare nothing',
+    );
+    assert.deepEqual(
+      articleRecords().map((r) => ({
+        outcome: r.outcome,
+        limit: r.limit,
+        count: r.count,
+      })),
+      [1, 2, 3, 4].map((count) => ({
+        outcome: 'admitted' as const,
+        limit: {
+          requests: 50,
+          windowSeconds: 600,
+          requestsFrom: 'grant' as const,
+          windowSecondsFrom: 'grant' as const,
+        },
+        count,
+      })),
+      "every read is counted against the grant's own limit",
     );
   });
 

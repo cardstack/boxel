@@ -19,6 +19,7 @@ import {
 import {
   blocklistCloses,
   compileGrantExpression,
+  grantExpressionPreparations,
   readBlocklist,
   readRateLimitPart,
   settleTraffic,
@@ -432,6 +433,62 @@ module(basename(import.meta.filename), function () {
         requestsFrom: 'grant',
         windowSecondsFrom: 'grant',
       });
+    });
+
+    test('a grant expression is prepared once, and reads its context afresh each time', async function (assert) {
+      let grant = {
+        blocklist: compiled('blocklist', 'realmConfig("blockedIps")'),
+        rateLimitRequests: compiled('rateLimitRequests', 'policy("requests")'),
+        rateLimitWindowSeconds: compiled('rateLimitWindowSeconds', '600'),
+      };
+      let before = grantExpressionPreparations();
+      let settled = [];
+      for (let requests of [5, 6, 7]) {
+        settled.push(
+          await settleTraffic(
+            grant,
+            {
+              realmConfig: { blockedIps: `192.0.2.${requests}` },
+              policy: { requests },
+            },
+            PLATFORM,
+          ),
+        );
+      }
+      assert.strictEqual(
+        grantExpressionPreparations() - before,
+        3,
+        'one preparation for each expression',
+      );
+      assert.deepEqual(
+        settled.map((traffic) => traffic.limit.requests),
+        [5, 6, 7],
+        'each settlement reads its own policy',
+      );
+      assert.deepEqual(
+        settled.map((traffic) => blocksAddress(traffic, '192.0.2.6')),
+        [false, true, false],
+        'and its own realm config',
+      );
+
+      let failing = compiled('blocklist', 'realmConfig("blockedIps")');
+      let beforeFailing = grantExpressionPreparations();
+      await settleTraffic(
+        { blocklist: failing },
+        { realmConfig: {} },
+        PLATFORM,
+      );
+      let fixed = await settleTraffic(
+        { blocklist: failing },
+        { realmConfig: { blockedIps: CALLER } },
+        PLATFORM,
+      );
+      assert.strictEqual(
+        grantExpressionPreparations() - beforeFailing,
+        1,
+        'an expression that throws on its values is still prepared once',
+      );
+      assert.true(blocksAddress(fixed, CALLER), 'and settles once they change');
     });
 
     test('a rate-limit expression that produces no limit leaves that half to the platform', async function (assert) {
