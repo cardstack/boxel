@@ -2275,8 +2275,9 @@ interface Options {
   fullIndexOnStartup?: true;
   // The realm is a published snapshot of a source realm, served to the public
   // as a site. Nobody authors in it, so an error it answers a caller it cannot
-  // identify carries no server stack (see `createResponse`), and a crawler's
-  // `/robots.txt` gets a default answer when the realm holds none.
+  // identify carries no server stack (see `withholdsErrorStacks`), and, at a
+  // host's root, a crawler's `/robots.txt` gets a default answer when the
+  // realm holds none.
   published?: true;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
@@ -8573,8 +8574,12 @@ export class Realm {
           // Every crawler asks a site for its robots.txt, so a published realm
           // that holds none answers with rules allowing everything — what a
           // crawler assumes of a 404 anyway — rather than an error document.
+          // Crawlers only ask at a host's root, so only a realm mounted there
+          // answers it; under a path the file would be one no crawler reads.
           response =
-            this.#published && localPath === 'robots.txt'
+            this.#published &&
+            localPath === 'robots.txt' &&
+            new URL(this.url).pathname === '/'
               ? createResponse({
                   body: DEFAULT_PUBLISHED_ROBOTS_TXT,
                   init: {

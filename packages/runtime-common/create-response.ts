@@ -1,7 +1,4 @@
-import { logger } from './log.ts';
 import type { RequestContext } from './realm.ts';
-
-const log = logger('realm:error-stacks');
 
 interface CreateResponseArgs {
   body?: BodyInit | null | undefined;
@@ -40,8 +37,8 @@ export function createResponse({
   varyOn,
 }: CreateResponseArgs): Response {
   let varyMembers = [...(varyOnAccept ? ['Accept'] : []), ...(varyOn ?? [])];
-  if (withholdsErrorStacks(init, requestContext)) {
-    body = withoutErrorStacks(body, init, requestContext);
+  if (withholdsErrorStacks(init?.status ?? 200, requestContext)) {
+    body = withoutErrorStacks(body);
   }
   return new Response(body, {
     ...init,
@@ -84,26 +81,26 @@ export function createResponse({
 
 // A server stack names the realm-server's internal file layout, functions and
 // dependency versions. A published realm is a public site, so its error
-// documents keep that only for a caller it can identify — a verified session,
+// responses keep that only for a caller it can identify — a verified session,
 // such as a signed-in user or the prerender indexing the realm — and for its
 // own in-process dispatches. Everyone else (crawlers, link-preview bots,
-// scanners) gets the error without it.
-function withholdsErrorStacks(
-  init: ResponseInit | undefined,
+// scanners) gets the error without it. The withheld stack is not lost: an
+// errored card's is stored in its index entry, and a handler's unexpected
+// exception is logged by the router.
+export function withholdsErrorStacks(
+  status: number,
   requestContext: RequestContext,
 ): boolean {
   return (
     requestContext.realm.isPublished === true &&
     !requestContext.realmInternal &&
     requestContext.authenticatedUser === undefined &&
-    (init?.status ?? 200) >= 400
+    status >= 400
   );
 }
 
 function withoutErrorStacks(
   body: BodyInit | null | undefined,
-  init: ResponseInit | undefined,
-  requestContext: RequestContext,
 ): BodyInit | null | undefined {
   if (typeof body !== 'string') {
     return body;
@@ -121,43 +118,33 @@ function withoutErrorStacks(
   ) {
     return body;
   }
-  let stacks: string[] = [];
-  removeStacks((doc as { errors: unknown[] }).errors, stacks);
-  if (stacks.length === 0) {
-    return body;
-  }
-  // A 4xx stack only says where the refusal was raised. A 5xx stack is the
-  // diagnosis, and the response no longer carries it, so it is logged.
-  let status = init?.status ?? 200;
-  if (status >= 500) {
-    log.error(
-      `${status} from ${requestContext.realm.url} answered without its stack:\n${stacks.join('\n\n')}`,
-    );
-  }
-  return JSON.stringify(doc);
+  return removeStacks((doc as { errors: unknown[] }).errors)
+    ? JSON.stringify(doc)
+    : body;
 }
 
 // Error documents nest stacks at several depths — the error itself, its
 // `meta`, each of its `additionalErrors` — so every `stack` key in the tree
-// goes.
-function removeStacks(value: unknown, stacks: string[]): void {
+// goes. Answers whether any was there.
+function removeStacks(value: unknown): boolean {
   if (Array.isArray(value)) {
+    let removed = false;
     for (let item of value) {
-      removeStacks(item, stacks);
+      removed = removeStacks(item) || removed;
     }
-    return;
+    return removed;
   }
   if (!value || typeof value !== 'object') {
-    return;
+    return false;
   }
   let record = value as Record<string, unknown>;
+  let removed = false;
   if ('stack' in record) {
-    if (typeof record.stack === 'string') {
-      stacks.push(record.stack);
-    }
     delete record.stack;
+    removed = true;
   }
   for (let child of Object.values(record)) {
-    removeStacks(child, stacks);
+    removed = removeStacks(child) || removed;
   }
+  return removed;
 }
