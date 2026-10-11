@@ -1044,6 +1044,11 @@ module(basename(import.meta.filename), function (hooks) {
         3,
         'the throwing predicate was evaluated each time',
       );
+      assert.strictEqual(
+        education.__testOnlyPolicyPredicatePreparations(),
+        1,
+        'and prepared once',
+      );
     });
 
     test('a policy the realm cannot load is a 500, whether the target exists or not', async function (assert) {
