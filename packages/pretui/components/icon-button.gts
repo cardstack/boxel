@@ -44,7 +44,8 @@ export class IconButton extends Component<IconButtonSignature> {
     return resolveBusy(this.args);
   }
   // aria-label replaces the content as the name, so Button's busy text never
-  // reaches it; the busy label joins the name here instead.
+  // reaches it; the busy label joins the name here instead, and still goes
+  // to Button, which shows it when the button is wide enough.
   get accessibleName() {
     let { label, busyLabel, href } = this.args;
     return this.busy && busyLabel && !href ? `${label} ${busyLabel}` : label;
@@ -69,6 +70,7 @@ export class IconButton extends Component<IconButtonSignature> {
       @shape={{@shape}}
       @href={{@href}}
       @busy={{this.busy}}
+      @busyLabel={{@busyLabel}}
       class='pretui-iconbtn'
       aria-label={{this.accessibleName}}
       aria-pressed={{this.ariaPressed}}

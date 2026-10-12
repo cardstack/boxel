@@ -121,6 +121,7 @@ module('Pretui | components/icon-button', function (hooks) {
     assert.strictEqual(busy.getAttribute('aria-disabled'), 'true');
     assert.false(busy.disabled, 'stays in the tab order');
     assert.strictEqual(busy.getAttribute('aria-label'), 'Save Saving');
+    assert.strictEqual(busy.querySelector('[data-test-pretui-button-busy-label]')?.textContent, 'Saving', 'forwarded to Button, which shows it given the room');
     assert.strictEqual(
       busy.getAttribute('title'),
       'Save',

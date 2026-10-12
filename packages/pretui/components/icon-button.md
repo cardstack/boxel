@@ -15,7 +15,7 @@ A square **Button** carrying an icon instead of text, with a mandatory label. Us
 @href?: string   (renders an <a>; @busy and @pressed do not apply)
 @pressed?: boolean   (toggle state as aria-pressed; leave undefined for a plain action)
 @busy?, @loading?, @isLoading?, @isPending?   (forwarded to Button)
-@busyLabel?: string   (added after @label in the accessible name while busy)
+@busyLabel?: string   (added after @label in the accessible name while busy; forwarded to Button, which shows it when the button is wide enough)
 @disabled?, @isDisabled?
 <:default>   — the icon, when it is not passed as @icon
 Element: HTMLButtonElement | HTMLAnchorElement

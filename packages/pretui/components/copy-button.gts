@@ -109,8 +109,11 @@ export class CopyButton extends Component<CopyButtonSignature> {
     if (text == null) {
       return;
     }
-    // a repeat copy clears the region first, so the result is announced again
+    // a repeat copy clears the region first, so the result is announced
+    // again, and disarms the last result's reset so the glyph holds until
+    // this one settles
     let attempt = ++this.attempt;
+    this.clearResetTimer();
     this.announced = 'idle';
     // absent outside a secure context, and writeText can throw synchronously
     let write: Promise<void>;
@@ -134,7 +137,6 @@ export class CopyButton extends Component<CopyButtonSignature> {
     );
   };
   reset = () => {
-    this.attempt++;
     this.clearResetTimer();
     this.state = 'idle';
     this.announced = 'idle';

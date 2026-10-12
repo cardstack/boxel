@@ -159,6 +159,27 @@ module('Pretui | components/copy-button', function (hooks) {
     }
   });
 
+  test('CopyButton lets a retry settle after the earlier result would have cleared', async function (assert) {
+    let { restore, resolve } = stubClipboard([], { pending: true });
+    try {
+      await render(<template><CopyButton @text='SKU-8812' /></template>);
+      await click('[data-test-pretui-copy-button]');
+      resolve();
+      await settled();
+      let btn = q('[data-test-pretui-copy-button]');
+      assert.strictEqual(btn.dataset['state'], 'copied');
+
+      await click('[data-test-pretui-copy-button]');
+      await new Promise((r) => setTimeout(r, RESET_MS + 50));
+      assert.strictEqual(btn.dataset['state'], 'copied', 'the first result\'s timer was disarmed by the retry');
+      resolve();
+      await settled();
+      assert.strictEqual(q('[data-test-pretui-copy-button-status]').textContent, 'Copied', 'the retry still lands');
+    } finally {
+      restore();
+    }
+  });
+
   test('CopyButton clears the result by itself when nothing else resets it', async function (assert) {
     let { restore } = stubClipboard([]);
     try {
