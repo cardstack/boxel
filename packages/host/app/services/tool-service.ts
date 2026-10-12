@@ -997,7 +997,13 @@ export default class ToolService extends Service {
           : e instanceof Error
             ? e
             : new Error('Tool call failed.');
-      console.error(error);
+      // The message and stack go in as strings: test runners that capture the
+      // browser console render a bare Error argument as "[object Object]".
+      console.error(
+        `tool call ${command.name} (${commandRequestId}) failed ${
+          didExecute ? 'after' : 'before'
+        } executing: ${error.message}\n${error.stack ?? ''}`,
+      );
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       if (didExecute) {
         // The tool's side effects landed; only post-execution bookkeeping

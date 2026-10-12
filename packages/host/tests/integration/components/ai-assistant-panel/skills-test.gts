@@ -28,6 +28,8 @@ import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -95,6 +97,39 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   let { getRoomState, getRoomEvents, simulateRemoteMessage } = mockMatrixUtils;
 
   let noop = () => {};
+
+  // Applying a tool call can keep running after the click's settled():
+  // executing the tool awaits work no test waiter tracks, and the room's
+  // skills are re-uploaded only once it finishes. The tool's result event is
+  // sent after that re-upload, so waiting for it on the mock homeserver is
+  // what makes the room state safe to read. A result other than "applied"
+  // fails with the reason the tool gave.
+  async function waitForToolResult(
+    assert: Assert,
+    roomId: string,
+    toolCallId: string,
+  ) {
+    let findResult = () =>
+      getRoomEvents(roomId).find(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.rel_type ===
+            APP_BOXEL_TOOL_RESULT_REL_TYPE &&
+          event.content.commandRequestId === toolCallId,
+      );
+    await waitUntil(() => findResult(), {
+      timeout: 10_000,
+      timeoutMessage: `no result event for tool call ${toolCallId} in ${roomId}`,
+    });
+    let result = findResult()!;
+    assert.strictEqual(
+      result.content['m.relates_to']?.key,
+      'applied',
+      `tool call ${toolCallId} applied (failure reason: ${
+        result.content.failureReason ?? 'none'
+      })`,
+    );
+  }
 
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
@@ -986,6 +1021,7 @@ Instructions live in the markdown body.
     await click('[data-test-edit-button]');
     await click('[data-test-close-button]');
 
+    let toolCallId = '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -993,7 +1029,7 @@ Instructions live in the markdown body.
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          id: toolCallId,
           name: exampleSkillToolName,
           arguments: JSON.stringify({
             attributes: {
@@ -1011,6 +1047,7 @@ Instructions live in the markdown body.
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitForToolResult(assert, roomId, toolCallId);
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
