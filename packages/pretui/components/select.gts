@@ -209,7 +209,7 @@ class SelectSearch extends Component<SelectSearchSignature> {
 
         position: absolute;
         /* the box's padding, then the input's */
-        inset-inline-start: calc(var(--boxel-sp-xs) * 2);
+        inset-inline-start: calc(var(--boxel-sp-xs) + var(--_select-px));
         top: 50%;
         translate: 0 -50%;
         pointer-events: none;
@@ -217,7 +217,8 @@ class SelectSearch extends Component<SelectSearchSignature> {
       /* unlayered on purpose: BoxelSelect's dropdown rules are layered and
          set the input's padding; this makes room for the icon */
       .pretui-selectsearch .ember-power-select-search-input {
-        padding-inline-start: calc(var(--boxel-sp-xs) * 2 + 1rem);
+        padding-inline-start: calc(var(--_select-px) + 1rem + var(--boxel-sp-2xs));
+        padding-inline-end: var(--_select-px);
       }
     </style>
   </template>
@@ -362,10 +363,14 @@ export class Select extends Component<SelectSignature> {
         background-color: var(--field);
         color: var(--foreground);
       }
+      /* the trigger's type; the dropdown rule below repeats it, since the
+         wormhole is outside this subtree */
       .pretui-selectwrap :deep(.boxel-trigger) {
         width: 100%;
         font-family: inherit;
         font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .pretui-selectwrap :deep(.boxel-trigger-content) {
         min-width: 0;
@@ -377,6 +382,8 @@ export class Select extends Component<SelectSignature> {
         color: var(--muted-foreground);
         font-family: inherit;
         font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
         --icon-color: var(--muted-foreground);
@@ -387,11 +394,29 @@ export class Select extends Component<SelectSignature> {
     {{! template-lint-disable require-scoped-style }}
     <style>
       /* Unscoped: the dropdown renders in the wormhole, outside this
-         component's subtree, and BoxelSelect has no font-size knob for it.
-         The options and the search box take the trigger's size. */
+         component's subtree, and BoxelSelect has no knobs for its type or
+         row metrics. The options and the search box take the trigger's
+         type, inline padding and height. */
+      .pretui-select-dropdown.ember-power-select-dropdown {
+        /* the trigger's padding and default height, restated: the wrapper's
+           knobs do not reach the wormhole */
+        --_select-px: 0.625rem;
+        --_select-h: 1.75rem;
+      }
       .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
       .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
         font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+        min-height: var(--_select-h);
+        padding-block: 0;
+        padding-inline: var(--_select-px);
+      }
+      .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+        min-height: var(--_select-h);
+        padding-block: 0;
       }
     </style>
     {{! template-lint-enable require-scoped-style }}
