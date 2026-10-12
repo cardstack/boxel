@@ -402,6 +402,9 @@ export class Select extends Component<SelectSignature> {
            knobs do not reach the wormhole */
         --_select-px: 0.625rem;
         --_select-h: 1.75rem;
+        /* the list matches the trigger's width as a floor, never a ceiling:
+           a trigger sized to a short value must not clip the other labels */
+        min-width: max-content;
       }
       .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
       .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
