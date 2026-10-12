@@ -1461,8 +1461,12 @@ async function firstHolding(
   let actor = scope.caller.kind === 'user' ? scope.caller.actor : undefined;
   // A predicate that throws is a fault in the policy, but another grant can
   // still hold. Grants union, so the fault is reported only when none does,
-  // and the answer is the same whatever order the grants are in.
+  // and the answer is the same whatever order the grants are in. A failure to
+  // evaluate a predicate at all is the gate's own, and is raised on the same
+  // terms: only when no grant holds, and ahead of a predicate's fault, since
+  // the grant it left unjudged might have held.
   let threw = false;
+  let failed: { error: unknown } | undefined;
   for (let candidate of grants) {
     let where = candidate.grant.where;
     if (!where) {
@@ -1481,9 +1485,15 @@ async function firstHolding(
     // no index row to read: nothing says what its computed or linked values
     // are.
     let judged = where.snapshot ? await subject.snapshot?.() : subject;
-    let outcome = judged
-      ? await evaluate(core, candidate, where, judged, actor)
-      : 'fails';
+    let outcome: Awaited<ReturnType<typeof evaluate>>;
+    try {
+      outcome = judged
+        ? await evaluate(core, candidate, where, judged, actor)
+        : 'fails';
+    } catch (error: unknown) {
+      failed ??= { error };
+      continue;
+    }
     notes?.evaluated(where, performance.now() - started);
     let said: GateTraceOutcome =
       outcome === 'holds'
@@ -1513,6 +1523,9 @@ async function firstHolding(
       return candidate;
     }
     threw ||= outcome === 'threw';
+  }
+  if (failed) {
+    throw failed.error;
   }
   return threw ? GATE_FAULTED : GATE_REFUSED;
 }

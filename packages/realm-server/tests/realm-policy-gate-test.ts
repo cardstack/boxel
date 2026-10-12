@@ -1056,6 +1056,10 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a realm whose settings cannot be read fails the gate, and no predicate is blamed for it', async function (assert) {
       const ADA = `${EDUCATION}students/ada`;
+      const BEN = `${EDUCATION}students/ben`;
+      // The first grant reads the realm's settings. The second admits an
+      // honors student without reading them, so Ada is admitted by it alone
+      // once the settings cannot be read, and Ben by nothing.
       await org.write(
         'policies/configured.json',
         policyCard([
@@ -1067,6 +1071,7 @@ module(basename(import.meta.filename), function (hooks) {
                 operation: 'read',
                 where: 'realmConfig("approver") == actor()',
               },
+              { operation: 'read', where: '.standing == "honors"' },
             ],
           },
         ]),
@@ -1082,9 +1087,9 @@ module(basename(import.meta.filename), function (hooks) {
       );
       await education.indexing();
       assert.strictEqual(
-        (await getCard(ADA, AUTH.teacher())).status,
+        (await getCard(BEN, AUTH.teacher())).status,
         200,
-        'the predicate holds while the settings can be read',
+        'the predicate that reads the settings holds while they can be read',
       );
 
       let decisions: PolicyDecisionEvent[] = [];
@@ -1095,17 +1100,17 @@ module(basename(import.meta.filename), function (hooks) {
       setPolicyDecisionSink((event) => decisions.push(event));
       let card!: Response;
       let batch!: Response;
-      let unaffected!: Response;
+      let admitted!: Response;
       let warnings: string[];
       try {
         warnings = await policyWarningsDuring(async () => {
-          card = await getCard(ADA, AUTH.teacher());
+          card = await getCard(BEN, AUTH.teacher());
           batch = await operations(
             EDUCATION,
             AUTH.teacher(),
-            invoke('read', { href: ADA }),
+            invoke('read', { href: BEN }),
           );
-          unaffected = await getCard(ROOM_206, AUTH.teacher());
+          admitted = await getCard(ADA, AUTH.teacher());
         });
       } finally {
         setPolicyDecisionSink(undefined);
@@ -1120,9 +1125,9 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(batch.status, 500, 'as is an envelope read');
       assert.strictEqual(errorOf(batch).code, 'internal-error');
       assert.strictEqual(
-        unaffected.status,
+        admitted.status,
         200,
-        'a predicate that does not read the settings still holds',
+        'a later grant that holds still admits, as grants union',
       );
       assert.deepEqual(
         warnings.filter((line) => line.includes('threw while deciding')),
@@ -1132,11 +1137,15 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         decisions
           .filter((decision) => decision.operation === 'read')
-          .map(({ outcome, reason }) => ({ outcome, reason })),
+          .map(({ outcome, reason, grant }) => ({ outcome, reason, grant })),
         [
-          { outcome: 'error', reason: 'gate-failed' },
-          { outcome: 'error', reason: 'gate-failed' },
-          { outcome: 'allow', reason: 'granted' },
+          { outcome: 'error', reason: 'gate-failed', grant: null },
+          { outcome: 'error', reason: 'gate-failed', grant: null },
+          {
+            outcome: 'allow',
+            reason: 'granted',
+            grant: `rules[${RULES.length}].grants[1]`,
+          },
         ],
         'each decision records the gate failing, not a predicate throwing',
       );
