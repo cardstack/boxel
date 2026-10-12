@@ -1,17 +1,26 @@
 /**
- * The In place demo: a record read, then written.
+ * The Inline Edit demo: a record read, then written.
  *
  * The cases here exist because of bugs the eye caught and the first
  * assertions did not, and they are all about the same thing — the type is
  * not laid out by the browser, so the assertions have to check the numbers
  * the demo computed rather than trusting that flow got it right.
  */
-import { setupChoreo } from '@cardstack/choreo/test-support';
-import { click, fillIn, find, render } from '@ember/test-helpers';
+import { click, fillIn, find } from '@ember/test-helpers';
+
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
-import { InlineEdit } from 'test-app/components/examples/inline-edit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+
+import {
+  frames,
+  setupChoreoGalleryTest,
+  setupStageViewport,
+} from '../helpers/choreo-gallery-stage';
+
+import type { ComponentLike } from '@glint/template';
+
+let gallery: ReturnType<typeof setupChoreoGalleryTest>;
+let InlineEdit: ComponentLike;
 
 const card = () => find('.ie-card') as HTMLElement;
 const mode = () => card().dataset['mode'];
@@ -30,9 +39,8 @@ const words = (key: string) => [
  * The type is no longer inside the platter it belongs to — it is a layer
  * over the whole card — so the only frame both layers share is the card's.
  * And `getBoundingClientRect` includes every transform above the element,
- * while QUnit scales `#ember-testing` by half, so a word the demo places at
- * 12 measures 6. The fixture's scale comes back out of the card, which knows
- * its own width in both spaces.
+ * so any scale on the test container comes back out of the card, which
+ * knows its own width in both spaces.
  */
 const scale = () => card().getBoundingClientRect().width / card().offsetWidth;
 
@@ -52,55 +60,59 @@ const wordX = (key: string) => words(key).map((el) => round(left(el)));
  */
 const controlTextX = (key: string) =>
   [...field(key).querySelectorAll<HTMLElement>('.pt-input')].map((el) =>
-    round(left(el) + parseFloat(getComputedStyle(el).paddingLeft))
+    round(left(el) + parseFloat(getComputedStyle(el).paddingLeft)),
   );
 
-module('Integration | inline edit', function (hooks) {
-  setupRenderingTest(hooks);
-  setupChoreo(hooks);
+module('Integration | Choreo gallery | inline edit', function (hooks) {
+  gallery = setupChoreoGalleryTest(hooks);
+  setupStageViewport(hooks);
+
+  hooks.beforeEach(async function () {
+    InlineEdit = await gallery.stage('inline-edit', 'InlineEdit');
+  });
 
   test('the record reads as a string and writes as real fields', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
 
     assert.strictEqual(mode(), 'view', 'it opens on the reading view');
     assert.strictEqual(
       find('.ie-value[data-value="name"]')?.textContent?.trim(),
       'Marguerite Villanueva',
-      'the reading view is an ordinary string in ordinary flow'
+      'the reading view is an ordinary string in ordinary flow',
     );
-    assert.notOk(
-      find('.pt-input'),
-      'and there is no form control anywhere in it'
-    );
+    assert
+      .dom('.pt-input')
+      .doesNotExist('and there is no form control anywhere in it');
 
     await toggle();
     await animationsSettled();
 
     assert.strictEqual(mode(), 'edit', 'the toggle opens the form');
-    assert.notOk(
-      find('.ie-value'),
-      'the reading string is gone — these are not two skins of one element'
-    );
+    assert
+      .dom('.ie-value')
+      .doesNotExist(
+        'the reading string is gone — these are not two skins of one element',
+      );
 
     // the point of copying pretui's field shapes in: real controls, real
     // types. An email input is the mobile keyboard and the autofill
     // category, neither of which a text input with a placeholder gives you.
     const name = find('.ie-plate[data-field="name"] input') as HTMLInputElement;
     const email = find(
-      '.ie-plate[data-field="email"] input'
+      '.ie-plate[data-field="email"] input',
     ) as HTMLInputElement;
     assert.strictEqual(name.type, 'text', 'the name is a text input');
     assert.strictEqual(email.type, 'email', 'the email is an email input');
     assert.strictEqual(
       email.autocomplete,
       'email',
-      'and carries the autofill category that makes that worth doing'
+      'and carries the autofill category that makes that worth doing',
     );
     assert.strictEqual(
       controlTextX('dob').length,
       3,
-      'the date is segmented — day, month and year, each its own control'
+      'the date is segmented — day, month and year, each its own control',
     );
   });
 
@@ -114,7 +126,7 @@ module('Integration | inline edit', function (hooks) {
    * in a still frame, which is exactly why this is a test.
    */
   test('every word lands exactly where its control paints', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     await toggle();
     await animationsSettled();
@@ -125,23 +137,24 @@ module('Integration | inline edit', function (hooks) {
       assert.strictEqual(
         wordX(key)[0],
         controlTextX(key)[0],
-        `${key}'s first word lands exactly where its control paints`
+        `${key}'s first word lands exactly where its control paints`,
       );
     }
 
     assert.deepEqual(
       wordX('dob'),
       controlTextX('dob'),
-      'and every date word lands on its own segment, to the pixel'
+      'and every date word lands on its own segment, to the pixel',
     );
 
     // three separate origins, not one flowed line — and the gaps between
     // them are the measured chip widths, which is what `controlTextX` above
     // has already pinned them to
     const [day, month, year] = wordX('dob');
+    const inOrder = day! < month! && month! < year!;
     assert.ok(
-      day! < month! && month! < year!,
-      `the date lands on three segments in order (${wordX('dob')})`
+      inOrder,
+      `the date lands on three segments in order (${wordX('dob')})`,
     );
   });
 
@@ -160,7 +173,7 @@ module('Integration | inline edit', function (hooks) {
    * pixel high.
    */
   test('the flight and the real text are the same text, to the pixel', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     // a round trip first: the score owns size, weight and tracking, so a
     // word has none of them until a pass has run
@@ -178,7 +191,7 @@ module('Integration | inline edit', function (hooks) {
 
     for (const key of ['name', 'email', 'dob']) {
       const real = glyphs(
-        find(`.ie-value[data-value="${key}"]`) as HTMLElement
+        find(`.ie-value[data-value="${key}"]`) as HTMLElement,
       );
       const flown = glyphs(words(key)[0]!);
       assert.deepEqual(
@@ -188,7 +201,7 @@ module('Integration | inline edit', function (hooks) {
           Math.round(flown.width - real.width),
         ],
         [0, 0, 0],
-        `${key} flies as the same text it lands as`
+        `${key} flies as the same text it lands as`,
       );
     }
   });
@@ -205,7 +218,7 @@ module('Integration | inline edit', function (hooks) {
    * model is what regressed.
    */
   test('a line moves as a line, not as three words', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
 
     const start = wordX('dob');
@@ -213,7 +226,7 @@ module('Integration | inline edit', function (hooks) {
 
     const samples: number[][] = [];
     for (let i = 0; i < 6; i++) {
-      await new Promise((go) => requestAnimationFrame(go));
+      await frames(0);
       samples.push(wordX('dob'));
     }
     await animationsSettled();
@@ -224,14 +237,15 @@ module('Integration | inline edit', function (hooks) {
       assert.deepEqual(
         [...sample].sort((a, b) => a - b),
         sample,
-        `the words never cross each other (${JSON.stringify(sample)})`
+        `the words never cross each other (${JSON.stringify(sample)})`,
       );
       sample.forEach((x, index) => {
         const low = Math.min(start[index]!, end[index]!) - 0.5;
         const high = Math.max(start[index]!, end[index]!) + 0.5;
+        const between = x >= low && x <= high;
         assert.ok(
-          x >= low && x <= high,
-          `word ${index} stays between its two poses (${x} in ${low}..${high})`
+          between,
+          `word ${index} stays between its two poses (${x} in ${low}..${high})`,
         );
       });
     }
@@ -250,7 +264,7 @@ module('Integration | inline edit', function (hooks) {
    * going.
    */
   test('the type is never missing on the way into the form', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
 
     const faint = () =>
@@ -261,11 +275,11 @@ module('Integration | inline edit', function (hooks) {
 
     await click('[data-test-toggle]');
     for (let i = 0; i < 6; i++) {
-      await new Promise((go) => requestAnimationFrame(go));
+      await frames(0);
       assert.deepEqual(
         faint(),
         [],
-        'every word is at full strength from the first frame in'
+        'every word is at full strength from the first frame in',
       );
     }
     await animationsSettled();
@@ -281,14 +295,14 @@ module('Integration | inline edit', function (hooks) {
    * any other box.
    */
   test('the card tweens its height rather than snapping', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     const start = card().offsetHeight;
 
     await click('[data-test-toggle]');
     let played = 0;
     for (let i = 0; i < 6; i++) {
-      await new Promise((go) => requestAnimationFrame(go));
+      await frames(0);
       if (/height|transform/.test(card().getAttribute('style') ?? '')) {
         played++;
       }
@@ -298,11 +312,11 @@ module('Integration | inline edit', function (hooks) {
     assert.notEqual(
       start,
       card().offsetHeight,
-      'the card is a different height in the two poses'
+      'the card is a different height in the two poses',
     );
     assert.ok(
       played >= 2,
-      `and its box was the move's for more than one frame (${played})`
+      `and its box was the move's for more than one frame (${played})`,
     );
   });
 
@@ -315,7 +329,7 @@ module('Integration | inline edit', function (hooks) {
    * the year and the next stop is the button that commits.
    */
   test('Done is the last stop after the form', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     await toggle();
     await animationsSettled();
@@ -323,11 +337,11 @@ module('Integration | inline edit', function (hooks) {
     assert.deepEqual(
       [
         ...(find('.ie-card') as HTMLElement).querySelectorAll<HTMLElement>(
-          'input, select, button'
+          'input, select, button',
         ),
       ].map((el) => el.getAttribute('aria-label') ?? el.className),
       ['Name', 'Job title', 'Email', 'Day', 'Month', 'Year', 'ie-toggle'],
-      'the form in order, and the commit at the end of it'
+      'the form in order, and the commit at the end of it',
     );
   });
 
@@ -344,7 +358,7 @@ module('Integration | inline edit', function (hooks) {
    * changes inside the region, where a change is a pass.
    */
   test('the platters tween their geometry rather than snapping', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
 
     await click('[data-test-toggle]');
@@ -354,7 +368,7 @@ module('Integration | inline edit', function (hooks) {
     // playing, the library owns the platter's box and says so inline.
     let played = 0;
     for (let i = 0; i < 6; i++) {
-      await new Promise((go) => requestAnimationFrame(go));
+      await frames(0);
       if (/height|transform/.test(field('dob').getAttribute('style') ?? '')) {
         played++;
       }
@@ -363,7 +377,7 @@ module('Integration | inline edit', function (hooks) {
 
     assert.ok(
       played >= 2,
-      `the platter's box was the move's for more than one frame (${played})`
+      `the platter's box was the move's for more than one frame (${played})`,
     );
   });
 
@@ -377,7 +391,7 @@ module('Integration | inline edit', function (hooks) {
    * rather than as the form coming apart.
    */
   test('the form fades as it leaves, rather than blinking off', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     await toggle();
     await animationsSettled();
@@ -390,7 +404,7 @@ module('Integration | inline edit', function (hooks) {
     await click('[data-test-toggle]');
     const samples: number[][] = [];
     for (let i = 0; i < 6; i++) {
-      await new Promise((go) => requestAnimationFrame(go));
+      await frames(0);
       const shot = leaving();
       if (shot.length) {
         samples.push(shot);
@@ -400,7 +414,7 @@ module('Integration | inline edit', function (hooks) {
     assert.ok(samples.length >= 2, 'the form was caught on its way out');
     assert.ok(
       Math.min(...samples[samples.length - 1]!) < Math.max(...samples[0]!),
-      `it is fading (${JSON.stringify(samples)})`
+      `it is fading (${JSON.stringify(samples)})`,
     );
     await animationsSettled();
   });
@@ -413,10 +427,10 @@ module('Integration | inline edit', function (hooks) {
    * the outline stood at its form geometry, full width, while the type was
    * still laid out for a card. They are one box now, which is what makes
    * this assertion true by construction rather than by tuning: the outline
-   * IS the platter's border, and everything a field holds is inside it.
+   * IS the platter's border, and everything a field between is inside it.
    */
-  test('nothing a field holds is ever outside its platter', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+  test('nothing a field between is ever outside its platter', async function (assert) {
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     await toggle();
     await animationsSettled();
@@ -426,7 +440,7 @@ module('Integration | inline edit', function (hooks) {
       for (const key of ['name', 'email', 'dob']) {
         const platter = field(key).getBoundingClientRect();
         for (const el of field(key).querySelectorAll<HTMLElement>(
-          '.pt-input, .pt-date'
+          '.pt-input, .pt-date',
         )) {
           const box = el.getBoundingClientRect();
           if (
@@ -446,7 +460,7 @@ module('Integration | inline edit', function (hooks) {
 
     await click('[data-test-toggle]');
     for (let i = 0; i < 6; i++) {
-      await new Promise((go) => requestAnimationFrame(go));
+      await frames(0);
       assert.deepEqual(escapes(), [], 'nor at any frame of the flight');
     }
     await animationsSettled();
@@ -464,7 +478,7 @@ module('Integration | inline edit', function (hooks) {
    * clearly said otherwise. Nothing in the library writes `visibility`.
    */
   test('exactly one copy of a value is on screen at rest', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
 
     const shown = () =>
@@ -480,13 +494,13 @@ module('Integration | inline edit', function (hooks) {
     assert.strictEqual(shown(), 0, 'nothing over the form controls');
     assert.notOk(
       (find('.ie') as HTMLElement).dataset['flying'],
-      'and the arming has stood down once the pass has settled'
+      'and the arming has stood down once the pass has settled',
     );
   });
 
   /** the card is a card at both ends: the form is taller, and that is all */
   test('the card changes height and nothing else drifts', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     const box = () => ({
       height: card().offsetHeight,
@@ -502,17 +516,17 @@ module('Integration | inline edit', function (hooks) {
     assert.strictEqual(after.width, before.width, 'the card keeps its width');
     assert.ok(
       after.height > before.height + 20,
-      `the form is meaningfully taller (${before.height} to ${after.height})`
+      `the form is meaningfully taller (${before.height} to ${after.height})`,
     );
     assert.strictEqual(
       after.top,
       before.top,
-      'and grows downward from a pinned top edge, so nothing above it drifts'
+      'and grows downward from a pinned top edge, so nothing above it drifts',
     );
   });
 
   test('what was typed is what is read back', async function (assert) {
-    await render(<template><InlineEdit /></template>);
+    await gallery.renderStage(InlineEdit);
     await animationsSettled();
     await toggle();
     await animationsSettled();
@@ -524,12 +538,12 @@ module('Integration | inline edit', function (hooks) {
     assert.strictEqual(
       find('.ie-value[data-value="name"]')?.textContent?.trim(),
       'Margarethe Vela',
-      'the reading view shows what the input was given'
+      'the reading view shows what the input was given',
     );
     assert.deepEqual(
       words('name').map((el) => el.textContent?.trim()),
       ['Margarethe', 'Vela'],
-      'and the flight was re-planned for the new words'
+      'and the flight was re-planned for the new words',
     );
   });
 });

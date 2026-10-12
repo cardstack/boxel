@@ -1,7 +1,7 @@
 /**
  * The car, before there is a car to look at.
  *
- * `docs/drift.md` argues that the driving loop is not a Choreo score and has to
+ * The Drift design note argues that the driving loop is not a Choreo score and has to
  * be written by hand. The corollary is that nothing else in the repo is
  * checking it: no region compiles it, no changeset covers it, and a bug in it
  * looks exactly like a car that needs tuning. So the model gets its own tests,
@@ -9,26 +9,59 @@
  * numbers in the panel do what their labels say, and that the car can drift.
  */
 import { module, test } from 'qunit';
-import { TUNING } from 'test-app/components/examples/drift';
-import {
-  applied,
-  autopilot,
-  type Character,
-  CHARACTERS,
-  type DriftTuning,
-  type DriveInput,
-  forwardOf,
-  makeCar,
-  makeShot,
-  routeOf,
-  slipAngleOf,
-  speedOf,
-  STEP,
-  stepCar,
-  stepShot,
-  through,
-  wrap,
-} from 'test-app/lib/drift';
+
+import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+
+import type * as DriftLibModule from '../../../choreo-gallery/realm/lib/drift';
+import type * as DriftStageModule from '../../../choreo-gallery/realm/stages/drift';
+
+type DriftLib = typeof DriftLibModule;
+type DriftStage = typeof DriftStageModule;
+type Character = DriftLibModule.Character;
+type DriftTuning = DriftLibModule.DriftTuning;
+type DriveInput = DriftLibModule.DriveInput;
+
+let applied: DriftLib['applied'];
+let autopilot: DriftLib['autopilot'];
+let CHARACTERS: DriftLib['CHARACTERS'];
+let forwardOf: DriftLib['forwardOf'];
+let makeCar: DriftLib['makeCar'];
+let makeShot: DriftLib['makeShot'];
+let routeOf: DriftLib['routeOf'];
+let slipAngleOf: DriftLib['slipAngleOf'];
+let speedOf: DriftLib['speedOf'];
+let STEP: DriftLib['STEP'];
+let stepCar: DriftLib['stepCar'];
+let stepShot: DriftLib['stepShot'];
+let through: DriftLib['through'];
+let wrap: DriftLib['wrap'];
+
+let TUNING: DriftStage['TUNING'];
+
+/** the Drift model and the stage's dial config, through the realm's loader */
+function setupDrift(hooks: NestedHooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+  hooks.beforeEach(async function () {
+    ({
+      applied,
+      autopilot,
+      CHARACTERS,
+      forwardOf,
+      makeCar,
+      makeShot,
+      routeOf,
+      slipAngleOf,
+      speedOf,
+      STEP,
+      stepCar,
+      stepShot,
+      through,
+      wrap,
+    } = await gallery.import<DriftLib>('lib/drift'));
+    ({ TUNING } = await gallery.import<DriftStage>('stages/drift'));
+    DT = STEP;
+  });
+}
 
 /**
  * The track the stage actually uses, and a room with no walls in reach.
@@ -46,7 +79,7 @@ const ROOM = { h: 9000, w: 9000 };
  * are tuned to it, so a test that used its own step would be certifying a
  * controller nobody ships.
  */
-const DT = STEP;
+let DT: number;
 
 /** the stage's own defaults, which are Drifty to the number */
 const BASE: DriftTuning = {
@@ -98,7 +131,7 @@ function run(
   input: DriveInput,
   t: DriftTuning,
   seconds: number,
-  world = ROOM
+  world = ROOM,
 ) {
   const a = applied(t);
   for (let i = 0; i < Math.round(seconds / DT); i++) {
@@ -107,14 +140,16 @@ function run(
   return car;
 }
 
-module('Unit | drift', function () {
+module('Integration | Choreo gallery | drift model', function (hooks) {
+  setupDrift(hooks);
+
   test('wrap takes the short way round', function (assert) {
     assert.strictEqual(wrap(0), 0);
     // 350° and -10° are the same ask; a yaw spring given the first would
     // spin the chassis all the way round the long way on screen
     assert.ok(
       Math.abs(wrap((350 * Math.PI) / 180) - (-10 * Math.PI) / 180) < 1e-9,
-      '350° is -10°'
+      '350° is -10°',
     );
     assert.ok(Math.abs(wrap(Math.PI * 4)) < 1e-9, 'full turns are nothing');
   });
@@ -135,14 +170,14 @@ module('Unit | drift', function () {
       slow,
       drive({ throttle: 1 }),
       tuned({ engine: { drag: 2, power: 660 } }),
-      8
+      8,
     );
     const fast = makeCar(0, 450, 0);
     run(
       fast,
       drive({ throttle: 1 }),
       tuned({ engine: { drag: 1, power: 660 } }),
-      8
+      8,
     );
 
     /**
@@ -156,7 +191,7 @@ module('Unit | drift', function () {
     assert.ok(Math.abs(speedOf(fast) - 660) / 660 < 0.03, 'power/drag');
     assert.ok(
       Math.abs(speedOf(fast) / speedOf(slow) - 2) < 0.02,
-      'twice the drag, half the speed'
+      'twice the drag, half the speed',
     );
   });
 
@@ -175,7 +210,7 @@ module('Unit | drift', function () {
 
     assert.ok(
       Math.abs(car.heading) < 1e-9,
-      'the heading only turns in proportion to forward speed — no throttle, no turn'
+      'the heading only turns in proportion to forward speed — no throttle, no turn',
     );
   });
 
@@ -268,7 +303,7 @@ module('Unit | drift', function () {
      */
     assert.ok(
       softLag > stiffLag * 1.5,
-      `the soft pair trails much further behind: ${softLag.toFixed(2)} vs ${stiffLag.toFixed(2)}`
+      `the soft pair trails much further behind: ${softLag.toFixed(2)} vs ${stiffLag.toFixed(2)}`,
     );
     assert.ok(stiffLag < 0.35, 'and the stiff pair stays near the nose');
   });
@@ -313,7 +348,7 @@ module('Unit | drift', function () {
     assert.ok(car.y > 60, `it backed off: y ${car.y.toFixed(0)}`);
     assert.ok(
       Math.abs(wrap(car.heading + Math.PI / 2)) > 0.3,
-      'and swung its nose round on the way out'
+      'and swung its nose round on the way out',
     );
   });
 
@@ -329,7 +364,7 @@ module('Unit | drift', function () {
       t.grip.bite,
       BASE.grip.bite,
       'and the raw value the folder shows is untouched — the macro multiplies, ' +
-        'it does not write, so nothing on the panel can become a lie'
+        'it does not write, so nothing on the panel can become a lie',
     );
   });
 
@@ -366,10 +401,8 @@ module('Unit | drift', function () {
       run(car, drive({ throttle: 1 }), t, 3);
       run(car, drive({ steer: 1, throttle: 1 }), t, 1.4);
 
-      assert.ok(
-        Number.isFinite(car.x) && Number.isFinite(car.heading),
-        `${c.name}: the integrator stayed stable`
-      );
+      const stable = Number.isFinite(car.x) && Number.isFinite(car.heading);
+      assert.ok(stable, `${c.name}: the integrator stayed stable`);
       assert.ok(speedOf(car) > 60, `${c.name}: it actually moves`);
     }
   });
@@ -461,11 +494,11 @@ module('Unit | drift', function () {
      */
     assert.ok(
       angle.get('Drifty')! > 20,
-      `Drifty runs at ${angle.get('Drifty')!.toFixed(0)}° of drift`
+      `Drifty runs at ${angle.get('Drifty')!.toFixed(0)}° of drift`,
     );
     assert.ok(
       angle.get('Stable')! < 10,
-      `Stable runs at ${angle.get('Stable')!.toFixed(0)}° of drift`
+      `Stable runs at ${angle.get('Stable')!.toFixed(0)}° of drift`,
     );
   });
 
@@ -506,7 +539,7 @@ module('Unit | drift', function () {
      */
     assert.ok(
       seen.get('Drifty')! > seen.get('Stable')! + 0.2,
-      `Drifty is sideways for ${Math.round(seen.get('Drifty')! * 100)}% of the lap, Stable for ${Math.round(seen.get('Stable')! * 100)}%`
+      `Drifty is sideways for ${Math.round(seen.get('Drifty')! * 100)}% of the lap, Stable for ${Math.round(seen.get('Stable')! * 100)}%`,
     );
   });
 
@@ -520,11 +553,11 @@ module('Unit | drift', function () {
     const route = routeOf(GATES);
     for (const g of GATES) {
       const near = Math.min(
-        ...route.pts.map((p) => Math.hypot(p.x - g.x, p.y - g.y))
+        ...route.pts.map((p) => Math.hypot(p.x - g.x, p.y - g.y)),
       );
       assert.ok(
         near < 1,
-        `the line reaches ${g.x},${g.y} (${near.toFixed(2)}px)`
+        `the line reaches ${g.x},${g.y} (${near.toFixed(2)}px)`,
       );
     }
   });
@@ -532,94 +565,9 @@ module('Unit | drift', function () {
   test('the line stays on the track', function (assert) {
     const route = routeOf(GATES);
     const out = route.pts.filter(
-      (p) => p.x < 0 || p.y < 0 || p.x > TRACK.w || p.y > TRACK.h
+      (p) => p.x < 0 || p.y < 0 || p.x > TRACK.w || p.y > TRACK.h,
     );
     assert.strictEqual(out.length, 0, 'no part of it leaves the world');
-  });
-
-  test('a car can reverse off a wall it has buried its nose in', function (assert) {
-    const t = applied(tuned());
-    const car = makeCar(WORLD.w / 2, 40, -Math.PI / 2); // pointing at the top
-
-    // drive it into the wall and hold it there
-    for (let i = 0; i < 180; i++) {
-      stepCar(car, drive({ throttle: 1 }), t, DT, WORLD);
-    }
-    assert.ok(car.y < 20, 'it is on the wall');
-    assert.ok(Math.abs(forwardOf(car)) < 60, 'and it has no way to steer');
-
-    // full lock forwards cannot save it — this is the deadlock
-    for (let i = 0; i < 120; i++) {
-      stepCar(car, drive({ steer: 1, throttle: 1 }), t, DT, WORLD);
-    }
-    assert.ok(car.y < 25, 'full lock and full throttle changes nothing');
-
-    // reverse does, and the steering works while it does
-    for (let i = 0; i < 120; i++) {
-      stepCar(car, drive({ steer: -1, throttle: -0.6 }), t, DT, WORLD);
-    }
-    assert.ok(car.y > 60, `it backed off: y ${car.y.toFixed(0)}`);
-    assert.ok(
-      Math.abs(wrap(car.heading + Math.PI / 2)) > 0.3,
-      'and swung its nose round on the way out'
-    );
-  });
-
-  test('looseness moves every pair without writing to any of them', function (assert) {
-    const t = tuned({ looseness: 0 });
-    const planted = applied(t);
-    const loose = applied({ ...t, looseness: 1 });
-
-    assert.ok(loose.bite < planted.bite, 'less grip');
-    assert.ok(loose.release < planted.release, 'and it lets go sooner');
-    assert.ok(loose.yawC < planted.yawC, 'the chassis settles more slowly');
-    assert.strictEqual(
-      t.grip.bite,
-      BASE.grip.bite,
-      'and the raw value the folder shows is untouched — the macro multiplies, ' +
-        'it does not write, so nothing on the panel can become a lie'
-    );
-  });
-
-  test('every character is a car that drives', function (assert) {
-    /**
-     * A character is a flat `path -> value` map, because that is the shape the
-     * store takes. Reading it back into the nested shape the loop wants is the
-     * only place the two vocabularies meet, and it is worth a test on its own:
-     * a typo in a path here is silent — the store ignores the update and the
-     * car quietly keeps the default.
-     */
-    const num = (c: Character, k: string) => {
-      const v = c.values[k];
-      assert.strictEqual(typeof v, 'number', `${c.name} sets ${k}`);
-      return v as number;
-    };
-
-    for (const c of CHARACTERS) {
-      const t: DriftTuning = {
-        engine: { drag: num(c, 'engine.drag'), power: num(c, 'engine.power') },
-        grip: { bite: num(c, 'grip.bite'), release: num(c, 'grip.release') },
-        looseness: num(c, 'looseness'),
-        steering: {
-          damping: num(c, 'steering.damping'),
-          lock: num(c, 'steering.lock'),
-          stiffness: num(c, 'steering.stiffness'),
-        },
-        yaw: {
-          damping: num(c, 'yaw.damping'),
-          stiffness: num(c, 'yaw.stiffness'),
-        },
-      };
-      const car = makeCar(200, 450, 0);
-      run(car, drive({ throttle: 1 }), t, 3);
-      run(car, drive({ steer: 1, throttle: 1 }), t, 1.4);
-
-      assert.ok(
-        Number.isFinite(car.x) && Number.isFinite(car.heading),
-        `${c.name}: the integrator stayed stable`
-      );
-      assert.ok(speedOf(car) > 60, `${c.name}: it actually moves`);
-    }
   });
 
   /**
@@ -659,7 +607,7 @@ module('Unit | drift', function () {
      * saved sooner, and the metric came out backwards — the loose car spent 26%
      * of the lap sideways against the planted car's 58%. Both numbers were
      * true; neither was about the car. What the panel changes is the car, so
-     * the test holds the driver still and moves only the slider.
+     * the test clamped the driver still and moves only the slider.
      */
     const driftAngle = (looseness: number) => {
       const t = applied(tuned({ looseness }));
@@ -682,7 +630,7 @@ module('Unit | drift', function () {
     const loose = driftAngle(1);
     assert.ok(
       loose > planted * 1.4,
-      `loose holds ${loose.toFixed(0)}° of drift through the turn, planted ${planted.toFixed(0)}°`
+      `loose clamped ${loose.toFixed(0)}° of drift through the turn, planted ${planted.toFixed(0)}°`,
     );
   });
 
@@ -699,10 +647,9 @@ module('Unit | drift', function () {
 
     assert.ok(shot.zoom < 1, 'at speed the frame has pulled back');
     const halfW = view.w / 2 / shot.zoom;
-    assert.ok(
-      shot.x >= halfW - 0.001 && shot.x <= WORLD.w - halfW + 0.001,
-      'and it is still clamped inside the track'
-    );
+    const clamped =
+      shot.x >= halfW - 0.001 && shot.x <= WORLD.w - halfW + 0.001;
+    assert.ok(clamped, 'and it is still clamped inside the track');
   });
 });
 
@@ -717,12 +664,12 @@ module('Unit | drift', function () {
  * this file runs `fromCharacter`, so a suite that is entirely green can be
  * green about a car nobody drives.
  *
- * That happened. Drifty's engine was taken from 520 to 490 in `lib/drift.ts`
- * alone; the tests went on passing at 490 while the stage kept starting at 520,
- * and the tuning note in CHARACTERS described a car you could only reach by
- * clicking its own name.
+ * The tuning note in CHARACTERS would then describe a car you could only
+ * reach by clicking its own name.
  */
-module('Unit | drift | the default car', function () {
+module('Integration | Choreo gallery | drift default car', function (hooks) {
+  setupDrift(hooks);
+
   test('the panel loads the Drifty character exactly', function (assert) {
     const drifty = CHARACTERS[0]!;
     assert.strictEqual(drifty.name, 'Drifty', 'Drifty is still the first');
@@ -747,7 +694,7 @@ module('Unit | drift | the default car', function () {
     assert.deepEqual(
       defaults,
       drifty.values as Record<string, number>,
-      'every dial default is the value Drifty ships'
+      'every dial default is the value Drifty ships',
     );
   });
 });
