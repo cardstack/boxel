@@ -53,6 +53,13 @@ class Shown {
   };
 }
 
+class Tiles {
+  @tracked items = [{ id: 'a' }, { id: 'b' }];
+  drop = () => {
+    this.items = this.items.filter((item) => item.id !== 'a');
+  };
+}
+
 const rest = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const left = () =>
   [...document.querySelectorAll<HTMLElement>('[data-it]')]
@@ -290,6 +297,85 @@ module('Integration | choreo | gated leaver', function (hooks) {
     state.scored = true;
     await rest(400);
 
+    await click('.narrow');
+    await rest(1200);
+
+    assert.notOk(
+      document.querySelector('[data-it="gated"]'),
+      `the region's child is gone — left: ${left()}`,
+    );
+    assert.notOk(
+      document.querySelector('[data-it="plain"]'),
+      `and did not take its batch with it — left: ${left()}`,
+    );
+  });
+
+  test('a tile already leaving when its region starts leaving goes with it', async function (assert) {
+    const state = new Shown();
+    const tiles = new Tiles();
+    await render(
+      <template>
+        <button type='button' class='narrow' {{on 'click' state.narrow}}>
+          x
+        </button>
+        <button type='button' class='drop' {{on 'click' tiles.drop}}>
+          y
+        </button>
+        <div style='position:relative'>
+          <Presence
+            @items={{state.items}}
+            @key={{keyOf}}
+            @mode='popLayout'
+            @initial={{false}}
+            as |item h|
+          >
+            <article
+              data-it={{item.id}}
+              {{motion
+                presence=h
+                initial=gone
+                animate=here
+                exit=gone
+                transition=quick
+              }}
+            >
+              {{#if (gated item)}}
+                <Choreo as |c|>
+                  <div {{pauseEveryRun c}}></div>
+                  <Presence
+                    @items={{tiles.items}}
+                    @key={{keyOf}}
+                    @propagate={{true}}
+                    @parent={{h}}
+                    as |tile th|
+                  >
+                    <div {{motion presence=th id=tile.id role='tile'}}>
+                      {{tile.id}}
+                    </div>
+                  </Presence>
+                  {{#if state.scored}}
+                    <c.Tween
+                      @of={{c.role 'tile'}}
+                      @opacity={{0}}
+                      @duration={{600}}
+                    />
+                  {{/if}}
+                </Choreo>
+              {{else}}
+                <p>{{item.id}}</p>
+              {{/if}}
+            </article>
+          </Presence>
+        </div>
+      </template>,
+    );
+    await rest(400);
+    state.scored = true;
+    await rest(400);
+
+    // the region is present: it holds this leaver, on a run held paused
+    await click('.drop');
+    await rest(400);
     await click('.narrow');
     await rest(1200);
 

@@ -58,7 +58,7 @@ class Shown {
  */
 function until(count: number) {
   return waitUntil(
-    () => document.querySelectorAll('[data-demo]').length === count,
+    () => document.querySelectorAll('[data-test-demo]').length === count,
     { timeout: 8000 },
   ).catch(() => {
     // fall through: the assertion below reports which ones are stuck
@@ -96,7 +96,7 @@ module('Integration | Choreo gallery | popLayout subtree', function (hooks) {
     await render(
       <template>
         <ChoreoRoot>
-          <button type='button' class='narrow' {{on 'click' state.narrow}}>
+          <button type='button' data-test-narrow {{on 'click' state.narrow}}>
             Drag
           </button>
           <LayoutGroup>
@@ -109,7 +109,7 @@ module('Integration | Choreo gallery | popLayout subtree', function (hooks) {
                 as |demo h|
               >
                 <article
-                  data-demo={{demo.slug}}
+                  data-test-demo={{demo.slug}}
                   {{motion
                     presence=h
                     layout=true
@@ -131,7 +131,7 @@ module('Integration | Choreo gallery | popLayout subtree', function (hooks) {
     );
     await until(catalog.length);
     assert.strictEqual(
-      document.querySelectorAll('[data-demo]').length,
+      document.querySelectorAll('[data-test-demo]').length,
       catalog.length,
       'everything is up',
     );
@@ -151,14 +151,14 @@ module('Integration | Choreo gallery | popLayout subtree', function (hooks) {
     );
 
     let drag = catalog.filter((demo) => demo.group === 'Drag');
-    await click('.narrow');
+    await click('[data-test-narrow]');
     await until(drag.length);
     // a beat for the exits to actually finish once the count is right
     await sleep(300);
 
     let kept = new Set(drag.map(keyOf));
-    let stuck = [...document.querySelectorAll<HTMLElement>('[data-demo]')]
-      .map((el) => el.dataset['demo'])
+    let stuck = [...document.querySelectorAll<HTMLElement>('[data-test-demo]')]
+      .map((el) => el.dataset['testDemo'])
       .filter((slug) => !kept.has(slug!));
     assert.deepEqual(stuck, [], 'every leaver has left the DOM');
   });
