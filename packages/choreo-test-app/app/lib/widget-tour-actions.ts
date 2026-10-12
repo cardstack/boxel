@@ -60,10 +60,7 @@ export const tourActions: Record<string, TourAction[]> = {
   ],
   reorder: [click(1, '[data-tour-reorder]'), click(3, '[data-tour-reorder]')],
   grid: [click(1, '[data-tour-reorder]'), click(3, '[data-tour-reorder]')],
-  'inline-edit': [
-    click(1, '[data-test-toggle]'),
-    click(4, '[data-test-toggle]'),
-  ],
+  'inline-edit': [click(1, '.ie-toggle'), click(4, '.ie-toggle')],
   lightbox: [click(1, '.shot'), click(4, '[aria-label="Close"]')],
   split: [click(1, '.replay'), click(3.5, '.replay')],
   inbox: [
@@ -76,7 +73,7 @@ export const tourActions: Record<string, TourAction[]> = {
     click(1, '.xstress-hud button', 1),
     click(3, '.xstress-hud button', 1),
   ],
-  escort: [click(1, '[data-test-bay="2"]'), click(4, '[data-test-bay="0"]')],
+  escort: [click(1, '.esc-bay', 2), click(4, '.esc-bay', 0)],
   interrupt: [
     click(1, '.slot', 3),
     click(1.22, '.slot', 0),
@@ -89,10 +86,7 @@ export const tourActions: Record<string, TourAction[]> = {
     click(3, '.study-card', 1),
     click(5, '.study-card', 2),
   ],
-  wires: [
-    click(1, '[data-test-wires-v]', 1),
-    click(4, '[data-test-wires-v]', 2),
-  ],
+  wires: [click(1, '.wires-bar button', 1), click(4, '.wires-bar button', 2)],
   jump: [click(1, '.jump-go'), click(3, '.jump-go')],
   parallax: [scroll(1, '.scroll-well', 0.3), scroll(2.5, '.scroll-well', 0.7)],
   reveal: [click(1, '.replay'), scroll(2, '.pours', 0.7)],
@@ -119,10 +113,7 @@ export const tourActions: Record<string, TourAction[]> = {
     click(1, '[aria-label="Tour the living world"]'),
     click(4, '.sy-play'),
   ],
-  subdivision: [
-    click(1, '[data-test-tile]', 1),
-    click(4, '[data-test-tile]', 3),
-  ],
+  subdivision: [click(1, '.sub-tile', 1), click(4, '.sub-tile', 3)],
   rack: [
     click(1, '[data-notch="1"]'),
     click(3, '[data-notch="3"]'),
@@ -136,10 +127,10 @@ export const tourActions: Record<string, TourAction[]> = {
   drag: [click(1, 'button')],
   slides: [click(1, '.slides-next'), click(3, '.slides-next')],
   presentation: [
-    click(1, '[data-test-pres-fwd]'),
-    click(2.5, '[data-test-pres-fwd]'),
-    click(4, '[data-test-pres-fwd]'),
-    click(5.5, '[data-test-pres-fwd]'),
+    click(1, '[aria-label="Next build"]'),
+    click(2.5, '[aria-label="Next build"]'),
+    click(4, '[aria-label="Next build"]'),
+    click(5.5, '[aria-label="Next build"]'),
   ],
   towers: [click(0.8, '.ft-play'), click(2, '.cf-go.is-quiet')],
   sagrada: [click(0.8, '.ft-play'), click(2, '.cf-go.is-quiet')],
@@ -218,7 +209,7 @@ export function guideDemo(
       current &&
       (doc ||
         ('body' in current
-          ? current.querySelector('[data-test-widget-embed]')
+          ? current.querySelector('[data-widget-embed]')
           : current.hasAttribute('data-live-demo')))
     ) {
       if (doc !== current) {

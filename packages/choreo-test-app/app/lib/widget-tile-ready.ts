@@ -36,7 +36,7 @@ export async function tileReady(canvas: HTMLElement, signal: AbortSignal) {
     while (!signal.aborted) {
       try {
         const face = child.contentDocument?.querySelector(
-          '[data-test-widget-embed]'
+          '[data-widget-embed]'
         );
         if (face?.childElementCount) {
           break;

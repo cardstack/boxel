@@ -46,7 +46,7 @@
     {
       "phrase": "profile becomes",
       "demo": "inline-edit",
-      "selector": "[data-test-toggle]",
+      "selector": ".ie-toggle",
       "at": 1.08,
       "chapter": 0
     },

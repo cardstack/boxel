@@ -257,9 +257,7 @@ export class Wires extends Component {
       if (hot && root.querySelector(`[data-thread="${hot}"]`)) {
         return;
       }
-      const first = root.querySelector(
-        '[data-test-wires-note]'
-      ) as HTMLElement | null;
+      const first = root.querySelector('.wires-note') as HTMLElement | null;
       root.setAttribute('data-hot', first?.dataset.thread ?? 'gauge');
     };
     const draw = () => {

@@ -41,7 +41,13 @@ const embed = modifier(() => {
       width: 100%;
     }
   </style>
-  <div class="widget-embed" data-test-widget-embed {{embed}} {{restWhenOff}}>
+  <div
+    class="widget-embed"
+    data-widget-embed
+    data-test-widget-embed
+    {{embed}}
+    {{restWhenOff}}
+  >
     {{#if @model}}{{#let @model.Example as |Example|}}<Example />{{/let}}{{/if}}
   </div>
 </template> satisfies TOC<{ Args: { model?: DemoEntry } }>;
