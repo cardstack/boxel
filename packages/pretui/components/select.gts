@@ -138,8 +138,8 @@ export class Select extends Component<SelectSignature> {
   <template>
     <div
       class='pretui-selectwrap'
-      data-test-pretui-select
       {{nameFromLabel @controlId this.explicitName}}
+      data-test-pretui-select
       ...attributes
     >
       {{! no id here: BoxelSelect finds the trigger by its own id to copy the
@@ -179,16 +179,20 @@ export class Select extends Component<SelectSignature> {
           --boxel-select-trigger-padding: 0 0.625rem;
           --boxel-select-trigger-gap: var(--boxel-sp-2xs);
           --boxel-select-trigger-content-wrap: nowrap;
+          --boxel-select-background-color: var(--field);
+          --boxel-select-text-color: var(--foreground);
           --boxel-dropdown-background-color: var(--popover);
           --boxel-dropdown-text-color: var(--popover-foreground);
           --boxel-dropdown-border-color: var(--border);
           --boxel-dropdown-hover-color: var(--hover);
           --boxel-dropdown-hover-text-color: var(--popover-foreground);
-          --boxel-dropdown-highlight-color: var(--hover);
-          --boxel-dropdown-highlight-hover-color: var(--hover);
+          /* the selected row sits on --selected, the contract's surface for
+             it; --primary-ink reads on it, where it would not on --hover */
+          --boxel-dropdown-highlight-color: var(--selected);
+          --boxel-dropdown-highlight-hover-color: var(--selected);
           --boxel-dropdown-selected-text-color: var(--primary-ink);
-          --boxel-dropdown-selected-highlighted-color: var(--hover);
-          --boxel-dropdown-selected-hover-color: var(--hover);
+          --boxel-dropdown-selected-highlighted-color: var(--selected);
+          --boxel-dropdown-selected-hover-color: var(--selected);
           --boxel-dropdown-focus-border-color: var(--ring);
         }
       }
@@ -200,10 +204,6 @@ export class Select extends Component<SelectSignature> {
         align-items: center;
         height: var(--pretui-select-h);
         border: 0;
-        font-family: inherit;
-        font-size: var(--boxel-font-size-xs);
-        color: var(--foreground);
-        background: var(--field);
         box-shadow: 0 0 0 1px var(--input);
         width: 100%;
         text-align: start;
@@ -221,6 +221,10 @@ export class Select extends Component<SelectSignature> {
       }
       .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
         opacity: 0.45;
+        /* BoxelSelect paints disabled on --muted; this rule outranks it, so
+           the field surface holds and only the opacity says disabled */
+        background-color: var(--field);
+        color: var(--foreground);
       }
       .pretui-selectwrap :deep(.boxel-trigger) {
         width: 100%;
@@ -230,6 +234,12 @@ export class Select extends Component<SelectSignature> {
       .pretui-selectwrap :deep(.boxel-trigger-content) {
         min-width: 0;
         overflow: hidden;
+      }
+      .pretui-selectwrap :deep(.boxel-trigger-content > *) {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
         color: var(--muted-foreground);

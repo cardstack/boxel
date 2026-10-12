@@ -36,7 +36,7 @@ export class SelectUsage extends Component {
   setPlaceholder = (v: string) => (this.placeholder = v);
   setDisabled = (v: boolean) => (this.disabled = v);
   get usage() {
-    let bits = ['@options={{this.countries}}'];
+    let bits = ['@options={{this.countries}}', "@label='Country'"];
     if (this.value) bits.push(`@value='${this.value}'`);
     if (this.placeholder) bits.push(`@placeholder='${this.placeholder}'`);
     if (this.disabled) bits.push('@disabled={{true}}');
@@ -52,6 +52,7 @@ export class SelectUsage extends Component {
       <:example>
         <Select
           @options={{this.countryOptions}}
+          @label='Country'
           @value={{this.value}}
           @placeholder={{this.placeholder}}
           @disabled={{this.disabled}}
@@ -62,31 +63,31 @@ export class SelectUsage extends Component {
         <Args.Object
           @name='options'
           @required={{true}}
-          @description='An array of items, to be listed on dropdown — now {value, label} pairs.'
+          @description='The options to list, as {value, label} pairs.'
           @value={{this.countryOptions}}
         />
         <Args.Action
           @name='onValueChange'
-          @description="Receives the chosen option's value as a string — boxel-ui's @onChange, which received the whole item."
+          @description="Receives the chosen option's value as a string."
         />
         <Args.String
           @name='value'
           @value={{this.value}}
           @options={{this.countryNames}}
-          @description="Selected item — boxel-ui's object @selected, now the selected option's string value."
+          @description="The selected option's value."
           @onInput={{this.setValue}}
         />
         <Args.String
           @name='placeholder'
           @value={{this.placeholder}}
-          @description='Placeholder for trigger component'
+          @description='Text shown when nothing is selected.'
           @onInput={{this.setPlaceholder}}
         />
         <Args.Bool
           @name='disabled'
           @defaultValue={{false}}
           @value={{this.disabled}}
-          @description='When truthy the component cannot be interacted'
+          @description='When true, the control cannot be used.'
           @onInput={{this.setDisabled}}
         />
       </:api>
