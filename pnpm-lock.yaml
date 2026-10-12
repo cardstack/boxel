@@ -2035,6 +2035,9 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui
+      '@cardstack/bxl':
+        specifier: workspace:*
+        version: link:../bxl
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
