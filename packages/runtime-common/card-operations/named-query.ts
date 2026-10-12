@@ -1,7 +1,9 @@
 import { isCodeRef } from '../card-document-shape.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
+import { SearchRequestError } from '../search-utils.ts';
 import {
+  parseSearchEntryQueryFromPayload,
   wireFilterGrantTypes,
   type SearchEntryWireFilter,
   type SearchEntryWireQuery,
@@ -235,6 +237,22 @@ export async function resolveNamedQuery(
       `"on" must be the code ref of the type operation "${operation}" is invoked on`,
     );
   }
+  // The members the caller chose are checked before the declaration is read,
+  // so they are refused alike whether it resolves or not. Checked after, a
+  // member the search grammar refuses would be refused only once the
+  // declaration resolved, and a caller who may not read the type could tell an
+  // operation it declares from one it doesn't.
+  try {
+    parseSearchEntryQueryFromPayload({
+      ...callerMembers,
+      ...namedQueryRendering(payload),
+    });
+  } catch (e) {
+    if (e instanceof SearchRequestError) {
+      throw invalidNamedQuery(e.message);
+    }
+    throw e;
+  }
   try {
     return await resolveDeclaredQuery(
       core,
@@ -242,13 +260,10 @@ export async function resolveNamedQuery(
       context,
     );
   } catch (e) {
-    // A refusal for what the request got wrong. A failure to read the
-    // declaration at all is the server's, says nothing of the type, and is
-    // answered as it is to everyone.
     if (
       isOperationFailure(e) &&
-      e.error.status < 500 &&
-      !(await readsModuleOf(core, on, context.principal))
+      describesDeclaration(e) &&
+      !(await readsModuleOf(core, on, callerOf(context.principal)))
     ) {
       return { admitsNothing: true };
     }
@@ -256,16 +271,34 @@ export async function resolveNamedQuery(
   }
 }
 
-// Whether the caller may read the realm that holds `on`'s module, by that
+// Whether a refusal resolving gives says something of the type's declaration.
+// Two refusals do not. A 500 is the server failing to read the declaration at
+// all. `actor-required` tells a caller who isn't signed in to sign in, which
+// lowering refuses rather than answer with no rows, since a saved search that
+// silently finds nothing is worse than one that asks for credentials.
+function describesDeclaration(failure: OperationFailure): boolean {
+  return (
+    failure.error.status !== 500 && failure.error.code !== 'actor-required'
+  );
+}
+
+// The caller a search principal is judged as by a realm's permissions. A
+// realm-authority principal reads what the realm ACL grants its user.
+function callerOf(principal: SearchPrincipal | undefined): ScopeCaller {
+  return principal?.kind === 'user' || principal?.kind === 'realm-authority'
+    ? { kind: 'user', actor: principal.user }
+    : { kind: 'anonymous' };
+}
+
+// Whether a caller may read the realm that holds `on`'s module, by that
 // realm's own permissions. A module no realm this server serves holds is one
-// whose realm the caller cannot be shown to read, and so is a type resolving
-// is not described for, as is one whose code ref does not resolve. A request
-// that authenticated nobody, and one this realm admitted without a session,
-// read what the realm opens to everyone.
-async function readsModuleOf(
+// whose realm the caller cannot be shown to read, and so is a type nothing is
+// described for, as is one whose code ref does not resolve. A caller who isn't
+// signed in reads what the realm opens to everyone.
+export async function readsModuleOf(
   core: OperationCore,
   on: CodeRef,
-  principal: SearchPrincipal | undefined,
+  caller: ScopeCaller,
 ): Promise<boolean> {
   if (!core.readsRealmOf) {
     return false;
@@ -279,10 +312,6 @@ async function readsModuleOf(
   if (!type) {
     return false;
   }
-  let caller: ScopeCaller =
-    principal?.kind === 'user' || principal?.kind === 'realm-authority'
-      ? { kind: 'user', actor: principal.user }
-      : { kind: 'anonymous' };
   try {
     return (await core.readsRealmOf(type.module, caller))?.read === true;
   } catch {

@@ -541,15 +541,43 @@ module(basename(import.meta.filename), function () {
           name,
         );
       }
-      assert.deepEqual(
-        await resolveNamedQuery(
+    });
+
+    test('is still told to sign in where a declaration compares against the caller', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      let noActor = await refusal(
+        resolveNamedQuery(
           core,
           { operation: 'mine', on: REPORT },
-          RENDER,
+          { ...CONTEXT, principal: undefined },
         ),
-        { admitsNothing: true },
-        'a render compared against an actor it lacks',
       );
+      assert.strictEqual(noActor.code, 'actor-required');
+    });
+
+    test('a member the search grammar refuses is refused whether the operation is declared or not', async function (assert) {
+      let { core } = stubCore({ reads: false });
+      let declared = await refusal(
+        resolveNamedQuery(
+          core,
+          {
+            operation: 'byStatus',
+            on: REPORT,
+            params: { status: 'open' },
+            nonsense: true,
+          },
+          CONTEXT,
+        ),
+      );
+      let undeclared = await refusal(
+        resolveNamedQuery(
+          core,
+          { operation: 'everything', on: REPORT, nonsense: true },
+          CONTEXT,
+        ),
+      );
+      assert.strictEqual(declared.status, 400);
+      assert.deepEqual(undeclared, declared);
     });
 
     test('a module no realm here serves is judged as one the caller may not read', async function (assert) {

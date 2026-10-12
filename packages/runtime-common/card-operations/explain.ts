@@ -35,6 +35,7 @@ import {
 } from './gate.ts';
 import {
   admitsNothing,
+  readsModuleOf,
   resolveNamedQuery,
   searchInvocation,
 } from './named-query.ts';
@@ -281,6 +282,26 @@ export async function explainOperation(
       detail:
         `this draft uses card types from a realm you can't read, so what it ` +
         `would decide can't be shown to you`,
+    });
+  }
+  // Explaining a named query reports what resolving its declaration did for
+  // the actor: the refusal it gave, or the filter it lowered to. Either one
+  // describes the type, so it is answered only to a caller who may read the
+  // realm holding the type's module, whoever the actor is, and is refused
+  // whole otherwise.
+  if (
+    question.search &&
+    'on' in question.search &&
+    !(await readsModuleOf(targetCore, question.search.on, asker))
+  ) {
+    throw new OperationFailure({
+      id: policyCard.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail:
+        `this search names a card type from a realm you can't read, so what ` +
+        `it would decide can't be shown to you`,
     });
   }
   let actor = scopeCallerFor(question.actor);
@@ -593,7 +614,7 @@ async function explainSearch(
         realms: [core.realmURL],
       });
       if (admitsNothing(resolved)) {
-        return { ...base, reason: 'declaration-unreadable' };
+        return { ...base, reason: 'not-resolved' };
       }
       if (resolved.query.filter) {
         answer.filter = resolved.query.filter;

@@ -954,6 +954,25 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       }
     });
 
+    test('a member the search grammar refuses is refused alike whether the operation is declared or not', async function (assert) {
+      let declared = await federatedSearch(
+        { ...ADMITS_NOTHING, nonsense: true, realms: [SCHOOL] },
+        PROVIDER_B,
+      );
+      let undeclared = await federatedSearch(
+        {
+          ...REFUSED['an operation the type does not declare'],
+          nonsense: true,
+          realms: [SCHOOL],
+        },
+        PROVIDER_B,
+      );
+
+      assert.strictEqual(declared.status, 400, 'HTTP 400 status');
+      assert.strictEqual(undeclared.status, declared.status);
+      assert.strictEqual(undeclared.text, declared.text);
+    });
+
     test('a declared query still returns its rows', async function (assert) {
       let response = await federatedSearch(
         { operation: 'openSecrets', on: SECRET, realms: [SCHOOL] },
