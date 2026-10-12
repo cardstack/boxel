@@ -816,7 +816,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
       cardId = session.cardURL((value as { show: unknown }).show);
       let source = await this.cardService.getSource(new URL(`${cardId}.json`));
       if (source.status !== 200) {
-        throw new Error(`Card not found: ${cardId}`);
+        // A path that names a file, such as an image, is not a card.
+        let file = await this.cardService.getSource(new URL(cardId));
+        throw new Error(
+          file.status === 200
+            ? `${cardId} is a file, not a card instance`
+            : `Card not found: ${cardId}`,
+        );
       }
       let card = await this.store.get(cardId);
       if (isCardErrorJSONAPI(card)) {

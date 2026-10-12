@@ -212,6 +212,18 @@ return { show: 'Pet/missing' };`,
       `says why: ${result.showError}`,
     );
 
+    let file = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return { show: 'notes/first.md' };`,
+    });
+    assert.true(
+      /notes\/first\.md is a file, not a card instance/.test(
+        file.showError ?? '',
+      ),
+      `names a file that is not a card: ${file.showError}`,
+    );
+
     let outside = await command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
