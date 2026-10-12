@@ -6,7 +6,11 @@ import {
 } from '../anonymous-access.ts';
 import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
 import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
-import { loadBxlTransform } from './transforms.ts';
+import {
+  loadBxlTransform,
+  type BxlTransformModule,
+  type PreparedTransformProgram,
+} from './transforms.ts';
 
 // ============================================================================
 // The expressions a grant carries besides its `where`, which settle how it
@@ -72,21 +76,49 @@ async function evaluateGrantExpression(
   context: GrantExpressionContext,
 ): Promise<GrantExpressionValue> {
   try {
-    let bxl = await loadBxlTransform();
-    let value = bxl.runBxlTransform(
-      expression.canonical,
-      null,
-      {
-        ...(context.realmConfig ? { realmConfig: context.realmConfig } : {}),
-        ...(context.policy ? { policy: context.policy } : {}),
-        ...(context.instance ? { instance: context.instance } : {}),
-      },
-      { syntax: 'solidified' },
-    );
+    let program = preparedExpression(await loadBxlTransform(), expression);
+    let value = program.run(null, {
+      ...(context.realmConfig ? { realmConfig: context.realmConfig } : {}),
+      ...(context.policy ? { policy: context.policy } : {}),
+      ...(context.instance ? { instance: context.instance } : {}),
+    });
     return { value };
   } catch (e: unknown) {
     return { failed: errorKind(e) };
   }
+}
+
+// Each expression's program, parsed and checked once and run for every
+// request it settles. Keyed on the compiled expression, so a program lives
+// exactly as long as the compiled policy that holds it, and a recompiled
+// policy prepares its own. An expression that fails to prepare is not held,
+// and fails again on its next evaluation.
+const preparedExpressions = new WeakMap<
+  CompiledGrantExpression,
+  PreparedTransformProgram
+>();
+
+// How many grant expression programs this process has prepared. A steady
+// policy prepares each expression once however many requests settle it.
+let preparations = 0;
+
+export function grantExpressionPreparations(): number {
+  return preparations;
+}
+
+function preparedExpression(
+  bxl: BxlTransformModule,
+  expression: CompiledGrantExpression,
+): PreparedTransformProgram {
+  let program = preparedExpressions.get(expression);
+  if (!program) {
+    program = bxl.prepareBxlTransform(expression.canonical, {
+      syntax: 'solidified',
+    });
+    preparedExpressions.set(expression, program);
+    preparations++;
+  }
+  return program;
 }
 
 function errorKind(e: unknown): string {
