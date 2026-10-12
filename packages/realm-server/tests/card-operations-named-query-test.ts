@@ -101,9 +101,9 @@ const OPERATIONS: Record<string, OperationDefinition> = {
   retitle: { base: 'transform', deterministic: true },
 };
 
-// `reads` is whether the caller reads the realm holding the type's module:
-// `undefined` for a module no realm on this server holds.
-function stubCore({ reads = true }: { reads?: boolean | undefined } = {}) {
+// `reads` is whether the caller reads the realm holding the type's module, or
+// `unserved` for a module no realm on this server holds.
+function stubCore({ reads = true }: { reads?: boolean | 'unserved' } = {}) {
   let definition: Definition = {
     type: 'card-def',
     codeRef: REPORT,
@@ -130,7 +130,7 @@ function stubCore({ reads = true }: { reads?: boolean | undefined } = {}) {
     resolveCodeRef: (codeRef: CodeRef) =>
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
     async readsRealmOf() {
-      return reads === undefined ? undefined : { realm: REALM_A, read: reads };
+      return reads === 'unserved' ? undefined : { realm: REALM_A, read: reads };
     },
   } as unknown as OperationCore;
   return { core };
@@ -553,7 +553,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a module no realm here serves is judged as one the caller may not read', async function (assert) {
-      let { core } = stubCore({ reads: undefined });
+      let { core } = stubCore({ reads: 'unserved' });
       assert.deepEqual(
         await resolveNamedQuery(
           core,
