@@ -750,6 +750,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (session.room.requested) {
         report += ' The room changes it asked for were not made.';
       }
+      // UI actions are done only after a run that finished, so a failed run
+      // did none.
+      if (session.uiActions.length > 0) {
+        report += ' The UI actions it asked for were not done.';
+      }
       throw new Error(report);
     }
 

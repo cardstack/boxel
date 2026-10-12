@@ -1063,7 +1063,7 @@ await realm.ui.openFile('notes/second.md');`,
         code: `await realm.ui.openFile('pet.gts');
 throw new Error('stop here');`,
       }),
-      /stop here/,
+      /stop here\. No file was saved\. The UI actions it asked for were not done\./,
     );
     assert.strictEqual(operatorModeStateService.state.submode, submodeBefore);
   });

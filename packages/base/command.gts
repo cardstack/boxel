@@ -526,14 +526,16 @@ export class RunRealmCodeResult extends CardDef {
   @field shownCard = contains(StringField);
   @field showError = contains(StringField);
 
-  // A run that saved no files, took no captures, changed nothing in the room
-  // and asked to show no card, such as one that only read, has nothing for
-  // the chat to show. Its script result goes to the model only.
+  // A run that saved no files, took no captures, changed nothing in the room,
+  // asked for no UI action and asked to show no card, such as one that only
+  // read, has nothing for the chat to show. Its script result goes to the
+  // model only.
   get [hasNothingToShow](): boolean {
     return (
       !this.files?.length &&
       !this.captures?.length &&
       !this.roomChanges?.length &&
+      !this.uiActions?.length &&
       !this.shownCard &&
       !this.showError
     );
@@ -557,6 +559,22 @@ export class RunRealmCodeResult extends CardDef {
           </ul>
         {{else}}
           <p class='no-files'>No files were changed.</p>
+        {{/if}}
+        {{#if @model.uiActions.length}}
+          <ul class='ui-actions'>
+            {{#each @model.uiActions as |uiAction|}}
+              <li
+                class='ui-action'
+                data-test-realm-code-ui-action={{uiAction.action}}
+              >
+                <span class='status'>{{uiAction.status}}</span>
+                <span>{{uiAction.action}} {{uiAction.target}}</span>
+                {{#if uiAction.detail}}
+                  <span class='status'>{{uiAction.detail}}</span>
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
         {{/if}}
         {{#if @model.roomChanges.length}}
           <ul class='room-changes'>
@@ -599,7 +617,8 @@ export class RunRealmCodeResult extends CardDef {
           font: var(--boxel-font-sm);
         }
         .files,
-        .room-changes {
+        .room-changes,
+        .ui-actions {
           margin: 0;
           padding: 0;
           list-style: none;
@@ -607,7 +626,8 @@ export class RunRealmCodeResult extends CardDef {
           flex-direction: column;
           gap: var(--boxel-sp-xxxs);
         }
-        .file {
+        .file,
+        .ui-action {
           display: flex;
           gap: var(--boxel-sp-xs);
           word-break: break-all;
