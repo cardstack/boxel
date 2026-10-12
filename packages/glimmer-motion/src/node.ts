@@ -222,26 +222,20 @@ function closestVisualElement(el: MotionEl): VisualElement | undefined {
 }
 
 /**
- * Whether a participant's host sits inside the same <Presence> child as the
- * participant, so that it leaves when that child leaves. A host's own element
- * carries no presence; it lives under whatever the nearest motion element at
- * or above it lives under.
+ * Whether the participant host above an element is itself leaving: it renders
+ * inside a <Presence> child on its way out, directly or through a propagating
+ * <Presence>. A host's own element carries no presence; it lives under the
+ * nearest motion element at or above it.
  */
-function leavesWithHost(
-  element: MotionEl,
-  presenceContext: PresenceContextProps,
-): boolean {
-  let root: Element | null | undefined = element.parentElement?.closest(
+function hostIsLeaving(element: MotionEl): boolean {
+  const root = element.parentElement?.closest<HTMLElement>(
     `[${PARTICIPANT_HOST_ATTRIBUTE}]`,
   );
-  while (root) {
-    const ve = visualElementStore.get(root);
-    if (ve) {
-      return presenceOf.get(ve)?.context.id === presenceContext.id;
-    }
-    root = root.parentElement;
+  if (!root) {
+    return false;
   }
-  return false;
+  const ve = visualElementStore.get(root) ?? closestVisualElement(root);
+  return (ve && presenceOf.get(ve)?.isPresent) === false;
 }
 
 function closestProjection(
@@ -449,6 +443,11 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   role: string | null = null;
   private host?: ParticipantHost;
   private presenceRegistered = false;
+  /**
+   * The registration the host holds this element by: one it made itself, or
+   * the projection's, which shares its key and reports on its own.
+   */
+  private hostRegistered?: 'own' | 'shared';
 
   constructor() {
     initFeatures();
@@ -737,6 +736,14 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     // PresenceContext below it). Glimmer only re-runs the modifiers whose own args changed, so a descendant
     // would never learn it is exiting — and its registration would block the exit forever.
     const presenceFlipped = this.lastPresent !== isPresent;
+    if (presenceFlipped && !isPresent && this.hostRegistered === 'own') {
+      // leaving alongside its host: see joinHost
+      frame.postRender(() => {
+        if (!this.isPresent && hostIsLeaving(element)) {
+          presenceContext?.onExitComplete?.(this.layoutPresenceKey);
+        }
+      });
+    }
     if (projection && this.lastPresent !== isPresent) {
       projection.isPresent = isPresent;
       if (pops) {
@@ -797,10 +804,13 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   /**
    * A participant registers with the nearest host, and with its Presence so
    * the host can keep it past a plain exit: the Presence then waits for the
-   * host's `exitComplete()`. A host inside the same Presence child leaves with
-   * that child, so there is nothing for it to outlive, and a run it holds
-   * paused or playing must not hold the child (or the batch it leaves with).
-   * Such a participant leaves on its own exit alone.
+   * host's `exitComplete()`. That holds only while the host outlives the exit.
+   * A host that is leaving too (inside the same <Presence> child, or one a
+   * propagating <Presence> takes out with it) has nothing to outlive, and a run
+   * it holds paused, playing or parked must not hold the child, nor the batch
+   * the child leaves with. So an element that starts leaving alongside its
+   * host hands back the registration it made for the host (a projection's
+   * reports on its own), and leaves on its own exit alone.
    */
   private joinHost(
     element: MotionEl,
@@ -812,18 +822,19 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     }
     this.host = host;
     const leave = host.register(this);
-    if (
-      presenceContext?.register &&
-      !this.presenceRegistered &&
-      !leavesWithHost(element, presenceContext)
-    ) {
-      const release = presenceContext.register(this.layoutPresenceKey);
-      this.presenceRegistered = true;
-      const before = this.unregister;
-      this.unregister = () => {
-        before?.();
-        release?.();
-      };
+    if (presenceContext?.register && !this.hostRegistered) {
+      if (this.presenceRegistered) {
+        this.hostRegistered = 'shared';
+      } else {
+        const release = presenceContext.register(this.layoutPresenceKey);
+        this.presenceRegistered = true;
+        this.hostRegistered = 'own';
+        const before = this.unregister;
+        this.unregister = () => {
+          before?.();
+          release?.();
+        };
+      }
     }
     const before = this.unregister;
     this.unregister = () => {
@@ -860,7 +871,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
 
   /** the host is done with a leaving element: tell its Presence, if it is waiting on the host */
   exitComplete() {
-    if (!this.presenceRegistered) {
+    if (!this.hostRegistered || !this.element || hostIsLeaving(this.element)) {
       return;
     }
     const presence =

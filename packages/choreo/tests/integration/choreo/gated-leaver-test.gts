@@ -228,6 +228,80 @@ module('Integration | choreo | gated leaver', function (hooks) {
       );
     });
   }
+
+  test('a region leaves with its child through a propagating <Presence>', async function (assert) {
+    const state = new Shown();
+    const inner = [{ id: 'a' }, { id: 'b' }];
+    await render(
+      <template>
+        <button type='button' class='narrow' {{on 'click' state.narrow}}>
+          x
+        </button>
+        <div style='position:relative'>
+          <Presence
+            @items={{state.items}}
+            @key={{keyOf}}
+            @mode='popLayout'
+            @initial={{false}}
+            as |item h|
+          >
+            <article
+              data-it={{item.id}}
+              {{motion
+                presence=h
+                initial=gone
+                animate=here
+                exit=gone
+                transition=quick
+              }}
+            >
+              {{#if (gated item)}}
+                <Choreo as |c|>
+                  <div {{pauseEveryRun c}}></div>
+                  {{! the tiles leave with the card: the inner Presence propagates }}
+                  <Presence
+                    @items={{inner}}
+                    @key={{keyOf}}
+                    @propagate={{true}}
+                    @parent={{h}}
+                    as |tile th|
+                  >
+                    <div {{motion presence=th id=tile.id role='tile'}}>
+                      {{tile.id}}
+                    </div>
+                  </Presence>
+                  {{#if state.scored}}
+                    <c.Tween
+                      @of={{c.role 'tile'}}
+                      @opacity={{0.5}}
+                      @duration={{600}}
+                    />
+                  {{/if}}
+                </Choreo>
+              {{else}}
+                <p>{{item.id}}</p>
+              {{/if}}
+            </article>
+          </Presence>
+        </div>
+      </template>,
+    );
+    await rest(400);
+    state.scored = true;
+    await rest(400);
+
+    await click('.narrow');
+    await rest(1200);
+
+    assert.notOk(
+      document.querySelector('[data-it="gated"]'),
+      `the region's child is gone — left: ${left()}`,
+    );
+    assert.notOk(
+      document.querySelector('[data-it="plain"]'),
+      `and did not take its batch with it — left: ${left()}`,
+    );
+  });
 });
 
 function gated(item: { id: string }) {

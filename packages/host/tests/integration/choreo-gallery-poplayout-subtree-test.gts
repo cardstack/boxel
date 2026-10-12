@@ -4,6 +4,7 @@ import { click, render, waitUntil } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
+import { whatIsBusy } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -135,8 +136,19 @@ module('Integration | Choreo gallery | popLayout subtree', function (hooks) {
       'everything is up',
     );
 
-    // every demo that starts on sight has seen itself and started
-    await sleep(1500);
+    // the regression needs a leaver whose region holds a run that will not
+    // finish in time: wait for the demos that start on sight to be holding one
+    const heldRuns = () =>
+      whatIsBusy().filter((reason) => reason.endsWith('run in flight'));
+    await waitUntil(() => heldRuns().length > 0, { timeout: 8000 }).catch(
+      () => {
+        // fall through: the assertion below says the precondition never held
+      },
+    );
+    assert.ok(
+      heldRuns().length > 0,
+      'some demo is holding a run when the filter fires',
+    );
 
     let drag = catalog.filter((demo) => demo.group === 'Drag');
     await click('.narrow');
@@ -144,14 +156,10 @@ module('Integration | Choreo gallery | popLayout subtree', function (hooks) {
     // a beat for the exits to actually finish once the count is right
     await sleep(300);
 
-    let left = [...document.querySelectorAll<HTMLElement>('[data-demo]')];
-    let stuck = left
-      .filter((el) => Number(getComputedStyle(el).opacity) < 0.5)
-      .map((el) => el.dataset['demo']);
-    assert.strictEqual(
-      left.length,
-      drag.length,
-      `still in the DOM: ${JSON.stringify(stuck)}`,
-    );
+    let kept = new Set(drag.map(keyOf));
+    let stuck = [...document.querySelectorAll<HTMLElement>('[data-demo]')]
+      .map((el) => el.dataset['demo'])
+      .filter((slug) => !kept.has(slug!));
+    assert.deepEqual(stuck, [], 'every leaver has left the DOM');
   });
 });
