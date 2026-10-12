@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { cameraCss, objectCss, perspective } from 'choreo-film-app/lib/css3d';
+import { announceFirstFrame } from 'choreo-film-app/lib/first-frame';
 import { tuneNumber } from 'choreo-film-app/lib/tuning';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
@@ -491,6 +492,8 @@ export class SylvaStage extends Component {
           };
         }
         this.loop();
+        /* the loop draws its first frame on the next animation frame */
+        announceFirstFrame();
       } catch (err) {
         this.status = `the scene did not come up: ${String(err)}`;
 

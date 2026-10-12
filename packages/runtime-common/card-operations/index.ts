@@ -1,15 +1,27 @@
 export {
-  ActingUsers,
+  AnonymousRequest,
   type ActingUserFailure,
   type ActingUserResolution,
-} from './acting-users.ts';
+  type ActingUserResolver,
+} from './anonymous-request.ts';
+export { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
+export {
+  blocklistCloses,
+  settleGrants,
+  settleTraffic,
+  type CompiledGrantExpression,
+  type GrantRateLimit,
+  type GrantTraffic,
+} from './grant-expressions.ts';
 export { lowerOperationDeclarations } from './lowering.ts';
 export {
   noteRealmIndexMoved,
+  opensToAnonymous,
   RealmPolicyCache,
   realmPolicyRef,
 } from './policy.ts';
 export type {
+  CompiledAnonymousGrant,
   CompiledOperationGrant,
   CompiledPolicyPredicate,
   CompiledPolicyRule,
@@ -19,11 +31,13 @@ export type {
 } from './policy.ts';
 export type { LoweringContext } from './lowering.ts';
 export {
+  actingUserResolver,
   dischargePendingDecision,
   notPermitted,
   pendingWriteFor,
   pendingWriteHolds,
   policyGateStats,
+  policyPredicatePreparations,
 } from './gate.ts';
 export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
 export type { CapabilityCaller } from './capabilities.ts';

@@ -16,7 +16,10 @@ import { getService } from '@universal-ember/test-support';
 import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
-import type { LinkShapePolicy } from '@cardstack/runtime-common';
+import type {
+  AnonymousRateLimit,
+  LinkShapePolicy,
+} from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
   cardDefComputedFields,
@@ -1368,6 +1371,7 @@ export async function setupIntegrationTestRealm({
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
+  anonymousRateLimit,
   enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
@@ -1391,6 +1395,10 @@ export async function setupIntegrationTestRealm({
   // does: relationships carry their links, but the targets behind them are
   // not side-loaded into `included`, so the reader resolves each one itself.
   linkShapePolicy?: LinkShapePolicy;
+  // The rate limit a policy grant counts callers who aren't signed in against
+  // where it sets none, as a realm server configures it. The realm reports it
+  // in its info. Unset, the platform's default.
+  anonymousRateLimit?: AnonymousRateLimit;
   // Judge the host's requests by the realm's ACL, as a deployed realm does.
   //
   // By default the realm answers every request as its own internal dispatch,
@@ -1413,9 +1421,14 @@ export async function setupIntegrationTestRealm({
   // the in-browser renderer reads too, and the renderer then fails the next
   // render it runs. The realm renders to read the definitions its policy names,
   // so a refusal of that kind can make the realm refuse what its policy grants.
-  // Setup signs the host in with the session its permissions call for, so none
-  // of the host's own requests is refused that way; a test that provokes such
-  // a refusal on purpose has to allow for it.
+  // Setup signs the host in with the session its permissions call for before
+  // the host sends the realm anything, the matrix boot's requests included,
+  // so none of the host's own requests is refused for want of a session. A
+  // signed-in user the realm's permissions refuse is still refused: the matrix
+  // boot reads the default system card from the realm at `testRealmURL`, so a
+  // realm there that won't let the user read it answers that read with a 403.
+  // A test that provokes a refusal on purpose, or sets up such a realm, has to
+  // allow for it.
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1436,6 +1449,7 @@ export async function setupIntegrationTestRealm({
     mockMatrixUtils,
     skipBootIndex,
     linkShapePolicy,
+    anonymousRateLimit,
     enforcePermissions,
     startMatrix,
     fileSizeLimitBytes,
@@ -1521,6 +1535,7 @@ async function setupTestRealm({
   mockMatrixUtils,
   skipBootIndex,
   linkShapePolicy,
+  anonymousRateLimit,
   enforcePermissions,
   startMatrix = true,
   fileSizeLimitBytes,
@@ -1534,6 +1549,7 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
   skipBootIndex?: true;
   linkShapePolicy?: LinkShapePolicy;
+  anonymousRateLimit?: AnonymousRateLimit;
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1672,6 +1688,7 @@ async function setupTestRealm({
     {
       ...(skipBootIndex ? { skipBootIndex } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
+      ...(anonymousRateLimit ? { anonymousRateLimit } : {}),
     },
   );
 
@@ -1713,7 +1730,6 @@ async function setupTestRealm({
     await settleRealmRenders();
   }
   if (startMatrix) {
-    await mockMatrixUtils.start();
     if (enforcePermissions) {
       // The host signs in to this realm now, with the session its permissions
       // call for, rather than on its first request. A session it holds from
@@ -1723,8 +1739,22 @@ async function setupTestRealm({
       // in-browser renderer shares the host's auth-error signal and fails its
       // next render on it, and the realm renders to read the definitions its
       // policy names.
-      await getService('realm').reauthenticate(realmURL);
+      //
+      // It signs in before the matrix boot, because the boot sends requests
+      // of its own: it reads the default system card, which lives in the
+      // realm at `testRealmURL`, so a realm set up there is asked for it
+      // before anything else.
+      //
+      // A session that can't be minted is reported as an auth error rather
+      // than thrown, and that would fail the renderer's next render far from
+      // here, so setup stops on it instead.
+      if (!(await getService('realm').reauthenticate(realmURL))) {
+        throw new Error(
+          `setup could not sign the host in to ${realmURL} before the matrix boot`,
+        );
+      }
     }
+    await mockMatrixUtils.start();
   }
 
   let realmServer = getService('realm-server');
@@ -2638,10 +2668,6 @@ export function realmConfigCardJSON(
     // The realm's own settings, which a card operation reads with
     // `realmConfig("key")`.
     config?: Record<string, unknown>;
-    // How the realm limits and blocks callers its policy admits without a
-    // session.
-    anonymousRateLimit?: { requests: number; windowSeconds: number };
-    anonymousBlocklist?: string[];
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -2663,12 +2689,6 @@ export function realmConfigCardJSON(
   }
   if (config.config !== undefined) {
     attrs.config = config.config;
-  }
-  if (config.anonymousRateLimit !== undefined) {
-    attrs.anonymousRateLimit = config.anonymousRateLimit;
-  }
-  if (config.anonymousBlocklist !== undefined) {
-    attrs.anonymousBlocklist = config.anonymousBlocklist;
   }
   return JSON.stringify({
     data: {

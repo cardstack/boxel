@@ -24,7 +24,7 @@ the rest).
 | `stages/<slug>.gts` | A demo's own `GalleryDemo` subclass, supplying its live stage and its notes.                                                  |
 | `notes/`            | Each demo's long-form notes (its Deep Dive).                                                                                  |
 | `asset/`            | Media the demos load: the films' narration, looks, textures, picture pages, vendored three.js and posters.                    |
-| `film-app/`         | The films' own app, built from `packages/choreo-film-app` by `pnpm push`. Not committed.                                      |
+| `film-app/`         | The films' own app, built from `packages/choreo-film-app` (see [The films](#the-films)). Not committed.                       |
 | `reel/`             | The feature reel: three demos, live, in one camera'd world under a title, brand and timecode plane. `feature-reel.json`.      |
 | `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`. |
 | `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.              |
@@ -44,8 +44,9 @@ gallery. Their sources are `packages/choreo-film-app`, a small app that plays
 one film per document. `pnpm push` builds it into `film-app/` before it
 pushes the realm, with every script renamed `.mjs`, because the realm compiles
 `.js` files as card modules and serves `.mjs` files verbatim. The build is not
-committed; anything else that copies the realm (a deploy, say) runs
-`pnpm --filter choreo-film-app build:realm` first.
+committed: the realm-server image builds it into the realm before a deploy
+copies the realm, and the local stack builds it when `film-app/` is absent.
+`pnpm --filter choreo-film-app build:realm` rebuilds it.
 
 - In the grid a film is a poster (`shell/film-tile.gts`); its play control
   opens the film's page in theater.
@@ -53,26 +54,59 @@ committed; anything else that copies the realm (a deploy, say) runs
   card source and mounts it through `srcdoc`, naming the film on its root
   element. A film's picture page (`asset/towers-model.html`,
   `asset/sagrada-model.html`) reaches the picture the same way.
-- Theater brings the stage to the front of the page at the window's height.
-  It is state held by the gallery card (or a demo card opened on its own), so
-  it never changes the host's URL, and the frame is never re-parented.
+- The page's stage shows the film's poster under the frame. The frame stays
+  clear until the film posts `choreo-film:first-frame` to the page
+  (`choreo-film-app`'s `lib/first-frame.ts`), so the film fades in over a
+  still of itself. When the page leaves, the frame is taken down a frame
+  ahead of the crossing and the poster is what flies back to the tile:
+  moving an iframe reloads it, and the crossing moves what leaves.
+- Theater brings the stage to the front of the page, edge to edge across the
+  card and as tall as what the viewer can see of it (the element that scrolls
+  the card, which in the host sits under the host's chrome and the card's
+  header). The stage glides between its page box and its theater box. Theater
+  is state held by the gallery card (or a demo card opened on its own), so it
+  never changes the host's URL, and the frame is never re-parented.
 
 CI builds the film app into the realm in the Choreo Film App Tests job, so a
 change that breaks that build fails there rather than at deploy.
 
 The film documents load their scripts and media with plain requests, without
 the viewer's realm session, so the films play only from a realm everyone can
-read. The deployed gallery is publicly readable; give a development realm the
-same read permission for `*`.
+read. Chrome hands a `srcdoc` frame to the host's auth service worker, which
+adds the session, so a private realm can appear to work there; Firefox does
+not, and the frame says the realm must be publicly readable. The deployed
+gallery is publicly readable; give a development realm the same read
+permission for `*`.
 
 Moving between the grid and a demo page is state inside the gallery card, so
 the site frame's `<Choreo @route>` region sees each move as one render pass
 and flies the tile into the page. The gallery never writes the host's URL or
 title.
 
+## Where it's served
+
+The realm server mounts `realm/` as the realm `choreo-gallery`:
+
+| Environment | URL                                                  |
+| ----------- | ---------------------------------------------------- |
+| Production  | `https://app.boxel.ai/choreo-gallery/`               |
+| Staging     | `https://realms-staging.stack.cards/choreo-gallery/` |
+| Local       | `https://localhost:4201/choreo-gallery/`             |
+
+Each deploy copies `realm/` onto the realm's disk with `rsync --delete`
+(`setup:choreo-gallery-in-deployment` in `packages/realm-server`), so git is
+the realm's source of truth: staging follows `main`, production follows each
+production deploy, and an edit made in the app lasts only until the next
+deploy. The service account `choreo_gallery_realm` owns the realm,
+`choreo_gallery_writer` can read and write it, and everyone can read it.
+
 ## Developing
 
-Serve the realm from the local stack and push your edits to it.
+The local stack (`mise run dev-all` from the repository root) serves `realm/`
+itself at `https://localhost:4201/choreo-gallery/` and reindexes files as you
+save them. Set `SKIP_CHOREO_GALLERY=true` to leave it out of the stack.
+
+To work on a copy in a realm of your own instead, push the realm to it:
 
 1. Start the stack from the repository root: `mise run dev-all`.
 2. Install the Boxel CLI at the version CI uses:
