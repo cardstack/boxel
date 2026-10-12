@@ -349,9 +349,9 @@ export class Select extends Component<SelectSignature> {
       .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
         /* forced-colors paints no box-shadow, so a transparent outline keeps
            a focus indicator there */
-        outline: 1px solid transparent;
+        outline: 1.5px solid transparent;
         outline-offset: 1px;
-        box-shadow: 0 0 0 1px var(--ring);
+        box-shadow: 0 0 0 1.5px var(--ring);
       }
       .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
         opacity: 0.45;
