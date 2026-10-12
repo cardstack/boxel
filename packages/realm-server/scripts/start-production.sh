@@ -17,6 +17,7 @@ pnpm setup:pretui-in-deployment
 pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:openrouter-in-deployment
+pnpm setup:choreo-gallery-in-deployment
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://app.boxel.ai/submissions/}"
@@ -87,6 +88,11 @@ NODE_NO_WARNINGS=1 \
   --username='openrouter_realm' \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://app.boxel.ai/openrouter/' \
+  \
+  --path='/persistent/choreo-gallery' \
+  --username='choreo_gallery_realm' \
+  --fromUrl='https://app.boxel.ai/choreo-gallery/' \
+  --toUrl='https://app.boxel.ai/choreo-gallery/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

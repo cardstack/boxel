@@ -51,6 +51,7 @@ export interface BxlTransformContext extends NativeRequestContext {
   readonly actor?: string;
   readonly instance?: Record<string, unknown>;
   readonly realmConfig?: Record<string, unknown>;
+  readonly policy?: Record<string, unknown>;
 }
 
 export interface BxlTransformOptions {

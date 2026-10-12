@@ -243,9 +243,9 @@ export interface CommitBatchOptions {
   actor?: string;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names
-  // (see `ActingUsers`). It is who the batch's index job is initiated by. It
-  // never stands for the caller in a program, where `actor()` refuses for
-  // want of one.
+  // (see `AnonymousRequest`). It is who the batch's index job is initiated
+  // by. It never stands for the caller in a program, where `actor()` refuses
+  // for want of one.
   actingUser?: () => string | undefined;
   // Runs once every entry has been admitted and staged, and before anything
   // is written. A throw refuses the batch whole, with nothing written, and

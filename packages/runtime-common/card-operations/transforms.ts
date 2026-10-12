@@ -73,6 +73,7 @@ export interface TransformProgramContext {
   actor?: string;
   instance?: Record<string, unknown>;
   realmConfig?: Record<string, unknown>;
+  policy?: Record<string, unknown>;
 }
 
 // A program parsed and checked once, run over many values.
