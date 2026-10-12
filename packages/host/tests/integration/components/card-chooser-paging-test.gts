@@ -1,4 +1,10 @@
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  settled,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -63,7 +69,31 @@ async function isExtendedPageFetch(request: Request) {
 async function openCreateChooser() {
   await click('[data-test-boxel-filter-list-button="All Cards"]');
   await click('[data-test-create-new-card-button]');
-  await waitFor(section);
+  await waitForSection();
+}
+
+// On a timeout, names the realm sections that did render, so a failure tells
+// a section that never rendered from one still showing the placeholder name.
+async function waitForSection() {
+  try {
+    await waitFor(section);
+  } catch {
+    let rendered = [...document.querySelectorAll('[data-test-realm-url]')].map(
+      (n) =>
+        `${n.getAttribute('data-test-realm-url')} as "${n.getAttribute('data-test-realm')}"${
+          n.hasAttribute('data-test-realm-info-placeholder')
+            ? ' (placeholder name)'
+            : ''
+        }`,
+    );
+    throw new Error(
+      `timed out waiting for ${section}; chooser ${
+        document.querySelector('[data-test-card-chooser-cancel-button]')
+          ? 'is open'
+          : 'is not open'
+      }, realm sections: ${rendered.length ? rendered.join(', ') : 'none'}`,
+    );
+  }
 }
 
 async function showAllInSection() {
@@ -219,7 +249,10 @@ module('Integration | card-chooser | paging', function (hooks) {
       },
       { multiSelect: true },
     );
-    await waitFor(section);
+    // chooseCard is not a test-helper action, so nothing has waited for the
+    // chooser to open and run its search yet.
+    await settled();
+    await waitForSection();
     await showAllInSection();
     let lastId = widgetSpecId(specCount);
     await waitFor(`${section} [data-test-item-button="${lastId}"]`);
