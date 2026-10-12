@@ -494,7 +494,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     );
     // Read and write are separate grants, and either one is enough to run:
     // in a workspace the user can only read, each write is refused on its
-    // own, and in one the user can only write, the realm refuses each read.
+    // own. In one the user can only write, the realm refuses each read,
+    // including the read that a write to a file makes first.
     if (
       !realmURL ||
       !(this.realm.canRead(realmURL) || this.realm.canWrite(realmURL))

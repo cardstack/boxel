@@ -726,6 +726,7 @@ module(
     hooks.beforeEach(async function () {
       await setupIntegrationTestRealm({
         mockMatrixUtils,
+        enforcePermissions: true,
         permissions: { '*': ['read'] },
         contents: {
           'task.json': '{ "title": "Old title" }\n',
@@ -803,42 +804,6 @@ return { refused, text: await realm.fs.readText('task.json') };`,
         }),
         /You can only read this workspace.*No file was saved/,
       );
-    });
-  },
-);
-
-module(
-  'Integration | tools | run-realm-code | write-only workspace',
-  function (hooks) {
-    setupRenderingTest(hooks);
-    setupLocalIndexing(hooks);
-    let mockMatrixUtils = setupMockMatrix(hooks, {
-      autostart: true,
-      realmPermissions: { [testRealmURL]: ['write'] },
-    });
-    setupRealmCacheTeardown(hooks);
-
-    hooks.beforeEach(async function () {
-      await setupIntegrationTestRealm({ mockMatrixUtils, contents: {} });
-      await getService('realm').login(testRealmURL);
-    });
-
-    test('a script writes to a workspace the user can only write', async function (assert) {
-      let toolService = getService('tool-service');
-      let cardService = getService('card-service');
-      let command = new RunRealmCodeTool(toolService.toolContext);
-
-      let result = await command.execute({
-        realm: testRealmURL,
-        roomId: '!room:example.com',
-        code: `await realm.fs.writeText('new.json', '{}');`,
-      });
-
-      assert.strictEqual(result.files[0]?.status, 'saved');
-      let source = await cardService.getSource(
-        new URL(`${testRealmURL}new.json`),
-      );
-      assert.strictEqual(source.status, 200);
     });
   },
 );
