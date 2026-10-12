@@ -39,12 +39,6 @@ const seat = () => parseFloat(pucks()[0]!.style.left) / 100;
 const note = () => $('.hang-note').textContent!.trim();
 
 /**
- * `onDragEnd` is dispatched through `frame.update`, so it runs on Motion's
- * frameloop rather than in the pointerup handler — and `settled()` knows
- * nothing about that loop. Every release has to be followed by real frames
- * (`frames`) or the assertion reads the board from before the throw landed.
- */
-/**
  * A throw, in the only terms the component understands: a pointer that is
  * moving when it is lifted. `ms` sets the speed and nothing else — every
  * throw here starts and ends at the same two points, so the only variable
@@ -53,6 +47,11 @@ const note = () => $('.hang-note').textContent!.trim();
  * `trigger` measures its x/y from the element's CURRENT top-left, and the
  * element moves under the drag, so the coordinates go through `init` as
  * absolute clientX instead.
+ *
+ * `onDragEnd` is dispatched through `frame.update`, so it runs on Motion's
+ * frameloop rather than in the pointerup handler — and `settled()` knows
+ * nothing about that loop. So every release is followed by real frames, or
+ * the assertion would read the board from before the throw landed.
  */
 async function flick(ms: number, steps = 6) {
   const el = $(SHOT);
