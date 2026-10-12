@@ -417,9 +417,20 @@ export class Select extends Component<SelectSignature> {
         padding-block: 0;
         padding-inline: var(--_select-px);
       }
+      /* the hairline and ring are shadows, as on the trigger, so focus
+         thickens the edge to the trigger's 1.5px instead of stacking a
+         shadow on a border */
       .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
         min-height: var(--_select-h);
         padding-block: 0;
+        border: 0;
+        box-shadow: 0 0 0 1px var(--border);
+      }
+      .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus {
+        border: 0;
+        outline: 1.5px solid transparent;
+        outline-offset: 1px;
+        box-shadow: 0 0 0 1.5px var(--ring);
       }
     </style>
     {{! template-lint-enable require-scoped-style }}
