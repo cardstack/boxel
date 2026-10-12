@@ -36,6 +36,9 @@ const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
 // A script that loops by mistake must not fill the user's workspace list.
 const MAX_WORKSPACES = 5;
+// Content types the realm serves for files whose content is not text.
+const BINARY_CONTENT_TYPE_RE =
+  /^(?:(?:image|audio|video|font)\/(?!svg\+xml)|application\/(?:octet-stream|pdf|zip|gzip|wasm)\b)/i;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -109,9 +112,11 @@ class RealmFsSession {
 
   constructor(
     private realmURL: string,
-    private readSource: (
-      url: string,
-    ) => Promise<{ status: number; content: string }>,
+    private readSource: (url: string) => Promise<{
+      status: number;
+      content: string;
+      contentType: string | null;
+    }>,
     private writeFile: WriteFile,
     private listDirectory: ListDirectory,
     captureURL: CaptureURL,
@@ -237,6 +242,22 @@ class RealmFsSession {
         }
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
+      }
+      // Copies the content as it is, the same as a readText then a writeText.
+      // Relative imports and card references are not rewritten, so they stay
+      // correct only in a copy at the same folder depth.
+      case 'fs.copy': {
+        let from = this.resolve(method, args[0]);
+        let to = this.resolve(method, args[1]);
+        let content = await this.load(from);
+        if (content === undefined) {
+          throw new Error(`File not found: ${from}`);
+        }
+        if ((await this.load(to)) !== undefined) {
+          throw new Error(`File already exists: ${to}`);
+        }
+        await this.save(to, content, undefined);
+        return { path: this.relative(to), saved: true };
       }
       case 'capture': {
         let url = this.resolve(method, args[0]);
@@ -386,6 +407,14 @@ class RealmFsSession {
       throw new Error(`Realm code may touch at most ${MAX_FILES} files`);
     }
     let source = await this.readSource(url);
+    // Read as text, a binary file comes back mangled, and saving that text
+    // would corrupt any copy or edit of it.
+    if (
+      source.status === 200 &&
+      BINARY_CONTENT_TYPE_RE.test(source.contentType ?? '')
+    ) {
+      throw new Error(`${url} is a binary file; realm.fs reads only text`);
+    }
     if (source.status !== 200 && source.status !== 404) {
       throw new Error(`Unable to read ${url}: ${source.status}`);
     }
