@@ -38,7 +38,7 @@ export interface SelectSignature {
 
 // The flagship, rebuilt ON boxel-ui (standing reuse directive): wraps
 // BoxelSelect (ember-power-select) for real listbox behavior — keyboard nav,
-// scroll-into-view, trigger typeahead, and a search box on long lists — while
+// scroll-into-view and trigger typeahead — while
 // keeping Pretui's public API (value/defaultValue/onValueChange hybrid).
 // The dropdown renders in BoxelSelect's wormhole, so no overflow-hidden
 // ancestor clips it. BoxelSelect copies its --boxel-dropdown-* knobs from the
@@ -58,8 +58,6 @@ interface PoweredSelectSignature {
     onChange: (option: SelectOption | null) => void;
     placeholder?: string;
     disabled?: boolean;
-    searchEnabled?: boolean;
-    searchField?: string;
     matchTriggerWidth?: boolean;
     ariaLabel?: string;
     ariaLabelledBy?: string;
@@ -122,9 +120,6 @@ export class Select extends Component<SelectSignature> {
   get selectedOption() {
     return this.options.find((o) => o.value === this.value);
   }
-  get searchEnabled() {
-    return this.options.length > 7;
-  }
   choose = (option: SelectOption | null) => {
     if (!option) {
       return;
@@ -152,8 +147,6 @@ export class Select extends Component<SelectSignature> {
         @onChange={{this.choose}}
         @placeholder={{if @placeholder @placeholder 'Select…'}}
         @disabled={{this.disabled}}
-        @searchEnabled={{this.searchEnabled}}
-        @searchField='label'
         @matchTriggerWidth={{true}}
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
@@ -186,13 +179,12 @@ export class Select extends Component<SelectSignature> {
           --boxel-dropdown-border-color: var(--border);
           --boxel-dropdown-hover-color: var(--hover);
           --boxel-dropdown-hover-text-color: var(--popover-foreground);
-          /* the selected row sits on --selected, the contract's surface for
-             it; --primary-ink reads on it, where it would not on --hover */
-          --boxel-dropdown-highlight-color: var(--selected);
-          --boxel-dropdown-highlight-hover-color: var(--selected);
-          --boxel-dropdown-selected-text-color: var(--primary-ink);
-          --boxel-dropdown-selected-highlighted-color: var(--selected);
-          --boxel-dropdown-selected-hover-color: var(--selected);
+          /* the selected row is a --primary fill; its text and checkmark
+             take --primary-foreground through currentColor. Its hover and
+             keyboard-highlight tints are BoxelSelect's own mixes of the two. */
+          --boxel-dropdown-highlight-color: var(--primary);
+          --boxel-dropdown-highlight-hover-color: var(--primary);
+          --boxel-dropdown-selected-text-color: var(--primary-foreground);
           --boxel-dropdown-focus-border-color: var(--ring);
         }
       }

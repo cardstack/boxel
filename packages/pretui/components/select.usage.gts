@@ -16,14 +16,13 @@ const COUNTRY_NAMES = [
 ];
 const COUNTRY_OPTIONS = COUNTRY_NAMES.map((c) => ({ value: c, label: c }));
 // ── Select ← select/usage.gts ────────────────────────────────────────────
-// Eight countries, one past the search threshold, so the search box shows.
 // Dropped knobs: @variant (tone/appearance theming not on Select yet),
 // @verticalPosition (listbox always opens below), @renderInPlace (the
 // listbox always renders in the wormhole, so nothing clips it),
 // @matchTriggerWidth (listbox always matches),
-// @searchEnabled / @searchField (the search box appears by itself past
-// seven options; typeahead covers shorter lists), item yield block (options
-// are {value, label} data, rendered by the component).
+// @searchEnabled / @searchField (typeahead on the trigger replaces the
+// search box), item yield block (options are {value, label} data, rendered
+// by the component).
 // The dropdown renders in the wormhole, so an overflow-hidden ancestor does
 // not clip it; its colors come from the theme contract.
 export class SelectUsage extends Component {
@@ -46,7 +45,7 @@ export class SelectUsage extends Component {
   <template>
     <FreestyleUsage
       @name='Select'
-      @description='Choose one value from a known list; a search box appears past seven options.'
+      @description='Choose one value from a known list.'
       @source={{this.usage}}
     >
       <:example>

@@ -15,19 +15,19 @@ Choose one value from a known list. Use it when the options are enumerable and t
 
 **Hybrid controlled/uncontrolled.** `@value ?? @internal`, and `@internal` is only written when `@value === undefined`. Pass `@value` and you own it; pass `@defaultValue` and the component does. This exact idiom is repeated across Switch, Checkbox, RadioGroup, SegmentedControl, Tabs, Slider and Pagination — learn it once.
 
-**Search appears automatically past seven options.** Not an arg, so every Select in a product behaves the same way; see the gap under Prior art.
+**No search box.** Typeahead on the trigger covers long lists, as in Radix and React Aria. A list that needs filtering is a **Combobox**.
 
 ## Prior art
 
 **Radix `Select`** composes `Root/Trigger/Value/Portal/Content/Item/ItemText/ItemIndicator` and is famously strict about `value`/`onValueChange` being strings. **Web Awesome `wa-select`** takes `<wa-option>` children, supports `multiple`, `clearable`, `with-label`/`hint`, and participates in native form validation. **React Spectrum `Picker`** uses a collection API (`items` + render function) and `selectedKey`/`onSelectionChange`.
 
-Pretui's most consequential departure is under the hood: **it rides boxel-ui's `BoxelSelect` (ember-power-select) rather than reimplementing listbox behavior**, which buys real keyboard navigation, scroll-into-view, trigger typeahead and the search box — behavior a hand-rolled select in this kit would have got wrong.
+Pretui's most consequential departure is under the hood: **it rides boxel-ui's `BoxelSelect` (ember-power-select) rather than reimplementing listbox behavior**, which buys real keyboard navigation, scroll-into-view, and trigger typeahead — behavior a hand-rolled select in this kit would have got wrong.
 
-**The dropdown renders in BoxelSelect's wormhole**, so no `overflow: hidden` ancestor clips it. BoxelSelect copies its `--boxel-dropdown-*` knobs from the trigger onto the wormhole each time it opens, and a custom property's computed value has its `var()` references resolved. Select sets those knobs to theme tokens (`--popover`, `--popover-foreground`, `--hover`, `--selected`, `--border`, `--primary-ink`, `--ring`), so the dropdown carries the trigger's theme, dark mode included, with no `:deep()` rule reaching into it.
+**The dropdown renders in BoxelSelect's wormhole**, so no `overflow: hidden` ancestor clips it. BoxelSelect copies its `--boxel-dropdown-*` knobs from the trigger onto the wormhole each time it opens, and a custom property's computed value has its `var()` references resolved. Select sets those knobs to theme tokens (`--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`, `--ring`), so the dropdown carries the trigger's theme, dark mode included, with no `:deep()` rule reaching into it.
 
-The selected row's text is `--primary-ink`. The trigger's hairline rides `box-shadow`, not `border`, and its corners are the theme radius less 2px, the same as Button; Input's field style differs until it adopts the same one.
+The selected row is a `--primary` fill; its text and checkmark are `--primary-foreground`. The trigger's hairline rides `box-shadow`, not `border`, and its corners are the theme radius less 2px, the same as Button; Input's field style differs until it adopts the same one.
 
-**Against boxel-ui and the field.** `BoxelSelect` speaks in option objects and leaves naming to the caller; Radix and React Aria both require an explicit label and Radix's trigger, like this one, is a `role="combobox"` element no `<label for>` can name. Pretui is ahead on three counts: the string value API, a trigger that takes its name from a plain `<label for>` or a wrapping `<label>` with the chosen value read after it, and a portaled dropdown that still carries the field's theme. Behind: no `@invalid`, `@required` or `@describedBy` pass-through (React Aria and Web Awesome have all three, and `BoxelSelect` accepts `@ariaInvalid`, `@required` and `@ariaDescribedBy`), no disabled options, no custom option block, and a search box forced past seven options where Radix and React Aria leave typeahead alone.
+**Against boxel-ui and the field.** `BoxelSelect` speaks in option objects and leaves naming to the caller; Radix and React Aria both require an explicit label and Radix's trigger, like this one, is a `role="combobox"` element no `<label for>` can name. Pretui is ahead on three counts: the string value API, a trigger that takes its name from a plain `<label for>` or a wrapping `<label>` with the chosen value read after it, and a portaled dropdown that still carries the field's theme. Behind: no `@invalid`, `@required` or `@describedBy` pass-through (React Aria and Web Awesome have all three, and `BoxelSelect` accepts `@ariaInvalid`, `@required` and `@ariaDescribedBy`), no disabled options, and no custom option block.
 
 ## Accessibility
 
@@ -42,13 +42,13 @@ Gaps and cautions:
 
 ## Theming
 
-Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--ring`, `--radius`, `--popover`, `--popover-foreground`, `--hover`, `--selected`, `--border`, `--primary-ink`, `--shadow-inset`.
+Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--ring`, `--radius`, `--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`, `--shadow-inset`.
 
-Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-wrap`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. The selected row sits on `--selected`.
+Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-wrap`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. The selected row's hover and keyboard-highlight tints are BoxelSelect's own mixes of `--primary` and `--primary-foreground`.
 
 Per-instance knob: `--pretui-select-h` (the trigger's height, 1.75rem by default), set on your class.
 
-The dropdown's own geometry (padding, option height, search box) is BoxelSelect's. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
+The dropdown's own geometry (padding, option height) is BoxelSelect's. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
 
 ## React ecosystem
 
