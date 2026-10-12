@@ -39,7 +39,7 @@
     "@types/three": "catalog:",
     "@universal-ember/test-support": "catalog:",
     "concurrently": "catalog:",
-    "dialkit": "^2.0.0",
+    "dialkit": "2.0.2",
     "ember-modifier": "^4.3.0",
     "ember-source": "catalog:",
     "ember-template-lint": "catalog:",

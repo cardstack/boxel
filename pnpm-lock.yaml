@@ -2486,7 +2486,7 @@ importers:
         specifier: 'catalog:'
         version: 8.2.2
       dialkit:
-        specifier: ^2.0.0
+        specifier: 2.0.2
         version: 2.0.2(motion@13.4.6)
       ember-modifier:
         specifier: ^4.1.0
@@ -3266,7 +3266,7 @@ importers:
         specifier: 'catalog:'
         version: 2.4.0(@babel/core@7.29.7(supports-color@8.1.1))
       dialkit:
-        specifier: ^2.0.0
+        specifier: 2.0.2
         version: 2.0.2(motion@13.4.6)
       ember-animated:
         specifier: 'catalog:'
