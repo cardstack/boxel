@@ -24,7 +24,9 @@ declare module '@cardstack/boxel-host/lib/three-loader' {
   // Matches `loadThree` in `packages/host/app/lib/three-loader.ts`.
   export function loadThree(): Promise<{
     THREE: any;
+    DRACOLoader: any;
     GLTFLoader: any;
+    RectAreaLightUniformsLib: any;
     STLLoader: any;
     ThreeMFLoader: any;
   }>;

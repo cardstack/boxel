@@ -11,9 +11,24 @@
 // capture-only component) asks for it. The version is pinned to the build
 // the live orbit viewer loads from its CDN, so a capture and the viewer
 // agree on framing and shading.
+//
+// `DRACOLoader` decodes Draco-compressed glTF meshes; the decoder itself
+// (`draco_wasm_wrapper.js` and `draco_decoder.wasm`) is not bundled, so a
+// caller points `setDecoderPath()` at a directory that serves it.
+// `RectAreaLightUniformsLib.init()` must run once before a scene renders a
+// `RectAreaLight`.
 import * as THREE from 'three';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
-export { THREE, GLTFLoader, STLLoader, ThreeMFLoader };
+export {
+  THREE,
+  DRACOLoader,
+  GLTFLoader,
+  RectAreaLightUniformsLib,
+  STLLoader,
+  ThreeMFLoader,
+};
