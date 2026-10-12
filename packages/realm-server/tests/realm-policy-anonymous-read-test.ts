@@ -534,15 +534,15 @@ module(basename(import.meta.filename), function (hooks) {
 
   test("a grant whose blocklist refuses an address admits none of that address's reads, though another grant lets it in", async function (assert) {
     await setNewsroomConfig({ blockedIps: BLOCKED_RANGE });
-    // Opens drafts to every address: it has no blocklist of its own.
+    // Open drafts, and their stored bytes, to every address: neither has a
+    // blocklist of its own.
+    let draftsToAnonymous = 'actor() == "anonymous" and .status == "draft"';
     await org.write(
       'policies/newsroom.json',
       policyCard(ARTICLE, [
         ...NEWSROOM_GRANTS,
-        {
-          operation: 'read',
-          where: 'actor() == "anonymous" and .status == "draft"',
-        },
+        { operation: 'read', where: draftsToAnonymous },
+        { operation: 'readSource', where: draftsToAnonymous },
       ]),
     );
     await org.indexing();
@@ -572,9 +572,14 @@ module(basename(import.meta.filename), function (hooks) {
       'which describe the card to an address the blocklist leaves out',
     );
     assert.strictEqual(
-      (await readSource(PUBLISHED, BLOCKED_VISITOR)).status,
-      401,
-      'nor its stored bytes',
+      (await readSource(DRAFT, BLOCKED_VISITOR)).status,
+      200,
+      "the grant without a blocklist serves the draft's stored bytes",
+    );
+    unauthenticated(
+      await readSource(PUBLISHED, BLOCKED_VISITOR),
+      'stored bytes only the blocking grant opens',
+      assert,
     );
     assert.strictEqual(
       (await readCard(PUBLISHED, VISITOR)).status,

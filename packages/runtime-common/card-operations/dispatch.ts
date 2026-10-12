@@ -344,10 +344,9 @@ export interface RunOperationOptions {
   skipStoredFileMeta?: boolean;
   // The admission of the request this invocation serves, where its caller
   // isn't signed in: the grants their address may be admitted through, and
-  // whether it has budget left through each. The gate judges the invocation,
-  // and every read it makes on the way (a linked card's), by those grants
-  // alone, and records which one admitted it, so the request is counted
-  // against that grant.
+  // whether it has budget left through each. The gate judges the invocation
+  // by those grants alone, and records which one admitted it, so the request
+  // is counted against that grant.
   anonymousRequest?: AnonymousRequest;
 }
 
