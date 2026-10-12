@@ -1415,8 +1415,12 @@ export async function setupIntegrationTestRealm({
   // so a refusal of that kind can make the realm refuse what its policy grants.
   // Setup signs the host in with the session its permissions call for before
   // the host sends the realm anything, the matrix boot's requests included,
-  // so none of the host's own requests is refused that way; a test that
-  // provokes such a refusal on purpose has to allow for it.
+  // so none of the host's own requests is refused for want of a session. A
+  // signed-in user the realm's permissions refuse is still refused: the matrix
+  // boot reads the default system card from the realm at `testRealmURL`, so a
+  // realm there that won't let the user read it answers that read with a 403.
+  // A test that provokes a refusal on purpose, or sets up such a realm, has to
+  // allow for it.
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1728,7 +1732,15 @@ async function setupTestRealm({
       // of its own: it reads the default system card, which lives in the
       // realm at `testRealmURL`, so a realm set up there is asked for it
       // before anything else.
-      await getService('realm').reauthenticate(realmURL);
+      //
+      // A session that can't be minted is reported as an auth error rather
+      // than thrown, and that would fail the renderer's next render far from
+      // here, so setup stops on it instead.
+      if (!(await getService('realm').reauthenticate(realmURL))) {
+        throw new Error(
+          `setup could not sign the host in to ${realmURL} before the matrix boot`,
+        );
+      }
     }
     await mockMatrixUtils.start();
   }
