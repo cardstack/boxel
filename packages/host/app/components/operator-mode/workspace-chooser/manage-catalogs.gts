@@ -19,11 +19,10 @@ import { Scroller } from '@cardstack/pretui/components/scroller';
 import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type PublicRealmSummary } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type { PublicRealmSummary } from '@cardstack/host/services/realm-server';
 
 interface ManageCatalogsModalSignature {
   Args: {
@@ -46,21 +45,27 @@ class ManageCatalogsModal extends Component<ManageCatalogsModalSignature> {
 
   constructor(owner: Owner, args: ManageCatalogsModalSignature['Args']) {
     super(owner, args);
-    this.selected = [...this.realmServer.userCatalogRealmIdentifiers];
+    this.selected = this.realmServer.userCatalogPicks;
     this.loadChoices.perform();
   }
 
   // Loaded here and handed to List as plain rows rather than through List's
   // `@load`: List's loader re-runs whenever any of its args change, so each
   // toggle of `@selected` would reload the rows and flash the skeleton.
+  // Realms the dashboard already shows some other way, which the picker
+  // doesn't offer.
+  private get listedElsewhere() {
+    return new Set<string>([
+      baseRealm.url,
+      ...this.realmServer.catalogRealmIdentifiers,
+      ...this.realmServer.userRealmIdentifiers,
+    ]);
+  }
+
   private loadChoices = restartableTask(async () => {
     this.loadError = null;
     try {
-      let listedElsewhere = new Set<string>([
-        baseRealm.url,
-        ...this.realmServer.catalogRealmIdentifiers,
-        ...this.realmServer.userRealmIdentifiers,
-      ]);
+      let listedElsewhere = this.listedElsewhere;
       let realms = await this.realmServer.fetchPublicRealms();
       this.choices = realms
         .filter(({ url }) => !listedElsewhere.has(url))
@@ -73,14 +78,21 @@ class ManageCatalogsModal extends Component<ManageCatalogsModalSignature> {
   private save = task(async () => {
     this.saveError = null;
     try {
-      // Only realms still on offer are kept, so one that stopped being
-      // public drops out of the section once the user saves.
+      // The checked realms on offer, plus earlier picks the picker didn't
+      // offer because another list shows them, so they come back if that
+      // list stops showing them. A pick that is neither is no longer public,
+      // and is dropped.
       let selected = new Set(this.selected);
-      await this.matrixService.setUserCatalogRealms(
-        (this.choices ?? [])
-          .map(({ url }) => url)
-          .filter((url) => selected.has(url)),
+      let listedElsewhere = this.listedElsewhere;
+      let kept = this.realmServer.userCatalogPicks.filter((url) =>
+        listedElsewhere.has(url),
       );
+      let chosen = (this.choices ?? [])
+        .map(({ url }) => url)
+        .filter((url) => selected.has(url));
+      await this.matrixService.setUserCatalogRealms([
+        ...new Set([...kept, ...chosen]),
+      ]);
       this.args.onClose();
     } catch (e: any) {
       this.saveError = e.message;

@@ -274,13 +274,12 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get catalogEmptyMessage(): string | null {
-    if (
-      this.sortOrder === 'hosted-only' &&
-      this.filteredCatalogRealmIdentifiers.length === 0
-    ) {
-      return 'No matching results';
+    if (this.filteredCatalogRealmIdentifiers.length > 0) {
+      return null;
     }
-    return null;
+    return this.sortOrder === 'hosted-only'
+      ? 'No matching results'
+      : 'No catalogs yet. Add public realms with the gear.';
   }
 
   private get favoritesEmptyMessage(): string | null {

@@ -1179,6 +1179,28 @@ export default class MatrixService extends Service {
     this.realmServer.setUserCatalogRealmIdentifiers(realmURLs);
   }
 
+  // A favorite that no list on the dashboard shows, but that is a public realm,
+  // becomes one of the user's catalog picks, so the favorite stays visible.
+  // Costs a request only when such a favorite exists.
+  public async adoptUnlistedFavoritesAsCatalogs(): Promise<void> {
+    let listed = new Set<string>(this.realmServer.availableRealmIdentifiers);
+    let unlisted = this.workspaceFavorites.filter((url) => !listed.has(url));
+    if (unlisted.length === 0) {
+      return;
+    }
+    let publicRealms = new Set(
+      (await this.realmServer.fetchPublicRealms()).map(({ url }) => url),
+    );
+    let adopted = unlisted.filter((url) => publicRealms.has(url));
+    if (adopted.length === 0) {
+      return;
+    }
+    await this.setUserCatalogRealms([
+      ...this.realmServer.userCatalogPicks,
+      ...adopted,
+    ]);
+  }
+
   async setDisplayName(displayName: string) {
     await this.client.setDisplayName(displayName);
   }
@@ -1388,6 +1410,12 @@ export default class MatrixService extends Service {
         // is also a server catalog or one of their own realms is listed once.
         this.realmServer.setUserCatalogRealmIdentifiers(
           catalogRealmsData?.realms ?? [],
+        );
+        this.adoptUnlistedFavoritesAsCatalogs().catch((err) =>
+          console.error(
+            'Failed to add favorited public realms to Catalogs',
+            err,
+          ),
         );
 
         // Commit or undo the keyless-account seed now that the list is
