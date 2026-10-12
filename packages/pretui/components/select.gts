@@ -2,7 +2,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { guidFor } from '@ember/object/internals';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlNotifyArgs } from '../pretui-primitives';
@@ -22,9 +21,11 @@ export interface SelectSignature {
     defaultValue?: string;
     placeholder?: string;
     disabled?: boolean;
+    /** the id your `<label for>` points at. The trigger keeps BoxelSelect's
+     * own id, so this only finds the label, which then names the trigger
+     * through aria-labelledby */
     controlId?: string;
-    /** accessible name for the trigger. The trigger is not a labelable
-     * element, so a `<label for={{controlId}}>` alone may not name it. */
+    /** accessible name for the trigger, when there is no label */
     label?: string;
     /** id of an element that names the trigger; preferred over @label when
      * a visible or visually hidden label already exists */
@@ -60,7 +61,6 @@ interface PoweredSelectSignature {
     searchEnabled?: boolean;
     searchField?: string;
     matchTriggerWidth?: boolean;
-    dropdownClass?: string;
     ariaLabel?: string;
     ariaLabelledBy?: string;
   };
@@ -77,26 +77,24 @@ const PoweredSelect = BoxelSelect as unknown as new (
 // aria-labelledby — label first, then the trigger itself, so the chosen
 // value is still announced after the name.
 const nameFromLabel = modifier(
-  (
-    wrap: HTMLElement,
-    [controlId, explicit, fallbackId]: [string | undefined, boolean, string],
-  ) => {
+  (wrap: HTMLElement, [controlId, explicit]: [string | undefined, boolean]) => {
     if (explicit) {
       return;
     }
-    let trigger = wrap.querySelector<HTMLElement>('[data-pretui-select-trigger]');
+    let trigger = wrap.querySelector<HTMLElement>(
+      '[data-pretui-select-trigger]',
+    );
     if (!trigger) {
       return;
     }
     let label =
       (controlId
-        ? document.querySelector<HTMLElement>(`label[for="${CSS.escape(controlId)}"]`)
+        ? document.querySelector<HTMLElement>(
+            `label[for="${CSS.escape(controlId)}"]`,
+          )
         : null) ?? wrap.closest('label');
     if (!label) {
       return;
-    }
-    if (!trigger.id) {
-      trigger.id = fallbackId;
     }
     if (!label.id) {
       label.id = `${trigger.id}-label`;
@@ -107,9 +105,6 @@ const nameFromLabel = modifier(
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
-  get triggerId(): string {
-    return this.args.controlId ?? `${guidFor(this)}-trigger`;
-  }
   get explicitName(): boolean {
     return this.args.label !== undefined || this.args.labelledBy !== undefined;
   }
@@ -144,7 +139,7 @@ export class Select extends Component<SelectSignature> {
     <div
       class='pretui-selectwrap'
       data-test-pretui-select
-      {{nameFromLabel @controlId this.explicitName this.triggerId}}
+      {{nameFromLabel @controlId this.explicitName}}
       ...attributes
     >
       {{! no id here: BoxelSelect finds the trigger by its own id to copy the
@@ -160,7 +155,6 @@ export class Select extends Component<SelectSignature> {
         @searchEnabled={{this.searchEnabled}}
         @searchField='label'
         @matchTriggerWidth={{true}}
-        @dropdownClass='pretui-select-dropdown'
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
         data-pretui-select-trigger
@@ -171,34 +165,37 @@ export class Select extends Component<SelectSignature> {
       </PoweredSelect>
     </div>
     <style scoped>
-      .pretui-selectwrap {
-        --pretui-select-h: 1.75rem;
+      @layer PretComponent {
+        .pretui-selectwrap {
+          /* per-instance knob: the trigger's height */
+          --pretui-select-h: 1.75rem;
 
-        min-width: 0;
-        /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
-           ones travel to the wormhole with their values resolved. */
-        --boxel-form-control-border-radius: calc(var(--radius) - 2px);
-        /* the trigger spends its hairline as a box-shadow with border: 0,
-           so it pads 1px more than a bordered Input to line its text up */
-        --boxel-select-trigger-padding: 0 0.625rem;
-        --boxel-select-trigger-gap: var(--boxel-sp-2xs);
-        --boxel-select-trigger-content-wrap: nowrap;
-        --boxel-dropdown-background-color: var(--popover);
-        --boxel-dropdown-text-color: var(--popover-foreground);
-        --boxel-dropdown-border-color: var(--border);
-        --boxel-dropdown-hover-color: var(--hover);
-        --boxel-dropdown-hover-text-color: var(--popover-foreground);
-        --boxel-dropdown-highlight-color: var(--hover);
-        --boxel-dropdown-highlight-hover-color: var(--hover);
-        --boxel-dropdown-selected-text-color: var(--primary-ink);
-        --boxel-dropdown-selected-highlighted-color: var(--hover);
-        --boxel-dropdown-selected-hover-color: var(--hover);
-        --boxel-dropdown-focus-border-color: var(--ring);
+          min-width: 0;
+          /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
+             ones and the radius travel to the wormhole, values resolved. */
+          --boxel-form-control-border-radius: calc(var(--radius) - 2px);
+          /* the trigger spends its hairline as a box-shadow with border: 0,
+             so it pads 1px more than a bordered Input to line its text up */
+          --boxel-select-trigger-padding: 0 0.625rem;
+          --boxel-select-trigger-gap: var(--boxel-sp-2xs);
+          --boxel-select-trigger-content-wrap: nowrap;
+          --boxel-dropdown-background-color: var(--popover);
+          --boxel-dropdown-text-color: var(--popover-foreground);
+          --boxel-dropdown-border-color: var(--border);
+          --boxel-dropdown-hover-color: var(--hover);
+          --boxel-dropdown-hover-text-color: var(--popover-foreground);
+          --boxel-dropdown-highlight-color: var(--hover);
+          --boxel-dropdown-highlight-hover-color: var(--hover);
+          --boxel-dropdown-selected-text-color: var(--primary-ink);
+          --boxel-dropdown-selected-highlighted-color: var(--hover);
+          --boxel-dropdown-selected-hover-color: var(--hover);
+          --boxel-dropdown-focus-border-color: var(--ring);
+        }
       }
       /* BoxelSelect has no knobs for the trigger's height and hairline, so
-         these reach its trigger, dressed to match Input. Unlayered:
-         BoxelSelect's own rules are unlayered, and unlayered CSS beats any
-         layer. */
+         these reach its trigger, dressed to match Input. Unlayered, the one
+         exception in the kit: BoxelSelect's own rules are unlayered, and
+         unlayered CSS beats any layer. */
       .pretui-selectwrap :deep(.pretui-selecttrigger) {
         align-items: center;
         height: var(--pretui-select-h);
@@ -247,4 +244,3 @@ export class Select extends Component<SelectSignature> {
     </style>
   </template>
 }
-

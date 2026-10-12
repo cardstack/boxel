@@ -103,8 +103,8 @@ module('Pretui | components/rule-row', function (hooks) {
   test('offers the target path as a select when resources are known', async function (assert) {
     const noop = () => {};
     await render(<template><RuleRow @rule={{RULE}} @resources={{RESOURCES}} @onChange={{noop}} /></template>);
-    assert.ok(document.querySelector('[data-test-pretui-rule-path] [data-test-pretui-select-trigger]'), 'a Select, not free text');
-    assert.true(document.querySelector('[data-test-pretui-rule-path] [data-test-pretui-select-trigger]')?.textContent?.includes('Total'));
+    assert.ok(row().querySelector('[data-test-pretui-rule-path] [data-test-pretui-select-trigger]'), 'a Select, not free text');
+    assert.true(row().querySelector('[data-test-pretui-rule-path] [data-test-pretui-select-trigger]')?.textContent?.includes('Total'));
   });
 
   test('shows a remove control only when given a handler, named after the rule', async function (assert) {

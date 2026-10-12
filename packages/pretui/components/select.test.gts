@@ -1,6 +1,6 @@
 // Pretui — Select unit tests: how the trigger is named.
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Select } from './select';
 
@@ -9,12 +9,24 @@ const OPTIONS = [
   { value: 'oolong', label: 'Oolong' },
 ];
 
+function wrapper(): HTMLElement {
+  return document.querySelector('[data-test-pretui-select]') as HTMLElement;
+}
 function trigger(): HTMLElement {
-  return document.querySelector('[data-test-pretui-select-trigger]') as HTMLElement;
+  return wrapper().querySelector('[data-test-pretui-select-trigger]') as HTMLElement;
 }
 
 module('Pretui | components/select', function (hooks) {
   setupCardTest(hooks);
+
+  test('the dropdown renders outside the Select, so no ancestor clips it', async function (assert) {
+    await render(<template><Select @options={{OPTIONS}} /></template>);
+    await click(trigger());
+    let listbox = document.querySelector("[role='listbox']") as HTMLElement;
+    assert.ok(listbox, 'the list is open');
+    assert.notOk(wrapper().contains(listbox), 'in the wormhole, not in place');
+    assert.strictEqual(listbox.querySelectorAll('[data-test-pretui-select-option]').length, OPTIONS.length);
+  });
 
   test('a label pointing at @controlId names the trigger, then the value', async function (assert) {
     await render(
