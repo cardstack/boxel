@@ -6,6 +6,7 @@ import {
   dbAdapterQuerier,
   param,
   query,
+  type Expression,
   type Querier,
   upsert,
 } from '../expression.ts';
@@ -186,9 +187,8 @@ export async function fetchUserPermissions(
     includeArchived = false,
     includePublicRealms = false,
   } = args;
-  // Render the archive predicate inline rather than appending a fragment:
-  // the `false` branch's UNION applies the filter to both arms, so a
-  // single composable expression keeps the two arms in sync.
+  // Rendered inline into each arm below rather than appended once, so the
+  // own-rows arm and the public arm filter archived realms the same way.
   const excludeArchivedSql = includeArchived
     ? ''
     : `AND realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)`;
@@ -199,54 +199,36 @@ export async function fetchUserPermissions(
     realm_owner: boolean;
   }[];
 
-  if (onlyOwnRealms) {
-    // Only get realms where user is owner
-    permissions = (await query(dbAdapter, [
-      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `AND realm_owner = true
-       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}`,
-    ])) as {
-      realm_url: string;
-      read: boolean;
-      write: boolean;
-      realm_owner: boolean;
-    }[];
-  } else if (!includePublicRealms) {
-    permissions = (await query(dbAdapter, [
-      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}`,
-    ])) as {
-      realm_url: string;
-      read: boolean;
-      write: boolean;
-      realm_owner: boolean;
-    }[];
-  } else {
-    // Get all user permissions (owned + read access) and public realms in one query
-    // Use UNION to deduplicate, prioritizing user permissions over public permissions
-    permissions = (await query(dbAdapter, [
-      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}
-       UNION
-       SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
-       AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `)
-       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}`,
-    ])) as {
-      realm_url: string;
-      read: boolean;
-      write: boolean;
-      realm_owner: boolean;
-    }[];
-  }
+  // The user's own permission rows — only the ones they own when
+  // `onlyOwnRealms` — leaving out published snapshots and, unless asked for,
+  // archived realms.
+  let ownRows: Expression = [
+    `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
+    param(userId),
+    `${onlyOwnRealms ? 'AND realm_owner = true' : ''}
+     AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+     ${excludeArchivedSql}`,
+  ];
+  // The world-readable realms the user has no row of their own for. UNION
+  // deduplicates, and the NOT IN keeps a user's own row the one that counts.
+  let publicRows: Expression =
+    includePublicRealms && !onlyOwnRealms
+      ? [
+          `UNION
+           SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
+           AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
+          param(userId),
+          `)
+           AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+           ${excludeArchivedSql}`,
+        ]
+      : [];
+  permissions = (await query(dbAdapter, [...ownRows, ...publicRows])) as {
+    realm_url: string;
+    read: boolean;
+    write: boolean;
+    realm_owner: boolean;
+  }[];
 
   return permissions.reduce(
     (permissionsAcc, { realm_url, read, write, realm_owner }) => {
