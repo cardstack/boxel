@@ -280,6 +280,7 @@ import {
   scopeCallerFor,
 } from './card-operations/dispatch.ts';
 import type { ReadPlan } from './card-operations/dispatch.ts';
+import type { AnonymousRequest } from './card-operations/anonymous-request.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
@@ -8677,7 +8678,7 @@ export class Realm {
             // Nothing here holds on to the bytes, so a `HEAD` asks only for
             // what its headers are computed from.
             headersOnly: request.method === 'HEAD' ? true : undefined,
-            ...(gated ? { coarseDeclined: true as const } : {}),
+            ...(gated ? this.#gatedRead(requestContext) : {}),
             route: byteRoute('module'),
           },
         );
@@ -8815,7 +8816,7 @@ export class Realm {
       source = await this.#readStoredSource(
         this.#callerOf(request, requestContext),
         fileRef.path,
-        { coarseDeclined: true, route: byteRoute('module') },
+        { ...this.#gatedRead(requestContext), route: byteRoute('module') },
       );
     } catch (e: unknown) {
       if (e instanceof CardError) {
@@ -10389,6 +10390,9 @@ export class Realm {
       skipStoredFileMeta?: true;
       coarseDeclined?: true;
       route?: PolicyRoute;
+      // The request of a caller who isn't signed in, which the read is judged
+      // and counted in (see `RunOperationOptions.anonymousRequest`).
+      anonymousRequest?: AnonymousRequest;
     } = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
@@ -10445,6 +10449,20 @@ export class Realm {
       );
     }
     return result;
+  }
+
+  // How a byte route reads for a caller the realm ACL declined: through the
+  // gate, and for a caller who isn't signed in, within their request, so the
+  // grant that admits the read is the one it is counted against.
+  #gatedRead(requestContext: RequestContext): {
+    coarseDeclined: true;
+    anonymousRequest?: AnonymousRequest;
+  } {
+    let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
+    return {
+      coarseDeclined: true,
+      ...(anonymousRequest ? { anonymousRequest } : {}),
+    };
   }
 
   // What a byte route hands `serveLocalFile`: the operation's answer, in the
@@ -11305,7 +11323,7 @@ export class Realm {
       let source = await this.#readStoredSource(
         this.#callerOf(request, requestContext),
         handle.path,
-        { headersOnly, ...(gated ? { coarseDeclined: true as const } : {}) },
+        { headersOnly, ...(gated ? this.#gatedRead(requestContext) : {}) },
       );
       if (!source) {
         return (
