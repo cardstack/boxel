@@ -1395,14 +1395,17 @@ export class Mockup extends Component {
        * a second palette — and it is repainted when the visitor flips the
        * theme, because a dark cyc behind a light page reads as a hole.
        */
+      // the gallery's theme is its root's `data-theme`
+      const site =
+        host.closest<HTMLElement>('[data-choreo-site]') ??
+        document.documentElement;
       const dressSet = () => {
         // TWO SETS, NOT ONE TINTED. A product shot needs the device to be
         // the brightest thing in frame, so neither set is the page colour:
         // dark mode gets a near-black warm cyc, light mode a medium slate
         // that is clearly darker than the paper around it but visibly its
         // own tone rather than the dark set reused.
-        const light =
-          document.documentElement.getAttribute('data-theme') === 'light';
+        const light = site.getAttribute('data-theme') === 'light';
         const base = light ? '#5b626e' : '#14161b';
         const floor = light ? '#3f444e' : '#090a0d';
         const pool = light ? '#ffffff2e' : '#ffffff1c';
@@ -1426,7 +1429,7 @@ export class Mockup extends Component {
       };
       dressSet();
       const themeWatch = new MutationObserver(dressSet);
-      themeWatch.observe(document.documentElement, {
+      themeWatch.observe(site, {
         attributeFilter: ['data-theme'],
         attributes: true,
       });

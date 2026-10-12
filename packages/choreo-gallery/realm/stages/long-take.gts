@@ -827,9 +827,12 @@ export class LongTake extends Component {
       const cycTex = new T.CanvasTexture(cycCanvas);
       cycTex.colorSpace = T.SRGBColorSpace;
       /** the set follows the page: a dark cyc behind a light page is a hole */
+      // the gallery's theme is its root's `data-theme`
+      const site =
+        host.closest<HTMLElement>('[data-choreo-site]') ??
+        document.documentElement;
       const dressSet = () => {
-        const light =
-          document.documentElement.getAttribute('data-theme') === 'light';
+        const light = site.getAttribute('data-theme') === 'light';
         const base = light ? '#5b626e' : '#14161b';
         const floor = light ? '#3f444e' : '#090a0d';
         const pool = light ? '#ffffff2e' : '#ffffff1c';
@@ -853,7 +856,7 @@ export class LongTake extends Component {
       };
       dressSet();
       const themeWatch = new MutationObserver(dressSet);
-      themeWatch.observe(document.documentElement, {
+      themeWatch.observe(site, {
         attributeFilter: ['data-theme'],
         attributes: true,
       });
