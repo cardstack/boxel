@@ -109,10 +109,7 @@ export const tourActions: Record<string, TourAction[]> = {
     click(5, '.cam-frame', 3),
   ],
   'long-take': [click(1, '.lt-seg button', 1)],
-  sylva: [
-    click(1, '[aria-label="Tour the living world"]'),
-    click(4, '.sy-play'),
-  ],
+  sylva: [click(4, '.sy-play')],
   subdivision: [click(1, '.sub-tile', 1), click(4, '.sub-tile', 3)],
   rack: [
     click(1, '[data-notch="1"]'),
@@ -132,13 +129,27 @@ export const tourActions: Record<string, TourAction[]> = {
     click(4, '[aria-label="Next build"]'),
     click(5.5, '[aria-label="Next build"]'),
   ],
-  towers: [click(0.8, '.ft-play'), click(2, '.cf-go.is-quiet')],
-  sagrada: [click(0.8, '.ft-play'), click(2, '.cf-go.is-quiet')],
+  towers: [click(2, '.cf-go.is-quiet')],
+  sagrada: [click(2, '.cf-go.is-quiet')],
   playhead: [range(1, 0.15), range(3, 0.7), range(5, 0.35), range(7, 0.95)],
   'build-order': [range(1, 0), click(1.5, '[aria-label="Play"]'), range(7, 1)],
 };
-function find(root: HTMLElement, selector: string): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(selector)];
+/**
+ * Every match under the tile, and inside any same-origin frame in it: a
+ * film's controls live in the film's own document.
+ */
+function find(doc: Document | HTMLElement, selector: string): HTMLElement[] {
+  const own = [...doc.querySelectorAll<HTMLElement>(selector)];
+  for (const frame of doc.querySelectorAll('iframe')) {
+    try {
+      if (frame.contentDocument) {
+        own.push(...find(frame.contentDocument, selector));
+      }
+    } catch {
+      /* Cross-origin content is not operated. */
+    }
+  }
+  return own;
 }
 /** Returns cancellation. All synthetic actions cease on a real visitor gesture. */
 export function guideDemo(

@@ -9,7 +9,7 @@ import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
 import type * as THREE from 'three';
 
-import type { GalleryDemo } from '../demo';
+import type { GalleryDemo, StageSignature } from '../demo';
 import { cameraCss, perspective } from '../lib/css3d';
 import { restWhenOff } from '../lib/onstage';
 import { realmFile } from '../lib/realm-url';
@@ -40,7 +40,7 @@ import { ChoreoRoot } from './choreo-root';
 
 /** a demo as the room hangs it: the card, its stage, and its URL */
 export interface RoomDemo {
-  Example: ComponentLike;
+  Example: ComponentLike<StageSignature>;
   group: string;
   href: string;
   id: string;
@@ -60,7 +60,7 @@ export function roomDemos(demos: GalleryDemo[]): RoomDemo[] {
             group: demo.group ?? '',
             lede: demo.lede ?? '',
             href: demo.id ?? '',
-            Example: Stage as ComponentLike,
+            Example: Stage,
           },
         ]
       : [];
@@ -1079,10 +1079,12 @@ export class WidgetRoom extends Component<Signature> {
                   data-render='parked'
                   {{restWhenOff}}
                 >
+                  {{! the stage face: a film plays in its own frame here, as
+                      on its demo page, rather than showing its gallery poster }}
                   {{#if (this.isMounted demo.id)}}{{#let
                       demo.Example
                       as |Example|
-                    }}<Example />{{/let}}{{/if}}
+                    }}<Example @face='stage' />{{/let}}{{/if}}
                 </div>
                 <img
                   class='wr-tile-preview'
