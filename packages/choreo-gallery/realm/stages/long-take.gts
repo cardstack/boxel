@@ -880,240 +880,254 @@ export class LongTake extends Component {
       const draco = dracoLoader(engine, DRACO);
       const loader = new GLTFLoader().setDRACOLoader(draco);
       await new Promise<void>((resolve) => {
-        loader.load(LAPTOP, (gltf) => {
-          const model = gltf.scene;
-          model.updateMatrixWorld(true);
+        loader.load(
+          LAPTOP,
+          (gltf) => {
+            const model = gltf.scene;
+            model.updateMatrixWorld(true);
 
-          /**
-           * THE DISPLAY, BY NAME. Unlike the phone's GLB this model was
-           * exported with its materials named, and one of them is
-           * `screen.001` — so the panel is simply the mesh wearing it. A
-           * geometry fallback is kept for the day that stops being true:
-           * the thinnest mesh whose face is close to the lid's aspect.
-           */
-          let found: THREE.Mesh | undefined;
-          let fallback: { mesh: THREE.Mesh; thin: number } | undefined;
-          model.traverse((child) => {
-            const mesh = child as THREE.Mesh;
-            if (!mesh.isMesh) {
+            /**
+             * THE DISPLAY, BY NAME. Unlike the phone's GLB this model was
+             * exported with its materials named, and one of them is
+             * `screen.001` — so the panel is simply the mesh wearing it. A
+             * geometry fallback is kept for the day that stops being true:
+             * the thinnest mesh whose face is close to the lid's aspect.
+             */
+            let found: THREE.Mesh | undefined;
+            let fallback: { mesh: THREE.Mesh; thin: number } | undefined;
+            model.traverse((child) => {
+              const mesh = child as THREE.Mesh;
+              if (!mesh.isMesh) {
+                return;
+              }
+              const mats = Array.isArray(mesh.material)
+                ? mesh.material
+                : [mesh.material];
+              if (mats.some((m) => /screen/i.test(m?.name ?? ''))) {
+                found ??= mesh;
+              }
+              mesh.geometry.computeBoundingBox();
+              const b = mesh.geometry.boundingBox!;
+              const d = b.max.clone().sub(b.min);
+              const thin = Math.min(d.x, d.y, d.z);
+              const bulk = Math.max(d.x, d.y, d.z);
+              if (
+                thin / bulk < 0.01 &&
+                (!fallback || bulk > fallback.thin) &&
+                bulk > 3
+              ) {
+                fallback = { mesh, thin: bulk };
+              }
+            });
+            const panel = found ?? fallback?.mesh;
+            if (!panel) {
+              this.status = 'no screen mesh found';
+              resolve();
               return;
             }
-            const mats = Array.isArray(mesh.material)
-              ? mesh.material
-              : [mesh.material];
-            if (mats.some((m) => /screen/i.test(m?.name ?? ''))) {
-              found ??= mesh;
-            }
-            mesh.geometry.computeBoundingBox();
-            const b = mesh.geometry.boundingBox!;
-            const d = b.max.clone().sub(b.min);
-            const thin = Math.min(d.x, d.y, d.z);
-            const bulk = Math.max(d.x, d.y, d.z);
-            if (
-              thin / bulk < 0.01 &&
-              (!fallback || bulk > fallback.thin) &&
-              bulk > 3
-            ) {
-              fallback = { mesh, thin: bulk };
-            }
-          });
-          const panel = found ?? fallback?.mesh;
-          if (!panel) {
-            this.status = 'no screen mesh found';
-            resolve();
-            return;
-          }
 
-          // EVERY MEASUREMENT BELOW HAPPENS WITH THE ORBIT AT REST. A
-          // Box3 is world-space and axis-aligned, so measuring under a
-          // rotated pivot returns the box of the ROTATED lid.
-          pivot.rotation.set(0, 0, 0);
-          pivot.updateMatrixWorld(true);
+            // EVERY MEASUREMENT BELOW HAPPENS WITH THE ORBIT AT REST. A
+            // Box3 is world-space and axis-aligned, so measuring under a
+            // rotated pivot returns the box of the ROTATED lid.
+            pivot.rotation.set(0, 0, 0);
+            pivot.updateMatrixWorld(true);
 
-          /**
-           * ONE WORLD UNIT IS ONE CSS PIXEL. `perspective` and the
-           * camera's translateZ are written in px, so a scene authored at
-           * "8 units for a laptop" projects nothing like the WebGL one.
-           * Scale the model until the display is exactly as wide as the
-           * DOM screen and every matrix below is in pixels.
-           *
-           * The width is taken from the panel's OWN geometry rather than
-           * from a world box, because the lid is hinged: an axis-aligned
-           * box of a tilted panel is bigger than the panel.
-           */
-          panel.geometry.computeBoundingBox();
-          const local = panel.geometry.boundingBox!;
-          const span = local.max.clone().sub(local.min);
-          // the thin axis is the normal; the other two are width x height
-          const axes: ('x' | 'y' | 'z')[] = ['x', 'y', 'z'];
-          const normalAxis = axes.reduce((a, b) => (span[a] < span[b] ? a : b));
-          const face = axes.filter((a) => a !== normalAxis);
-          const wLocal = Math.max(span[face[0]!], span[face[1]!]);
-          const hLocal = Math.min(span[face[0]!], span[face[1]!]);
+            /**
+             * ONE WORLD UNIT IS ONE CSS PIXEL. `perspective` and the
+             * camera's translateZ are written in px, so a scene authored at
+             * "8 units for a laptop" projects nothing like the WebGL one.
+             * Scale the model until the display is exactly as wide as the
+             * DOM screen and every matrix below is in pixels.
+             *
+             * The width is taken from the panel's OWN geometry rather than
+             * from a world box, because the lid is hinged: an axis-aligned
+             * box of a tilted panel is bigger than the panel.
+             */
+            panel.geometry.computeBoundingBox();
+            const local = panel.geometry.boundingBox!;
+            const span = local.max.clone().sub(local.min);
+            // the thin axis is the normal; the other two are width x height
+            const axes: ('x' | 'y' | 'z')[] = ['x', 'y', 'z'];
+            const normalAxis = axes.reduce((a, b) =>
+              span[a] < span[b] ? a : b,
+            );
+            const face = axes.filter((a) => a !== normalAxis);
+            const wLocal = Math.max(span[face[0]!], span[face[1]!]);
+            const hLocal = Math.min(span[face[0]!], span[face[1]!]);
 
-          const worldScale = panel.getWorldScale(new T.Vector3()).x || 1;
-          model.scale.multiplyScalar(SCREEN.w / (wLocal * worldScale));
-          pivot.add(model);
-          pivot.updateMatrixWorld(true);
+            const worldScale = panel.getWorldScale(new T.Vector3()).x || 1;
+            model.scale.multiplyScalar(SCREEN.w / (wLocal * worldScale));
+            pivot.add(model);
+            pivot.updateMatrixWorld(true);
 
-          // centre the whole laptop on the origin, so a dolly closes in on
-          // the device rather than drifting off it
-          const bounds = new T.Box3().setFromObject(model);
-          model.position.sub(bounds.getCenter(new T.Vector3()));
-          pivot.updateMatrixWorld(true);
+            // centre the whole laptop on the origin, so a dolly closes in on
+            // the device rather than drifting off it
+            const bounds = new T.Box3().setFromObject(model);
+            model.position.sub(bounds.getCenter(new T.Vector3()));
+            pivot.updateMatrixWorld(true);
 
-          const whole = new T.Box3()
-            .setFromObject(model)
-            .getSize(new T.Vector3());
-          // the silhouette a turned laptop sweeps, so a yaw does not push
-          // a corner out of frame
-          mac = { h: whole.y, w: Math.hypot(whole.x, whole.z) };
-          frame2();
+            const whole = new T.Box3()
+              .setFromObject(model)
+              .getSize(new T.Vector3());
+            // the silhouette a turned laptop sweeps, so a yaw does not push
+            // a corner out of frame
+            mac = { h: whole.y, w: Math.hypot(whole.x, whole.z) };
+            frame2();
 
-          /**
-           * THE ANCHOR TAKES THE LID'S OWN ORIENTATION.
-           *
-           * The panel's local frame is (width, normal, height) in some
-           * order; the DOM wants (right, up, out). That is one fixed
-           * rotation, and composing it with the panel's WORLD rotation
-           * pins the plane to the glass at whatever angle the hinge left
-           * it — including the degree or so this model is off vertical,
-           * which is invisible head-on and a visible parallax the moment
-           * the shot turns.
-           */
-          const q = panel.getWorldQuaternion(new T.Quaternion());
-          const correct = new T.Quaternion().setFromEuler(
-            normalAxis === 'y'
-              ? new T.Euler(-Math.PI / 2, 0, 0)
-              : normalAxis === 'x'
-                ? new T.Euler(0, Math.PI / 2, 0)
-                : new T.Euler(0, 0, 0),
-          );
-          anchor.quaternion.copy(q).multiply(correct);
+            /**
+             * THE ANCHOR TAKES THE LID'S OWN ORIENTATION.
+             *
+             * The panel's local frame is (width, normal, height) in some
+             * order; the DOM wants (right, up, out). That is one fixed
+             * rotation, and composing it with the panel's WORLD rotation
+             * pins the plane to the glass at whatever angle the hinge left
+             * it — including the degree or so this model is off vertical,
+             * which is invisible head-on and a visible parallax the moment
+             * the shot turns.
+             */
+            const q = panel.getWorldQuaternion(new T.Quaternion());
+            const correct = new T.Quaternion().setFromEuler(
+              normalAxis === 'y'
+                ? new T.Euler(-Math.PI / 2, 0, 0)
+                : normalAxis === 'x'
+                  ? new T.Euler(0, Math.PI / 2, 0)
+                  : new T.Euler(0, 0, 0),
+            );
+            anchor.quaternion.copy(q).multiply(correct);
 
-          const box = new T.Box3().setFromObject(panel);
-          const centre = box.getCenter(new T.Vector3());
-          // FLUSH, on the face the panel actually points at. There is no
-          // z-fighting to avoid — the DOM never enters the depth buffer —
-          // and any offset at all is parallax the moment the lid turns.
-          const out = new T.Vector3(0, 0, 1).applyQuaternion(anchor.quaternion);
-          const half = (span[normalAxis]! * worldScale * model.scale.x) / 2;
-          anchor.position.copy(centre).addScaledVector(out, half);
+            const box = new T.Box3().setFromObject(panel);
+            const centre = box.getCenter(new T.Vector3());
+            // FLUSH, on the face the panel actually points at. There is no
+            // z-fighting to avoid — the DOM never enters the depth buffer —
+            // and any offset at all is parallax the moment the lid turns.
+            const out = new T.Vector3(0, 0, 1).applyQuaternion(
+              anchor.quaternion,
+            );
+            const half = (span[normalAxis]! * worldScale * model.scale.x) / 2;
+            anchor.position.copy(centre).addScaledVector(out, half);
 
-          plane.style.width = `${SCREEN.w}px`;
-          plane.style.height = `${Math.round(SCREEN.w * (hLocal / wLocal))}px`;
+            plane.style.width = `${SCREEN.w}px`;
+            plane.style.height = `${Math.round(SCREEN.w * (hLocal / wLocal))}px`;
 
-          /**
-           * THE GLASS. `blending: NoBlending` writes the material's RGB
-           * *and its alpha* straight into the framebuffer, replacing the
-           * opaque fragments already drawn there — so the canvas becomes
-           * a hole the shape of the display and the DOM beneath shows
-           * through. Whatever this alpha is, that much of the slide is
-           * replaced by shaded glass: five percent of near-black is depth
-           * without dimming.
-           */
-          panel.material = new T.MeshPhysicalMaterial({
-            blending: T.NoBlending,
-            clearcoat: 1,
-            clearcoatRoughness: 0.04,
-            color: 0x01030a,
-            envMap: flagged,
-            envMapIntensity: 0.85,
-            metalness: 0,
-            opacity: 0.05,
-            roughness: 0.06,
-            transparent: true,
-          });
-
-          /**
-           * THE COVER GLASS — the sheet the drawing is behind, rather than
-           * a surface the drawing is printed on.
-           *
-           * The panel above cannot do this itself. Its whole job is to
-           * punch a hole: `NoBlending` writes its alpha straight into the
-           * framebuffer, so everything it draws is a replacement for the
-           * DOM rather than something laid over it, and a highlight strong
-           * enough to read would be a highlight you look at the slides
-           * THROUGH. So the reflection is a second sheet, a hair in front,
-           * drawn after it and adding to what is already there.
-           *
-           * Custom blending, because the two channels want opposite
-           * things. RGB is additive — a reflection is light arriving, and
-           * light only ever brightens what it lands on. Alpha is left
-           * exactly as the panel wrote it: the framebuffer's alpha is the
-           * hole the DOM shows through, and an ordinary transparent
-           * material would raise it right across the display and quietly
-           * seal the screen over.
-           *
-           * It reflects the flagged room and not the bright one for the
-           * same reason the panel does — a mirror pointed at a white cyc
-           * comes back a white sheet. What it catches is the overhead
-           * strip, and the point of it is that it MOVES: the sheen slides
-           * across the drawing as the shot turns, which a painted-on
-           * gradient cannot do and which is most of why glass reads as
-           * glass.
-           */
-          const glass = new T.Mesh(
-            new T.PlaneGeometry(
-              SCREEN.w,
-              Math.round(SCREEN.w * (hLocal / wLocal)),
-            ),
-            new T.MeshPhysicalMaterial({
-              blendDst: T.OneFactor,
-              // leave the hole alone — see above
-              blendDstAlpha: T.OneFactor,
-              blendEquation: T.AddEquation,
-              blendEquationAlpha: T.AddEquation,
-              blendSrc: T.OneFactor,
-              blendSrcAlpha: T.ZeroFactor,
-              blending: T.CustomBlending,
-              // A MIRROR, not glass — which is the opposite of what it is
-              // standing in for, and the only way to get the look. A
-              // dielectric reflects about four percent of what it faces;
-              // four percent of a room painted almost black is nothing at
-              // all, and no gain rescues it because the gain multiplies
-              // the same nothing. `metalness: 1` reflects the whole room
-              // instead, and the room's own darkness becomes the control:
-              // its walls are #05060a, so they add no haze over the
-              // drawing, and what survives is the strip and the two side
-              // lamps. The Fresnel edge a real cover glass has is the one
-              // thing given up, and at these angles it was never visible.
-              color: new T.Color().setScalar(GLOSS),
-              depthWrite: false,
+            /**
+             * THE GLASS. `blending: NoBlending` writes the material's RGB
+             * *and its alpha* straight into the framebuffer, replacing the
+             * opaque fragments already drawn there — so the canvas becomes
+             * a hole the shape of the display and the DOM beneath shows
+             * through. Whatever this alpha is, that much of the slide is
+             * replaced by shaded glass: five percent of near-black is depth
+             * without dimming.
+             */
+            panel.material = new T.MeshPhysicalMaterial({
+              blending: T.NoBlending,
+              clearcoat: 1,
+              clearcoatRoughness: 0.04,
+              color: 0x01030a,
               envMap: flagged,
-              envMapIntensity: 1,
-              metalness: 1,
-              // a touch soft: a mirror-sharp strip reads as a seam in the
-              // model rather than as light in the room, and a softened
-              // lobe is also what stops a moving highlight from sparkling
-              roughness: 0.18,
+              envMapIntensity: 0.85,
+              metalness: 0,
+              opacity: 0.05,
+              roughness: 0.06,
               transparent: true,
-            }),
-          );
-          // a hair proud of the panel, and drawn last: far too little to
-          // read as parallax when the lid turns, far enough to sort in
-          // front of the surface it is the cover for
-          glass.position.z = 0.5;
-          glass.renderOrder = 2;
-          anchor.add(glass);
-          glassMat = glass.material as THREE.MeshPhysicalMaterial;
+            });
 
-          model.traverse((child) => {
-            const mesh = child as THREE.Mesh;
-            if (mesh.isMesh && mesh !== panel) {
-              // every mesh joins the key light's layer EXCEPT the display
-              mesh.layers.enable(EYE_LEVEL);
-            }
-          });
+            /**
+             * THE COVER GLASS — the sheet the drawing is behind, rather than
+             * a surface the drawing is printed on.
+             *
+             * The panel above cannot do this itself. Its whole job is to
+             * punch a hole: `NoBlending` writes its alpha straight into the
+             * framebuffer, so everything it draws is a replacement for the
+             * DOM rather than something laid over it, and a highlight strong
+             * enough to read would be a highlight you look at the slides
+             * THROUGH. So the reflection is a second sheet, a hair in front,
+             * drawn after it and adding to what is already there.
+             *
+             * Custom blending, because the two channels want opposite
+             * things. RGB is additive — a reflection is light arriving, and
+             * light only ever brightens what it lands on. Alpha is left
+             * exactly as the panel wrote it: the framebuffer's alpha is the
+             * hole the DOM shows through, and an ordinary transparent
+             * material would raise it right across the display and quietly
+             * seal the screen over.
+             *
+             * It reflects the flagged room and not the bright one for the
+             * same reason the panel does — a mirror pointed at a white cyc
+             * comes back a white sheet. What it catches is the overhead
+             * strip, and the point of it is that it MOVES: the sheen slides
+             * across the drawing as the shot turns, which a painted-on
+             * gradient cannot do and which is most of why glass reads as
+             * glass.
+             */
+            const glass = new T.Mesh(
+              new T.PlaneGeometry(
+                SCREEN.w,
+                Math.round(SCREEN.w * (hLocal / wLocal)),
+              ),
+              new T.MeshPhysicalMaterial({
+                blendDst: T.OneFactor,
+                // leave the hole alone — see above
+                blendDstAlpha: T.OneFactor,
+                blendEquation: T.AddEquation,
+                blendEquationAlpha: T.AddEquation,
+                blendSrc: T.OneFactor,
+                blendSrcAlpha: T.ZeroFactor,
+                blending: T.CustomBlending,
+                // A MIRROR, not glass — which is the opposite of what it is
+                // standing in for, and the only way to get the look. A
+                // dielectric reflects about four percent of what it faces;
+                // four percent of a room painted almost black is nothing at
+                // all, and no gain rescues it because the gain multiplies
+                // the same nothing. `metalness: 1` reflects the whole room
+                // instead, and the room's own darkness becomes the control:
+                // its walls are #05060a, so they add no haze over the
+                // drawing, and what survives is the strip and the two side
+                // lamps. The Fresnel edge a real cover glass has is the one
+                // thing given up, and at these angles it was never visible.
+                color: new T.Color().setScalar(GLOSS),
+                depthWrite: false,
+                envMap: flagged,
+                envMapIntensity: 1,
+                metalness: 1,
+                // a touch soft: a mirror-sharp strip reads as a seam in the
+                // model rather than as light in the room, and a softened
+                // lobe is also what stops a moving highlight from sparkling
+                roughness: 0.18,
+                transparent: true,
+              }),
+            );
+            // a hair proud of the panel, and drawn last: far too little to
+            // read as parallax when the lid turns, far enough to sort in
+            // front of the surface it is the cover for
+            glass.position.z = 0.5;
+            glass.renderOrder = 2;
+            anchor.add(glass);
+            glassMat = glass.material as THREE.MeshPhysicalMaterial;
 
-          ready = true;
-          this.status =
-            `MacBook Pro GLB · display "${panel.name}" · ` +
-            `${SCREEN.w}×${Math.round(SCREEN.w * (hLocal / wLocal))} css px = ` +
-            `${wLocal.toFixed(2)}×${hLocal.toFixed(2)} model units · 1:1`;
-          resolve();
-        });
+            model.traverse((child) => {
+              const mesh = child as THREE.Mesh;
+              if (mesh.isMesh && mesh !== panel) {
+                // every mesh joins the key light's layer EXCEPT the display
+                mesh.layers.enable(EYE_LEVEL);
+              }
+            });
+
+            ready = true;
+            this.status =
+              `MacBook Pro GLB · display "${panel.name}" · ` +
+              `${SCREEN.w}×${Math.round(SCREEN.w * (hLocal / wLocal))} css px = ` +
+              `${wLocal.toFixed(2)}×${hLocal.toFixed(2)} model units · 1:1`;
+            resolve();
+          },
+          undefined,
+          () => {
+            this.status = 'the laptop model did not load';
+            resolve();
+          },
+        );
       });
+      // the model is decoded; the decoder's workers are not needed again
+      draco.dispose();
 
       tick = () => {
         raf = requestAnimationFrame(tick!);
