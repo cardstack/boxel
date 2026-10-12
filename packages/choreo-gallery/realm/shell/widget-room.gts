@@ -921,7 +921,7 @@ export class WidgetRoom extends Component<Signature> {
           await this.travel(this.pose, remaining);
         }
       } else {
-        // The same Choreo clock holds the viewpoint for this readable script beat.
+        // A held move is the clock for this readable script beat.
         const duration = Math.max(
           stop.seconds * 1000,
           (stop.text.split(/\s+/).length / 2.45) * 1000,
