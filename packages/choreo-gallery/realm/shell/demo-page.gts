@@ -403,6 +403,33 @@ export class DemoPage extends Component<Signature> {
         max-height: min(92vh, 1180px);
       }
 
+      /* A LAPTOP IS A WIDE, SHORT SUBJECT ON A TALL PLATTER. A machine seen
+         from a low three-quarter angle wants headroom above the lid and floor
+         under the base — without it the framing solver keeps pulling the
+         camera back to fit the height, and the drawing on the screen goes too
+         small to read. */
+      .stage-wrap[data-well='laptop'] {
+        min-height: min(84vh, 860px);
+      }
+
+      /* ...and on a narrow screen a device's well takes the shape of the
+         device. The flat laptop is 1178x838 scaled to fit, so on a phone it
+         is width-bound, and a tall well then holds a very small machine with
+         a band of empty air above and below it. The phone is the opposite
+         shape: a landscape well holds a very small phone with air either
+         side, and a tall one lets the device fill the frame. */
+      @media (max-width: 760px) {
+        .stage-wrap[data-well='laptop'] {
+          min-height: 0;
+          aspect-ratio: 1178 / 838;
+        }
+
+        .stage-wrap[data-well='phone'] {
+          min-height: 0;
+          aspect-ratio: 5 / 7;
+        }
+      }
+
       /* ── Theater ────────────────────────────────────────────────────
          The film's page with the stage re-ordered to the front. Everything
          else keeps its order and sits below, which makes the mode a scroll
