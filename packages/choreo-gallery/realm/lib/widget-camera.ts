@@ -1,8 +1,19 @@
 import type { Camera3DState, Camera3DWaypoint } from '@cardstack/choreo';
 import { animate } from 'glimmer-motion';
 
-/** the controls a camera move hands back: a clock to seek, pause or stop */
-export type CameraRun = ReturnType<typeof animate>;
+/** a camera move's clock, as the room drives it */
+export interface CameraRun {
+  /**
+   * Stop where the camera is. No further pose is painted — not the move's
+   * start, which is where a cancelled animation reports itself last.
+   */
+  cancel(): void;
+  /** settles when the move lands or is stopped */
+  finished: Promise<void>;
+  pause(): void;
+  /** seconds into the move; setting it seeks, and paints that pose */
+  time: number;
+}
 
 /**
  * One cardinal-spline component: Hermite through p1 and p2, tangents off p0
@@ -179,8 +190,9 @@ function between(
  * Move the room's camera from one pose to another, handing every frame's
  * pose to `update`. With `through`, the camera rides a spline through those
  * waypoints at a constant rate with a 0.3s settle; without, it eases
- * straight to `to`. The returned controls are the move's clock: the quick
- * tour seeks it (`time`) against its narration.
+ * straight to `to`. The returned run is the move's clock: the quick tour
+ * seeks it (`time`) against its narration, and a newer move stops it where
+ * it stands.
  *
  * Under reduced motion a short move is a cut, and a path holds its first
  * pose: the tour steps the camera itself.
@@ -197,10 +209,37 @@ export function moveRoomCamera(
   const pts = through && !reduced ? controlPoints(from, through) : undefined;
   const width = pts ? 0.3 / seconds : 0;
   const target = reduced && through ? from : to;
-  return animate(0, 1, {
+  let stopped = false;
+  let land = () => {};
+  const finished = new Promise<void>((resolve) => (land = resolve));
+  const controls = animate(0, 1, {
     duration: seconds,
     ease: pts ? 'linear' : [0.4, 0, 0.2, 1],
-    onUpdate: (t: number) =>
-      update(pts ? settle(pts, t, 0.6, width) : between(from, target, t)),
+    onUpdate: (t: number) => {
+      if (!stopped) {
+        update(pts ? settle(pts, t, 0.6, width) : between(from, target, t));
+      }
+    },
+    onComplete: () => land(),
   });
+  return {
+    get time() {
+      return controls.time;
+    },
+    set time(seconds: number) {
+      if (!stopped) {
+        controls.time = seconds;
+      }
+    },
+    pause: () => controls.pause(),
+    cancel: () => {
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      controls.stop();
+      land();
+    },
+    finished,
+  };
 }

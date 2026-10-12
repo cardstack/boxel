@@ -10,11 +10,13 @@ import { module, test } from 'qunit';
 
 import { choreoGalleryContents } from '../helpers/choreo-gallery';
 import {
+  frames,
   GALLERY_DEMOS,
   setupChoreoGalleryTest,
   setupStageViewport,
 } from '../helpers/choreo-gallery-stage';
 
+import type * as CameraModule from '../../../choreo-gallery/realm/lib/widget-camera';
 import type * as LayoutModule from '../../../choreo-gallery/realm/lib/widget-gallery-layout';
 import type * as RoomModule from '../../../choreo-gallery/realm/shell/widget-room';
 
@@ -79,6 +81,25 @@ module('Integration | Choreo gallery | widget room', function (hooks) {
     assert
       .dom('.wr-shell')
       .hasClass('has-selection', 'the room reports the selection');
+  });
+
+  test('a camera move stopped mid-flight holds where it stands', async function (assert) {
+    let { moveRoomCamera } =
+      await gallery.import<typeof CameraModule>('lib/widget-camera');
+    let from = { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 };
+    let to = { dolly: 2, pitch: 10, x: 0, y: 0, yaw: 90 };
+    let poses: { yaw: number }[] = [];
+    let run = moveRoomCamera(from, to, (pose) => poses.push(pose), 600);
+    await frames(6);
+    assert.ok(poses.length > 0, 'the move painted while it ran');
+    let before = poses.length;
+    let last = poses[before - 1]!.yaw;
+    run.cancel();
+    await frames(6);
+    assert.strictEqual(poses.length, before, 'nothing is painted after a stop');
+    assert.ok(last > 0, `the camera held mid-move (yaw ${last.toFixed(1)})`);
+    await run.finished;
+    assert.ok(true, 'and the stopped move settles');
   });
 
   test('no gallery module finds anything by a test selector', function (assert) {
