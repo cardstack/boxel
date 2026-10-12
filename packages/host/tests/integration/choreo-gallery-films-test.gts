@@ -125,35 +125,47 @@ module('Integration | Choreo gallery | films', function (hooks) {
   test('the film’s poster stands in its frame’s place until the film’s first frame is up', async function (assert) {
     await renderFilm('towers', 'TowersDemo', 'isolated');
     assert
-      .dom('.tw-face [data-test-film-poster]')
+      .dom('[data-test-film="towers"] [data-test-film-poster]')
       .hasAttribute(
         'src',
         `${testRealmURL}asset/towers-poster.webp`,
         'the page’s stage shows the film’s still from its first render',
       );
 
-    await waitFor('.tw-face iframe.film-frame');
-    let frame = find('.tw-face iframe.film-frame') as HTMLIFrameElement;
+    await waitFor('[data-test-film="towers"] [data-test-film-frame]');
+    let frame = find(
+      '[data-test-film="towers"] [data-test-film-frame]',
+    ) as HTMLIFrameElement;
     await waitUntil(() => frame.contentDocument?.readyState === 'complete');
     assert
       .dom(frame)
       .doesNotHaveAttribute(
-        'data-film-shown',
+        'data-test-film-shown',
         'the frame stays clear of the poster while the film loads',
       );
+    assert
+      .dom('[data-test-film="towers"] [role="status"]')
+      .hasText('Loading the film…', 'and a screen reader hears it is loading');
 
     // the film app posts this from inside its own document once its picture
     // is seated (choreo-film-app's lib/first-frame)
     (frame.contentWindow as Window & typeof globalThis).eval(
       "parent.postMessage({ type: 'choreo-film:first-frame' }, '*')",
     );
-    await waitUntil(() => frame.hasAttribute('data-film-shown'));
+    await waitUntil(() => frame.hasAttribute('data-test-film-shown'));
     assert
       .dom(frame)
-      .hasAttribute('data-film-shown', '', 'the film comes up over its poster');
+      .hasAttribute(
+        'data-test-film-shown',
+        '',
+        'the film comes up over its poster',
+      );
     assert
-      .dom('.tw-face [data-test-film-poster]')
+      .dom('[data-test-film="towers"] [data-test-film-poster]')
       .exists('the poster stays under the frame');
+    assert
+      .dom('[data-test-film="towers"] [role="status"]')
+      .doesNotExist('the loading status goes with the poster’s turn');
   });
 
   test('a film’s page leaving takes its frame down before the swap, so the poster is what flies', async function (assert) {
@@ -179,14 +191,16 @@ module('Integration | Choreo gallery | films', function (hooks) {
     });
     await renderCard(loader, gallery, 'isolated');
     await click('[data-test-gallery-tile-link="towers"]');
-    await waitFor('.tw-face iframe.film-frame');
+    await waitFor('[data-test-film="towers"] [data-test-film-frame]');
 
     // what the page held at the moment its frame went
     let pageWhenFrameWent: boolean | undefined;
     let observer = new MutationObserver(() => {
       if (
         pageWhenFrameWent === undefined &&
-        !document.querySelector('.tw-face iframe.film-frame')
+        !document.querySelector(
+          '[data-test-film="towers"] [data-test-film-frame]',
+        )
       ) {
         pageWhenFrameWent = Boolean(
           document.querySelector('[data-test-demo-body]'),

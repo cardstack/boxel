@@ -49,7 +49,7 @@ interface Signature {
  * The frame stays transparent until the film posts that its first frame is
  * up: whatever the frame sits on — the film's poster, in `FilmStage` — is
  * what shows while the world loads, and the film fades in over a still of
- * itself.
+ * itself. Until then a visually hidden status says the film is loading.
  *
  * The film's own requests carry no realm session. Where the host's auth
  * service worker controls the frame it adds one, but a browser that leaves
@@ -159,6 +159,11 @@ export class FilmFrame extends Component<Signature> {
     }
   }
 
+  /** the film's first frame isn't up yet */
+  get loading() {
+    return !this.shown;
+  }
+
   get pose() {
     return this.shown ? FRAME_SHOWN : FRAME_HIDDEN;
   }
@@ -171,16 +176,22 @@ export class FilmFrame extends Component<Signature> {
         sandbox='allow-scripts allow-same-origin allow-pointer-lock'
         allow='autoplay; fullscreen'
         allowfullscreen
-        data-film-shown={{this.shown}}
+        data-test-film-frame
+        data-test-film-shown={{this.shown}}
         {{this.frame}}
         {{this.linked}}
         {{on 'load' this.onLoad}}
         {{motion initial=FRAME_HIDDEN animate=this.pose transition=FRAME_IN}}
         ...attributes
       ></iframe>
-    {{else if this.error}}
+    {{/if}}
+    {{#if this.error}}
       <p class='film-status' role='alert'>Unable to load the film:
         {{this.error}}</p>
+    {{else if this.loading}}
+      {{! the poster under the frame is the loading state on screen; this
+        says so to a screen reader }}
+      <p class='film-loading' role='status'>Loading the film…</p>
     {{/if}}
     <style scoped>
       .film-status {
@@ -197,6 +208,15 @@ export class FilmFrame extends Component<Signature> {
         text-transform: uppercase;
         color: rgba(255, 250, 242, 0.92);
         background: rgba(14, 12, 10, 0.72);
+      }
+
+      .film-loading {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
     </style>
   </template>
