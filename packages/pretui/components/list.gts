@@ -220,7 +220,8 @@ export class List<T> extends Component<ListSignature<T>> {
       let selected = this.source.isSelected(row, index);
       let key = this.source.keyFor(row, index);
       let expanded = this.expansion.isExpanded(key);
-      let detailId = this.guid + '-d-' + String(key);
+      // by position: a key can hold spaces, and 1 and '1' are distinct keys
+      let detailId = this.guid + '-d-' + String(index);
       return {
         key,
         row,

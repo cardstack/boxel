@@ -125,6 +125,7 @@ function listRows(): HTMLElement[] {
 }
 
 const EXPAND_FIRST: RowKey[] = ['B-1'];
+const MIXED_KEYS: RowKey[] = ['customer 42', 1, '1'];
 
 class ExpandHolder {
   @tracked keys: RowKey[] = [];
@@ -914,6 +915,44 @@ module('Pretui | reading-listing', function (hooks) {
       .dom('[data-test-pretui-list-detail]')
       .doesNotExist('collapsing removes the detail');
     assert.deepEqual(knobs.expandLog, [['B-2'], []]);
+  });
+
+  test('detail ids stay valid for keys with spaces and for 1 vs "1"', async function (assert) {
+    const ROWS = [
+      { id: 'customer 42', name: 'Spaced' },
+      { id: 1, name: 'Number' },
+      { id: '1', name: 'String' },
+    ];
+    let key = (row: { id: string | number }) => row.id;
+    let label = (row: { name: string }) => row.name;
+    await render(
+      <template>
+        <List
+          @items={{ROWS}}
+          @key={{key}}
+          @rowLabel={{label}}
+          @defaultExpandedKeys={{MIXED_KEYS}}
+        >
+          <:item as |row|>{{row.name}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.name}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    let toggles = Array.from(
+      listRoot().querySelectorAll('[data-test-pretui-list-expand]'),
+    ) as HTMLElement[];
+    let ids = toggles.map((t) => t.getAttribute('aria-controls') as string);
+    assert.strictEqual(new Set(ids).size, 3, 'every row has its own detail id');
+    ids.forEach((id, i) => {
+      assert.false(/\s/.test(id), 'the id holds no whitespace');
+      let detail = document.getElementById(id) as HTMLElement;
+      assert.ok(detail, 'aria-controls resolves');
+      assert.strictEqual(
+        detail.textContent?.trim(),
+        ROWS[i]!.name,
+        'to its own row',
+      );
+    });
   });
 
   test('a controlled List reports the expansion and waits for @expandedKeys', async function (assert) {

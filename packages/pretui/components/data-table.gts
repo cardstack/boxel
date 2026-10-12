@@ -666,7 +666,8 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
   isExpanded = (key: RowKey): boolean => this.expansion.isExpanded(key);
   toggleExpanded = (key: RowKey) => this.expansion.toggle(key);
 
-  detailId = (key: RowKey): string => this.guid + '-d-' + String(key);
+  // by position: a key can hold spaces, and 1 and '1' are distinct keys
+  detailId = (index: number): string => this.guid + '-d-' + String(index);
 
   // ── paging ─────────────────────────────────────────────────────────────
 
@@ -773,8 +774,8 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         selectedFlag: selected ? 'true' : undefined,
         expanded,
         expandedFlag: expanded ? ('true' as const) : ('false' as const),
-        detailId: this.detailId(key),
-        controls: expanded ? this.detailId(key) : undefined,
+        detailId: this.detailId(index),
+        controls: expanded ? this.detailId(index) : undefined,
         label: this.labelFor(row, index),
         cells: cols.map((col) => {
           let value = this.rawValue(col, row);
