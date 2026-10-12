@@ -32,7 +32,7 @@ import { PhotosApp } from './mockup/photos';
 /**
  * SPIKE 2 — mockup-studio's GLB in WebGL, and the phone's SCREEN as live
  * DOM, mapped onto the mesh by the one piece of ember-lume /
- * CSS3DRenderer worth taking: the coordinate mapping (`app/lib/css3d.ts`).
+ * CSS3DRenderer worth taking: the coordinate mapping (`lib/css3d.ts`).
  *
  * mockup-studio paints its screen into a canvas and uploads it as a
  * texture, so the UI is pixels. Here the same mesh is rendered by WebGL
