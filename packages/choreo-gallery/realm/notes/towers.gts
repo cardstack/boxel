@@ -125,28 +125,56 @@ const TowersNotes: TOC<NotesSignature> = <template>
         </p>
         {{#if @preview}}
           <div class='dd-joins'>
-            <button type='button' {{on 'click' (fn @preview 'wipe')}}>wipe<i
-              >feathered, raked to the sun</i></button>
-            <button type='button' {{on 'click' (fn @preview 'blend')}}>blend<i
-              >push dissolve</i></button>
-            <button type='button' {{on 'click' (fn @preview 'blur')}}>blur<i
-              >defocus dissolve</i></button>
-            <button type='button' {{on 'click' (fn @preview 'luma')}}>luma<i
-              >highlights linger</i></button>
-            <button type='button' {{on 'click' (fn @preview 'iris')}}>iris<i
-              >closes on the subject</i></button>
-            <button type='button' {{on 'click' (fn @preview 'dip')}}>dip<i
-              >through a colour</i></button>
-            <button type='button' {{on 'click' (fn @preview 'flash')}}>flash<i
-              >two-breath pop</i></button>
             <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'wipe')}}
+            >wipe<i class='dd-join-sub'>feathered, raked to the sun</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'blend')}}
+            >blend<i class='dd-join-sub'>push dissolve</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'blur')}}
+            >blur<i class='dd-join-sub'>defocus dissolve</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'luma')}}
+            >luma<i class='dd-join-sub'>highlights linger</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'iris')}}
+            >iris<i class='dd-join-sub'>closes on the subject</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'dip')}}
+            >dip<i class='dd-join-sub'>through a colour</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'flash')}}
+            >flash<i class='dd-join-sub'>two-breath pop</i></button>
+            <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'defocus')}}
-            >defocus<i>rack focus</i></button>
-            <button type='button' {{on 'click' (fn @preview 'sweep')}}>sweep<i
-              >the sun flares</i></button>
-            <button type='button' {{on 'click' (fn @preview 'whip')}}>whip<i>a
-                fast chased tween</i></button>
+            >defocus<i class='dd-join-sub'>rack focus</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'sweep')}}
+            >sweep<i class='dd-join-sub'>the sun flares</i></button>
+            <button
+              class='dd-join'
+              type='button'
+              {{on 'click' (fn @preview 'whip')}}
+            >whip<i class='dd-join-sub'>a fast chased tween</i></button>
           </div>
         {{else}}
           <p>
@@ -245,6 +273,46 @@ const TowersNotes: TOC<NotesSignature> = <template>
       </div>
     </section>
   </section>
+  <style scoped>
+    .dd-joins {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .dd-join {
+      appearance: none;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.125rem;
+      padding: 0.5rem 0.8125rem;
+      border: 1px solid var(--line);
+      border-radius: 0.625rem;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition:
+        transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 180ms ease;
+    }
+
+    .dd-join:hover {
+      transform: translateY(-0.125rem);
+      border-color: var(--ember);
+    }
+
+    .dd-join-sub {
+      font-style: normal;
+      font-size: 0.625rem;
+      font-weight: 500;
+      color: color-mix(in srgb, var(--ink) 60%%, var(--bg-page));
+    }
+  </style>
 </template>;
 
 export default TowersNotes;

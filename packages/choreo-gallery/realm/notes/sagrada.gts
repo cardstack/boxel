@@ -149,34 +149,42 @@ const SagradaNotes: TOC<NotesSignature> = <template>
         {{#if @preview}}
           <p class='dd-joins'>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'wipe')}}
             >wipe</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'blend')}}
             >blend</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'blur')}}
             >blur</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'luma')}}
             >luma</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'iris')}}
             >iris</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'dip')}}
             >dip</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'flash')}}
             >flash</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'whip')}}
             >whip</button>
@@ -189,6 +197,39 @@ const SagradaNotes: TOC<NotesSignature> = <template>
       </div>
     </section>
   </section>
+  <style scoped>
+    .dd-joins {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .dd-join {
+      appearance: none;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.125rem;
+      padding: 0.5rem 0.8125rem;
+      border: 1px solid var(--line);
+      border-radius: 0.625rem;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition:
+        transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 180ms ease;
+    }
+
+    .dd-join:hover {
+      transform: translateY(-0.125rem);
+      border-color: var(--ember);
+    }
+  </style>
 </template>;
 
 export default SagradaNotes;
