@@ -115,28 +115,20 @@ const CrossingNotes: TOC<object> = <template>
     </section>
 
     <section class='dd'>
-      <h3>The tile and the page are one component</h3>
+      <h3>A guest in the grid</h3>
       <div class='dd-col'>
         <p>
-          This card and
-          <code>/crossing-stress</code>
-          are the same file with an
-          <code>@embedded</code>
-          flag. The page owns the viewport, listens on
-          <code>window</code>
-          and drifts a three.js field behind the slides; the tile stays in flow,
-          keeps its keys to itself, and drops the field, whose perpetual
-          animation frame would otherwise run behind every other demo in the
-          gallery.
+          The stage is a tile before it is a page, and it is built as a guest:
+          it stays in flow, hears its own keys rather than the window's, and
+          does not run its conductor until you ask. Thirty tiles cutting on
+          their own clocks would be a gallery that never sits still to be read,
+          and the crossing is a thing you ask for rather than something that
+          happens at you.
         </p>
         <p>
-          Everything that differs is containment. The slide geometry is written
-          once, in multiples of a unit token that resolves to viewport units on
-          the page and container units in the card — so the layout arithmetic
-          cannot drift between the two. An earlier
-          <code>/crossing-reel</code>
-          route was a hand-copied second scene, and it had already fallen out of
-          step with the demo it was copied from.
+          The slide geometry is written once, in multiples of a unit token that
+          resolves to container units, so the same arithmetic lays the slides
+          out at tile size and at page size.
         </p>
       </div>
     </section>
