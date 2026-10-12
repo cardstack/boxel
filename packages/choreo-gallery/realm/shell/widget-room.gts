@@ -977,25 +977,41 @@ export class WidgetRoom extends Component<Signature> {
     // Distant tiles use previews. Live trees are mounted only on approach and
     // retained thereafter; hidden content does not join layout or painting.
     //
-    // The keys are the room's own: it listens on its shell, not the window,
-    // so they never reach the host's shortcuts.
+    // The keys are the room's own. It listens on its shell and stops the
+    // keys it handles there, so Escape and the arrows never also reach the
+    // host's shortcuts; a key a demo has already handled is the demo's. The
+    // shell takes focus when the visitor presses inside it, so the keys keep
+    // working after the button that had focus goes away.
     const shell = el.closest<HTMLElement>('.wr-shell') ?? (el as HTMLElement);
     const key = (event: Event) => {
       const e = event as KeyboardEvent;
-      if ((e.target as HTMLElement).matches('input,textarea,select')) {
+      if (
+        e.defaultPrevented ||
+        (e.target as HTMLElement).matches('input,textarea,select')
+      ) {
         return;
       }
-      if (e.key === 'Escape') {
-        this.overview();
+      const act =
+        e.key === 'Escape'
+          ? this.overview
+          : e.key === 'ArrowRight'
+            ? this.next
+            : e.key === 'ArrowLeft'
+              ? this.previous
+              : undefined;
+      if (act) {
+        e.preventDefault();
+        e.stopPropagation();
+        act();
       }
-      if (e.key === 'ArrowRight') {
-        this.next();
-      }
-      if (e.key === 'ArrowLeft') {
-        this.previous();
+    };
+    const claimFocus = () => {
+      if (!shell.contains(document.activeElement)) {
+        shell.focus({ preventScroll: true });
       }
     };
     shell.addEventListener('keydown', key);
+    shell.addEventListener('pointerdown', claimFocus);
     void fetch(`${this.assetRoot}widget-tour/voices.json`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -1017,6 +1033,7 @@ export class WidgetRoom extends Component<Signature> {
       this.preparations.clear();
       resize.disconnect();
       shell.removeEventListener('keydown', key);
+      shell.removeEventListener('pointerdown', claimFocus);
     };
   });
 
@@ -1032,6 +1049,7 @@ export class WidgetRoom extends Component<Signature> {
           {{if this.selected "has-selection"}}
           {{if this.stop "has-guide"}}'
         aria-label='Choreo spatial demo room'
+        tabindex='-1'
       >
         <div class='wr-viewport' {{this.setup}}>
           <div class='wr-scene-layer'><div class='wr-world'>
