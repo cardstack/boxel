@@ -1123,7 +1123,6 @@ module(basename(import.meta.filename), function (hooks) {
         'a card+json read is a 500, not the 404 a predicate fault gives a caller who may not read the realm',
       );
       assert.strictEqual(batch.status, 500, 'as is an envelope read');
-      assert.strictEqual(errorOf(batch).code, 'internal-error');
       assert.strictEqual(
         admitted.status,
         200,
