@@ -43,6 +43,7 @@ const SelectSupplier: TemplateOnlyComponent = <template>
       @controlId={{id}}
       @options={{selSupplierOptions}}
       @defaultValue={{selSupplierDefault}}
+      @searchEnabled={{true}}
     />
   </Field>
 </template>;
@@ -66,7 +67,7 @@ export const EXAMPLES_SELECT: Record<string, ExampleSpec[]> = {
     },
     {
       title: 'Supplier picker',
-      note: 'Eight options — long enough that the listbox grows its search box.',
+      note: 'Eight options with the opt-in search box; it takes focus when the list opens.',
       component: SelectSupplier,
     },
     {

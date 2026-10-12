@@ -7,6 +7,7 @@ Choose one value from a known list. Use it when the options are enumerable and t
 ```
 @options: { value, label }[]   (required)
 @value?, @defaultValue?, @placeholder? (default 'Select…'), @disabled?, @controlId?
+@searchEnabled?   (a search box above the list, focused on open)
 @label?, @labelledBy?   (the trigger's accessible name)
 @onValueChange?(value: string)
 ```
@@ -15,7 +16,7 @@ Choose one value from a known list. Use it when the options are enumerable and t
 
 **Hybrid controlled/uncontrolled.** `@value ?? @internal`, and `@internal` is only written when `@value === undefined`. Pass `@value` and you own it; pass `@defaultValue` and the component does. This exact idiom is repeated across Switch, Checkbox, RadioGroup, SegmentedControl, Tabs, Slider and Pagination — learn it once.
 
-**No search box.** Typeahead on the trigger covers long lists, as in Radix and React Aria. A list that needs filtering is a **Combobox**.
+**Search is opt-in.** `@searchEnabled` adds a search box above the list, with a search icon, that takes focus when the list opens and filters by label. Off by default: typeahead on the trigger covers most lists, as in Radix and React Aria. BoxelSelect's own search box never takes focus, so from the trigger it is reachable by pointer only; Select supplies its own. A list the user types into to find a value that may not exist is a **Combobox**.
 
 ## Prior art
 
@@ -36,6 +37,7 @@ Governing pattern: APG **Combobox with listbox popup** (which is what ember-powe
 Gaps and cautions:
 
 - **Name it.** A `<label for={{@controlId}}>` or a wrapping `<label>` names the trigger through `aria-labelledby`, label first and then the trigger, so the chosen value is still read. Without a label, pass `@label` (or `@labelledBy`). The trigger keeps BoxelSelect's own id, which BoxelSelect needs to theme the wormhole, so `@controlId` is never an element id: nothing can find the trigger by it, and FormField focuses a failing Select through its first focusable element instead.
+- With `@searchEnabled`, the search input is the combobox: it carries `aria-activedescendant` and `aria-controls`, and the trigger gives them up while the list is open.
 - **No invalid state.** There is no `@invalid`, no `aria-invalid`, no error row — unlike `Input`. Inside `Field` the invalid dress arrives through the `--border`/`--background` token channel, so it _looks_ invalid, but nothing is announced. For validated selects, use **FormField**, which supplies the ARIA.
 - `@disabled` renders as `aria-disabled="true"` on the trigger (power-select's model) and drops its `tabindex`, so the control leaves the tab order, the same as `Input`'s native `disabled`.
 - No `multiple` and no clear affordance — deliberate; those are MultiSelect's job.
@@ -44,11 +46,11 @@ Gaps and cautions:
 
 Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--ring`, `--radius`, `--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`, `--shadow-inset`.
 
-Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-wrap`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. The selected row's hover and keyboard-highlight tints are BoxelSelect's own mixes of `--primary` and `--primary-foreground`.
+Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-display`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. Hovered or keyboard-highlighted, the selected row darkens a shade in both schemes, the same as an accent Button's hover.
 
 Per-instance knob: `--pretui-select-h` (the trigger's height, 1.75rem by default), set on your class.
 
-The dropdown's own geometry (padding, option height) is BoxelSelect's. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
+The dropdown's own geometry (padding, option height, search box) is BoxelSelect's; the search box's icon inset is the one rule Select adds there. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
 
 ## React ecosystem
 

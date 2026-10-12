@@ -2,6 +2,8 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { on } from '@ember/modifier';
+import SearchIcon from '@cardstack/boxel-icons/search';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlNotifyArgs } from '../pretui-primitives';
@@ -21,6 +23,10 @@ export interface SelectSignature {
     defaultValue?: string;
     placeholder?: string;
     disabled?: boolean;
+    /** adds a search box above the list that takes focus when the list
+     * opens and filters options by label. Off by default: typeahead on the
+     * trigger covers most lists */
+    searchEnabled?: boolean;
     /** the id your `<label for>` points at. The trigger keeps BoxelSelect's
      * own id, so this only finds the label, which then names the trigger
      * through aria-labelledby */
@@ -58,6 +64,9 @@ interface PoweredSelectSignature {
     onChange: (option: SelectOption | null) => void;
     placeholder?: string;
     disabled?: boolean;
+    searchEnabled?: boolean;
+    searchField?: string;
+    beforeOptionsComponent?: unknown;
     matchTriggerWidth?: boolean;
     ariaLabel?: string;
     ariaLabelledBy?: string;
@@ -100,6 +109,118 @@ const nameFromLabel = modifier(
     trigger.setAttribute('aria-labelledby', `${label.id} ${trigger.id}`);
   },
 );
+
+// The search box ember-power-select renders above the options, with a
+// search icon and focus on open. BoxelSelect's own before-options component
+// turns autofocus off, which leaves the box reachable by pointer only: from
+// the trigger, typing runs typeahead and Tab closes the list.
+interface SelectSearchSignature {
+  Args: {
+    select: {
+      searchText: string;
+      isOpen: boolean;
+      actions: { close: (e?: Event) => void; search: (term: string) => void };
+    };
+    searchEnabled?: boolean;
+    onInput: (e: Event) => unknown;
+    onKeydown: (e: Event) => unknown;
+    onFocus: (e: Event) => void;
+    onBlur: (e: Event) => void;
+    listboxId?: string;
+    ariaActiveDescendant?: string;
+    ariaLabel?: string;
+    ariaLabelledBy?: string;
+    ariaDescribedBy?: string;
+  };
+  Element: HTMLDivElement;
+}
+
+class SelectSearch extends Component<SelectSearchSignature> {
+  handleInput = (e: Event) => {
+    this.args.onInput(e);
+  };
+  handleKeydown = (e: Event) => {
+    if (this.args.onKeydown(e) === false) {
+      return;
+    }
+    if (e instanceof KeyboardEvent && e.key === 'Enter') {
+      this.args.select.actions.close(e);
+    }
+  };
+  // No positional args, so this runs once per open; the frame delay lets
+  // the dropdown finish positioning before focus moves into it.
+  focusOnOpen = modifier((el: HTMLInputElement) => {
+    let frame = requestAnimationFrame(() => el.focus());
+    return () => {
+      cancelAnimationFrame(frame);
+      this.args.select.actions.search('');
+    };
+  });
+
+  <template>
+    {{#if @searchEnabled}}
+      <div
+        class='ember-power-select-search pretui-selectsearch'
+        data-test-pretui-select-search
+        ...attributes
+      >
+        <SearchIcon
+          class='pretui-selectsearch-icon'
+          width='16'
+          height='16'
+          aria-hidden='true'
+        />
+        {{! template-lint-disable require-input-label }}
+        <input
+          type='search'
+          class='ember-power-select-search-input'
+          value={{@select.searchText}}
+          placeholder='Search…'
+          autocomplete='off'
+          autocorrect='off'
+          autocapitalize='off'
+          spellcheck='false'
+          role='combobox'
+          aria-activedescendant={{@ariaActiveDescendant}}
+          aria-controls={{@listboxId}}
+          aria-owns={{@listboxId}}
+          aria-autocomplete='list'
+          aria-haspopup='listbox'
+          aria-expanded={{if @select.isOpen 'true' 'false'}}
+          aria-label={{if @ariaLabel @ariaLabel 'Search options'}}
+          aria-labelledby={{@ariaLabelledBy}}
+          aria-describedby={{@ariaDescribedBy}}
+          {{on 'input' this.handleInput}}
+          {{on 'keydown' this.handleKeydown}}
+          {{on 'focus' @onFocus}}
+          {{on 'blur' @onBlur}}
+          {{this.focusOnOpen}}
+          data-test-pretui-select-search-input
+        />
+      </div>
+    {{/if}}
+    <style scoped>
+      .pretui-selectsearch {
+        position: relative;
+      }
+      .pretui-selectsearch-icon {
+        --icon-color: var(--muted-foreground);
+
+        position: absolute;
+        /* the box's padding, then the input's */
+        inset-inline-start: calc(var(--boxel-sp-xs) * 2);
+        top: 50%;
+        translate: 0 -50%;
+        pointer-events: none;
+      }
+      /* unlayered on purpose: BoxelSelect's dropdown rules are layered and
+         set the input's padding; this makes room for the icon */
+      .pretui-selectsearch .ember-power-select-search-input {
+        padding-inline-start: calc(var(--boxel-sp-xs) * 2 + 1rem);
+      }
+    </style>
+  </template>
+}
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
@@ -147,6 +268,9 @@ export class Select extends Component<SelectSignature> {
         @onChange={{this.choose}}
         @placeholder={{if @placeholder @placeholder 'Select…'}}
         @disabled={{this.disabled}}
+        @searchEnabled={{@searchEnabled}}
+        @searchField='label'
+        @beforeOptionsComponent={{SelectSearch}}
         @matchTriggerWidth={{true}}
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
@@ -171,7 +295,8 @@ export class Select extends Component<SelectSignature> {
              so it pads 1px more than a bordered Input to line its text up */
           --boxel-select-trigger-padding: 0 0.625rem;
           --boxel-select-trigger-gap: var(--boxel-sp-2xs);
-          --boxel-select-trigger-content-wrap: nowrap;
+          /* one block line, so a long label ends in an ellipsis */
+          --boxel-select-trigger-content-display: block;
           --boxel-select-background-color: var(--field);
           --boxel-select-text-color: var(--foreground);
           --boxel-dropdown-background-color: var(--popover);
@@ -180,11 +305,16 @@ export class Select extends Component<SelectSignature> {
           --boxel-dropdown-hover-color: var(--hover);
           --boxel-dropdown-hover-text-color: var(--popover-foreground);
           /* the selected row is a --primary fill; its text and checkmark
-             take --primary-foreground through currentColor. Its hover and
-             keyboard-highlight tints are BoxelSelect's own mixes of the two. */
+             take --primary-foreground through currentColor. Hovered or
+             keyboard-highlighted, it darkens a shade in both schemes, the
+             accent Button's hover; a mix toward --foreground would lighten
+             it in dark mode instead. */
+          --_select-primary-hover: oklch(from var(--primary) calc(l * 0.9) c h);
           --boxel-dropdown-highlight-color: var(--primary);
-          --boxel-dropdown-highlight-hover-color: var(--primary);
+          --boxel-dropdown-highlight-hover-color: var(--_select-primary-hover);
           --boxel-dropdown-selected-text-color: var(--primary-foreground);
+          --boxel-dropdown-selected-highlighted-color: var(--_select-primary-hover);
+          --boxel-dropdown-selected-hover-color: var(--_select-primary-hover);
           --boxel-dropdown-focus-border-color: var(--ring);
         }
       }
@@ -224,10 +354,6 @@ export class Select extends Component<SelectSignature> {
         font-size: var(--boxel-font-size-xs);
       }
       .pretui-selectwrap :deep(.boxel-trigger-content) {
-        min-width: 0;
-        overflow: hidden;
-      }
-      .pretui-selectwrap :deep(.boxel-trigger-content > *) {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;

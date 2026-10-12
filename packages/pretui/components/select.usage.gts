@@ -20,9 +20,8 @@ const COUNTRY_OPTIONS = COUNTRY_NAMES.map((c) => ({ value: c, label: c }));
 // @verticalPosition (listbox always opens below), @renderInPlace (the
 // listbox always renders in the wormhole, so nothing clips it),
 // @matchTriggerWidth (listbox always matches),
-// @searchEnabled / @searchField (typeahead on the trigger replaces the
-// search box), item yield block (options are {value, label} data, rendered
-// by the component).
+// @searchField (search filters by label), item yield block (options are
+// {value, label} data, rendered by the component).
 // The dropdown renders in the wormhole, so an overflow-hidden ancestor does
 // not clip it; its colors come from the theme contract.
 export class SelectUsage extends Component {
@@ -31,14 +30,17 @@ export class SelectUsage extends Component {
   @tracked value = '';
   @tracked placeholder = 'Select Item';
   @tracked disabled = false;
+  @tracked searchEnabled = false;
   setValue = (v: string) => (this.value = v);
   setPlaceholder = (v: string) => (this.placeholder = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setSearchEnabled = (v: boolean) => (this.searchEnabled = v);
   get usage() {
     let bits = ['@options={{this.countries}}', "@label='Country'"];
     if (this.value) bits.push(`@value='${this.value}'`);
     if (this.placeholder) bits.push(`@placeholder='${this.placeholder}'`);
     if (this.disabled) bits.push('@disabled={{true}}');
+    if (this.searchEnabled) bits.push('@searchEnabled={{true}}');
     bits.push('@onValueChange={{this.setValue}}');
     return `<Select ${bits.join(' ')} />`;
   }
@@ -55,6 +57,7 @@ export class SelectUsage extends Component {
           @value={{this.value}}
           @placeholder={{this.placeholder}}
           @disabled={{this.disabled}}
+          @searchEnabled={{this.searchEnabled}}
           @onValueChange={{this.setValue}}
         />
       </:example>
@@ -88,6 +91,13 @@ export class SelectUsage extends Component {
           @value={{this.disabled}}
           @description='When true, the control cannot be used.'
           @onInput={{this.setDisabled}}
+        />
+        <Args.Bool
+          @name='searchEnabled'
+          @defaultValue={{false}}
+          @value={{this.searchEnabled}}
+          @description='Adds a search box above the list; it takes focus when the list opens.'
+          @onInput={{this.setSearchEnabled}}
         />
       </:api>
     </FreestyleUsage>

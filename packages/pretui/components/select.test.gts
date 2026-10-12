@@ -1,6 +1,6 @@
 // Pretui — Select unit tests: how the trigger is named.
 import { module, test } from 'qunit';
-import { render, click } from '@ember/test-helpers';
+import { render, click, fillIn, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Select } from './select';
 
@@ -26,6 +26,18 @@ module('Pretui | components/select', function (hooks) {
     assert.ok(listbox, 'the list is open');
     assert.notOk(wrapper().contains(listbox), 'in the wormhole, not in place');
     assert.strictEqual(listbox.querySelectorAll('[data-test-pretui-select-option]').length, OPTIONS.length);
+  });
+
+  test('@searchEnabled adds a search box that takes focus on open and filters by label', async function (assert) {
+    await render(<template><Select @options={{OPTIONS}} @searchEnabled={{true}} /></template>);
+    await click(trigger());
+    let input = document.querySelector('[data-test-pretui-select-search-input]') as HTMLInputElement;
+    assert.ok(input, 'the search box renders');
+    await waitUntil(() => document.activeElement === input);
+    assert.strictEqual(document.activeElement, input, 'focus moves into the search box');
+    await fillIn(input, 'oo');
+    let shown = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option]")).map((o) => o.textContent?.trim());
+    assert.deepEqual(shown, ['Oolong'], 'typing filters the options by label');
   });
 
   test('a label pointing at @controlId names the trigger, then the value', async function (assert) {
