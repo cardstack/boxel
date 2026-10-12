@@ -556,11 +556,21 @@ module(basename(import.meta.filename), function (hooks) {
       'a card only the blocking grant opens',
       assert,
     );
-    let head = await request
-      .head(new URL(PUBLISHED).pathname)
-      .set('Accept', SupportedMimeType.CardJson)
-      .set('X-Forwarded-For', BLOCKED_VISITOR);
-    assert.strictEqual(head.status, 401, 'nor its headers');
+    // A `HEAD` no grant admits gets the realm's discovery answer, which
+    // describes no card.
+    let head = (from: string) =>
+      request
+        .head(new URL(PUBLISHED).pathname)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('X-Forwarded-For', from);
+    assert.notOk(
+      (await head(BLOCKED_VISITOR)).headers['etag'],
+      'nor its headers',
+    );
+    assert.ok(
+      (await head(VISITOR)).headers['etag'],
+      'which describe the card to an address the blocklist leaves out',
+    );
     assert.strictEqual(
       (await readSource(PUBLISHED, BLOCKED_VISITOR)).status,
       401,
