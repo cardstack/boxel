@@ -501,32 +501,14 @@ module('Integration | operations query', function (hooks) {
     );
   });
 
-  // Re-marks every session this tab holds as a realm-authority one, the kind a
-  // realm renders its own cards under, and answers how to put them back.
-  function holdRealmAuthoritySessions(): () => void {
-    let resources = [...getService('realm').realms.values()].filter(
-      (resource) => resource.token,
-    );
-    let originals = resources.map((resource) => resource.token!);
-    for (let resource of resources) {
-      let [header, payload, signature] = resource.token!.split('.');
-      let claims = JSON.parse(atob(payload));
-      resource.token = [
-        header,
-        btoa(JSON.stringify({ ...claims, realmAuthority: true })),
-        signature,
-      ].join('.');
-    }
-    return () =>
-      resources.forEach((resource, i) => (resource.token = originals[i]));
-  }
-
-  test("a realm's render of its own cards has no viewer, so a search that compares against one answers none", async function (assert) {
-    // A realm renders its own cards on realm-authority sessions, and what it
-    // produces is served to everyone. A saved search that resolved the caller
-    // there would put one identity's rows into shared HTML.
+  test('a render its server pinned no actor on has no viewer, whatever sessions the tab holds', async function (assert) {
+    // A realm renders its own cards with no actor, and what it produces is
+    // served to everyone. The tab's sessions here are the signed-in user's
+    // ordinary ones, which is what a realm's own render holds once a sibling
+    // tab's capture has replaced its sessions in the storage they share. A
+    // saved search that resolved the caller from them would put that user's
+    // rows into shared HTML.
     (globalThis as any).__boxelPrerenderApp = true;
-    let restoreSessions = holdRealmAuthoritySessions();
     try {
       assert.strictEqual(
         saved('myReports').query(),
@@ -538,7 +520,6 @@ module('Integration | operations query', function (hooks) {
         'and a saved search that does not read the caller is unaffected',
       );
     } finally {
-      restoreSessions();
       delete (globalThis as any).__boxelPrerenderApp;
     }
 
@@ -549,16 +530,21 @@ module('Integration | operations query', function (hooks) {
   });
 
   test('a render a user asks for has that user as its viewer', async function (assert) {
-    // A capture or a command renders on the sessions of the user who asked
-    // for it, and the realm scopes the render's searches as that user.
+    // A capture or a command renders as the user who asked for it, and its
+    // render server pins that user on the tab.
     (globalThis as any).__boxelPrerenderApp = true;
+    (globalThis as any).__boxelRenderActor = '@requester:localhost';
     try {
       assert.deepEqual(
         saved('myReports').query()?.filter,
-        { 'item.on': reportRef(), eq: { 'item.postedBy': CALLER } },
-        "the actor-scoped search compares against the sessions' user",
+        {
+          'item.on': reportRef(),
+          eq: { 'item.postedBy': '@requester:localhost' },
+        },
+        'the actor-scoped search compares against the user the server pinned',
       );
     } finally {
+      delete (globalThis as any).__boxelRenderActor;
       delete (globalThis as any).__boxelPrerenderApp;
     }
   });

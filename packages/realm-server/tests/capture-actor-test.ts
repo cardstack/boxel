@@ -14,6 +14,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   closeServer,
+  createJWT,
   createVirtualNetwork,
   matrixURL,
   realmSecretSeed,
@@ -21,9 +22,11 @@ import {
   setupDB,
 } from './helpers/index.ts';
 import {
+  maxPrerenderHtmlJobId,
   prerenderedHtmlRowFor,
   settlePrerenderHtmlJobs,
 } from './helpers/indexing.ts';
+import { PagePool } from '../prerender/page-pool.ts';
 import { installRealmServerAssertOwnRealmServerBypassPatch } from './helpers/prerender-page-patches.ts';
 import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
@@ -146,6 +149,51 @@ function schedule(title: string, providerId: string) {
   });
 }
 
+function board(revision: number) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { revision },
+      meta: { adoptsFrom: { module: rri(`${REALM}board`), name: 'Board' } },
+    },
+  });
+}
+
+// Writes `sessionAuth` into a tab's session storage after every call the
+// render server makes into it, which is what a sibling tab of the same
+// affinity does when it starts a capture: tabs of one affinity share their
+// storage. Answers how to stop.
+function overwriteTabSessionsWith(sessionAuth: string): () => void {
+  let originalGetPage = PagePool.prototype.getPage;
+  let wrapped = new Map<any, (...args: any[]) => Promise<any>>();
+  PagePool.prototype.getPage = async function (
+    this: PagePool,
+    ...args: Parameters<PagePool['getPage']>
+  ) {
+    let pageInfo = await originalGetPage.apply(this, args);
+    let page = pageInfo.page as any;
+    if (page?.evaluate && !wrapped.has(page)) {
+      let originalEvaluate = page.evaluate.bind(page);
+      wrapped.set(page, page.evaluate);
+      page.evaluate = async (...evaluateArgs: any[]) => {
+        let result = await originalEvaluate(...evaluateArgs);
+        await originalEvaluate(
+          (auth: string) => localStorage.setItem('boxel-session', auth),
+          sessionAuth,
+        );
+        return result;
+      };
+    }
+    return pageInfo;
+  } as PagePool['getPage'];
+  return () => {
+    for (let [page, evaluate] of wrapped) {
+      page.evaluate = evaluate;
+    }
+    PagePool.prototype.getPage = originalGetPage;
+  };
+}
+
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm | undefined;
   let request: SuperTest<Test>;
@@ -172,15 +220,7 @@ module(basename(import.meta.filename), function (hooks) {
           fileSystem: {
             'schedule.gts': SCHEDULE_MODULE,
             'board.gts': BOARD_MODULE,
-            'boards/board.json': JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: { revision: 1 },
-                meta: {
-                  adoptsFrom: { module: rri(`${REALM}board`), name: 'Board' },
-                },
-              },
-            }),
+            'boards/board.json': board(1),
             'schedules/requester.json': schedule("The requester's", REQUESTER),
             'schedules/owner.json': schedule("The owner's", OWNER),
             'schedules/other.json': schedule(
@@ -311,6 +351,48 @@ module(basename(import.meta.filename), function (hooks) {
     assert.notOk(
       html.includes('board-row'),
       `the realm's render, which has no actor, drew no schedule, not even its owner's: ${html}`,
+    );
+  });
+
+  test("the realm's own render draws no one's rows though a sibling tab's capture replaced its sessions", async function (assert) {
+    // The requester's ordinary sessions, as a capture they asked for would
+    // write them into the storage this tab shares with its siblings.
+    let requesterSessions = JSON.stringify({
+      [REALM]: createJWT(realm!, REQUESTER, ['read']),
+    });
+    let before = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
+    let baseline = await maxPrerenderHtmlJobId(db, REALM);
+    let stopOverwriting = overwriteTabSessionsWith(requesterSessions);
+    try {
+      await realm!.write('boards/board.json', board(2));
+      await settlePrerenderHtmlJobs(db, REALM, {
+        afterJobId: baseline,
+        timeout: 120_000,
+      });
+    } finally {
+      stopOverwriting();
+    }
+    let row = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
+    let errorDoc = row?.error_doc ?? null;
+    assert.strictEqual(
+      errorDoc,
+      null,
+      `the board rendered cleanly: ${JSON.stringify(errorDoc)}`,
+    );
+    let generation = row?.generation ?? -1;
+    let generationBefore = before?.generation ?? -1;
+    assert.true(
+      generation > generationBefore,
+      `the HTML is the render just made (generation ${row?.generation}, before ${before?.generation})`,
+    );
+    let html = row?.isolated_html ?? '';
+    assert.true(
+      html.includes('board-search'),
+      `the render drew the board: ${html}`,
+    );
+    assert.notOk(
+      html.includes('board-row'),
+      `the realm's render drew no schedule, not even the requester's whose sessions it ended up holding: ${html}`,
     );
   });
 });

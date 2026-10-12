@@ -153,7 +153,7 @@ export default class OperationsService
   // against, and what an operation's `actor()` resolves to when its program is
   // run locally.
   //
-  // A render tab answers from the sessions it was handed (see
+  // A render tab answers with the actor its render server pinned on it (see
   // `renderTabActor`), since no one signs in to matrix there.
   //
   // Nobody before the matrix client is up or after a sign-out, where reading
@@ -173,35 +173,27 @@ export default class OperationsService
     }
   }
 
-  // Who a render tab renders as, read from the realm sessions it holds.
+  // Who a render tab renders as: the actor the render server pinned on this
+  // tab when it handed the tab its auth.
   //
-  // A render a user asks for — a capture, a command — holds that user's
+  // A render a user asks for — a capture, a command — runs on that user's
   // ordinary sessions, and the realm server scopes its searches and judges its
   // writes as that user, so the actor is that user: the one the realm already
   // authenticates the render's requests as.
   //
   // A render a realm makes of its own cards — indexing, the HTML render, a
-  // module's definition render — holds realm-authority sessions. The `user`
-  // on those is the identity the session reads as, not someone the rendering
-  // is for: what it draws is kept and served to every viewer. So there is
-  // nobody, the saved search answers no rows, and the live render that
-  // follows fills them in.
+  // module's definition render — runs on realm-authority sessions, and what it
+  // draws is kept and served to every viewer. So there is nobody, the saved
+  // search answers no rows, and the live render that follows fills them in.
   //
-  // Nobody, too, when the tab holds no session, or sessions for more than one
-  // user, since then no single user asked for the render.
+  // The tab's own sessions can't answer this. They live in localStorage, which
+  // every tab of one affinity shares, so a sibling tab's capture can replace
+  // them partway through a realm's own render. So a tab the server pinned no
+  // actor on — including one served by a render server that predates the
+  // global — has nobody.
   private renderTabActor(): string | undefined {
-    let users = new Set<string>();
-    for (let resource of this.realm.realms.values()) {
-      let claims = resource.claims;
-      if (!claims) {
-        continue;
-      }
-      if (claims.realmAuthority) {
-        return undefined;
-      }
-      users.add(claims.user);
-    }
-    return users.size === 1 ? [...users][0] : undefined;
+    let actor = (globalThis as any).__boxelRenderActor;
+    return typeof actor === 'string' && actor ? actor : undefined;
   }
 
   async send(

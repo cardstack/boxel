@@ -125,6 +125,47 @@ const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
 const HOST_CHUNK_IMPORT_FAILURE_RE =
   /Failed to fetch dynamically imported module:?\s*(\S*)/;
 
+// Who a render runs as, read from the auth this server hands its tab: the
+// user every session names, when they all name one user and none carries
+// the `realmAuthority` claim. A realm rendering its own cards, an anonymous
+// render, and anything that cannot be read run as nobody.
+//
+// It is answered here and pinned on the tab, rather than read back in the tab
+// from the sessions it holds, because those sessions live in localStorage,
+// which every tab of one affinity shares: a sibling tab's capture can replace
+// them partway through a realm's own render, and that render's HTML is served
+// to every viewer.
+export function renderActorFor(auth: string): string | null {
+  let tokens: Record<string, unknown>;
+  try {
+    tokens = JSON.parse(auth);
+  } catch (_e) {
+    return null;
+  }
+  if (!tokens || typeof tokens !== 'object') {
+    return null;
+  }
+  let users = new Set<string>();
+  for (let token of Object.values(tokens)) {
+    if (typeof token !== 'string') {
+      return null;
+    }
+    let claims: { user?: unknown; realmAuthority?: unknown };
+    try {
+      claims = JSON.parse(
+        Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
+      );
+    } catch (_e) {
+      return null;
+    }
+    if (claims.realmAuthority || typeof claims.user !== 'string') {
+      return null;
+    }
+    users.add(claims.user);
+  }
+  return users.size === 1 ? [...users][0] : null;
+}
+
 // Searches the error, and the errors nested in it, since the failed import is
 // usually the cause of whatever the render reports on top.
 function failedHostChunkImportIn(
@@ -462,8 +503,17 @@ export class RenderRunner {
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
       await abortable(signal, () =>
         page.evaluate(
-          (sessionAuth, key, commandToRun, input, requestNonce, createdAt) => {
+          (
+            sessionAuth,
+            actor,
+            key,
+            commandToRun,
+            input,
+            requestNonce,
+            createdAt,
+          ) => {
             localStorage.setItem('boxel-session', sessionAuth);
+            (globalThis as any).__boxelRenderActor = actor;
             localStorage.setItem(
               key,
               JSON.stringify({
@@ -475,6 +525,7 @@ export class RenderRunner {
             );
           },
           auth,
+          renderActorFor(auth),
           storageKey,
           command,
           commandInput ?? null,
@@ -685,18 +736,23 @@ export class RenderRunner {
       // aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
       await abortable(signal, () =>
-        page.evaluate((sessionAuth) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-          // A capture renders through the same card branch as a visit, on a
-          // tab drawn from the same affinity queue — and it names the card a
-          // visit's stash would name, so the route's URL check cannot tell a
-          // leftover apart from a stash meant for this render. Clear both
-          // stashes here for the same reason a visit clears them at its start:
-          // this render reads current bytes, never what some earlier visit
-          // read.
-          delete (globalThis as any).__boxelFileRenderData;
-          delete (globalThis as any).__boxelCardRenderData;
-        }, auth),
+        page.evaluate(
+          (sessionAuth, actor) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            (globalThis as any).__boxelRenderActor = actor;
+            // A capture renders through the same card branch as a visit, on a
+            // tab drawn from the same affinity queue — and it names the card a
+            // visit's stash would name, so the route's URL check cannot tell a
+            // leftover apart from a stash meant for this render. Clear both
+            // stashes here for the same reason a visit clears them at its start:
+            // this render reads current bytes, never what some earlier visit
+            // read.
+            delete (globalThis as any).__boxelFileRenderData;
+            delete (globalThis as any).__boxelCardRenderData;
+          },
+          auth,
+          renderActorFor(auth),
+        ),
       );
 
       let renderStart = Date.now();
@@ -1014,9 +1070,14 @@ export class RenderRunner {
       // if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
       await abortable(signal, () =>
-        page.evaluate((sessionAuth) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-        }, auth),
+        page.evaluate(
+          (sessionAuth, actor) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            (globalThis as any).__boxelRenderActor = actor;
+          },
+          auth,
+          renderActorFor(auth),
+        ),
       );
 
       let renderStart = Date.now();
@@ -1317,11 +1378,15 @@ export class RenderRunner {
         page.evaluate(
           (
             sessionAuth: string,
+            actor: string | null,
             id: string | undefined,
             jobPriority: number | undefined,
             scope: string | undefined,
           ) => {
             localStorage.setItem('boxel-session', sessionAuth);
+            (
+              globalThis as unknown as { __boxelRenderActor?: string | null }
+            ).__boxelRenderActor = actor;
             (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
               id;
             (
@@ -1343,6 +1408,7 @@ export class RenderRunner {
             );
           },
           auth,
+          renderActorFor(auth),
           jobId,
           priority,
           renderScope,
