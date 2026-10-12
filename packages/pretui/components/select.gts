@@ -298,6 +298,13 @@ export class Select extends Component<SelectSignature> {
           /* one block line, so a long label ends in an ellipsis */
           --boxel-select-trigger-content-display: block;
           --boxel-select-background-color: var(--field);
+          /* hover pulls the hairline toward --foreground, so it strengthens
+             in both schemes, the way a Button's edge answers the pointer */
+          --_select-edge-hover: color-mix(
+            in oklch,
+            var(--foreground) 30%,
+            var(--input)
+          );
           --boxel-select-text-color: var(--foreground);
           --boxel-dropdown-background-color: var(--popover);
           --boxel-dropdown-text-color: var(--popover-foreground);
@@ -329,7 +336,14 @@ export class Select extends Component<SelectSignature> {
         box-shadow: 0 0 0 1px var(--input);
         width: 100%;
         text-align: start;
-        transition: none;
+        transition: box-shadow var(--pretui-dur-snap, 180ms)
+          var(--pretui-ease-snap, ease);
+      }
+      /* before the expanded and focus rules, which win the tie */
+      @media (hover: hover) {
+        .pretui-selectwrap :deep(.pretui-selecttrigger:hover) {
+          box-shadow: 0 0 0 1px var(--_select-edge-hover);
+        }
       }
       .pretui-selectwrap :deep(.pretui-selecttrigger[aria-expanded='true']),
       .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
