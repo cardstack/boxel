@@ -112,9 +112,24 @@ export function setupChoreoGalleryTest(
      * instance documents rather than loaded through the store.
      */
     async renderGallery() {
+      let demos = await gallery.demos();
+      let { ChoreoGallery } =
+        await gallery.import<typeof GalleryModule>('gallery');
+      await renderCard(
+        gallery.loader,
+        new ChoreoGallery({ demos }),
+        'isolated',
+      );
+    },
+
+    /**
+     * Every demo the gallery's index links, in its order, as card instances
+     * built from the realm's own instance documents.
+     */
+    async demos(): Promise<DemoModule.GalleryDemo[]> {
       let { DemoLesson, WalkthroughStep } =
         await gallery.import<typeof DemoModule>('demo');
-      let demos = await Promise.all(
+      return await Promise.all(
         GALLERY_DEMOS.map(async (slug) => {
           let { data } = galleryInstance(`demos/${slug}.json`);
           let { module, name } = data.meta.adoptsFrom;
@@ -130,13 +145,6 @@ export function setupChoreoGalleryTest(
             ),
           });
         }),
-      );
-      let { ChoreoGallery } =
-        await gallery.import<typeof GalleryModule>('gallery');
-      await renderCard(
-        gallery.loader,
-        new ChoreoGallery({ demos }),
-        'isolated',
       );
     },
 

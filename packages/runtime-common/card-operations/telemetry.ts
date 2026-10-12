@@ -1,4 +1,4 @@
-import type { ActingUserFailure } from './acting-users.ts';
+import type { ActingUserFailure } from './types.ts';
 import { logger } from '../log.ts';
 import type { BaseOperation, OperationErrorCode } from './types.ts';
 
@@ -528,10 +528,11 @@ export interface AnonymousRequestEvent {
   //   addresses, which is counted here but never limited or blocked.
   // - `refused`: no grant admitted it, and it was answered as an
   //   unauthenticated request is.
-  // - `blocked`: the realm refused the caller's address before any grant was
-  //   asked (see `blockReason`).
-  // - `rate-limited`: the address had used up its limit, so it was turned
-  //   away before anything ran, whatever it asked for.
+  // - `blocked`: every grant that could admit the caller refused its address
+  //   before anything about the target was read (see `blockReason`).
+  // - `rate-limited`: the address had used up its limit through every grant
+  //   that could admit it, or through the one that did, so it was turned away
+  //   whatever it asked for.
   // - `unavailable`: the realm couldn't read or update the address's count,
   //   so it was turned away rather than let through uncounted.
   outcome:
@@ -541,15 +542,27 @@ export interface AnonymousRequestEvent {
     | 'blocked'
     | 'rate-limited'
     | 'unavailable';
+  // - `blocklist`: a grant's blocklist names the address.
+  // - `ip-undetermined`: no address reached the realm.
+  // - `blocklist-invalid`: a grant's blocklist produced something that isn't
+  //   a list of addresses, which closes it to every such caller.
+  // Where grants refused the caller for different reasons, the first of them
+  // in the policy card is recorded.
   blockReason?: 'blocklist' | 'ip-undetermined' | 'blocklist-invalid';
+  // The grant the request was counted against, by its path in the policy
+  // card: the one that admitted it, or for a refusal before anything ran, the
+  // first one that could have.
+  grant?: string;
   clientIP: string | null;
   // What the caller is counted under: the address, or the /64 an IPv6
   // address is in.
   rateLimitKey?: string;
+  // The grant's limit, each half from its expression or the platform's.
   limit?: {
     requests: number;
     windowSeconds: number;
-    from: 'realm' | 'platform';
+    requestsFrom: 'grant' | 'platform';
+    windowSecondsFrom: 'grant' | 'platform';
   };
   // The window's count once this request was counted.
   count?: number;
@@ -559,9 +572,10 @@ export interface AnonymousRequestEvent {
   // For a write, the users it was made as: the acting user each admitting
   // grant names, first admitted first.
   actingUsers?: string[];
-  // For a write a grant would otherwise have admitted, why its acting-user
-  // key named no one who may write the realm.
-  actingUserFailures?: { key: string; failure: ActingUserFailure }[];
+  // For a write a grant would otherwise have admitted, why its `actingUser`
+  // named no one who may write the realm, by the grant's path in the policy
+  // card.
+  actingUserFailures?: { grant: string; failure: ActingUserFailure }[];
   retryAfterSeconds?: number;
   correlationId: string | null;
 }

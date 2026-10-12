@@ -157,7 +157,13 @@ region. A removed sprite lives until the last cue that names it ends (a
 `Wait` counts), then its element is dropped and the node unmounted. A removed
 participant no step names is released when the run starts. A participant whose
 `<Presence>` is leaving is also _removed_, stays where it is (Presence holds
-it), and its exit is reported complete to the Presence when its row ends.
+it), and its exit is reported complete to the Presence when its row ends. That
+holds while the region outlives the leaver. A region that is leaving too
+(inside the same `<Presence>` child, or one a propagating `<Presence>` takes
+out with it) cannot keep anything past its own exit, so it does not hold the
+Presence: the child leaves when its own exit ends, whatever the region's run is
+doing. A region that should play its participants out belongs above the
+`<Presence>`.
 
 **Durations.** `Tween`/`Wait`/`Hold @ms` are explicit. `Spring`/`Move` with a
 spring are computed per property with the engine's own generator

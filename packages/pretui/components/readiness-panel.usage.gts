@@ -85,6 +85,29 @@ const BLOCKED_GATES: readonly ReadinessGate[] = [
   },
 ];
 
+const FAILING_CHECKS: readonly ReadinessGate[] = [
+  {
+    id: 'lint',
+    name: 'Lint',
+    state: 'fail',
+    caption: '3 errors in list.gts',
+    href: '#ci-lint',
+  },
+  {
+    id: 'host-2',
+    name: 'Host tests (shard 2 of 8)',
+    state: 'fail',
+    caption: '1 failing: card selection keeps nested clicks',
+    href: '#ci-host-2',
+  },
+  {
+    id: 'types',
+    name: 'Type check',
+    state: 'running',
+    href: '#ci-types',
+  },
+];
+
 const BLOCKING_REASONS: readonly string[] = [
   'Two integration suites are failing on the release branch.',
   'The bundle budget cannot be measured until the suite finishes.',
@@ -120,6 +143,9 @@ class ReadinessPanelUsage extends Component {
   }
   get noReasons(): string[] {
     return [];
+  }
+  get failingChecks(): ReadinessGate[] {
+    return [...FAILING_CHECKS];
   }
   get noGates(): ReadinessGate[] {
     return [];
@@ -159,7 +185,11 @@ class ReadinessPanelUsage extends Component {
             @announce={{this.announce}}
           >
             <:actions>
-              <Button @size='s' @tone='primary' @disabled={{true}}>Release</Button>
+              <Button
+                @size='s'
+                @tone='primary'
+                @disabled={{true}}
+              >Release</Button>
             </:actions>
           </ReadinessPanel>
 
@@ -187,6 +217,16 @@ class ReadinessPanelUsage extends Component {
             @emptyMessage='Attach a policy set and its gates will report here.'
             @announce={{this.announce}}
           />
+
+          <div class='pretui-rp-nested'>
+            <p class='pretui-rp-nested-title'>cardstack/boxel#6650 · 2 checks
+              failing</p>
+            <ReadinessPanel
+              @title='Failing checks'
+              @variant='list'
+              @gates={{this.failingChecks}}
+            />
+          </div>
         </div>
       </:example>
       <:api as |Args|>
@@ -203,9 +243,14 @@ class ReadinessPanelUsage extends Component {
           @description='Optional sub-line under the verdict.'
           @onInput={{this.setSummary}}
         />
+        <Args.String
+          @name='variant'
+          @defaultValue='panel'
+          @description='panel is the verdict, reasons, gates and actions on a Panel. list is the gate rows alone, for a check list nested under another record, like the failing checks under the pull request above: no surface, heading, verdict, reasons, actions or live region. The title still names the list.'
+        />
         <Args.Array
           @name='gates'
-          @description='The gates, in reading order. Each is id / name / state / caption / value. State is pass, fail, blocked, running, pending, skipped or unknown — an unrecognised value resolves to unknown and still renders, so a gate can never silently disappear.'
+          @description='The gates, in reading order. Each is id / name / state / caption / value / href; href makes the gate name a link to its source, with the state left outside the link. State is pass, fail, blocked, running, pending, skipped or unknown — an unrecognised value resolves to unknown and still renders, so a gate can never silently disappear.'
         />
         <Args.Array
           @name='reasons'
@@ -264,10 +309,7 @@ class ReadinessPanelUsage extends Component {
           @name='emptyTitle'
           @description='Empty-state wording when there are no gates at all.'
         />
-        <Args.String
-          @name='emptyMessage'
-          @description='Empty-state message.'
-        />
+        <Args.String @name='emptyMessage' @description='Empty-state message.' />
         <Args.String
           @name='gatesLabel'
           @description='Accessible name for the gate list. Defaults to the title.'
@@ -304,6 +346,18 @@ class ReadinessPanelUsage extends Component {
         display: grid;
         gap: var(--space-5, 14px);
         max-width: 640px;
+      }
+      .pretui-rp-nested {
+        display: grid;
+        gap: var(--space-2, 6px);
+        padding: var(--space-4, 11px);
+        border-radius: var(--radius-surface, 10px);
+        box-shadow: 0 0 0 1px var(--border);
+      }
+      .pretui-rp-nested-title {
+        margin: 0;
+        font-size: var(--text-ui-md, 12.5px);
+        font-weight: 600;
       }
     </style>
   </template>

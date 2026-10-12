@@ -231,7 +231,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a whole-body GET whose stat describes an older version sends no validators', async function (assert) {
+    test('a whole-body GET whose stat describes an older version sends no ETag and dates the bytes it sends', async function (assert) {
       await uploadSample('/stale-stat-validators.png');
       let fresh = await getSample('/stale-stat-validators.png');
       assert.ok(fresh.headers['etag'], 'a current stat yields an ETag');
@@ -270,8 +270,8 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(
         response.headers['last-modified'],
-        undefined,
-        'no Last-Modified describing another version',
+        fresh.headers['last-modified'],
+        "Last-Modified is the opened file's own, not the stale stat's",
       );
       assert.deepEqual(
         new Uint8Array(response.body),
