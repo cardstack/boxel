@@ -75,8 +75,8 @@ query-backed relationship raises `FilterRefersToNonsearchableFieldError`
 instead of silently matching nothing.
 
 **Pass 2** (`expressionToSql` in `expression.ts`) is purely mechanical: params
-become `$n` binds; table-valued nodes dedupe into a map (`each_<column>`,
-`tree_<column>_<fieldPath>`) rendered as nonce-numbered aliases, with the
+become `$n` binds; table-valued nodes dedupe into a map keyed
+`tree_<column>_<fieldPath>` rendered as nonce-numbered aliases, with the
 `CROSS JOIN LATERAL …` clauses spliced into the FROM clause at the
 `__TABLE_VALUED_FUNCTIONS__` placeholder; `dbExpression` nodes pick their
 pg/sqlite branch.
@@ -135,10 +135,10 @@ the value test.
 
 - Two predicates on the _same_ path share one alias and evaluate per tree
   row: `every` of `friends.name = 'Mango'` and `friends.name = 'Ringo'`
-  matches nothing, even for a card that has both friends: each tree row is
-  one friend, and no single friend has both names. Type conditions don't
-  behave this way — they are per-row membership predicates with no alias
-  (see "Semantics to keep in mind").
+  matches nothing, even for a card that has both friends: each surviving
+  tree row is one friend's `name` node, and no single node has both names.
+  Type conditions don't behave this way — they are per-row membership
+  predicates with no alias (see "Semantics to keep in mind").
 - Predicates on _different_ leaf paths get separate tree functions and fan
   out as a cartesian product: `friends.name = 'Mango' AND friends.age = 5`
   means "some friend named Mango AND some friend aged 5" — **not necessarily
@@ -196,8 +196,14 @@ So type conditions compose like ordinary boolean predicates:
 - `every([{type: A}, {type: B}])` is a true intersection — it matches a row
   whose `types` chain contains both A and B (e.g. an instance of B where B
   extends A).
-- `not: {type: X}` is a true exclusion — it drops every instance of X,
-  including instances of X's subclasses (their `types` chain contains X).
+- `not: {type: X}` is a true exclusion — it drops every row whose `types`
+  contains X. For card instances and successfully extracted files that is
+  every instance of X and of X's subclasses, since `types` is the full
+  ancestor chain. A file row whose extraction errored is the exception: the
+  file indexer stamps it with the fallback chain for its extension (the
+  extension's FileDef, `FileDef`, `BaseDef`), which skips intermediate
+  classes, so such a `.png` is not a member of `ImageDef` and survives
+  `not: {type: ImageDef}`.
 - The `COALESCE` keeps a row whose `types` is null a definite FALSE rather
   than SQL NULL, so `not: {type: X}` keeps such a row instead of dropping it.
   Errored instances can lack `types`; under this predicate they behave as
