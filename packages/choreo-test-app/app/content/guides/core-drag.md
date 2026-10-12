@@ -44,4 +44,4 @@ If the object moves twice as far as the pointer under a scaled parent, the relea
 
 **ChoreoContext**: `c.gesture`.
 
-Read the implementation: [`gesture.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/gesture.ts), [`helpers.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts), [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`gesture.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/gesture.ts), [`helpers.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/helpers.ts), [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

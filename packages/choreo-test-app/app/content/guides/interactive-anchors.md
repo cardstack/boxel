@@ -46,4 +46,4 @@ Use the build-order demo to inspect the relationship between names, starts, dela
 
 **@cardstack/choreo**: `AnchorRef`, `after`, `at`.
 
-Read the implementation: [`anchors.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/anchors.ts).
+Read the implementation: [`anchors.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/anchors.ts).

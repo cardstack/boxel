@@ -5,30 +5,32 @@ Boxel realm content. Everything in [`realm/`](realm/) is the realm: cards,
 their data, and the modules they import. Cards import `glimmer-motion` and
 `@cardstack/choreo` like any other card; the host serves both to realms.
 
-The rest of the package is tooling and source material that is not served:
-`tools/` (the realm check and the film and widget tools), `scripts/`,
-`docs/` and `notes/`. The agent skills for working on the libraries and the
+The rest of the package is tooling that is not served: `tools/` (the realm
+check and the film and widget tools) and `scripts/`. The agent skills for working on the libraries and the
 gallery are in the monorepo's `.claude/skills/` (`motion-pattern` routes to
 the rest).
 
 ## The realm
 
-| Path                | What it is                                                                                                                    |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `realm.json`        | The realm's config.                                                                                                           |
-| `index.json`        | The gallery: a `ChoreoGallery` card linking every demo, in the order the gallery shows them.                                  |
-| `gallery.gts`       | `ChoreoGallery`. Its isolated format is the whole site; embedded and fitted are a summary.                                    |
-| `demo.gts`          | `GalleryDemo`, one gallery entry: its title, group, lede, API pills, usage example, walkthrough and teaching lesson.          |
-| `demos/<slug>.json` | One `GalleryDemo` per demo. The catalog is this data.                                                                         |
-| `shell/`            | The site's components: the frame, the grid, the demo page, the How panel and the pickers.                                     |
-| `stages/<slug>.gts` | A demo's own `GalleryDemo` subclass, supplying its live stage and its notes.                                                  |
-| `notes/`            | Each demo's long-form notes (its Deep Dive).                                                                                  |
-| `asset/`            | Media the demos load: the films' narration, looks, textures, picture pages, vendored three.js and posters.                    |
-| `film-app/`         | The films' own app, built from `packages/choreo-film-app` by `pnpm push`. Not committed.                                      |
-| `reel/`             | The feature reel: three demos, live, in one camera'd world under a title, brand and timecode plane. `feature-reel.json`.      |
-| `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`. |
-| `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.              |
-| `*.test.gts`        | The gallery's tests, run by `boxel test`.                                                                                     |
+| Path                | What it is                                                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `realm.json`        | The realm's config.                                                                                                                      |
+| `index.json`        | The gallery: a `ChoreoGallery` card linking every demo, in the order the gallery shows them.                                             |
+| `gallery.gts`       | `ChoreoGallery`. Its isolated format is the whole site; embedded and fitted are a summary.                                               |
+| `demo.gts`          | `GalleryDemo`, one gallery entry: its title, group, lede, API pills, usage example, walkthrough and teaching lesson.                     |
+| `demos/<slug>.json` | One `GalleryDemo` per demo. The catalog is this data.                                                                                    |
+| `shell/`            | The site's components: the frame, the grid, the demo page, the How panel and the pickers.                                                |
+| `stages/<slug>.gts` | A demo's own `GalleryDemo` subclass, supplying its live stage and its notes.                                                             |
+| `notes/`            | Each demo's long-form notes (its Deep Dive).                                                                                             |
+| `docs/`             | The long-form documentation, as Markdown: the guide, the choreography model, the construct reference, Film. `docs/README.md` indexes it. |
+| `design/`           | Design history: design records, handoffs, measurements, and the films' scripts. Drafts by definition.                                    |
+| `licenses/`         | Attribution for third-party material the demos use.                                                                                      |
+| `asset/`            | Media the demos load: the films' narration, looks, textures, picture pages, vendored three.js and posters.                               |
+| `film-app/`         | The films' own app, built from `packages/choreo-film-app` by `pnpm push`. Not committed.                                                 |
+| `reel/`             | The feature reel: three demos, live, in one camera'd world under a title, brand and timecode plane. `feature-reel.json`.                 |
+| `lib/`              | The crossing between the grid and a demo page, tempo and theme preferences, syntax highlighting, and `onstage`/`restWhenOff`.            |
+| `theme.json`        | The fonts the gallery is set in. The palette is declared by the gallery's root element, `shell/choreo-root.gts`.                         |
+| `*.test.gts`        | The gallery's tests, run by `boxel test`.                                                                                                |
 
 A demo's stage and its long-form notes are components, not data. A demo that
 has them adopts from its own subclass of `GalleryDemo`, in
@@ -105,13 +107,19 @@ pnpm test   # boxel test realm
 `pnpm lint:realm` (`tools/check-realm.mjs`) checks the realm's contents
 against the libraries it documents:
 
-- `docs/api-inventory.json` names every public export of glimmer-motion,
+- `tools/api-inventory.json` names every public export of glimmer-motion,
   Choreo and choreo-player, and every member of the `ChoreoContext` and
   `FilmVocabulary` vocabularies, and maps each to a guide;
 - every `demos/*.json` is well formed, `index.json` links exactly that set,
   and each demo has a complete teaching lesson naming a known guide;
 - every guide meets the prose floor, has a preamble, and links only to guides
-  that exist.
+  that exist;
+- `docs/` and `design/` link only to realm files and headings that exist;
+- every import written in the docs, the guides and the package READMEs names
+  an export its package has, so none still reaches Choreo or Film through
+  `glimmer-motion`;
+- every `choreo.boxel.site` URL names a file in the realm, and every link into
+  the monorepo names a file that exists.
 
 The guides themselves, and the guide pages that embed the demos, are still
 `choreo-test-app` sources; the check reads them from there.

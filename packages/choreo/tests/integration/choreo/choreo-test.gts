@@ -1,6 +1,6 @@
 /**
  * <Choreo>: boxel-motion's region-scoped choreography on the motion-dom engine.
- * docs/choreography.md is the spec these pin.
+ * packages/choreo-gallery/realm/docs/choreography.md is the spec these pin.
  */
 import { beacon, type Changeset, Choreo, type Sprite } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
@@ -105,7 +105,7 @@ module('Integration | choreo', function (hooks) {
   });
 
   test('the first render never animates; an all-kept pass still runs its timeline', async function (assert) {
-    // docs/choreo-constructs.md §3.1: the share badge, the hot wire — a Hold
+    // packages/choreo-gallery/realm/docs/choreo-constructs.md §3.1: the share badge, the hot wire — a Hold
     // with a lifetime fired by an event that inserts, removes and moves
     // nothing. Steps that select CHANGE stay quiet on such a pass.
     let holds = 0;

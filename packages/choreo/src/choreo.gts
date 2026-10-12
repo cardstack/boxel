@@ -12,7 +12,7 @@
  *     </c.Sequence>
  *   </Choreo>
  *
- * docs/choreography.md has the whole design and the legacy it descends from.
+ * packages/choreo-gallery/realm/docs/choreography.md has the whole design and the legacy it descends from.
  */
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';

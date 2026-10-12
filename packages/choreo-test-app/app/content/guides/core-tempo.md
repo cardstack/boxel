@@ -36,4 +36,4 @@ Restore global tempo when a temporary inspection tool is destroyed. Otherwise a 
 
 **glimmer-motion**: `motionSpeed`, `onMotionSpeed`, `scaleTransition`, `setMotionSpeed`.
 
-Read the implementation: [`speed.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/speed.ts).
+Read the implementation: [`speed.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/speed.ts).

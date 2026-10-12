@@ -13,7 +13,7 @@ import { beginCrossing } from 'test-app/lib/crossing';
  * the thirteen load-bearing subtleties they needed. The transition belongs
  * to the library now: `<Choreo @route>` in the application template treats
  * the route swap as one render pass, and its timeline says the whole move.
- * The region stays router-agnostic by design (docs/choreo-constructs.md §9),
+ * The region stays router-agnostic by design (packages/choreo-gallery/realm/docs/choreo-constructs.md §9),
  * so the one thing left for the route layer is telling the app a crossing
  * has begun — see app/lib/crossing.ts.
  */

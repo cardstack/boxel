@@ -10,6 +10,10 @@
  * - Every guide meets the prose floor and has a preamble, the `-start`
  *   guides state their motivation and goals, and internal guide links
  *   resolve.
+ * - The docs and design records in the realm link only to files and
+ *   headings that exist; every import written in them, in the guides and in
+ *   the package READMEs names an export its package has; and every
+ *   choreo.boxel.site URL names a file in the realm.
  *
  * Reads sources and JSON only, so it needs no build.
  */
@@ -52,7 +56,7 @@ function source(file) {
 // ---- the API inventory ---------------------------------------------------
 
 const inventory = readJSON(
-  path.join(root, 'packages/choreo-gallery/docs/api-inventory.json'),
+  path.join(root, 'packages/choreo-gallery/tools/api-inventory.json'),
 );
 const files = {
   'glimmer-motion': 'packages/glimmer-motion/src/index.ts',
@@ -115,7 +119,7 @@ assert.equal(
 assert.deepEqual(
   [...listed].sort(),
   [...actual].sort(),
-  'API exports changed: review and update packages/choreo-gallery/docs/api-inventory.json',
+  'API exports changed: review and update packages/choreo-gallery/tools/api-inventory.json',
 );
 
 // ---- the guides ----------------------------------------------------------
@@ -316,4 +320,256 @@ for (const { id, ...lesson } of testAppLessons) {
 }
 console.log(
   `${testAppLessons.length} test-app lessons cover its catalog and match the realm's.`,
+);
+
+// ---- the docs ------------------------------------------------------------
+
+function markdownFiles(dir) {
+  return fs
+    .readdirSync(dir, { recursive: true })
+    .filter((file) => file.endsWith('.md'))
+    .map((file) => path.join(dir, file));
+}
+const relative = (file) => path.relative(root, file);
+/** fenced code, which may quote link or import syntax it doesn't mean */
+const withoutFences = (markdown) =>
+  markdown.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
+
+/** the ids GitHub (and the host's renderer) give a document's headings */
+function headingIds(markdown) {
+  const ids = new Set();
+  const seen = new Map();
+  for (const [, text] of withoutFences(markdown).matchAll(
+    /^#{1,6}\s+(.*?)\s*#*\s*$/gm,
+  )) {
+    // a code span keeps its text as written, `<Film>` and `/_sylva` included;
+    // outside one, tags, link targets and emphasis underscores drop out
+    const base = text
+      .split(/(`[^`]*`)/)
+      .map((part, i) =>
+        i % 2
+          ? part.slice(1, -1)
+          : part
+              .replace(/<[^>]+>/g, '')
+              .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+              .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, ''),
+      )
+      .join('')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{M}\p{Nd}\p{Pc} -]/gu, '')
+      .replace(/ /g, '-');
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    ids.add(count ? `${base}-${count}` : base);
+  }
+  return ids;
+}
+
+const realmDocs = [
+  ...markdownFiles(path.join(realm, 'docs')),
+  ...markdownFiles(path.join(realm, 'design')),
+];
+const packageReadmes = [
+  'glimmer-motion',
+  'choreo',
+  'choreo-player',
+  'choreo-gallery',
+].map((pkg) => path.join(root, 'packages', pkg, 'README.md'));
+const brokenLinks = [];
+for (const file of [...realmDocs, ...packageReadmes]) {
+  // a realm doc is published with the realm, so it may link only inside it
+  const inRealm = file.startsWith(realm + path.sep);
+  const markdown = fs.readFileSync(file, 'utf8');
+  for (const [, target] of withoutFences(markdown).matchAll(
+    /\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g,
+  )) {
+    if (/^[a-z][a-z+.-]*:/i.test(target)) {
+      continue;
+    }
+    const [pathPart, fragment] = target.split('#');
+    const resolved = pathPart
+      ? path.resolve(path.dirname(file), decodeURIComponent(pathPart))
+      : file;
+    // an extensionless link is a card: `../demos/fold` is demos/fold.json
+    const exists = fs.existsSync(resolved) || fs.existsSync(`${resolved}.json`);
+    if (inRealm && (!resolved.startsWith(realm + path.sep) || !exists)) {
+      brokenLinks.push(`${relative(file)}: ${target} is not a realm file`);
+    } else if (!exists) {
+      brokenLinks.push(`${relative(file)}: ${target} names no file`);
+    } else if (
+      fragment &&
+      resolved.endsWith('.md') &&
+      !headingIds(fs.readFileSync(resolved, 'utf8')).has(
+        decodeURIComponent(fragment),
+      )
+    ) {
+      brokenLinks.push(`${relative(file)}: ${target} names no heading`);
+    }
+  }
+}
+assert.deepEqual(brokenLinks, [], 'Broken links in the docs');
+
+/*
+ * Imports, wherever the docs show one. Choreo and Film moved out of
+ * glimmer-motion into @cardstack/choreo, so a name imported from a package
+ * has to be one that package exports today.
+ */
+const packageSources = {
+  'glimmer-motion': 'packages/glimmer-motion/src',
+  '@cardstack/choreo': 'packages/choreo/src',
+  '@cardstack/choreo-player': 'packages/choreo-player/src',
+};
+const retiredSpecifiers = new Set(['choreo', 'choreo-player']);
+function moduleFile(specifier) {
+  const name = Object.keys(packageSources)
+    .sort((a, b) => b.length - a.length)
+    .find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
+  if (!name) {
+    return undefined;
+  }
+  const base = path.join(
+    root,
+    packageSources[name],
+    specifier.slice(name.length + 1) || 'index',
+  );
+  return [
+    `${base}.ts`,
+    `${base}.gts`,
+    path.join(base, 'index.ts'),
+    path.join(base, 'index.gts'),
+  ].find((candidate) => fs.existsSync(candidate));
+}
+function exportsOf(file) {
+  const tree = ts.createSourceFile(
+    file,
+    fs.readFileSync(file, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const names = new Set();
+  for (const node of tree.statements) {
+    if (ts.isExportDeclaration(node) && !node.exportClause) {
+      return undefined; // `export *`: anything may come through
+    }
+    if (
+      ts.isExportDeclaration(node) &&
+      node.exportClause &&
+      ts.isNamedExports(node.exportClause)
+    ) {
+      for (const item of node.exportClause.elements) {
+        names.add(item.name.text);
+      }
+    } else if (
+      node.modifiers?.some(
+        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+      )
+    ) {
+      if (node.name) {
+        names.add(node.name.text);
+      }
+      if (ts.isVariableStatement(node)) {
+        for (const item of node.declarationList.declarations) {
+          names.add(item.name.getText(tree));
+        }
+      }
+    }
+  }
+  return names;
+}
+const exportCache = new Map();
+const importedDocs = [
+  ...realmDocs,
+  ...markdownFiles(guidesDir),
+  ...packageReadmes,
+];
+const badImports = [];
+for (const file of importedDocs) {
+  const markdown = fs.readFileSync(file, 'utf8');
+  for (const [statement, clause, specifier] of markdown.matchAll(
+    /\bimport\s+(?:type\s+)?([\w$]+\s*,\s*\{[^}]*\}|\{[^}]*\}|[\w$]+|\*\s+as\s+[\w$]+)\s+from\s+['"]([^'"]+)['"]/g,
+  )) {
+    const where = `${relative(file)}: ${statement.replace(/\s+/g, ' ')}`;
+    if (retiredSpecifiers.has(specifier)) {
+      badImports.push(`${where} — no such package`);
+      continue;
+    }
+    const isOurs = Object.keys(packageSources).some(
+      (pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`),
+    );
+    if (!isOurs) {
+      continue;
+    }
+    const module = moduleFile(specifier);
+    if (!module) {
+      badImports.push(`${where} — no such module`);
+      continue;
+    }
+    if (!exportCache.has(module)) {
+      exportCache.set(module, exportsOf(module));
+    }
+    const exported = exportCache.get(module);
+    const named = clause.match(/\{([^}]*)\}/)?.[1] ?? '';
+    for (const item of named.split(',')) {
+      const name = item
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+/)[0];
+      if (name && exported && !exported.has(name)) {
+        badImports.push(`${where} — ${specifier} has no export ${name}`);
+      }
+    }
+  }
+}
+assert.deepEqual(badImports, [], 'Imports the packages do not provide');
+
+/** the hosted gallery is this realm, so its URLs name realm files */
+const siteURLs = [];
+for (const file of importedDocs) {
+  const markdown = fs.readFileSync(file, 'utf8');
+  for (const [url, pathname] of markdown.matchAll(
+    /https:\/\/choreo\.boxel\.site\/([^\s)"'<>`#?]*)/g,
+  )) {
+    const target = path.join(realm, decodeURIComponent(pathname));
+    const exists =
+      pathname === '' ||
+      fs.existsSync(target) ||
+      fs.existsSync(`${target}.json`);
+    if (!exists) {
+      siteURLs.push(`${relative(file)}: ${url}`);
+    }
+  }
+}
+assert.deepEqual(
+  siteURLs,
+  [],
+  'choreo.boxel.site URLs that name no realm file',
+);
+
+/*
+ * Links into the monorepo name files that exist, and the docs (the design
+ * history aside, which records where things were) don't send a reader to
+ * Choreo's archived repository.
+ */
+const repoLinks = [];
+const designDir = path.join(realm, 'design') + path.sep;
+for (const file of importedDocs) {
+  const markdown = fs.readFileSync(file, 'utf8');
+  for (const [url, repoPath] of markdown.matchAll(
+    /https:\/\/github\.com\/cardstack\/boxel\/(?:blob|tree)\/main\/([^\s)"'<>`#?]+)/g,
+  )) {
+    if (!fs.existsSync(path.join(root, repoPath))) {
+      repoLinks.push(`${relative(file)}: ${url} names no file`);
+    }
+  }
+  if (!file.startsWith(designDir)) {
+    for (const [url] of markdown.matchAll(
+      /https:\/\/github\.com\/cardstack\/choreo[^\s)"'<>`]*/g,
+    )) {
+      repoLinks.push(`${relative(file)}: ${url} is the archived repository`);
+    }
+  }
+}
+assert.deepEqual(repoLinks, [], 'Links to repository files that are gone');
+console.log(
+  `${realmDocs.length} realm docs link only to files and headings that exist; imports, choreo.boxel.site URLs and repository links in ${importedDocs.length} docs resolve.`,
 );

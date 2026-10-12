@@ -33,4 +33,4 @@ Test a hold's beginning, its tail, and the state after its surrounding region ch
 
 **ChoreoContext**: `c.Hold`, `c.Wait`.
 
-Read the implementation: [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

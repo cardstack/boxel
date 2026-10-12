@@ -69,7 +69,7 @@ import type {
  * is why a beat can be widened and the type, the voice, the transport
  * and the readout all re-time together. The picture is whatever the film
  * hands in through the `Picture` port; two reference films hand in a
- * WebGL page in an iframe (notes/film-construct.md).
+ * WebGL page in an iframe (packages/choreo-gallery/realm/design/film-construct.md).
  *
  * THE CAMERA. The score authors the shot and the lens CHASES it: one
  * critically-damped stage here, the page's own chase as the second, so
@@ -1563,7 +1563,7 @@ export class Film extends Component<FilmSignature> {
   /**
    * THE PLAYHEAD SNAPS TO A SHOT, because this film cannot seek: the
    * lens is an integrator and a run dropped into its own middle arrives
-   * with the wrong velocity (docs/choreo-splices.md). So the drag reads
+   * with the wrong velocity (packages/choreo-gallery/realm/docs/choreo-splices.md). So the drag reads
    * as time, the label names the shot under the hand, and the release
    * RE-CUTS from that shot's head — which is the same edit the chapter
    * buttons and the arrow keys make.
@@ -3983,7 +3983,7 @@ export class Film extends Component<FilmSignature> {
           }
           film.freeze?.(false);
           this.freeze = held;
-          /* A WIPE IS A CUT with punctuation over it (docs/choreo-splices.md):
+          /* A WIPE IS A CUT with punctuation over it (packages/choreo-gallery/realm/docs/choreo-splices.md):
              the still of the outgoing shot sweeps off to reveal the incoming
              one, so the lens must already BE on the incoming shot. Without
              the cut, the sweep revealed the old shot still gliding toward the
@@ -4354,7 +4354,7 @@ export class Film extends Component<FilmSignature> {
    * existing run would be the obvious alternative and it would be wrong:
    * the lens is an integrator whose pose depends on where it has been, so
    * a run dropped into the middle of itself arrives with the wrong
-   * velocity — the same reason `notes/sylva-one-world.md` calls the chaser
+   * velocity — the same reason `packages/choreo-gallery/realm/design/sylva-one-world.md` calls the chaser
    * seek-unsafe and means it.
    */
   private goChapter = (delta: number) => {
@@ -4496,7 +4496,7 @@ export class Film extends Component<FilmSignature> {
    * starts clean on a fresh one — the game-dialogue barge-in, which is
    * what a chapter skip actually is. ("Stop at the next word" is the
    * refinement this is built to take: an analyser watching for the
-   * inter-word trough before the fade — see docs/choreo-splices.md.)
+   * inter-word trough before the fade — see packages/choreo-gallery/realm/docs/choreo-splices.md.)
    */
 
   /**

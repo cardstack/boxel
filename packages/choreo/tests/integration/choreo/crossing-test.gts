@@ -1,5 +1,5 @@
 /**
- * @route and c.Crossing (docs/choreo-constructs.md §4.7): a subtree swap as
+ * @route and c.Crossing (packages/choreo-gallery/realm/docs/choreo-constructs.md §4.7): a subtree swap as
  * one pass — leaves fade first, the paired flight carries, arrivals land
  * near the settle, and live content never freezes, because nothing is
  * snapshotted.
