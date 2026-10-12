@@ -42,6 +42,8 @@ class Isolated extends Component<typeof ChoreoGallery> {
 
   willDestroy() {
     super.willDestroy();
+    // a swap still waiting on the curtain must not run on a torn-down card
+    this.moves++;
     this.crossing.reset();
   }
 
@@ -81,13 +83,16 @@ class Isolated extends Component<typeof ChoreoGallery> {
    * leaving page's curtain.
    */
   private move(slug: string | null, theater: boolean) {
-    this.moves++;
+    // a move to the page already showing is no move: it leaves one waiting
+    // on the curtain to finish, rather than superseding it and stranding
+    // the curtain down
     if (slug === this.slug) {
       if (slug === null) {
         this.crossing.scrollToTop();
       }
       return;
     }
+    this.moves++;
     // A film's page drops its curtain a frame ahead of the swap, so the
     // crossing flies the film's poster rather than a frame that reloads in
     // flight. A newer move supersedes the one waiting on the curtain.
