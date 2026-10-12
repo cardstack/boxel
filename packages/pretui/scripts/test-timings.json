@@ -21,6 +21,7 @@
   "components/button-group.test.gts": 1692,
   "components/button.test.gts": 3740,
   "components/calendar.test.gts": 2648,
+  "components/card.test.gts": 1811,
   "components/carousel.test.gts": 1393,
   "components/cascader.test.gts": 2826,
   "components/channel-slider.test.gts": 2541,

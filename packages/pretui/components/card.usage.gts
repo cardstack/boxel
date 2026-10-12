@@ -18,6 +18,8 @@ export class CardUsage extends Component {
   @tracked size = 'm';
   @tracked orientation: 'horizontal' | 'vertical' = 'vertical';
   @tracked interactive = true;
+  @tracked selectable = false;
+  @tracked selected = false;
 
   toneOptions = [
     'neutral',
@@ -55,6 +57,18 @@ export class CardUsage extends Component {
   setInteractive = (v: boolean) => {
     this.interactive = v;
   };
+  setSelectable = (v: boolean) => {
+    this.selectable = v;
+  };
+  setSelected = (v: boolean) => {
+    this.selected = v;
+  };
+  toggleSelected = () => {
+    this.selected = !this.selected;
+  };
+  get onSelect(): (() => void) | undefined {
+    return this.selectable ? this.toggleSelected : undefined;
+  }
 
   get toneValue(): PretuiTone {
     return this.tone as PretuiTone;
@@ -73,6 +87,9 @@ export class CardUsage extends Component {
       "  @description='" + this.lot.tea + "'",
       "  @tone='" + this.tone + "'",
       "  @appearance='" + this.appearance + "'",
+      ...(this.selectable
+        ? ['  @selected={{this.selected}}', '  @onSelect={{this.toggle}}']
+        : []),
       '>',
       '  <:action>…</:action>',
       '  <:media>…</:media>',
@@ -85,7 +102,7 @@ export class CardUsage extends Component {
   <template>
     <FreestyleUsage
       @name='Card'
-      @description="The name collision worth getting right: CopyFit is a container-query identity, Panel is a surface, and this is neither — it is the composition shape React means by Card. Header with a title, a description and an action parked at the end edge; then media, body and footer."
+      @description='The name collision worth getting right: CopyFit is a container-query identity, Panel is a surface, and this is neither — it is the composition shape React means by Card. Header with a title, a description and an action parked at the end edge; then media, body and footer.'
       @source={{this.usage}}
     >
       <:example>
@@ -99,9 +116,15 @@ export class CardUsage extends Component {
             @size={{this.sizeValue}}
             @orientation={{this.orientation}}
             @interactive={{this.interactive}}
+            @selected={{this.selected}}
+            @onSelect={{this.onSelect}}
           >
             <:action>
-              <Button @size='xs' @appearance='plain' @tone='neutral'>Edit</Button>
+              <Button
+                @size='xs'
+                @appearance='plain'
+                @tone='neutral'
+              >Edit</Button>
             </:action>
             <:media>
               <AspectRatio
@@ -111,7 +134,8 @@ export class CardUsage extends Component {
               />
             </:media>
             <:default>
-              <p class='card-body'>{{this.lot.place}} ·
+              <p class='card-body'>{{this.lot.place}}
+                ·
                 {{this.lot.chests}}
                 chests. The header grid gains its second column only when an
                 action block is present — and it knows that from a block test,
@@ -119,7 +143,11 @@ export class CardUsage extends Component {
             </:default>
             <:footer>
               <Button @size='s'>Open lot</Button>
-              <Button @size='s' @appearance='plain' @tone='neutral'>Archive</Button>
+              <Button
+                @size='s'
+                @appearance='plain'
+                @tone='neutral'
+              >Archive</Button>
             </:footer>
           </Card>
         </div>
@@ -175,6 +203,24 @@ export class CardUsage extends Component {
           @defaultValue={{false}}
           @value={{this.interactive}}
           @onInput={{this.setInteractive}}
+        />
+        <Args.Bool
+          @name='onSelect'
+          @description='Set it and the whole card becomes a select target: one full-size button behind the content, with aria-pressed from selected. The Edit, Open lot and Archive buttons keep their own clicks. Toggle it here to try both.'
+          @defaultValue={{false}}
+          @value={{this.selectable}}
+          @onInput={{this.setSelectable}}
+        />
+        <Args.Bool
+          @name='selected'
+          @description='A tint plus a rule on the inline start, so selection reads without colour. Reflected as aria-pressed on the select control.'
+          @defaultValue={{false}}
+          @value={{this.selected}}
+          @onInput={{this.setSelected}}
+        />
+        <Args.String
+          @name='selectLabel'
+          @description='The select control name. Defaults to the title, through aria-labelledby.'
         />
         <Args.Bool
           @name='scroll'

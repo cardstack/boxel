@@ -1,9 +1,18 @@
 // Pretui — Card: the hairline surface with header, media, body and footer bands.
 import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
-import type { PretuiAppearance, PretuiSize, PretuiTone } from '../pretui-primitives';
+import { on } from '@ember/modifier';
+import type {
+  PretuiAppearance,
+  PretuiSize,
+  PretuiTone,
+} from '../pretui-primitives';
 import { pretuiOrientation, pretuiSize } from '../internal/structure-layout';
-import type { Orientation, OrientationAlias, SizeAlias } from '../internal/structure-layout';
+import type {
+  Orientation,
+  OrientationAlias,
+  SizeAlias,
+} from '../internal/structure-layout';
 
 // ── Card ─────────────────────────────────────────────────────────────────
 //
@@ -91,6 +100,17 @@ export interface CardSignature {
     interactive?: boolean;
     /** Body scrolls instead of growing; the caller supplies the height. */
     scroll?: boolean;
+    /** Selected state: a tint plus an inline-start rule, and `aria-pressed`
+     * on the select control when `@onSelect` is set. */
+    selected?: boolean;
+    /**
+     * Makes the whole surface a select target. One full-size `<button>` sits
+     * BEHIND the content as a sibling, so the card's own links and buttons
+     * stay valid, stay their own targets, and never bubble into it.
+     */
+    onSelect?: () => void;
+    /** The select control's name. Defaults to the generated title. */
+    selectLabel?: string;
   };
   Blocks: {
     /** Replaces the whole generated header — for a header carrying controls. */
@@ -133,7 +153,10 @@ export class Card extends Component<CardSignature> {
    * replaces the whole header with `<:header>` owns the naming. */
   titleId = `${guidFor(this)}-title`;
   /** The title labels the card unless a custom header owns the top. */
-  labelledBy = (hasHeader: boolean, hasTitleBlock: boolean): string | undefined =>
+  labelledBy = (
+    hasHeader: boolean,
+    hasTitleBlock: boolean,
+  ): string | undefined =>
     !hasHeader && (hasTitleBlock || this.args.title) ? this.titleId : undefined;
 
   get tone(): PretuiTone {
@@ -145,6 +168,19 @@ export class Card extends Component<CardSignature> {
   get size(): PretuiSize {
     return pretuiSize(this.args.size);
   }
+  /** Names the select control by the title unless `@selectLabel` does. */
+  selectLabelledBy = (
+    hasHeader: boolean,
+    hasTitleBlock: boolean,
+  ): string | undefined =>
+    this.args.selectLabel
+      ? undefined
+      : this.labelledBy(hasHeader, hasTitleBlock);
+
+  select = () => {
+    this.args.onSelect?.();
+  };
+
   get orientation(): Orientation {
     return pretuiOrientation(
       this.args.orientation,
@@ -162,10 +198,29 @@ export class Card extends Component<CardSignature> {
       data-orientation={{this.orientation}}
       data-interactive={{if @interactive 'true' 'false'}}
       data-scroll={{if @scroll 'true' 'false'}}
-      aria-labelledby={{this.labelledBy (has-block 'header') (has-block 'title')}}
+      data-selected={{if @selected 'true' 'false'}}
+      data-selectable={{if @onSelect 'true' 'false'}}
+      aria-labelledby={{this.labelledBy
+        (has-block 'header')
+        (has-block 'title')
+      }}
       data-test-pretui-card
       ...attributes
     >
+      {{#if @onSelect}}
+        <button
+          type='button'
+          class='pretui-card-select'
+          aria-pressed={{if @selected 'true' 'false'}}
+          aria-label={{@selectLabel}}
+          aria-labelledby={{this.selectLabelledBy
+            (has-block 'header')
+            (has-block 'title')
+          }}
+          data-test-pretui-card-select
+          {{on 'click' this.select}}
+        ></button>
+      {{/if}}
       {{#if (has-block 'media')}}
         <div class='pretui-card-media'>{{yield to='media'}}</div>
       {{/if}}
@@ -286,10 +341,7 @@ export class Card extends Component<CardSignature> {
         }
         .pretui-card[data-tone='attention'] {
           --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
-          --pretui-tone-on: var(
-            --pretui-on-attention,
-            var(--background)
-          );
+          --pretui-tone-on: var(--pretui-on-attention, var(--background));
         }
         /* appearance — the five canonical recipes, reading the tone channel. */
         .pretui-card[data-appearance='outlined'] {
@@ -442,6 +494,71 @@ export class Card extends Component<CardSignature> {
         }
         .pretui-card[data-interactive='true']:focus-within {
           box-shadow: 0 0 0 2px var(--ring);
+        }
+        /* selectable — the select button covers the card from BEHIND the
+           content; the content lets pointer events fall through to it, and
+           only the caller's own controls take them back. Nothing of the
+           caller's position or z-index is touched. */
+        .pretui-card[data-selectable='true'] {
+          position: relative;
+          isolation: isolate;
+        }
+        .pretui-card-select {
+          all: unset;
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          border-radius: inherit;
+          cursor: pointer;
+        }
+        .pretui-card-select:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-card[data-selectable='true'] > .pretui-card-media,
+        .pretui-card[data-selectable='true'] > .pretui-card-column {
+          position: relative;
+          z-index: 1;
+          pointer-events: none;
+        }
+        .pretui-card[data-selectable='true'] :deep(a),
+        .pretui-card[data-selectable='true'] :deep(button),
+        .pretui-card[data-selectable='true'] :deep(input),
+        .pretui-card[data-selectable='true'] :deep(select),
+        .pretui-card[data-selectable='true'] :deep(textarea),
+        .pretui-card[data-selectable='true'] :deep(label),
+        .pretui-card[data-selectable='true'] :deep(summary),
+        .pretui-card[data-selectable='true'] :deep([tabindex]),
+        .pretui-card[data-selectable='true'] :deep([contenteditable]) {
+          pointer-events: auto;
+        }
+        .pretui-card[data-selectable='true']:hover {
+          box-shadow: var(
+            --pretui-card-shadow-hover,
+            var(
+              --pretui-shadow-raised,
+              0 0 0 1px var(--border),
+              0 2px 10px var(--shadow-ink-mid, rgb(0 0 0 / 0.08))
+            )
+          );
+        }
+        /* Selection reads in greyscale: a rule on the inline start, not the
+           tint alone. Same recipe as List. */
+        .pretui-card[data-selected='true'] {
+          position: relative;
+          background: var(--pretui-selected, var(--boxel-100));
+        }
+        .pretui-card[data-selected='true']::before {
+          content: '';
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: 0;
+          z-index: 2;
+          inline-size: 2px;
+          border-start-start-radius: inherit;
+          border-end-start-radius: inherit;
+          background: var(--primary);
+          pointer-events: none;
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-card {
