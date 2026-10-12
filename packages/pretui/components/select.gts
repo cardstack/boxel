@@ -227,11 +227,12 @@ class SelectSearch extends Component<SelectSearchSignature> {
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
-  // A modal <dialog> sits in the top layer and makes everything outside it
-  // inert, the wormhole included, so inside one the list renders in place.
-  @tracked inDialog = false;
-  detectDialog = modifier((wrap: HTMLElement) => {
-    this.inDialog = wrap.closest('dialog') !== null;
+  // The list renders in place where the wormhole would break it: a modal
+  // <dialog> makes everything outside it inert, and a focus scope (an
+  // EditInPlace editor) reads focus moving into the search box as leaving.
+  @tracked inPlace = false;
+  detectContainment = modifier((wrap: HTMLElement) => {
+    this.inPlace = wrap.closest('dialog, [data-pretui-focus-scope]') !== null;
   });
   get explicitName(): boolean {
     return this.args.label !== undefined || this.args.labelledBy !== undefined;
@@ -264,7 +265,7 @@ export class Select extends Component<SelectSignature> {
     <div
       class='pretui-selectwrap'
       {{nameFromLabel @controlId this.explicitName}}
-      {{this.detectDialog}}
+      {{this.detectContainment}}
       data-test-pretui-select
       ...attributes
     >
@@ -283,7 +284,7 @@ export class Select extends Component<SelectSignature> {
         @beforeOptionsComponent={{SelectSearch}}
         @matchTriggerWidth={{true}}
         @dropdownClass='pretui-select-dropdown'
-        @renderInPlace={{this.inDialog}}
+        @renderInPlace={{this.inPlace}}
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
         data-pretui-select-trigger

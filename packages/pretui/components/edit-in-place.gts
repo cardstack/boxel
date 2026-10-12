@@ -339,6 +339,7 @@ export class EditInPlace extends Component<EditInPlaceSignature> {
         {{#if this.editing}}
           <div
             class='pretui-eip-editor'
+            data-pretui-focus-scope
             data-test-pretui-edit-in-place-editor
             {{listen 'focusout' this.handleFocusOut}}
             {{listen 'keydown' this.handleKeyDown}}

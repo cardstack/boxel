@@ -1,9 +1,10 @@
 // Pretui — Select unit tests: how the trigger is named.
 import { module, test } from 'qunit';
-import { render, click, fillIn, waitUntil } from '@ember/test-helpers';
+import { render, click, fillIn, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Select } from './select';
 import { Dialog } from './dialog';
+import { EditInPlace } from './edit-in-place';
 
 const OPTIONS = [
   { value: 'green', label: 'Green' },
@@ -45,6 +46,36 @@ module('Pretui | components/select', function (hooks) {
     let oolong = Array.from(listbox.querySelectorAll('[data-test-pretui-select-option]')).find((o) => o.textContent?.trim() === 'Oolong') as HTMLElement;
     await click(oolong);
     assert.strictEqual(chosen, 'oolong', 'the option takes the click');
+  });
+
+  test('inside a blur-commit EditInPlace the search box keeps the edit open', async function (assert) {
+    let committed: string | undefined;
+    let onCommit = (next: string) => {
+      committed = next;
+    };
+    await render(
+      <template>
+        <EditInPlace @label='Tea' @value='green' @defaultEditing={{true}} @onCommit={{onCommit}}>
+          <:editor as |editor|>
+            <Select
+              @options={{OPTIONS}}
+              @value={{editor.value}}
+              @controlId={{editor.controlId}}
+              @onValueChange={{editor.setValue}}
+              @searchEnabled={{true}}
+            />
+          </:editor>
+        </EditInPlace>
+      </template>,
+    );
+    await click(trigger());
+    let input = document.querySelector('[data-test-pretui-select-search-input]') as HTMLInputElement;
+    await waitUntil(() => document.activeElement === input);
+    assert.strictEqual(committed, undefined, 'focusing the search box does not commit');
+    await fillIn(input, 'oo');
+    await triggerKeyEvent(input, 'keydown', 'Enter');
+    await triggerKeyEvent(trigger(), 'keydown', 'Enter');
+    assert.strictEqual(committed, 'oolong', 'the filtered option is chosen, then Enter commits it');
   });
 
   test('@searchEnabled adds a search box that takes focus on open and filters by label', async function (assert) {
