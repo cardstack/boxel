@@ -176,6 +176,45 @@ module('Integration | tools | copy-card', function (hooks) {
       );
     });
 
+    test('reads a leading slash in localDir as the realm root', async function (assert) {
+      let copyCardCommand = new CopyCardToRealmTool(
+        getService('tool-service').toolContext,
+      );
+      let store = getService('store');
+      let sourceCard = (await store.get(`${testRealmURL}Pet/mango`)) as CardDef;
+
+      let result = await copyCardCommand.execute({
+        sourceCard,
+        targetRealm: testRealm2URL,
+        localDir: '/projects/acme',
+      });
+
+      assert.true(
+        result.newCardId.startsWith(`${testRealm2URL}projects/acme/Pet/`),
+        `copy stays inside the target realm, got ${result.newCardId}`,
+      );
+    });
+
+    test('refuses a localDir that leaves the target realm', async function (assert) {
+      let copyCardCommand = new CopyCardToRealmTool(
+        getService('tool-service').toolContext,
+      );
+      let store = getService('store');
+      let sourceCard = (await store.get(`${testRealmURL}Pet/mango`)) as CardDef;
+
+      for (let localDir of ['../test', 'projects/../../test', '%2e%2e/test']) {
+        await assert.rejects(
+          copyCardCommand.execute({
+            sourceCard,
+            targetRealm: testRealm2URL,
+            localDir,
+          }),
+          /is not a folder inside/,
+          `localDir "${localDir}" is refused`,
+        );
+      }
+    });
+
     test('the tool schema describes how targetRealm and localDir make up the path of the copy', async function (assert) {
       let loader = getService('loader-service').loader;
       let cardAPI = await loader.import<typeof CardAPI>(
