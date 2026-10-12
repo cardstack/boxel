@@ -1413,9 +1413,10 @@ export async function setupIntegrationTestRealm({
   // the in-browser renderer reads too, and the renderer then fails the next
   // render it runs. The realm renders to read the definitions its policy names,
   // so a refusal of that kind can make the realm refuse what its policy grants.
-  // Setup signs the host in with the session its permissions call for, so none
-  // of the host's own requests is refused that way; a test that provokes such
-  // a refusal on purpose has to allow for it.
+  // Setup signs the host in with the session its permissions call for before
+  // the host sends the realm anything, the matrix boot's requests included,
+  // so none of the host's own requests is refused that way; a test that
+  // provokes such a refusal on purpose has to allow for it.
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1713,7 +1714,6 @@ async function setupTestRealm({
     await settleRealmRenders();
   }
   if (startMatrix) {
-    await mockMatrixUtils.start();
     if (enforcePermissions) {
       // The host signs in to this realm now, with the session its permissions
       // call for, rather than on its first request. A session it holds from
@@ -1723,8 +1723,14 @@ async function setupTestRealm({
       // in-browser renderer shares the host's auth-error signal and fails its
       // next render on it, and the realm renders to read the definitions its
       // policy names.
+      //
+      // It signs in before the matrix boot, because the boot sends requests
+      // of its own: it reads the default system card, which lives in the
+      // realm at `testRealmURL`, so a realm set up there is asked for it
+      // before anything else.
       await getService('realm').reauthenticate(realmURL);
     }
+    await mockMatrixUtils.start();
   }
 
   let realmServer = getService('realm-server');
