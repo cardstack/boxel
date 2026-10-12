@@ -274,6 +274,8 @@ export class WidgetRoom extends Component<Signature> {
   @tracked narrationAvailable = true;
   @tracked narrationPath = 'widget-tour/narration-george-fast-v1';
   @tracked audioIssue = false;
+  /** the 3D engine did not load, so the room cannot be drawn */
+  @tracked engineIssue = false;
   @tracked viewportWidth = innerWidth;
   @tracked viewportHeight = innerHeight;
   private viewport?: HTMLElement;
@@ -955,14 +957,20 @@ export class WidgetRoom extends Component<Signature> {
     this.worlds = [...el.querySelectorAll<HTMLElement>('.wr-world')];
     // the projection is three's camera, which loads with the room
     let alive = true;
-    void three().then(({ THREE: T }) => {
-      if (!alive) {
-        return;
-      }
-      this.T = T;
-      this.camera = new T.PerspectiveCamera(48, 1, 1, 50000);
-      this.paint(this.pose);
-    });
+    void three()
+      .then(({ THREE: T }) => {
+        if (!alive) {
+          return;
+        }
+        this.T = T;
+        this.camera = new T.PerspectiveCamera(48, 1, 1, 50000);
+        this.paint(this.pose);
+      })
+      .catch(() => {
+        if (alive) {
+          this.engineIssue = true;
+        }
+      });
     const resize = new ResizeObserver(() => {
       this.viewportWidth = el.clientWidth;
       this.viewportHeight = el.clientHeight;
@@ -1051,6 +1059,11 @@ export class WidgetRoom extends Component<Signature> {
         aria-label='Choreo spatial demo room'
         tabindex='-1'
       >
+        {{#if this.engineIssue}}
+          <p class='wr-engine-issue' role='alert'>
+            The room's 3D engine did not load. Reload to try again.
+          </p>
+        {{/if}}
         <div class='wr-viewport' {{this.setup}}>
           <div class='wr-scene-layer'><div class='wr-world'>
               {{#each this.architecture as |surface|}}<div
@@ -1318,6 +1331,18 @@ export class WidgetRoom extends Component<Signature> {
         position: relative;
         height: 100%;
         min-height: 640px;
+      }
+
+      .wr-engine-issue {
+        position: absolute;
+        z-index: 1;
+        inset: 45% 0 auto;
+        margin: 0;
+        text-align: center;
+        color: #f3ece3;
+        font:
+          15px 'IBM Plex Sans',
+          sans-serif;
       }
     </style>
   </template>
