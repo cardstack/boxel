@@ -42,6 +42,17 @@ const CONVENTIONAL_PREFIX_RE = /^([a-z]+)(?:\([^)]+\))?(!?):\s*/;
 
 const BUMP_BY_PREFIX = bumpByPrefixJson as Record<string, BumpLevel>;
 
+// Monorepo source that `scripts/build-types.ts` copies into `bundled-types/`,
+// the type surface `boxel parse` checks cards against. A change here ships
+// only in a new boxel-cli release, so it is npm surface like `src/`. The
+// publish workflow's `paths:` filter lists the same directories.
+export const BUNDLED_SOURCE_DIRS = [
+  'packages/bxl/src/',
+  'packages/glimmer-motion/src/',
+  'packages/choreo/src/',
+  'packages/choreo-player/src/',
+];
+
 const NPM_SURFACE_PATTERNS: RegExp[] = [
   /^packages\/boxel-cli\/src\//,
   /^packages\/boxel-cli\/api\.ts$/,
@@ -83,7 +94,10 @@ export function detectSurfaces(changedFiles: string[]): {
   let npmTouched = false;
   let pluginTouched = false;
   for (const file of changedFiles) {
-    if (matchesAny(file, NPM_SURFACE_PATTERNS)) {
+    if (
+      matchesAny(file, NPM_SURFACE_PATTERNS) ||
+      BUNDLED_SOURCE_DIRS.some((dir) => file.startsWith(dir))
+    ) {
       npmTouched = true;
     } else if (file === PACKAGE_JSON_PATH) {
       // package.json bumps the npm surface, but only if dependencies (or
@@ -206,12 +220,13 @@ function changedFilesAgainstHead1(root: string): string[] {
   // the literal `packages/boxel-cli/` pathspec resolves to a non-existent
   // nested directory and matches nothing.
   const opts = { cwd: root };
+  const pathspecs = ['packages/boxel-cli/', ...BUNDLED_SOURCE_DIRS].join(' ');
   const committed = execSync(
-    'git diff --name-only HEAD^ -- packages/boxel-cli/',
+    `git diff --name-only HEAD^ -- ${pathspecs}`,
     opts,
   ).toString();
   const workingTree = execSync(
-    'git diff --name-only -- packages/boxel-cli/',
+    `git diff --name-only -- ${pathspecs}`,
     opts,
   ).toString();
   const set = new Set(

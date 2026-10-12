@@ -124,6 +124,29 @@ describe('detectSurfaces', () => {
     expect(s.npmTouched).toBe(true);
   });
 
+  it('npm-only when source boxel-cli bundles into bundled-types/ changed', () => {
+    for (const file of [
+      'packages/bxl/src/index.ts',
+      'packages/glimmer-motion/src/helpers.ts',
+      'packages/choreo/src/index.ts',
+      'packages/choreo-player/src/index.ts',
+    ]) {
+      expect(detectSurfaces([file]), file).toEqual({
+        npmTouched: true,
+        pluginTouched: false,
+      });
+    }
+  });
+
+  it('neither touched when a bundled package changed outside src/', () => {
+    expect(
+      detectSurfaces([
+        'packages/glimmer-motion/tests/integration/helpers-test.gts',
+        'packages/bxl/package.json',
+      ]),
+    ).toEqual({ npmTouched: false, pluginTouched: false });
+  });
+
   it('neither touched when only docs at repo root changed', () => {
     const s = detectSurfaces(['docs/cs-11112-plan.md', 'README.md']);
     expect(s).toEqual({ npmTouched: false, pluginTouched: false });

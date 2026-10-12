@@ -125,7 +125,7 @@ module('Integration | motion | template helpers', function (hooks) {
     assert.strictEqual(
       dot.style.transform,
       'translateX(40px)',
-      'the element follows the value, with no re-render',
+      'the element follows the value',
     );
     assert.strictEqual(dot.style.backgroundColor, 'rgb(0, 0, 0)');
   });

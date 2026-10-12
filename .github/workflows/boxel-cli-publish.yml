@@ -37,12 +37,18 @@ on:
     branches: [main]
     paths:
       - "packages/boxel-cli/**"
-      # `bundled-types/bxl` is a copy of `packages/bxl/src`, and it is the
-      # type surface `boxel parse` checks a card's `computeVia` formulas
-      # against. A BXL export the copy predates is one the host serves and
-      # the published CLI rejects — the false diagnostic this bundle
-      # exists to prevent — so a BXL change has to cut a release too.
+      # `bundled-types/` copies these packages' `src`, and it is the type
+      # surface `boxel parse` checks cards against (BXL `computeVia`
+      # formulas, and glimmer-motion / Choreo imports). An export the copy
+      # predates is one the host serves and the published CLI rejects — the
+      # false diagnostic this bundle exists to prevent — so a change to any
+      # of them has to cut a release too. `BUNDLED_SOURCE_DIRS` in
+      # `scripts/compute-release.ts` lists the same directories, which is
+      # what makes such a change count toward the version bump.
       - "packages/bxl/src/**"
+      - "packages/glimmer-motion/src/**"
+      - "packages/choreo/src/**"
+      - "packages/choreo-player/src/**"
   workflow_dispatch:
     inputs:
       confirm:
