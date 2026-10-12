@@ -350,6 +350,7 @@ import {
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
   isNamedQueryPayload,
+  namedQueryRendering,
   resolveNamedQuery,
   searchInvocation,
   type SearchInvocation,
@@ -7288,11 +7289,15 @@ export class Realm {
   // grants it and nothing more: the ACL's refusal is its answer, and the
   // policy is never asked — as a federated search never asks one about it
   // either. A capability check asks the same of a query it is asked about.
+  //
+  // A realm that names no policy contributes nothing, and is not asked: the
+  // search it answers is no policy's decision, so no policy decision is
+  // recorded for it.
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    if (!invocation) {
+    if (!invocation || (await this.getRealmPolicy()) === undefined) {
       return { kind: 'denied' };
     }
     return await principalQueryScope(
@@ -14530,28 +14535,42 @@ export class Realm {
       if (requestContext.anonymousCaller) {
         return this.#authenticationRequired(requestContext);
       }
-      // A named query searches this realm and no other, so this realm is the
-      // whole of the scope it may resolve to.
-      try {
-        let resolved = await resolveNamedQuery(this.operationCore, payload, {
-          principal: this.#searchPrincipal(requestContext),
-          realms: [this.url],
-        });
-        payload = resolved.query;
-        declaredLinks = resolved.links;
-        unshareableFormats = resolved.unshareableFormats;
-      } catch (err: unknown) {
-        if (!isOperationFailure(err)) {
-          throw err;
+      if (
+        this.#coarseDeclined(requestContext) === 'all' &&
+        (await this.getRealmPolicy()) === undefined
+      ) {
+        // A realm with no policy answers a user it doesn't let read it with
+        // no rows whatever the declaration says, so the declaration is not
+        // read: the request is answered as a search asking for the same
+        // rendering, as a federated search answers it from such a realm. An
+        // operation the type doesn't declare, or a type the realm doesn't
+        // hold, is answered the same way, so the answer says nothing about
+        // what the realm holds.
+        payload = namedQueryRendering(payload);
+      } else {
+        // A named query searches this realm and no other, so this realm is
+        // the whole of the scope it may resolve to.
+        try {
+          let resolved = await resolveNamedQuery(this.operationCore, payload, {
+            principal: this.#searchPrincipal(requestContext),
+            realms: [this.url],
+          });
+          payload = resolved.query;
+          declaredLinks = resolved.links;
+          unshareableFormats = resolved.unshareableFormats;
+        } catch (err: unknown) {
+          if (!isOperationFailure(err)) {
+            throw err;
+          }
+          return createResponse({
+            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            init: {
+              status: err.error.status,
+              headers: { 'content-type': SupportedMimeType.CardJson },
+            },
+            requestContext,
+          });
         }
-        return createResponse({
-          body: JSON.stringify(errorsDocument(err.error), null, 2),
-          init: {
-            status: err.error.status,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
       }
     }
 

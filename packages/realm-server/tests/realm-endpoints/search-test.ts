@@ -428,9 +428,15 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           'person.gts': `
             import { contains, field, CardDef } from "@cardstack/base/card-api";
             import StringField from "@cardstack/base/string";
+            import { operation } from "@cardstack/base/operations";
 
             export class Person extends CardDef {
               @field firstName = contains(StringField);
+
+              @operation static listPeople = {
+                base: 'query',
+                query: { filter: { type: () => Person } },
+              };
             }
           `,
           'john.json': {
@@ -452,7 +458,15 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
 
       // The token carries the permissions the realm's ACL grants `user`, as
       // a session the realm issued would.
-      function search(user?: string, permissions: ('read' | 'write')[] = []) {
+      function search(
+        user?: string,
+        permissions: ('read' | 'write')[] = [],
+        body: Record<string, unknown> = {
+          filter: {
+            'item.on': { module: `${realmHref}person`, name: 'Person' },
+          },
+        },
+      ) {
         let req = request
           .post(`${realmPath}_search`)
           .set('Accept', 'application/vnd.card+json')
@@ -463,11 +477,15 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             `Bearer ${createJWT(testRealm, user, permissions)}`,
           );
         }
-        return req.send({
-          filter: {
-            'item.on': { module: `${realmHref}person`, name: 'Person' },
-          },
-        });
+        return req.send(body);
+      }
+
+      function namedSearch(
+        user: string,
+        query: { operation: string; on: { module: string; name: string } },
+        permissions: ('read' | 'write')[] = [],
+      ) {
+        return search(user, permissions, query);
       }
 
       // Points the realm at a policy that lets anyone read a person they were
@@ -525,6 +543,52 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           noPolicy.text,
           grantsNothing.text,
           'the two answers are byte for byte alike',
+        );
+      });
+
+      test('a named query from a verified non-reader is answered with no rows without its declaration being read', async function (assert) {
+        let person = { module: `${realmHref}person`, name: 'Person' };
+        let declared = await namedSearch(STRANGER, {
+          operation: 'listPeople',
+          on: person,
+        });
+        assert.strictEqual(declared.status, 200, 'HTTP 200 status');
+        assert.deepEqual(declared.body.data, [], 'no rows');
+        assert.deepEqual(
+          declared.body.meta.policyScopedRealms,
+          [realmHref],
+          'marked policy-scoped',
+        );
+
+        let undeclared = await namedSearch(STRANGER, {
+          operation: 'everything',
+          on: person,
+        });
+        assert.strictEqual(
+          undeclared.text,
+          declared.text,
+          'an operation the type does not declare is answered byte for byte as the declared one is',
+        );
+
+        let missingType = await namedSearch(STRANGER, {
+          operation: 'listPeople',
+          on: { module: `${realmHref}no-such-module`, name: 'Nothing' },
+        });
+        assert.strictEqual(
+          missingType.text,
+          declared.text,
+          'and so is a type the realm does not hold',
+        );
+
+        let reader = await namedSearch(
+          READER,
+          { operation: 'listPeople', on: person },
+          ['read'],
+        );
+        assert.deepEqual(
+          reader.body.data.map((entry: { id: string }) => entry.id),
+          [`${realmHref}john`],
+          'a reader is answered with the rows the declaration resolves to',
         );
       });
 
