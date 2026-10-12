@@ -554,6 +554,7 @@ export default function handlePublishRealm({
     try {
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
+        includePublicRealms: true,
       });
 
       // Phase 3: /_publish-realm is a server-level endpoint and bypasses

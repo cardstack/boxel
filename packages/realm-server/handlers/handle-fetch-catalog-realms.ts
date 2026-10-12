@@ -13,7 +13,12 @@ type CatalogRealm = {
   id: string;
   attributes: RealmInfo;
 };
-let catalogRealms: CatalogRealm[] | null = null;
+
+// The catalog list changes only when an operator opts a realm in or out
+// (`/_grafana-set-realm-catalog`), which resets this instance's cache at once.
+// Peer instances pick the change up when their copy expires.
+const CATALOG_REALMS_TTL_MS = 60_000;
+let catalogRealms: { realms: CatalogRealm[]; fetchedAt: number } | null = null;
 
 const log = logger('realm-server');
 export default function handleFetchCatalogRealmsRequest({
@@ -21,9 +26,12 @@ export default function handleFetchCatalogRealmsRequest({
   virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    if (!catalogRealms) {
+    if (
+      !catalogRealms ||
+      Date.now() - catalogRealms.fetchedAt > CATALOG_REALMS_TTL_MS
+    ) {
       let catalogRealmURLs = await fetchCatalogRealms(dbAdapter);
-      catalogRealms = (
+      let realms = (
         await Promise.all(
           catalogRealmURLs.map(async ({ realm_url: realmURL }) => {
             let realmInfoResponse = await virtualNetwork.handle(
@@ -36,16 +44,11 @@ export default function handleFetchCatalogRealmsRequest({
             );
             if (realmInfoResponse.status != 200) {
               log.warn(
-                `Failed to fetch realm info for public realm ${realmURL}: ${realmInfoResponse.status}`,
+                `Failed to fetch realm info for catalog realm ${realmURL}: ${realmInfoResponse.status}`,
               );
               return null;
             }
             let json = await realmInfoResponse.json();
-            let attributes = json.data.attributes;
-            if (attributes.showAsCatalog !== true) {
-              return null;
-            }
-
             return {
               type: 'catalog-realm',
               id: realmURL,
@@ -54,18 +57,20 @@ export default function handleFetchCatalogRealmsRequest({
           }),
         )
       ).filter(Boolean) as CatalogRealm[];
+      catalogRealms = { realms, fetchedAt: Date.now() };
     }
 
     return setContextResponse(
       ctxt,
-      new Response(JSON.stringify({ data: catalogRealms }), {
+      new Response(JSON.stringify({ data: catalogRealms.realms }), {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
       }),
     );
   };
 }
 
-// This function is created for testing purpose
+// Drops this instance's cached catalog list so the next request reads it
+// afresh. Also used by tests.
 export function resetCatalogRealms() {
   catalogRealms = null;
 }

@@ -2,10 +2,20 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
-import { param, query } from '@cardstack/runtime-common';
-import { realmSecretSeed, testRealmInfo } from '../helpers/index.ts';
+import {
+  archiveRealm,
+  insertPermissions,
+  param,
+  query,
+} from '@cardstack/runtime-common';
+import {
+  grafanaSecret,
+  realmSecretSeed,
+  testRealmInfo,
+} from '../helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { insertSourceRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 import { setupServerEndpointsTest, testRealmURL } from './helpers.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -119,6 +129,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test(`returns 200 with empty data if failed to fetch catalog realm's info`, async function (assert) {
+        await query(context.dbAdapter, [
+          `INSERT INTO realm_metadata (url, show_as_catalog) VALUES (`,
+          param(testRealmURL.href),
+          `, `,
+          param(true),
+          `) ON CONFLICT (url) DO UPDATE SET show_as_catalog = `,
+          param(true),
+        ]);
+        resetCatalogRealms();
         let failedRealmInfoMock = async (req: Request) => {
           if (req.url.includes('_info')) {
             return new Response('Failed to fetch realm info', {
@@ -137,6 +156,162 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.deepEqual(response.body, {
           data: [],
         });
+      });
+
+      test('GET /_public-realms lists the active public source realms with their names', async function (assert) {
+        await insertSourceRealmInRegistry(context.dbAdapter, {
+          url: testRealmURL.href,
+          diskId: 'node-test_realm/test',
+          ownerUsername: 'node-test_realm',
+        });
+        const privateRealmURL = 'http://127.0.0.1:4444/someone/private/';
+        const archivedRealmURL = 'http://127.0.0.1:4444/someone/archived/';
+        for (let url of [privateRealmURL, archivedRealmURL]) {
+          await insertSourceRealmInRegistry(context.dbAdapter, {
+            url,
+            diskId: new URL(url).pathname.slice(1, -1),
+            ownerUsername: 'someone',
+          });
+        }
+        await insertPermissions(context.dbAdapter, new URL(privateRealmURL), {
+          '@someone:localhost': ['read', 'write', 'realm-owner'],
+        });
+        await insertPermissions(context.dbAdapter, new URL(archivedRealmURL), {
+          '*': ['read'],
+          '@someone:localhost': ['read', 'write', 'realm-owner'],
+        });
+        await archiveRealm(context.dbAdapter, new URL(archivedRealmURL));
+
+        let response = await context.request
+          .get('/_public-realms')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: '@mango:localhost', sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let realms = response.body.data as {
+          id: string;
+          attributes: { name: string | null };
+        }[];
+        let testRealm = realms.find(({ id }) => id === testRealmURL.href);
+        assert.strictEqual(
+          testRealm?.attributes.name,
+          'Test Realm',
+          'the public realm is listed with the name from its realm.json',
+        );
+        let ids = realms.map(({ id }) => id);
+        assert.false(
+          ids.includes(privateRealmURL),
+          'a realm that is not public is not listed',
+        );
+        assert.false(
+          ids.includes(archivedRealmURL),
+          'an archived public realm is not listed',
+        );
+      });
+
+      test('GET /_public-realms requires a signed-in user', async function (assert) {
+        let response = await context.request
+          .get('/_public-realms')
+          .set('Accept', 'application/vnd.api+json');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      function setRealmCatalog(params: string, secret = grafanaSecret) {
+        return context.request
+          .post(`/_grafana-set-realm-catalog?${params}`)
+          .set('Authorization', `Bearer ${secret}`);
+      }
+
+      async function catalogRealms() {
+        let response = await context.request
+          .get('/_catalog-realms')
+          .set('Accept', 'application/json');
+        return response.body.data as {
+          id: string;
+          attributes: { showAsCatalog: boolean | null };
+        }[];
+      }
+
+      async function catalogRealmIds() {
+        return (await catalogRealms()).map(({ id }) => id);
+      }
+
+      test('the grafana set-realm-catalog endpoint adds a public realm to the catalog and takes it out again', async function (assert) {
+        let realm = encodeURIComponent(testRealmURL.href);
+
+        let added = await setRealmCatalog(`realm=${realm}&catalog=true`);
+        assert.strictEqual(added.status, 200, 'HTTP 200 adding the realm');
+        assert.deepEqual(
+          { realm: added.body.realm, showAsCatalog: added.body.showAsCatalog },
+          { realm: testRealmURL.href, showAsCatalog: true },
+        );
+        let listed = await catalogRealms();
+        assert.deepEqual(
+          listed.map(({ id }) => id),
+          [testRealmURL.href],
+          'the realm is listed as a catalog right away',
+        );
+        assert.true(
+          listed[0].attributes.showAsCatalog,
+          'the realm info served with it reports showAsCatalog',
+        );
+
+        let removed = await setRealmCatalog(`realm=${realm}&catalog=false`);
+        assert.strictEqual(removed.status, 200, 'HTTP 200 removing the realm');
+        assert.deepEqual(
+          await catalogRealmIds(),
+          [],
+          'the realm is no longer listed as a catalog',
+        );
+      });
+
+      test('the grafana set-realm-catalog endpoint refuses a realm that is not publicly readable', async function (assert) {
+        await query(context.dbAdapter, [
+          `DELETE FROM realm_user_permissions WHERE username = '*' AND realm_url =`,
+          param(testRealmURL.href),
+        ]);
+
+        let response = await setRealmCatalog(
+          `realm=${encodeURIComponent(testRealmURL.href)}&catalog=true`,
+        );
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        assert.deepEqual(await catalogRealmIds(), [], 'nothing is listed');
+      });
+
+      test('the grafana set-realm-catalog endpoint validates its params and its secret', async function (assert) {
+        let realm = encodeURIComponent(testRealmURL.href);
+        assert.strictEqual(
+          (await setRealmCatalog(`catalog=true`)).status,
+          400,
+          'a missing realm is refused',
+        );
+        assert.strictEqual(
+          (await setRealmCatalog(`realm=${realm}&catalog=yes`)).status,
+          400,
+          'a catalog value other than true/false is refused',
+        );
+        assert.strictEqual(
+          (
+            await setRealmCatalog(
+              `realm=${encodeURIComponent('http://127.0.0.1:4444/no-such-realm/')}&catalog=true`,
+            )
+          ).status,
+          400,
+          'a URL that is not a realm on this server is refused',
+        );
+        assert.strictEqual(
+          (await setRealmCatalog(`realm=${realm}&catalog=true`, 'wrong'))
+            .status,
+          401,
+          'a wrong grafana secret is refused',
+        );
+        assert.deepEqual(await catalogRealmIds(), [], 'nothing is listed');
       });
     },
   );
