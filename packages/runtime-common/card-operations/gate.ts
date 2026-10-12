@@ -2290,11 +2290,15 @@ async function projector(
 }
 
 // Whether one predicate holds for this caller. Only `true` holds. Anything
-// else it answers fails, and any way its evaluation throws is reported as that.
+// else it answers fails, and any way the predicate throws is reported as that.
 // The one exception is a data file. It has no document, so a predicate that
 // throws reaching for one has found nothing, as `readSubject` says, and so it
 // does not hold. That is the subject's shape rather than a fault in the policy,
 // and it stays a refusal: the same answer as a path with nothing stored at it.
+//
+// Loading the evaluator and reading the realm's settings are the realm's work,
+// not the predicate's, so their failure propagates as the gate's own: an
+// infrastructure fault, not one blamed on the policy's author.
 //
 // It runs through the transform runner, the one BXL entry that carries the
 // request context a predicate reads. `params()` is not supplied, so a
@@ -2311,11 +2315,12 @@ async function evaluate(
   subject: PredicateSubject,
   actor: string | undefined,
 ): Promise<'holds' | 'fails' | 'threw'> {
+  let bxl = await loadBxlTransform();
+  let realmConfig = where.canonical.includes('realmConfig')
+    ? await core.realmConfig()
+    : undefined;
   try {
-    let program = preparedPredicate(core, await loadBxlTransform(), where);
-    let realmConfig = where.canonical.includes('realmConfig')
-      ? await core.realmConfig()
-      : undefined;
+    let program = preparedPredicate(core, bxl, where);
     let answer = program.run(subject.input, {
       ...(actor === undefined ? {} : { actor }),
       ...(subject.instance ? { instance: subject.instance } : {}),
