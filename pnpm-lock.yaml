@@ -1148,6 +1148,9 @@ importers:
       '@cardstack/view-transitions':
         specifier: 'catalog:'
         version: 0.2.0(@babel/core@7.29.7(supports-color@8.1.1))(ember-modifier@4.3.0(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(supports-color@8.1.1)
+      '@chenglou/pretext':
+        specifier: ^0.0.8
+        version: 0.0.8
       '@ember/test-helpers':
         specifier: 'catalog:'
         version: 5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
@@ -1202,6 +1205,9 @@ importers:
       date-fns:
         specifier: 'catalog:'
         version: 2.30.0
+      dialkit:
+        specifier: 2.0.2
+        version: 2.0.2(motion@13.4.6)
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
