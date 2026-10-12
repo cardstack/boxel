@@ -1059,7 +1059,9 @@ module(basename(import.meta.filename), function (hooks) {
       const BEN = `${EDUCATION}students/ben`;
       // The first grant reads the realm's settings. The second admits an
       // honors student without reading them, so Ada is admitted by it alone
-      // once the settings cannot be read, and Ben by nothing.
+      // once the settings cannot be read, and Ben by nothing. The third throws
+      // for any name that is not a number, so for Ben a predicate's fault and
+      // the realm's failure meet in one decision.
       await org.write(
         'policies/configured.json',
         policyCard([
@@ -1072,6 +1074,7 @@ module(basename(import.meta.filename), function (hooks) {
                 where: 'realmConfig("approver") == actor()',
               },
               { operation: 'read', where: '.standing == "honors"' },
+              { operation: 'read', where: '(.name | tonumber) > 0' },
             ],
           },
         ]),
@@ -1120,7 +1123,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         card.status,
         500,
-        'a card+json read is a 500, not the 404 a predicate fault gives a caller who may not read the realm',
+        'a card+json read is a 500, not the 404 a predicate fault gives a caller who may not read the realm, though a predicate did throw',
       );
       assert.strictEqual(batch.status, 500, 'as is an envelope read');
       assert.strictEqual(
@@ -1128,10 +1131,20 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         'a later grant that holds still admits, as grants union',
       );
+      let configured = `rules[${RULES.length}]`;
+      let faults = warnings.filter((line) =>
+        line.includes('threw while deciding'),
+      );
       assert.deepEqual(
-        warnings.filter((line) => line.includes('threw while deciding')),
+        faults.filter((line) => line.includes(`${configured}.grants[0]`)),
         [],
-        'no predicate is logged as having thrown',
+        'the grant that reads the settings is not logged as having thrown',
+      );
+      assert.strictEqual(
+        faults.filter((line) => line.includes(`${configured}.grants[2]`))
+          .length,
+        1,
+        'the grant that did throw is',
       );
       assert.deepEqual(
         decisions
@@ -1143,7 +1156,7 @@ module(basename(import.meta.filename), function (hooks) {
           {
             outcome: 'allow',
             reason: 'granted',
-            grant: `rules[${RULES.length}].grants[1]`,
+            grant: `${configured}.grants[1]`,
           },
         ],
         'each decision records the gate failing, not a predicate throwing',

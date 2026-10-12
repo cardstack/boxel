@@ -1483,10 +1483,12 @@ async function firstHolding(
     let started = performance.now();
     // A predicate judged against the snapshot does not hold for a target with
     // no index row to read: nothing says what its computed or linked values
-    // are.
-    let judged = where.snapshot ? await subject.snapshot?.() : subject;
+    // are. Reading that row is the realm's work, so a failure to read it is
+    // the gate's, as a failure inside `evaluate` is.
+    let judged: PredicateSubject | undefined;
     let outcome: Awaited<ReturnType<typeof evaluate>>;
     try {
+      judged = where.snapshot ? await subject.snapshot?.() : subject;
       outcome = judged
         ? await evaluate(core, candidate, where, judged, actor)
         : 'fails';
