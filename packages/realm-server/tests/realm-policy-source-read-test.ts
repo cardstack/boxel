@@ -1415,11 +1415,11 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
-    // Code is readable only with the realm's own read permission: module
-    // source, raw and transpiled, and the directory listings code mode browses
-    // the realm by. No grant reaches any of them, so a caller a grant admits
-    // to the realm's data is told of each what they are told of a path that
-    // holds nothing.
+    // Module source, raw and transpiled, is read through a grant on a code
+    // type, and through nothing else: a caller a grant on the realm's data
+    // admits is told of it what they are told of a path that holds nothing.
+    // The directory listings code mode browses the realm by are read only with
+    // the realm's own read permission.
     module('code is read through a grant that names it', function () {
       // The routes a module's bytes are served on: its source on card+source,
       // and the module serve a browser's `import` reaches with `*/*`, which

@@ -119,7 +119,8 @@ export const ANONYMOUS_SEARCH: AnonymousDispatch = {
   operations: ['query'],
   counted: 'once-served',
 };
-// A data file's or a card's stored bytes: what a `readSource` grant opens.
+// A file's or a card's stored bytes, module source among them: what a
+// `readSource` grant opens.
 export const ANONYMOUS_BYTES_READ: AnonymousDispatch = {
   operations: ['readSource'],
   counted: 'once-served',

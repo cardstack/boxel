@@ -2586,6 +2586,12 @@ export class Realm {
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
   // newer pending entry installed after a drop survives an older
   // promise's eventual settle.
+  // Compiles for callers the policy gate admitted, keyed by path and the
+  // validator of the version being compiled, so concurrent admitted callers
+  // share one and nothing outlives it (see `#moduleForGatedCaller`). Kept apart
+  // from `#inFlightTranspiles`, which a reader's request joins without the gate.
+  #inFlightGatedCompiles: Map<string, Promise<ModuleTranspileResult>> =
+    new Map();
   #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
     new Map();
   // Monotonic count of transpileJS invocations, used by the CS-11029
@@ -8736,6 +8742,11 @@ export class Realm {
   // the gate has admitted the read, so a reader's `ETag` tells them nothing
   // either, and what they are served is marked `private`.
   //
+  // Admitted callers asking for the same version of a module at once share one
+  // compile, joined only once the gate has admitted each of them (see
+  // `#inFlightGatedCompiles`). A browser that has the module revalidates it on
+  // its next import and is answered 304 without a compile.
+  //
   // A shimmed module is served from the host's own bundle rather than the
   // realm's files, so no grant reaches it.
   async #moduleForGatedCaller(
@@ -8773,6 +8784,9 @@ export class Realm {
       ) ?? fileRef.lastModified,
       MODULE_ETAG_VARIANT,
     );
+    // What the caller asked for is served from here on, so a caller who isn't
+    // signed in is counted against the realm's limit for it.
+    servedAnonymous(requestContext);
     if (etag && request.headers.get('if-none-match') === etag) {
       return {
         kind: 'not-modified',
@@ -8787,11 +8801,23 @@ export class Realm {
         },
       };
     }
-    let compiled = await this.#compileModule(
-      fileRef,
-      await fileContentToText({ content: source.body as FileRef['content'] }),
-      etag,
-    );
+    let compileKey = `${fileRef.path}\n${etag ?? ''}`;
+    let compiling = this.#inFlightGatedCompiles.get(compileKey);
+    if (!compiling) {
+      let pending: Promise<ModuleTranspileResult>;
+      pending = fileContentToText({
+        content: source.body as FileRef['content'],
+      })
+        .then((text) => this.#compileModule(fileRef, text, etag))
+        .finally(() => {
+          if (this.#inFlightGatedCompiles.get(compileKey) === pending) {
+            this.#inFlightGatedCompiles.delete(compileKey);
+          }
+        });
+      compiling = pending;
+      this.#inFlightGatedCompiles.set(compileKey, pending);
+    }
+    let compiled = await compiling;
     return {
       ...compiled,
       headers: {

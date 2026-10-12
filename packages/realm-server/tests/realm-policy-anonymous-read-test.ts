@@ -44,6 +44,12 @@ const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
 const LIBRARY = 'http://127.0.0.1:4444/library/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const NEWSROOM_POLICY = `${ORG}policies/newsroom`;
+// Opens the newsroom's code to callers who aren't signed in.
+const NEWSROOM_CODE_POLICY = `${ORG}policies/newsroom-code`;
+const TS_FILE_DEF = {
+  module: rri('@cardstack/base/ts-file-def'),
+  name: 'TsFileDef',
+};
 const LIBRARY_POLICY = `${ORG}policies/library`;
 const EDITOR = '@editor:localhost';
 const READER = '@reader:localhost';
@@ -202,6 +208,9 @@ module(basename(import.meta.filename), function (hooks) {
                 where: '.status == "published"',
               },
             ]),
+            'policies/newsroom-code.json': policyCard(TS_FILE_DEF, [
+              { operation: 'readSource', anonymous: true },
+            ]),
             // Grants only signed-in callers.
             'policies/library.json': policyCard(BOOK, [{ operation: 'read' }]),
           },
@@ -276,6 +285,7 @@ module(basename(import.meta.filename), function (hooks) {
   async function setNewsroomConfig(fields: {
     anonymousRateLimit?: unknown;
     anonymousBlocklist?: unknown;
+    policy?: string;
   }) {
     await newsroom.write(
       'realm.json',
@@ -803,6 +813,44 @@ module(basename(import.meta.filename), function (hooks) {
     } finally {
       await unarchiveRealm(db, new URL(NEWSROOM));
     }
+  });
+
+  test('a module a code grant opens to a caller who is not signed in is served privately, and counted', async function (assert) {
+    await setNewsroomConfig({
+      policy: NEWSROOM_CODE_POLICY,
+      anonymousRateLimit: { requests: 2, windowSeconds: 600 },
+    });
+    let importModule = (headers: Record<string, string> = {}) => {
+      let req = request
+        .get(`${new URL(NEWSROOM).pathname}article`)
+        .set('Accept', '*/*')
+        .set('X-Forwarded-For', VISITOR);
+      for (let [name, value] of Object.entries(headers)) {
+        req = req.set(name, value);
+      }
+      return req;
+    };
+    let served = await importModule();
+    assert.strictEqual(served.status, 200, 'the module is served');
+    assert.strictEqual(served.get('content-type'), 'text/javascript');
+    assert.true(
+      /^private\b/.test(served.get('cache-control') ?? ''),
+      'privately',
+    );
+    let revalidated = await importModule({
+      'If-None-Match': served.get('etag')!,
+    });
+    assert.strictEqual(revalidated.status, 304, 'and revalidated');
+    let over = await importModule();
+    assert.strictEqual(over.status, 429, 'each of which was counted');
+    assert.strictEqual(over.body.errors[0].code, 'rate-limited');
+    assert.deepEqual(
+      records
+        .filter((record) => record.route.endsWith('/article'))
+        .map(({ outcome }) => outcome),
+      ['admitted', 'admitted', 'rate-limited'],
+      'and recorded',
+    );
   });
 
   test('what no anonymous grant can open stays closed to a caller who is not signed in', async function (assert) {

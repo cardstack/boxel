@@ -1138,7 +1138,7 @@ export type PolicyExplanationReason =
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,
   // for anything but a read of its stored bytes; or stored bytes with no type
-  // to match, which is what module source and an empty path are.
+  // to match, which is what an empty path is.
   | 'unmatchable-target'
   // The operation is not one the target carries: resolving it refused before
   // the policy could be consulted. `refusal` says how.
