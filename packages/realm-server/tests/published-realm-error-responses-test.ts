@@ -2,7 +2,9 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
+import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm, RequestContext } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 import { Router, SupportedMimeType } from '@cardstack/runtime-common/router';
 import {
   createJWT,
@@ -12,11 +14,20 @@ import {
 } from './helpers/index.ts';
 
 // A published realm is a public site: whatever it answers a crawler, a
-// link-preview bot or a scanner, it answers to anyone. Its error documents
-// keep the server stack only for a caller it can identify, and it answers the
-// robots.txt every crawler asks for.
+// link-preview bot or a scanner, it answers to anyone. It shows a server stack
+// only to a caller it can identify, and it answers the robots.txt every
+// crawler asks for.
 
 const BROKEN_MODULE = 'export const = ;\n';
+const NOTE_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  export class Note extends CardDef {
+    @field label = contains(StringField);
+  }
+`;
+const STORED_STACK =
+  'Error: render failed\n    at render (/srv/realm-server/x.ts:1:1)';
 const DEFAULT_ROBOTS = 'User-agent: *\nAllow: /\n';
 
 function hasStack(body: string): boolean {
@@ -27,15 +38,83 @@ module(basename(import.meta.filename), function () {
   module('a published realm', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
+    let dbAdapter: PgAdapter;
 
     setupPermissionedRealmCached(hooks, {
       permissions: { '*': ['read'] },
-      fileSystem: { 'broken.gts': BROKEN_MODULE },
+      fileSystem: {
+        'broken.gts': BROKEN_MODULE,
+        'note.gts': NOTE_MODULE,
+        'note.json': {
+          data: {
+            type: 'card',
+            attributes: { label: 'A note' },
+            meta: { adoptsFrom: { module: rri('./note'), name: 'Note' } },
+          },
+        },
+      },
       published: true,
       onRealmSetup(args) {
         testRealm = args.testRealm;
         request = args.request;
+        dbAdapter = args.dbAdapter;
       },
+    });
+
+    // Stores an error with a stack on the note's index entry, as a render
+    // failure would, and reads it back through `_indexing-errors`.
+    async function indexingErrors(authorization?: string) {
+      await dbAdapter.execute(
+        `UPDATE boxel_index
+         SET has_error = TRUE, error_doc = $1::jsonb
+         WHERE url = $2 AND type = 'instance'`,
+        {
+          bind: [
+            JSON.stringify({
+              message: 'render failed',
+              status: 500,
+              stack: STORED_STACK,
+              additionalErrors: [{ message: 'cause', stack: STORED_STACK }],
+            }),
+            `${testRealm.url}note.json`,
+          ],
+        },
+      );
+      let req = request
+        .get('/_indexing-errors')
+        .set('Accept', SupportedMimeType.JSONAPI);
+      if (authorization) {
+        req = req.set('Authorization', authorization);
+      }
+      let response = await req;
+      let entry = response.body.data?.find(
+        (e: { attributes?: { url?: string } }) =>
+          e.attributes?.url === `${testRealm.url}note.json`,
+      );
+      return { response, entry };
+    }
+
+    test("an anonymous caller reads the realm's indexing errors without their stacks", async function (assert) {
+      let { response, entry } = await indexingErrors();
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(
+        entry?.attributes?.errorDoc?.message,
+        'render failed',
+        'the stored error is still reported',
+      );
+      assert.false(hasStack(response.text), `no stack: ${response.text}`);
+    });
+
+    test("a verified session reads the realm's indexing errors with their stacks", async function (assert) {
+      let { response, entry } = await indexingErrors(
+        `Bearer ${createJWT(testRealm, '@reader:localhost', ['read'])}`,
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(entry?.attributes?.errorDoc?.stack, STORED_STACK);
+      assert.strictEqual(
+        entry?.attributes?.errorDoc?.additionalErrors?.[0]?.stack,
+        STORED_STACK,
+      );
     });
 
     test('a missing path answers an anonymous caller without a stack', async function (assert) {

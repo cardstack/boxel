@@ -438,7 +438,11 @@ import {
 } from './router.ts';
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
-import { createResponse } from './create-response.ts';
+import {
+  createResponse,
+  removeStacks,
+  withholdsStacksFrom,
+} from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
@@ -2275,7 +2279,7 @@ interface Options {
   fullIndexOnStartup?: true;
   // The realm is a published snapshot of a source realm, served to the public
   // as a site. Nobody authors in it, so an error it answers a caller it cannot
-  // identify carries no server stack (see `withholdsErrorStacks`), and, at a
+  // identify carries no server stack (see `withholdsStacksFrom`), and, at a
   // host's root, a crawler's `/robots.txt` gets a default answer when the
   // realm holds none.
   published?: true;
@@ -2362,7 +2366,7 @@ export type RequestContext = {
   // A token the public path verified without the checks above, which that
   // path skips because nothing it serves turns on them. The one thing the
   // token's identity decides there is whether a published realm's error keeps
-  // its stack (see `withholdsErrorStacks`), for which a signature the
+  // its stack (see `withholdsStacksFrom`), for which a signature the
   // realm-server issued is enough. `#sessionPrincipal` runs the checks, for a
   // request that turns out to need a principal.
   unvouchedSession?: {
@@ -15463,6 +15467,12 @@ export class Realm {
         }));
       }),
     };
+
+    // The stored error documents carry the stacks an error response would
+    // withhold, and this answers with a 200, so `createResponse` leaves it be.
+    if (withholdsStacksFrom(requestContext)) {
+      removeStacks(doc.data);
+    }
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),
