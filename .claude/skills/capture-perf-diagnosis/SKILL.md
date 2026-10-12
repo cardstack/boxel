@@ -88,7 +88,7 @@ Envelope (shared): `eventType="capture"`, `surface`, `status` (`ready` | `error`
 
 Resolve the input to `(realmURL, sourceURL)` and, when you can, a `captureSpecHash` / `sourceGeneration`, then pull the record(s).
 
-- **A served URL** `{realm}_capture/{path}?{params}` — `realmURL` = the realm root; `sourceURL` = `{realm}{path}` (the instance URL, drop the `_capture/` segment); the query params (`format`, `viewport`, `dsf`, `fullPage`, `clip`) are the capture spec. Find `request`/`capture` events for that `sourceURL`, or the `media_cache_ledger` rows for it.
+- **A served URL** `{realm}_capture/{path}?{params}` — `realmURL` = the realm root; `sourceURL` = `{realm}{path}` (drop the `_capture/` segment: a card's extensionless id, or a file's URL with its extension intact); the query params (`format`, `viewport`, `dsf`, `fullPage`, `clip`) are the capture spec. Find `request`/`capture` events for that `sourceURL`, or the `media_cache_ledger` rows for it.
 - **A (realm + cardId + capture spec) triple** — `sourceURL` = `cardId` without a trailing `.json`. Same lookups.
 - **A matrix user / session** — pivot user → `correlationId` via the realm-server request log (which has the authenticated user), then to `boxel:capture-perf`; that route covers both surfaces. `capture.runAs` is the job's render identity, not the requester: a POST job runs as its requester, but a GET job runs as the **realm owner** — so `| runAs="@user:…"` misses every `<img>`-driven capture unless the complainer owns the realm.
 - **A time window** — `--since` / a Grafana range; scope with `realmURL`/`surface`.

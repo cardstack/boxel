@@ -16,7 +16,7 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
   <template>
     <nav class='pretui-breadcrumb' aria-label='Breadcrumb' data-test-pretui-breadcrumb ...attributes>
       {{#each @items as |item index|}}
-        {{#if index}}<span class='sep' aria-hidden='true'>/</span>{{/if}}
+        {{#if index}}<span class='sep' aria-hidden='true' data-test-pretui-breadcrumb-sep>/</span>{{/if}}
         {{#if (this.isLast index)}}
           <b aria-current='page'>{{item.label}}</b>
         {{else if item.href}}
@@ -31,8 +31,8 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
         .pretui-breadcrumb {
           display: flex;
           align-items: center;
-          gap: 6px;
-          font-size: var(--text-ui, 12px);
+          gap: var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pretui-breadcrumb b {
@@ -48,7 +48,7 @@ export class Breadcrumb extends Component<BreadcrumbSignature> {
           text-underline-offset: 2px;
         }
         .sep {
-          color: var(--ink-3, var(--boxel-400));
+          color: var(--subtle-foreground);
         }
       }
     </style>

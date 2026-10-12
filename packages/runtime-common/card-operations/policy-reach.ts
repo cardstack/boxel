@@ -126,7 +126,7 @@ const realmConfigRef: ResolvedCodeRef = {
 
 // The types every card or file descends from. A link typed as one of them can
 // hold a card of any type, so granting the type it names would grant every
-// card, and the message does not offer that.
+// card, or for `BaseDef` nothing at all, and the message offers neither.
 const baseTypeRefs: ResolvedCodeRef[] = [
   cardDefRef,
   { module: rri('@cardstack/base/card-api'), name: 'BaseDef' },
@@ -451,7 +451,8 @@ function ungrantedClause(
 
 // The other way out: granting the reached type on purpose. Not offered for
 // authorization infrastructure, which no rule grants, nor for a type every
-// card descends from, since granting it would grant every card.
+// card descends from, since granting it would grant every card, or for
+// `BaseDef` nothing at all.
 function deliberately(
   to: string,
   kind: UngrantedKind,

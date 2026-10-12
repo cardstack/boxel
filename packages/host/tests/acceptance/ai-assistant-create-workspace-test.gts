@@ -28,7 +28,6 @@ import {
   waitForNewRoomSkillsLoaded,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -61,8 +60,6 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
     activeRealms: [testRealmURL],
   });
   let { simulateRemoteMessage, getRoomIds, getRoomEvents } = mockMatrixUtils;
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     setupUserSubscription();

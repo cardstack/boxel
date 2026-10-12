@@ -1,5 +1,6 @@
 // Pretui — UsageString: a string argument with its knob.
 import Component from '@glimmer/component';
+import { guidFor } from '@ember/object/internals';
 import { Input } from './input';
 import { Select } from './select';
 import { UsageArgument } from './usage-argument';
@@ -39,25 +40,35 @@ export class UsageString extends Component<UsageStringSignature> {
   get readOnlyValue() {
     return readOnlyText(this.args.value ?? this.args.defaultValue);
   }
+  controlId = `${guidFor(this)}-control`;
+  // the rail labels the control when there is one
+  get labelFor() {
+    return this.hasControl ? this.controlId : undefined;
+  }
   callOnInput = (v: string) => {
     this.args.onInput?.(v);
   };
   <template>
     {{#if this.isProp}}
       {{#unless @hideControls}}
-        <PropRow @label={{@name}} @required={{@required}}>
+        <PropRow
+          @label={{@name}}
+          @required={{@required}}
+          @controlId={{this.labelFor}}
+        >
           {{#if this.hasControl}}
             {{#if @options}}
               <Select
                 @options={{this.selectOptions}}
                 @value={{this.valueStr}}
                 @onValueChange={{this.callOnInput}}
+                @controlId={{this.controlId}}
               />
             {{else}}
               <Input
                 @value={{this.valueStr}}
                 @onInput={{this.callOnInput}}
-                aria-label={{@name}}
+                @controlId={{this.controlId}}
               />
             {{/if}}
           {{else}}

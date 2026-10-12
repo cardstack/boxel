@@ -51,6 +51,7 @@ import {
 import {
   isExclusiveLane,
   laneFamilyOf,
+  type JobsAlias,
 } from '@cardstack/runtime-common/jobs/lane-family';
 import { flattenErrorForJsonb } from './flatten-error-for-jsonb.ts';
 import { WorkLoop } from './work-loop.ts';
@@ -498,6 +499,20 @@ const MAX_RESERVATION_COUNT_PER_JOB = 2;
 // out of a pool every realm shares, which a realm with many writers would do to
 // every other realm's user-initiated work. So a writer job whose family is at
 // the cap waits, as it would have waited behind the family's exclusive lane.
+//
+// The cap does not move for a lower-tier exclusive job of the family, pending or
+// running. Halving a family's writer concurrency to hand a lower-tier job a turn
+// is the same tier inversion the barrier and the running-exclusive rule refuse.
+//
+// It does cost that job its one reliable chance to start, and the replacement is
+// an operator's reindex rather than anything the queue arranges. A lower-tier
+// exclusive job needs the family *simultaneously* idle, and a single writer lane
+// manufactured that: the lane drained, the family was briefly empty, and the
+// oldest pending row in it — the exclusive job — was there to be claimed. Two
+// lanes make a coincident gap rarer, and on a realm that keeps saving there may
+// be none at all. So a system-tier pass is not guaranteed to run; it waits for
+// the realm to go quiet. To run one on demand, publish it at the user tier,
+// where the barrier below holds the writers off and the family drains for it.
 const MAX_CONCURRENT_WRITER_LANES_PER_FAMILY = 2;
 
 // A row's lane and family as non-null keys for the claim query. See the
@@ -514,7 +529,7 @@ function familyKey(alias: 'j'): string {
 // system tier (see the tier table in runtime-common's queue.ts). The
 // high-priority worker pool floors at the bottom of the user-initiated tier, so
 // only the all-priority pool can claim a system-tier job.
-function isUserInitiatedTier(alias: 'j' | 'p'): string {
+function isUserInitiatedTier(alias: JobsAlias): string {
   return `(${alias}.priority >= ${userInitiatedPrerenderHtmlPriority})`;
 }
 
@@ -671,43 +686,50 @@ export class PgQueueRunner implements QueueRunner {
             // its family is `lane_family`, or its group when it names none
             // (see `QueuePublishRequest.laneFamily`):
             //
+            // One line runs through all of them: a job at a higher priority
+            // tier is never held back by one at a lower tier (the tiers are
+            // user-initiated and system; see `isUserInitiatedTier`). A save is
+            // on someone's critical path and a background pass is not, so the
+            // pass yields, whether it is pending or already running.
+            //
             // - One job at a time per lane.
-            // - A family's exclusive work runs alone: it waits for every
-            //   running member of the family, and every member waits for it.
+            // - An exclusive job of a family waits for the family to empty, and
+            //   every member of the family waits for a running exclusive job of
+            //   its own tier or above.
+            // - A running exclusive job below a writer lane's tier does not hold
+            //   it back. This is what keeps a deploy's system-tier from-scratch
+            //   pass from stalling every save in its realm for as long as the
+            //   pass runs, which is minutes even when the pass is healthy.
+            //   Indexing tolerates the overlap: a pass re-derives its rows from
+            //   bytes already on disk and its production rows stay live until
+            //   its swap, and a commit that a peer's commit left stale is
+            //   re-visited at validation (see `Batch.#findPeerConflicts`), or
+            //   re-indexed by a follow-up job when the rounds run out.
             // - Writer lanes of one family run alongside each other, up to
-            //   `#maxWriterLanesPerFamily` at once, and one at a time while an
-            //   older exclusive job of the family is pending. An exclusive job
-            //   waits for the family to empty, and two writer lanes whose
-            //   passes keep overlapping would never let it. With one lane at a
-            //   time the family empties between passes, and a worker that can
-            //   claim the exclusive job and scans in that gap takes it as the
-            //   older of the two. The worker that ran a pass scans the moment
-            //   its completion commits, so when that worker can claim the
-            //   exclusive job, the job starts once the passes running when it
-            //   was queued finish.
+            //   `#maxWriterLanesPerFamily` at once, whatever lower-tier
+            //   exclusive work of the family is pending or running.
             // - A writer job does not start ahead of an older pending exclusive
-            //   job of its family at the writer's priority tier or above (the
-            //   tiers are user-initiated and system; see `isUserInitiatedTier`).
-            //   With the pools the worker manager starts, a worker that can
-            //   claim a writer job can also claim any exclusive job of its
-            //   family at the writer's tier, so the one-lane rule already gives
-            //   that exclusive job its turn. This barrier keeps the turn when a
-            //   free worker can take the writer job but not the exclusive one,
-            //   such as a worker whose floor sits inside the tier.
+            //   job of its family at the writer's tier or above. With the pools
+            //   the worker manager starts, a worker that can claim a writer job
+            //   can also claim any exclusive job of its family at the writer's
+            //   tier. This barrier is what lets such a job reach an empty
+            //   family at all: without it a realm that keeps saving would never
+            //   leave a gap, so an operator's own reindex, published at the user
+            //   tier, could not start.
             // - Below the writer's tier there is no barrier. The workers that
             //   serve the higher tier never claim a lower-tier job, so a
             //   system-tier from-scratch pass waits for an all-priority worker
             //   to reach it behind every realm's system work, which after a
             //   deploy that reindexes every realm takes hours. A barrier would
-            //   hold each save in the realm for all of that. The cost is that
-            //   nothing bounds how long such a pass waits while its realm keeps
-            //   saving. The worker that ran the last pass cannot claim it, and
-            //   takes the next queued save the moment its completion commits.
-            //   The completion wakes the other workers
-            //   (`wakeRunnersForPendingExclusive`), so an idle all-priority
-            //   worker races it for the family, but a busy one scans only when
-            //   it frees up. Only a pause in the realm's saves that lasts until
-            //   an all-priority worker scans is sure to let the pass start.
+            //   hold each save in the realm for all of that. Nothing bounds how
+            //   long such a pass waits, since it needs both a free all-priority
+            //   worker and an idle moment in the family. The worker that ran the
+            //   last pass cannot claim it, and takes the next queued save the
+            //   moment its completion commits. The completion wakes the other
+            //   workers (`wakeRunnersForPendingExclusive`), so an idle
+            //   all-priority worker races it for the family, but a busy one
+            //   scans only when it frees up. An operator reindex published at
+            //   the user tier is the way to run one on demand.
             //
             // Jobs published without a family are all exclusive, each in a
             // family of its own group, so for them these reduce to the first
@@ -723,9 +745,9 @@ export class PgQueueRunner implements QueueRunner {
             // subquery uncorrelated, so it is hashed once per claim rather
             // than rescanned per pending job.
             //
-            // The writer-only rules, the barrier and the cap, apply only to a
-            // job that fails the exclusive test, which a family-less job never
-            // does.
+            // The writer-only rules — the tier-limited reach of a running
+            // exclusive job, the barrier and the cap — apply only to a job that
+            // fails the exclusive test, which a family-less job never does.
             `WITH
               pending_jobs AS (
                 SELECT * FROM jobs j WHERE j.status='unfulfilled'
@@ -770,7 +792,8 @@ export class PgQueueRunner implements QueueRunner {
                 SELECT DISTINCT j.id,
                        ${laneKey('j')} AS lane_key,
                        ${familyKey('j')} AS family_key,
-                       ${isExclusiveLane('j')} AS exclusive
+                       ${isExclusiveLane('j')} AS exclusive,
+                       j.priority AS priority
                   FROM jobs j, valid_reservations v WHERE v.job_id = j.id
               )
             SELECT j.* FROM pending_jobs j
@@ -778,28 +801,37 @@ export class PgQueueRunner implements QueueRunner {
                 SELECT 1 FROM valid_reservations v WHERE v.job_id = j.id
               )
               AND ${laneKey('j')} NOT IN (SELECT lane_key FROM active_jobs)
-              AND ${familyKey('j')} NOT IN (
-                SELECT family_key FROM active_jobs WHERE exclusive
-              )
               AND (
                 (${isExclusiveLane('j')} AND ${familyKey('j')} NOT IN (
                   SELECT family_key FROM active_jobs
                 ))
                 OR (NOT ${isExclusiveLane('j')}
+                  -- A running exclusive job of the family holds a writer lane
+                  -- back only from the writer's tier or above, the same line
+                  -- the barrier below draws for a pending one. Spelled as two
+                  -- uncorrelated sets rather than one correlated test of the
+                  -- writer's tier, so both stay hashed once per claim: the
+                  -- first set holds every writer back, and the second adds the
+                  -- rest of the family's exclusive work for a system-tier
+                  -- writer, which nothing outranks.
+                  AND ${familyKey('j')} NOT IN (
+                    SELECT a.family_key FROM active_jobs a
+                     WHERE a.exclusive AND ${isUserInitiatedTier('a')}
+                  )
+                  AND (${isUserInitiatedTier('j')} OR ${familyKey('j')} NOT IN (
+                    SELECT a.family_key FROM active_jobs a WHERE a.exclusive
+                  ))
                   AND NOT EXISTS (
                     ${olderPendingExclusive()}
                        AND (${isUserInitiatedTier('p')}
                             OR NOT ${isUserInitiatedTier('j')})
                   )
-                  -- Past the barrier, any older pending exclusive job is at a
-                  -- lower tier, and while there is one the family runs one
-                  -- writer lane at a time.
                   AND (
                     SELECT COUNT(*) FROM active_jobs a
                      WHERE a.family_key = j.lane_family AND NOT a.exclusive
-                  ) < CASE WHEN EXISTS (${olderPendingExclusive()}) THEN 1 ELSE`,
+                  ) <`,
             param(this.#maxWriterLanesPerFamily),
-            `END)
+            `)
               )
               ORDER BY j.created_at, j.id
               LIMIT 1`,

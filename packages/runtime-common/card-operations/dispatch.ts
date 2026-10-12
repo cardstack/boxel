@@ -26,6 +26,7 @@ import {
   type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
+import { ActingUsers, NO_ACTING_USER } from './acting-users.ts';
 import type { GateTrace } from './gate-trace.ts';
 import { INTERNAL_ROUTE, type PolicyRoute } from './telemetry.ts';
 import { explainOperation, type TargetRealm } from './explain.ts';
@@ -39,6 +40,7 @@ import {
   isOperationFailure,
   unshareableFormatsOf,
   isHeadResult,
+  isWrite,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
@@ -252,6 +254,9 @@ export interface OperationDefinitionLookup {
   lookupDefinitionEntry(
     codeRef: ResolvedCodeRef,
   ): Promise<{ definition: Definition; types: string[] } | undefined>;
+  // Moves whenever a definition the lookup serves may have changed. See
+  // `DefinitionLookup.definitionGeneration`.
+  definitionGeneration?(): number;
 }
 
 // `RealmIndexQueryEngine`, narrowed to the reads an operation makes.
@@ -345,11 +350,13 @@ export interface RunOperationOptions {
 // snapshot of it. The memo lives for the invocation and no longer: a core is
 // long-lived and must never hold a card's row across requests.
 //
-// A scope also says who the invocation is for, whether the realm ACL declined
-// them, and, for a create, what it would write. Those are the facts the policy
-// gate reads that the target does not carry. They travel here rather than as
+// A scope also says who the invocation is for and whether the realm ACL
+// declined them. Those are the facts the policy gate reads that the target
+// does not carry (see `GateScope`). They travel here rather than as
 // parameters of `resolveOperation` because the scope already reaches every
-// place an operation is resolved.
+// place an operation is resolved. A create's payload is not among them: a
+// create against a type is judged by the card it mints once staged, and a
+// named create anchored on a card by that card.
 export interface OperationScope {
   peekInstance(url: URL): Promise<InstanceOrError | undefined>;
   readonly caller: ScopeCaller;
@@ -357,13 +364,6 @@ export interface OperationScope {
   // Where it declined an invocation, the policy gate decides whether it runs;
   // everywhere else the gate does nothing at all.
   readonly coarseDeclined: CoarseDeclined;
-  // The payload a `create` entry is staged from, as its `input` stage and its
-  // `params` check left it — what the operation would actually write, not the
-  // bytes the caller sent. For a plain create that is the resource the card is
-  // minted from; for a named one, the params its template is filled with.
-  // Absent for every other invocation, and for a create until those two
-  // stages have run.
-  readonly proposed: Record<string, unknown> | undefined;
   // Where the policy gate records how it reached its decision, for an explain
   // to report, or for a capability check to read why the gate refused. Absent
   // on every invocation a caller makes.
@@ -374,6 +374,10 @@ export interface OperationScope {
   // The request surface and route this invocation arrived on, which the
   // gate's decision record names (see `PolicyDecisionEvent`).
   readonly route: PolicyRoute;
+  // Who the request's writes are made as, where it authenticated nobody and
+  // a grant naming an acting user admits them (see `ActingUsers`). One for the
+  // request, shared by every scope derived from this one.
+  readonly actingUsers: ActingUsers;
   // The archived realm's refusal, where the realm holds one for this caller
   // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
   // gate grants.
@@ -382,8 +386,7 @@ export interface OperationScope {
   // memo so the invocations of one request still cost one read of each row
   // between them. The caller, the ACL's verdict, the seal and whether the
   // request is advisory carry over unless named, and so does its route; a
-  // proposed document belongs to one invocation and never does, and neither
-  // does a trace.
+  // trace belongs to one invocation and never does.
   derive(invocation: ScopeInvocation): OperationScope;
 }
 
@@ -407,11 +410,14 @@ export type ScopeCaller =
 export interface ScopeInvocation {
   caller?: ScopeCaller;
   coarseDeclined?: CoarseDeclined;
-  proposed?: Record<string, unknown>;
   trace?: GateTrace;
   seal?: Error;
   advisory?: boolean;
   route?: PolicyRoute;
+  // The request's acting users, where its caller supplies the one its
+  // records read from. Otherwise the scope resolves them through the realm's
+  // policy access.
+  actingUsers?: ActingUsers;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -435,6 +441,11 @@ export function newOperationScope(
   invocation: ScopeInvocation = {},
 ): OperationScope {
   let rows = new Map<string, Promise<InstanceOrError | undefined>>();
+  let actingUsers =
+    invocation.actingUsers ??
+    new ActingUsers(
+      (key) => core.policy?.actingUser?.(key) ?? NO_ACTING_USER(),
+    );
   let peekInstance = (url: URL) => {
     let cached = rows.get(url.href);
     if (!cached) {
@@ -449,7 +460,6 @@ export function newOperationScope(
   let scopeFor = (
     caller: ScopeCaller,
     coarseDeclined: CoarseDeclined,
-    proposed: Record<string, unknown> | undefined,
     trace: GateTrace | undefined,
     seal: Error | undefined,
     advisory: boolean,
@@ -458,16 +468,15 @@ export function newOperationScope(
     peekInstance,
     caller,
     coarseDeclined,
-    proposed,
     trace,
     seal,
     advisory,
     route,
+    actingUsers,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
         next.coarseDeclined ?? coarseDeclined,
-        next.proposed,
         next.trace,
         next.seal ?? seal,
         next.advisory ?? advisory,
@@ -477,7 +486,6 @@ export function newOperationScope(
   return scopeFor(
     invocation.caller ?? { kind: 'unattributed' },
     invocation.coarseDeclined ?? 'none',
-    invocation.proposed,
     invocation.trace,
     invocation.seal,
     invocation.advisory ?? false,
@@ -725,6 +733,31 @@ export async function resolveOperation(
     name,
     scope,
   );
+}
+
+// Whether the operation resolves to a write on the target, which says which
+// request would carry it: a write travels on a `POST`, which the ACL judges as
+// a write, and everything else on a request it judges as a read. It is
+// resolved as a caller the ACL allows would resolve it, so the gate doesn't
+// decide what it is then asked to judge. An operation that does not resolve
+// travels as a read would.
+export async function resolvesToWrite(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  scope: OperationScope,
+): Promise<boolean> {
+  try {
+    let { base } = await resolveOperation(
+      core,
+      target,
+      name,
+      scope.derive({ coarseDeclined: 'none' }),
+    );
+    return isWrite(base);
+  } catch {
+    return false;
+  }
 }
 
 function sameTarget(a: OperationTarget, b: OperationTarget): boolean {

@@ -30,6 +30,14 @@
 //     does they fail, waiting on it. With no pairing they fail, saying how to
 //     declare one.
 //
+//   node scripts/lint-sweep.ts --report=<file> [--baseline=<file>] [--pairing=<file>] --pinned
+//     Reports a recording of the catalog at the revision this change pins in
+//     test-subset.json. Production deploys a boxel commit with the catalog at
+//     its pin, so every error the change adds there fails, paired or not; the
+//     pairing only says which catalog revision to pin instead. Its baseline is
+//     the base branch's pin linted against the base branch, so a new pin's
+//     errors count as the change's too.
+//
 // Errors are matched by linter, file, rule, message and position first, then
 // the rest without position, so an error in a boxel file that the change only
 // moved still matches, and a repeated error the change adds is the one
@@ -47,7 +55,7 @@ import {
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
-import { mainVerdict, type Resolution } from './pairing.ts';
+import { mainVerdict, type Pair, type Resolution } from './pairing.ts';
 
 type Linter = 'lint:types' | 'lint:js' | 'lint:hbs';
 
@@ -408,10 +416,51 @@ function annotation(message: string) {
     .replace(/\n/g, '%0A');
 }
 
+// What to do about errors a change adds to the catalog at its pin: pin a
+// catalog revision the change works with, which a paired catalog pull request
+// is, or keep the change compatible with the catalog as pinned.
+function pinAdvice(resolution: Resolution | undefined) {
+  let deploys =
+    `Production deploys this boxel with the catalog at the revision ` +
+    `packages/catalog/test-subset.json pins, so the whole catalog there has ` +
+    `to work with it, not only the subset files boxel's tests load.`;
+  let open = (key: Pair['key']) =>
+    resolution?.pairs.find((p) => p.key === key && !p.merged);
+  let repin = (pair: Pair) =>
+    `set \`revision\` to ${pair.headSha}, run ` +
+    `\`pnpm --dir packages/catalog catalog:test-subset\`, run the manifest's ` +
+    `tests against it, and commit the new pin`;
+  let after = open('merges-after');
+  if (after) {
+    return (
+      `${deploys} Pin the head of ${after.repository}#${after.number}, which ` +
+      `this change merges after: ${repin(after)}.`
+    );
+  }
+  let before = open('merges-before');
+  if (before) {
+    return (
+      `${deploys} Pin the head of ${before.repository}#${before.number}, ` +
+      `which this change merges before: ${repin(before)}. The Catalog Test ` +
+      `Subset check accepts that pin while ${before.repository}#` +
+      `${before.number} is approved, and it merges right after this change.`
+    );
+  }
+  return (
+    `${deploys} Keep the change compatible with the catalog at the pin, or ` +
+    `pin a catalog revision it works with: catalog main ` +
+    `(\`pnpm --dir packages/catalog catalog:test-subset --bump\`) when it ` +
+    `already works there, or else a boxel-catalog pull request that fixes ` +
+    `the catalog, paired with this change as packages/catalog/README.md ` +
+    `describes.`
+  );
+}
+
 async function report(
   headPath: string,
   baselinePath: string | undefined,
   pairingPath: string | undefined,
+  pinned: boolean,
 ) {
   let head = JSON.parse(readFileSync(headPath, 'utf8')) as Recording;
   let baseline = baselinePath
@@ -431,23 +480,32 @@ async function report(
   // With a pairing, this recording is either a paired catalog pull request's
   // head, which the change is linted with, or catalog main, which the change
   // must not leave failing behind a pull request that isn't ready.
-  let pair = resolution?.pairs.find(
-    (p) => !p.merged && p.headSha === catalog.revision,
-  );
-  let gated = Boolean(resolution) && !pair;
-  let subject = pair
-    ? `${pair.repository}#${pair.number}'s head (${at})`
-    : gated
-      ? `catalog main (${at})`
-      : at;
+  // A pinned recording is reported on its own terms, whatever pull request
+  // its revision belongs to.
+  let pair = pinned
+    ? undefined
+    : resolution?.pairs.find(
+        (p) => !p.merged && p.headSha === catalog.revision,
+      );
+  let gated = !pinned && Boolean(resolution) && !pair;
+  let subject = pinned
+    ? `the catalog at this change's pin (${at})`
+    : pair
+      ? `${pair.repository}#${pair.number}'s head (${at})`
+      : gated
+        ? `catalog main (${at})`
+        : at;
   let linting = `Linting ${subject} against this change`;
+  let title = pinned ? 'catalog lint (pin)' : 'catalog lint';
 
   let summary = [
-    pair
-      ? `### Catalog lint: ${pair.repository}#${pair.number}`
-      : gated
-        ? `### Catalog lint: main`
-        : `### Catalog lint`,
+    pinned
+      ? `### Catalog lint: pin`
+      : pair
+        ? `### Catalog lint: ${pair.repository}#${pair.number}`
+        : gated
+          ? `### Catalog lint: main`
+          : `### Catalog lint`,
     '',
   ];
   let passes = added.length === 0;
@@ -472,18 +530,23 @@ async function report(
         `::${passes ? 'notice' : 'error'} title=catalog lint (main)::${annotation(advice)}`,
       );
     } else {
-      advice = pair
-        ? `Fix them in ${pair.repository}#${pair.number}, which this change ` +
-          `is paired with.`
-        : verdict
-          ? verdict.message
-          : `Keep the change compatible with the catalog as it is, or fix the ` +
-            `catalog in a boxel-catalog pull request and pair the two in ` +
-            `their descriptions, as packages/catalog/README.md describes.`;
+      advice = pinned
+        ? pinAdvice(resolution)
+        : pair
+          ? `Fix them in ${pair.repository}#${pair.number}, which this ` +
+            `change is paired with.`
+          : verdict
+            ? verdict.message
+            : `Keep the change compatible with the catalog as it is, or fix the ` +
+              `catalog in a boxel-catalog pull request and pair the two in ` +
+              `their descriptions, as packages/catalog/README.md describes.`;
       for (let d of added) {
         console.log(
-          `::error title=catalog lint::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
+          `::error title=${title}::${annotation(`${location(d)} ${d.rule}: ${d.message}`)}`,
         );
+      }
+      if (pinned) {
+        console.log(`::error title=${title}::${annotation(advice)}`);
       }
     }
     summary.push(
@@ -505,7 +568,7 @@ async function report(
       existing,
     );
     console.log(
-      `::warning title=catalog lint::${annotation(
+      `::warning title=${title}::${annotation(
         `${subject} already has ${existing.length} lint error(s) against the base branch; they do not fail this check.`,
       )}`,
     );
@@ -541,9 +604,10 @@ if (recordPath && !reportPath) {
     resolve(reportPath),
     baselinePath ? resolve(baselinePath) : undefined,
     pairingPath ? resolve(pairingPath) : undefined,
+    args.includes('--pinned'),
   ).catch((error) => fail(String(error)));
 } else {
   fail(
-    'pass either --record=<file> or --report=<file> [--baseline=<file>] [--pairing=<file>]',
+    'pass either --record=<file> or --report=<file> [--baseline=<file>] [--pairing=<file>] [--pinned]',
   );
 }

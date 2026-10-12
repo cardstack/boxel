@@ -1,16 +1,14 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename, join } from 'path';
+import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { User } from '@cardstack/runtime-common';
 import { query, insert, asExpressions } from '@cardstack/runtime-common';
 import {
   setupDB,
+  setupSimpleRealmServerTemplate,
+  startSimpleRealmServer,
   insertUser,
-  runTestRealmServer,
-  createVirtualNetwork,
-  fixtureDir,
-  matrixURL,
   closeServer,
 } from './helpers/index.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
@@ -19,46 +17,32 @@ import { realmSecretSeed } from './helpers/index.ts';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import type { RealmHttpServer as Server } from '../server.ts';
-import { dirSync, type DirResult } from 'tmp';
-import fsExtra from 'fs-extra';
-const { copySync, ensureDirSync } = fsExtra;
-
-const testRealmURL = new URL('http://127.0.0.1:0/test/');
 
 module(basename(import.meta.filename), function () {
   module('boxel domain availability endpoint', function (hooks) {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
     let dbAdapter: PgAdapter;
     let user: User;
     let boxelSiteDomain = 'boxel.site';
     let defaultToken: RealmServerTokenClaim;
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
+    async function stop() {
+      await closeServer(testRealmServer);
+    }
+
+    let templateDatabase = setupSimpleRealmServerTemplate(hooks);
 
     setupDB(hooks, {
+      templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
-        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(fixtureDir('simple'), testRealmDir);
-
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_5'),
-            realmURL: testRealmURL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-            domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
-          })
-        ).testRealmHttpServer;
+        testRealmServer = await startSimpleRealmServer({
+          dbAdapter,
+          publisher,
+          runner,
+          domainsForPublishedRealms: { boxelSite: boxelSiteDomain },
+        });
         request = supertest(testRealmServer);
 
         user = await insertUser(
@@ -72,9 +56,7 @@ module(basename(import.meta.filename), function () {
           sessionRoom: 'test-session',
         };
       },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
-      },
+      afterEach: stop,
     });
 
     async function makeCheckBoxelDomainRequest(

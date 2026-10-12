@@ -11,9 +11,11 @@
    underlying source of truth for brand colors. A consumer overrides any
    token by redeclaring it on :root (or a scoped element) after this file.
 
-   The full list of tokens declared here is the contract every theme must
-   satisfy. The dark-mode counterpart (a `.dark` / `[data-theme='dark']` scope)
-   is layered on separately, below.
+   The semantic tokens declared here are the contract every theme must
+   satisfy. The typography roles (--boxel-<role>-*) are only their defaults
+   outside a card: a theme sets a role through its typography field, never
+   by redeclaring the variable. The dark-mode counterpart (a `.dark` /
+   `[data-theme='dark']` scope) is layered on separately, below.
 
    Every card renders against this contract. An unthemed card has the default
    theme: the values in this file. A themed card links its own Theme, so its
@@ -29,6 +31,62 @@
 :root,
 [data-theme='light'] {
   --boxel-color-scheme: light;
+}
+
+/* Typography roles, for readers outside a card. Inside one, CardContainer
+   publishes the theme's values over these, and resolves to the same
+   defaults when the theme sets no typography. Scheme-independent, so
+   declared once on :root. */
+:root {
+  /* heading (h1) */
+  --boxel-heading-font-family: var(--font-sans);
+  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 22px */
+  --boxel-heading-font-weight: 700;
+  --boxel-heading-line-height: var(--boxel-line-height-lg);
+  --boxel-heading-letter-spacing: normal;
+
+  /* section heading (h2) */
+  --boxel-section-heading-font-family: var(--boxel-heading-font-family);
+  --boxel-section-heading-font-size: var(--boxel-font-size-md); /* 20px */
+  --boxel-section-heading-font-weight: 500;
+  --boxel-section-heading-line-height: var(--boxel-line-height-md);
+  --boxel-section-heading-letter-spacing: normal;
+
+  /* subheading (h3) */
+  --boxel-subheading-font-family: var(--boxel-heading-font-family);
+  --boxel-subheading-font-size: var(--boxel-font-size); /* 16px */
+  --boxel-subheading-font-weight: 500;
+  --boxel-subheading-line-height: var(--boxel-line-height);
+  --boxel-subheading-letter-spacing: normal;
+
+  /* body */
+  --boxel-body-font-family: var(--font-sans);
+  --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
+  --boxel-body-font-weight: 400;
+  --boxel-body-line-height: var(--boxel-line-height-sm);
+  --boxel-body-letter-spacing: var(--tracking-normal);
+
+  /* caption */
+  --boxel-caption-font-family: var(--boxel-body-font-family);
+  --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
+  --boxel-caption-font-weight: 500;
+  --boxel-caption-line-height: var(--boxel-line-height-xs);
+  --boxel-caption-letter-spacing: var(--boxel-body-letter-spacing);
+
+  /* ui label: control text, table headers, badges. Kept off the
+     `--boxel-label-*` family, which is Label's own contract. */
+  --boxel-ui-label-font-family: var(--boxel-body-font-family);
+  --boxel-ui-label-font-size: var(--boxel-font-size-xs); /* 12px */
+  --boxel-ui-label-font-weight: 500;
+  --boxel-ui-label-line-height: var(--boxel-line-height-xs);
+  --boxel-ui-label-letter-spacing: var(--boxel-body-letter-spacing);
+
+  /* eyebrow: the tracked-out kicker above a title */
+  --boxel-eyebrow-font-family: var(--boxel-ui-label-font-family);
+  --boxel-eyebrow-font-size: var(--boxel-font-size-2xs); /* 11px */
+  --boxel-eyebrow-font-weight: 600;
+  --boxel-eyebrow-line-height: var(--boxel-line-height-xs);
+  --boxel-eyebrow-letter-spacing: 0.08em;
 }
 
 /* Light — the default theme, and the explicit `data-theme="light"` scope used

@@ -70,15 +70,22 @@ module(basename(import.meta.filename), function (hooks) {
       )}`,
     );
     let rules = (doc?.type === 'doc' ? doc.doc.data.attributes?.rules : []) as {
-      grants: { operation: string; where: unknown }[];
+      grants: {
+        operation: string;
+        where: unknown;
+        anonymous: unknown;
+        actingUser: unknown;
+      }[];
     }[];
     assert.deepEqual(
       rules[0]?.grants,
       [
-        { operation: 'read', where: null },
+        { operation: 'read', where: null, anonymous: false, actingUser: null },
         {
           operation: 'appendActivity',
           where: { bxl: 'actor() in .teacherIds', snapshot: true },
+          anonymous: false,
+          actingUser: null,
         },
       ],
       "the catalog definition's fields, including its serializer-backed predicate, round-trip",

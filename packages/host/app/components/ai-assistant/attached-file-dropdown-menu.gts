@@ -33,14 +33,10 @@ import { Submodes } from '../submode-switcher';
 
 import type { FileDef } from '@cardstack/base/file-api';
 
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
-
 export default class AttachedFileDropdownMenu extends Component<{
   Args: {
     file: FileDef;
     isNewFile: boolean;
-    version?: 'diff-editor';
-    codePatchStatus?: CodePatchStatus | 'applying' | 'ready';
     isCardInstance?: boolean;
   };
 }> {
@@ -78,9 +74,6 @@ export default class AttachedFileDropdownMenu extends Component<{
   };
 
   private get menuItems(): MenuItem[] {
-    let submittedOrGenerated =
-      this.args.version === 'diff-editor' ? 'Generated' : 'Submitted';
-
     let sourceUrl = this.args.file?.sourceUrl;
     const items = [
       ...(!sourceUrl ||
@@ -95,21 +88,17 @@ export default class AttachedFileDropdownMenu extends Component<{
           ]
         : []),
       new MenuItem({
-        label: `Copy ${submittedOrGenerated} Content`,
+        label: 'Copy Submitted Content',
         action: this.copySubmittedContentTask.perform,
         icon: Copy,
         disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
       }),
       new MenuItem({
-        label: `Restore ${submittedOrGenerated} Content`,
+        label: 'Restore Submitted Content',
         action: this.toggleRestorePatchedFileModal,
         icon: Undo2,
         dangerous: true,
-        disabled:
-          !this.args.file?.sourceUrl ||
-          this.args.isNewFile ||
-          (this.args.codePatchStatus != null &&
-            this.args.codePatchStatus !== 'applied'),
+        disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
       }),
     ];
 

@@ -1535,12 +1535,14 @@ export class Film extends Component<FilmSignature> {
     return at;
   }
 
-  private scrubDown = (e: PointerEvent) => {
+  private scrubDown = (event: Event) => {
+    const e = event as PointerEvent;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     this.scrubAt = this.point(e);
   };
 
-  private scrubMove = (e: PointerEvent) => {
+  private scrubMove = (event: Event) => {
+    const e = event as PointerEvent;
     const at = this.point(e);
     if (this.scrubAt !== null) {
       this.scrubAt = at;
@@ -1577,7 +1579,8 @@ export class Film extends Component<FilmSignature> {
     return Math.min(at * this.totalSecs, Math.max(0, this.totalSecs - 2));
   }
 
-  private scrubUp = (e: PointerEvent) => {
+  private scrubUp = (event: Event) => {
+    const e = event as PointerEvent;
     const at = this.scrubAt ?? this.scrubFrom(e);
     this.scrubAt = null;
     this.hoverAt = null;
@@ -2332,39 +2335,6 @@ export class Film extends Component<FilmSignature> {
       if (this.dim === el) {
         this.dim = undefined;
       }
-    };
-  });
-
-  /**
-   * A JOIN OVERLAY LIVES EXACTLY AS LONG AS ITS ANIMATION.
-   *
-   * Every join paints the outgoing frame over the film and gets out of
-   * the way — and "gets out of the way" was left to each overlay's own
-   * last keyframe. The wipe's is a swept MASK, not an opacity, so when
-   * it finished the element stayed at opacity 1 with a mask that did
-   * not, in fact, hide it: a full-screen still of the previous shot sat
-   * on top of the picture for the rest of the chapter. The camera went
-   * on moving underneath, the captions went on changing, and the film
-   * looked frozen one section behind itself — which is exactly what it
-   * was. (It also explains a whole afternoon of "these shots barely
-   * move": some of those frames were photographs.)
-   *
-   * So the overlay retires itself the moment its animation ends, and
-   * the next cut builds a fresh one. No join can outlive its own play.
-   */
-  private retire = modifier((el: HTMLElement) => {
-    const done = () => {
-      el.style.display = 'none';
-    };
-    el.addEventListener('animationend', done);
-    el.addEventListener('animationcancel', done);
-    /* a still that never animates at all (reduced motion, a dropped
-       stylesheet) must not become a permanent lid either */
-    const failsafe = window.setTimeout(done, 1400);
-    return () => {
-      window.clearTimeout(failsafe);
-      el.removeEventListener('animationend', done);
-      el.removeEventListener('animationcancel', done);
     };
   });
 
@@ -4813,9 +4783,6 @@ export class Film extends Component<FilmSignature> {
       this.rolling = true;
     }, 0);
   };
-
-  private beginSound = () => this.begin(true);
-  private beginMute = () => this.begin(false);
 
   /** the whole film's running time, said the way a poster says it */
   get runtime(): string {

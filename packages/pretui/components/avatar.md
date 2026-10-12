@@ -10,11 +10,11 @@ A person or entity as a circle: a photo if there is one, hashed initials if ther
 Element: HTMLSpanElement
 ```
 
-**`@name` is required even when `@src` is present**, and that is the load-bearing decision: it is the `alt` text on the image, the `title`, the source of the initials fallback, and the seed for the hue. An avatar without a name is a coloured circle, and this component makes that unrepresentable.
+**`@name` is required even when `@src` is present**, and that is the load-bearing decision: it is the `alt` text on the image, the `title`, the source of the initials fallback, and the seed for the hue. An avatar without a name is a colored circle, and this component makes that unrepresentable.
 
 **Initials are the first letter of up to two whitespace-separated words**, uppercased. "Ada Lovelace" → "AL", "Cher" → "C", "Jean-Luc Picard" → "JP" (the hyphen is not a separator). Non-Latin scripts get their first two characters, which is right for CJK and wrong for scripts with combining marks — worth knowing before using this for arbitrary user input.
 
-**The hue is `statusHue(@name)`** — the same 32-bit hash used by **StatusChip**, over the name — so a given person is the same colour on every card and in every realm, with no registry. Everything else derives from that hue by `color-mix`: a 16% fill over `--card`, a 20% ink mix, a 28% hairline. Same Law 2 recipe as **Chip**, tuned lighter.
+**The hue is `statusHue(@name)`** — the same 32-bit hash used by **StatusChip**, over the name — so a given person is the same color on every card and in every realm, with no registry. Everything else derives from that hue by `color-mix`: a 16% fill over `--card`, a 28% hairline, and `--foreground` for the initials. Same Law 2 recipe as **Chip**, tuned lighter. A photo gets a neutral ring instead of the hue ring: `color-mix(--foreground 10%, transparent)`, set on the root because its `overflow: hidden` circle would clip an outline on the square `img`. The name's hue means nothing once the photo shows, and avatars inside **AvatarGroup** still get the group's `--card` ring.
 
 `@size` sets width, height **and** font size (`round(size * 0.42)` to the whole pixel), so initials scale correctly rather than staying 11px in a 48px circle. The number is the diameter in px at a 16px root, and Avatar writes it as `--pretui-avatar-size` in rem (`@size={{40}}` is `2.5rem`), so it follows the root font size. Without `@size`, nothing is written and the size is `--pretui-avatar-size` from the cascade, `1.5rem` by default, so a class, a container query or an ancestor can set it. Give it a `rem`, `px` or container-query length (`cqi`, `cqw`, …). Those keep the 0.42 type ratio. `em` and `%` do not: the font size resolves them against the parent, while the width and height resolve them against the Avatar's own font size and its containing block, so `3em` under a 16px parent is a 60px disc with 20px type.
 
@@ -32,7 +32,7 @@ Element: HTMLSpanElement
 
 **Web Awesome `wa-avatar`** takes `image`, `label`, `initials`, `loading` and `shape` (`circle | square | rounded`), with an icon slot as the third fallback tier. **Radix `Avatar`** is `Root`/`Image`/`Fallback` with a `delayMs` on the fallback so a fast-loading image does not flash initials. **React Spectrum `Avatar`** has `src`, `alt`, `size` and `isDisabled`.
 
-Where Pretui is better: **the hue is derived, not chosen.** Web Awesome and Spectrum both give you one neutral avatar colour, so a list of eight initials-only avatars is eight identical grey circles — which defeats the purpose. Deriving the hue from the name makes initials-only avatars genuinely scannable, and it costs no configuration.
+Where Pretui is better: **the hue is derived, not chosen.** Web Awesome and Spectrum both give you one neutral avatar color, so a list of eight initials-only avatars is eight identical gray circles — which defeats the purpose. Deriving the hue from the name makes initials-only avatars genuinely scannable, and it costs no configuration.
 
 Where it is behind, and these are real:
 
@@ -49,17 +49,17 @@ What is right: `alt={{@name}}` on the image is real alternative text rather than
 
 Gaps:
 
-- **The root's `aria-label={{@name}}` sits on a `<span>` with no role.** It names the initials fallback as "Ada Lovelace" rather than the letters "A L" where a screen reader honours it, but `aria-label` on a generic element is prohibited by ARIA and several readers ignore it. A `role='img'` on the initials case would make the name reliable.
+- **The initials case is `role='img'` with `aria-label={{@name}}`** on the root, so it is announced as "Ada Lovelace" rather than the letters "A L". With a photo, the root has neither and the `<img>`'s `alt` carries the name, so it is announced once.
 - **`title` is the only hover affordance**, which means no touch access, no keyboard access, and UA-controlled presentation.
-- **When `@src` _is_ present, the `alt`, the `title` and the root's `aria-label` all carry the name**, so several readers announce it more than once.
+- **`title` repeats the name** on the root in both cases; some readers announce it as well as the `alt` or `aria-label`.
 - **The avatar is decorative in many contexts and nothing says so.** An Avatar next to a name that is already visible should be `aria-hidden`; there is no `@decorative` arg, so it announces redundantly in exactly the layout where it is most common (**EntityDisplay**, **Feed** rows, comment lists).
-- **Contrast**: initials are `color-mix(--foreground 20%, hue)` on a **16%** hue fill — a lighter, lower-contrast pairing than **Chip**'s. At the default 24px the type is ~10px, weight 600, mono. That is small text at low contrast and is a likely **WCAG 1.4.3** failure for pale chart hues. Check all five per season.
+- **Contrast**: initials are `--foreground` on a **16%** hue fill over `--card`, so the text is the theme's own foreground on a surface that stays close to `--card`, rather than a hue on its own tint. At the default 24px the type is ~10px, weight 600, mono, which is small, so check the five chart hues per theme.
 
 ## Theming
 
-`--pretui-chip-hue` (set per instance from the name hash — note it reuses **Chip**'s property name, so an ancestor setting `--pretui-chip-hue` for a chip will _not_ affect an Avatar, because the inline style wins), `--pretui-avatar-size` (the diameter; inline only when `@size` is given, otherwise from the cascade with a `1.5rem` fallback), `--card` (mix base and the group ring), `--foreground` (mixed into initials), `--border` (mixed into the hairline), `--primary` (the fallback hue when the name is empty), `--font-mono`.
+`--pretui-chip-hue` (set per instance from the name hash, and read once into a private `--_avatar-hue` — note it reuses **Chip**'s property name, so an ancestor setting `--pretui-chip-hue` for a chip will _not_ affect an Avatar, because the inline style wins), `--pretui-avatar-size` (the diameter; inline only when `@size` is given, otherwise from the cascade; the `1.5rem` default is declared once, as a private `--_avatar-size` that width, height and the font size all read), `--card` (mix base and the group ring), `--foreground` (the initials, and the ring around a photo), `--border` (mixed into the hairline), `--primary` (the fallback hue when the name is empty), `--font-mono`.
 
-The 16% / 20% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenised — so a season cannot make avatars more or less saturated. A season or a card can set a default size through `--pretui-avatar-size`; `@size` wins over it. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
+The 16% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenized — so a season cannot make avatars more or less saturated. A season or a card can set a default size through `--pretui-avatar-size`; `@size` wins over it. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

@@ -83,6 +83,10 @@ const CLEAN_FIXTURES: { name: string; covers: string }[] = [
     name: 'bxl-formula',
     covers: '@cardstack/bxl import in a computeVia formula',
   },
+  {
+    name: 'motion-card',
+    covers: 'glimmer-motion and @cardstack/choreo imports, subpaths included',
+  },
 ];
 
 describe('boxel parse (against the installed CLI)', () => {
@@ -126,6 +130,27 @@ describe('boxel parse (against the installed CLI)', () => {
       expect(messages).toMatch(/not assignable to type 'number'/);
       // …and specifically NOT the environmental "nothing got checked"
       // message that masks a broken type-resolution setup as a pass.
+      expect(messages).not.toContain(NOTHING_CHECKED);
+    },
+    { timeout: 180_000 },
+  );
+});
+
+describe('boxel parse — glimmer-motion and Choreo subpaths', () => {
+  it(
+    'rejects a subpath the host does not shim',
+    async () => {
+      // Both packages publish more subpaths than the host shims. parse
+      // resolves only the shimmed ones, so a card importing another fails
+      // here instead of type-checking clean and then failing to load.
+      let result = await parseFixture('motion-unshimmed-subpath');
+      expect(result.status).toBe('failed');
+
+      let messages = result.errors.map((e) => e.message).join('\n');
+      expect(messages).toContain("Cannot find module 'glimmer-motion/scroll'");
+      expect(messages).toContain(
+        "Cannot find module '@cardstack/choreo/easings'",
+      );
       expect(messages).not.toContain(NOTHING_CHECKED);
     },
     { timeout: 180_000 },

@@ -124,7 +124,7 @@ write(
         // build output, so glimmer-motion packs first.
         'glimmer-motion': pack('glimmer-motion'),
         '@cardstack/choreo': pack('choreo'),
-        'choreo-player': pack('choreo-player'),
+        '@cardstack/choreo-player': pack('choreo-player'),
         ...dependencies,
       },
       devDependencies,

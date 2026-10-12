@@ -11,7 +11,7 @@ The library is taught in four sections:
 3. **Spatial & 3D Choreo:** cameras, live DOM projection, interaction, and gallery design.
 4. **Recorded & Film Choreo:** explicit clock ownership, Film graphs, narration, frame capture, and deployment.
 
-These are learning paths, not four npm packages. Imports retain their real names: `glimmer-motion`, `@cardstack/choreo/film`, and `choreo-player`.
+These are learning paths, not four npm packages. Imports retain their real names: `glimmer-motion`, `@cardstack/choreo/film`, and `@cardstack/choreo-player`.
 
 ## Writing a Guide
 
@@ -33,7 +33,7 @@ Motion's `type: 'tween'` and DialKit's `type: 'easing'` are translated at the ad
 
 ## Agent Support
 
-The canonical skill is `.claude/skills/choreo-create/SKILL.md`. `.agents/skills/choreo-create` points to the same directory so Codex and Claude use one maintained workflow. Invoke `$choreo-create` in Codex or `/choreo-create` in Claude Code. It routes agents through the catalog, existing motion-pattern skills, composition recipes, live tuning, and recording verification.
+The canonical skill is the monorepo's `.claude/skills/choreo-create/SKILL.md`. Invoke `/choreo-create` in Claude Code. It routes agents through the catalog, existing motion-pattern skills, composition recipes, live tuning, and recording verification. Card authors working in a realm use boxel-skills' `card-motion` skill instead.
 
 ## Local Development and Build
 

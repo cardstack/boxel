@@ -84,7 +84,7 @@ Applications that only need an external transport install `choreo-player`
 alone:
 
 ```bash
-pnpm add choreo-player
+pnpm add @cardstack/choreo-player
 ```
 
 A video project installs its own exact HyperFrames CLI as a development tool:
@@ -112,7 +112,7 @@ composition.
 Connect the complete application transaction to capture:
 
 ```ts
-import { bindHyperframes } from 'choreo-player/hyperframes';
+import { bindHyperframes } from '@cardstack/choreo-player/hyperframes';
 
 const disconnect = bindHyperframes({ renderAt });
 ```

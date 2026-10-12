@@ -28,6 +28,13 @@ export type AnonymousRateOutcome =
 // in another, and a federated search charges each realm it reaches on its own.
 export interface AnonymousRateLimiter {
   charge(charge: AnonymousRateCharge): Promise<AnonymousRateOutcome>;
+  // Whether the caller has already used up the current window, without
+  // counting anything. Asked before an invocation runs, so a caller over the
+  // limit is turned away before the realm does the work, and charged only
+  // once the invocation has served them.
+  remaining(
+    probe: Omit<AnonymousRateCharge, 'cost'>,
+  ): Promise<AnonymousRateOutcome>;
 }
 
 // Kept in the database so every realm-server process, and a restarted one,
@@ -50,17 +57,45 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
     this.#now = opts?.now ?? Date.now;
   }
 
+  #window(limit: AnonymousRateLimit) {
+    let nowSeconds = Math.floor(this.#now() / 1000);
+    let windowStart =
+      Math.floor(nowSeconds / limit.windowSeconds) * limit.windowSeconds;
+    let expiresAt = windowStart + limit.windowSeconds;
+    let retryAfterSeconds = Math.max(1, expiresAt - nowSeconds);
+    return { nowSeconds, windowStart, expiresAt, retryAfterSeconds };
+  }
+
+  async remaining({
+    realmURL,
+    clientIP,
+    limit,
+  }: Omit<AnonymousRateCharge, 'cost'>): Promise<AnonymousRateOutcome> {
+    let { windowStart, retryAfterSeconds } = this.#window(limit);
+    let rows = await query(this.#dbAdapter, [
+      `SELECT count FROM anonymous_rate_limits WHERE realm_url =`,
+      param(realmURL),
+      'AND client_ip =',
+      param(clientIP),
+      'AND window_start =',
+      param(windowStart),
+      'AND window_seconds =',
+      param(limit.windowSeconds),
+    ] as Expression);
+    let count = rows.length === 0 ? 0 : Number(rows[0].count);
+    return count < limit.requests
+      ? { admitted: true, count }
+      : { admitted: false, retryAfterSeconds };
+  }
+
   async charge({
     realmURL,
     clientIP,
     limit,
     cost,
   }: AnonymousRateCharge): Promise<AnonymousRateOutcome> {
-    let nowSeconds = Math.floor(this.#now() / 1000);
-    let windowStart =
-      Math.floor(nowSeconds / limit.windowSeconds) * limit.windowSeconds;
-    let expiresAt = windowStart + limit.windowSeconds;
-    let retryAfterSeconds = Math.max(1, expiresAt - nowSeconds);
+    let { nowSeconds, windowStart, expiresAt, retryAfterSeconds } =
+      this.#window(limit);
 
     if (!Number.isInteger(cost) || cost < 1) {
       throw new Error(

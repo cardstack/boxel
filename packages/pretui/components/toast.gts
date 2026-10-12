@@ -16,7 +16,9 @@ export interface ToastSignature {
 
 export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
   <div class='pretui-toast' role='status' data-test-pretui-toast ...attributes>
-    {{#if (has-block 'icon')}}{{yield to='icon'}}{{/if}}
+    {{#if (has-block 'icon')}}<span class='pretui-toast-icon'>{{yield
+          to='icon'
+        }}</span>{{/if}}
     <div class='pretui-toast-body'>
       <div class='pretui-toast-title'>{{@title}}</div>
       {{#if @message}}<div class='pretui-toast-msg'>{{@message}}</div>
@@ -24,43 +26,58 @@ export const Toast: TemplateOnlyComponent<ToastSignature> = <template>
           class='pretui-toast-msg'
         >{{@description}}</div>{{/if}}
     </div>
-    {{#if (has-block 'action')}}<div class='pretui-toast-action'>{{yield to='action'}}</div>{{/if}}
+    {{#if (has-block 'action')}}<div class='pretui-toast-action'>{{yield
+          to='action'
+        }}</div>{{/if}}
   </div>
   <style scoped>
     @layer PretComponent {
       .pretui-toast {
+        --pretui-toast-max-w: 22.5rem;
+
         display: flex;
         align-items: center;
-        gap: 9px;
-        /* kit stacking scale (pretui-css.gts): a toast reports something that
-           just happened and must stay readable over whatever is open, so it is
-           the one tier deliberately above `dialog`. `relative` is what makes
-           the z-index apply — the toast is otherwise in flow and its consumer
-           owns where it sits. */
-        position: relative;
-        z-index: var(--pretui-z-toast, 100);
-        background: var(--popover);
-        border-radius: 10px;
-        box-shadow: var(--pretui-shadow-raised, 0 0 0 1px var(--border), 0 2px 10px rgb(0 0 0 / 0.08));
-        padding: 7px 10px;
-        font-size: var(--text-ui-md, 12.5px);
+        gap: var(--boxel-sp-xs);
+        /* no stacking tier of its own: the toast is in flow, so whatever
+           positions it (Toaster's fixed region, or the host's) owns its
+           z-index; one here would paint an in-flow toast over sticky chrome */
+        background-color: var(--popover);
+        color: var(--popover-foreground);
+        border-radius: var(--boxel-border-radius);
+        box-shadow:
+          0 0 0 1px var(--border),
+          var(--shadow-md);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size-xs);
         width: max-content;
-        max-width: 360px;
+        /* never wider than its container, so a narrow column wraps it */
+        max-width: min(var(--pretui-toast-max-w), 100%);
+      }
+      /* the icon keeps its size when the message wraps */
+      .pretui-toast-icon {
+        display: inline-flex;
+        flex: none;
       }
       .pretui-toast-body {
         display: grid;
-        gap: 1px;
+        gap: var(--boxel-sp-6xs);
         min-width: 0;
       }
       .pretui-toast-title {
         font-weight: 600;
       }
+      /* a softer ink than the title: --muted-foreground isn't a guaranteed
+         pair on --popover (4.2:1 in dark), a mix of the surface's own ink is */
       .pretui-toast-msg {
-        color: var(--muted-foreground);
-        font-size: var(--text-ui-sm, 11.5px);
+        color: color-mix(
+          in oklch,
+          var(--popover-foreground) 75%,
+          var(--popover)
+        );
+        line-height: 1.4;
       }
       .pretui-toast-action {
-        margin-left: 8px;
+        margin-inline-start: var(--boxel-sp-xs);
         flex: none;
       }
     }

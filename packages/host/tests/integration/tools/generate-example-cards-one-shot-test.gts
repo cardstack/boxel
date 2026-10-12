@@ -12,7 +12,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -20,7 +19,6 @@ module(
   'Integration | Command | generate-example-cards (one-shot)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

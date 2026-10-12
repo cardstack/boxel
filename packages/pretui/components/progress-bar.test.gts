@@ -288,7 +288,7 @@ module('Pretui | components/progress-bar', function (hooks) {
       assert.strictEqual(el.getAttribute('aria-valuemax'), '0', `${sel}: the range is empty`);
       let fill = el.querySelector('.pretui-progress-fill') as HTMLElement;
       assert.strictEqual(px(fill, 'width'), '0%', `${sel}: the fill is empty, neither full nor NaN%`);
-      assert.strictEqual(px(fill, 'min-width'), '0px', `${sel}: an empty fill has no minimum`);
+      assert.strictEqual(px(fill, 'min-width'), '0', `${sel}: an empty fill has no minimum`);
       assert.strictEqual(
         el.querySelector('.pretui-progress-count')?.textContent?.trim(),
         '0%',
@@ -346,7 +346,7 @@ module('Pretui | components/progress-bar', function (hooks) {
 
   test('gives a zero-width fill no minimum, so an empty bar reads as empty', async function (assert) {
     await render(<template><ProgressBar @value={{0}} /></template>);
-    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0px');
+    assert.strictEqual(px(q('.pretui-progress-fill'), 'min-width'), '0');
   });
 
   test('switches to steps for a small discrete total with a count', async function (assert) {

@@ -101,7 +101,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-radius: var(--radius, var(--_boxel-radius, 0.625rem));
       --_boxel-ff: var(--font-sans, var(--boxel-font-family));
 
-      /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
+      /*** code below this line mirrors the scales in "variables.css" and the typography roles in "theme.css". values will be recalculated based on theming variable values ***/
       /* font-sizes */
       --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25);
       --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);

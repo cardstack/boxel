@@ -62,12 +62,10 @@ export default class ResponseState {
   ) {
     if (toolCallsSnapshot?.length) {
       // In lengthy conversations, the LLM will sometimes call checkCorrectness
-      // tool on its own, even when we explicitly disallow this in our prompts.
-      // The LLM will usually place this tool call after code patches are offered
-      // but the user hasn't accepted them yet. When this happens, ignore these
-      // tool calls. We only allow them when we construct them ourselves (in the
-      // ai bot's code), at the point where we know the user has accepted the
-      // card/code patches.
+      // tool on its own, even when we explicitly disallow this in our prompts,
+      // often before its own edits have been applied. Ignore these tool calls.
+      // We only allow them when we construct them ourselves (in the ai bot's
+      // code), at the point where we know the edits have results.
       toolCallsSnapshot = toolCallsSnapshot.filter((call) => {
         let name = (call as any)?.function?.name;
         if (!name) {

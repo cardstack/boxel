@@ -26,6 +26,8 @@ Names are kebab-case, and every component has exactly one module, named after it
 
 Spec instances for these components live in the catalog realm, not here.
 
+Git tracks some files the realm leaves out: `.boxelignore` lists them (the `*.test.gts` files and `scripts/`). The indexer skips what it lists, and the deploy's rsync excludes the same list, so a new kind of non-card file added to the package belongs there. Keep its lines to simple patterns with no `!`, since rsync reads the file as filter rules and a `!` line clears the whole list.
+
 ## Cascade layers
 
 Every component's `<style scoped>` content sits in one of two layers, so a caller's unlayered CSS overrides any component without a more specific selector or `:deep()`:
@@ -35,7 +37,7 @@ Every component's `<style scoped>` content sits in one of two layers, so a calle
 
 Rules that restyle a boxel-ui component whose own CSS is unlayered stay outside the layer, since unlayered CSS beats any layer. Select is the one case: BoxelSelect's trigger and option styles are unlayered.
 
-The `Pret` prefix matters because layer names are document-global. Usage pages, example galleries, `pretui-component.gts` and `pretui-note.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
+The `Pret` prefix matters because layer names are document-global. Usage pages and their shell (`freestyle-usage`, the `usage-*` argument rows and `internal/freestyle`), example galleries, `pretui-component.gts` and `pretui-note.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
 
 ## Development
 

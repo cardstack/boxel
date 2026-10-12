@@ -1,3 +1,13 @@
+import {
+  CardDef,
+  FieldDef,
+  contains,
+  containsMany,
+  field,
+  getFields,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { expression, fx, jq } from '@cardstack/bxl';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -11,17 +21,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import {
-  CardDef,
-  FieldDef,
-  StringField,
-  NumberField,
-  contains,
-  containsMany,
-  field,
-  getFields,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import {
   bxlTrackingPol100Renewal,
   bxlTrackingRealmContents,
@@ -43,7 +42,6 @@ import { setupRenderingTest } from '../helpers/setup';
 // each assertion touches only its own dimension.
 module('Integration | bxl expressions on real cards', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let realm: Realm;
 

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "crossing",
+      "title": "Crossing",
+      "group": "Choreo",
+      "lede": "Two skins cross inside one flying box. The video never stops.",
+      "apis": ["c.Crossing", "pack", "createArming", "c.Move"],
+      "sample": "// A CROSSING is the canned scene swap: leaves fade, the paired flight\n// carries, arrivals land near the settle. It is written in nothing but\n// the public step vocabulary — no privileged access, no snapshot.\n<c.Parallel>\n  {{! counterparts: same id, different content. Two skins, one box. }}\n  <c.Crossing\n    @duration={{tt.move}} @ease={{EASE}}\n    @leave={{tt.leave}} @arrive={{tt.arrive}} @overlap={{0.18}} />\n\n  {{! kept identities (the plate, the hairline) tween their REAL box —\n      crop-cover would scale Tide's wide plate into Violet's square. }}\n  <c.Move @of={{c.moved}} @duration={{tt.move}} @ease={{EASE}} />\n</c.Parallel>\n\n// The innards are NOT participants. A <video>, an auto-scrolling pane and\n// a spinning mark reflow with the box and keep running mid-flight — the\n// exact case a View Transition snapshot freezes into a still.\n<div class='hero' {{motion id='hero' role='hero'}}>\n  <video src={{CLIP}} muted loop autoplay playsinline></video>\n  <div class='pane' {{liveScroll}}>…</div>\n  {{! an inset caption INSIDE the plate is itself a counterpart, so a skin\n      crosses while its parent is still flying }}\n  <em {{motion id='inset' role='inset' pack='content'}}>{{s.inset}}</em>\n</div>\n\n// Drop-shadows do not tween. Tide's tight teal, Ember's huge warm and\n// Violet's small black are three different LIGHTS: interpolating the\n// box-shadow string reparses every frame and drags the colour through\n// mud. Each rest shadow is its own caster; only opacity crossfades.\n<span class='cast {{s.tone}}' data-slide={{s.n}}></span>\n\n// A cut can land at any phase — including mid-flight. data-phase='crossing'\n// stills the intra-slide CSS loops for the span of the run, because those\n// are transforms on the motion nodes themselves and would fight the Move.",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-crossings",
+        "concept": "The interior can stay live during a transformation",
+        "why": "Crossing blends two skins inside a moving box while unregistered video, scrolling content and animated marks continue to run. This tests continuity that a still image cannot demonstrate.",
+        "experiment": "Watch the moving mark and scroll the pane while the container crosses. Compare the internal motion before, during and after the transition.",
+        "pitfall": "View-transition snapshots freeze live descendants for the snapshot's duration.",
+        "combine": "Combine with inline editing when a read view changes into an interactive form without losing continuity."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

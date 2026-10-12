@@ -37,6 +37,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { holdIndexingLane } from './helpers/indexing.ts';
 import { policyWarningsDuring } from './helpers/policy-log.ts';
 
 // The worked example's topology. The Education realm holds the cards a policy
@@ -1788,35 +1789,12 @@ module(basename(import.meta.filename), function (hooks) {
       let before = (await answer(question)).search!.index;
       assert.deepEqual(before, { pending: 0 }, 'the index has caught up');
 
-      // Work that holds the realm's index lane and never completes: a job a
-      // worker has claimed and not finished, which nothing runs. Every pass in
-      // the lane queues behind it.
-      let [{ id: jobId }] = (await db.execute(
-        `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout, initiated_by)
-         VALUES ('incremental-index', $1, '{}'::jsonb, 'unfulfilled', 7200, $2)
-         RETURNING id`,
-        {
-          bind: [
-            `indexing:${EDUCATION}`,
-            JSON.stringify(['@elsewhere:localhost']),
-          ],
-        },
-      )) as unknown as { id: string }[];
-      let unwedge = async () => {
-        await db.execute('DELETE FROM job_reservations WHERE job_id = $1', {
-          bind: [jobId],
-        });
-        await db.execute('DELETE FROM jobs WHERE id = $1', { bind: [jobId] });
-        // Removing a job wakes no worker, so the queue is told there is work,
-        // as publishing one tells it.
-        await db.execute('NOTIFY jobs');
-      };
+      // Every index pass for the realm queues behind work that never
+      // completes, until it is let go.
+      let unwedge = await holdIndexingLane(db, EDUCATION, {
+        workerId: 'explain-test-worker',
+      });
       try {
-        await db.execute(
-          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
-           VALUES ($1, 'explain-test-worker', NOW() + INTERVAL '7200 seconds')`,
-          { bind: [jobId] },
-        );
         // The teacher joins room 205. The bytes are stored now, and the pass
         // that indexes them waits behind the held lane.
         await education.write(

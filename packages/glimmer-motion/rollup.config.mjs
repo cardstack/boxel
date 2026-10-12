@@ -19,7 +19,7 @@ const addon = new Addon({
 
 // framer-motion is MIT-licensed: the chunk carrying its inlined modules
 // carries its copyright and permission notice, as a legal comment that
-// minifiers and bundlers (the realm bundle's esbuild) keep.
+// minifiers and bundlers keep.
 const framerMotionNotice = () => {
   const { version, repository } = JSON.parse(
     readFileSync(join(framerMotionDir, 'package.json'), 'utf8'),

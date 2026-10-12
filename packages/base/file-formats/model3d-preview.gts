@@ -28,6 +28,7 @@ import CubeIcon from '@cardstack/boxel-icons/cube';
 import { isLiveRender } from '../render-context';
 
 import type { FilePreviewSignature } from './file-preview-stage';
+import { fileContentRevision } from './file-revision';
 
 // Static preview behind the live viewer and in fitted cells: a plain cube icon.
 // A shaded raster thumbnail (CS-12401) will later flow through the shell's own
@@ -77,8 +78,13 @@ function disposeObject(root: any) {
   });
 }
 
+// Reruns when the model URL or the file's revision changes: a write to the
+// file tears the viewer down and boots it again from freshly fetched bytes.
 const renderModel = modifier(
-  (element: HTMLElement, [component, url]: [Model3DPreview, string]) => {
+  (
+    element: HTMLElement,
+    [component, url, _revision]: [Model3DPreview, string, string],
+  ) => {
     if (!url || !isLiveRender(element)) {
       return;
     }
@@ -361,6 +367,9 @@ export class Model3DPreview extends GlimmerComponent<FilePreviewSignature> {
   get url() {
     return String(this.args.model?.resourceUrl ?? this.args.model?.url ?? '');
   }
+  get revision() {
+    return fileContentRevision(this.args.model);
+  }
   get name() {
     return String(this.args.model?.name ?? 'model');
   }
@@ -408,7 +417,10 @@ export class Model3DPreview extends GlimmerComponent<FilePreviewSignature> {
     {{else}}
       <div class='model-viewer' data-test-model-preview={{@format}}>
         {{#if this.url}}
-          <div class='model-viewer__host' {{renderModel this this.url}}></div>
+          <div
+            class='model-viewer__host'
+            {{renderModel this this.url this.revision}}
+          ></div>
         {{/if}}
         {{#unless this.isReady}}
           <div class='model-viewer__placeholder'>

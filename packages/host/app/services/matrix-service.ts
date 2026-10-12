@@ -2253,7 +2253,7 @@ export default class MatrixService extends Service {
           // switch, or schema edit, and tool definitions render ahead of
           // all message history, so each change re-bills the whole
           // conversation at full input price. Skills route card edits
-          // through patch-fields and SEARCH/REPLACE patches; the executor
+          // through patch-fields and run-realm-code; the executor
           // still honors patchCardInstance calls (old rooms carry them in
           // history), and the programmatic SendAiAssistantMessage tool
           // still injects it for callers that require a forced patch call.

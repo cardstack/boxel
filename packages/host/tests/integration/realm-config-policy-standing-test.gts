@@ -30,7 +30,6 @@ import {
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
@@ -80,7 +79,6 @@ type RealmConfig = CardDef & { policy?: string };
 module('Integration | realm config policy standing', function (hooks) {
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 

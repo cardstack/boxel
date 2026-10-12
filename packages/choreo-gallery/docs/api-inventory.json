@@ -2299,7 +2299,7 @@
       "declaration": "packages/choreo/src/test-support/index.ts"
     },
     {
-      "entrypoint": "choreo-player",
+      "entrypoint": "@cardstack/choreo-player",
       "symbol": "ChoreoRun",
       "source": "packages/choreo-player/src/index.ts",
       "kind": "type",
@@ -2307,7 +2307,7 @@
       "declaration": "packages/choreo-player/src/index.ts"
     },
     {
-      "entrypoint": "choreo-player",
+      "entrypoint": "@cardstack/choreo-player",
       "symbol": "ChoreoPlayer",
       "source": "packages/choreo-player/src/index.ts",
       "kind": "type",
@@ -2315,7 +2315,7 @@
       "declaration": "packages/choreo-player/src/index.ts"
     },
     {
-      "entrypoint": "choreo-player",
+      "entrypoint": "@cardstack/choreo-player",
       "symbol": "ChoreoPlayerUpdateOptions",
       "source": "packages/choreo-player/src/index.ts",
       "kind": "type",
@@ -2323,7 +2323,7 @@
       "declaration": "packages/choreo-player/src/index.ts"
     },
     {
-      "entrypoint": "choreo-player",
+      "entrypoint": "@cardstack/choreo-player",
       "symbol": "ChoreoPlayerOptions",
       "source": "packages/choreo-player/src/index.ts",
       "kind": "type",
@@ -2331,7 +2331,7 @@
       "declaration": "packages/choreo-player/src/index.ts"
     },
     {
-      "entrypoint": "choreo-player",
+      "entrypoint": "@cardstack/choreo-player",
       "symbol": "createChoreoPlayer",
       "source": "packages/choreo-player/src/index.ts",
       "kind": "value",

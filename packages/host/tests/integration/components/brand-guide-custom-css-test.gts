@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -14,7 +13,6 @@ import type * as StructuredThemeVarsModule from '@cardstack/base/structured-them
 
 module('Integration | brand-guide | custom-css section', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let BrandGuide: typeof BrandGuideModule.default;

@@ -473,6 +473,12 @@ export default class StoreService extends Service implements StoreInterface {
   // we can't compare against a stored Promise.
   private searchCacheGeneration = 0;
   private store: CardStore;
+  // Advances on every reset of card identity: when the identity map is
+  // replaced (`resetCache`, `resetState`) and when it is cleared in place for
+  // a code change. An operation that captured an epoch and finds it moved is
+  // holding instances from a superseded identity, and the epochs it logs say
+  // which identity it started in and which one it finished against.
+  #identityEpoch = 0;
   protected isRenderStore = false;
 
   // This is used for tests
@@ -618,7 +624,9 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
-    storeLogger.debug('resetting store cache');
+    storeLogger.info(
+      `resetting store cache; leaving identity epoch #${this.#identityEpoch}`,
+    );
     if (!opts?.preserveReferences) {
       this.referenceCount = new Map();
     }
@@ -640,6 +648,11 @@ export default class StoreService extends Service implements StoreInterface {
     this.store = this.createCardStore();
   }
 
+  #resetIdentityInPlace() {
+    this.#identityEpoch++;
+    this.store.reset();
+  }
+
   refreshReferencesForCodeChange(
     reason?: string,
     opts?: { triggerModule?: string; realm?: string },
@@ -648,7 +661,7 @@ export default class StoreService extends Service implements StoreInterface {
     storeLogger.debug(`resetting store for code change${reasonSuffix}`);
     let telemetry = this.#clientTelemetry();
     let start = telemetry?.isEnabled ? performance.now() : undefined;
-    this.store.reset();
+    this.#resetIdentityInPlace();
     let refetch = this.reestablishReferences.perform();
     if (telemetry?.isEnabled && start !== undefined) {
       let triggerModules = opts?.triggerModule ? [opts.triggerModule] : [];
@@ -1314,6 +1327,7 @@ export default class StoreService extends Service implements StoreInterface {
         (instance as any)[field] = value;
       }
     }
+    let api = await this.cardService.getAPI();
     let doc = await this.cardService.serializeCard(instance, {
       omitQueryFields: true,
     });
@@ -1323,6 +1337,14 @@ export default class StoreService extends Service implements StoreInterface {
         patch.attributes,
         (_dest, src) => (Array.isArray(src) ? src : undefined),
       );
+      if (doc.data.attributes) {
+        replacePrimitiveValues(
+          api,
+          doc.data.attributes,
+          patch.attributes,
+          instance,
+        );
+      }
       clearReplacedArrayFieldMeta(doc.data.meta, patch.attributes);
     }
     if (patch.relationships) {
@@ -1337,7 +1359,6 @@ export default class StoreService extends Service implements StoreInterface {
     if (patch.meta) {
       doc.data.meta = merge(doc.data.meta, patch.meta);
     }
-    let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.store);
     let shouldPersist = !opts?.doNotPersist;
     let shouldAwaitPersist = shouldPersist && !opts?.doNotWaitForPersist;
@@ -2378,6 +2399,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private createCardStore(): CardStore {
+    this.#identityEpoch++;
     return new CardStore(
       this.referenceCount,
       this.network.authedFetch,
@@ -2905,9 +2927,19 @@ export default class StoreService extends Service implements StoreInterface {
     return undefined;
   }
 
+  // Re-reads a card the store holds as an error or an awaiting-index
+  // placeholder. A realm event is what usually starts it, so the test waiter is
+  // what lets `settled()` after a realm write cover the card coming back. The
+  // token is held in the task body itself rather than through
+  // `withTestWaiters`, so cancelling the task stops the re-read and still
+  // releases the token.
   private loadInstanceTask = task(
     async (idOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(idOrDoc, this.network.virtualNetwork);
+      let token = waiter.beginAsync(
+        undefined,
+        `loadInstance ${url ?? 'new card document'}`,
+      );
       let reloadTracker = this.startTrackingCardLoad(url);
       try {
         let oldInstance = url ? this.store.getCard(url) : undefined;
@@ -2920,8 +2952,12 @@ export default class StoreService extends Service implements StoreInterface {
         }
         this.setIdentityContext(instanceOrError);
         await this.startAutoSaving(instanceOrError);
+        if (isTesting()) {
+          await this.cardService.cardsSettled();
+        }
       } finally {
         this.finishTrackingCardLoad(url, reloadTracker);
+        waiter.endAsync(token);
       }
     },
   );
@@ -3119,7 +3155,7 @@ export default class StoreService extends Service implements StoreInterface {
     // records against the new loader, so the invalidation still to come for
     // that write finds them.
     this.loaderService.resetLoader();
-    this.store.reset();
+    this.#resetIdentityInPlace();
     let cardsReloaded: number | undefined;
     try {
       cardsReloaded = await this.reestablishReferences.perform();
@@ -3148,10 +3184,23 @@ export default class StoreService extends Service implements StoreInterface {
       let reloadTracker = this.startTrackingCardLoad(instance.id);
       let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
       let isDelete = false;
+      // The reload belongs to the card identity the instance had when it
+      // started. A reset while the read is in flight supersedes it — an
+      // in-browser index pass replaces the identity map on its first visit,
+      // and a code change clears it in place — and what follows the reset may
+      // already hold its own instance for this id under a different local id.
+      // Writing this one in would give one remote id two local ids, so a
+      // superseded reload stops short of touching the current identity.
+      let identityMap = this.store;
+      let identityEpoch = this.#identityEpoch;
 
       try {
         try {
-          maybeReloadedInstance = await this.reloadInstance(instance);
+          maybeReloadedInstance = await this.reloadInstance(
+            instance,
+            identityMap,
+            identityEpoch,
+          );
         } catch (err: any) {
           let cardError = processCardError(instance.id, err).errors[0];
           if (cardError?.awaitingIndex) {
@@ -3170,6 +3219,12 @@ export default class StoreService extends Service implements StoreInterface {
           } else {
             maybeReloadedInstance = cardError;
           }
+        }
+        if (this.#identityEpoch !== identityEpoch) {
+          storeLogger.info(
+            `dropping reload of ${instance.id}: it started in identity epoch #${identityEpoch}, which was superseded by #${this.#identityEpoch} while the reload was in flight`,
+          );
+          return;
         }
         // Detach the original instance's autosave subscription when it's been
         // superseded: either the reload errored, or the card's type changed and
@@ -4537,7 +4592,14 @@ export default class StoreService extends Service implements StoreInterface {
   // Returns the refreshed instance. Usually this is the same object as the
   // one passed in (updated in place), but when the card's type changed it is a
   // freshly-built instance of the new type — see below.
-  private async reloadInstance(instance: CardDef): Promise<CardDef> {
+  // Resolves to undefined when a reset supersedes `identityEpoch` before the
+  // reload writes anything: the instance no longer belongs to the store's
+  // current identity, so it is left as it was.
+  private async reloadInstance(
+    instance: CardDef,
+    identityMap: CardStore,
+    identityEpoch: number,
+  ): Promise<CardDef | undefined> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     let waiterLabel = `reloadInstance ${instance.id}`;
@@ -4591,6 +4653,10 @@ export default class StoreService extends Service implements StoreInterface {
         throw err;
       }
 
+      if (this.#identityEpoch !== identityEpoch) {
+        return undefined;
+      }
+
       let currentDef = Reflect.getPrototypeOf(instance)?.constructor as
         | typeof BaseDef
         | undefined;
@@ -4610,7 +4676,7 @@ export default class StoreService extends Service implements StoreInterface {
         await api.updateFromSerialized<typeof CardDef>(
           rebuilt,
           incomingDoc,
-          this.store,
+          identityMap,
         );
         return rebuilt;
       }
@@ -4622,7 +4688,7 @@ export default class StoreService extends Service implements StoreInterface {
       await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
-        this.store,
+        identityMap,
         undefined,
         (fieldName) => {
           let keep =
@@ -4637,6 +4703,12 @@ export default class StoreService extends Service implements StoreInterface {
           return keep;
         },
       );
+      if (this.#identityEpoch !== identityEpoch) {
+        // A reset landed while this deserialized. Saving now would resolve the
+        // card through the current identity and write that instance's state,
+        // not the merge this reload just made.
+        return undefined;
+      }
       if (kept.size > 0) {
         realmEventsLogger.debug(
           `reload of ${instance.id} keeps local edits to ${[...kept].join(', ')}`,
@@ -4819,6 +4891,47 @@ function notFoundError(
     title,
     message: `The ${noun} ${url} does not exist`,
   };
+}
+
+// A primitive field's value is one value, however it is shaped, so where a
+// patch gives one an object, that object replaces the instance's value rather
+// than merging into it — a key the patch leaves out is a key the field no
+// longer has. Compound `contains` fields still merge key by key; this walks
+// into them by the class of the value the instance holds, which is the
+// polymorphic type where there is one. The realm applies the same rule when it
+// merges a patch onto the stored file.
+function replacePrimitiveValues(
+  api: typeof CardAPI,
+  merged: Record<string, unknown>,
+  patch: Record<string, unknown>,
+  owner: BaseDef,
+): void {
+  let fields: Record<string, { card: typeof BaseDef; fieldType: string }> =
+    api.getFields(owner, { includeComputeds: true });
+  for (let [name, source] of Object.entries(patch)) {
+    if (!isPlainRecord(source) || !Object.hasOwn(fields, name)) {
+      continue;
+    }
+    let field = fields[name];
+    if (api.primitive in field.card) {
+      merged[name] = cloneDeep(source);
+      continue;
+    }
+    let target = merged[name];
+    let value = (owner as unknown as Record<string, unknown>)[name];
+    if (
+      field.fieldType !== 'contains' ||
+      !isPlainRecord(target) ||
+      !(value instanceof api.BaseDef)
+    ) {
+      continue;
+    }
+    replacePrimitiveValues(api, target, source, value);
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function needsServerStateMerge(

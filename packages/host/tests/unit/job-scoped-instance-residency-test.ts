@@ -1,3 +1,5 @@
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -5,13 +7,6 @@ import CardStore, {
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-card-store';
 
-import {
-  CardDef,
-  contains,
-  field,
-  StringField,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
 
 // A prerender tab serves index visits from many jobs and holds the instances
@@ -28,7 +23,6 @@ import { setupRenderingTest } from '../helpers/setup';
 // so the within-a-job sharing that makes a dense render affordable survives.
 module('Unit | job-scoped instance residency', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     (globalThis as any).__boxelRenderContext = true;
@@ -40,8 +34,6 @@ module('Unit | job-scoped instance residency', function (hooks) {
     delete (globalThis as any).__boxelJobId;
   });
 
-  // Built per test: the base-realm definitions these extend are only loaded
-  // once `setupBaseRealm` has run.
   function makePerson(name: string) {
     class Person extends CardDef {
       @field name = contains(StringField);

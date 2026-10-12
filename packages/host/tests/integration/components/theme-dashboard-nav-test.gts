@@ -11,7 +11,6 @@ import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard, renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -22,7 +21,6 @@ import type * as StyleReferenceModule from '@cardstack/base/style-reference';
 
 module('Integration | theme-dashboard | nav', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   // scrolling to a section replaceState's its hash onto the test page's URL
   hooks.afterEach(function () {

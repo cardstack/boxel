@@ -12,6 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { applyFileFont } from './file-resources';
+import { fileContentRevision, urlAtRevision } from './file-revision';
 import type { FilePreviewSignature } from './file-preview-stage';
 
 // A type-designer's pangram: every letter, and a shape mix that shows a face's
@@ -73,18 +74,29 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
     ];
   }
 
-  // The URL the FontFace loads from. `resourceUrl` is the served file; the auth
-  // service worker injects the realm token on the native request.
+  // The served file's own URL; the auth service worker injects the realm token
+  // on the FontFace's native request.
   get resourceUrl(): string {
     return this.args.model?.resourceUrl ?? this.args.model?.url ?? '';
   }
 
-  // A face family name unique to this file, so two specimens on one page each
-  // load their own face instead of colliding in the document's FontFace
-  // registry. The content hash is stable across renders of the same bytes.
+  // The URL the face loads from, carrying the file's content revision so a
+  // write reaches the browser as a new font resource.
+  get faceUrl(): string {
+    return urlAtRevision(
+      this.resourceUrl,
+      fileContentRevision(this.args.model),
+    );
+  }
+
+  // A face family name unique to this file's content, so two specimens on one
+  // page each load their own face instead of colliding in the document's
+  // FontFace registry. The content revision is stable across renders of the
+  // same bytes and changes with every write, which reruns `applyFileFont` and
+  // loads the rewritten face.
   get specimenFamily(): string {
     let token =
-      this.args.model?.contentHash ||
+      fileContentRevision(this.args.model) ||
       this.args.model?.id ||
       this.resourceUrl ||
       this.displayName;
@@ -95,7 +107,7 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
     {{#if (eq @format 'fitted')}}
       <div
         class='specimen specimen--fitted'
-        {{applyFileFont null this.resourceUrl this.specimenFamily}}
+        {{applyFileFont null this.faceUrl this.specimenFamily}}
         data-test-font-specimen='fitted'
       >
         <span class='fitted-glyphs'>{{this.fittedGlyphs}}</span>
@@ -104,7 +116,7 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
     {{else if (eq @format 'embedded')}}
       <div
         class='specimen specimen--embedded'
-        {{applyFileFont null this.resourceUrl this.specimenFamily}}
+        {{applyFileFont null this.faceUrl this.specimenFamily}}
         data-test-font-specimen='embedded'
       >
         <div
@@ -120,7 +132,7 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
     {{else}}
       <div
         class='specimen specimen--isolated'
-        {{applyFileFont null this.resourceUrl this.specimenFamily}}
+        {{applyFileFont null this.faceUrl this.specimenFamily}}
         data-test-font-specimen='isolated'
       >
         <header class='specimen-head'>

@@ -1,8 +1,8 @@
+import { field, contains, CardDef, Component } from '@cardstack/base/card-api';
 import { getService } from '@universal-ember/test-support';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import { field, contains, CardDef, Component } from './base-realm';
 import { renderCard } from './render-component';
 
 export type FieldFormat = 'embedded' | 'atom' | 'edit' | 'fitted';

@@ -1,6 +1,37 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { fillIn } from '@ember/test-helpers';
 
+import Base64ImageField from '@cardstack/base/base64-image';
+import BigIntegerField from '@cardstack/base/big-integer';
+import {
+  contains,
+  CardDef,
+  Component,
+  createFromSerialized,
+  serializeCard,
+  field,
+  isSaved,
+  subscribeToChanges,
+  unsubscribeFromChanges,
+  flushLogs,
+  updateFromSerialized,
+  linksTo,
+  getRelationshipMembershipState,
+  FieldDef,
+  containsMany,
+  linksToMany,
+  getQueryableValue,
+  getFields,
+  Theme,
+  CardInfoField,
+} from '@cardstack/base/card-api';
+import CodeRefField from '@cardstack/base/code-ref';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import EthereumAddressField from '@cardstack/base/ethereum-address';
+import NumberField from '@cardstack/base/number';
+import { RichMarkdownField } from '@cardstack/base/rich-markdown';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
 import parseISO from 'date-fns/parseISO';
@@ -42,46 +73,11 @@ import {
   cardInfo,
   cardInfoLinks,
 } from '../../helpers';
-
-import {
-  setupBaseRealm,
-  contains,
-  CardDef,
-  Component,
-  DateField,
-  DateTimeField,
-  createFromSerialized,
-  serializeCard,
-  StringField,
-  field,
-  NumberField,
-  isSaved,
-  subscribeToChanges,
-  unsubscribeFromChanges,
-  flushLogs,
-  Base64ImageField,
-  updateFromSerialized,
-  CodeRefField,
-  linksTo,
-  getRelationshipMembershipState,
-  FieldDef,
-  containsMany,
-  linksToMany,
-  BigIntegerField,
-  getQueryableValue,
-  EthereumAddressField,
-  RichMarkdownField,
-  getFields,
-  Theme,
-  CardInfoField,
-} from '../../helpers/base-realm';
-
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { Captain } from '../../../../test-realm-cards/contents/captain';
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 
@@ -99,7 +95,6 @@ function assertSingularRelationship(
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   hooks.beforeEach(async function () {
     let permissions: Permissions = {
       canWrite: true,
@@ -624,7 +619,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-    )) as CardDefType;
+    )) as CardDef;
 
     assert.strictEqual(
       savedCard.id,
@@ -666,7 +661,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-    )) as CardDefType;
+    )) as CardDef;
 
     assert.strictEqual(
       instance[localId],
@@ -803,7 +798,7 @@ module('Integration | serialization', function (hooks) {
       }),
     });
 
-    let normalSerialize = serializeCard(mango);
+    let normalSerialize = serializeCard(mango, {});
     let serializedWithoutOmittedField = serializeCard(mango, {
       omitFields: [Base64ImageField],
     });
@@ -6277,7 +6272,7 @@ module('Integration | serialization', function (hooks) {
       await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
       await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
 
-      let serialized = serializeCard(hassan);
+      let serialized = serializeCard(hassan, {});
       assert.deepEqual(serialized, {
         data: {
           lid: hassan[localId],
@@ -6376,7 +6371,7 @@ module('Integration | serialization', function (hooks) {
         pets: [mango, vanGogh],
       });
 
-      let serialized = serializeCard(hassan);
+      let serialized = serializeCard(hassan, {});
       assert.deepEqual(serialized, {
         data: {
           lid: hassan[localId],
@@ -6905,7 +6900,7 @@ module('Integration | serialization', function (hooks) {
       );
       await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
 
-      let serialized = serializeCard(hassan);
+      let serialized = serializeCard(hassan, {});
       assert.deepEqual(serialized, {
         data: {
           lid: hassan[localId],
@@ -7068,7 +7063,7 @@ module('Integration | serialization', function (hooks) {
       });
 
       let mango = new Person({ firstName: 'Mango', pets: null });
-      serialized = serializeCard(mango);
+      serialized = serializeCard(mango, {});
       assert.deepEqual(serialized, {
         data: {
           lid: mango[localId],

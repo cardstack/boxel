@@ -65,7 +65,7 @@ class KeyValueUsage extends Component {
           @value={{this.labelStyle}}
           @options={{LABEL_STYLES}}
           @defaultValue='default'
-          @description="'eyebrow' sets the keys in the theme's eyebrow role (--boxel-eyebrow-*), or the kit's mono eyebrow outside a themed card. The --pretui-kv-label-* properties still win (Pretui addition)."
+          @description="'eyebrow' sets the keys in the theme's eyebrow role, uppercase; the --pretui-kv-label-* properties still win (Pretui addition)."
           @onInput={{this.setLabelStyle}}
         />
         <Args.Yield
@@ -83,34 +83,37 @@ class KeyValueUsage extends Component {
         <Css.Basic
           @name='pretui-kv-label-font-family'
           @type='string'
-          @description='Key font family. Unset, the keys inherit it (or take the eyebrow font with @labelStyle).'
+          @description="Key font family; the eyebrow role's with @labelStyle."
+          @defaultValue='var(--boxel-ui-label-font-family)'
         />
         <Css.Basic
           @name='pretui-kv-label-font-size'
           @type='dimension'
-          @description='Key font size.'
-          @defaultValue='var(--text-ui, 0.75rem)'
+          @description="Key font size; the eyebrow role's with @labelStyle."
+          @defaultValue='var(--boxel-ui-label-font-size)'
         />
         <Css.Basic
           @name='pretui-kv-label-font-weight'
           @type='string'
-          @description='Key font weight. Unset, the keys inherit it.'
+          @description="Key font weight; the eyebrow role's with @labelStyle."
+          @defaultValue='var(--boxel-ui-label-font-weight)'
         />
         <Css.Basic
           @name='pretui-kv-label-line-height'
           @type='dimension'
-          @description='Key line height.'
-          @defaultValue='1.125rem'
+          @description="Key line height; the eyebrow role's with @labelStyle."
+          @defaultValue='var(--boxel-ui-label-line-height)'
         />
         <Css.Basic
           @name='pretui-kv-label-letter-spacing'
           @type='dimension'
-          @description='Key tracking. Unset, the keys inherit it.'
+          @description="Key tracking; the eyebrow role's with @labelStyle."
+          @defaultValue='var(--boxel-ui-label-letter-spacing)'
         />
         <Css.Basic
           @name='pretui-kv-label-text-transform'
           @type='keyword'
-          @description='Key case, such as uppercase. Unset, the keys inherit it.'
+          @description='Key case. Unset, the keys inherit it, or are uppercase with @labelStyle.'
         />
       </:cssVars>
     </FreestyleUsage>

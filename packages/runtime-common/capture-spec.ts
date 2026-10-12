@@ -1219,6 +1219,12 @@ export const CAPTURE_DEFAULT_BACKGROUND = 'white';
 // refused at declaration (`assertValidCaptureSpec`), so they are absent
 // here. Paper comes from the card's own print CSS (`@page`), and the entry
 // renders under `media=print`.
+//
+// `filename` is the name a pdf entry's document is saved under, resolved
+// against the instance being captured (the declared string, the declared
+// function's result, or the card's title). It is present only on a roster
+// read with an instance in hand — the `render.captures` route — and absent on
+// the class-only reads that derive declaration meta.
 export interface DeclaredCaptureSpecPayload {
   width?: number;
   height?: number;
@@ -1229,6 +1235,7 @@ export interface DeclaredCaptureSpecPayload {
   type?: CaptureOutputType;
   format?: DeclaredCaptureFormat;
   render?: true;
+  filename?: string;
 }
 
 export type DeclaredCaptureRoster = Record<string, DeclaredCaptureSpecPayload>;
@@ -1241,8 +1248,8 @@ export type DeclaredCaptureRoster = Record<string, DeclaredCaptureSpecPayload>;
 // The slot name is part of the identity: a capture-only component's pixels
 // are identified only by the slot that declares it, and format twins sharing
 // a ledger row would let one slot's re-persist reclaim the other's object.
-// `keyBy` and `useAsThumbnail` steer invalidation and consumption, not
-// pixels, so they stay out.
+// `keyBy`, `useAsThumbnail`, and `filename` steer invalidation, consumption,
+// and serving, not pixels, so they stay out.
 export function canonicalDeclaredCaptureString(
   name: string,
   payload: DeclaredCaptureSpecPayload,
@@ -1251,8 +1258,9 @@ export function canonicalDeclaredCaptureString(
   // `DeclaredCaptureSpecPayload` later fails to compile here — the one
   // function that turns a payload into a ledger key — instead of being
   // silently dropped from the identity and aliasing two distinct captures onto
-  // one hash. `useAsThumbnail` and `keyBy` steer consumption and invalidation,
-  // not pixels, so they are deliberate discards; `rest` must stay empty.
+  // one hash. `useAsThumbnail`, `keyBy`, and `filename` steer consumption,
+  // invalidation, and serving, not pixels, so they are deliberate discards —
+  // a name change alone is never a new identity; `rest` must stay empty.
   let {
     width,
     height,
@@ -1263,6 +1271,7 @@ export function canonicalDeclaredCaptureString(
     render,
     useAsThumbnail: _useAsThumbnail,
     keyBy: _keyBy,
+    filename: _filename,
     ...rest
   } = payload;
   rest satisfies Record<string, never>;
@@ -1318,7 +1327,8 @@ export async function declaredCaptureSpecHash(
 // `width` / `height` / `deviceScaleFactor` are absent, and `pageCount` /
 // `byteSize` describe the paged document instead. A pdf can never be a
 // thumbnail (that fallback chain wants an image), so `useAsThumbnail` never
-// rides on one.
+// rides on one. `filename` is the name the `?name=` route serves a pdf slot
+// under; an entry without one serves under the source URL's last segment.
 export interface CaptureManifestEntry {
   specHash: string;
   objectKey: string;
@@ -1330,6 +1340,7 @@ export interface CaptureManifestEntry {
   byteSize?: number;
   useAsThumbnail?: true;
   sourceContentHash?: string;
+  filename?: string;
 }
 
 export type CaptureManifest = Record<string, CaptureManifestEntry>;
@@ -1359,19 +1370,22 @@ export function shouldCarryForwardDeclaredEntry({
   );
 }
 
-// The durable served URL for one capture of one instance: the platform's
-// only public capture URL form. A re-capture changes what this URL
-// serves, never the URL itself.
+// The durable served URL for one capture of one instance or file: the
+// platform's only public capture URL form. `localPath` is the source's
+// ledger spelling within its realm — an instance's extensionless id, a
+// file's path with its extension intact — which is how the GET route tells
+// the two apart. A re-capture changes what this URL serves, never the URL
+// itself.
 export function captureURLFor({
   realmURL,
-  instanceLocalPath,
+  localPath,
   spec,
 }: {
   realmURL: string;
-  instanceLocalPath: string;
+  localPath: string;
   spec: CaptureIdentity;
 }): string {
-  return `${realmURL}${CAPTURE_SERVING_PREFIX}${instanceLocalPath}${canonicalCaptureIdentityQuery(
+  return `${realmURL}${CAPTURE_SERVING_PREFIX}${localPath}${canonicalCaptureIdentityQuery(
     spec,
   )}`;
 }
@@ -1426,6 +1440,8 @@ export interface CaptureMetaEntry {
   pageCount?: number;
   byteSize?: number;
   useAsThumbnail?: true;
+  // The name a pdf capture saves under (see `CaptureManifestEntry.filename`).
+  filename?: string;
 }
 
 export type CapturesMeta = Record<string, CaptureMetaEntry>;
@@ -1459,6 +1475,7 @@ export function capturesMetaFromManifest(
       ...(entry.pageCount !== undefined ? { pageCount: entry.pageCount } : {}),
       ...(entry.byteSize !== undefined ? { byteSize: entry.byteSize } : {}),
       ...(entry.useAsThumbnail ? { useAsThumbnail: true as const } : {}),
+      ...(entry.filename !== undefined ? { filename: entry.filename } : {}),
     };
   }
   return result;

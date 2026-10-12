@@ -487,6 +487,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'without reaching the policy',
       );
@@ -503,6 +505,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'whose policy is loaded before the type resolves, and matched against nothing',
       );
@@ -534,6 +538,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'neither reached the policy',
       );
@@ -586,6 +592,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'and no policy was loaded for either',
       );

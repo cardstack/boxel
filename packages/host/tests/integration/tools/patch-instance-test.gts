@@ -1,5 +1,14 @@
 import { waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  containsMany,
+  field,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -24,31 +33,18 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  containsMany,
-  field,
-  linksTo,
-  linksToMany,
-  StringField,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-
 module('Integration | tools | patch-instance', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   const saveWaitTimeoutMs = 5000;
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let toolService: ToolService;
-  let PersonDef: typeof CardDefType;
+  let PersonDef: typeof CardDef;
   let indexQuery: RealmIndexQueryEngine;
 
   setupRealmCacheTeardown(hooks);

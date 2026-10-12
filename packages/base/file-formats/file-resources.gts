@@ -12,12 +12,13 @@ import { profileForFile, type FileTypeProfile } from './file-type-profile';
 // module remains the media-primitives barrel.
 import {
   FileImage,
+  fileElementURL,
   fileResourceURL,
   stringValue,
   type FileResourceLike,
 } from './file-image';
 
-export { FileImage, fileResourceURL, type FileResourceLike };
+export { FileImage, fileElementURL, fileResourceURL, type FileResourceLike };
 
 interface ResourceArgs {
   file?: FileResourceLike | null;
@@ -27,7 +28,13 @@ interface ResourceArgs {
 }
 
 export interface ResolvedFileResource {
+  // The file's own URL, for links, downloads, and copy-link.
   url: string;
+  // The URL to load the file's bytes from in an element the caller renders
+  // (an SVG `<image href>`, a custom player). Resolved from `@file`, it carries
+  // the file's content revision, so the element reloads when the file is
+  // written; `backgroundImage` and `backgroundStyle` load it too.
+  elementUrl: string;
   hasURL: boolean;
   name: string;
   contentType: string;
@@ -55,9 +62,11 @@ function resourceFrom(args: ResourceArgs): ResolvedFileResource {
   let contentType =
     stringValue(args.contentType) || stringValue(args.file?.contentType);
   let profile = profileForFile({ name, contentType });
-  let backgroundImage = cssURL(url);
+  let elementUrl = fileElementURL(args.file, args.url);
+  let backgroundImage = cssURL(elementUrl);
   return {
     url,
+    elementUrl,
     hasURL: Boolean(url),
     name,
     contentType,
@@ -231,7 +240,9 @@ const preservePlaybackIntentWhileSeeking = modifier(
 // requests, so `<audio src>` normally just works. This opt-in covers the cases
 // it can't: a browser with no controlling worker yet, or one that declines to
 // route media element requests through it. The object URL is ephemeral and is
-// revoked on teardown, so it never reaches card data.
+// revoked on teardown, so it never reaches card data. The fetch reruns when the
+// URL changes; a URL resolved from the FileDef carries the file's content
+// revision (`fileElementURL`), so a write to the file refetches it.
 const loadProtectedMediaBlob = modifier(
   (
     element: HTMLMediaElement,
@@ -318,7 +329,7 @@ interface FileAudioSignature {
 export class FileAudio extends GlimmerComponent<FileAudioSignature> {
   get src() {
     return (
-      fileResourceURL(this.args.file, this.args.src ?? this.args.url) ||
+      fileElementURL(this.args.file, this.args.src ?? this.args.url) ||
       undefined
     );
   }
@@ -385,7 +396,7 @@ interface FileVideoSignature {
 export class FileVideo extends GlimmerComponent<FileVideoSignature> {
   get src() {
     return (
-      fileResourceURL(this.args.file, this.args.src ?? this.args.url) ||
+      fileElementURL(this.args.file, this.args.src ?? this.args.url) ||
       undefined
     );
   }
@@ -449,7 +460,7 @@ interface FileObjectSignature {
 export class FileObject extends GlimmerComponent<FileObjectSignature> {
   get data() {
     return (
-      fileResourceURL(this.args.file, this.args.data ?? this.args.url) ||
+      fileElementURL(this.args.file, this.args.data ?? this.args.url) ||
       undefined
     );
   }

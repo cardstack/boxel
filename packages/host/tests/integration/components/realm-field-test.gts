@@ -2,6 +2,9 @@ import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 import { click, waitFor, type RenderingTestContext } from '@ember/test-helpers';
 
+import { field, contains, CardDef } from '@cardstack/base/card-api';
+import RealmField from '@cardstack/base/realm';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -14,14 +17,6 @@ import {
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { provideConsumeContext, setupCardLogs } from '../../helpers';
-import {
-  setupBaseRealm,
-  field,
-  contains,
-  CardDef,
-  StringField,
-  RealmField,
-} from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -69,7 +64,6 @@ module('Integration | components | realm field', function (hooks) {
     let owner = getOwner(this)!;
     owner.register('service:realm', StubRealmService);
   });
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let toolContext: CommandContext;

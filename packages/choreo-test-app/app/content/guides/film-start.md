@@ -27,7 +27,7 @@ Use `choreo-player` when you already have a Choreo scene and want to scrub or re
 Use `Film` when the presentation itself needs a shot list, chapter navigation, voice, and a picture renderer. Its components describe the edit while the renderer supplies the picture.
 
 ```ts title="Package Entry Points"
-import { createChoreoPlayer } from 'choreo-player';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 import { Film } from '@cardstack/choreo/film';
 ```
 

@@ -35,6 +35,16 @@ export default abstract class HostBaseTool<
   // Reserved for actions that destroy data and cannot be undone.
   static neverAutoExecutes = false;
 
+  // The same rule for one call, for a tool where only some inputs destroy
+  // data. It gets the call's input attributes as the model sent them, and is
+  // asked again whenever they change, so a call whose input is still
+  // streaming is never judged early.
+  static neverAutoExecutesFor(
+    _attributes: Record<string, unknown> | undefined,
+  ): boolean {
+    return false;
+  }
+
   // The files this tool's result attaches for the model, such as files it
   // saved or images it captured. The tool service asks only tools the host
   // itself provides, so a command loaded from a realm cannot attach files

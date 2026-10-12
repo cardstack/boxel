@@ -10,13 +10,14 @@
 //   - The note LINKS to its component (`target`), so the relationship is a
 //     real edge in the graph rather than a name match. The component page
 //     finds its own notes by querying for that edge.
-//   - Colour is the Law 2 recipe over one hue, not a hardcoded yellow, so a
-//     sticky re-tints with the season and reads correctly in light or dark.
-//     `--pretui-note-hue` is the knob.
-//   - `status` is deliberately a plain string rather than an enum field: an
-//     agent writes it, and a value this small does not need a field class.
-//     Anything that is not 'addressed' counts as open, so a note created by
-//     hand with no status set still shows up in the queue.
+//   - Color is a tint of `--attention` over `--card`, not a hardcoded yellow,
+//     so a sticky re-tints with the theme; it is mixed in oklab, which keeps
+//     the tint warm over a cool dark card where oklch would turn it violet.
+//   - `status` is an Open / Addressed enum. Anything that is not
+//     'addressed' counts as open, so a note created with no status set still
+//     shows up in the queue.
+//   - The title is `cardTitle`: `cardInfo.name` when one is set, otherwise
+//     the note's first line, so a note is never "Untitled" in a list.
 import {
   CardDef,
   Component,
@@ -27,52 +28,79 @@ import {
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
+import DateField from 'https://cardstack.com/base/date';
+import enumField from 'https://cardstack.com/base/enum';
+import { FittedCard } from '@cardstack/boxel-ui/components';
+import StickyNoteIcon from '@cardstack/boxel-icons/sticky-note';
 import { on } from '@ember/modifier';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { Button } from './components/button';
+import { Chip } from './components/chip';
 import { PretUISpec } from './pretui-component';
+import { noteSummary } from './note-text';
 
 /** A note is open unless it has been explicitly addressed. */
 export function isAddressed(status: string | undefined): boolean {
   return (status ?? '').toLowerCase() === 'addressed';
 }
 
-/**
- * First line of a note, flattened to plain text and shortened — the note's
- * title in card lists, search results, and the assistant's card picker.
- * Notes are markdown, so the leading `#`/`>`/`-`/backtick furniture is
- * stripped rather than shown.
- */
-export function noteSummary(note: string | undefined): string {
-  let first = (note ?? '')
+export { noteSummary };
+
+// The note's state as a chip: open in the attention tone, addressed in
+// success.
+const NoteStatus: TemplateOnlyComponent<{
+  Args: { addressed: boolean };
+  Element: HTMLSpanElement;
+}> = <template>
+  <Chip
+    @label={{if @addressed 'Addressed' 'Open'}}
+    @tone={{if @addressed 'success' 'attention'}}
+    data-test-pretui-note-status
+    ...attributes
+  />
+</template>;
+
+// The title is the note's first line unless cardInfo.name is set, so the
+// body only adds something when there is a name or more than that line.
+function bodyAddsToTitle(note: string | undefined, name: string | undefined) {
+  let text = note?.trim();
+  if (!text) return false;
+  if (name?.trim()) return true;
+  let lines = text
     .split('\n')
-    .map((line) => line.replace(/^[\s>#*\-+]+/, '').trim())
-    .find((line) => line.length > 0);
-  if (!first) return 'Sticky note';
-  let plain = first.replace(/[`*_]/g, '');
-  return plain.length > 72 ? `${plain.slice(0, 71)}…` : plain;
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines.length > 1 || noteSummary(text).endsWith('…');
 }
 
 export class PretuiNote extends CardDef {
   static displayName = 'Sticky Note';
+  static icon = StickyNoteIcon;
 
   /** what you want changed, in your own words */
   @field note = contains(MarkdownField);
   /** the component this note is stuck to */
   @field target = linksTo(() => PretUISpec);
   /** 'open' (default, and anything unrecognised) or 'addressed' */
-  @field status = contains(StringField);
+  @field status = contains(
+    enumField(StringField, {
+      options: [
+        { value: 'open', label: 'Open' },
+        { value: 'addressed', label: 'Addressed' },
+      ],
+    }),
+  );
   /** what the agent actually did about it — written when the note is closed */
   @field resolution = contains(MarkdownField);
-  /** ISO date the note was left. Stamped at creation by the page that
+  /** the date the note was left. Stamped at creation by the page that
    *  creates it, never read from the clock at render time. */
-  @field noted = contains(StringField);
+  @field noted = contains(DateField);
   /** who left it, when that is worth recording */
   @field author = contains(StringField);
 
-  /** Derived so a note is never "Untitled" in a list, a search result, or the
-   *  assistant's card picker — the note text IS the title. */
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PretuiNote) {
-      return noteSummary(this.note);
+      return this.cardInfo?.name?.trim() || noteSummary(this.note);
     },
   });
 
@@ -86,139 +114,148 @@ export class PretuiNote extends CardDef {
     get addressed() {
       return isAddressed(this.args.model.status);
     }
+    get showBody() {
+      return bodyAddsToTitle(
+        this.args.model.note,
+        this.args.model.cardInfo?.name,
+      );
+    }
 
     <template>
-      <article
-        class='note-page'
-        data-addressed={{if this.addressed 'true'}}
-        data-test-pretui-note-page
-      >
-        <header class='note-head'>
-          <span class='note-cap'>Sticky note</span>
-          <span class='note-state'>{{if this.addressed 'addressed' 'open'}}</span>
-          {{#if @model.noted}}
-            <span class='note-when'>{{@model.noted}}</span>
+      <div class='note-isolated'>
+        <article
+          class='note-page'
+          data-addressed={{if this.addressed 'true'}}
+          data-test-pretui-note-page
+        >
+          <header class='note-head'>
+            <span class='note-cap'>Sticky note</span>
+            <NoteStatus @addressed={{this.addressed}} />
+            {{#if @model.noted}}
+              <span class='note-when'><@fields.noted /></span>
+            {{/if}}
+          </header>
+
+          <h1><@fields.cardTitle /></h1>
+          {{#if @model.cardDescription}}
+            <p class='note-summary'><@fields.cardDescription /></p>
           {{/if}}
-        </header>
 
-        <div class='note-body'><@fields.note /></div>
+          {{#if this.showBody}}
+            <div><@fields.note /></div>
+          {{/if}}
 
-        {{#if @model.target}}
-          <button
-            type='button'
-            class='note-target'
-            data-test-pretui-note-target
-            {{on 'click' this.openTarget}}
-          >
-            On
-            <strong>{{if
-                @model.target.componentName
-                @model.target.componentName
-                'a component'
-              }}</strong>
-          </button>
-        {{/if}}
+          {{#if @model.target}}
+            <Button
+              class='note-target'
+              @tone='neutral'
+              @appearance='outlined'
+              @size='xs'
+              {{on 'click' this.openTarget}}
+              data-test-pretui-note-target
+            >
+              Open
+              <strong>{{if
+                  @model.target.componentName
+                  @model.target.componentName
+                  'a component'
+                }}</strong>
+            </Button>
+          {{/if}}
 
-        {{#if @model.resolution}}
-          <section class='note-fix'>
-            <span class='note-cap'>What got fixed</span>
-            <div class='note-body'><@fields.resolution /></div>
-          </section>
-        {{/if}}
+          {{#if @model.resolution}}
+            <section class='note-fix'>
+              <h2 class='note-cap'>What got fixed</h2>
+              <div><@fields.resolution /></div>
+            </section>
+          {{/if}}
 
-        {{#if @model.author}}
-          <footer class='note-foot'>— {{@model.author}}</footer>
-        {{/if}}
-      </article>
+          {{#if @model.author}}
+            <footer class='note-foot'>— <@fields.author /></footer>
+          {{/if}}
+        </article>
+      </div>
 
       <style scoped>
-        /* Law 2: one hue in, a complete treatment out. The sticky is a tint
-           of --pretui-note-hue over --card, with ink derived from the same
-           hue — so it holds contrast in light AND dark without a branch. */
+        /* the isolated page owns the scroll and the margin; the sticky sits
+           on it as a card */
+        .note-isolated {
+          --_note-page-max-w: 40rem;
+
+          height: 100%;
+          overflow-y: auto;
+          padding: var(--boxel-sp-lg);
+        }
+        /* The sticky is a tint of --attention over --card with
+           --card-foreground text and --attention-ink labels, which hold
+           contrast in light and dark. An addressed note goes to the neutral
+           --muted surface with --foreground. */
         .note-page {
-          --hue: var(--pretui-note-hue, var(--chart-3));
           display: flex;
           flex-direction: column;
-          gap: var(--space-3, 10px);
-          padding: var(--space-5, 18px);
-          border-radius: var(--radius-surface, 10px);
-          background: color-mix(in oklch, var(--hue) 14%, var(--card));
-          color: color-mix(in oklch, var(--foreground) 16%, var(--hue));
-          /* Law 1: depth is hairline + shadow, never contrast. */
-          box-shadow: var(
-            --pretui-shadow-card,
-            0 0 0 1px var(--border),
-            0 1px 2px rgb(0 0 0 / 0.2),
-            0 2px 6px rgb(0 0 0 / 0.2)
+          gap: var(--boxel-sp-xs);
+          max-inline-size: var(--_note-page-max-w);
+          overflow-wrap: break-word;
+          margin-inline: auto;
+          padding: var(--boxel-sp);
+          border-radius: var(--boxel-border-radius);
+          background-color: color-mix(
+            in oklab,
+            var(--attention) 14%,
+            var(--card)
           );
+          color: var(--card-foreground);
+          box-shadow:
+            0 0 0 1px var(--border),
+            var(--shadow-sm);
         }
         .note-page[data-addressed='true'] {
-          --hue: var(--muted-foreground);
+          background-color: var(--muted);
+          color: var(--foreground);
+        }
+        .note-page[data-addressed='true']
+          :is(.note-cap, .note-when, .note-foot) {
+          color: var(--muted-foreground);
         }
         .note-head {
           display: flex;
           align-items: baseline;
-          gap: var(--space-3, 10px);
+          gap: var(--boxel-sp-xs);
+        }
+        /* the sticky's own labels read in its attention ink; the title and
+           body keep the surface's --foreground */
+        .note-cap,
+        .note-when,
+        .note-foot {
+          color: var(--attention-ink);
         }
         .note-cap {
-          font-size: var(--text-ui-xs, 11px);
-          font-weight: 600;
-          letter-spacing: var(--track-eyebrow, 0.06em);
+          font-family: var(--boxel-eyebrow-font-family);
+          font-size: var(--boxel-eyebrow-font-size);
+          font-weight: var(--boxel-eyebrow-font-weight);
+          line-height: var(--boxel-eyebrow-line-height);
+          letter-spacing: var(--boxel-eyebrow-letter-spacing);
           text-transform: uppercase;
-          color: color-mix(
-            in oklch,
-            var(--foreground) 45%,
-            var(--hue)
-          );
         }
-        .note-state,
         .note-when {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: color-mix(
-            in oklch,
-            var(--foreground) 45%,
-            var(--hue)
-          );
+          font-size: var(--boxel-caption-font-size);
         }
-        .note-body {
-          font-size: var(--text-ui-md, 12.5px);
-          line-height: 1.6;
-          color: var(--foreground);
+        .note-summary {
+          color: var(--muted-foreground);
         }
         .note-target {
           align-self: flex-start;
-          padding: 4px 9px;
-          border: 0;
-          border-radius: var(--radius-control, 7px);
-          background: var(--card);
-          box-shadow: var(
-            --pretui-shadow-control,
-            0 0 0 1px var(--border)
-          );
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--foreground);
-          cursor: pointer;
-        }
-        .note-target:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
         }
         .note-fix {
           display: flex;
           flex-direction: column;
-          gap: var(--space-2, 6px);
-          padding-top: var(--space-3, 10px);
-          box-shadow: inset 0 1px 0 0
-            color-mix(in oklch, var(--hue) 30%, transparent);
+          gap: var(--boxel-sp-2xs);
+          padding-block-start: var(--boxel-sp-xs);
+          box-shadow: inset 0 1px 0 0 var(--border);
         }
         .note-foot {
-          font-size: var(--text-ui-xs, 11px);
-          color: color-mix(
-            in oklch,
-            var(--foreground) 45%,
-            var(--hue)
-          );
+          font-size: var(--boxel-caption-font-size);
         }
       </style>
     </template>
@@ -228,45 +265,51 @@ export class PretuiNote extends CardDef {
     get addressed() {
       return isAddressed(this.args.model.status);
     }
+    get showBody() {
+      return bodyAddsToTitle(
+        this.args.model.note,
+        this.args.model.cardInfo?.name,
+      );
+    }
     <template>
       <div
         class='sticky'
         data-addressed={{if this.addressed 'true'}}
         data-test-pretui-note-embedded
       >
-        <div class='sticky-body'><@fields.note /></div>
-        {{#if this.addressed}}
-          <span class='sticky-done'>addressed</span>
+        <NoteStatus class='sticky-status' @addressed={{this.addressed}} />
+        <h3 class='sticky-title'><@fields.cardTitle /></h3>
+        {{#if this.showBody}}
+          <div class='sticky-body'><@fields.note /></div>
         {{/if}}
       </div>
       <style scoped>
         .sticky {
-          --hue: var(--pretui-note-hue, var(--chart-3));
           display: flex;
           flex-direction: column;
-          gap: var(--space-2, 6px);
-          padding: var(--space-3, 10px);
-          border-radius: var(--radius-surface, 10px);
-          background: color-mix(in oklch, var(--hue) 14%, var(--card));
-          box-shadow: var(
-            --pretui-shadow-card,
-            0 0 0 1px var(--border),
-            0 1px 2px rgb(0 0 0 / 0.2)
+          gap: var(--boxel-sp-2xs);
+          padding: var(--boxel-sp-xs);
+          overflow-wrap: break-word;
+          background-color: color-mix(
+            in oklab,
+            var(--attention) 14%,
+            var(--card)
           );
-          font-size: var(--text-ui-md, 12.5px);
-          line-height: 1.5;
-          color: var(--foreground);
+          color: var(--card-foreground);
         }
         .sticky[data-addressed='true'] {
-          --hue: var(--muted-foreground);
-          color: var(--muted-foreground);
+          background-color: var(--muted);
+          color: var(--foreground);
         }
-        .sticky-done {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          letter-spacing: var(--track-eyebrow, 0.06em);
-          text-transform: uppercase;
-          color: var(--muted-foreground);
+        .sticky-status {
+          align-self: flex-start;
+        }
+        /* a long note shows its first lines; the isolated view has the rest */
+        .sticky-body {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 4;
+          overflow: hidden;
         }
       </style>
     </template>
@@ -277,56 +320,46 @@ export class PretuiNote extends CardDef {
       return isAddressed(this.args.model.status);
     }
     <template>
-      <div
+      <FittedCard
         class='nfit'
+        @titleTag='h3'
+        @imageUrl={{@model.cardThumbnailURL}}
         data-addressed={{if this.addressed 'true'}}
         data-test-pretui-note-fitted
       >
-        <span class='nfit-dot'></span>
-        {{! the computed title is the note's first line, already flattened out
-            of markdown — the raw field would show `#`/backtick furniture }}
-        <span class='nfit-title'>{{if @model.title @model.title 'Sticky note'}}</span>
-        <span class='nfit-on'>{{if
-            @model.target.componentName
-            @model.target.componentName
-            ''
-          }}</span>
-      </div>
+        {{! badgeRight stays at the sizes where FittedCard hides the badge
+            row, so open and addressed never differ by fill alone }}
+        <:badgeRight><NoteStatus @addressed={{this.addressed}} /></:badgeRight>
+        <:title><@fields.cardTitle /></:title>
+        <:subtitle>
+          {{#if @model.cardDescription}}
+            <@fields.cardDescription />
+          {{else if @model.target.componentName}}
+            On
+            {{@model.target.componentName}}
+          {{/if}}
+        </:subtitle>
+        <:footer>
+          {{#if @model.author}}<span><@fields.author /></span>{{/if}}
+          {{#if @model.noted}}<@fields.noted />{{/if}}
+        </:footer>
+      </FittedCard>
       <style scoped>
+        /* FittedCard's fade knob doubles as the surface color, so a
+           thumbnail fades into the same tint the card is painted with */
         .nfit {
-          --hue: var(--pretui-note-hue, var(--chart-3));
-          display: flex;
-          align-items: center;
-          gap: var(--space-2, 6px);
-          width: 100%;
-          height: 100%;
-          padding: var(--space-3, 10px);
-          background: color-mix(in oklch, var(--hue) 14%, var(--card));
-          font-size: var(--text-ui-md, 12.5px);
-          color: var(--foreground);
-          overflow: hidden;
+          --fc-image-fade-color: color-mix(
+            in oklab,
+            var(--attention) 14%,
+            var(--card)
+          );
+
+          background-color: var(--fc-image-fade-color);
         }
         .nfit[data-addressed='true'] {
-          --hue: var(--muted-foreground);
-        }
-        .nfit-dot {
-          flex: none;
-          width: 7px;
-          height: 7px;
-          border-radius: 999px;
-          background: var(--hue);
-        }
-        .nfit-title {
-          font-weight: 600;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .nfit-on {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--muted-foreground);
-          white-space: nowrap;
+          --fc-image-fade-color: var(--muted);
+
+          color: var(--foreground);
         }
       </style>
     </template>

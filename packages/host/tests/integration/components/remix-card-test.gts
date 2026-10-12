@@ -1,14 +1,11 @@
+import { CardDef } from '@cardstack/base/card-api';
+import { ProcessCard } from '@cardstack/base/process-card';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
-import {
-  CardDef,
-  ProcessCard,
-  RemixCard,
-  setupBaseRealm,
-} from '../../helpers/base-realm';
+import { RemixCard, setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 

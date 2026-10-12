@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Choreo",
+        "summary": "The gallery's type: Syne and Archivo for display, IBM Plex for text and code. Its palette is declared by the gallery itself."
+      },
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@600;700;800&display=swap"
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

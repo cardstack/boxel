@@ -48,7 +48,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // A search a realm's policy scopes: the grants a `query` policy compiled to
 // filters, composed into the query a realm runs for a caller its ACL declined.
 //
-// Eleven realms on one server, one per answer a realm can give a caller it does
+// Twelve realms on one server, one per answer a realm can give a caller it does
 // not let read outright. The types live in a public library realm so every
 // other realm can hold cards of them.
 //
@@ -71,6 +71,8 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // - Subtypes: its policy admits a provider's own classrooms, and it holds
 //   classrooms of types descending from the rule's, one of which computes the
 //   owner its cards are indexed under.
+// - Rosters: its policy admits a teacher to a query over the classrooms whose
+//   `teacherIds` hold them, and it holds a classroom two teachers share.
 //
 // Every card a provider could be admitted to in one realm has a twin in the
 // realms that must not admit it, so a filter applied to the wrong realm's
@@ -88,6 +90,7 @@ const MISSING = 'http://127.0.0.1:4444/missing/';
 const WITHHELD = 'http://127.0.0.1:4444/withheld/';
 const BORROWED = 'http://127.0.0.1:4444/borrowed/';
 const SUBTYPES = 'http://127.0.0.1:4444/subtypes/';
+const ROSTERS = 'http://127.0.0.1:4444/rosters/';
 
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
@@ -165,7 +168,12 @@ const NOTICE_MODULE = `
 // does the same, and the realm starts with no card of it.
 // `ElectiveClassroom` adds a field and declares the owner as `Classroom` does.
 const CLASSROOM_MODULE = `
-  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import {
+    contains,
+    containsMany,
+    field,
+    CardDef,
+  } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
   import NumberField from "@cardstack/base/number";
   import { operation } from "@cardstack/base/operations";
@@ -173,6 +181,7 @@ const CLASSROOM_MODULE = `
   export class Classroom extends CardDef {
     @field title = contains(StringField);
     @field ownerId = contains(StringField);
+    @field teacherIds = containsMany(StringField);
     @field visibility = contains(StringField);
     @field rank = contains(NumberField);
 
@@ -217,6 +226,7 @@ const CLASSROOM_MODULE = `
 const OWN = '.providerId == actor()';
 const OWN_CLASSROOM = '.ownerId == actor()';
 const OWN_OR_PUBLIC_CLASSROOM = `${OWN_CLASSROOM} or .visibility == "public"`;
+const TEACHES_CLASSROOM = '.teacherIds | any(. == actor())';
 const OPEN = '.status == "open"';
 const POSTED = '.status == "posted"';
 // Refused by the `predicate` profile, so its grant compiles no filter. It
@@ -365,6 +375,7 @@ function classroom(
     rank: number;
     ownerId?: string;
     visibility?: string;
+    teacherIds?: string[];
   },
 ) {
   return JSON.stringify({
@@ -414,6 +425,20 @@ const SUBTYPE_CLASSROOMS: Record<string, string> = {
 const A_OWN_CLASSROOMS = ['a-1', 'elective-3', 'a-6'].map(
   (name) => `${SUBTYPES}classrooms/${name}`,
 );
+
+// A classroom provider A teaches alone, and one A and B share.
+const ROSTER_CLASSROOMS: Record<string, string> = {
+  'classrooms/a-only.json': classroom('Classroom', {
+    title: 'A only',
+    rank: 1,
+    teacherIds: [PROVIDER_A],
+  }),
+  'classrooms/shared.json': classroom('Classroom', {
+    title: 'Shared',
+    rank: 2,
+    teacherIds: [PROVIDER_A, PROVIDER_B],
+  }),
+};
 
 // One of provider A's schedules, for a realm that must not admit it.
 function aOpen(title = 'A open') {
@@ -627,6 +652,20 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
             permissions: { ...owner },
           },
+          {
+            realmURL: new URL(ROSTERS),
+            fileSystem: {
+              'realm.json': withPolicy('Rosters', ROSTERS),
+              'policies/policy.json': policyRules([
+                {
+                  targetType: CLASSROOM,
+                  grants: [{ operation: 'query', where: TEACHES_CLASSROOM }],
+                },
+              ]),
+              ...ROSTER_CLASSROOMS,
+            },
+            permissions: { ...owner },
+          },
         ],
         dbAdapter,
         publisher,
@@ -645,7 +684,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     // One server for the whole module, since every test but the archived one
     // only reads, and that one puts back what it changes. Booting it indexes
-    // seven realms, which runs inside the first test's budget, so that budget
+    // every realm, which runs inside the first test's budget, so that budget
     // is extended past the per-test timeout.
     hooks.before(function (assert) {
       assert.timeout(300_000);
@@ -1295,6 +1334,62 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         } finally {
           await realms[SUBTYPES].delete(path);
         }
+      });
+    });
+
+    module('a caller filter and a grant on the same list', function () {
+      // A plural path is reached through one table-valued alias per path, so
+      // two conditions on `teacherIds` test the same element of it, and their
+      // `every` needs one element equal to both. This pins that documented
+      // limit: changing it is a change to the query engine, not to policy.
+      function teaching(teacher: string) {
+        return {
+          filter: { 'item.on': CLASSROOM, eq: { 'item.teacherIds': teacher } },
+          realms: [ROSTERS],
+        };
+      }
+      const SHARED = `${ROSTERS}classrooms/shared`;
+      const A_ONLY = `${ROSTERS}classrooms/a-only`;
+
+      test("a filter testing the caller's own id in the list finds every classroom the grant admits", async function (assert) {
+        let response = await federatedSearch(teaching(PROVIDER_A), PROVIDER_A);
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response).sort(), [A_ONLY, SHARED]);
+      });
+
+      test('a filter testing a colleague in the list finds no classroom, not even one listing them both', async function (assert) {
+        let owner = await federatedSearch(teaching(PROVIDER_B), OWNER);
+        assert.deepEqual(
+          ids(owner),
+          [SHARED],
+          'a caller who reads the realm outright finds the classroom B teaches',
+        );
+
+        let teacher = await federatedSearch(teaching(PROVIDER_B), PROVIDER_A);
+        assert.strictEqual(teacher.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          ids(teacher),
+          [],
+          "A's grant admits the shared classroom, and still no element of its `teacherIds` is both A and B",
+        );
+
+        let own = await realmSearch(
+          ROSTERS,
+          { filter: teaching(PROVIDER_B).filter },
+          PROVIDER_A,
+        );
+        assert.deepEqual(ids(own), [], "nor through the realm's own search");
+      });
+
+      test('the same classroom is found by a filter on another field', async function (assert) {
+        let response = await federatedSearch(
+          {
+            filter: { 'item.on': CLASSROOM, eq: { 'item.title': 'Shared' } },
+            realms: [ROSTERS],
+          },
+          PROVIDER_A,
+        );
+        assert.deepEqual(ids(response), [SHARED]);
       });
     });
 

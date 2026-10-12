@@ -67,9 +67,11 @@ export function createResponse({
       // this list is pruned from that filtered Response, so it is invisible
       // to the player's loading stack, not just to app JS. Content-Length is
       // CORS-safelisted and survives regardless; it is named alongside the
-      // pair so the range trio reads as one unit.
+      // pair so the range trio reads as one unit. Content-Disposition carries
+      // a served capture's save-as filename, which a host download control
+      // reads off a cross-origin capture response.
       'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length',
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition',
     },
   });
 }

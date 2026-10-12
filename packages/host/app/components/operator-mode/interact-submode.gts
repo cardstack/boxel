@@ -928,8 +928,16 @@ export default class InteractSubmode extends Component {
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
       }
 
+      /* The top bar floats over the stacks, and the headers of buried
+         stack items peek out in the strip it covers. The bar's own box
+         lets pointer events through to them; only its controls take
+         clicks. */
       .interact-submode-layout :deep(.submode-layout-top-bar) {
         position: absolute;
+        pointer-events: none;
+      }
+      .interact-submode-layout :deep(.submode-layout-top-bar > *) {
+        pointer-events: auto;
       }
 
       .interact-submode {

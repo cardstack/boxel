@@ -50,10 +50,10 @@ export interface PlayerSignature {
     screen: () => void;
     /** the fraction the hand is holding while scrubbing, else null */
     scrubAt: null | number;
-    scrubDown: (e: PointerEvent) => void;
+    scrubDown: (event: Event) => void;
     scrubLeave: () => void;
-    scrubMove: (e: PointerEvent) => void;
-    scrubUp: (e: PointerEvent) => void;
+    scrubMove: (event: Event) => void;
+    scrubUp: (event: Event) => void;
     /** keeps the bar's element, for the slider's live value */
     slider: ElementModifier;
     sound: boolean;

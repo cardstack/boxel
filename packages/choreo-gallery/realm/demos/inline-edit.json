@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "inline-edit",
+      "title": "In place",
+      "group": "Choreo",
+      "lede": "An employee profile, read and then written. Real fields at both ends.",
+      "apis": ["c.Crossing", "c.Move", "c.Tween", "createArming"],
+      "sample": "// Real DOM, then a flight, then real DOM again.\n//\n//   1. the reading view's own markup — an ordinary string, in flow\n//   2. a layer of words, out of flow, carrying the eye between the poses\n//   3. real fields: a text input, an email input, a segmented date group\n//\n// No element is in both, and none can be. A <span> in flow and the value\n// of an <input> cannot be the same node, and every attempt to make\n// choreography pretend otherwise failed differently: two copies of a word\n// sliding past each other while the arriving one relaid itself out; a line\n// whose gaps went wrong in flight because each word travelled alone and\n// nothing was interpolating the LINE — \"14 March 1986\" arriving as\n// \"14  March1986\". The space between two words is a property of neither.\n\n// WHAT IS MEASURED, AND BY WHOM. The containers are the LIBRARY's: a\n// field's box before the swap and after it is exactly what a changeset is.\n// There is no getBoundingClientRect in the demo, and there was — a\n// hand-rolled FLIP re-deriving what the region had already measured.\n<c.Move @of={{c.moved 'field'}} @duration={{MOVE}} @ease={{EASE}} />\n\n// pretext measures the one thing the DOM cannot: where a word will sit in a\n// pose that is NOT rendered. The form does not exist while the reading view\n// is on screen, and in general it is not even the same author's component.\nconst view = layoutWords(words, VIEW[key], 0);      // canvas metrics,\nconst edit = layoutWords(words, EDIT[key], INSET);  // pure arithmetic\n\n// One step, one journey per word: a step property may be a function of the\n// sprite it is applied to, so the plan is read per element.\n<c.Tween @of={{c.kept 'name-value'}} @x={{this.wordX}}\n  @fontSize={{this.nameSize}} @fontWeight={{this.nameWeight}}\n  @duration={{MOVE}} @ease={{EASE}} />\n\n// Each of those is a KEYFRAME ARRAY — ['30px', '17px'] — not a target. The\n// rest poses live in CSS keyed by [data-mode], so the new value is already\n// on the element when the region measures; a step given one target finds it\n// already there and animates nothing.\n\n// NEVER TWO COPIES. The flight words are hidden at both ends and shown only\n// while the region says a scene change is under way, and the real control's\n// text stands aside for exactly that long. VISIBILITY, not opacity: a\n// participant's opacity belongs to the engine, which renders one inline, so\n// a stylesheet rule is simply outvoted.\nprivate arming = createArming();\n// .ie-word { visibility: hidden }\n// .ie-card[data-flying] .ie-word { visibility: visible }\n\n// wdth is said as font-stretch: 87.5%, not font-variation-settings — a\n// variation axis cannot appear in the canvas font shorthand, so pretext\n// would measure the wide cut while the screen drew the narrow one. Thirty\n// pixels of error on a two-word name, all of it in the gaps.",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-crossings",
+        "concept": "Content can change inside one continuous box",
+        "why": "The read view and edit view have different markup but occupy one meaningful record. Crossing coordinates their skins with the box movement; the easing includes acceleration because editing is a considered transition.",
+        "experiment": "Toggle editing while a field is moving, change a value, and exit. Look for preserved content and a box that lands at its actual form size.",
+        "pitfall": "Replacing a live form with a screenshot loses caret, scroll and interactive continuity.",
+        "combine": "Combine with a shared-layout selection marker while keeping form controls outside drag initiation."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

@@ -473,7 +473,9 @@ export class RealmIndexUpdater {
     try {
       await completed;
     } catch (e: any) {
-      this.#log.error(`Error running from-scratch-index: ${e.message}`);
+      this.#log.error(
+        `Realm ${this.realmURL.href} failed indexing: error running from-scratch-index: ${e.message}`,
+      );
       // Preserve the historical fullIndex() behavior for fire-and-forget
       // callers such as startup.
     }
@@ -675,14 +677,23 @@ export class RealmIndexUpdater {
     // should provide a default ignore list. But really we should decouple the
     // realm's consumption of this from the search index so that the realm can
     // figure out what files are ignored before indexing has happened.
-    if (
-      ['node_modules'].includes(url.href.replace(/\/$/, '').split('/').pop()!)
-    ) {
+    // A `node_modules` directory and everything beneath it. A directory walk
+    // asks about the directory and skips it, but a read names a file inside.
+    let local = url.href.startsWith(this.realmURL.href)
+      ? url.href.slice(this.realmURL.href.length)
+      : url.pathname;
+    if (local.split('/').includes('node_modules')) {
       return true;
     }
     return isIgnored(this.realmURL, this.ignoreMap, url);
   }
 }
+
+// The realm-root files the indexer reads its ignore rules from. A rule can't
+// ignore them: a realm that hid them would read no rules on its next
+// from-scratch pass, index everything, and then read them again on the pass
+// after.
+export const REALM_IGNORE_FILES = ['.gitignore', '.boxelignore'];
 
 export function isIgnored(
   realmURL: URL,
@@ -692,9 +703,19 @@ export function isIgnored(
   if (url.href === realmURL.href) {
     return false; // you can't ignore the entire realm
   }
+  let local = url.href.startsWith(realmURL.href)
+    ? url.href.slice(realmURL.href.length)
+    : url.pathname;
+  if (
+    REALM_IGNORE_FILES.some((name) => url.href === `${realmURL.href}${name}`)
+  ) {
+    return false;
+  }
   if (
     [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
-    url.href.startsWith(`${realmURL.href}.git/`) ||
+    // A git repository's metadata, at the realm's root or in a repository
+    // nested anywhere below it.
+    local.split('/').includes('.git') ||
     // A file the realm is part-way through writing, or one left behind by a
     // write that died. It is no part of the realm either way.
     isPartialWritePath(url.href)

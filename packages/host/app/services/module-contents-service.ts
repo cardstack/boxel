@@ -128,7 +128,7 @@ export default class ModuleContentsService extends Service {
       throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);
     }
     let source = r.content;
-    let moduleSyntax = new ModuleSyntax(
+    let moduleSyntax = await ModuleSyntax.create(
       source,
       moduleId,
       this.network.virtualNetwork,

@@ -114,6 +114,7 @@ audited before concluding the tool isn't live.
 | `execute-atomic-operations`                                                                                             | Run a transactional plan (used by listing-install).                                                                         |
 | `fetch-card-json`, `get-card`, `read-source`, `serialize-card`, `validate-realm`                                        | Realm-server primitives.                                                                                                    |
 | `get-card-type-schema`                                                                                                  | Introspect a CardDef's field shape.                                                                                         |
+| `capture-card`                                                                                                          | Capture a card as PNG, or PDF with `type: 'pdf'` (+ `media: 'print'`); returns its durable `_capture/` URL.                 |
 | `get-all-realm-metas`, `get-available-realm-urls`, `get-default-writable-realm`                                         | Realm metadata and writable-realm discovery.                                                                                |
 | `get-catalog-realm-urls`, `get-realm-of-url`, `can-read-realm`                                                          | Catalog/realm lookups and access checks.                                                                                    |
 | `store-add`                                                                                                             | Add a card to the store.                                                                                                    |
@@ -145,7 +146,8 @@ OpenRouter calls go through `/_request-forward` to the external
 | `/_publish-realm`, `/_unpublish-realm`                               | POST   | Realm publishing controls.                                                                      |
 | `/_create-realm`, `/_delete-realm`                                   | POST   | Realm lifecycle.                                                                                |
 | `/_run-command`                                                      | POST   | Server-side host command execution (underlying `boxel run-command`).                            |
-| `/_capture-card`                                                     | POST   | Capture a card as a PNG or PDF (underlying `boxel capture`).                                    |
+| `/_capture`                                                          | POST   | Capture a card or file as a PNG or PDF (underlying `boxel capture`).                            |
+| `{realm}_capture/{path}`                                             | GET    | Serve a capture. `download` → attachment; `filename=` names the saved file.                     |
 | `/_realm-auth`                                                       | GET    | Realm auth metadata.                                                                            |
 | `/_queue-status`                                                     | GET    | Indexing queue state.                                                                           |
 | `/_catalog-realms`                                                   | GET    | List of catalog realms.                                                                         |

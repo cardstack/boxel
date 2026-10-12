@@ -712,6 +712,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 1,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 2,
+          lockedTypeReads: 2,
         },
         'only the rename reached the policy',
       );
@@ -801,6 +803,8 @@ module(basename(import.meta.filename), function (hooks) {
         pendingDischarges: 0,
         definitionLookups: 0,
         snapshotReads: 0,
+        ancestorDefinitionReads: 0,
+        lockedTypeReads: 0,
       });
     });
 

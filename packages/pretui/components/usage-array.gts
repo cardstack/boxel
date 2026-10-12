@@ -1,5 +1,6 @@
 // Pretui — UsageArray: an array argument with its knob.
 import Component from '@glimmer/component';
+import { guidFor } from '@ember/object/internals';
 import { Input } from './input';
 import { UsageArgument } from './usage-argument';
 import { PropReadOnly, PropRow, readOnlyText } from '../internal/freestyle';
@@ -34,6 +35,11 @@ export class UsageArray extends Component<UsageArraySignature> {
   get readOnlyValue() {
     return readOnlyText(this.args.value ?? this.args.defaultValue);
   }
+  controlId = `${guidFor(this)}-control`;
+  // the rail labels the control when there is one
+  get labelFor() {
+    return this.hasControl ? this.controlId : undefined;
+  }
   callOnInput = (raw: string) => {
     this.args.onInput?.(
       raw
@@ -45,12 +51,16 @@ export class UsageArray extends Component<UsageArraySignature> {
   <template>
     {{#if this.isProp}}
       {{#unless @hideControls}}
-        <PropRow @label={{@name}} @required={{@required}}>
+        <PropRow
+          @label={{@name}}
+          @required={{@required}}
+          @controlId={{this.labelFor}}
+        >
           {{#if this.hasControl}}
             <Input
               @value={{this.text}}
               @onInput={{this.callOnInput}}
-              aria-label={{@name}}
+              @controlId={{this.controlId}}
             />
           {{else}}
             <PropReadOnly @value={{this.readOnlyValue}} />

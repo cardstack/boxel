@@ -1,6 +1,11 @@
 // Pretui — Alert: an inline message with a tone, a title and an optional action.
 import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import InfoIcon from '@cardstack/boxel-icons/info-small';
+import XIcon from '@cardstack/boxel-icons/x';
+import { keepStyle, type KeptProperty } from '../internal/keep-style';
 import { resolveTone } from '../pretui-primitives';
 import type { PretuiToneArg } from '../pretui-primitives';
 import { VisuallyHidden } from './visually-hidden';
@@ -18,17 +23,32 @@ const ALERT_VARIANTS: Record<string, AlertTone> = {
   default: 'info',
   destructive: 'danger',
 };
-const ALERT_HUES: Record<AlertTone, string> = {
-  info: 'var(--pretui-info)',
-  success: 'var(--success)',
-  warning: 'var(--warning)',
-  danger: 'var(--destructive)',
+// Each tone names its fill and the fill's paired foreground (the ink that
+// reads on the disc). The text is `--foreground`: the `-ink` tokens are only
+// guaranteed on `--background`, `--card` and `--muted`, not on the tint.
+const ALERT_COLORS: Record<AlertTone, { hue: string; onHue: string }> = {
+  info: {
+    hue: 'var(--info)',
+    onHue: 'var(--info-foreground)',
+  },
+  success: {
+    hue: 'var(--success)',
+    onHue: 'var(--success-foreground)',
+  },
+  warning: {
+    hue: 'var(--warning)',
+    onHue: 'var(--warning-foreground)',
+  },
+  danger: {
+    hue: 'var(--destructive)',
+    onHue: 'var(--destructive-foreground)',
+  },
 };
-const ALERT_GLYPHS: Record<AlertTone, string> = {
-  info: 'i',
-  success: '✓',
-  warning: '!',
-  danger: '✕',
+const ALERT_ICONS = {
+  info: InfoIcon,
+  success: CheckIcon,
+  warning: AlertTriangleIcon,
+  danger: XIcon,
 };
 // The glyph is hidden from assistive technology, so the tone is spoken as a
 // word instead. Without it, `info`, `success` and `warning` all share
@@ -69,20 +89,34 @@ export class Alert extends Component<AlertSignature> {
     return this.tone === 'danger' ? 'alert' : 'status';
   }
   get hueStyle() {
-    return htmlSafe(`--pretui-alert-hue: ${ALERT_HUES[this.tone]}`);
+    let { hue, onHue } = ALERT_COLORS[this.tone];
+    return htmlSafe(`--pretui-alert-hue: ${hue}; --pretui-alert-on-hue: ${onHue}`,
+    );
   }
-  get glyph() {
-    return ALERT_GLYPHS[this.tone];
+  // The same properties again, kept on top of a caller's `style`: a caller's
+  // `style` attribute replaces the component's own, and the tint, hairline
+  // and glyph disc all read these properties.
+  get keptStyle(): KeptProperty[] {
+    let { hue, onHue } = ALERT_COLORS[this.tone];
+    return [
+      { property: '--pretui-alert-hue', value: hue, strength: 'arg' },
+      { property: '--pretui-alert-on-hue', value: onHue, strength: 'arg' },
+    ];
+  }
+  get Glyph() {
+    return ALERT_ICONS[this.tone];
   }
   get spokenTone(): string {
     return `${this.args.toneLabel ?? ALERT_TONE_LABELS[this.tone]}:`;
   }
   <template>
-    <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} data-test-pretui-alert ...attributes>
-      <span class='pretui-alert-glyph' aria-hidden='true'>{{this.glyph}}</span>
+    <div class='pretui-alert' role={{this.role}} style={{this.hueStyle}} {{keepStyle this.keptStyle}} data-test-pretui-alert ...attributes>
+      <span class='pretui-alert-glyph' aria-hidden='true'>
+        <this.Glyph width='12' height='12' />
+      </span>
       <VisuallyHidden>{{this.spokenTone}}</VisuallyHidden>
       <div class='pretui-alert-body'>
-        {{#if @title}}<div class='pretui-alert-title'>{{@title}}</div>{{/if}}
+        {{#if @title}}<p class='pretui-alert-title'>{{@title}}</p>{{/if}}
         {{#if (has-block)}}<div>{{yield}}</div>{{/if}}
         {{#if (has-block 'action')}}<div class='pretui-alert-action'>{{yield to='action'}}</div>{{/if}}
       </div>
@@ -90,39 +124,38 @@ export class Alert extends Component<AlertSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-alert {
+          --pretui-alert-mix: 20%;
           display: flex;
-          gap: 9px;
-          padding: 8px 10px;
-          border-radius: 10px;
-          background: color-mix(in oklch, var(--pretui-alert-hue, var(--chart-1)) var(--pretui-chip-mix, 20%), var(--card));
-          color: color-mix(in oklch, var(--foreground) 40%, var(--pretui-alert-hue, var(--chart-1)));
-          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-alert-hue, var(--chart-1)) 25%, var(--border));
-          font-size: var(--text-ui-md, 12.5px);
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius);
+          background-color: color-mix(in oklch, var(--pretui-alert-hue) var(--pretui-alert-mix), var(--card));
+          color: var(--foreground);
+          box-shadow: 0 0 0 1px color-mix(in oklch, var(--pretui-alert-hue) 25%, var(--border));
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-alert-glyph {
-          width: 16px;
-          height: 16px;
+          width: 1rem;
+          height: 1rem;
           border-radius: 50%;
           flex: none;
           display: grid;
           place-items: center;
-          font-size: 9px;
-          font-weight: 700;
-          background: var(--pretui-alert-hue, var(--chart-1));
-          color: var(--pretui-on-neutral, var(--boxel-light));
+          background-color: var(--pretui-alert-hue);
+          color: var(--pretui-alert-on-hue);
           margin-top: 1px;
         }
         .pretui-alert-body {
           display: grid;
-          gap: 2px;
+          gap: var(--boxel-sp-6xs);
           min-width: 0;
         }
         .pretui-alert-title {
+          margin: 0;
           font-weight: 600;
-          color: color-mix(in oklch, var(--foreground) 55%, var(--pretui-alert-hue, var(--chart-1)));
         }
         .pretui-alert-action {
-          margin-top: 4px;
+          margin-top: var(--boxel-sp-3xs);
         }
       }
     </style>

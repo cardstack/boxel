@@ -1,24 +1,24 @@
 import { click } from '@ember/test-helpers';
 
+import DateField from '@cardstack/base/date';
+import DayField from '@cardstack/base/date/day';
+import MonthField from '@cardstack/base/date/month';
+import MonthDayField from '@cardstack/base/date/month-day';
+import MonthYearField from '@cardstack/base/date/month-year';
+import QuarterField from '@cardstack/base/date/quarter';
+import WeekField from '@cardstack/base/date/week';
+import YearField from '@cardstack/base/date/year';
+import DateTimeField from '@cardstack/base/datetime';
+import DatetimeStampField from '@cardstack/base/datetime-stamp';
+import TimeField from '@cardstack/base/time';
+import DurationField from '@cardstack/base/time/duration';
+import RelativeTimeField from '@cardstack/base/time/relative-time';
 import { module, test } from 'qunit';
 
 import {
   setupBaseRealm,
-  DateField,
-  DateTimeField,
-  DatetimeStampField,
-  DayField,
   DateRangeField,
-  MonthDayField,
-  YearField,
-  MonthField,
-  MonthYearField,
-  WeekField,
-  QuarterField,
-  TimeField,
   TimeRangeField,
-  DurationField,
-  RelativeTimeField,
 } from '../helpers/base-realm';
 import {
   renderField,

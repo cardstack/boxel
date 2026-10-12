@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@cardstack/choreo": "workspace:*",
+    "@cardstack/choreo-player": "workspace:*",
     "@chenglou/pretext": "^0.0.8",
-    "choreo-player": "workspace:*",
     "dialkit": "^2.0.0",
     "glimmer-motion": "workspace:*",
     "marked": "^18.0.11",

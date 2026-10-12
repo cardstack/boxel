@@ -16,7 +16,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as CardApiModule from '@cardstack/base/card-api';
@@ -24,7 +23,6 @@ import type * as FileResourcesModule from '@cardstack/base/file-formats/file-res
 
 module('Integration | FileDef resource primitives', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let FileDef: typeof CardApiModule.FileDef;
@@ -35,6 +33,7 @@ module('Integration | FileDef resource primitives', function (hooks) {
   let FileObject: typeof FileResourcesModule.FileObject;
   let applyFileFont: typeof FileResourcesModule.applyFileFont;
   let fileResourceURL: typeof FileResourcesModule.fileResourceURL;
+  let fileElementURL: typeof FileResourcesModule.fileElementURL;
 
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
@@ -49,6 +48,7 @@ module('Integration | FileDef resource primitives', function (hooks) {
       FileObject,
       applyFileFont,
       fileResourceURL,
+      fileElementURL,
     } = await loader.import<typeof FileResourcesModule>(
       '@cardstack/base/file-formats/file-resources',
     ));
@@ -90,6 +90,77 @@ module('Integration | FileDef resource primitives', function (hooks) {
       'http://example.com/a.png',
       'a URL object normalizes the same as a string',
     );
+  });
+
+  test('an element URL resolved from the file carries its content revision', function (assert) {
+    let file = {
+      url: 'http://example.com/img/hero.png',
+      contentHash: 'abc123',
+      lastModified: 1700000000,
+    };
+    assert.strictEqual(
+      fileElementURL(file),
+      'http://example.com/img/hero.png?rev=abc123%3A1700000000',
+      'the hash and modification time both name the revision',
+    );
+    assert.strictEqual(
+      fileElementURL({
+        ...file,
+        url: 'http://example.com/img/hero.png?w=2#top',
+      }),
+      'http://example.com/img/hero.png?w=2&rev=abc123%3A1700000000#top',
+      'an existing query and fragment are kept',
+    );
+    assert.strictEqual(
+      fileElementURL(file, 'http://example.com/explicit.png'),
+      'http://example.com/explicit.png',
+      'an explicit URL passes through as given',
+    );
+    assert.strictEqual(
+      fileElementURL({ url: 'http://example.com/img/hero.png' }),
+      'http://example.com/img/hero.png',
+      'a file with no revision keeps its own URL',
+    );
+    assert.strictEqual(
+      fileElementURL({ ...file, url: 'blob:http://example.com/1234' }),
+      'blob:http://example.com/1234',
+      'an object URL passes through',
+    );
+  });
+
+  test('a primitive loads the revisioned URL while FileResource yields the clean one', async function (assert) {
+    let file = {
+      url: 'http://example.com/img/hero.png',
+      name: 'hero.png',
+      contentType: 'image/png',
+      contentHash: 'abc123',
+      lastModified: 1700000000,
+    };
+    await render(
+      precompileTemplate(
+        `<div class="probe"><FileImage @file={{file}} /><FileResource @file={{file}} as |resource|>
+           <span class="url">{{resource.url}}</span>
+           <span class="element-url">{{resource.elementUrl}}</span>
+           <span class="bg">{{resource.backgroundImage}}</span>
+         </FileResource></div>`,
+        { strictMode: true, scope: () => ({ FileImage, FileResource, file }) },
+      ),
+    );
+    assert
+      .dom('.probe img')
+      .hasAttribute(
+        'src',
+        'http://example.com/img/hero.png?rev=abc123%3A1700000000',
+      );
+    assert.dom('.url').hasText('http://example.com/img/hero.png');
+    assert
+      .dom('.element-url')
+      .hasText('http://example.com/img/hero.png?rev=abc123%3A1700000000');
+    assert
+      .dom('.bg')
+      .hasText(
+        'url("http://example.com/img/hero.png?rev=abc123%3A1700000000")',
+      );
   });
 
   test('FileResource yields resolved facts and emits no DOM of its own', async function (assert) {

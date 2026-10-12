@@ -2,7 +2,8 @@
 //
 // A realm's indexing runs in one lane family, named by
 // `indexingConcurrencyGroup(realmURL)`. Work published to the family's
-// exclusive lane runs with nothing else in the family, and the queue runs one
+// exclusive lane runs with nothing else in the family at its tier or above,
+// and the queue runs one
 // job per lane, so while a realm's index passes all publish there, two people
 // editing unrelated cards in one realm serialize, and the second one's write
 // pays the first one's fan-out. Passes in per-writer lanes of the family run

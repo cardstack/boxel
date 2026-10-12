@@ -1,5 +1,6 @@
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
+import { CardsGrid } from '@cardstack/base/cards-grid';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -18,7 +19,6 @@ import {
   testRealmURL,
   visitOperatorMode,
 } from '../helpers';
-import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -82,8 +82,6 @@ module('Acceptance | code submode availability', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, unreadableRealmURL, readableRealmURL],
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     await setupAcceptanceTestRealm({

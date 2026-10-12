@@ -8,6 +8,13 @@ import {
 
 import GlimmerComponent from '@glimmer/component';
 
+import {
+  CardDef,
+  CardInfoField,
+  contains,
+  field,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { provide } from 'ember-provide-consume-context';
 import { module, test } from 'qunit';
@@ -30,11 +37,6 @@ import {
   testRealmURL,
 } from '../../helpers';
 import {
-  CardDef,
-  CardInfoField,
-  StringField,
-  contains,
-  field,
   Workspace,
   setupBaseRealm,
   setupWorkspaceCard,
@@ -43,10 +45,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type {
-  CardDef as CardDefInstance,
-  Format,
-} from '@cardstack/base/card-api';
+import type { Format } from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 
 // `getComponent` returns an unparameterised ComponentLike; name the one argument
@@ -68,7 +67,7 @@ module('Integration | Card | workspace | accessibility', function (hooks) {
     loader = getService('loader-service').loader;
   });
 
-  async function componentFor(card: CardDefInstance): Promise<CardComponent> {
+  async function componentFor(card: CardDef): Promise<CardComponent> {
     let api = await loader.import<typeof import('@cardstack/base/card-api')>(
       '@cardstack/base/card-api',
     );
@@ -280,7 +279,7 @@ module(
     async function renderWorkspace() {
       let loader = getService('loader-service').loader;
       let store = getService('store') as StoreService;
-      let card = (await store.get(WORKSPACE_URL)) as CardDefInstance;
+      let card = (await store.get(WORKSPACE_URL)) as CardDef;
       let api = await loader.import<typeof import('@cardstack/base/card-api')>(
         '@cardstack/base/card-api',
       );

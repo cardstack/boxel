@@ -14,8 +14,7 @@ import {
   canonicalizeMatrixMediaKey,
   downloadFile,
   downloadFileAsBase64DataUrl,
-  extractCodePatchBlocks,
-  isToolOrCodePatchResult,
+  isToolResult,
 } from './matrix-utils.ts';
 import { isRecognisedDebugCommand, sessionSkillFeatures } from './debug.ts';
 import {
@@ -32,7 +31,6 @@ import type {
   BoxelContext,
   CardMessageContent,
   CardMessageEvent,
-  CodePatchResultEvent,
   ToolResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   EncodedToolRequest,
@@ -45,12 +43,9 @@ import type {
   SerializedFileDef,
 } from '@cardstack/base/file-api';
 import {
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   getToolDefinitions,
   getToolRequests,
   isToolResultEventType,
-  isToolResultRelType,
   isToolResultWithNoOutputMsgtype,
   isToolResultWithOutputContent,
   isToolResultWithOutputMsgtype,
@@ -82,10 +77,22 @@ import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
 import { stopInForce } from './stop.ts';
+import {
+  compactionSummaryMessage,
+  getLatestCompaction,
+  historyAfterCompaction,
+  type CompactionContent,
+} from './compaction.ts';
 
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
+
+// Leads the trailing context message. That message is the last user message
+// of every prompt, so without this a model can take the context as the
+// request and answer it instead of the user's message before it.
+export const TRAILING_CONTEXT_PREAMBLE =
+  'This message carries context for the conversation above. It is not a new request from the user. Respond to the latest user request above, or continue the work in progress.';
 
 function getLog() {
   return logger('ai-bot:prompt');
@@ -267,6 +274,7 @@ export async function getPromptParts(
     client,
     inputModalities,
     sessionSkillFeatures(eventList, aiBotUserId),
+    getLatestCompaction(eventList, aiBotUserId),
   );
   return {
     shouldRespond,
@@ -281,28 +289,6 @@ export async function getPromptParts(
   };
 }
 
-// The host reports a patch result with the fenced block's position among ALL
-// code blocks in the message, while `codePatchBlocks` holds the patch blocks
-// only. A message that quotes an example code fence before its first patch
-// therefore reports indexes that never line up with 0..n-1, so matching by
-// position waited forever on a patch the host had long applied. Match by
-// count instead: a result per distinct block index, at least one per patch.
-//
-// A failed result counts: the host offers no way to re-apply a failed block,
-// so the block's outcome is final and its reply is resolved. The blocks that
-// did apply are checked for correctness on their own; the failed ones are
-// retried in a new reply that gets its own check.
-function allCodePatchesHaveAResult(
-  codePatchBlocks: string[],
-  results: CodePatchResultEvent[],
-): boolean {
-  if (codePatchBlocks.length === 0) {
-    return true;
-  }
-  let indexes = new Set(results.map((result) => result.content.codeBlockIndex));
-  return indexes.size >= codePatchBlocks.length;
-}
-
 // A user's approval of a call ai-bot holds for approval. It is not the call's
 // outcome: the call stays unanswered — no turn starts, and the prompt shows
 // no result for it — until ai-bot publishes the real result.
@@ -313,10 +299,10 @@ export function isApprovalResult(event: {
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
-  // If the aibot is awaiting command or code patch results, it should not respond yet.
+  // If the aibot is awaiting tool results, it should not respond yet.
   let lastEventExcludingResults = findLast(
     history,
-    (event) => !isToolOrCodePatchResult(event),
+    (event) => !isToolResult(event),
   );
 
   if (!lastEventExcludingResults) {
@@ -335,9 +321,6 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
     getToolRequests<Partial<EncodedToolRequest>>(
       lastEventExcludingResults.content as CardMessageContent,
     ) ?? [];
-  let codePatchBlocks = extractCodePatchBlocks(
-    (lastEventExcludingResults.content as CardMessageContent).body,
-  );
   let lastEventIndex = history.indexOf(lastEventExcludingResults);
   let recentEventsToCheck = history.slice(lastEventIndex + 1);
 
@@ -354,11 +337,7 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
         );
       });
     });
-  let allCodePatchesHaveResults = allCodePatchesHaveAResult(
-    codePatchBlocks,
-    recentEventsToCheck.filter(isCodePatchResultEvent),
-  );
-  if (!allToolsHaveResults || !allCodePatchesHaveResults) {
+  if (!allToolsHaveResults) {
     return false;
   }
   if (!allCheckCorrectnessToolsHaveResults(history)) {
@@ -407,7 +386,7 @@ function shouldPromptCheckCorrectnessSummary(
   }
   let lastNonResultIndex = findLastIndex(
     history,
-    (event) => !isToolOrCodePatchResult(event),
+    (event) => !isToolResult(event),
   );
   if (lastNonResultIndex === -1) {
     return true;
@@ -1120,143 +1099,6 @@ function isCheckCorrectnessToolResultEvent(
   );
 }
 
-function getCodePatchResults(
-  cardMessageEvent: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
-) {
-  let codePatchResultEvents = history.filter((e) => {
-    if (
-      isCodePatchResultEvent(e) &&
-      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
-    ) {
-      return true;
-    }
-    return false;
-  }) as CodePatchResultEvent[];
-  return codePatchResultEvents;
-}
-
-// The host records a patch outcome on a codePatchResult event, and those
-// events are not rendered into the history. For an applied block that is
-// fine: the correctness check reports on the result. A failed block left the
-// model with no signal at all, so it would re-read the file and resend the
-// same block. This message records which blocks of the reply failed and why.
-// It is a record, not an instruction: a retry is a new block in a new reply,
-// so this block stays failed for the rest of the session, and an imperative
-// here would stand in history long after the fix landed. The instruction
-// rides the trailing message, see buildFailedCodePatchFollowUp.
-//
-// Only a block whose latest result is a failure is reported: a block that
-// failed once and then applied on a retry is an applied block.
-function latestCodePatchResults(
-  cardMessageEvent: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
-): CodePatchResultEvent[] {
-  let latestResultByBlock = new Map<number, CodePatchResultEvent>();
-  for (let result of getCodePatchResults(cardMessageEvent, history)) {
-    latestResultByBlock.set(result.content.codeBlockIndex, result);
-  }
-  return [...latestResultByBlock.values()].sort(
-    (a, b) => a.content.codeBlockIndex - b.content.codeBlockIndex,
-  );
-}
-
-function failedCodePatchResults(
-  cardMessageEvent: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
-): CodePatchResultEvent[] {
-  return latestCodePatchResults(cardMessageEvent, history).filter(
-    (result) => result.content['m.relates_to']?.key === 'failed',
-  );
-}
-
-function appliedAnyCodePatch(
-  cardMessageEvent: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
-): boolean {
-  return latestCodePatchResults(cardMessageEvent, history).some(
-    (result) => result.content['m.relates_to']?.key === 'applied',
-  );
-}
-
-function buildFailedCodePatchMessage(
-  cardMessageEvent: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
-): string | undefined {
-  let failures = failedCodePatchResults(cardMessageEvent, history);
-  if (failures.length === 0) {
-    return undefined;
-  }
-  return failures
-    .map((result) => {
-      let fileUrl = result.content.data?.attachedFiles?.[0]?.sourceUrl;
-      let reason = result.content.failureReason ?? 'unknown error';
-      return `Code block ${result.content.codeBlockIndex + 1}${
-        fileUrl ? ` (${fileUrl})` : ''
-      } was not applied: ${reason}`;
-    })
-    .join('\n');
-}
-
-// The instruction that goes with a failed patch, for this request only. It
-// applies while the bot's most recent reply that carried patches has a
-// failed edit and nothing has replaced it: a re-read turn in between keeps
-// it, a later reply with a new edit ends it, and a new message from the user
-// ends it too. Consecutive replies since the user's message whose edit failed
-// are counted; a reply that makes progress ends the count, so three replies
-// that each finish part of the job are
-// never mistaken for three failures in a row.
-function buildFailedCodePatchFollowUp(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): string | undefined {
-  let lastUserMessageIndex = findLastIndex(
-    history,
-    (event) =>
-      event.sender !== aiBotUserId &&
-      event.type === 'm.room.message' &&
-      !isToolOrCodePatchResult(event),
-  );
-  let patchReplies = history.slice(lastUserMessageIndex + 1).filter((event) => {
-    if (
-      event.sender !== aiBotUserId ||
-      event.type !== 'm.room.message' ||
-      isToolOrCodePatchResult(event)
-    ) {
-      return false;
-    }
-    let content = event.content as CardMessageContent;
-    if (content.isStreamingFinished === false) {
-      return false;
-    }
-    return extractCodePatchBlocks(content.body ?? '').length > 0;
-  }) as CardMessageEvent[];
-  let latestReply = patchReplies[patchReplies.length - 1];
-  if (
-    !latestReply ||
-    failedCodePatchResults(latestReply, history).length === 0
-  ) {
-    return undefined;
-  }
-  let failedAttempts = 0;
-  for (let i = patchReplies.length - 1; i >= 0; i--) {
-    if (
-      failedCodePatchResults(patchReplies[i], history).length === 0 ||
-      appliedAnyCodePatch(patchReplies[i], history)
-    ) {
-      break;
-    }
-    failedAttempts++;
-  }
-  // The latest reply has a failed block, so a retry is due even when the
-  // same reply also made progress; that counts as the first attempt.
-  failedAttempts = Math.max(failedAttempts, 1);
-  if (failedAttempts >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
-    return FAILED_CODE_PATCH_LIMIT_INSTRUCTION;
-  }
-  return `${FAILED_CODE_PATCH_RETRY_INSTRUCTION} Attempt ${failedAttempts} of ${MAX_CORRECTNESS_FIX_ATTEMPTS}.`;
-}
-
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
@@ -1457,15 +1299,6 @@ const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have 
 // for a summary reads as the end of the work. It was: a build announced as
 // two cards delivered one, reported it was clean, and stopped, because
 // nothing resumes a plan across turns.
-// A failed patch leaves two traces in the prompt. History carries a record of
-// the failure after the reply that produced it (buildFailedCodePatchMessage):
-// past tense, stable bytes, and it stays true for the rest of the session.
-// The instruction to retry rides the volatile trailing message instead
-// (buildFailedCodePatchFollowUp), so it is present only while the retry is
-// pending and disappears once the next patch lands, rather than standing in
-// history as an order a weak model keeps obeying after the fix.
-const FAILED_CODE_PATCH_RETRY_INSTRUCTION = `A code edit in your last reply was not applied; the reason is recorded after that reply. Re-read the file and use the run-realm-code tool with the current contents. Do not repeat a failed edit.`;
-const FAILED_CODE_PATCH_LIMIT_INSTRUCTION = `Code patches have failed to apply ${MAX_CORRECTNESS_FIX_ATTEMPTS} times in a row. Do not send another patch. Tell the user which file could not be updated and why, and ask how they want to proceed.`;
 
 const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
   'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
@@ -1720,6 +1553,7 @@ export async function buildPromptForModel(
   client: MatrixClient,
   inputModalities?: string[],
   enabledSkillFeatures: string[] = [],
+  compaction?: CompactionContent,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -1729,12 +1563,13 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
-  for (let event of history) {
+  // History through the compaction's cut point is replaced by its summary,
+  // which leads the history. Single messages are never shortened or edited.
+  for (let event of historyAfterCompaction(history, compaction)) {
+    // Tool results have their own event types, so this also skips them;
+    // they ride in with the tool calls they answer.
     if (event.type !== 'm.room.message') {
       continue;
-    }
-    if (isToolOrCodePatchResult(event)) {
-      continue; // we'll include these with the tool calls
     }
     if (
       'isStreamingFinished' in event.content &&
@@ -1745,12 +1580,10 @@ export async function buildPromptForModel(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
-      // Past prose edits ride in history verbatim. Eliding them
-      // rewrote already-sent messages — the placeholder text even changed
-      // once the patch result arrived — which broke the cache prefix, and
-      // models imitated the "[Omitting …]" placeholder in place of a real
-      // patch, stalling the session. Carrying the blocks forward costs
-      // cached-read tokens instead.
+      // Past assistant messages ride in history verbatim, code blocks
+      // included. Rewriting or eliding already-sent messages breaks the
+      // prompt-cache prefix, and models imitate an elision placeholder in
+      // place of real code.
       let content = body;
       let toolCalls = toToolCalls(event as CardMessageEvent);
       if (content || toolCalls.length) {
@@ -1772,16 +1605,6 @@ export async function buildPromptForModel(
           history,
         )
       ).forEach((message) => historicalMessages.push(message));
-      let failedCodePatchMessage = buildFailedCodePatchMessage(
-        event as CardMessageEvent,
-        history,
-      );
-      if (failedCodePatchMessage) {
-        historicalMessages.push({
-          role: 'user',
-          content: failedCodePatchMessage,
-        });
-      }
     }
     if (
       event.sender !== aiBotUserId &&
@@ -1832,6 +1655,14 @@ export async function buildPromptForModel(
       }),
     },
   ];
+  if (compaction) {
+    // A user message, not part of the system message: the summary is a
+    // record of the conversation, not instructions.
+    messages.push({
+      role: 'user',
+      content: compactionSummaryMessage(compaction.summary),
+    });
+  }
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
     history,
@@ -1861,9 +1692,9 @@ export async function buildPromptForModel(
     currentTurnToolResultMedia(history, aiBotUserId, inputModalities),
   );
   let trailingContent = [
+    TRAILING_CONTEXT_PREAMBLE,
     contextContent,
     unsupportedNote,
-    buildFailedCodePatchFollowUp(history, aiBotUserId),
     shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
       ? CHECK_CORRECTNESS_SUMMARY_INSTRUCTION
       : undefined,
@@ -1927,12 +1758,6 @@ function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
-  // If any bot message has unresolved code patches or card patch commands,
-  // defer correctness entirely until all are applied/failed.
-  if (hasUnresolvedCodePatches(history, aiBotUserId)) {
-    return undefined;
-  }
-
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
@@ -1942,58 +1767,20 @@ function collectPendingCodePatchCorrectnessCheck(
     ) {
       continue;
     }
-
-    // Only consider messages that contain code patches or card patch commands.
-    let content = event.content as CardMessageContent;
-    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let toolRequests = (
-      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-    ).map((request) => decodeToolRequest(request));
-    let relevantTools = toolRequests.filter((request) =>
-      isCodeEditingTool(request.name),
-    );
-    let hasRelevantChanges =
-      codePatchBlocks.length > 0 || relevantTools.length > 0;
-    if (!hasRelevantChanges) {
+    let edits = resolveCodeEdits(event as CardMessageEvent, history);
+    // Only messages with source or card edits count, and a cancelled one
+    // counts only if some of its edits landed.
+    if (!edits || edits.cancelledWithoutChanges) {
       continue;
     }
-
-    let codePatchResults = getCodePatchResults(
-      event as CardMessageEvent,
-      history,
-    );
-    let toolResults = getToolResults(event as CardMessageEvent, history);
-    let isCancelled =
-      content.isCanceled || (event as any).status === 'cancelled';
-    let appliedChanges = hasAppliedChanges(
-      codePatchResults,
-      relevantTools,
-      toolResults,
-    );
-    if (isCancelled && !appliedChanges) {
-      continue;
-    }
-
-    let allCodePatchesResolved = allCodePatchesHaveAResult(
-      codePatchBlocks,
-      codePatchResults,
-    );
-    let allRelevantToolsResolved =
-      relevantTools.length === 0 ||
-      relevantTools.every((request) =>
-        toolResults.some(
-          (result) => result.content.commandRequestId === request.id,
-        ),
-      );
-
-    // If the most recent message with patches/commands isn't resolved yet,
-    // don't walk back to earlier messages—wait for the current one to finish.
-    if (!allCodePatchesResolved || !allRelevantToolsResolved) {
+    // Wait for the most recent message with edits to finish before checking
+    // it, and do not walk back to older messages meanwhile.
+    if (!edits.allResolved) {
       return undefined;
     }
-
     let correctnessCheck = buildCodePatchCorrectnessMessage(
       event as CardMessageEvent,
+      edits,
       history,
     );
     if (correctnessCheck) {
@@ -2003,84 +1790,51 @@ function collectPendingCodePatchCorrectnessCheck(
   return undefined;
 }
 
-function hasUnresolvedCodePatches(
+interface ResolvedCodeEdits {
+  content: CardMessageContent;
+  relevantTools: ReturnType<typeof decodeToolRequest>[];
+  toolResults: ReturnType<typeof getToolResults>;
+  cancelledWithoutChanges: boolean;
+  allResolved: boolean;
+}
+
+// The source and card edits a bot message requested, with their results.
+// Undefined when the message requested none.
+function resolveCodeEdits(
+  messageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): boolean {
-  // Consider only the most recent relevant bot message; older unresolved
-  // commands should not block correctness for newer changes.
-  for (let index = history.length - 1; index >= 0; index--) {
-    let event = history[index];
-    if (
-      event.type !== 'm.room.message' ||
-      event.sender !== aiBotUserId ||
-      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
-    ) {
-      continue;
-    }
-    let content = event.content as CardMessageContent;
-    let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-    let toolRequests = (
-      getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-    ).map((request) => decodeToolRequest(request));
-    let relevantTools = toolRequests.filter((request) =>
-      isCodeEditingTool(request.name),
-    );
-    let hasRelevantChanges =
-      codePatchBlocks.length > 0 || relevantTools.length > 0;
-    if (!hasRelevantChanges) {
-      continue;
-    }
-
-    let codePatchResults = getCodePatchResults(
-      event as CardMessageEvent,
-      history,
-    );
-    let toolResults = getToolResults(event as CardMessageEvent, history);
-    let isCancelled =
-      content.isCanceled || (event as any).status === 'cancelled';
-    let appliedChanges = hasAppliedChanges(
-      codePatchResults,
-      relevantTools,
-      toolResults,
-    );
-    if (isCancelled && !appliedChanges) {
-      return false;
-    }
-    let allCodePatchesResolved = allCodePatchesHaveAResult(
-      codePatchBlocks,
-      codePatchResults,
-    );
-    let allRelevantToolsResolved =
-      relevantTools.length === 0 ||
-      relevantTools.every((request) =>
-        toolResults.some(
-          (result) => result.content.commandRequestId === request.id,
-        ),
-      );
-
-    return !(allCodePatchesResolved && allRelevantToolsResolved);
+): ResolvedCodeEdits | undefined {
+  let content = messageEvent.content as CardMessageContent;
+  let relevantTools = (
+    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
+  )
+    .map((request) => decodeToolRequest(request))
+    .filter((request) => isCodeEditingTool(request.name));
+  if (relevantTools.length === 0) {
+    return undefined;
   }
-  return false;
+  let toolResults = getToolResults(messageEvent, history);
+  let isCancelled =
+    content.isCanceled || (messageEvent as any).status === 'cancelled';
+  return {
+    content,
+    relevantTools,
+    toolResults,
+    cancelledWithoutChanges:
+      isCancelled && !hasAppliedChanges(relevantTools, toolResults),
+    allResolved: relevantTools.every((request) =>
+      toolResults.some(
+        (result) => result.content.commandRequestId === request.id,
+      ),
+    ),
+  };
 }
 
 function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
+  { content, relevantTools, toolResults }: ResolvedCodeEdits,
   history: DiscreteMatrixEvent[],
 ): PendingCodePatchCorrectnessCheck | undefined {
-  let content = messageEvent.content as CardMessageContent;
-  let codePatchBlocks = extractCodePatchBlocks(content.body || '');
-  let toolRequests = (
-    getToolRequests<Partial<EncodedToolRequest>>(content) ?? []
-  ).map((request) => decodeToolRequest(request));
-  let relevantTools = toolRequests.filter((request) =>
-    isCodeEditingTool(request.name),
-  );
-
-  if (codePatchBlocks.length === 0 && relevantTools.length === 0) {
-    return undefined;
-  }
-
   if (
     history.some((event) =>
       isCodePatchCorrectnessEventForMessage(event, messageEvent.event_id!),
@@ -2089,36 +1843,7 @@ function buildCodePatchCorrectnessMessage(
     return undefined;
   }
 
-  let codePatchResults = getCodePatchResults(messageEvent, history);
-  let toolResults = getToolResults(messageEvent, history);
-  let isCancelled =
-    content.isCanceled || (messageEvent as any).status === 'cancelled';
-  let appliedChanges = hasAppliedChanges(
-    codePatchResults,
-    relevantTools,
-    toolResults,
-  );
-  if (isCancelled && !appliedChanges) {
-    return undefined;
-  }
-
-  let allCodePatchesResolved = allCodePatchesHaveAResult(
-    codePatchBlocks,
-    codePatchResults,
-  );
-  let allRelevantToolsResolved =
-    relevantTools.length === 0 ||
-    relevantTools.every((request) =>
-      toolResults.some(
-        (result) => result.content.commandRequestId === request.id,
-      ),
-    );
-
-  if (!allCodePatchesResolved || !allRelevantToolsResolved) {
-    return undefined;
-  }
-
-  let files = gatherPatchedFiles(codePatchResults, relevantTools, toolResults);
+  let files = gatherPatchedFiles(relevantTools, toolResults);
   let cards = gatherPatchedCards(relevantTools, toolResults);
 
   if (files.length === 0 && cards.length === 0) {
@@ -2153,47 +1878,10 @@ function isCodeEditingTool(name?: string) {
 }
 
 function gatherPatchedFiles(
-  codePatchResults: CodePatchResultEvent[],
   relevantTools: Partial<ToolRequest>[],
   toolResults: ToolResultEvent[],
 ): CodePatchCorrectnessFile[] {
   let filesByKey = new Map<string, CodePatchCorrectnessFile>();
-  for (let result of codePatchResults) {
-    let status = result.content['m.relates_to']?.key;
-    if (status !== 'applied') {
-      continue;
-    }
-    let lintIssues = result.content.data?.lintIssues || [];
-    let attachments = result.content.data?.attachedFiles ?? [];
-    if (attachments.length === 0) {
-      let fallback = result.content.data?.context?.codeMode?.currentFile;
-      if (fallback) {
-        let entry = filesByKey.get(fallback) ?? {
-          sourceUrl: fallback,
-          displayName: formatFileDisplayName(fallback),
-        };
-        if (lintIssues.length) {
-          entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
-        }
-        filesByKey.set(fallback, entry);
-      }
-      continue;
-    }
-    for (let file of attachments) {
-      let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
-      let key = sourceUrl || file.name || `${result.event_id}-${file.name}`;
-      let labelSource = sourceUrl || file.name || '';
-      let entry = filesByKey.get(key) ?? {
-        sourceUrl: sourceUrl || labelSource,
-        displayName: formatFileDisplayName(labelSource),
-      };
-      if (lintIssues.length) {
-        entry.lintIssues = mergeLintIssues(entry.lintIssues, lintIssues);
-      }
-      filesByKey.set(key, entry);
-    }
-  }
-
   for (let request of relevantTools) {
     if (!request.name?.startsWith(SOURCE_CODE_TOOL_NAME_PREFIX)) {
       continue;
@@ -2217,28 +1905,6 @@ function gatherPatchedFiles(
     }
   }
   return Array.from(filesByKey.values());
-}
-
-function mergeLintIssues(
-  existing: string[] | undefined,
-  next: string[],
-): string[] {
-  if (!existing) {
-    return [...next];
-  }
-  if (next.length === 0) {
-    return existing;
-  }
-  let seen = new Set(existing);
-  let merged = [...existing];
-  for (let issue of next) {
-    if (seen.has(issue)) {
-      continue;
-    }
-    seen.add(issue);
-    merged.push(issue);
-  }
-  return merged;
 }
 
 function gatherPatchedCards(
@@ -2358,18 +2024,9 @@ function formatFileDisplayName(identifier?: string) {
 }
 
 function hasAppliedChanges(
-  codePatchResults: CodePatchResultEvent[],
   relevantTools: Partial<ToolRequest>[],
   toolResults: ToolResultEvent[],
 ): boolean {
-  if (
-    codePatchResults.some(
-      (result) => result.content['m.relates_to']?.key === 'applied',
-    )
-  ) {
-    return true;
-  }
-
   return relevantTools.some((request) =>
     toolResults.some(
       (result) =>
@@ -2404,18 +2061,15 @@ export const buildAttachmentsMessagePart = async (
   return text;
 };
 
-// A message a human sent — the event that starts a turn. Tool and code-patch
-// results are excluded even when a human's client published them: they
-// continue the turn the bot's tool calls belong to.
+// A message a human sent — the event that starts a turn. Tool results are
+// not messages (they have their own event types), so a human's client that
+// publishes one does not start a turn: it continues the turn the bot's tool
+// calls belong to.
 function isHumanMessage(
   event: DiscreteMatrixEvent,
   aiBotUserId: string,
 ): boolean {
-  return (
-    event.sender !== aiBotUserId &&
-    event.type === 'm.room.message' &&
-    !isToolOrCodePatchResult(event)
-  );
+  return event.sender !== aiBotUserId && event.type === 'm.room.message';
 }
 
 // Limits on the tool-result media one turn embeds. Every request of the turn
@@ -2749,10 +2403,9 @@ export const buildContextMessage = async (
     return (
       (ev.type === 'm.room.message' &&
         ev.content.msgtype == APP_BOXEL_MESSAGE_MSGTYPE) ||
-      isToolResultEventType(ev.type) ||
-      ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+      isToolResultEventType(ev.type)
     );
-  }) as CardMessageEvent | ToolResultEvent | CodePatchResultEvent | undefined;
+  }) as CardMessageEvent | ToolResultEvent | undefined;
   let context = lastEventWithContext?.content.data?.context;
 
   // Extract room ID from any event in history
@@ -2987,16 +2640,6 @@ export const isToolResultStatusApplied = (event?: MatrixEvent) => {
   );
 };
 
-export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    isCodePatchResultEvent(event.event as DiscreteMatrixEvent) &&
-    event.getContent()['m.relates_to']?.key === 'applied'
-  );
-};
-
 function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   model: string;
   toolsSupported?: boolean;
@@ -3065,28 +2708,7 @@ function normalizeReasoningEffort(
 export function isToolResultEvent(
   event?: DiscreteMatrixEvent,
 ): event is ToolResultEvent {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    isToolResultEventType(event.type) &&
-    isToolResultRelType(
-      (event as ToolResultEvent).content['m.relates_to']?.rel_type,
-    )
-  );
-}
-
-export function isCodePatchResultEvent(
-  event?: DiscreteMatrixEvent,
-): event is CodePatchResultEvent {
-  if (event === undefined) {
-    return false;
-  }
-  return (
-    event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
-    event.content['m.relates_to']?.rel_type ===
-      APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
-  );
+  return event !== undefined && isToolResult(event);
 }
 
 export function mxcUrlToHttp(mxc: string, baseUrl: string): string {

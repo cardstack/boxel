@@ -88,10 +88,11 @@ function rebaseSpecifier(
 // literal shim ids out of that file covers `@cardstack/base/*` through its
 // path alias already, so nothing is lost to it here.
 // The base modules a bundled module may import while still leaving the set
-// closed: each one's whole content is a re-export, so it is fetched on purpose
-// and the copy the bundler puts in the chunk exposes the same class from that
-// same chunk. Anything else a bundled module imports has to be bundled too —
-// `Integration | bundled base modules` fails when it is not.
+// closed: each one's whole content is a re-export, so the copy the bundler
+// puts in the chunk exposes the same class from that same chunk, and nothing
+// is left holding two that disagree. Anything else a bundled module imports
+// has to be bundled too — `Integration | bundled base modules` fails when it
+// is not.
 export const FETCHED_RE_EXPORTS = new Set([
   'string',
   'markdown',
@@ -115,20 +116,36 @@ export const BUNDLED_BASE_MODULES: Record<
   // is bundled anyway AND fetched separately when card code imports it by
   // identifier — two copies, whose classes and module state do not match.
   //
-  // A module whose whole content is a re-export is the exception, and is left
-  // out on purpose: a loader credits a class to the first module it serves
-  // that exposes it, and a bundled re-exporter is served without the loader
-  // ever being asked for the module that declares the class. The class is then
-  // named by a module that does not declare it, which an adoption-chain walk
-  // reaches as a filter referring to a nonexistent type. Fetching the
-  // re-exporter instead costs one request and gets the attribution right, and
-  // the two module records that leaves behind expose the same class from the
-  // same chunk, so nothing compares them and disagrees.
+  // Attribution does not decide what goes in this table. A bundled module
+  // publishes the classes it declares as it is evaluated, and the loader reads
+  // that registry before its own record, so a class is named by the module
+  // that declares it whichever module was served first. `theme` and
+  // `image-file-def` are bundled on that footing: each re-exports a class
+  // `card-api` declares, and `card-api` keeps the credit.
   //
-  // `file-api`, `command`, `commands/search-card-result`, `theme`, `index`,
-  // `command-field`, `frontmatter-parse` and `file-formats/index` are out on
-  // the same rule; `FETCHED_RE_EXPORTS` lists the ones a bundled module still
-  // imports, which are the ones the closure check has to allow.
+  // Two rules keep a module out. Closure, above; and attribution — a bundled
+  // module must not be the only one naming a class another bundled module
+  // declares, because one bundled module asking for another resolves inside
+  // the chunk, so the declarer is never served and never names it.
+  //
+  // `command` is the one module attribution keeps out: its `linksToMany(Spec)`
+  // fields name `Spec`, which `spec` declares, and `lint:bundled-base` reports
+  // `command names Spec from spec` when it is added. Closure blocks it today as
+  // well, but that is the removable half — bundle its siblings and attribution
+  // is what remains.
+  //
+  // Nothing else here is blocked. `commands/search-card-result`,
+  // `commands/search-entry-result` and `commands/search-result-list` pass the
+  // check together, as do `markdown`, `text-area`, `file-api`, `index`,
+  // `command-field` and `file-formats/index`, which import nothing the table
+  // lacks. All of them are follow-on work rather than exclusions.
+  // `string` has a reason of its own: it is `export default StringField` in a
+  // `.ts`, so a dynamic `import()` of it here pulls that file into the
+  // TypeScript program, where TS reads the `.ts` as CommonJS and retypes the
+  // default export for every consumer.
+  //
+  // `FETCHED_RE_EXPORTS` lists the ones a bundled module still imports, which
+  // are the ones the closure check has to allow.
   'card-api': () => import('@cardstack/base/card-api'),
   '-private': () => import('@cardstack/base/-private'),
   'card-serialization': () => import('@cardstack/base/card-serialization'),
@@ -185,6 +202,8 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/file-formats/file-presentation'),
   'file-formats/file-preview-stage': () =>
     import('@cardstack/base/file-formats/file-preview-stage'),
+  'file-formats/file-revision': () =>
+    import('@cardstack/base/file-formats/file-revision'),
   'file-formats/file-shell-atom': () =>
     import('@cardstack/base/file-formats/file-shell-atom'),
   'file-formats/file-shell-embedded': () =>
@@ -216,6 +235,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'render-context': () => import('@cardstack/base/render-context'),
   'shared-state': () => import('@cardstack/base/shared-state'),
   'text-input-validator': () => import('@cardstack/base/text-input-validator'),
+  'untitled-card-title': () => import('@cardstack/base/untitled-card-title'),
   'watched-array': () => import('@cardstack/base/watched-array'),
   'date/day': () => import('@cardstack/base/date/day'),
   'date/month': () => import('@cardstack/base/date/month'),
@@ -262,22 +282,16 @@ export const BUNDLED_BASE_MODULES: Record<
     import('@cardstack/base/color-field/util/color-utils'),
   'color-field/util/css-color-parsers': () =>
     import('@cardstack/base/color-field/util/css-color-parsers'),
-  // `command` and `commands/search-card-result` are deliberately NOT bundled,
-  // for the two reasons `file-api` is not.
+  // `commands/search-card-result` is not blocked: adding it with
+  // `commands/search-entry-result` and `commands/search-result-list` passes
+  // the check. The three are follow-on work.
   //
-  // `command` imports `./commands/search-entry-result`, which is not in this
-  // table, so bundling it would compile that module into `command`'s chunk
-  // while a direct import of it still fetched a separate copy — the closure
-  // rule above, broken.
-  //
-  // Both also re-export classes they do not declare: `command` re-exports the
-  // search input and result fields from `commands/*`, and
-  // `commands/search-card-result` re-exports `JsonField` from `json-field`.
-  // A loader credits a class to the first module it serves that exposes it,
-  // and a bundled module is served without its re-export source being loaded
-  // first, so serving either would make those classes name the wrong module.
-  // Fetched from the realm they are correct, because evaluation loads the
-  // declaring module first.
+  // `command` is blocked, and by attribution rather than closure. Its
+  // `linksToMany(Spec)` fields name `Spec`, which `spec` declares; bundling
+  // both resolves `command`'s import of `spec` inside the chunk, so the loader
+  // is never asked for `spec` and never names `Spec`. A link's type is read as
+  // data, and the chooser filters on it. `lint:bundled-base` reports
+  // `command names Spec from spec`.
   'components/markdown-editor-mode-select': () =>
     import('@cardstack/base/components/markdown-editor-mode-select'),
   'components/time-slots': () =>
@@ -344,7 +358,16 @@ export const BUNDLED_BASE_MODULES: Record<
   'audio-metadata': () => import('@cardstack/base/audio-metadata'),
   'audio-waveform': () => import('@cardstack/base/audio-waveform'),
   'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
+  // `brand-functional-palette` is fetched, not bundled: served from the bundle,
+  // Safari intermittently evaluates it before its `color` import is
+  // initialized.
+  'brand-logo': () => import('@cardstack/base/brand-logo'),
+  coordinate: () => import('@cardstack/base/coordinate'),
+  country: () => import('@cardstack/base/country'),
+  'css-value': () => import('@cardstack/base/css-value'),
   'csv-file-def': () => import('@cardstack/base/csv-file-def'),
+  currency: () => import('@cardstack/base/currency'),
+  date: () => import('@cardstack/base/date'),
   'docx-file-def': () => import('@cardstack/base/docx-file-def'),
   'docx-meta-extractor': () => import('@cardstack/base/docx-meta-extractor'),
   'exif-meta-extractor': () => import('@cardstack/base/exif-meta-extractor'),
@@ -381,6 +404,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'flac-meta-extractor': () => import('@cardstack/base/flac-meta-extractor'),
   'font-file-def': () => import('@cardstack/base/font-file-def'),
   'font-meta-extractor': () => import('@cardstack/base/font-meta-extractor'),
+  'frontmatter-parse': () => import('@cardstack/base/frontmatter-parse'),
   'gif-meta-extractor': () => import('@cardstack/base/gif-meta-extractor'),
   'gltf-meta-extractor': () => import('@cardstack/base/gltf-meta-extractor'),
   'html-file-def': () => import('@cardstack/base/html-file-def'),
@@ -406,12 +430,15 @@ export const BUNDLED_BASE_MODULES: Record<
   'png-meta-extractor': () => import('@cardstack/base/png-meta-extractor'),
   'pptx-file-def': () => import('@cardstack/base/pptx-file-def'),
   'pptx-meta-extractor': () => import('@cardstack/base/pptx-meta-extractor'),
+  'process-card': () => import('@cardstack/base/process-card'),
   'stl-meta-extractor': () => import('@cardstack/base/stl-meta-extractor'),
   'svg-meta-extractor': () => import('@cardstack/base/svg-meta-extractor'),
   'text-file-def': () => import('@cardstack/base/text-file-def'),
+  theme: () => import('@cardstack/base/theme'),
   'three-d-model-def': () => import('@cardstack/base/three-d-model-def'),
   'three-mf-meta-extractor': () =>
     import('@cardstack/base/three-mf-meta-extractor'),
+  time: () => import('@cardstack/base/time'),
   'ts-file-def': () => import('@cardstack/base/ts-file-def'),
   'video-file-def': () => import('@cardstack/base/video-file-def'),
   'vorbis-comment-parser': () =>

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "hang",
+      "title": "Hang",
+      "group": "Choreo",
+      "lede": "Shuffleboard. The puck goes as far as you flick it, and no further.",
+      "apis": ["c.gesture", "c.beacon", "c.Follow", "c.moved", "c.still"],
+      "sample": "// The shooting area is walled — dragConstraints, not a foul line — so the\n// puck cannot be carried to where you want it and the distance has to come\n// out of the THROW. A wall teaches the same lesson as a rule and never tells\n// anyone off for crossing it.\n//\n// dragMomentum=false on purpose. Motion's inertia would slide the puck for\n// free and prove nothing: inertia has no destination and no rules. Here the\n// throw is READ, a resting place is RESOLVED from it, and only then is the\n// flight AUTHORED to that place with the throw's own speed borrowed as its\n// opening velocity. And COAST is not a free parameter — an overdamped spring\n// decays over damping/stiffness, so the projection has to use the spring's\n// own time constant or the puck visibly lies about how hard you threw it.\nconst SLIDE = { damping: 28, stiffness: 100 };\nconst COAST = SLIDE.damping / SLIDE.stiffness;\n\n<c.Parallel>\n  <c.Move @of={{c.received 'puck'}} @from={{c.gesture}} @spring={{SLIDE}}\n    @size={{false}} @swap='none' />\n\n  {{! the knock. Nothing told these to move — the collision sweep changed\n      their seats and the changeset noticed. A different spring, because a\n      transferred shove is not a throw. }}\n  <c.Move @of={{c.moved 'puck'}} @spring={{KNOCK}} @size={{false}} />\n\n  {{! what the throw did NOT disturb, so a chain reaction reads as one }}\n  <c.Hold @of={{c.still 'puck'}} @opacity={{0.38}} @duration={{0.55}} />\n\n  {{! shoved off the end: claimed by nobody, so it has nowhere to land }}\n  <c.Move @of={{c.removed 'puck'}} @to={{c.beacon 'gutter'}} @spring={{OFF}} />\n\n  {{! the lead line. Which puck is furthest can change PART WAY THROUGH the\n      flight — the thrown one, one it knocked forward, or the old leader —\n      at a moment no keyframe can name. @read takes the max every frame, so\n      the line changes allegiance exactly when the lead changes hands. }}\n  <c.Follow @of={{c.id 'lead'}} @to={{c.kept 'puck'}}\n    @read={{lead}} @rest={{LEAD_REST}} @duration={{1.6}} />\n</c.Parallel>\n\n// And the aim preview is deliberately NOT in the score. It runs on every\n// pointer move while nothing is animating, so putting it through the\n// renderer would re-measure every sprite in the region sixty times a second\n// to move one dashed ring. It previews info.velocity.x through the same\n// projection onDragEnd will use, so the ghost is not an approximation of the\n// throw — it is the throw, asked early.\naim = (event, info) => {\n  const x = this.project(event.clientX, info.velocity.x, rect);\n  ghost.style.setProperty('--at', String(clamp01(x)));\n  ghost.textContent = callIt(x);\n};",
+      "slowmo": true,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "interactive-hang",
+        "concept": "Release velocity is information that layout cannot provide",
+        "why": "The gesture snapshot supplies where the puck was released and how fast it was moving. Game logic chooses a legal destination, then Choreo stages the travel and follow-up instead of delegating everything to free inertia.",
+        "experiment": "Flick from a similar release point at two speeds. Compare the resulting travel, then try Rubber hang and Decisive release for the transition response.",
+        "pitfall": "Enabling automatic drag momentum as well as scored travel gives two systems ownership of the released puck.",
+        "combine": "Combine with Follow for a label or shadow that must stay attached during the throw."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

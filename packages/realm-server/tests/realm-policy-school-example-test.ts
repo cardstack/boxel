@@ -30,6 +30,7 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { holdIndexingLane } from './helpers/indexing.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 // The school example realms, served exactly as they ship in
@@ -434,6 +435,8 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
+          ancestorDefinitionReads: 0,
+          lockedTypeReads: 0,
         },
         'a caller the realm ACL allows pays nothing for the policy',
       );
@@ -765,6 +768,70 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         (await getCard(READING_SAM, onEducation(CARMEN))).status,
         404,
+      );
+    });
+  });
+
+  // Search is not a prompt revocation boundary. A direct read judges the card
+  // as stored, so taking someone off it refuses them on the next request,
+  // while a search composes the grant into a filter over the index and keeps
+  // returning the card until it is reindexed. This pins that behavior as it
+  // is, the lagging search included, so a change to it is a deliberate one.
+  module('a provider is taken off a schedule', function () {
+    function listedIds(response: Response) {
+      return (response.body.data as { id: string }[]).map((entry) => entry.id);
+    }
+
+    test('the direct read refuses her at once, and search lists the schedule until it is reindexed', async function (assert) {
+      assert.deepEqual(
+        listedIds(await listMySchedules(CARMEN)),
+        [SPEECH_JORDAN, SPEECH_MAYA],
+        'Carmen provides both speech-therapy schedules',
+      );
+
+      let release = await holdIndexingLane(db, EDUCATION);
+      try {
+        // Jordan's schedule passes to Ben. The bytes are stored now, and the
+        // pass that indexes them waits behind the held lane.
+        let shipped = readFileSync(
+          join(
+            EXAMPLE_ROOT,
+            'school-education',
+            'schedules',
+            'speech-jordan.json',
+          ),
+          'utf8',
+        );
+        let handedOver = shipped.replace(CARMEN, BEN);
+        assert.notStrictEqual(handedOver, shipped, 'the provider id changed');
+        await education.write('schedules/speech-jordan.json', handedOver, {
+          waitForIndex: false,
+        });
+
+        assert.strictEqual(
+          (await getCard(SPEECH_JORDAN, onEducation(CARMEN))).status,
+          404,
+          'the direct read judges the stored provider id, and refuses her on the next request',
+        );
+        assert.strictEqual(
+          (await getCard(SPEECH_JORDAN, onEducation(BEN))).status,
+          200,
+          'and admits Ben, whom only the stored bytes name',
+        );
+        assert.deepEqual(
+          listedIds(await listMySchedules(CARMEN)),
+          [SPEECH_JORDAN, SPEECH_MAYA],
+          'while search answers from the index, which still names her',
+        );
+      } finally {
+        await release();
+      }
+      await education.incrementalIndexing();
+
+      assert.deepEqual(
+        listedIds(await listMySchedules(CARMEN)),
+        [SPEECH_MAYA],
+        'once the schedule is reindexed, search stops listing it',
       );
     });
   });

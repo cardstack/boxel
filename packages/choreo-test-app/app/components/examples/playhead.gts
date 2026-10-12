@@ -1,14 +1,13 @@
 import type { ChoreoRun, Query, SpringSpec } from '@cardstack/choreo';
 import { at, Choreo } from '@cardstack/choreo';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { createChoreoPlayer } from 'choreo-player';
 import { modifier } from 'ember-modifier';
-import { motion } from 'glimmer-motion';
-import { motionValue } from 'motion-dom';
+import { motion, motionValue } from 'glimmer-motion';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';

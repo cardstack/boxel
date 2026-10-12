@@ -55,7 +55,7 @@ The second package, **`choreo-player`**, is a dependency-free headless transport
 
 > Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`. The repo is **Choreo**; the published package is still **`glimmer-motion`** — one npm name, unchanged, and every import in these docs is the real one.
 
-**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. Then: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [choreo-splices.md](docs/choreo-splices.md) (cuts as a first-class citizen of a score), [film.md](docs/film.md) (the `<Film>` construct, as built), [planes-and-cameras.md](docs/planes-and-cameras.md) and [dom-in-3d.md](docs/dom-in-3d.md) (a `<Choreo>` region as a plane in a three.js scene), [demo-recording.md](docs/demo-recording.md) (external clocks), [choreo-player.md](docs/choreo-player.md) (the headless transport), [realm-publishing.md](docs/realm-publishing.md), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
+**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. Then: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [choreo-splices.md](docs/choreo-splices.md) (cuts as a first-class citizen of a score), [film.md](docs/film.md) (the `<Film>` construct, as built), [planes-and-cameras.md](docs/planes-and-cameras.md) and [dom-in-3d.md](docs/dom-in-3d.md) (a `<Choreo>` region as a plane in a three.js scene), [demo-recording.md](docs/demo-recording.md) (external clocks), [choreo-player.md](docs/choreo-player.md) (the headless transport), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
 
 `docs/` is the documentation. The workshop behind it — design records, handoffs, measurements, the films' scripts and wall text — is in [notes/](notes), which is drafts by definition: some of it describes things proposed and never built, or built and since changed.
 
@@ -322,7 +322,7 @@ import {
 `choreo-player` is a dependency-free, headless transport for clocking public Choreo runs from outside — a frame-by-frame video renderer, parallel capture workers, a custom scrub surface. It owns runs you hand it (never before an external clock has actually arrived — [docs/demo-recording.md](docs/demo-recording.md) is the field guide for keeping a demo correct both interactively and under capture), and its run contract is structural and five members small:
 
 ```ts
-import { createChoreoPlayer } from 'choreo-player';
+import { createChoreoPlayer } from '@cardstack/choreo-player';
 
 const player = createChoreoPlayer({
   duration: 12,
@@ -644,18 +644,11 @@ pnpm lint:types                # glint, workspace packages
 pnpm docs:check                # API and demo teaching coverage
 pnpm build:boxel               # gallery adaptation and realm artifacts
 pnpm --filter test-app start   # examples at / ; tests at /tests
-pnpm realm:stage               # hashed realm bundle + stable choreo.ts entrypoint
 ```
 
-`pnpm realm:stage` flattens the built addon plus the motion.dev engine into a
-content-hashed `builds/choreo-<hash>.ts` plus a one-line `choreo.ts` re-export
-for a [Boxel](https://github.com/cardstack/boxel) realm — only `@ember/*`,
-`@glimmer/*` and `ember-modifier` stay external, resolved by the host. `pnpm
-realm` mirrors both into the workspace in `.choreo-realm-sync.json` and
-publishes them with `boxel file write`. Old hashes stay on the realm; rolling
-back is changing the re-export. See
-`packages/glimmer-motion/scripts/build-realm-bundle.mjs` and the
-[realm publishing guide](docs/realm-publishing.md).
+Cards in a [Boxel](https://github.com/cardstack/boxel) realm import
+`glimmer-motion` and `@cardstack/choreo` by their package names. The Boxel host
+shims both packages, so a realm needs no bundled copy of either.
 
 The complete gallery, guides, tuning workspaces, and 3D room can also be deployed
 through the [Boxel gallery build](packages/choreo-gallery/README.md). Use your own

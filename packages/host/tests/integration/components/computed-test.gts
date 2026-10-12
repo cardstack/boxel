@@ -1,6 +1,20 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { click, settled } from '@ember/test-helpers';
 
+import {
+  field,
+  contains,
+  CardDef,
+  Component,
+  FieldDef,
+  containsMany,
+  linksTo,
+  linksToMany,
+  CardInfoField,
+  Theme,
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -18,21 +32,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../../helpers';
-import {
-  setupBaseRealm,
-  StringField,
-  NumberField,
-  field,
-  contains,
-  CardDef,
-  Component,
-  FieldDef,
-  containsMany,
-  linksTo,
-  linksToMany,
-  CardInfoField,
-  Theme,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -43,8 +42,6 @@ module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     let permissions: Permissions = {

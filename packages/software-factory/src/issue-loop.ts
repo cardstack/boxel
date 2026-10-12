@@ -183,7 +183,7 @@ export interface IssueLoopConfig {
   /**
    * Render gate: after each non-bootstrap issue completes,
    * screenshot the cards it shipped via the realm server's
-   * `_capture-card`, attach the renders to the run log, and — unless
+   * `POST /_capture`, attach the renders to the run log, and — unless
    * `acceptanceWalkthrough` is false — run a verifier turn that reads the
    * PNGs and verdicts each acceptance criterion, filing defect issues for
    * gaps. Both are best-effort: a gate failure never un-does the issue.

@@ -15,9 +15,6 @@ import {
   setupLocalIndexing,
   setRealmAuthFailure,
 } from '../helpers';
-
-import { setupBaseRealm } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../helpers/setup';
@@ -40,7 +37,6 @@ module(
   'Integration | matrix-service | boot assembly with trusted servers',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // Don't autostart Matrix during realm setup: `setupIntegrationTestRealm`
@@ -108,7 +104,6 @@ module(
   'Integration | matrix-service | trusted-servers result survives legacy event',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // The mock matrix client's `startClient` re-emits a synthetic
@@ -154,7 +149,6 @@ module(
   'Integration | matrix-service | boot assembly fallback to legacy realms',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // No activeRealmServers — the mock returns `{ realmServers: [] }`, the
@@ -199,7 +193,6 @@ module(
   'Integration | matrix-service | lazy migration seeds realm-servers',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // Only the legacy `app.boxel.realms` key is set (no activeRealmServers),
@@ -306,7 +299,6 @@ module(
   'Integration | matrix-service | graceful degradation when a trusted server is unreachable',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -380,7 +372,6 @@ module(
   'Integration | matrix-service | account-data refresh survives a transient outage',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -436,7 +427,6 @@ module(
   'Integration | matrix-service | already-migrated account is untouched',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // `app.boxel.realm-servers` is already populated, so boot takes the
@@ -480,7 +470,6 @@ module(
   'Integration | matrix-service | boot seeds own realm server for a keyless account',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // Neither `app.boxel.realms` nor `app.boxel.realm-servers` is set — the
@@ -544,7 +533,6 @@ module(
   'Integration | matrix-service | boot seed leaves a legacy account alone',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     // Legacy `app.boxel.realms` set, no `app.boxel.realm-servers`.

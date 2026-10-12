@@ -12,6 +12,7 @@ import {
   formatClock,
   type FileIconComponent,
 } from './file-presentation';
+import { fileContentRevision, urlAtRevision } from './file-revision';
 import {
   extensionOfFile,
   profileForFile,
@@ -101,6 +102,10 @@ export interface FileViewModel {
   previewKind: string;
   previewAdapter: PreviewAdapter | string;
   previewSource: PreviewSource | string;
+  // An image's `imageUrl` and a media file's `mediaUrl` are what a native
+  // element loads the file's own bytes from. They carry the file's content
+  // revision so the element reloads when the file is written; `url` and
+  // `resourceUrl` stay the file's own URL for links, downloads, and copy-link.
   imageUrl?: string;
   posterUrl: string;
   thumbnailUrl: string;
@@ -366,6 +371,7 @@ export function fileViewModel(
 ): FileViewModel {
   let file = (model ?? {}) as FileModelLike;
   let url = String(file.url ?? file.sourceUrl ?? file.id ?? '');
+  let revisionedUrl = urlAtRevision(url, fileContentRevision(file));
   let name = String(file.name ?? url.split('/').pop() ?? '');
   let contentType = file.contentType;
   let profile = profileForFile({ name, contentType });
@@ -541,10 +547,16 @@ export function fileViewModel(
     previewSource,
     // One presentation slot covers both a native image and a video's poster.
     imageUrl:
-      family === 'image' ? url : family === 'video' ? posterUrl : undefined,
+      family === 'image'
+        ? revisionedUrl
+        : family === 'video'
+          ? posterUrl
+          : undefined,
     posterUrl,
     thumbnailUrl,
-    mediaUrl: ['audio', 'video', 'music'].includes(family) ? url : undefined,
+    mediaUrl: ['audio', 'video', 'music'].includes(family)
+      ? revisionedUrl
+      : undefined,
     captionUrl: file.captionUrl,
     waveformBars: waveformBarsFor(file, format),
     title,

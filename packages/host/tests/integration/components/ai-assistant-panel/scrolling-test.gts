@@ -2,6 +2,8 @@ import { waitFor, waitUntil, click, triggerEvent } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -26,14 +28,6 @@ import {
   withCachedRealmSetup,
   realmConfigCardJSON,
 } from '../../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  setupBaseRealm,
-  StringField,
-} from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
@@ -45,7 +39,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
 
   setupRenderingTest(hooks);
   setupOperatorModeStateCleanup(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;

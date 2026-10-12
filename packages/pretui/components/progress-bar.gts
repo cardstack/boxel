@@ -59,7 +59,7 @@ export class ProgressBar extends Component<ProgressBarSignature> {
     return this.args.count ?? `${Math.round(this.pct)}%`;
   }
   get fillStyle() {
-    return htmlSafe(`width: ${this.pct}%; min-width: ${this.pct > 0 ? 4 : 0}px`);
+    return htmlSafe(`width: ${this.pct}%; min-width: ${this.pct > 0 ? '0.25rem' : 0}`);
   }
   get stepList(): { on: boolean }[] {
     let out = [];
@@ -124,46 +124,52 @@ export class ProgressBar extends Component<ProgressBarSignature> {
       @layer PretComponent {
         .pretui-progresswrap {
           display: grid;
-          gap: 5px;
+          gap: var(--boxel-sp-3xs);
         }
         .pretui-progress-head {
           display: flex;
           justify-content: space-between;
           align-items: last baseline;
-          font-size: var(--text-ui-sm, 11.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--muted-foreground);
         }
         .pretui-progress-count {
           font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
+          font-size: var(--boxel-font-size-2xs);
           font-variant-numeric: tabular-nums;
           color: var(--foreground);
         }
         .pretui-progress {
-          height: 4px;
-          border-radius: 2px;
-          background: var(--inset, var(--boxel-100));
+          height: 0.25rem;
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: var(--inset);
           overflow: hidden;
         }
         .pretui-progress-fill {
           height: 100%;
-          border-radius: 2px;
+          border-radius: var(--boxel-border-radius-2xs);
           background-color: var(--pretui-progress-hue, var(--primary));
-          transition: width var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
+          transition: width var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease-out);
         }
         .pretui-progress-steps {
           display: flex;
-          gap: 3px;
+          gap: var(--boxel-sp-5xs);
         }
         .pretui-progress-step {
           flex: 1;
-          height: 4px;
-          border-radius: 2px;
-          background: var(--inset, var(--boxel-100));
-          transition: background var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease);
+          height: 0.25rem;
+          border-radius: var(--boxel-border-radius-2xs);
+          background-color: var(--inset);
+          transition: background-color var(--pretui-dur-morph, 300ms) var(--pretui-ease-morph, ease-out);
         }
         .pretui-progress-step[data-on] {
           background-color: var(--pretui-progress-hue, var(--primary));
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-progress-fill,
+          .pretui-progress-step {
+            transition: none;
+          }
         }
       }
     </style>

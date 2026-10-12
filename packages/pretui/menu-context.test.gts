@@ -422,6 +422,6 @@ module('Pretui | ContextMenu | usage page', function (hooks) {
     let Page = PAGES['ContextMenu'];
     assert.ok(Page, 'the page is in the registry');
     await render(<template><Page /></template>);
-    assert.dom('.FreestyleUsage').exists('the page mounted');
+    assert.dom('[data-test-pretui-usage]').exists('the page mounted');
   });
 });

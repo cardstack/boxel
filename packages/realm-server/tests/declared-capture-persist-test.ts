@@ -335,6 +335,58 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(adapter.objects.size, 0, 'no object written');
   });
 
+  test("a pdf capture's filename lands on its manifest entry", async function (assert) {
+    let { manifest } = await persist({
+      result: {
+        entries: [pdfCaptureResult({ filename: 'Acme Q3 Statement' })],
+      },
+    });
+    assert.strictEqual(manifest!.statement.filename, 'Acme Q3 Statement');
+  });
+
+  test("a carried-forward pdf entry takes the current render's filename", async function (assert) {
+    let prior: CaptureManifest = {
+      statement: {
+        specHash: 'c'.repeat(64),
+        objectKey: 'e'.repeat(64),
+        contentType: 'application/pdf',
+        pageCount: 3,
+        byteSize: 10,
+        sourceContentHash: 'abc123',
+        filename: 'Old Name',
+      },
+    };
+    let carried = (filename?: string) =>
+      pdfCaptureResult({
+        keyBy: 'file-content',
+        carriedForward: true,
+        base64: undefined,
+        ...(filename !== undefined ? { filename } : {}),
+      });
+
+    let renamed = await persist({
+      result: { entries: [carried('New Name')] },
+      priorManifest: prior,
+      contentHash: 'abc123',
+    });
+    assert.deepEqual(
+      renamed.manifest!.statement,
+      { ...prior.statement, filename: 'New Name' },
+      'the bytes carry forward under the new name',
+    );
+
+    let unnamed = await persist({
+      result: { entries: [carried()] },
+      priorManifest: prior,
+      contentHash: 'abc123',
+    });
+    assert.false(
+      'filename' in unnamed.manifest!.statement,
+      'a render that resolves no name drops the prior one',
+    );
+    assert.deepEqual(await ledgerRows(), [], 'no new ledger row');
+  });
+
   test('per-slot failures land in errors and the manifest omits the name', async function (assert) {
     adapter.failNextPut = true;
     let { manifest, errors } = await persist({

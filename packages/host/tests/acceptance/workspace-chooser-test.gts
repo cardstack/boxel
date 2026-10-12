@@ -29,7 +29,6 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
@@ -86,8 +85,6 @@ module('Acceptance | workspace-chooser', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [realmAURL, realmBURL],
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     setupUserSubscription();

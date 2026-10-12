@@ -5,7 +5,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -34,7 +33,6 @@ const CSV_SOURCE = [
 // formats, and a count summary — not a cropped table — in a fitted cell.
 module('Integration | json/csv file def preview', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let JsonFileDef: typeof JsonFileDefModule.JsonFileDef;

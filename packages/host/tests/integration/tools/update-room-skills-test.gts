@@ -1,6 +1,7 @@
 import { getOwner } from '@ember/owner';
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import { ToolField, Skill } from '@cardstack/base/skill';
 import { getService } from '@universal-ember/test-support';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 
@@ -23,7 +24,6 @@ import {
   setupRealmCacheTeardown,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm, ToolField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -56,7 +56,6 @@ module('Integration | Command | update-room-skills', function (hooks) {
     loggedInAs: '@testuser:localhost',
   });
   setupLocalIndexing(hooks);
-  setupBaseRealm(hooks);
   setupOnSave(hooks);
   setupCardLogs(
     hooks,

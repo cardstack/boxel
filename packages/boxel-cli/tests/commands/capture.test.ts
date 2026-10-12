@@ -13,7 +13,7 @@ import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
 
 const REALM_URL = 'http://realms.example.test/owner/workspace/';
 const CARD_URL = `${REALM_URL}Person/fadhlan`;
-const ENDPOINT = 'http://realms.example.test/_capture-card';
+const ENDPOINT = 'http://realms.example.test/_capture';
 
 interface RecordedRequest {
   url: string;
@@ -75,7 +75,7 @@ function makeFake(options: {
 function readyResponse(attrs: Record<string, unknown>): Response {
   return new Response(
     JSON.stringify({
-      data: { type: 'capture-card-result', attributes: attrs },
+      data: { type: 'capture-result', attributes: attrs },
     }),
     { status: 201, headers: { 'Content-Type': 'application/vnd.api+json' } },
   );
@@ -138,7 +138,7 @@ describe('boxel capture: single capture', () => {
     expect(requests[1].url).toBe(ENDPOINT);
     expect(requests[1].body).toEqual({
       data: {
-        type: 'capture-card',
+        type: 'capture',
         attributes: {
           realmURL: REALM_URL,
           cardId: CARD_URL,

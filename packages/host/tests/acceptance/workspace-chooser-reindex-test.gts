@@ -16,7 +16,6 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -66,8 +65,6 @@ module('Acceptance | workspace-chooser re-index', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [ownedRealmURL, readOnlyRealmURL],
   });
-
-  setupBaseRealm(hooks);
 
   setupRealmServerEndpoints(hooks, [
     {

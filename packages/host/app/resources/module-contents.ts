@@ -103,7 +103,7 @@ export class ModuleContentsResource
       //this prevents unnecessary flickering of errors
       this.moduleError = undefined;
     }
-    let moduleSyntax = new ModuleSyntax(
+    let moduleSyntax = await ModuleSyntax.create(
       executableFile.content,
       executableFile.url,
       this.network.virtualNetwork,

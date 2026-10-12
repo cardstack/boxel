@@ -275,7 +275,7 @@ returned them) is Keynote's "by object". The rest of the delivery panel:
   together; large is strict relay.
 - `@order` — `'forward'` (default) | `'reverse'` | `'center'` |
   `'random'`. Reverse is how Keynote builds text out: last word first.
-  Random takes a seed on the realm build (§6.2).
+  Random takes a seed under the native driver (§6.2).
 - `@by` text values on a sprite with no text is a compile error;
   splitting happens at measure time and the spans are the region's to
   own and clean up — the split preserves Glimmer's own text nodes, so
@@ -898,16 +898,39 @@ What never compiles, with its law-legal substitute:
 | `c.Tether` per-frame draw              | CSS anchor positioning, when it lands; until then tethers re-measure at cue boundaries                                                                                  |
 | `@order='random'`                      | a seed argument — realms have `seedFrom`; randomness must be an input, never a clock                                                                                    |
 
-#### Package for the realm
+#### Deliver through the shims
 
-Realm dependency law is "vendored, single file" — Pretui carries
-photoswipe, gridstack and floating-ui as one `index.js` each. Choreo needs
-the same: a flat build of `glimmer-motion` with motion-dom folded in, the
-native target on, and the frameloop-dependent features (drag sessions,
-`useScroll`'s JS fallback) excluded or inert. Scroll binding requires the
-native `ScrollTimeline` path — the capability check exists
-(`can-use-native-timeline`); the realm build makes it a requirement
-rather than a preference.
+Pretui vendors what the host doesn't provide: photoswipe, gridstack and
+the rest each sit in the realm as one `index.js`. `glimmer-motion` and
+`@cardstack/choreo` are not in that position. The Boxel host shims both,
+so a card imports them by package name and gets the host's own module
+objects. A realm carries no copy of either, and a card can't bring a build
+of its own — it gets the one the host ships.
+
+So the native target is not a separate build. It is a driver inside the
+shimmed packages, chosen where the motion is declared: a `driver` option
+on `<MotionConfig>` and a `@driver` argument on a Choreo region, with
+`'frameloop'` the default — the same option `setupMotion(hooks, { driver:
+'native' })` sets in tests (§8). A Pretui card opts in once, at its root;
+a card that doesn't keeps the frameloop driver, and both drivers share
+the host's one copy of the module state.
+
+The `requestAnimationFrame` calls behind the frameloop driver live in host
+code, so a card on that driver never calls them itself. It still animates
+on a JavaScript clock, though, and that clock is what Pretui's charter
+rules out. A shimmed import meets the charter only under the native
+driver.
+
+Because the host's build carries both drivers, the frameloop-dependent
+features can't be left out of it; under the native driver they refuse
+instead. A drag session or pointer spring throws when it mounts, and a
+per-frame step (`c.Tether`, `c.Follow`) fails when the pass compiles, each
+naming the feature and its substitute from the table above — the loud
+refusal §8's one-suite rule asks for. Scroll binding follows the same
+rule: framer-motion's `scroll()` already prefers a native `ScrollTimeline`
+when `canUseNativeTimeline` says it can; under the native driver that path
+is required, and a binding that would fall back to JavaScript is an
+error, not a quiet fallback.
 
 What that buys back from Pretui's vendored shelf: the lightbox flight
 (photoswipe's open/close morph is a counterpart flight; its pinch stays
@@ -1180,7 +1203,7 @@ Duplicate `@name` and a forward reference each fail at compile, named.
 and the assistive mirror stays whole. The window math is pinned by
 porting `windowOf`'s literal numbers from `builds.ts` as expectations.
 `@order='random'` with the same seed is byte-identical across two runs;
-without a seed it is a compile error on the realm build.
+without a seed it is a compile error under the native driver.
 
 **Paths.** Closure: a `@path` move's final frame equals the FLIP final
 bounds exactly — the path bends the journey, never the destination.
@@ -1228,8 +1251,10 @@ time.
 zero engine ticks during steady playback; the sampled `linear()` spring
 matches the JS spring within ε at five offsets; a child's `shape()`
 stays identity while its parent flies (the pre-sampled counter-scale);
-and the realm bundle passes a static scan — no `setTimeout`,
-`requestAnimationFrame`, `Date.now`, or `Math.random` in the artifact.
+and a native-driver run of the contract fixtures makes no call to
+`setTimeout`, `requestAnimationFrame`, `Date.now` or `Math.random` — a spy
+on the run, not a scan of a bundle, since the host's build carries the
+frameloop driver's code too.
 
 ### 8.3 Test-support additions
 

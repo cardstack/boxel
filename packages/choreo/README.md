@@ -17,7 +17,7 @@ import { motion } from 'glimmer-motion';
       </article>
     {{/each}}
     <c.Sequence>
-      <c.Tween @of={{c.removed 'message'}} @opacity={{0}} @ms={{200}} />
+      <c.Tween @of={{c.removed 'message'}} @opacity={{0}} @duration={{0.2}} />
       <c.Move @of={{c.kept 'message'}} />
     </c.Sequence>
   </Choreo>
@@ -27,12 +27,12 @@ import { motion } from 'glimmer-motion';
 ## Install
 
 ```
-pnpm add @cardstack/choreo glimmer-motion motion-dom motion-utils
+pnpm add @cardstack/choreo glimmer-motion
 ```
 
 Peers: `glimmer-motion` at exactly the same version (the two packages release together), `motion-dom` /
 `motion-utils` in the same ranges glimmer-motion declares, so both packages share one engine,
-`ember-modifier`, `@glimmer/component`, `@glimmer/tracking`, `ember-source >= 5.4`. A v2 addon with
+`ember-modifier`, `@glimmer/component`, `ember-source >= 5.4`. A v2 addon with
 TypeScript types and Glint signatures.
 
 ## Entry points

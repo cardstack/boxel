@@ -112,6 +112,25 @@ function makeFileSystem() {
         };
       }
 
+      // Two pdf slots that name their saved documents: one from a function of
+      // the instance's fields, one from the card's title (the default).
+      export class NamedStatement extends CardDef {
+        @field name = contains(StringField);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Statement: <@fields.name/></h1>
+          </template>
+        }
+        static captures: Record<string, CaptureSpec> = {
+          statement: {
+            format: 'isolated',
+            type: 'pdf',
+            filename: (card: NamedStatement) => 'Relevé ' + card.name,
+          },
+          titled: { format: 'isolated', type: 'pdf' },
+        };
+      }
+
       // A mixed roster: one pdf slot and one raster slot on the same card.
       // Pins the capture leg order — raster format groups first, then the pdf
       // slots one at a time under print media — by asserting both manifest
@@ -734,6 +753,78 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       (served!.headers.get('content-disposition') ?? '').startsWith('inline'),
       'the pdf serves inline with a filename',
+    );
+    assert.strictEqual(
+      statement.filename,
+      undefined,
+      'an untitled card records no filename',
+    );
+    assert.strictEqual(
+      served!.headers.get('content-disposition'),
+      'inline; filename="report.pdf"',
+      'an untitled card serves under its instance id',
+    );
+  });
+
+  test('a declared pdf filename resolves against the instance and names the served document', async function (assert) {
+    await writeAndSettle(
+      'named.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Q3',
+            cardInfo: { name: 'Acme Q3 Statement' },
+          },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'NamedStatement' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}named.json`,
+    );
+    let manifest = row!.captures as CaptureManifest | null;
+    assert.strictEqual(
+      manifest?.statement?.filename,
+      'Relevé Q3',
+      'the filename function read the instance',
+    );
+    assert.strictEqual(
+      manifest?.titled?.filename,
+      'Acme Q3 Statement',
+      'an undeclared filename defaults to the card title',
+    );
+    assert.strictEqual(
+      manifest?.statement?.specHash,
+      await declaredCaptureSpecHash('statement', {
+        format: 'isolated',
+        type: 'pdf',
+      }),
+      'the filename stays out of the capture identity',
+    );
+
+    let response = await realm.handle(
+      new Request(`${testRealm}named`, {
+        headers: { Accept: 'application/vnd.card+json' },
+      }),
+    );
+    let json = await response!.json();
+    assert.strictEqual(
+      json.data.meta.captures.statement.filename,
+      'Relevé Q3',
+      'meta.captures projects the filename',
+    );
+
+    let served = await realm.handle(
+      new Request(`${testRealm}_capture/named?name=statement&download=1`),
+    );
+    assert.strictEqual(served!.status, 200);
+    assert.strictEqual(
+      served!.headers.get('content-disposition'),
+      `attachment; filename="Releve Q3.pdf"; filename*=UTF-8''Relev%C3%A9%20Q3.pdf`,
     );
   });
 

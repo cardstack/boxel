@@ -169,6 +169,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           @selectedRealmPrefix='In'
           @displayReadOnlyTag={{true}}
           @contentClass='realm-dropdown-menu'
+          @searchable={{true}}
         />
 
         <div class='realm-download'>

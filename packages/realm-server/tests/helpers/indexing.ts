@@ -5,6 +5,7 @@ import { trimJsonExtension } from '@cardstack/runtime-common';
 import type { DBAdapter, Expression } from '@cardstack/runtime-common';
 import { every, param, query } from '@cardstack/runtime-common';
 import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
+import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import type {
   IncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
@@ -587,5 +588,44 @@ export async function errorDocForIndexEntry(
   return {
     hasError: false,
     errorDoc: parseDoc(row.error_doc) ?? null,
+  };
+}
+
+// Holds a realm's indexing lanes with work a worker has claimed and never
+// finishes, which nothing runs: every index pass for the realm queues behind
+// it until the returned function lets it go. The job and the reservation that
+// stops a worker claiming it land in one statement. A bare job row on its own
+// would be picked up by a worker that dies on its empty args, poisoning the
+// realm's next index pass, so the lane is never left holding one.
+export async function holdIndexingLane(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  {
+    jobType = 'incremental-index',
+    workerId = 'held-lane-test-worker',
+  }: { jobType?: string; workerId?: string } = {},
+): Promise<() => Promise<void>> {
+  let [{ id: jobId }] = (await dbAdapter.execute(
+    `WITH job AS (
+       INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
+       VALUES ($1, $2, '{}'::jsonb, 'unfulfilled', 7200)
+       RETURNING id
+     ), reservation AS (
+       INSERT INTO job_reservations (job_id, worker_id, locked_until)
+       SELECT id, $3, NOW() + INTERVAL '7200 seconds' FROM job
+     )
+     SELECT id FROM job`,
+    { bind: [jobType, indexingConcurrencyGroup(realmURL), workerId] },
+  )) as unknown as { id: string }[];
+  return async () => {
+    await dbAdapter.execute('DELETE FROM job_reservations WHERE job_id = $1', {
+      bind: [jobId],
+    });
+    await dbAdapter.execute('DELETE FROM jobs WHERE id = $1', {
+      bind: [jobId],
+    });
+    // Removing a job wakes no worker, so the queue is told there is work, as
+    // publishing one tells it.
+    await dbAdapter.execute('NOTIFY jobs');
   };
 }

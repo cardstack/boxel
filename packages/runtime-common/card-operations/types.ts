@@ -549,12 +549,45 @@ export type PolicyIssueCode =
   // draws the card's links whatever strategy the grant's document is served
   // under, so this is recorded independently of
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
-  | 'render-reaches-ungranted-type';
+  | 'render-reaches-ungranted-type'
+  // A grant that opts in to admitting callers who aren't signed in on an
+  // operation whose base isn't one of `ANONYMOUS_ELIGIBLE_OPERATIONS`, or on a
+  // named query. An operation a type declares on an eligible base, under its
+  // own name or a base operation's, is eligible. The grant is left out.
+  | 'anonymous-not-base-operation'
+  // A grant that opts in to admitting callers who aren't signed in on a write,
+  // without naming the `realm.json` setting that says which user the write is
+  // made as. The grant is left out.
+  | 'anonymous-write-without-acting-user'
+  // A grant that opts in to admitting callers who aren't signed in, whose
+  // `where` reads `actor()`, or whose operation's program, template or output
+  // does. The realm evaluates neither for a caller with no actor, so the grant
+  // never admits one. It is kept for signed-in callers.
+  | 'anonymous-grant-reads-actor';
+
+// The base operations a grant may open to callers who aren't signed in, under
+// their own names or through an operation a type declares on one of them. Such
+// an operation is one invocation of its base, run with no actor, and a write
+// it makes is made as the user the grant's `actingUser` names. A named query
+// is the exception: it runs a stored query on the search lane, and stays a
+// contract for signed-in callers.
+export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
+  'read',
+  'readSource',
+  'query',
+  'create',
+  'update',
+  'delete',
+  'transform',
+  'appendContainsMany',
+  'appendLine',
+];
 
 // The codes that leave the part of the policy they are recorded against live.
 export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'grant-reaches-ungranted-type',
   'render-reaches-ungranted-type',
+  'anonymous-grant-reads-actor',
 ]);
 
 export type PolicyIssueSeverity = 'inactive' | 'warning';
@@ -999,6 +1032,21 @@ export interface PolicyExplanation {
   // Present for a question asked about a search: what the target realm's
   // policy composes into it.
   search?: ExplainedSearch;
+  // Present for a question asked about a caller who isn't signed in: how the
+  // target realm limits and blocks such callers, from its `realm.json`.
+  anonymous?: ExplainedAnonymousAccess;
+}
+
+// How a realm treats callers who aren't signed in, as an explain reports it.
+export interface ExplainedAnonymousAccess {
+  // How many requests one address may make in a window, and whether that is
+  // the realm's own setting (`anonymousRateLimit`) or the platform's default.
+  limit: { requests: number; windowSeconds: number };
+  limitFrom: 'realm' | 'platform';
+  // `anonymousBlocklist` entries that are neither an address nor a range, as
+  // written. While there is any, the realm admits no caller who isn't signed
+  // in at all.
+  invalidBlocklistEntries: string[];
 }
 
 // ============================================================================
@@ -1104,6 +1152,16 @@ export type PolicyExplanationReason =
   // caller, so the invocation is answered with a 401 before anything about
   // the target is read.
   | 'actor-required'
+  // The operation, as the target's type declares it, reads `actor()`, and
+  // the caller isn't signed in, so has no actor for it to read. Where a grant
+  // opens the operation to such callers, the grant doesn't apply to them.
+  // Where the ACL lets anyone invoke it, the realm refuses the invocation
+  // with a 401 before it runs.
+  | 'reads-actor'
+  // The caller isn't signed in, and the target realm's `anonymousBlocklist`
+  // has an entry that is neither an address nor a range, which closes the
+  // realm to every such caller whatever the policy grants.
+  | 'blocklist-invalid'
   // The realm names a policy it cannot load.
   | 'policy-unloadable';
 
@@ -1135,6 +1193,19 @@ export interface ExplainedGrant {
   // is what it composes into the search. One whose predicate has none admits
   // no search (`policy-not-filterable`). Absent on the direct lane.
   filterable?: boolean;
+  // Present where the grant opts in to callers who aren't signed in. For one
+  // on a write, the `realm.json` `config` key its writes are made under, and
+  // either the user that key names or why it names no one who may write the
+  // realm, in which case the grant admits no such caller.
+  anonymous?: {
+    actingUserKey?: string;
+    actingUser?: string;
+    actingUserFailure?: 'key-missing' | 'not-a-matrix-id' | 'no-write';
+  };
+  // What compiling the policy recorded against this grant: the warnings it
+  // still applies under. A grant an issue left out of the policy isn't here
+  // to carry it, and appears only in the policy's own issues.
+  issues?: PolicyIssue[];
 }
 
 export type ExplainedGrantOutcome =
@@ -1404,6 +1475,15 @@ export type OperationErrorCode =
   // of them could land. Serial order is how a batch says that two entries
   // touch the same target.
   | 'conflicting-targets'
+  // A caller who isn't signed in, admitted by the realm's policy, has used up
+  // the invocations the realm allows their address in the current window.
+  // Nothing was done. Carries a 429 with `Retry-After`, and
+  // `meta.retryAfterSeconds`.
+  | 'rate-limited'
+  // The realm couldn't count an invocation by a caller who isn't signed in, so
+  // it turned the caller away rather than let it through uncounted. Nothing
+  // was done. Carries a 503 with `Retry-After`.
+  | 'rate-limit-unavailable'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.
@@ -1486,4 +1566,42 @@ export function refusalForNonReader(error: OperationError): OperationError {
     detail: 'no such target',
     ...(entry !== undefined ? { meta: { entry } } : {}),
   };
+}
+
+// What a realm with a policy tells a request that authenticated nobody,
+// wherever nothing admits it: to authenticate. The detail is the realm's
+// missing-credentials message (`AuthenticationErrorMessages.MissingAuthHeader`).
+export const AUTHENTICATION_REQUIRED: OperationError = {
+  status: 401,
+  code: 'actor-required',
+  title: 'Authentication required',
+  detail: 'Missing Authorization header',
+};
+
+// An operation's refusal as its caller is told it. A caller the realm ACL
+// would not let read the realm is never told which cards exist (see
+// `refusalForNonReader`), and one of them who isn't signed in is told to
+// authenticate wherever such a caller is told nothing is there, since that is
+// the answer every request that authenticated nobody gets. A caller the ACL
+// lets read the realm is told the refusal as it is, where the realm asks: it
+// asks whether a caller it declined a write could read only of a signed-in
+// caller, so a visitor's refused write is told as a non-reader's even on a
+// realm anyone may read.
+//
+// The operations envelope and the card+json writes answer their callers with
+// this, and an explain reports it as the refusal its actor would receive. The
+// card+json read and HEAD and the byte serves apply `refusalForNonReader`
+// themselves, and give a caller who isn't signed in the same answer by their
+// own route.
+export function refusalSeenBy(
+  error: OperationError,
+  caller: { readDeclined: boolean; signedIn: boolean },
+): OperationError {
+  if (!caller.readDeclined) {
+    return error;
+  }
+  let seen = refusalForNonReader(error);
+  return !caller.signedIn && seen.code === 'target-not-found'
+    ? AUTHENTICATION_REQUIRED
+    : seen;
 }

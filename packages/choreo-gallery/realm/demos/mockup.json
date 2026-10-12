@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "slug": "mockup",
+      "title": "Mockup",
+      "group": "3D",
+      "lede": "A phone you can turn, and an app you can still use.",
+      "apis": ["c.Camera3D", "@onCamera3D", "c.Perform", "c.Camera"],
+      "sample": "{{! ONE SCORE, TWO LENSES. The beats are identical in both\n    modes — the same apps open and close on the same counts — and only\n    the camera differs. That symmetry is the argument for making the 3D\n    camera a STEP rather than a callback. }}\n<c.Parallel>\n  {{! the beats: semantic commands on the timeline, not remembered\n      clicks. A seek past one includes its result; a seek before it\n      excludes it. }}\n  <c.Sequence>\n    {{#each SHOTS as |shot|}}\n      <c.Wait @duration={{TRAVEL}} />\n      <c.Perform @action='open' @target={{shot.app}} />\n      <c.Wait @duration={{shot.hold}} />\n      <c.Perform @action='close' @target={{shot.app}} />\n    {{/each}}\n  </c.Sequence>\n\n  {{! the camera. c.Camera moves a region's own frame — a 2D transform\n      on real DOM. A 3D scene has no such frame, so c.Camera3D carries\n      only the POSE and the host draws with it. }}\n  <c.Sequence>\n    {{#each SHOTS as |shot|}}\n      <c.Camera3D\n        @yaw={{shot.yaw}} @pitch={{shot.pitch}} @dolly={{shot.dolly}}\n        @duration={{TRAVEL}} @ease={{GLIDE}}\n      />\n      {{! the hold is not a hold: it closes in while the app is open }}\n      <c.Camera3D @by={{true}} @dolly={{0.94}} @yaw={{6}}\n        @duration={{shot.hold}} @ease={{GLIDE}} />\n    {{/each}}\n  </c.Sequence>\n</c.Parallel>\n\n// The host applies the pose to whatever it is actually drawing with.\n// Choreo owns the clock and the easing; this is the whole adapter:\n<Choreo @onCamera3D={{this.shot}} @onPerform={{this.dispatch}} as |c|>\n\nshot = (pose) => {\n  ry = Math.PI + (pose.yaw * Math.PI) / 180;\n  rx = (pose.pitch * Math.PI) / 180;\n  dolly = pose.dolly;          // x the distance the framing solved for\n};\n\n// A drag means \"let me look\" and stops the camera; a tap on the screen\n// means \"let me use it\" and stops the cues. Two tracks, two switches.",
+      "slowmo": false,
+      "theater": false,
+      "walkthrough": [],
+      "lesson": {
+        "guide": "spatial-start",
+        "concept": "A projected screen can remain real DOM",
+        "why": "WebGL owns the device mesh while CSS projection places a live interface on its screen. The score cues app actions and chooses the camera, allowing one interface to be examined in 2D and 3D.",
+        "experiment": "Switch to 3D before opening an app. Interact with the screen near its corners and compare the hit position with its projected visual position.",
+        "pitfall": "A screenshot texture can resemble a screen while losing selection, focus and input. Projection and hit testing must agree.",
+        "combine": "Combine with long-take for a readable inner camera and a restrained outer device camera."
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../demo",
+        "name": "GalleryDemo"
+      }
+    }
+  }
+}

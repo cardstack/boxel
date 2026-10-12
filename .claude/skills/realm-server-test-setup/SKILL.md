@@ -1,6 +1,6 @@
 ---
 name: realm-server-test-setup
-description: How to set up realms in a packages/realm-server test module without indexing them from scratch before every test — which helper to use (setupPermissionedRealmCached, setupPermissionedRealmsCached, setupTestDatabaseTemplate), when a test genuinely needs a fresh boot index, and how the template database works. Use whenever writing a new realm-server test module, adding a module or test that brings up realms, copying an existing suite as a starting point, or working out why a realm-server module is slow. Triggers on runTestRealmServer, runTestRealmServerWithRealms, setupDB with a beforeEach that starts realms, setupPermissionedRealm(s), or "realm-server tests are slow".
+description: How to set up realms in a packages/realm-server test module without indexing them from scratch before every test — which helper to use (setupPermissionedRealmCached, setupPermissionedRealmsCached, setupTestDatabaseTemplate), when a test genuinely needs a fresh boot index, and how the template database works. Use whenever writing a new realm-server test module, adding a module or test that brings up realms, copying an existing suite as a starting point, or working out why a realm-server module is slow. Triggers on the `@cardstack/boxel/realm-server-test-template-database` lint error, runTestRealmServer, runTestRealmServerWithRealms, setupDB with a beforeEach that starts realms, setupPermissionedRealm(s), or "realm-server tests are slow".
 ---
 
 # Realm-server test setup
@@ -8,6 +8,8 @@ description: How to set up realms in a packages/realm-server test module without
 Bringing up a realm on an empty database indexes it from scratch, and that index — not the test body — is usually most of a realm-server test's time. A module that brings up its realms in `beforeEach` pays it once per test. Index once per module instead: every helper below builds a **template database** the first time a module needs it, and each test then starts from a copy of that template. The two cached realm helpers also give each test a fresh realm directory holding the same files. `setupTestDatabaseTemplate` copies only the database, so there the fresh directory is your `start`'s job (see below).
 
 The cost is real. A 40-test suite that brought up two realms before every test took 524s; indexed once into a template it took 85s. Nineteen such suites together went from 46 minutes to 13 minutes of CI time, about five minutes off every Realm Server shard.
+
+The `@cardstack/boxel/realm-server-test-template-database` lint rule enforces this. It reports a `setupDB` whose `beforeEach` brings up realms (`runTestRealmServer`, `runTestRealmServerWithRealms`, `startSimpleRealmServer`, or `start()` on a `createRealm` realm, directly or through a function in the same file) and passes no `templateDatabase`, and a `setupPermissionedRealm` or `setupPermissionedRealms` call without `mode: 'before'`. CI Lint fails on both. The rule checks only that a template is there, not what it holds, so a template that leaves out some of the module's realms passes it: keep `build` and `beforeEach` bringing up the same realms.
 
 ## Pick the helper
 
@@ -55,11 +57,23 @@ setupDB(hooks, {
 - **`key`** must be unique to what `build` writes, across every module in the run: the template cache is shared by the whole test process. The module's full path, `import.meta.filename`, is right when the module has one `start()`. Its `basename` is not, because modules in different directories share names (`realm-endpoints/info-test.ts` and `server-endpoints/info-test.ts`), and the second to build would silently get the first one's snapshot. A module that builds two different setups needs two keys.
 - **`build` must bring up exactly what `beforeEach` does.** A realm that boots on a copy finds its index there and skips its boot index (`Realm#startup` runs one only on a new index or with `fullIndexOnStartup`). Anything `beforeEach` adds that `build` didn't is never indexed.
 - **`start` must write a fresh realm directory every time it runs.** The helper copies the database and nothing else. Give each call its own directory, as the policy suites do with `realmsRootPath = join(dirSync().name, 'realm_server_1')`, and write the realm's files there. A directory reused between tests carries files an earlier test wrote into the next one, whose copy of the database knows nothing about them.
-- Rows `start()` writes besides the index (realm permissions and the like) are upserts, so writing them again on a copy is safe.
+- `build` runs in a `hooks.before`, so it runs before every `hooks.beforeEach` in the module. A directory a `hooks.beforeEach` creates (`dir = dirSync()`) does not exist yet when `build` runs. Create the directory inside `start`.
+- Rows `start()` writes besides the index (realm permissions and the like) are upserts, so writing them again on a copy is safe. A row the module adds with a plain `INSERT` (`insertUser`, a plan, a token) is not: keep it out of `start` and add it in `beforeEach` after `start` returns, or every test's copy fails on a duplicate key.
 
 ## When a test still needs a fresh index
 
-Leave a module uncached only when what it tests is the boot index itself: indexing from an empty database, `fullIndexOnStartup`, or what a realm does when its index is missing. Say so in a comment where the module brings up its realms, so the next person doesn't "fix" it.
+Leave a module uncached only when what it tests is the boot index itself: indexing from an empty database, `fullIndexOnStartup`, or what a realm does when its index is missing. Disable the lint rule there, and give the reason in the comment, so the next person doesn't "fix" it:
+
+```ts
+setupDB(hooks, {
+  // eslint-disable-next-line @cardstack/boxel/realm-server-test-template-database -- tests indexing from an empty database
+  beforeEach: async (dbAdapter, publisher, runner) => {
+    await start({ dbAdapter, publisher, runner });
+  },
+});
+```
+
+A disable with no reason, or a reason other than the boot index, does not pass review.
 
 A test that changes files during the test is not one of these. Write through the realm (`realm.write`, then `await realm.indexing()`) and the index follows, as it would on a fresh database.
 

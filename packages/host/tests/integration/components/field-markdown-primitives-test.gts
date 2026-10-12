@@ -1,24 +1,23 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
-
-import type { Loader } from '@cardstack/runtime-common';
-
 import {
   CardDef,
   Component,
   CSSField,
   contains,
   field,
-  MarkdownField,
   MaybeBase64Field,
-  NumberField,
   ReadOnlyField,
-  setupBaseRealm,
-  StringField,
-  TextAreaField,
-} from '../../helpers/base-realm';
+} from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import type { Loader } from '@cardstack/runtime-common';
+
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -35,7 +34,6 @@ function readMarkdown(root: Element | Document): string {
 
 module('Integration | field markdown primitives', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
 

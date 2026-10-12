@@ -1,8 +1,3 @@
-import { module, test } from 'qunit';
-
-import { getField } from '@cardstack/runtime-common/code-ref';
-import type { Query } from '@cardstack/runtime-common/query';
-
 import {
   CardDef,
   FieldDef,
@@ -11,14 +6,17 @@ import {
   field,
   linksTo,
   linksToMany,
-  StringField,
-  setupBaseRealm,
-} from '../helpers/base-realm';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { module, test } from 'qunit';
+
+import { getField } from '@cardstack/runtime-common/code-ref';
+import type { Query } from '@cardstack/runtime-common/query';
+
 import { setupRenderingTest } from '../helpers/setup';
 
 module('Unit | query field schema', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   test('linksToMany accepts a query option and exposes it via field metadata', function (assert) {
     class Shirt extends CardDef {

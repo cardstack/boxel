@@ -7,7 +7,6 @@ import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { defaultClientConditions, defineConfig } from 'vite';
 
-import { boxelIframe } from '../choreo-gallery/scripts/iframe-plugin.mjs';
 import { glimmerMotionSource } from '../glimmer-motion/scripts/source-resolution.mjs';
 
 /**
@@ -183,7 +182,6 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     glimmerMotionSource(),
-    boxelIframe(),
     captureStill(),
     classicEmberSupport(),
     ember(),

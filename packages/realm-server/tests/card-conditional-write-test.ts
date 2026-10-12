@@ -8,7 +8,6 @@ import fsExtra from 'fs-extra';
 const { existsSync, readFileSync } = fsExtra;
 import type { Realm } from '@cardstack/runtime-common';
 import { SKIP_INDEX_WAIT_HEADER, rri } from '@cardstack/runtime-common';
-import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { LinkShapePolicy } from '@cardstack/runtime-common/link-shape-policy';
 import {
   setupPermissionedRealmCached,
@@ -21,7 +20,10 @@ import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import { waitForIncrementalIndexEvent } from './helpers/indexing.ts';
+import {
+  holdIndexingLane,
+  waitForIncrementalIndexEvent,
+} from './helpers/indexing.ts';
 
 // A conditional write: `If-Match` on a card+json `PATCH` or `DELETE`, which
 // lets a client say "only apply this if the card is still the one I saw" and
@@ -546,42 +548,11 @@ module(basename(import.meta.filename), function () {
       // gate is scoped to the job types that can leave a row describing bytes
       // the realm no longer stores, so which kind of work occupies the lane is
       // what decides whether a conditional write may proceed.
-      async function wedgeIndexingLane(jobType = 'incremental-index') {
-        let job = (await dbAdapter.execute(
-          `INSERT INTO jobs (job_type, concurrency_group, args, status, timeout)
-           VALUES ($1, $2, '{}'::jsonb, 'unfulfilled', 7200)
-           RETURNING id`,
-          {
-            bind: [jobType, indexingConcurrencyGroup(realmURL.href)],
-          },
-        )) as unknown as { id: string }[];
-        let jobId = job[0].id;
-        let unwedge = async () => {
-          await dbAdapter.execute(
-            'DELETE FROM job_reservations WHERE job_id = $1',
-            { bind: [jobId] },
-          );
-          await dbAdapter.execute('DELETE FROM jobs WHERE id = $1', {
-            bind: [jobId],
-          });
-        };
-        try {
-          // The reservation is what stops a worker claiming the job. Until it
-          // lands, what is in the lane is the bare row this fixture exists to
-          // avoid — a job the worker picks up and dies on, poisoning the
-          // realm's next index pass. A throw here would leave that behind with
-          // nothing to remove it, and every later conditional write in this
-          // file would wait out its budget and 503.
-          await dbAdapter.execute(
-            `INSERT INTO job_reservations (job_id, worker_id, locked_until)
-             VALUES ($1, $2, NOW() + INTERVAL '7200 seconds')`,
-            { bind: [jobId, 'conditional-write-test-worker'] },
-          );
-        } catch (err) {
-          await unwedge();
-          throw err;
-        }
-        return unwedge;
+      function wedgeIndexingLane(jobType = 'incremental-index') {
+        return holdIndexingLane(dbAdapter, realmURL.href, {
+          jobType,
+          workerId: 'conditional-write-test-worker',
+        });
       }
 
       test('a conditional write the realm cannot decide is refused, not answered', async function (assert) {

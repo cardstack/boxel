@@ -18,11 +18,11 @@ Identical to Toast. Lifetime, placement and tone are not args here: they live on
 
 ## Accessibility
 
-Governing pattern: APG **Alert**. Toast hardcodes `role="status"` on the card and is its own live region, created with its content already in it, so a card that mounts complete is announced unreliably; there is no close control and no Escape handling. Render it inside a host that owns the region, the politeness and the dismiss — Toaster does all three — and keep `role="status"` on the region rather than the card.
+Governing pattern: APG **Alert**. Toast hardcodes `role="status"` on the card and is its own live region, created with its content already in it, so a card that mounts complete is announced unreliably; there is no close control and no Escape handling. Render it inside a host that owns the region, the politeness and the dismiss, and pass `role={{null}}` so the card isn't a second region. **Toaster** owns all three but draws its own item, so it is the alternative to Snackbar, not a place to put one.
 
 ## Theming
 
-`--popover` (surface), `--pretui-shadow-raised`, `--border`, `--foreground` (title), `--muted-foreground` (message), `--text-ui-md`. The 10px radius, padding, gap and 360px max width are fixed. A season must keep `--popover` distinct from the page background, since the only other separation is a shadow.
+Same as **Toast**; see its Theming.
 
 ## React ecosystem
 

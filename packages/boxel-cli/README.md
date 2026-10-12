@@ -120,6 +120,13 @@ The copies are generated output, rewritten on every run: edit a skill in the rea
 
 Set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`, or pass `--no-claude-skills`, to skip it.
 
+### Files a realm leaves out
+
+`.gitignore` and `.boxelignore` both name files that aren't part of the realm. Use `.boxelignore` for files git should still track, such as tests, build scripts and a package's README.
+
+- When `push` and `sync` upload local files, they skip what either file matches, and always skip `node_modules` and dotfiles. An ignore file in a subdirectory applies to the files below it. Because dotfiles are never uploaded, the ignore files themselves stay local.
+- A realm the realm-server serves from a directory on disk reads the two files at that directory's root as one gitignore-syntax list, `.gitignore` first, so a `!` line in `.boxelignore` can re-include a path `.gitignore` excludes. A matching file is not indexed, listed or served, and the row of a file that becomes ignored is removed. Neither file can ignore itself. The realm applies the rules on its next from-scratch index; an incremental index, such as the one a single file write triggers, keeps the rules it already has.
+
 ## Development
 
 ### Building

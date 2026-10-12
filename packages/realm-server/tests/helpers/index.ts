@@ -1733,6 +1733,7 @@ export async function runTestRealmServerWithRealms({
   liveSearchCache,
   linkShapePolicy,
   mediaCacheAdapter,
+  clientAddress,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1762,6 +1763,11 @@ export async function runTestRealmServerWithRealms({
   // The store every capture surface persists to: the worker's capture task,
   // each realm's `_screenshot/` route, and the server's `_screenshot-card`.
   mediaCacheAdapter?: MediaCacheAdapter;
+  // How the server works out a caller's address. Omit for none in front of
+  // it, which makes every supertest request the same loopback caller; a test
+  // that tells callers apart trusts one hop and names each in
+  // `X-Forwarded-For`.
+  clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1867,6 +1873,7 @@ export async function runTestRealmServerWithRealms({
     liveSearchCache,
     linkShapePolicy,
     mediaCacheAdapter,
+    ...(clientAddress ? { clientAddress } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
@@ -3305,6 +3312,59 @@ export function setupTestDatabaseTemplate(
   return () => acquiredTemplateDatabase;
 }
 
+// The `simple` fixture realm at `simpleRealmServerURL`, alone on its own
+// realm server. Every call writes the realm into a fresh directory. The
+// `realm-server-test-template-database` lint rule lists this function by name
+// as a realm starter, as it does any exported helper that brings up realms.
+export const simpleRealmServerURL = new URL('http://127.0.0.1:0/test/');
+
+export async function startSimpleRealmServer({
+  dbAdapter,
+  publisher,
+  runner,
+  domainsForPublishedRealms,
+}: {
+  dbAdapter: PgAdapter;
+  publisher: QueuePublisher;
+  runner: QueueRunner;
+  // Changes how the server answers, not what it indexes, so every caller
+  // shares the one template `setupSimpleRealmServerTemplate` builds.
+  domainsForPublishedRealms?: Parameters<
+    typeof runTestRealmServer
+  >[0]['domainsForPublishedRealms'];
+}): Promise<Server> {
+  let realmsRootPath = join(dirSync().name, 'realm_server_simple');
+  let testRealmDir = join(realmsRootPath, 'test');
+  ensureDirSync(testRealmDir);
+  copySync(fixtureDir('simple'), testRealmDir);
+  let { testRealmHttpServer } = await runTestRealmServer({
+    virtualNetwork: createVirtualNetwork(),
+    testRealmDir,
+    realmsRootPath,
+    realmURL: simpleRealmServerURL,
+    dbAdapter,
+    publisher,
+    runner,
+    matrixURL,
+    domainsForPublishedRealms,
+  });
+  return testRealmHttpServer;
+}
+
+// A template database holding the realm `startSimpleRealmServer` brings up.
+// Every module that uses it shares one key, so a test run indexes the realm
+// once. Pass it to `setupDB` and call `startSimpleRealmServer` in its
+// `beforeEach`.
+export function setupSimpleRealmServerTemplate(hooks: NestedHooks) {
+  return setupTestDatabaseTemplate(hooks, {
+    key: 'simple-realm-server',
+    build: async (args) => {
+      let server = await startSimpleRealmServer(args);
+      return () => closeServer(server);
+    },
+  });
+}
+
 async function buildTestDatabaseTemplate(
   cacheKey: string,
   build: Parameters<typeof setupTestDatabaseTemplate>[1]['build'],
@@ -3440,6 +3500,27 @@ export const cardInfo = {
 // `name` under cardInfo.name (matching the CardDef slot); other fields land
 // on attributes directly. Mirrors the host helper so realm-server tests can
 // build the same shape without depending on host.
+// Waits, where needed, until the current anonymous rate-limit window has
+// enough of itself left for a test's requests to land in it together. The
+// limiter counts in fixed windows aligned to multiples of `windowSeconds`, so
+// two requests either side of a boundary are counted in different windows,
+// and a test that expects the second to be refused would see it admitted.
+export async function clearOfRateLimitWindowEdge(
+  limit: unknown,
+  marginSeconds = 30,
+): Promise<void> {
+  let windowSeconds = (limit as { windowSeconds?: unknown } | undefined)
+    ?.windowSeconds;
+  if (typeof windowSeconds !== 'number' || windowSeconds <= 0) {
+    return;
+  }
+  let margin = Math.min(marginSeconds, windowSeconds / 2);
+  let left = windowSeconds - ((Date.now() / 1000) % windowSeconds);
+  if (left < margin) {
+    await new Promise((resolve) => setTimeout(resolve, left * 1000 + 50));
+  }
+}
+
 export function realmConfigCardJSON(
   config: {
     name?: string;

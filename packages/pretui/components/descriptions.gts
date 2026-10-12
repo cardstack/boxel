@@ -183,11 +183,13 @@ export class Descriptions extends Component<DescriptionsSignature> {
             class='pretui-desc-pair'
             data-span={{entry.span}}
             data-mono={{entry.mono}}
+            data-test-pretui-descriptions-pair
           >
             <dt class='pretui-desc-label'>
               {{entry.item.label}}{{#if this.colon}}<span
                   class='pretui-desc-colon'
                   aria-hidden='true'
+                  data-test-pretui-descriptions-colon
                 >:</span>{{/if}}
             </dt>
             <dd class='pretui-desc-value'>
