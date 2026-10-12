@@ -69,7 +69,7 @@ interface PoweredSelectSignature {
     beforeOptionsComponent?: unknown;
     matchTriggerWidth?: boolean;
     dropdownClass?: string;
-    renderInPlace?: boolean;
+    destinationElement?: HTMLElement;
     ariaLabel?: string;
     ariaLabelledBy?: string;
   };
@@ -227,12 +227,33 @@ class SelectSearch extends Component<SelectSearchSignature> {
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
-  // The list renders in place where the wormhole would break it: a modal
-  // <dialog> makes everything outside it inert, and a focus scope (an
+  // The list renders inside the Select where the wormhole would break it: a
+  // modal <dialog> makes everything outside it inert, and a focus scope (an
   // EditInPlace editor) reads focus moving into the search box as leaving.
-  @tracked inPlace = false;
-  detectContainment = modifier((wrap: HTMLElement) => {
-    this.inPlace = wrap.closest('dialog, [data-pretui-focus-scope]') !== null;
+  // A destination, not @renderInPlace: ember-basic-dropdown reads
+  // @renderInPlace once at creation, before this can know where it sits,
+  // and reads the destination each time the list opens.
+  @tracked anchor: HTMLElement | undefined;
+  registerAnchor = modifier((el: HTMLElement) => {
+    this.anchor = el.closest('dialog, [data-pretui-focus-scope]')
+      ? el
+      : undefined;
+  });
+  // Options are not focusable, so pressing one would move focus to the page
+  // and a focus scope would read that as leaving. Keep focus where it is;
+  // the option is still chosen on click. The search input still takes focus.
+  keepFocusInList = modifier((wrap: HTMLElement) => {
+    let onPress = (e: MouseEvent) => {
+      let target = e.target as HTMLElement | null;
+      if (target?.closest('input')) {
+        return;
+      }
+      if (target?.closest("[role='listbox'], [data-option-index]")) {
+        e.preventDefault();
+      }
+    };
+    wrap.addEventListener('mousedown', onPress);
+    return () => wrap.removeEventListener('mousedown', onPress);
   });
   get explicitName(): boolean {
     return this.args.label !== undefined || this.args.labelledBy !== undefined;
@@ -265,7 +286,7 @@ export class Select extends Component<SelectSignature> {
     <div
       class='pretui-selectwrap'
       {{nameFromLabel @controlId this.explicitName}}
-      {{this.detectContainment}}
+      {{this.keepFocusInList}}
       data-test-pretui-select
       ...attributes
     >
@@ -284,7 +305,7 @@ export class Select extends Component<SelectSignature> {
         @beforeOptionsComponent={{SelectSearch}}
         @matchTriggerWidth={{true}}
         @dropdownClass='pretui-select-dropdown'
-        @renderInPlace={{this.inPlace}}
+        @destinationElement={{this.anchor}}
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
         data-pretui-select-trigger
@@ -293,6 +314,7 @@ export class Select extends Component<SelectSignature> {
       >
         <span data-test-pretui-select-option>{{option.label}}</span>
       </PoweredSelect>
+      <div {{this.registerAnchor}}></div>
     </div>
     <style scoped>
       @layer PretComponent {
@@ -300,6 +322,9 @@ export class Select extends Component<SelectSignature> {
           /* per-instance knob: the trigger's height */
           --pretui-select-h: 1.75rem;
 
+          /* the containing block for a list rendered inside the Select,
+             which ember-basic-dropdown positions against it */
+          position: relative;
           min-width: 0;
           /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
              ones and the radius travel to the wormhole, values resolved. */

@@ -78,6 +78,35 @@ module('Pretui | components/select', function (hooks) {
     assert.strictEqual(committed, 'oolong', 'the filtered option is chosen, then Enter commits it');
   });
 
+  test('pressing an option in place keeps focus, so a blur-commit EditInPlace stays open', async function (assert) {
+    let committed: string | undefined;
+    let onCommit = (next: string) => {
+      committed = next;
+    };
+    await render(
+      <template>
+        <EditInPlace @label='Tea' @value='green' @defaultEditing={{true}} @onCommit={{onCommit}}>
+          <:editor as |editor|>
+            <Select
+              @options={{OPTIONS}}
+              @value={{editor.value}}
+              @controlId={{editor.controlId}}
+              @onValueChange={{editor.setValue}}
+            />
+          </:editor>
+        </EditInPlace>
+      </template>,
+    );
+    await click(trigger());
+    let oolong = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option]")).find((o) => o.textContent?.trim() === 'Oolong') as HTMLElement;
+    let press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    oolong.dispatchEvent(press);
+    assert.true(press.defaultPrevented, 'the press does not move focus off the trigger');
+    await click(oolong);
+    assert.strictEqual(committed, undefined, 'choosing does not commit the edit');
+    assert.ok(trigger().textContent?.includes('Oolong'), 'the option is chosen');
+  });
+
   test('@searchEnabled adds a search box that takes focus on open and filters by label', async function (assert) {
     await render(<template><Select @options={{OPTIONS}} @searchEnabled={{true}} /></template>);
     await click(trigger());

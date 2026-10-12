@@ -275,6 +275,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @onBlur={{@onBlur}}
       @onClose={{@onClose}}
       @renderInPlace={{@renderInPlace}}
+      @destinationElement={{@destinationElement}}
       @verticalPosition={{@verticalPosition}}
       @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
       @loadingMessage={{@loadingMessage}}
@@ -606,12 +607,10 @@ export class BoxelSelectOptions extends PowerSelectOptions {
   @action
   handleSelect(option: any, select: any) {
     select.actions.select(option);
+    // Focus stays on the trigger, where ember-power-select returns it on
+    // close: blurring it would drop a keyboard user's place and read as
+    // leaving to any focus-out handler around the select.
     select.actions.close();
-    // Blur the target element after selection
-    const activeElement = document.activeElement as HTMLElement;
-    if (activeElement) {
-      activeElement.blur();
-    }
   }
 
   <template>
