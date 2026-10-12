@@ -8,7 +8,8 @@ import { now } from '../clock.ts';
 import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
-import { policyFileDefCodeRef } from '../policy-file-def.ts';
+import { baseFileRef } from '../constants.ts';
+import { isModuleSource, policyFileDefCodeRef } from '../policy-file-def.ts';
 import { routesForField } from '../searchable-routes.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
@@ -1018,8 +1019,12 @@ async function queryKeptOutOfReach(
 // the type the document names. A card whose type does not resolve is still a
 // card, so it is matched by nothing rather than read as a data file. Every
 // other stored file is typed by its extension, and an extension no def is
-// written for, a `.css` or a `.yml`, resolves to `FileDef` itself. Module
-// source resolves to no type at all.
+// written for, a `.css` or a `.yml`, resolves to `FileDef` itself.
+//
+// Module source is typed by its extension too, as `TsFileDef` or `GtsFileDef`,
+// and matched on the part of its chain that is code, which stops short of
+// `FileDef`. A rule on `FileDef` is written for the realm's data files, and a
+// module is what renders them, so only a rule naming a code type reaches one.
 //
 // A path with nothing stored at it is matched by nothing either, rather than
 // being typed by its name and left for the read to report missing. Otherwise a
@@ -1050,9 +1055,6 @@ async function storedBytesSubject(
   }
   let fileURL = pathsFor(core).fileURL(localPath);
   let codeRef = policyFileDefCodeRef(localPath);
-  if (!codeRef) {
-    return undefined;
-  }
   if (await core.isIgnored(fileURL)) {
     return undefined;
   }
@@ -1071,7 +1073,25 @@ async function storedBytesSubject(
     return undefined;
   }
   let types = await fileAdoptionChain(core, codeRef, fileURL);
-  return types ? { kind: 'file', url: fileURL, types } : undefined;
+  if (types && isModuleSource(localPath)) {
+    types = await codeTypes(core, types, fileURL);
+  }
+  return types?.length ? { kind: 'file', url: fileURL, types } : undefined;
+}
+
+// The part of a module's chain that is code: its own type and every type
+// before `FileDef`, read from the definition cache the way the module's own
+// chain is.
+async function codeTypes(
+  core: OperationCore,
+  types: string[],
+  relativeTo: URL,
+): Promise<string[] | undefined> {
+  let fileDefKey = (
+    await fileAdoptionChain(core, baseFileRef, relativeTo)
+  )?.[0];
+  let end = fileDefKey ? types.indexOf(fileDefKey) : -1;
+  return end > 0 ? types.slice(0, end) : undefined;
 }
 
 // A card's stored document, matched on the type the document itself names.

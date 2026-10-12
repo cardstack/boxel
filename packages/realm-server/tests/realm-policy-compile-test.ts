@@ -764,9 +764,10 @@ module(basename(import.meta.filename), function (hooks) {
           // which a rule naming a policy type grants.
           grants: grants('read', 'update', 'readSource', 'query'),
         },
+        // Module source's types, and a data file's, each of which is
+        // grantable.
         { targetType: TS_FILE_DEF, grants: grants('readSource') },
         { targetType: GTS_FILE_DEF, grants: grants('readSource') },
-        // A data file's type, which is grantable.
         { targetType: JSON_FILE_DEF, grants: grants('readSource') },
         {
           targetType: { module: '../no-such-module', name: 'Nothing' },
@@ -801,8 +802,6 @@ module(basename(import.meta.filename), function (hooks) {
           code: 'grants-authorization-infrastructure',
           path: `rules[2].grants[${grant}].operation`,
         })),
-        { code: 'grants-module-source', path: 'rules[3].targetType' },
-        { code: 'grants-module-source', path: 'rules[4].targetType' },
         { code: 'unresolved-type', path: 'rules[6].targetType' },
         { code: 'unknown-operation', path: 'rules[7].grants[0].operation' },
       ],
@@ -830,6 +829,8 @@ module(basename(import.meta.filename), function (hooks) {
         },
         { rule: 'rules[1]', grants: ['rules[1].grants[1] approve'] },
         { rule: 'rules[2]', grants: [] },
+        { rule: 'rules[3]', grants: ['rules[3].grants[0] readSource'] },
+        { rule: 'rules[4]', grants: ['rules[4].grants[0] readSource'] },
         { rule: 'rules[5]', grants: ['rules[5].grants[0] readSource'] },
         { rule: 'rules[7]', grants: ['rules[7].grants[1] update'] },
       ],

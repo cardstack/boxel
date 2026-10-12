@@ -493,10 +493,6 @@ export type PolicyIssueCode =
   // among them: that type might declare the operation `nonGrantable`, so the
   // gate refuses it whatever a compiled policy holds.
   | 'unresolved-type'
-  // A rule whose `targetType` is module source, or descends from it. Module
-  // source is readable only with the realm's own read permission, so there is
-  // nothing a rule on it could grant.
-  | 'grants-module-source'
   // A grant with no operation name, or a `where` that is neither BXL source
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'

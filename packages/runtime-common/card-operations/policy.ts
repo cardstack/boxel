@@ -9,7 +9,6 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
-import { MODULE_SOURCE_FILE_DEF_CODE_REFS } from '../policy-file-def.ts';
 import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
@@ -1127,12 +1126,6 @@ async function compileDocument(
   if (authored != null && !Array.isArray(authored)) {
     return uncompilable('invalid-rule', 'rules', '`rules` should be a list');
   }
-  let moduleSourceKeys = new Set(
-    MODULE_SOURCE_FILE_DEF_CODE_REFS.flatMap((ref) => {
-      let key = attempt(() => env.typeKey(ref));
-      return key ? [key] : [];
-    }),
-  );
   for (let [ruleIndex, rule] of (authored ?? []).entries()) {
     let rulePath = `rules[${ruleIndex}]`;
     let targetType = asCodeRef(rule?.targetType);
@@ -1163,16 +1156,6 @@ async function compileDocument(
       continue;
     }
     let { definition, types: chain } = entry;
-    // Module source is readable only with the realm's own read permission,
-    // so a rule on a module-source type could grant nothing at all.
-    if (chain.some((key) => moduleSourceKeys.has(key))) {
-      issue(
-        'grants-module-source',
-        `${rulePath}.targetType`,
-        `${resolved.name} is a code file, which a policy can't share.\n\nReading code needs the realm's own read permission.`,
-      );
-      continue;
-    }
     // A chain that cannot be judged counts as a policy type's, so its grants
     // are recorded rather than kept.
     let isPolicyType = attempt(() => env.isPolicyCard(chain)) ?? true;
