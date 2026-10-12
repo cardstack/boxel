@@ -62,7 +62,7 @@
 //     law), and all three are policy the caller owns.
 //   • Optimistic mutation. This is a reading contract; writing is not here.
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint can't see
 // it here (accepted parse baseline, same as overlay.gts / structure-data.gts)
@@ -371,7 +371,10 @@ export class DataShell extends Component<DataShellSignature> {
         {{#if @hasEmpty}}
           {{yield to='empty'}}
         {{else}}
-          <EmptyState @title={{this.emptyTitle}} @message={{this.emptyMessage}} />
+          <EmptyState
+            @title={{this.emptyTitle}}
+            @message={{this.emptyMessage}}
+          />
         {{/if}}
       {{else}}
         {{yield}}
@@ -414,10 +417,7 @@ export class DataShell extends Component<DataShellSignature> {
         padding: var(--space-4, 11px) var(--space-5, 14px);
         border-radius: var(--radius-surface, 10px);
         background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
+        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
       }
       .pretui-data-errmsg {
         margin: 0 0 var(--space-2, 6px);
@@ -561,6 +561,87 @@ export interface DataComponentSignature<
   Args: DataArgs<T>;
   Blocks: DataBlocks<T>;
   Element: El;
+}
+
+/** The expanded-rows args DataTable and List share. */
+export interface ExpansionArgs {
+  /** controlled expanded rows */
+  expandedKeys?: readonly RowKey[];
+  /** uncontrolled seed */
+  defaultExpandedKeys?: readonly RowKey[];
+  /** fires with the next expanded set, in both modes */
+  onExpandedChange?: (keys: RowKey[]) => void;
+}
+
+/** One row's expansion, everything its expander and detail need. */
+export interface ExpansionView {
+  expanded: boolean;
+  expandedFlag: 'true' | 'false';
+  /** the detail region's id */
+  detailId: string;
+  /** the detail id while it exists — a collapsed row's detail is not rendered */
+  controls: string | undefined;
+  /** "Expand {label}" / "Collapse {label}" */
+  expandLabel: string;
+}
+
+/**
+ * Which rows are expanded, by key, and the ARIA wiring for each row's
+ * expander. Controlled when `@expandedKeys` is passed (the host never moves
+ * itself, it only reports), uncontrolled otherwise, seeded from
+ * `@defaultExpandedKeys`. Takes a thunk for the same reason DataSource does:
+ * every read goes through the live args. DataTable and List both use it, so
+ * the state rule and the ARIA contract cannot drift between them.
+ */
+export class ExpansionState {
+  constructor(
+    private readArgs: () => ExpansionArgs,
+    private idPrefix: string,
+  ) {}
+
+  @tracked private internal: readonly RowKey[] | undefined = undefined;
+
+  get keys(): readonly RowKey[] {
+    let a = this.readArgs();
+    if (a.expandedKeys !== undefined) {
+      return a.expandedKeys;
+    }
+    return this.internal ?? a.defaultExpandedKeys ?? [];
+  }
+
+  /** A Set keeps 1 and '1' distinct, as `includes` does. */
+  @cached
+  get keySet(): Set<RowKey> {
+    return new Set(this.keys);
+  }
+
+  isExpanded = (key: RowKey): boolean => this.keySet.has(key);
+
+  /** The detail id is built from the row's position: a key can hold
+   * spaces, and 1 and '1' are distinct keys. */
+  viewFor(key: RowKey, index: number, label: string): ExpansionView {
+    let expanded = this.isExpanded(key);
+    let detailId = this.idPrefix + '-d-' + String(index);
+    return {
+      expanded,
+      expandedFlag: expanded ? 'true' : 'false',
+      detailId,
+      controls: expanded ? detailId : undefined,
+      expandLabel: (expanded ? 'Collapse ' : 'Expand ') + label,
+    };
+  }
+
+  toggle = (key: RowKey) => {
+    let current = this.keys;
+    let next = current.includes(key)
+      ? current.filter((k) => k !== key)
+      : [...current, key];
+    let a = this.readArgs();
+    if (a.expandedKeys === undefined) {
+      this.internal = next;
+    }
+    a.onExpandedChange?.([...next]);
+  };
 }
 
 /**
@@ -735,7 +816,9 @@ export class DataSource<T> implements DataState {
   }
 
   get errorMessage(): string {
-    return this.a.rows === undefined && this.failure ? this.failure.message : '';
+    return this.a.rows === undefined && this.failure
+      ? this.failure.message
+      : '';
   }
 
   /** The rows as given: `@rows` when eager, the loaded set otherwise. */
@@ -967,7 +1050,6 @@ export class DataSource<T> implements DataState {
       reload: this.reload,
     };
   }
-
 }
 
 /**
