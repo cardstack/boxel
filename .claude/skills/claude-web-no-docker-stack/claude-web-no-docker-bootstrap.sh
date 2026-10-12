@@ -184,6 +184,7 @@ export PUPPETEER_DISABLE_SANDBOX=true
 export SKIP_CATALOG=true
 export SKIP_BOXEL_HOMEPAGE=true
 export SKIP_EXPERIMENTS=true
+export SKIP_CHOREO_GALLERY=true
 export SKIP_SUBMISSION=true
 export SKIP_SOFTWARE_FACTORY=true
 # Postgres is native here, so the task that starts (and health-checks) the

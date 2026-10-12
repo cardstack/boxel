@@ -3,6 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { TowersScore } from 'choreo-film-app/components/films/towers-score';
+import { JoinPreviews } from 'choreo-film-app/components/join-previews';
 import { assetURL } from 'choreo-film-app/lib/assets';
 import {
   BUILD,
@@ -172,6 +173,8 @@ export default class TowerFilm extends Component<{
       (tests/integration/film/graph-test.gts proves it, row for row). }}
       <:default as |f|>
         <TowersScore @f={{f}} />
+        {{! the wall plate's join triggers, from the page framing the film }}
+        <JoinPreviews @preview={{f.preview}} />
       </:default>
     </Film>
 
@@ -337,45 +340,6 @@ export default class TowerFilm extends Component<{
       .cf-link:hover {
         text-decoration: underline;
         text-underline-offset: 3px;
-      }
-
-      .dd-joins {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .dd-joins button {
-        appearance: none;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 2px;
-        border: 1px solid var(--line);
-        background: transparent;
-        color: var(--ink);
-        font: inherit;
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        padding: 8px 13px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition:
-          transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-          border-color 180ms ease;
-      }
-
-      .dd-joins button:hover {
-        transform: translateY(-2px);
-        border-color: var(--ember);
-      }
-
-      .dd-joins button i {
-        font-style: normal;
-        font-size: 10px;
-        font-weight: 500;
-        color: color-mix(in srgb, var(--ink) 60%, var(--bg-page));
       }
     </style>
   </template>
