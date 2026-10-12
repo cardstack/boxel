@@ -134,6 +134,12 @@ export const BUNDLED_BASE_MODULES: Record<
   // well, but that is the removable half — bundle its siblings and attribution
   // is what remains.
   //
+  // One precondition is not checked by `lint:bundled-base`: the host's static
+  // module graph must contain no top-level `await`. Safari before 27 can
+  // otherwise evaluate a bundled chunk before its imports are initialized, so
+  // a field module calls `contains(X)` while `X` is still undefined. See
+  // runtime-common/content-tag-loader.ts.
+  //
   // Nothing else here is blocked. `commands/search-card-result`,
   // `commands/search-entry-result` and `commands/search-result-list` pass the
   // check together, as do `markdown`, `text-area`, `file-api`, `index`,
@@ -358,9 +364,8 @@ export const BUNDLED_BASE_MODULES: Record<
   'audio-metadata': () => import('@cardstack/base/audio-metadata'),
   'audio-waveform': () => import('@cardstack/base/audio-waveform'),
   'avif-meta-extractor': () => import('@cardstack/base/avif-meta-extractor'),
-  // `brand-functional-palette` is fetched, not bundled: served from the bundle,
-  // Safari intermittently evaluates it before its `color` import is
-  // initialized.
+  'brand-functional-palette': () =>
+    import('@cardstack/base/brand-functional-palette'),
   'brand-logo': () => import('@cardstack/base/brand-logo'),
   coordinate: () => import('@cardstack/base/coordinate'),
   country: () => import('@cardstack/base/country'),

@@ -47,8 +47,6 @@ specific):
    (`boxel`, `boxel-file-def`, `ember-best-practices`, …) — the
    release the plugin marketplace installs for end users as the
    `boxel-skills` plugin. `pnpm factory:setup` clones it.
-3. monorepo root `.agents/skills/` — a fallback slot for shared
-   domain skills.
 
 The two software-factory skill sets diverged during CS-11149. They
 stay separated until the SDK orchestrator is retired; at that
