@@ -50,7 +50,7 @@ Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--
 
 Per-instance knob: `--pretui-select-h` (the trigger's height, 1.75rem by default), set on your class.
 
-The dropdown's own geometry (padding, option height, search box) is BoxelSelect's; the search box's icon inset is the one rule Select adds there. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
+The dropdown's own geometry (padding, option height, search box) is BoxelSelect's. Select adds two rules there: the search box's icon inset, and the options and search box at the trigger's font size, through an unscoped rule on its dropdown class, since the wormhole is outside Select's subtree and BoxelSelect has no font-size knob. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
 
 ## React ecosystem
 

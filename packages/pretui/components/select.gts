@@ -68,6 +68,7 @@ interface PoweredSelectSignature {
     searchField?: string;
     beforeOptionsComponent?: unknown;
     matchTriggerWidth?: boolean;
+    dropdownClass?: string;
     ariaLabel?: string;
     ariaLabelledBy?: string;
   };
@@ -272,6 +273,7 @@ export class Select extends Component<SelectSignature> {
         @searchField='label'
         @beforeOptionsComponent={{SelectSearch}}
         @matchTriggerWidth={{true}}
+        @dropdownClass='pretui-select-dropdown'
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
         data-pretui-select-trigger
@@ -382,5 +384,16 @@ export class Select extends Component<SelectSignature> {
         flex: none;
       }
     </style>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      /* Unscoped: the dropdown renders in the wormhole, outside this
+         component's subtree, and BoxelSelect has no font-size knob for it.
+         The options and the search box take the trigger's size. */
+      .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
+      .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+        font-size: var(--boxel-font-size-xs);
+      }
+    </style>
+    {{! template-lint-enable require-scoped-style }}
   </template>
 }
