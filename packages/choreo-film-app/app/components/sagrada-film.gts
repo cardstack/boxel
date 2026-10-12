@@ -3,6 +3,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { SagradaScore } from 'choreo-film-app/components/films/sagrada-score';
+import { JoinPreviews } from 'choreo-film-app/components/join-previews';
 import { assetURL } from 'choreo-film-app/lib/assets';
 import {
   BUILD,
@@ -159,6 +160,8 @@ export default class SagradaFilm extends Component<{
       (tests/integration/film/graph-test.gts proves it, row for row). }}
       <:default as |f|>
         <SagradaScore @f={{f}} />
+        {{! the wall plate's join triggers, from the page framing the film }}
+        <JoinPreviews @preview={{f.preview}} />
       </:default>
     </Film>
 
