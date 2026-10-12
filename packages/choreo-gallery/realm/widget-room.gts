@@ -8,8 +8,15 @@ class Isolated extends Component<typeof ChoreoWidgetRoom> {
     return this.args.model.gallery as ChoreoGallery | undefined;
   }
 
-  get demos() {
-    return roomDemos((this.gallery?.demos ?? []).filter(Boolean));
+  /**
+   * The demos to hang, keyed by which they are. Linked demos load lazily, and
+   * the room lays out its walls once, so a new set of demos is a new room.
+   */
+  get hanging() {
+    const demos = roomDemos((this.gallery?.demos ?? []).filter(Boolean));
+    return demos.length
+      ? [{ demos, key: demos.map((demo) => demo.id).join(' ') }]
+      : [];
   }
 
   get homeHref() {
@@ -17,9 +24,9 @@ class Isolated extends Component<typeof ChoreoWidgetRoom> {
   }
 
   <template>
-    {{#if this.demos.length}}
-      <WidgetRoom @demos={{this.demos}} @homeHref={{this.homeHref}} />
-    {{/if}}
+    {{#each this.hanging key='key' as |room|}}
+      <WidgetRoom @demos={{room.demos}} @homeHref={{this.homeHref}} />
+    {{/each}}
   </template>
 }
 
