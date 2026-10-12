@@ -52,6 +52,7 @@ import type { CardDef } from '@cardstack/base/card-api';
 
 const COARSE = testRealmURL;
 const SCOPED = 'http://test-realm/scoped/';
+const UNJUDGED = 'http://test-realm/unjudged/';
 const USER = '@testuser:localhost';
 const OWNER = '@owner:localhost';
 
@@ -364,6 +365,50 @@ module('Integration | policy-scoped search', function (hooks) {
     } finally {
       registerDefaultRoutes();
     }
+  });
+
+  test('a realm the user does not read stays scoped when its search fails', async function (this: RenderingTestContext, assert) {
+    // Its realm.json names a policy card that does not exist, so its policy
+    // cannot be judged and the realm fails the search rather than answering
+    // it.
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: UNJUDGED,
+      enforcePermissions: true,
+      permissions: {
+        [USER]: [],
+        [OWNER]: ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          name: 'Unjudged',
+          policy: `${UNJUDGED}policies/missing`,
+        }),
+        'schedules/theirs-open.json': schedule({
+          title: 'Unjudged open',
+          providerId: OWNER,
+          status: 'open',
+        }),
+      },
+    });
+
+    let search = liveSearch(this.owner, OPEN, [UNJUDGED, COARSE]);
+    await search.loaded;
+    await settled();
+    assert.deepEqual(
+      search.meta.policyScopedRealms,
+      [UNJUDGED],
+      'the result marks the realm that did not answer',
+    );
+    assert.deepEqual(ids(search), [COARSE_OPEN]);
+
+    await createLocally(UNJUDGED, 'schedules/local');
+    await settled();
+    assert.deepEqual(
+      ids(search),
+      [COARSE_OPEN],
+      'a matching local create in that realm is not merged',
+    );
   });
 
   test('a row a policy-scoped result returned still drops out when a local edit stops it matching', async function (this: RenderingTestContext, assert) {

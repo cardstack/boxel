@@ -276,8 +276,11 @@ function registerSearchRoutes() {
       // on the session the caller holds there, so its ACL and its policy
       // decide what it contributes, as they do on the realm server: rows the
       // caller reads, rows their grants admit, or none. Its answer carries
-      // its own policy-scoped mark. A render's search is the exception, as
-      // it runs under realm authority there and reads every realm.
+      // its own policy-scoped mark. One that fails to answer carries none, so
+      // it is marked here where the session the realm hands the caller does
+      // not read it, as the server marks every realm the caller does not
+      // read. A render's search is the exception, as it runs under realm
+      // authority there and reads every realm.
       //
       // Every other realm is read from the permissions this mock holds for
       // it: a realm the caller does not read contributes no rows, and is
@@ -287,8 +290,12 @@ function registerSearchRoutes() {
         !duringRender &&
         getTestRealmRegistry().get(ensureTrailingSlash(realmURL))
           ?.sessionPermissionsFor !== undefined;
+      let unanswered: UnansweredRealms = { unread: new Set() };
       let readable = (realmURL: string) =>
-        duringRender || asksRealm(realmURL) || callerReads(state, realmURL);
+        duringRender ||
+        (asksRealm(realmURL)
+          ? !unanswered.unread.has(ensureTrailingSlash(realmURL))
+          : callerReads(state, realmURL));
       let realms = realmList.map((realmURL) => {
         if (asksRealm(realmURL)) {
           return permissionCheckingRealm(
@@ -297,6 +304,7 @@ function registerSearchRoutes() {
             user,
             loggingCorrelationId,
             state,
+            unanswered,
           );
         }
         // A realm the caller reads is one the declaration would have
@@ -314,12 +322,16 @@ function registerSearchRoutes() {
             emptySearchEntryDocument(query),
         };
       });
+      let searched = await searchEntryRealms(realms, parsed, {
+        ...(loggingCorrelationId ? { loggingCorrelationId } : {}),
+        ...(links !== 'full' ? { links } : {}),
+        ...(unshareableFormats.length > 0 ? { unshareableFormats } : {}),
+      });
+      if (unanswered.anonymousRefusal) {
+        return new Response(unanswered.anonymousRefusal, { status: 401 });
+      }
       let combined = markPolicyScoped(
-        await searchEntryRealms(realms, parsed, {
-          ...(loggingCorrelationId ? { loggingCorrelationId } : {}),
-          ...(links !== 'full' ? { links } : {}),
-          ...(unshareableFormats.length > 0 ? { unshareableFormats } : {}),
-        }),
+        searched,
         policyScopedRealms({ realms: requested, readable, resolvedByServer }),
       );
 
@@ -747,19 +759,29 @@ function callerReads(state: RealmServerMockState, realmURL: string): boolean {
   return permissions === undefined || permissions.includes('read');
 }
 
+// What the permission-checking realms of one search that did not answer it
+// leave the search to decide. `unread` holds those whose session for the
+// caller does not read them, which the search marks policy-scoped.
+// `anonymousRefusal` is set when one refused a caller who authenticated
+// nobody: the realm server refuses the whole request with a 401 then, rather
+// than answering for the realms that would admit them.
+type UnansweredRealms = { unread: Set<string>; anonymousRefusal?: string };
+
 // A realm that checks permissions, searched through its own `_search` route
 // on the session `user` holds there, minted as the realm server mints it,
 // with the permissions the realm computes for them. A request that
 // authenticated nobody is sent without one. The request goes out over the
 // virtual network the realm is mounted on, so the realm judges it exactly as
 // it judges a search the host sends it directly. A refusal or a failure is
-// thrown, which the fan-out counts as a realm that did not answer.
+// thrown, which the fan-out counts as a realm that did not answer, and is
+// recorded in `unanswered` for the search to answer as the server does.
 function permissionCheckingRealm(
   realmURL: string,
   wirePayload: unknown,
   user: string | undefined,
   loggingCorrelationId: string | null,
   state: RealmServerMockState,
+  unanswered: UnansweredRealms,
 ) {
   let url = ensureTrailingSlash(realmURL);
   let { sessionPermissionsFor } = getTestRealmRegistry().get(url)!;
@@ -798,9 +820,14 @@ function permissionCheckingRealm(
         body: JSON.stringify(wireQuery),
       });
       if (!response.ok) {
-        throw new Error(
-          `${url} answered its search with ${response.status}: ${await response.text()}`,
-        );
+        let refusal = `${url} answered its search with ${response.status}: ${await response.text()}`;
+        if (!user && response.status === 401) {
+          unanswered.anonymousRefusal = refusal;
+        }
+        if (!user || !(await sessionPermissionsFor!(user)).includes('read')) {
+          unanswered.unread.add(url);
+        }
+        throw new Error(refusal);
       }
       return (await response.json()) as EntryCollectionDocument;
     },
