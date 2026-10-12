@@ -427,9 +427,9 @@ module('Integration | Choreo gallery | inline edit', function (hooks) {
    * the outline stood at its form geometry, full width, while the type was
    * still laid out for a card. They are one box now, which is what makes
    * this assertion true by construction rather than by tuning: the outline
-   * IS the platter's border, and everything a field between is inside it.
+   * IS the platter's border, and everything a field holds is inside it.
    */
-  test('nothing a field between is ever outside its platter', async function (assert) {
+  test('nothing a field holds is ever outside its platter', async function (assert) {
     await gallery.renderStage(InlineEdit);
     await animationsSettled();
     await toggle();

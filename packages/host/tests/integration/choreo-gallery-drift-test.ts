@@ -607,7 +607,7 @@ module('Integration | Choreo gallery | drift model', function (hooks) {
      * saved sooner, and the metric came out backwards — the loose car spent 26%
      * of the lap sideways against the planted car's 58%. Both numbers were
      * true; neither was about the car. What the panel changes is the car, so
-     * the test clamped the driver still and moves only the slider.
+     * the test holds the driver still and moves only the slider.
      */
     const driftAngle = (looseness: number) => {
       const t = applied(tuned({ looseness }));
@@ -630,7 +630,7 @@ module('Integration | Choreo gallery | drift model', function (hooks) {
     const loose = driftAngle(1);
     assert.ok(
       loose > planted * 1.4,
-      `loose clamped ${loose.toFixed(0)}° of drift through the turn, planted ${planted.toFixed(0)}°`,
+      `loose holds ${loose.toFixed(0)}° of drift through the turn, planted ${planted.toFixed(0)}°`,
     );
   });
 

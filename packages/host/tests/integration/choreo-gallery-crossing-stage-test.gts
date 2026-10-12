@@ -65,21 +65,19 @@ module('Integration | Choreo gallery | crossing stage', function (hooks) {
     assert.dom('[data-test-chip]').hasText('drift');
     assert.dom('[data-test-kicker]').hasText('flood line');
     assert.dom('[data-test-inset]').hasText('flood');
-    assert.dom('[data-test-shot]').exists('the plate tideIsATile a live shot');
+    assert.dom('[data-test-shot]').exists('the plate holds a live shot');
     assert.strictEqual(
       (find('[data-test-clip]') as HTMLElement).tagName,
       'VIDEO',
       'the shot is a real <video> clip',
     );
     const scroller = find('[data-test-scroll]') as HTMLElement;
-    assert.ok(scroller, 'the plate tideIsATile an internal scroll pane');
+    assert.ok(scroller, 'the plate holds an internal scroll pane');
     assert.true(
       scroller.scrollHeight > scroller.clientHeight + 8,
       `the scroll pane overflows (${scroller.scrollHeight} > ${scroller.clientHeight})`,
     );
-    assert
-      .dom('[data-test-mark]')
-      .exists('the plate tideIsATile a spinning mark');
+    assert.dom('[data-test-mark]').exists('the plate holds a spinning mark');
     assert.dom('[data-test-rule]').exists('a kept hairline sits on the stage');
     const tideCast = find('[data-test-cast="0"]') as HTMLElement;
     const tideIsLit =
