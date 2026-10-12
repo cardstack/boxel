@@ -1206,6 +1206,21 @@ export class InlineEdit extends Component {
         -webkit-touch-callout: none;
         -webkit-user-drag: none;
       }
+
+      .ie {
+        display: grid;
+        /* One fixed row, so the card's top edge is pinned: the two poses are
+           different heights on purpose, and a card centred in an auto row would
+           turn that into vertical drift under every flight. */
+        grid-template-rows: 340px;
+        /* An EXPLICIT column. An auto column is sized by what its items ask
+           for, and mid-flight the card asks for more than it is given — so the
+           column would grow, the centred card would be centred in something
+           wider than the stage, and the whole card would lurch sideways. */
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+        align-content: center;
+      }
       .ie-stage {
         position: relative;
         display: grid;
