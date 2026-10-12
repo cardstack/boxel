@@ -1,0 +1,170 @@
+[
+  {
+    "title": "Same elements. New possibilities.",
+    "category": "UX / Continuity",
+    "text": "Watch this. A profile becomes an editor. A thumbnail becomes the hero. These are the same live elements, keeping their identity as the interface changes around them.",
+    "actions": [
+      {
+        "phrase": "profile becomes",
+        "demo": "inline-edit",
+        "selector": "[data-test-toggle]"
+      },
+      {
+        "phrase": "thumbnail becomes",
+        "demo": "lightbox",
+        "selector": ".shot"
+      },
+      {
+        "phrase": "keeping their identity",
+        "demo": "lightbox",
+        "selector": "[aria-label=\"Close\"]"
+      },
+      {
+        "phrase": "interface changes",
+        "demo": "layout",
+        "selector": ".replay"
+      }
+    ]
+  },
+  {
+    "title": "A whole interface, choreographed.",
+    "category": "UX / Orchestration",
+    "text": "Now coordinate the whole scene. Messages make room for each other. Change direction mid-flight, and the motion responds. Open a card, and everything else knows where to go.",
+    "actions": [
+      {
+        "phrase": "Messages make room",
+        "demo": "inbox",
+        "selector": ".inbox-compose"
+      },
+      {
+        "phrase": "each other",
+        "demo": "inbox",
+        "selector": ".inbox-compose"
+      },
+      {
+        "phrase": "Change direction",
+        "demo": "interrupt",
+        "selector": ".slot",
+        "index": 3
+      },
+      {
+        "phrase": "mid-flight",
+        "demo": "interrupt",
+        "selector": ".slot",
+        "index": 0
+      },
+      {
+        "phrase": "motion responds",
+        "demo": "interrupt",
+        "selector": ".slot",
+        "index": 2
+      },
+      {
+        "phrase": "Open a card",
+        "demo": "sequence",
+        "selector": ".study-card",
+        "index": 1
+      }
+    ]
+  },
+  {
+    "title": "Time becomes a control.",
+    "category": "Interaction / Time",
+    "text": "Even time becomes interactive. Scrub the kiln backwards: the app reconstructs what happened. Then flick a puck, and watch the choreography follow the consequences of your gesture.",
+    "actions": [
+      {
+        "phrase": "time becomes interactive",
+        "demo": "fold",
+        "selector": "input[type=range]",
+        "kind": "range",
+        "value": 0.8
+      },
+      {
+        "phrase": "kiln backwards",
+        "demo": "fold",
+        "selector": "input[type=range]",
+        "kind": "range",
+        "value": 0.25
+      },
+      {
+        "phrase": "flick a puck",
+        "demo": "hang",
+        "selector": ".hang-lane",
+        "kind": "shot"
+      },
+      {
+        "phrase": "consequences",
+        "demo": "hang",
+        "selector": ".hang-lane",
+        "kind": "shot"
+      }
+    ]
+  },
+  {
+    "title": "The interface enters space.",
+    "category": "Spatial computing",
+    "text": "Now give the interface depth. Open a real app inside a spatial device. Fly into a photograph. The camera and the interface share the same choreography, so space becomes part of the interaction.",
+    "actions": [
+      {
+        "phrase": "Open a real app",
+        "demo": "mockup",
+        "selector": ".mg-icon"
+      },
+      {
+        "phrase": "spatial device",
+        "demo": "mockup",
+        "selector": "[aria-label^=\"Close \"]"
+      },
+      {
+        "phrase": "Fly into a photograph",
+        "demo": "camera",
+        "selector": ".cam-frame",
+        "index": 1
+      },
+      {
+        "phrase": "share the same choreography",
+        "demo": "camera",
+        "selector": "[aria-label=\"Love this one\"]"
+      }
+    ]
+  },
+  {
+    "title": "Direct it. Scrub it. Build it.",
+    "category": "Filmmaking / Build Order",
+    "text": "And now, direct a film. One continuous camera move carries the story. Scrub an entire edit, then finish in Build Order: arrange the beats, retime the reveal, and play it again. That is Choreo.",
+    "actions": [
+      {
+        "phrase": "direct a film",
+        "demo": "long-take",
+        "selector": ".lt-seg button",
+        "index": 1
+      },
+      {
+        "phrase": "Scrub an entire edit",
+        "demo": "playhead",
+        "selector": "input[type=range]",
+        "kind": "range",
+        "value": 0.75
+      },
+      {
+        "phrase": "finish in Build Order",
+        "demo": "build-order",
+        "selector": "input[type=range]",
+        "kind": "range",
+        "value": 0
+      },
+      {
+        "phrase": "arrange the beats",
+        "demo": "build-order",
+        "selector": "[aria-label=\"Play\"]"
+      },
+      {
+        "phrase": "play it again",
+        "demo": "build-order",
+        "selector": "input[type=range]",
+        "kind": "range",
+        "value": 0.8
+      }
+    ]
+  }
+]
