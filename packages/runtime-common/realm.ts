@@ -3000,10 +3000,7 @@ export class Realm {
         this.realmMtimes.bind(this),
         ACL_ONLY,
       )
-      // Answers every verified user the ACL refuses, in a realm with no
-      // policy as in one with a policy, with the rows their grants admit, so
-      // a user who may not read the realm gets the answer a federated search
-      // gives them (see `RouteOptions.admitsVerifiedNonReaders`).
+      // Admits every verified user the ACL refuses (see `SEARCH_ROUTE`).
       .get(
         '/_search',
         SupportedMimeType.CardJson,
@@ -14572,8 +14569,8 @@ export class Realm {
       // nothing are the same answer, as they are for a card they may not read.
       // A realm that names no policy grants nothing, so a user it admits here
       // without letting them read it (see `SEARCH_ROUTE`) gets the same
-      // answer. A policy that did not compile is neither: the search is refused with
-      // the 500 the gate gives every operation it would judge.
+      // answer. A policy that did not compile is neither: the search is
+      // refused with the 500 the gate gives every operation it would judge.
       let policyScope: PolicyQueryScope | undefined;
       if (this.#coarseDeclined(requestContext) === 'all') {
         try {
