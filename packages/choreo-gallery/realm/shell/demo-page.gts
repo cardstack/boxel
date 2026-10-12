@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { motion } from 'glimmer-motion';
 
 import type { GalleryDemo } from '../demo';
+import { FilmLink } from '../lib/film-link';
 import type { GalleryNavigation } from '../lib/navigation';
 import type { Theater } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
@@ -27,6 +28,9 @@ interface Signature {
  * for the demos that bring one — how it works.
  */
 export class DemoPage extends Component<Signature> {
+  /** the stage's film, when it has one, for the notes' join triggers */
+  readonly filmLink = new FilmLink();
+
   get Notes() {
     return (this.args.demo.constructor as typeof GalleryDemo).notes;
   }
@@ -41,6 +45,14 @@ export class DemoPage extends Component<Signature> {
   }
 
   leaveTheater = () => this.args.theater.enter(false);
+
+  /**
+   * the notes' join triggers, while the stage's film frame is attached; a
+   * join plays only once the viewer has opened that film
+   */
+  get preview() {
+    return this.filmLink.live ? this.filmLink.preview : undefined;
+  }
 
   <template>
     {{#let @demo.slug as |slug|}}
@@ -119,7 +131,12 @@ export class DemoPage extends Component<Signature> {
             data-well={{this.well}}
             {{motion id=(concat 'stage-' slug) role='stage'}}
           >
-            <DemoStage @demo={{@demo}} @face='stage' @theater={{@theater}} />
+            <DemoStage
+              @demo={{@demo}}
+              @face='stage'
+              @filmLink={{this.filmLink}}
+              @theater={{@theater}}
+            />
             {{! THE MARK, in theater only, where the site's bar has stepped out.
             It is also the way out, because the thing a viewer wants after
             the film is how it was made. }}
@@ -151,7 +168,7 @@ export class DemoPage extends Component<Signature> {
         {{! How to use it, then how it works — in that order, because nobody
         needs the second one to get started }}
         {{#if this.Notes}}
-          <this.Notes />
+          <this.Notes @preview={{this.preview}} />
         {{/if}}
         {{#if @nav}}
           <nav class='pager' {{motion role='late'}}>

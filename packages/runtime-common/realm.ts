@@ -437,7 +437,11 @@ import {
 } from './router.ts';
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
-import { createResponse } from './create-response.ts';
+import {
+  createResponse,
+  removeStacks,
+  withholdsStacksFrom,
+} from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
@@ -2253,6 +2257,8 @@ export interface RealmAdapter {
   ): Promise<LintResult>;
 }
 
+const DEFAULT_PUBLISHED_ROBOTS_TXT = 'User-agent: *\nAllow: /\n';
+
 interface Options {
   // The rate limit a realm's anonymous callers get when its `realm.json` sets
   // none. Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`.
@@ -2266,6 +2272,12 @@ interface Options {
   linkShapePolicy?: LinkShapePolicy;
   disableModuleCaching?: true;
   fullIndexOnStartup?: true;
+  // The realm is a published snapshot of a source realm, served to the public
+  // as a site. Nobody authors in it, so an error it answers a caller it cannot
+  // identify carries no server stack (see `withholdsStacksFrom`), and, at a
+  // host's root, a crawler's `/robots.txt` gets a default answer when the
+  // realm holds none.
+  published?: true;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2345,8 +2357,11 @@ export type RequestContext = {
   // policy grants to. Identity, not authority, like `authenticatedUser`.
   realmAuthority?: true;
   // A token the public path verified without the checks above, which that
-  // path skips because nothing it serves reads them. `#sessionPrincipal`
-  // runs them, for a request that turns out to need a principal.
+  // path skips because nothing it serves turns on them. The one thing the
+  // token's identity decides there is whether a published realm's error keeps
+  // its stack (see `withholdsStacksFrom`), for which a signature the
+  // realm-server issued is enough. `#sessionPrincipal` runs the checks, for a
+  // request that turns out to need a principal.
   unvouchedSession?: {
     user: string;
     iat: number;
@@ -2374,6 +2389,11 @@ export type RequestContext = {
   // in place of running what the caller asked for, and gives every refusal
   // ahead of that as the realm gives it while active.
   archivedSeal?: ArchivedRealmError;
+  // Set for a dispatch made from inside the realm-server process (a worker's
+  // or definition lookup's in-process fetch), which never reaches the realm
+  // ACL and so records no identity. Every other context, including one a
+  // route builds for itself, is treated as an outside caller.
+  realmInternal?: true;
 };
 
 // What answers a request once it is routed: the answer itself, not yet run,
@@ -2516,6 +2536,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #published = false;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
   #skipBootIndex = false;
@@ -2763,6 +2784,10 @@ export class Realm {
     return this.#virtualNetwork;
   }
 
+  get isPublished(): boolean {
+    return this.#published;
+  }
+
   constructor(
     {
       url,
@@ -2852,6 +2877,7 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#published = Boolean(opts?.published);
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -7670,6 +7696,9 @@ export class Realm {
     let requestContext = await this.createRequestContext(requiredPermission, {
       asksBothLanes: localPath === CAPABILITIES_PATH,
     });
+    if (isLocal) {
+      requestContext.realmInternal = true;
+    }
 
     try {
       let dispatch = this.#routeRequest(request, localPath, requestContext);
@@ -8552,7 +8581,27 @@ export class Realm {
           });
           break;
         }
-        case 'not-found':
+        case 'not-found': {
+          // Every crawler asks a site for its robots.txt, so a published realm
+          // that holds none answers with rules allowing everything — what a
+          // crawler assumes of a 404 anyway — rather than an error document.
+          // Crawlers only ask at a host's root, so only a realm mounted there
+          // answers it; under a path the file would be one no crawler reads.
+          response =
+            this.#published &&
+            localPath === 'robots.txt' &&
+            new URL(this.url).pathname === '/'
+              ? createResponse({
+                  body: DEFAULT_PUBLISHED_ROBOTS_TXT,
+                  init: {
+                    status: 200,
+                    headers: { 'content-type': 'text/plain; charset=utf-8' },
+                  },
+                  requestContext,
+                })
+              : result.response;
+          break;
+        }
         case 'non-module':
         case 'shimmed': {
           response = result.response;
@@ -15422,6 +15471,12 @@ export class Realm {
         }));
       }),
     };
+
+    // The stored error documents carry the stacks an error response would
+    // withhold, and this answers with a 200, so `createResponse` leaves it be.
+    if (withholdsStacksFrom(requestContext)) {
+      removeStacks(doc.data);
+    }
 
     return createResponse({
       body: JSON.stringify(doc, null, 2),

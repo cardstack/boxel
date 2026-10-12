@@ -12,7 +12,13 @@
 // LOCAL-ONLY. Never push a *.test.gts to a realm.
 import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
-import { render, click, fillIn, triggerKeyEvent } from '@ember/test-helpers';
+import {
+  render,
+  click,
+  fillIn,
+  settled,
+  triggerKeyEvent,
+} from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { DataTable } from './components/data-table';
 import { Descriptions } from './components/descriptions';
@@ -30,7 +36,12 @@ import { resolveSize } from './pretui-primitives';
 
 // Pages are looked up by component name through the merged loadable registry,
 // so this test does not care which module a page lives in.
-const PAGES: Record<string, unknown> = { ...DEMOS_DATA_TABLE, ...DEMOS_DESCRIPTIONS, ...DEMOS_ITEM, ...DEMOS_LIST };
+const PAGES: Record<string, unknown> = {
+  ...DEMOS_DATA_TABLE,
+  ...DEMOS_DESCRIPTIONS,
+  ...DEMOS_ITEM,
+  ...DEMOS_LIST,
+};
 const LISTING_USAGE_PAGES = ['DataTable', 'List', 'Item', 'Descriptions'];
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- a DEMOS registry is
@@ -59,7 +70,11 @@ const PLACE_OPTIONS = [
 const COLUMNS: DataColumn<Lot>[] = [
   { key: 'id', label: 'Lot', width: '6em', alwaysVisible: true },
   { key: 'tea', label: 'Tea', filter: { kind: 'text' } },
-  { key: 'place', label: 'Origin', filter: { kind: 'options', options: PLACE_OPTIONS } },
+  {
+    key: 'place',
+    label: 'Origin',
+    filter: { kind: 'options', options: PLACE_OPTIONS },
+  },
   { key: 'kg', label: 'Weight', align: 'end', sortable: true },
 ];
 
@@ -107,6 +122,13 @@ function listRows(): HTMLElement[] {
   return Array.from(
     listRoot().querySelectorAll('[data-test-pretui-list-row]'),
   ) as HTMLElement[];
+}
+
+const EXPAND_FIRST: RowKey[] = ['B-1'];
+const MIXED_KEYS: RowKey[] = ['customer 42', 1, '1'];
+
+class ExpandHolder {
+  @tracked keys: RowKey[] = [];
 }
 
 class Knobs {
@@ -188,10 +210,9 @@ module('Pretui | reading-listing', function (hooks) {
       'Lots',
       'the caption is a real <caption>',
     );
-    assert.dom('[data-test-pretui-datatable] table').doesNotHaveAttribute(
-      'role',
-      'role=grid is not claimed',
-    );
+    assert
+      .dom('[data-test-pretui-datatable] table')
+      .doesNotHaveAttribute('role', 'role=grid is not claimed');
   });
 
   test('a non-sortable column carries no aria-sort and no button', async function (assert) {
@@ -230,7 +251,11 @@ module('Pretui | reading-listing', function (hooks) {
     let button = weight.querySelector(
       '[data-test-pretui-dt-sort]',
     ) as HTMLElement;
-    assert.strictEqual(button.tagName, 'BUTTON', 'the sort control is a button');
+    assert.strictEqual(
+      button.tagName,
+      'BUTTON',
+      'the sort control is a button',
+    );
 
     await click(button);
     assert.strictEqual(weight.getAttribute('aria-sort'), 'ascending');
@@ -246,7 +271,11 @@ module('Pretui | reading-listing', function (hooks) {
       'none',
       'the third step returns to unsorted',
     );
-    assert.deepEqual(cellTexts(3), ['61', '24', '88'], 'original order returns');
+    assert.deepEqual(
+      cellTexts(3),
+      ['61', '24', '88'],
+      'original order returns',
+    );
     assert.deepEqual(
       knobs.sorts.map((s) => (s ? s.key + ':' + s.dir : 'null')),
       ['kg:asc', 'kg:desc', 'null'],
@@ -401,7 +430,9 @@ module('Pretui | reading-listing', function (hooks) {
         />
       </template>,
     );
-    let labels = heads().map((h) => (h.textContent ?? '').trim().split('\n')[0]);
+    let labels = heads().map(
+      (h) => (h.textContent ?? '').trim().split('\n')[0],
+    );
     assert.strictEqual(heads().length, 2, 'Lot survives, Origin and Weight go');
     assert.true(
       (labels[0] ?? '').startsWith('Lot'),
@@ -420,9 +451,9 @@ module('Pretui | reading-listing', function (hooks) {
       </template>,
     );
     assert.strictEqual(heads().length, 1);
-    assert.dom('[data-test-pretui-dt-columns]').exists(
-      'the column switcher is offered because something is hideable',
-    );
+    assert
+      .dom('[data-test-pretui-dt-columns]')
+      .exists('the column switcher is offered because something is hideable');
   });
 
   // ── DataTable: filters ────────────────────────────────────────────────
@@ -446,18 +477,24 @@ module('Pretui | reading-listing', function (hooks) {
     assert.ok(field, 'a filterable column gets a labelled toolbar control');
 
     await fillIn(field, 'silver');
-    assert.strictEqual(bodyRows().length, 1, 'contains match, case-insensitive');
-    assert.deepEqual(knobs.filterLog[0], { tea: 'silver' });
-    assert.dom('[data-test-pretui-dt-live]').hasText(
-      '1 of 3 lots',
-      'the count is honest about what was filtered away',
+    assert.strictEqual(
+      bodyRows().length,
+      1,
+      'contains match, case-insensitive',
     );
+    assert.deepEqual(knobs.filterLog[0], { tea: 'silver' });
+    assert
+      .dom('[data-test-pretui-dt-live]')
+      .hasText(
+        '1 of 3 lots',
+        'the count is honest about what was filtered away',
+      );
 
     await fillIn(field, 'nothing at all');
     assert.strictEqual(bodyRows().length, 0);
-    assert.dom('[data-test-pretui-dt-noresults]').exists(
-      'a filtered-empty table is its own state, not the empty dataset',
-    );
+    assert
+      .dom('[data-test-pretui-dt-noresults]')
+      .exists('a filtered-empty table is its own state, not the empty dataset');
     await click('[data-test-pretui-dt-clear]');
     assert.strictEqual(bodyRows().length, 3, 'clearing brings every row back');
   });
@@ -523,8 +560,9 @@ module('Pretui | reading-listing', function (hooks) {
           @rowLabel={{rowLabel}}
           @onExpandedChange={{knobs.onExpandedChange}}
         >
-          <:expanded as |row|>
+          <:expanded as |row index|>
             <p data-test-detail>{{row.place}}</p>
+            <p data-test-detail-index>{{index}}</p>
           </:expanded>
         </DataTable>
       </template>,
@@ -534,6 +572,10 @@ module('Pretui | reading-listing', function (hooks) {
     ) as HTMLElement;
     assert.strictEqual(toggle.tagName, 'BUTTON');
     assert.strictEqual(toggle.getAttribute('aria-expanded'), 'false');
+    assert.false(
+      toggle.hasAttribute('aria-controls'),
+      'no aria-controls while the detail row does not exist',
+    );
     assert.strictEqual(
       toggle.getAttribute('aria-label'),
       'Expand Gyokuro',
@@ -545,6 +587,9 @@ module('Pretui | reading-listing', function (hooks) {
     let detail = tableRoot().querySelector('#' + controls) as HTMLElement;
     assert.ok(detail, 'aria-controls resolves to a real element');
     assert.dom(detail.querySelector('[data-test-detail]')).hasText('Uji');
+    assert
+      .dom(detail.querySelector('[data-test-detail-index]'))
+      .hasText('0', 'the block gets the row index, as List does');
     assert.strictEqual(
       detail.querySelector('td')?.getAttribute('colspan'),
       '5',
@@ -618,7 +663,9 @@ module('Pretui | reading-listing', function (hooks) {
       </template>,
     );
     assert.strictEqual(bodyRows().length, 2, 'one page of two');
-    assert.dom('[data-test-pretui-pagination]').exists('paging composes Pagination');
+    assert
+      .dom('[data-test-pretui-pagination]')
+      .exists('paging composes Pagination');
     assert
       .dom('[data-test-pretui-pagination] button[data-state="active"]')
       .hasAttribute(
@@ -634,10 +681,12 @@ module('Pretui | reading-listing', function (hooks) {
         'aria-current',
         'inactive page buttons omit aria-current',
       );
-    assert.dom('[data-test-pretui-dt-live]').hasText(
-      '3 lots',
-      'the announcement counts the result set, not the page',
-    );
+    assert
+      .dom('[data-test-pretui-dt-live]')
+      .hasText(
+        '3 lots',
+        'the announcement counts the result set, not the page',
+      );
   });
 
   test('an empty dataset gets the empty state, never a filtered-empty one', async function (assert) {
@@ -684,9 +733,15 @@ module('Pretui | reading-listing', function (hooks) {
       'the tab stop roves with the cursor',
     );
     await triggerKeyEvent(listRows()[1] as HTMLElement, 'keydown', 'End');
-    assert.deepEqual(listRows().map((r) => r.tabIndex), [-1, -1, 0]);
+    assert.deepEqual(
+      listRows().map((r) => r.tabIndex),
+      [-1, -1, 0],
+    );
     await triggerKeyEvent(listRows()[2] as HTMLElement, 'keydown', 'Home');
-    assert.deepEqual(listRows().map((r) => r.tabIndex), [0, -1, -1]);
+    assert.deepEqual(
+      listRows().map((r) => r.tabIndex),
+      [0, -1, -1],
+    );
   });
 
   test('List selection is a named control, and Space toggles it from the row', async function (assert) {
@@ -761,15 +816,306 @@ module('Pretui | reading-listing', function (hooks) {
     knobs.selectionMode = 'single';
     await render(
       <template>
-        <List @items={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode={{knobs.selectionMode}} @onActivate={{knobs.onActivate}}>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @selectionMode={{knobs.selectionMode}}
+          @onActivate={{knobs.onActivate}}
+        >
           <:item as |row|><span data-test-tea>{{row.tea}}</span></:item>
         </List>
       </template>,
     );
-    await click(listRoot().querySelectorAll('[data-test-tea]')[1] as HTMLElement);
+    await click(
+      listRoot().querySelectorAll('[data-test-tea]')[1] as HTMLElement,
+    );
     assert.deepEqual(knobs.activations, ['B-2'], 'the row text activates');
-    await click(listRoot().querySelectorAll('[data-test-pretui-list-select]')[0] as HTMLElement);
+    await click(
+      listRoot().querySelectorAll(
+        '[data-test-pretui-list-select]',
+      )[0] as HTMLElement,
+    );
     assert.deepEqual(knobs.activations, ['B-2'], 'the radio does not');
+  });
+
+  test('List without an expanded block renders no expander', async function (assert) {
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @defaultExpandedKeys={{EXPAND_FIRST}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+        </List>
+      </template>,
+    );
+    assert.dom('[data-test-pretui-list-expand]').doesNotExist();
+    assert.dom('[data-test-pretui-list-detail]').doesNotExist();
+    assert.false(listRows()[0]!.hasAttribute('data-expanded'));
+  });
+
+  test('a List row expands into a detail region that only exists while open', async function (assert) {
+    let knobs = new Knobs();
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @onExpandedChange={{knobs.onExpandedChange}}
+        >
+          <:item as |row|><span data-test-tea>{{row.tea}}</span></:item>
+          <:expanded as |row index|><p data-test-detail>{{row.place}}
+              #{{index}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    let toggles = Array.from(
+      listRoot().querySelectorAll('[data-test-pretui-list-expand]'),
+    ) as HTMLElement[];
+    assert.strictEqual(toggles.length, 3, 'one expander per row');
+    let toggle = toggles[1]!;
+    assert.strictEqual(toggle.tagName, 'BUTTON');
+    assert.strictEqual(toggle.getAttribute('type'), 'button');
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'false');
+    assert.strictEqual(toggle.getAttribute('aria-label'), 'Expand Da Hong Pao');
+    assert.false(
+      toggle.hasAttribute('aria-controls'),
+      'nothing to control while collapsed',
+    );
+    assert
+      .dom('[data-test-pretui-list-detail]')
+      .doesNotExist('collapsed rows render no detail');
+
+    await click(toggle);
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'true');
+    assert.strictEqual(
+      toggle.getAttribute('aria-label'),
+      'Collapse Da Hong Pao',
+    );
+    let detail = listRoot().querySelector(
+      '#' + toggle.getAttribute('aria-controls'),
+    ) as HTMLElement;
+    assert.ok(detail, 'aria-controls resolves to the detail');
+    assert.strictEqual(detail.getAttribute('role'), 'region');
+    assert.strictEqual(
+      detail.getAttribute('aria-label'),
+      'Da Hong Pao details',
+    );
+    assert.true(
+      listRows()[1]!.contains(detail),
+      'the detail lives in its own <li>',
+    );
+    assert
+      .dom(detail.querySelector('[data-test-detail]'))
+      .hasText('Wuyishan #1');
+    assert.strictEqual(listRows()[1]!.dataset['expanded'], 'true');
+    assert.deepEqual(knobs.expandLog, [['B-2']]);
+
+    await click(toggle);
+    assert
+      .dom('[data-test-pretui-list-detail]')
+      .doesNotExist('collapsing removes the detail');
+    assert.deepEqual(knobs.expandLog, [['B-2'], []]);
+  });
+
+  test('detail ids stay valid for keys with spaces and for 1 vs "1"', async function (assert) {
+    const ROWS = [
+      { id: 'customer 42', name: 'Spaced' },
+      { id: 1, name: 'Number' },
+      { id: '1', name: 'String' },
+    ];
+    let key = (row: { id: string | number }) => row.id;
+    let label = (row: { name: string }) => row.name;
+    await render(
+      <template>
+        <List
+          @items={{ROWS}}
+          @key={{key}}
+          @rowLabel={{label}}
+          @defaultExpandedKeys={{MIXED_KEYS}}
+        >
+          <:item as |row|>{{row.name}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.name}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    let toggles = Array.from(
+      listRoot().querySelectorAll('[data-test-pretui-list-expand]'),
+    ) as HTMLElement[];
+    let ids = toggles.map((t) => t.getAttribute('aria-controls') as string);
+    assert.strictEqual(new Set(ids).size, 3, 'every row has its own detail id');
+    ids.forEach((id, i) => {
+      assert.false(/\s/.test(id), 'the id holds no whitespace');
+      let detail = document.getElementById(id) as HTMLElement;
+      assert.ok(detail, 'aria-controls resolves');
+      assert.strictEqual(
+        detail.textContent?.trim(),
+        ROWS[i]!.name,
+        'to its own row',
+      );
+    });
+  });
+
+  test('a controlled List reports the expansion and waits for @expandedKeys', async function (assert) {
+    let state = new ExpandHolder();
+    let asked: RowKey[][] = [];
+    let ignore = (keys: RowKey[]) => asked.push(keys);
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @expandedKeys={{state.keys}}
+          @onExpandedChange={{ignore}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.place}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    let toggle = listRoot().querySelector(
+      '[data-test-pretui-list-expand]',
+    ) as HTMLElement;
+    await click(toggle);
+    assert.deepEqual(asked, [['B-1']], 'the owner is asked');
+    assert
+      .dom('[data-test-pretui-list-detail]')
+      .doesNotExist('and the row did not move itself');
+
+    state.keys = ['B-1', 'B-3'];
+    await settled();
+    assert
+      .dom('[data-test-detail]')
+      .exists({ count: 2 }, 'the owner opens rows');
+    assert.strictEqual(toggle.getAttribute('aria-expanded'), 'true');
+  });
+
+  test('@defaultExpandedKeys seeds the open rows', async function (assert) {
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @defaultExpandedKeys={{EXPAND_FIRST}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.place}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    assert.dom('[data-test-detail]').exists({ count: 1 });
+    assert.dom('[data-test-detail]').hasText('Uji');
+  });
+
+  test('expanding a List row neither activates nor selects it', async function (assert) {
+    let knobs = new Knobs();
+    knobs.selectionMode = 'single';
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @selectionMode={{knobs.selectionMode}}
+          @onSelectionChange={{knobs.onSelectionChange}}
+          @onActivate={{knobs.onActivate}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.place}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    await click(
+      listRoot().querySelector('[data-test-pretui-list-expand]') as HTMLElement,
+    );
+    await click(listRoot().querySelector('[data-test-detail]') as HTMLElement);
+    assert.deepEqual(
+      knobs.activations,
+      [],
+      'neither the expander nor the detail activates the row',
+    );
+    assert.deepEqual(knobs.selections, [], 'and selection is untouched');
+    assert.dom('[data-test-pretui-list-select]:checked').doesNotExist();
+  });
+
+  test('focus inside a detail moves to its expander when the row collapses', async function (assert) {
+    let state = new ExpandHolder();
+    state.keys = ['B-2'];
+    let noop = () => {};
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @expandedKeys={{state.keys}}
+          @onExpandedChange={{noop}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><input
+              aria-label='Note'
+              data-test-note
+              value={{row.place}}
+            /></:expanded>
+        </List>
+      </template>,
+    );
+    let field = listRoot().querySelector(
+      '[data-test-note]',
+    ) as HTMLInputElement;
+    field.focus();
+    await settled();
+    assert.strictEqual(document.activeElement, field, 'focus is in the detail');
+
+    state.keys = [];
+    await settled();
+    assert.dom('[data-test-note]').doesNotExist('the detail is gone');
+    let expander = listRows()[1]!.querySelector(
+      '[data-test-pretui-list-expand]',
+    );
+    assert.strictEqual(
+      document.activeElement,
+      expander,
+      "focus landed on that row's expander",
+    );
+  });
+
+  test("a click in the detail focuses the detail, so the row's Enter stays quiet", async function (assert) {
+    let knobs = new Knobs();
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @defaultExpandedKeys={{EXPAND_FIRST}}
+          @onActivate={{knobs.onActivate}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.place}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    let detail = listRoot().querySelector(
+      '[data-test-pretui-list-detail]',
+    ) as HTMLElement;
+    assert.strictEqual(detail.getAttribute('tabindex'), '-1');
+    await click(listRoot().querySelector('[data-test-detail]') as HTMLElement);
+    detail.focus();
+    await triggerKeyEvent(
+      document.activeElement as HTMLElement,
+      'keydown',
+      'Enter',
+    );
+    assert.deepEqual(
+      knobs.activations,
+      [],
+      'Enter from the detail does not activate the row',
+    );
   });
 
   test('List yields the row API and shows an empty state', async function (assert) {
@@ -824,7 +1170,12 @@ module('Pretui | reading-listing', function (hooks) {
     ];
     await render(
       <template>
-        <Descriptions @items={{items}} @columns={{3}} @bordered={{true}} @title='Lot record' />
+        <Descriptions
+          @items={{items}}
+          @columns={{3}}
+          @bordered={{true}}
+          @title='Lot record'
+        />
       </template>,
     );
     let root = document.querySelector(
@@ -861,7 +1212,9 @@ module('Pretui | reading-listing', function (hooks) {
       '[data-test-pretui-descriptions]',
     ) as HTMLElement;
     assert.dom(root.querySelector('[data-test-value]')).hasText('Lot block');
-    let colon = root.querySelector('[data-test-pretui-descriptions-colon]') as HTMLElement;
+    let colon = root.querySelector(
+      '[data-test-pretui-descriptions-colon]',
+    ) as HTMLElement;
     assert.strictEqual(
       colon.getAttribute('aria-hidden'),
       'true',
@@ -885,24 +1238,45 @@ module('Pretui | reading-listing | controlled selection', function (hooks) {
     let ignore = (keys: RowKey[]) => asked.push(keys);
     await render(
       <template>
-        <DataTable @columns={{COLUMNS}} @rows={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode='multi' @selected={{NONE}} @onSelectionChange={{ignore}} />
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @selectionMode='multi'
+          @selected={{NONE}}
+          @onSelectionChange={{ignore}}
+        />
       </template>,
     );
-    let box = document.querySelector('[data-test-pretui-dt-select]') as HTMLInputElement;
+    let box = document.querySelector(
+      '[data-test-pretui-dt-select]',
+    ) as HTMLInputElement;
     await click(box);
     assert.strictEqual(asked.length, 1, 'the owner is asked');
     assert.false(box.checked, 'and the box did not drift');
   });
 
-  test('a rejected radio change keeps the owner\'s radio checked', async function (assert) {
+  test("a rejected radio change keeps the owner's radio checked", async function (assert) {
     const HELD: RowKey[] = ['B-2'];
     let ignore = () => {};
     await render(
       <template>
-        <DataTable @columns={{COLUMNS}} @rows={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode='single' @selected={{HELD}} @onSelectionChange={{ignore}} />
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @selectionMode='single'
+          @selected={{HELD}}
+          @onSelectionChange={{ignore}}
+        />
       </template>,
     );
-    let radios = () => Array.from(document.querySelectorAll('input.pretui-dt-radio')) as HTMLInputElement[];
+    let radios = () =>
+      Array.from(
+        document.querySelectorAll('input.pretui-dt-radio'),
+      ) as HTMLInputElement[];
     let held = radios().findIndex((r) => r.checked);
     let other = held === 0 ? 1 : 0;
     await click(radios()[other] as HTMLElement);
@@ -915,10 +1289,20 @@ module('Pretui | reading-listing | controlled selection', function (hooks) {
     let ignore = () => {};
     await render(
       <template>
-        <DataTable @columns={{COLUMNS}} @rows={{LOTS}} @key={{rowKey}} @rowLabel={{rowLabel}} @selectionMode='multi' @selected={{SOME}} @onSelectionChange={{ignore}} />
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @selectionMode='multi'
+          @selected={{SOME}}
+          @onSelectionChange={{ignore}}
+        />
       </template>,
     );
-    let all = document.querySelector('thead input[type="checkbox"]') as HTMLInputElement;
+    let all = document.querySelector(
+      'thead input[type="checkbox"]',
+    ) as HTMLInputElement;
     assert.true(all.indeterminate, 'some selected at rest');
     await click(all);
     assert.false(all.checked, 'not all selected');

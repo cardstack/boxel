@@ -1,8 +1,10 @@
 import { registerDestructor } from '@ember/destroyable';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
 
+import type { FilmLink } from '../lib/film-link';
 import { realmFile } from '../lib/realm-url';
 
 /** where the film app's build lives in this realm (see choreo-film-app) */
@@ -17,6 +19,8 @@ export type FilmName = 'sagrada' | 'sylva' | 'towers';
 interface Signature {
   Args: {
     film: FilmName;
+    /** the demo page's line to the film, which the frame's window attaches to */
+    link?: FilmLink;
     /** the frame's accessible name */
     title: string;
   };
@@ -38,6 +42,13 @@ export class FilmFrame extends Component<Signature> {
   @tracked source?: string;
   @tracked error?: string;
   private abort = new AbortController();
+
+  /* a srcdoc frame keeps one window for its life, so attaching it once,
+     as the frame goes in, holds until the frame comes out */
+  private linked = modifier((frame: HTMLIFrameElement) => {
+    let film = frame.contentWindow;
+    return film && this.args.link ? this.args.link.attach(film) : undefined;
+  });
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner as never, args);
@@ -78,6 +89,7 @@ export class FilmFrame extends Component<Signature> {
         allow='autoplay; fullscreen'
         allowfullscreen
         {{motion initial=FRAME_FROM animate=FRAME_TO transition=FRAME_IN}}
+        {{this.linked}}
         ...attributes
       ></iframe>
     {{else if this.error}}

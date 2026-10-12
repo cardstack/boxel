@@ -104,6 +104,9 @@ export interface ReadinessGate {
   /** A machine value the gate reports (`12 / 14`, `3.2 s`, `v4.1.0`),
    * set like jewelry per Law 3. */
   value?: string;
+  /** Where the gate's source lives (a CI run, a log). The gate's NAME
+   * becomes the link; the state stays outside it. */
+  href?: string;
 }
 
 /** The headline answer. Derived from the gates unless the caller states it. */
@@ -118,10 +121,22 @@ interface GateTreatment {
 // One record, read by BOTH the template (glyph, words, the Chip hue) and
 // the CSS (through --pretui-gate-tone). The tone token never appears twice.
 const GATE_TREATMENT: Readonly<Record<ReadinessGateState, GateTreatment>> = {
-  pass: { glyph: '✓', hue: 'var(--success, var(--boxel-success))', text: 'Passed' },
+  pass: {
+    glyph: '✓',
+    hue: 'var(--success, var(--boxel-success))',
+    text: 'Passed',
+  },
   fail: { glyph: '✕', hue: 'var(--destructive)', text: 'Failed' },
-  blocked: { glyph: '⊘', hue: 'var(--warning, var(--boxel-warning))', text: 'Blocked' },
-  running: { glyph: '◐', hue: 'var(--pretui-info, var(--boxel-blue))', text: 'Running' },
+  blocked: {
+    glyph: '⊘',
+    hue: 'var(--warning, var(--boxel-warning))',
+    text: 'Blocked',
+  },
+  running: {
+    glyph: '◐',
+    hue: 'var(--pretui-info, var(--boxel-blue))',
+    text: 'Running',
+  },
   pending: {
     glyph: '○',
     hue: 'var(--muted-foreground)',
@@ -140,9 +155,17 @@ const GATE_TREATMENT: Readonly<Record<ReadinessGateState, GateTreatment>> = {
 };
 
 const VERDICT_TREATMENT: Readonly<Record<ReadinessVerdict, GateTreatment>> = {
-  ready: { glyph: '✓', hue: 'var(--success, var(--boxel-success))', text: 'Ready' },
+  ready: {
+    glyph: '✓',
+    hue: 'var(--success, var(--boxel-success))',
+    text: 'Ready',
+  },
   blocked: { glyph: '✕', hue: 'var(--destructive)', text: 'Blocked' },
-  pending: { glyph: '◐', hue: 'var(--pretui-info, var(--boxel-blue))', text: 'In progress' },
+  pending: {
+    glyph: '◐',
+    hue: 'var(--pretui-info, var(--boxel-blue))',
+    text: 'In progress',
+  },
   unknown: {
     glyph: '?',
     hue: 'var(--muted-foreground)',
@@ -165,6 +188,7 @@ interface GateView {
   hue: string;
   caption?: string;
   value?: string;
+  href?: string;
   style: ReturnType<typeof cssStyle>;
 }
 
@@ -172,8 +196,14 @@ export interface ReadinessPanelSignature {
   Args: {
     /** What is being judged — "Deploy to production", "Publish listing".
      * Required, because the source's hardcoded domain title is the single
-     * thing that made it unreusable. */
+     * thing that made it unreusable. In the `list` variant it names the
+     * list. */
     title: string;
+    /** `panel` (default) is the verdict, reasons, gates and actions on a
+     * Panel. `list` is the gate rows alone, for a check list nested under
+     * another record: no surface, heading, verdict, reasons, actions or
+     * live region, and `...attributes` land on the `<ul>`. */
+    variant?: 'panel' | 'list';
     /** Optional sub-line under the verdict. */
     summary?: string;
     /** The gates, in the order they should be read. */
@@ -228,6 +258,181 @@ export interface ReadinessPanelSignature {
   Element: HTMLElement;
 }
 
+interface GateListSignature {
+  Args: {
+    views: GateView[];
+    loading: boolean;
+    skeletonRows: number[];
+    label: string;
+  };
+  Element: HTMLUListElement;
+}
+
+/** The gate rows, rendered by both variants so the two cannot drift. */
+class GateList extends Component<GateListSignature> {
+  <template>
+    {{#if @loading}}
+      <ul
+        class='pretui-gates'
+        role='list'
+        aria-busy='true'
+        aria-label={{@label}}
+        data-test-pretui-readiness-loading
+        ...attributes
+      >
+        {{#each @skeletonRows key='@identity' as |line|}}
+          <li class='pretui-gate' data-state='pending' data-row={{line}}>
+            <span class='pretui-gate-glyph' aria-hidden='true'>○</span>
+            <span class='pretui-gate-body'>
+              <Skeleton @width='42%' @height='13px' />
+              <Skeleton @width='68%' @height='11px' />
+            </span>
+            <span class='pretui-gate-side'>
+              <Skeleton @width='58px' @height='18px' />
+            </span>
+          </li>
+        {{/each}}
+      </ul>
+    {{else}}
+      <ul
+        class='pretui-gates'
+        role='list'
+        aria-label={{@label}}
+        data-test-pretui-readiness-gates
+        ...attributes
+      >
+        {{#each @views key='key' as |row|}}
+          <li
+            class='pretui-gate'
+            data-state={{row.state}}
+            style={{row.style}}
+            data-test-pretui-readiness-gate
+          >
+            <span class='pretui-gate-glyph' aria-hidden='true'>
+              {{row.glyph}}
+            </span>
+            <span class='pretui-gate-body'>
+              {{#if row.href}}
+                <a
+                  class='pretui-gate-name pretui-gate-link'
+                  href={{row.href}}
+                  data-test-pretui-readiness-gate-link
+                >{{row.name}}</a>
+              {{else}}
+                <span class='pretui-gate-name'>{{row.name}}</span>
+              {{/if}}
+              {{#if row.caption}}
+                <span class='pretui-gate-caption'>{{row.caption}}</span>
+              {{/if}}
+            </span>
+            <span class='pretui-gate-side'>
+              {{#if row.value}}
+                <Token @value={{row.value}} />
+              {{/if}}
+              <Chip @label={{row.stateText}} @hue={{row.hue}} @dot={{false}} />
+            </span>
+          </li>
+        {{/each}}
+      </ul>
+    {{/if}}
+
+    <style scoped>
+      /* above Chip's and Token's layer, so these win by layer order */
+      @layer PretComponent, PretComposite;
+      @layer PretComposite {
+        .pretui-gates {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: var(--space-2, 6px);
+        }
+        .pretui-gate {
+          display: flex;
+          align-items: center;
+          gap: var(--space-3, 8px);
+          min-height: 34px;
+          padding: var(--space-2, 6px) var(--space-3, 8px);
+          border-radius: var(--radius-chip, 6px);
+          background: color-mix(
+            in oklch,
+            var(--pretui-gate-tone, var(--muted-foreground)) 10%,
+            var(--card)
+          );
+        }
+        .pretui-gate-glyph {
+          flex: none;
+          width: 16px;
+          text-align: center;
+          font-size: 12px;
+          line-height: 1;
+          color: var(--pretui-gate-tone, var(--muted-foreground));
+        }
+        .pretui-gate-body {
+          display: grid;
+          gap: 1px;
+          min-width: 0;
+          flex: 1;
+        }
+        .pretui-gate-name {
+          font-size: var(--text-ui-md, 12.5px);
+          font-weight: 500;
+          color: var(--foreground);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-gate-caption {
+          font-size: var(--text-ui-xs, 11px);
+          color: var(--muted-foreground);
+          overflow-wrap: break-word;
+        }
+        .pretui-gate-side {
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: var(--space-2, 6px);
+        }
+        /* A skipped gate is quiet, but it is still there and still named —
+           the one place opacity is used, and it never falls below the 4.5:1
+           floor because the tone is already muted. */
+        .pretui-gate[data-state='skipped'] .pretui-gate-name {
+          color: var(--muted-foreground);
+        }
+
+        .pretui-gate-link {
+          justify-self: start;
+          max-width: 100%;
+          text-decoration: none;
+          border-radius: 2px;
+        }
+        .pretui-gate-link:hover {
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .pretui-gate-link:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        /* The list variant is its own size container, so the narrow-row wrap
+           below holds without the panel around it. */
+        .pretui-gates.pretui-readiness-list {
+          container-type: inline-size;
+        }
+        @container (max-width: 26rem) {
+          .pretui-gate {
+            flex-wrap: wrap;
+          }
+          .pretui-gate-side {
+            width: 100%;
+            padding-left: calc(16px + var(--space-3, 8px));
+          }
+        }
+      }
+    </style>
+  </template>
+}
+
 export class ReadinessPanel extends Component<ReadinessPanelSignature> {
   private titleId = guidFor(this) + '-title';
   private reasonsId = guidFor(this) + '-reasons';
@@ -243,6 +448,9 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
   }
   get isLoading() {
     return this.args.loading ?? false;
+  }
+  get isList() {
+    return this.args.variant === 'list';
   }
   get headingAriaLevel() {
     return ariaLevelFor(this.args.headingLevel);
@@ -263,7 +471,9 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
     return this.args.stateText?.[norm] ?? this.treatmentFor(norm).text;
   }
   private has(states: ReadinessGateState[]): boolean {
-    return this.gates.some((gate) => states.includes(this.normState(gate.state)));
+    return this.gates.some((gate) =>
+      states.includes(this.normState(gate.state)),
+    );
   }
 
   get verdict(): ReadinessVerdict {
@@ -320,12 +530,14 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
         hue: treatment.hue,
         caption: gate.caption,
         value: gate.value,
+        href: gate.href,
         style: cssStyle('--pretui-gate-tone', treatment.hue),
       };
     });
   }
   get passedCount(): number {
-    return this.gates.filter((gate) => this.normState(gate.state) === 'pass').length;
+    return this.gates.filter((gate) => this.normState(gate.state) === 'pass')
+      .length;
   }
   get skeletonRows(): number[] {
     let count = Math.max(1, Math.min(12, this.args.loadingRows ?? 3));
@@ -335,6 +547,8 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
     }
     return rows;
   }
+  hasRows = (): boolean => this.isLoading || this.views.length > 0;
+
   get gatesLabel(): string {
     return this.args.gatesLabel ?? this.args.title;
   }
@@ -359,7 +573,10 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
     }
     if (this.gates.length > 0) {
       parts.push(
-        String(this.passedCount) + ' of ' + String(this.gates.length) + ' passed',
+        String(this.passedCount) +
+          ' of ' +
+          String(this.gates.length) +
+          ' passed',
       );
     }
     return parts.join('. ') + '.';
@@ -367,141 +584,117 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
 
   <template>
     {{#if this.applicable}}
-      <Panel
-        class='pretui-readiness'
-        aria-labelledby={{this.titleId}}
-        data-verdict={{this.verdict}}
-        data-loading={{if this.isLoading 'true'}}
-        data-test-pretui-readiness-panel
-        ...attributes
-      >
-        <:header>
-          <div
-            class='pretui-verdict'
-            style={{this.verdictStyle}}
-            data-test-pretui-readiness-verdict
-          >
-            <span class='pretui-verdict-glyph' aria-hidden='true'>
-              {{this.verdictTreatment.glyph}}
-            </span>
-            <div class='pretui-verdict-head'>
-              <h2
-                id={{this.titleId}}
-                class='pretui-verdict-title'
-                aria-level={{this.headingAriaLevel}}
-              >{{@title}}</h2>
-              <p
-                class='pretui-verdict-state'
-                data-test-pretui-readiness-verdict-text
-              >{{this.verdictText}}</p>
-              {{#if @summary}}
-                <p class='pretui-verdict-summary'>{{@summary}}</p>
+      {{#if this.isList}}
+        {{#if (this.hasRows)}}
+          <GateList
+            class='pretui-readiness-list'
+            @views={{this.views}}
+            @loading={{this.isLoading}}
+            @skeletonRows={{this.skeletonRows}}
+            @label={{this.gatesLabel}}
+            data-test-pretui-readiness-list
+            ...attributes
+          />
+        {{else if (has-block 'empty')}}
+          {{yield to='empty'}}
+        {{else}}
+          <EmptyState
+            @title={{this.emptyTitle}}
+            @message={{this.emptyMessage}}
+            @texture={{false}}
+            data-test-pretui-readiness-empty
+            ...attributes
+          />
+        {{/if}}
+      {{else}}
+        <Panel
+          class='pretui-readiness'
+          aria-labelledby={{this.titleId}}
+          data-verdict={{this.verdict}}
+          data-loading={{if this.isLoading 'true'}}
+          data-test-pretui-readiness-panel
+          ...attributes
+        >
+          <:header>
+            <div
+              class='pretui-verdict'
+              style={{this.verdictStyle}}
+              data-test-pretui-readiness-verdict
+            >
+              <span class='pretui-verdict-glyph' aria-hidden='true'>
+                {{this.verdictTreatment.glyph}}
+              </span>
+              <div class='pretui-verdict-head'>
+                <h2
+                  id={{this.titleId}}
+                  class='pretui-verdict-title'
+                  aria-level={{this.headingAriaLevel}}
+                >{{@title}}</h2>
+                <p
+                  class='pretui-verdict-state'
+                  data-test-pretui-readiness-verdict-text
+                >{{this.verdictText}}</p>
+                {{#if @summary}}
+                  <p class='pretui-verdict-summary'>{{@summary}}</p>
+                {{/if}}
+              </div>
+              {{#if (has-block 'actions')}}
+                <div class='pretui-verdict-actions'>{{yield to='actions'}}</div>
               {{/if}}
             </div>
-            {{#if (has-block 'actions')}}
-              <div class='pretui-verdict-actions'>{{yield to='actions'}}</div>
-            {{/if}}
-          </div>
-        </:header>
-        <:default>
-          {{#if this.showReasons}}
-            {{! Promoted ABOVE the gate inventory: why, before what. }}
-            <div class='pretui-reasons' data-test-pretui-readiness-reasons>
-              <p class='pretui-reasons-title' id={{this.reasonsId}}>
-                {{this.reasonsTitle}}
-                <span class='pretui-reasons-count'>{{this.reasons.length}}</span>
-              </p>
-              <ul
-                class='pretui-reasons-list'
-                role='list'
-                aria-label={{this.reasonsLabel}}
-              >
-                {{#each this.reasons key='@index' as |reason|}}
-                  <li class='pretui-reasons-item'>{{reason}}</li>
-                {{/each}}
-              </ul>
-            </div>
-          {{/if}}
-
-          {{#if this.isLoading}}
-            <ul
-              class='pretui-gates'
-              role='list'
-              aria-busy='true'
-              aria-label={{this.gatesLabel}}
-              data-test-pretui-readiness-loading
-            >
-              {{#each this.skeletonRows key='@identity' as |line|}}
-                <li class='pretui-gate' data-state='pending' data-row={{line}}>
-                  <span class='pretui-gate-glyph' aria-hidden='true'>○</span>
-                  <span class='pretui-gate-body'>
-                    <Skeleton @width='42%' @height='13px' />
-                    <Skeleton @width='68%' @height='11px' />
-                  </span>
-                  <span class='pretui-gate-side'>
-                    <Skeleton @width='58px' @height='18px' />
-                  </span>
-                </li>
-              {{/each}}
-            </ul>
-          {{else if this.views.length}}
-            <ul
-              class='pretui-gates'
-              role='list'
-              aria-label={{this.gatesLabel}}
-              data-test-pretui-readiness-gates
-            >
-              {{#each this.views key='key' as |row|}}
-                <li
-                  class='pretui-gate'
-                  data-state={{row.state}}
-                  style={{row.style}}
-                  data-test-pretui-readiness-gate
+          </:header>
+          <:default>
+            {{#if this.showReasons}}
+              {{! Promoted ABOVE the gate inventory: why, before what. }}
+              <div class='pretui-reasons' data-test-pretui-readiness-reasons>
+                <p class='pretui-reasons-title' id={{this.reasonsId}}>
+                  {{this.reasonsTitle}}
+                  <span
+                    class='pretui-reasons-count'
+                  >{{this.reasons.length}}</span>
+                </p>
+                <ul
+                  class='pretui-reasons-list'
+                  role='list'
+                  aria-label={{this.reasonsLabel}}
                 >
-                  <span class='pretui-gate-glyph' aria-hidden='true'>
-                    {{row.glyph}}
-                  </span>
-                  <span class='pretui-gate-body'>
-                    <span class='pretui-gate-name'>{{row.name}}</span>
-                    {{#if row.caption}}
-                      <span class='pretui-gate-caption'>{{row.caption}}</span>
-                    {{/if}}
-                  </span>
-                  <span class='pretui-gate-side'>
-                    {{#if row.value}}
-                      <Token @value={{row.value}} />
-                    {{/if}}
-                    <Chip
-                      @label={{row.stateText}}
-                      @hue={{row.hue}}
-                      @dot={{false}}
-                    />
-                  </span>
-                </li>
-              {{/each}}
-            </ul>
-          {{else if (has-block 'empty')}}
-            {{yield to='empty'}}
-          {{else}}
-            <EmptyState
-              @title={{this.emptyTitle}}
-              @message={{this.emptyMessage}}
-              @texture={{false}}
-              data-test-pretui-readiness-empty
-            />
-          {{/if}}
+                  {{#each this.reasons key='@index' as |reason|}}
+                    <li class='pretui-reasons-item'>{{reason}}</li>
+                  {{/each}}
+                </ul>
+              </div>
+            {{/if}}
 
-          {{yield}}
+            {{#if (this.hasRows)}}
+              <GateList
+                @views={{this.views}}
+                @loading={{this.isLoading}}
+                @skeletonRows={{this.skeletonRows}}
+                @label={{this.gatesLabel}}
+              />
+            {{else if (has-block 'empty')}}
+              {{yield to='empty'}}
+            {{else}}
+              <EmptyState
+                @title={{this.emptyTitle}}
+                @message={{this.emptyMessage}}
+                @texture={{false}}
+                data-test-pretui-readiness-empty
+              />
+            {{/if}}
 
-          {{#if this.announce}}
-            <p
-              class='pretui-vh'
-              role='status'
-              data-test-pretui-readiness-live
-            >{{this.liveText}}</p>
-          {{/if}}
-        </:default>
-      </Panel>
+            {{yield}}
+
+            {{#if this.announce}}
+              <p
+                class='pretui-vh'
+                role='status'
+                data-test-pretui-readiness-live
+              >{{this.liveText}}</p>
+            {{/if}}
+          </:default>
+        </Panel>
+      {{/if}}
     {{/if}}
 
     <style scoped>
@@ -612,16 +805,8 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
           display: inline-grid;
           place-items: center;
           letter-spacing: 0;
-          background: color-mix(
-            in oklch,
-            var(--destructive) 16%,
-            var(--card)
-          );
-          color: color-mix(
-            in oklch,
-            var(--foreground) 30%,
-            var(--destructive)
-          );
+          background: color-mix(in oklch, var(--destructive) 16%, var(--card));
+          color: color-mix(in oklch, var(--foreground) 30%, var(--destructive));
         }
         .pretui-reasons-list {
           margin: 0;
@@ -639,79 +824,12 @@ export class ReadinessPanel extends Component<ReadinessPanelSignature> {
         /* Gate rows. The tint is generated from the row's own tone token —
            the technique review-section arrived at independently, which is
            Law 2. */
-        .pretui-gates {
-          margin: 0;
-          padding: 0;
-          list-style: none;
-          display: grid;
-          gap: var(--space-2, 6px);
-        }
-        .pretui-gate {
-          display: flex;
-          align-items: center;
-          gap: var(--space-3, 8px);
-          min-height: 34px;
-          padding: var(--space-2, 6px) var(--space-3, 8px);
-          border-radius: var(--radius-chip, 6px);
-          background: color-mix(
-            in oklch,
-            var(--pretui-gate-tone, var(--muted-foreground)) 10%,
-            var(--card)
-          );
-        }
-        .pretui-gate-glyph {
-          flex: none;
-          width: 16px;
-          text-align: center;
-          font-size: 12px;
-          line-height: 1;
-          color: var(--pretui-gate-tone, var(--muted-foreground));
-        }
-        .pretui-gate-body {
-          display: grid;
-          gap: 1px;
-          min-width: 0;
-          flex: 1;
-        }
-        .pretui-gate-name {
-          font-size: var(--text-ui-md, 12.5px);
-          font-weight: 500;
-          color: var(--foreground);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .pretui-gate-caption {
-          font-size: var(--text-ui-xs, 11px);
-          color: var(--muted-foreground);
-          overflow-wrap: break-word;
-        }
-        .pretui-gate-side {
-          flex: none;
-          display: flex;
-          align-items: center;
-          gap: var(--space-2, 6px);
-        }
-        /* A skipped gate is quiet, but it is still there and still named —
-           the one place opacity is used, and it never falls below the 4.5:1
-           floor because the tone is already muted. */
-        .pretui-gate[data-state='skipped'] .pretui-gate-name {
-          color: var(--muted-foreground);
-        }
-
         /* Narrow containers stack the side column under the name rather than
            crushing the name. Unnamed query against this block's own box. */
         .pretui-readiness {
           container-type: inline-size;
         }
         @container (max-width: 26rem) {
-          .pretui-gate {
-            flex-wrap: wrap;
-          }
-          .pretui-gate-side {
-            width: 100%;
-            padding-left: calc(16px + var(--space-3, 8px));
-          }
           .pretui-verdict {
             flex-wrap: wrap;
           }

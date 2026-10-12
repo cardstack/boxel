@@ -1370,6 +1370,7 @@ export async function createRealm({
   linkShapePolicy,
   cardDocumentCache = new CardDocumentCache(),
   realmFor,
+  published,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1405,6 +1406,9 @@ export async function createRealm({
   // the realm-server test stack, which starts it with
   // `REALM_SERVER_SKIP_BOOT_INDEX=true`.
   skipBootIndex?: true;
+  // Forwarded to the Realm constructor's `published` option. Production sets
+  // it from the realm's registry row; a test realm has none to read it from.
+  published?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1514,6 +1518,7 @@ export async function createRealm({
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
       ...(skipBootIndex ? { skipBootIndex: true as const } : {}),
+      ...(published ? { published: true as const } : {}),
       ...(captureSyncWaitMs !== undefined ? { captureSyncWaitMs } : {}),
       ...(linkShapePolicy ? { linkShapePolicy } : {}),
       ...(readIndexDrainBudgetMs !== undefined
@@ -1571,6 +1576,7 @@ export async function runTestRealmServer({
   readIndexDrainBudgetMs,
   linkShapePolicy,
   cardDocumentCache,
+  published,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1601,6 +1607,8 @@ export async function runTestRealmServer({
   linkShapePolicy?: LinkShapePolicy;
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
+  // Builds the realm as a published one (see `createRealm`).
+  published?: true;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1645,6 +1653,7 @@ export async function runTestRealmServer({
     readIndexDrainBudgetMs,
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(cardDocumentCache ? { cardDocumentCache } : {}),
+    ...(published ? { published: true as const } : {}),
   });
 
   await testRealm.logInToMatrix();
@@ -2438,6 +2447,7 @@ async function startPermissionedRealmFixture(
     readIndexDrainBudgetMs,
     linkShapePolicy,
     cardDocumentCache,
+    ...(published ? { published: true as const } : {}),
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);

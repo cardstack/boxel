@@ -1,4 +1,4 @@
-import { click, find, waitFor } from '@ember/test-helpers';
+import { click, find, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
@@ -157,6 +157,49 @@ module('Integration | Choreo gallery | films', function (hooks) {
     await click('.theater-built');
     assert.dom('.demo-body.is-theater').doesNotExist('back on the page');
     assert.dom('[data-film-theater]').exists('the way in is back');
+  });
+
+  // The stand-in page has no film in it, so this listens where the film app
+  // would and checks what the notes send across the frame.
+  async function heardByFilm(face: string) {
+    await waitFor(`${face} iframe.film-frame`);
+    let frame = find(`${face} iframe.film-frame`) as HTMLIFrameElement;
+    await waitUntil(() => frame.contentDocument?.title === 'Film');
+    let heard: unknown[] = [];
+    // the data arrives as an object of the frame's realm; copy it into this
+    // one so deepEqual compares contents rather than prototypes
+    frame.contentWindow!.addEventListener('message', (event) =>
+      heard.push({ ...event.data }),
+    );
+    return heard;
+  }
+
+  test('the Towers notes play their joins on the film in the frame', async function (assert) {
+    await renderFilm('towers', 'TowersDemo', 'isolated');
+    let heard = await heardByFilm('.tw-face');
+
+    assert.dom('.dd-joins button').exists({ count: 10 }, 'the strip is live');
+    await click('.dd-joins button:first-child');
+    await waitUntil(() => heard.length > 0);
+    assert.deepEqual(
+      heard,
+      [{ type: 'choreo-film:preview-join', join: 'wipe' }],
+      'the join is posted to the film’s document',
+    );
+  });
+
+  test('the Sagrada notes play their joins on the film in the frame', async function (assert) {
+    await renderFilm('sagrada', 'SagradaDemo', 'isolated');
+    let heard = await heardByFilm('.sg-face');
+
+    assert.dom('.dd-joins button').exists({ count: 8 }, 'the strip is live');
+    await click('.dd-joins button:nth-child(5)');
+    await waitUntil(() => heard.length > 0);
+    assert.deepEqual(
+      heard,
+      [{ type: 'choreo-film:preview-join', join: 'iris' }],
+      'the join is posted to the film’s document',
+    );
   });
 
   test('Sylva has a theater but no resize grip', async function (assert) {

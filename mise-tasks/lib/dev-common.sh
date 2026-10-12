@@ -333,8 +333,8 @@ esac
 # Phase 1 readiness URLs
 BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
 SKILLS_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/skills/${READY_PATH}"
-# pretui boots last and the test realms don't need it, so it finishes indexing
-# while they start.
+# choreo-gallery and pretui boot last and the test realms need neither, so they
+# finish indexing while the test realms start.
 PHASE1_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
 
 if [ -z "${SKIP_CATALOG:-}" ]; then

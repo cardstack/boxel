@@ -70,9 +70,9 @@ export type MultiRealmAuthorizationState = {
   grantCandidates: string[];
   // Who the request's token was verified for: the user it names, or a
   // realm-authority principal — a session a realm renders its own cards
-  // under. For a request that carried no token, an anonymous principal where
-  // a realm it names admitted it through its policy (see `anonymousCallers`),
-  // and absent where every realm it names is publicly readable.
+  // under. Absent for a request that carried no token, which each realm it
+  // reaches only through its policy judges by its own admission of the caller
+  // (see `anonymousCallers`).
   principal?: SearchPrincipal;
   // For a request that carried no token, the caller each realm it may search
   // only through its policy admitted (see `Realm.admitAnonymousSearch`). Each
@@ -228,7 +228,6 @@ export function multiRealmAuthorization(
           );
           return;
         }
-        principal = { kind: 'anonymous' };
       }
     } else {
       let token: RealmServerTokenClaim & { iat: number; exp: number };

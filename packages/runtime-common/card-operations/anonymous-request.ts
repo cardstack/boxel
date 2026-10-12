@@ -1,3 +1,4 @@
+import type { GrantRateLimit } from './grant-expressions.ts';
 import type { CompiledOperationGrant } from './policy.ts';
 import type { ActingUserFailure } from './types.ts';
 
@@ -6,9 +7,10 @@ import type { ActingUserFailure } from './types.ts';
 // The realm admits such a request only through grants whose `where` names the
 // caller who isn't signed in, and of those only the ones whose blocklist and
 // rate limit let the caller's address in (see `AnonymousAdmission`). This
-// holds which those are for the request, so every invocation it makes is
-// judged by them alone, and records which grant admitted it, so the request is
-// counted against that grant's limit.
+// holds which those are for the request, and which of them the address has
+// budget left through, so every invocation it makes is judged by them alone,
+// and records which grant admitted it, so the request is counted against that
+// grant's limit.
 //
 // It also settles who the request's writes are made as. A grant on a write
 // names that user with its `actingUser` expression, which reads the governed
@@ -26,6 +28,16 @@ import type { ActingUserFailure } from './types.ts';
 
 export type { ActingUserFailure };
 
+// A grant that may admit a caller who isn't signed in, with the limit it
+// counts them against.
+export interface AdmittingGrant {
+  id: string;
+  path: string;
+  limit: GrantRateLimit;
+  // Set where the caller's address has used up this grant's limit.
+  spent?: true;
+}
+
 // Who a grant's `actingUser` names for one write, or why no write may be made
 // as anyone through it.
 export type ActingUserResolution =
@@ -41,8 +53,7 @@ export type ActingUserResolver = (
 
 export class AnonymousRequest {
   #resolve: ActingUserResolver;
-  #eligible: ReadonlySet<string> | undefined;
-  #spent: ReadonlySet<string>;
+  #grants: readonly AdmittingGrant[] | undefined;
   // An expression that doesn't read the target names the same user for every
   // write of the request, so it is resolved once per grant.
   #resolved = new Map<string, Promise<ActingUserResolution>>();
@@ -58,49 +69,71 @@ export class AnonymousRequest {
   #admittedGrants: string[] = [];
   #failures: { grant: string; failure: ActingUserFailure }[] = [];
 
-  // `eligible` holds the ids of the grants the caller's address may be
-  // admitted through. Without it, every grant that opens anything to such
-  // callers may admit them. `spent` holds the eligible grants whose rate limit
-  // the address has used up: they admit only what no grant with budget left
-  // does, so the request is answered as over that grant's limit.
-  constructor(
-    resolve: ActingUserResolver,
-    eligible?: ReadonlySet<string>,
-    spent: ReadonlySet<string> = new Set(),
-  ) {
+  // `grants` are the grants the caller's address may be admitted through.
+  // Without them, every grant that opens anything to such callers may admit
+  // them.
+  constructor(resolve: ActingUserResolver, grants?: readonly AdmittingGrant[]) {
     this.#resolve = resolve;
-    this.#eligible = eligible;
-    this.#spent = spent;
+    this.#grants = grants && [
+      ...grants.filter(({ spent }) => !spent),
+      ...grants.filter(({ spent }) => spent),
+    ];
+  }
+
+  // The grants the caller's address may be admitted through, the ones with
+  // budget left first, each group in the order given.
+  get grants(): readonly AdmittingGrant[] {
+    return this.#grants ?? [];
   }
 
   // Whether `grant` may admit this request.
   admits(grant: CompiledOperationGrant): boolean {
-    let id = grant.anonymous?.id;
-    return (
-      id !== undefined &&
-      (this.#eligible === undefined || this.#eligible.has(id))
-    );
+    return this.#admitting(grant) !== undefined;
   }
 
-  // Whether the caller's address has used up `grant`'s rate limit.
-  spent(grant: CompiledOperationGrant): boolean {
-    let id = grant.anonymous?.id;
-    return id !== undefined && this.#spent.has(id);
-  }
-
-  // `items` with those whose grant has budget left first, each group in the
-  // order given. Grants union, so which one admits doesn't change whether the
-  // invocation is admitted. It decides which limit is charged, and for a
-  // write, which grant's acting user the write is made as: one with budget
-  // left wherever it admits.
-  withBudgetFirst<T>(
+  // Those of `items` whose grant may admit this request, split by whether the
+  // caller's address has budget left through it, each group in the order
+  // given. A grant whose budget is spent stays eligible, so that what only it
+  // admits is answered as over its limit rather than as something no grant
+  // admits, but wherever a grant with budget left admits the same thing, that
+  // one is preferred: it is the one the request is counted against, and for a
+  // write, the one whose acting user the write is made as.
+  admitting<T>(
     items: readonly T[],
     grantOf: (item: T) => CompiledOperationGrant,
-  ): T[] {
-    return [
-      ...items.filter((item) => !this.spent(grantOf(item))),
-      ...items.filter((item) => this.spent(grantOf(item))),
-    ];
+  ): { withBudget: T[]; spent: T[] } {
+    let withBudget: T[] = [];
+    let spent: T[] = [];
+    for (let item of items) {
+      let admitting = this.#admitting(grantOf(item));
+      if (admitting) {
+        (admitting.spent ? spent : withBudget).push(item);
+      }
+    }
+    return { withBudget, spent };
+  }
+
+  // The grant the request is counted against: a grant whose budget is spent
+  // where one admitted any of its invocations, since nothing with budget left
+  // would have, and otherwise the first of its grants to admit one, or the
+  // first that could have.
+  get charged(): AdmittingGrant | undefined {
+    let admitted = this.#admittedGrants
+      .map((id) => this.grants.find((grant) => grant.id === id))
+      .filter((grant): grant is AdmittingGrant => grant !== undefined);
+    return admitted.find(({ spent }) => spent) ?? admitted[0] ?? this.grants[0];
+  }
+
+  #admitting(
+    grant: CompiledOperationGrant,
+  ): Pick<AdmittingGrant, 'spent'> | undefined {
+    let id = grant.anonymous?.id;
+    if (id === undefined) {
+      return undefined;
+    }
+    return this.#grants === undefined
+      ? {}
+      : this.#grants.find((admitting) => admitting.id === id);
   }
 
   async actingUser(
