@@ -498,16 +498,18 @@ export class Card extends Component<CardSignature> {
         /* selectable — the select button covers the card from BEHIND the
            content; the content lets pointer events fall through to it, and
            only the caller's own controls take them back. Nothing of the
-           caller's position or z-index is touched. */
+           caller's position or z-index is touched, and no z-index is set
+           here: a stacking context on the card would trap an inline
+           Popup or Menu under the next card. Paint order does the layering —
+           both layers are positioned with z-index auto, and the content
+           comes later in the DOM. */
         .pretui-card[data-selectable='true'] {
           position: relative;
-          isolation: isolate;
         }
         .pretui-card-select {
           all: unset;
           position: absolute;
           inset: 0;
-          z-index: 0;
           border-radius: inherit;
           cursor: pointer;
         }
@@ -518,8 +520,14 @@ export class Card extends Component<CardSignature> {
         .pretui-card[data-selectable='true'] > .pretui-card-media,
         .pretui-card[data-selectable='true'] > .pretui-card-column {
           position: relative;
-          z-index: 1;
           pointer-events: none;
+        }
+        /* A scrolling body keeps its pointer, or the wheel and the scrollbar
+           would land on the select button; in a scroll card the body is not
+           a select target. */
+        .pretui-card[data-selectable='true'][data-scroll='true']
+          .pretui-card-body {
+          pointer-events: auto;
         }
         .pretui-card[data-selectable='true'] :deep(a),
         .pretui-card[data-selectable='true'] :deep(button),
@@ -529,7 +537,13 @@ export class Card extends Component<CardSignature> {
         .pretui-card[data-selectable='true'] :deep(label),
         .pretui-card[data-selectable='true'] :deep(summary),
         .pretui-card[data-selectable='true'] :deep([tabindex]),
-        .pretui-card[data-selectable='true'] :deep([contenteditable]) {
+        .pretui-card[data-selectable='true'] :deep([contenteditable]),
+        .pretui-card[data-selectable='true'] :deep(dialog),
+        .pretui-card[data-selectable='true'] :deep([popover]),
+        .pretui-card[data-selectable='true'] :deep([role='dialog']),
+        .pretui-card[data-selectable='true'] :deep([role='menu']),
+        .pretui-card[data-selectable='true'] :deep([role='listbox']),
+        .pretui-card[data-selectable='true'] :deep([role='tooltip']) {
           pointer-events: auto;
         }
         .pretui-card[data-selectable='true']:hover {
@@ -546,6 +560,10 @@ export class Card extends Component<CardSignature> {
            tint alone. Same recipe as List. */
         .pretui-card[data-selected='true'] {
           position: relative;
+        }
+        /* An accent card keeps its fill — the tint under its on-tone ink
+           would be unreadable — and carries selection on the rule alone. */
+        .pretui-card[data-selected='true']:not([data-appearance='accent']) {
           background: var(--pretui-selected, var(--boxel-100));
         }
         .pretui-card[data-selected='true']::before {
@@ -553,12 +571,16 @@ export class Card extends Component<CardSignature> {
           position: absolute;
           inset-block: 0;
           inset-inline-start: 0;
-          z-index: 2;
+          z-index: 1;
           inline-size: 2px;
           border-start-start-radius: inherit;
           border-end-start-radius: inherit;
           background: var(--primary);
           pointer-events: none;
+        }
+        .pretui-card[data-selected='true'][data-appearance='accent']::before {
+          inline-size: 3px;
+          background: var(--pretui-tone-on);
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-card {

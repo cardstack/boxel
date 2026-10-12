@@ -88,7 +88,10 @@ export class CardUsage extends Component {
       "  @tone='" + this.tone + "'",
       "  @appearance='" + this.appearance + "'",
       ...(this.selectable
-        ? ['  @selected={{this.selected}}', '  @onSelect={{this.toggle}}']
+        ? [
+            '  @selected={{this.selected}}',
+            '  @onSelect={{this.toggleSelected}}',
+          ]
         : []),
       '>',
       '  <:action>…</:action>',
