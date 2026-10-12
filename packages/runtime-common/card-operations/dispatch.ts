@@ -342,6 +342,13 @@ export interface RunOperationOptions {
   // built to avoid, not merely a cost. Such a caller has to be able to say
   // that this read touches no connection.
   skipStoredFileMeta?: boolean;
+  // The admission of the request this invocation serves, where its caller
+  // isn't signed in: the grants their address may be admitted through, and
+  // whether it has budget left through each. The gate judges the invocation,
+  // and every read it makes on the way (a linked card's), by those grants
+  // alone, and records which one admitted it, so the request is counted
+  // against that grant.
+  anonymousRequest?: AnonymousRequest;
 }
 
 // One request's memo of the index-row peek. Dispatch reads a card's row to
@@ -1324,6 +1331,9 @@ export async function runOperation(
     target === request.target ? request : { ...request, target };
   let scope = newOperationScope(core, {
     caller: scopeCallerFor(canonical.actor),
+    ...(opts.anonymousRequest
+      ? { anonymousRequest: opts.anonymousRequest }
+      : {}),
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
     ...(canonical.seal ? { seal: canonical.seal } : {}),
     ...(canonical.route ? { route: canonical.route } : {}),
