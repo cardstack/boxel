@@ -447,12 +447,23 @@ class RealmFsSession {
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
         let { data } = await this.readCard(id);
+        // The same shape as a card `realm.cards.search` finds: the type, and
+        // each link keyed by its field path (`field.0`, `field.1`, … for a
+        // `linksToMany` field). Every URL is already absolute.
+        let adoptsFrom = data.meta.adoptsFrom;
+        let relationships: Record<string, string | null> = {};
+        for (let [field, value] of Object.entries(data.relationships ?? {})) {
+          relationships[field] =
+            (value as Relationship | null)?.links?.self ?? null;
+        }
         return {
-          path: `${this.relative(id)}.json`,
           id,
-          adoptsFrom: data.meta.adoptsFrom,
+          path: `${this.relative(id)}.json`,
+          ...(isResolvedCodeRef(adoptsFrom)
+            ? { type: { module: adoptsFrom.module, name: adoptsFrom.name } }
+            : {}),
           attributes: data.attributes ?? {},
-          relationships: data.relationships ?? {},
+          relationships,
         };
       }
       case 'capture': {
@@ -1464,8 +1475,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
   }
 
   private async readCard(id: string): Promise<LooseSingleCardDocument> {
-    let card = await this.store.get(id);
+    // The store's cached instance can lag a write this run just made, or hold
+    // edits not saved yet, so the card is read from the realm.
+    let card = await this.store.getWithoutCache(id);
     if (!isCardInstance(card)) {
+      if (card.awaitingIndex) {
+        throw new Error(
+          `Card is not indexed yet: ${id}; read it again in a moment`,
+        );
+      }
       throw new Error(
         card.status === 404
           ? `Card not found: ${id}`

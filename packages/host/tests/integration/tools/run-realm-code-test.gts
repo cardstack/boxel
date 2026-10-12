@@ -444,7 +444,7 @@ return { show: 'Pet/missing' };`,
     let { bare, withExtension, byURL } = JSON.parse(result.scriptResult!);
     assert.strictEqual(bare.path, 'people/hassan.json');
     assert.strictEqual(bare.id, `${testRealmURL}people/hassan`);
-    assert.deepEqual(bare.adoptsFrom, {
+    assert.deepEqual(bare.type, {
       module: `${testRealmURL}person`,
       name: 'Person',
     });
@@ -454,12 +454,26 @@ return { show: 'Pet/missing' };`,
       'Hassan',
       'computed fields are included',
     );
-    assert.strictEqual(
-      bare.relationships.friend.links.self,
-      `${testRealmURL}people/mango`,
+    assert.deepEqual(
+      bare.relationships,
+      { friend: `${testRealmURL}people/mango` },
+      'links are keyed by field path, as realm.cards.search returns them',
     );
     assert.deepEqual(withExtension, bare, 'a .json path reads the same card');
     assert.deepEqual(byURL, bare, 'a URL reads the same card');
+
+    let afterEdit = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.cards.get('people/hassan');
+await realm.fs.replace('people/hassan.json', '"Hassan"', '"Hassan Abdel"');
+return await realm.cards.get('people/hassan');`,
+    });
+    assert.strictEqual(
+      JSON.parse(afterEdit.scriptResult!).attributes.firstName,
+      'Hassan Abdel',
+      'a card read after an edit in the same run shows the edit',
+    );
 
     await assert.rejects(
       command.execute({
