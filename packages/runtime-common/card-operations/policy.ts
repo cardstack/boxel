@@ -21,12 +21,17 @@ import {
 } from './policy-filter.ts';
 import {
   ANONYMOUS_ACTOR,
+  fixedText,
+  namesAnonymous,
+  settleActor,
+} from './anonymous-actor.ts';
+import {
   compileGrantExpression,
   GRANT_EXPRESSION_NAMES,
-  namesAnonymous,
   type CompiledGrantExpression,
   type GrantExpressionName,
 } from './grant-expressions.ts';
+import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
 import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
@@ -1992,20 +1997,18 @@ function readPredicate(
   return 'malformed';
 }
 
-// The request-context calls a policy predicate reads: who is asking, the card
-// it asks about, the governed realm's own settings, and the policy card's own
-// fields. The `policy` profile
+// The request-context calls a policy predicate reads. The `policy` profile
 // denies every request-context call, because a request's payload is not an
-// authorization input. A predicate is still written against its caller and its
-// target, so these three are admitted. `params()` is not admitted. It reads
-// the payload, and a caller-supplied value must not decide its own
-// authorization.
-//
-// The profile reports a denied call only in its message, so the exception is
-// matched there. If that wording changes, nothing matches. The calls are then
-// refused rather than admitted, so a drift fails closed.
-const ADMITTED_CALL_DENIAL =
-  / does not allow call (?:actor|instance|realmConfig|policy):/;
+// authorization input. A predicate is still written against its caller, its
+// target, the governed realm's own settings and the policy card's own fields,
+// so those are admitted. `params()` is not admitted. It reads the payload, and
+// a caller-supplied value must not decide its own authorization.
+const PREDICATE_CALLS: readonly RequestContextCall[] = [
+  'actor',
+  'instance',
+  'realmConfig',
+  'policy',
+];
 
 // The builtins a predicate may not call, because each can hold for a value it
 // matches only in part. `.teacherIds | contains([actor()])` holds for the
@@ -2079,15 +2082,6 @@ const ANCHORED_BUILTINS = new Set([
   'trimstr',
 ]);
 
-function isFixedString(node: unknown): boolean {
-  let { type, valueType, interpolated } = node as {
-    type?: unknown;
-    valueType?: unknown;
-    interpolated?: unknown;
-  };
-  return type === 'literal' && valueType === 'string' && interpolated !== true;
-}
-
 // The partial-match builtins a predicate calls, each named once in the order
 // it first appears, with what makes it partial.
 function partialMatchCalls(
@@ -2114,7 +2108,11 @@ function partialMatchCalls(
       );
     } else if (
       ANCHORED_BUILTINS.has(name) &&
-      !(Array.isArray(args) && args.length === 1 && isFixedString(args[0]))
+      !(
+        Array.isArray(args) &&
+        args.length === 1 &&
+        fixedText(args[0]) !== undefined
+      )
     ) {
       calls.set(name, 'is given a prefix or suffix that is not fixed text');
     }
@@ -2146,14 +2144,7 @@ async function compilePredicate(source: string): Promise<
       problem: `\`where\` has a syntax error: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
-  let refusals = program.profileIssues.filter(
-    (issue) =>
-      issue.severity === 'error' &&
-      !(
-        issue.code === 'policy-call-banned' &&
-        ADMITTED_CALL_DENIAL.test(issue.message)
-      ),
-  );
+  let refusals = profileRefusals(program.profileIssues, PREDICATE_CALLS);
   // A `where` with nothing in it parses to a program with no body, which the
   // profile has nothing to refuse. It is not a grant with no condition: that
   // is written by leaving `where` out, and an empty one is what an editor
@@ -2188,12 +2179,7 @@ async function compilePredicate(source: string): Promise<
     canonical: program.canonicalSource,
     body: program.body,
     readsActor: callsActor(bxl, program.body),
-    // A comparison that only ever keeps such a caller out, such as
-    // `actor() != "anonymous"`, guards a grant written for signed-in callers
-    // rather than opening it to anyone else.
-    namesAnonymous:
-      namesAnonymous(bxl, program.body) &&
-      settleActor(program.body, 'anonymous') !== false,
+    namesAnonymous: namesAnonymous(bxl, program.body),
   };
 }
 
@@ -2207,204 +2193,6 @@ function callsActor(bxl: BxlPolicyParser, body: unknown): boolean {
     }
   });
   return found;
-}
-
-// A predicate as it reads for one kind of caller, with what that kind settles
-// about `actor()` worked out: `true` or `false` where the whole predicate is
-// settled, and otherwise the predicate with each settled part folded away.
-//
-// - For a caller who isn't signed in, `actor()` is `"anonymous"`, so every
-//   call is that text, and a comparison of it with other text is settled.
-// - For a signed-in caller, `actor()` is a Matrix user id, which is never
-//   `"anonymous"`, so a comparison of the two is settled and every other use
-//   of `actor()` is left for the search to fill in.
-//
-// Then `and`, `or`, `not` and the `AND`, `OR` and `NOT` calls are folded
-// wherever a side is settled. Anything else holding a settled part is left as
-// it is, so the filter compiler judges it as written.
-export function settleActor(
-  body: unknown,
-  caller: 'signed-in' | 'anonymous',
-): unknown {
-  let folded = fold(body, caller);
-  let value = settledValue(folded);
-  return value === undefined ? folded : value;
-}
-
-const SETTLED_TRUE = { type: 'literal', value: true, valueType: 'boolean' };
-const SETTLED_FALSE = { type: 'literal', value: false, valueType: 'boolean' };
-
-function settledValue(node: unknown): boolean | undefined {
-  let { type, valueType, value } = node as {
-    type?: unknown;
-    valueType?: unknown;
-    value?: unknown;
-  };
-  return type === 'literal' && valueType === 'boolean'
-    ? (value as boolean)
-    : undefined;
-}
-
-function asSettled(value: boolean) {
-  return value ? SETTLED_TRUE : SETTLED_FALSE;
-}
-
-function isActorCall(node: unknown): boolean {
-  let { type, name, arity } = node as {
-    type?: unknown;
-    name?: unknown;
-    arity?: unknown;
-  };
-  return type === 'call' && name === 'actor' && (arity ?? 0) === 0;
-}
-
-function fixedText(node: unknown): string | undefined {
-  let { type, valueType, value, interpolated } = node as {
-    type?: unknown;
-    valueType?: unknown;
-    value?: unknown;
-    interpolated?: unknown;
-  };
-  return type === 'literal' &&
-    valueType === 'string' &&
-    interpolated !== true &&
-    typeof value === 'string'
-    ? value
-    : undefined;
-}
-
-function fold(node: unknown, caller: 'signed-in' | 'anonymous'): unknown {
-  if (Array.isArray(node)) {
-    return node.map((item) => fold(item, caller));
-  }
-  if (typeof node !== 'object' || node === null) {
-    return node;
-  }
-  if (isActorCall(node)) {
-    return caller === 'anonymous'
-      ? {
-          type: 'literal',
-          value: ANONYMOUS_ACTOR,
-          valueType: 'string',
-          interpolated: false,
-        }
-      : node;
-  }
-  let record = node as Record<string, unknown>;
-  let { type, operator } = record;
-  if (type === 'binary' && (operator === '==' || operator === '!=')) {
-    let left = fold(record.left, caller);
-    let right = fold(record.right, caller);
-    let equal: boolean | undefined;
-    let leftText = fixedText(left);
-    let rightText = fixedText(right);
-    if (leftText !== undefined && rightText !== undefined) {
-      equal = leftText === rightText;
-    } else if (
-      caller === 'signed-in' &&
-      ((isActorCall(left) && rightText === ANONYMOUS_ACTOR) ||
-        (isActorCall(right) && leftText === ANONYMOUS_ACTOR))
-    ) {
-      equal = false;
-    }
-    if (equal !== undefined) {
-      return asSettled(operator === '==' ? equal : !equal);
-    }
-    return { ...record, left, right };
-  }
-  if (type === 'binary' && (operator === 'and' || operator === 'or')) {
-    let left = fold(record.left, caller);
-    let right = fold(record.right, caller);
-    let absorbing = operator === 'or';
-    for (let [side, other] of [
-      [left, right],
-      [right, left],
-    ]) {
-      let value = settledValue(side);
-      if (value === absorbing) {
-        return asSettled(absorbing);
-      }
-      if (value === !absorbing) {
-        return other;
-      }
-    }
-    return { ...record, left, right };
-  }
-  // `X | not`, which is how `NOT(X)` and `not` read.
-  if (type === 'binary' && operator === '|') {
-    let left = fold(record.left, caller);
-    let right = fold(record.right, caller);
-    let {
-      type: rightType,
-      name,
-      arity,
-    } = right as {
-      type?: unknown;
-      name?: unknown;
-      arity?: unknown;
-    };
-    let value = settledValue(left);
-    if (
-      value !== undefined &&
-      rightType === 'call' &&
-      name === 'not' &&
-      (arity ?? 0) === 0
-    ) {
-      return asSettled(!value);
-    }
-    return { ...record, left, right };
-  }
-  // `AND([...])` and `OR([...])`, whose single argument is a list built with
-  // `,`.
-  if (
-    type === 'call' &&
-    (record.name === 'AND' || record.name === 'OR') &&
-    Array.isArray(record.args) &&
-    record.args.length === 1 &&
-    (record.args[0] as { type?: unknown }).type === 'array'
-  ) {
-    let absorbing = record.name === 'OR';
-    let items = commaItems((record.args[0] as { expr?: unknown }).expr).map(
-      (item) => fold(item, caller),
-    );
-    if (items.some((item) => settledValue(item) === absorbing)) {
-      return asSettled(absorbing);
-    }
-    let open = items.filter((item) => settledValue(item) === undefined);
-    if (open.length === 0) {
-      return asSettled(!absorbing);
-    }
-    return {
-      ...record,
-      args: [{ ...(record.args[0] as object), expr: commaList(open) }],
-    };
-  }
-  let copy: Record<string, unknown> = {};
-  for (let [key, value] of Object.entries(record)) {
-    copy[key] = fold(value, caller);
-  }
-  return copy;
-}
-
-function commaItems(node: unknown): unknown[] {
-  let { type, operator, left, right } = node as {
-    type?: unknown;
-    operator?: unknown;
-    left?: unknown;
-    right?: unknown;
-  };
-  return type === 'binary' && operator === ','
-    ? [...commaItems(left), ...commaItems(right)]
-    : [node];
-}
-
-function commaList(items: unknown[]): unknown {
-  return items.reduce((left, right) => ({
-    type: 'binary',
-    operator: ',',
-    left,
-    right,
-  }));
 }
 
 // BXL, and the shape of what this module asks of it.

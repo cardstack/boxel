@@ -390,7 +390,7 @@ export default function handleSearch(opts: {
     if (
       grantCandidates.length === 0 ||
       !invocation?.types.length ||
-      !principal
+      (!principal && !anonymous)
     ) {
       return access;
     }
@@ -419,7 +419,7 @@ export default function handleSearch(opts: {
             ...invocation,
             principal: caller
               ? { kind: 'anonymous', request: caller.request }
-              : principal,
+              : principal!,
             transport: 'federated-search',
           });
           if (scope.kind !== 'scoped') {

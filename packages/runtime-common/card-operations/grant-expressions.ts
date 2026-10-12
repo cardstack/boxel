@@ -4,6 +4,8 @@ import {
   type AddressRange,
   type AnonymousRateLimit,
 } from '../anonymous-access.ts';
+import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
+import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
 import { loadBxlTransform } from './transforms.ts';
 
 // ============================================================================
@@ -189,15 +191,48 @@ export function blocklistCloses(traffic: GrantTraffic): boolean {
   );
 }
 
+// The expressions that settle how a grant treats a caller's address.
+export interface TrafficExpressions {
+  blocklist?: CompiledGrantExpression;
+  rateLimitRequests?: CompiledGrantExpression;
+  rateLimitWindowSeconds?: CompiledGrantExpression;
+}
+
+// What each of `grants` that opens anything to callers who aren't signed in
+// settles its blocklist and rate limit to, in the order given. A realm's
+// admission of such a caller and an explain of one both read a policy's
+// grants this way, so explain reports what the realm enforces. Each then
+// judges the caller's address against the blocklists its own way: admission
+// against the address the request came from, explain against none.
+export async function settleGrants<
+  G extends { anonymous?: TrafficExpressions },
+>(
+  grants: readonly G[],
+  context: Pick<GrantExpressionContext, 'realmConfig' | 'policy'>,
+  platformLimit: AnonymousRateLimit,
+): Promise<
+  {
+    grant: G & { anonymous: NonNullable<G['anonymous']> };
+    traffic: GrantTraffic;
+  }[]
+> {
+  let settled = [];
+  for (let grant of grants) {
+    if (grant.anonymous) {
+      settled.push({
+        grant: grant as G & { anonymous: NonNullable<G['anonymous']> },
+        traffic: await settleTraffic(grant.anonymous, context, platformLimit),
+      });
+    }
+  }
+  return settled;
+}
+
 // The blocklist and rate limit `grant` settles to. Each half of the limit
 // that the grant leaves out, or whose expression produces no limit, is the
 // platform's.
 export async function settleTraffic(
-  grant: {
-    blocklist?: CompiledGrantExpression;
-    rateLimitRequests?: CompiledGrantExpression;
-    rateLimitWindowSeconds?: CompiledGrantExpression;
-  },
+  grant: TrafficExpressions,
   context: Pick<GrantExpressionContext, 'realmConfig' | 'policy'>,
   platformLimit: AnonymousRateLimit,
 ): Promise<GrantTraffic> {
@@ -286,10 +321,13 @@ export interface GrantExpressionParser {
   visitBxlAst(node: unknown, visitor: (node: unknown) => void): void;
 }
 
-// The request-context calls an expression may make. The profile denies every
-// one, and the denial is matched in its message, as `where`'s exceptions are.
-const ADMITTED_CALL_DENIAL =
-  / does not allow call (?:instance|realmConfig|policy):/;
+// The request-context calls an expression may make. None reads `actor()`:
+// the caller it is evaluated for is always one who isn't signed in.
+const EXPRESSION_CALLS: readonly RequestContextCall[] = [
+  'instance',
+  'realmConfig',
+  'policy',
+];
 
 const WHAT_EACH_PRODUCES: Record<GrantExpressionName, string> = {
   actingUser: 'a Matrix user id, such as `"@writer:example.org"`',
@@ -323,14 +361,7 @@ export function compileGrantExpression(
       problem: `\`${name}\` is empty.\n\nTo leave it unset, remove it.`,
     };
   }
-  let refusals = program.profileIssues.filter(
-    (issue) =>
-      issue.severity === 'error' &&
-      !(
-        issue.code === 'policy-call-banned' &&
-        ADMITTED_CALL_DENIAL.test(issue.message)
-      ),
-  );
+  let refusals = profileRefusals(program.profileIssues, EXPRESSION_CALLS);
   let calls = new Set<string>();
   bxl.visitBxlAst(program.body, (node) => {
     let { type, name: called } = node as { type?: unknown; name?: unknown };
@@ -414,63 +445,4 @@ function producesRightKind(name: GrantExpressionName, value: unknown): boolean {
     case 'rateLimitWindowSeconds':
       return readRateLimitPart('windowSeconds', value) !== undefined;
   }
-}
-
-// ----------------------------------------------------------------------------
-// The caller who isn't signed in, as a policy reads them.
-// ----------------------------------------------------------------------------
-
-// What `actor()` answers for a caller who isn't signed in. It isn't a Matrix
-// user id, so no signed-in caller can ever be it.
-export const ANONYMOUS_ACTOR = 'anonymous';
-
-// Whether a predicate names the caller who isn't signed in. The opt-in is an
-// equality comparison between `actor()` and the fixed anonymous value; a
-// card field that happens to contain that text is not an anonymous grant.
-export function namesAnonymous(
-  bxl: Pick<GrantExpressionParser, 'visitBxlAst'>,
-  body: unknown,
-): boolean {
-  let found = false;
-  bxl.visitBxlAst(body, (node) => {
-    let { type, operator, left, right } = node as {
-      type?: unknown;
-      operator?: unknown;
-      left?: unknown;
-      right?: unknown;
-    };
-    if (
-      type === 'binary' &&
-      (operator === '==' || operator === '!=') &&
-      ((isActorCall(left) && isAnonymousText(right)) ||
-        (isActorCall(right) && isAnonymousText(left)))
-    ) {
-      found = true;
-    }
-  });
-  return found;
-}
-
-function isActorCall(node: unknown): boolean {
-  let { type, name, arity } = node as {
-    type?: unknown;
-    name?: unknown;
-    arity?: unknown;
-  };
-  return type === 'call' && name === 'actor' && (arity ?? 0) === 0;
-}
-
-function isAnonymousText(node: unknown): boolean {
-  let { type, valueType, value, interpolated } = node as {
-    type?: unknown;
-    valueType?: unknown;
-    value?: unknown;
-    interpolated?: unknown;
-  };
-  return (
-    type === 'literal' &&
-    valueType === 'string' &&
-    interpolated !== true &&
-    value === ANONYMOUS_ACTOR
-  );
 }

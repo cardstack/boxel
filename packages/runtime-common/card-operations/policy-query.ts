@@ -18,7 +18,7 @@ import {
 } from './telemetry.ts';
 import { FIELD_KEYED_OPERATORS } from './policy-filter.ts';
 import type { AnonymousRequest } from './anonymous-request.ts';
-import { ANONYMOUS_ACTOR } from './grant-expressions.ts';
+import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
 import {
   opensToAnonymous,
   realmPolicyRef,
@@ -119,22 +119,20 @@ const DENIED: PolicyQueryScope = { kind: 'denied' };
 // because its policy opens `query` to such callers. Any other is the user its
 // session names, including a render a user asked for.
 //
-// An anonymous principal carries the request's anonymous admission where the
-// realm made one: only the grants it lets the caller's address in through
-// scope the search, and the ones that do are recorded on it, so the search is
-// counted against one of them. Without one, every grant that opens `query` to
-// such callers scopes it.
+// An anonymous principal carries the request's anonymous admission: only the
+// grants it lets the caller's address in through scope the search, and the
+// ones that do are recorded on it, so the search is counted against one of
+// them.
 export type SearchPrincipal =
   | { kind: 'user'; user: string }
   | { kind: 'realm-authority'; user: string }
-  | { kind: 'anonymous'; request?: AnonymousRequest };
+  | { kind: 'anonymous'; request: AnonymousRequest };
 
 // Who a search's grants are judged for: a signed-in user, or a caller who
-// isn't signed in, through the request's anonymous admission where there is
-// one.
+// isn't signed in, through the request's anonymous admission.
 type Searcher =
   | { kind: 'user'; actor: string }
-  | { kind: 'anonymous'; request: AnonymousRequest | undefined };
+  | { kind: 'anonymous'; request: AnonymousRequest };
 
 // The principal a request authenticated as, or none for a request that
 // authenticated nobody.
@@ -399,13 +397,6 @@ async function typeScope(
     searcher,
     core,
   );
-  // A grant whose rate limit the caller's address has used up scopes a type
-  // only where no grant with budget left scopes it. A type it alone scopes
-  // keeps it, and the search is then answered as over that grant's limit.
-  let request = searcher.kind === 'anonymous' ? searcher.request : undefined;
-  if (request && granted.some(({ matched }) => !request.spent(matched.grant))) {
-    granted = granted.filter(({ matched }) => !request.spent(matched.grant));
-  }
   if (granted.length === 0) {
     return DENIED;
   }
@@ -476,15 +467,24 @@ async function grantFilters(
   core: OperationCore,
 ): Promise<{ filter: Filter; matched: MatchedGrant }[]> {
   let matched = await matchingGrants(policy, types, operation, core.policy!);
+  // A caller who isn't signed in is scoped only by the grants that may admit
+  // them. A grant whose rate limit their address has used up scopes a type
+  // only where no grant with budget left scopes it: a search can't tell which
+  // grant admits each row, so it can't fall back row by row the way the gate
+  // does card by card. A type such a grant alone scopes keeps it, and the
+  // search is then answered as over that grant's limit.
+  if (searcher.kind === 'anonymous') {
+    let { withBudget, spent } = searcher.request.admitting(
+      matched.filter(({ grant }) => opensToAnonymous(grant)),
+      ({ grant }) => grant,
+    );
+    matched = withBudget.length > 0 ? withBudget : spent;
+  }
   let filters: { filter: Filter; matched: MatchedGrant }[] = [];
   for (let candidate of matched) {
     let { grant } = candidate;
     let filter =
-      searcher.kind === 'user'
-        ? grant.filter
-        : opensToAnonymous(grant) && (searcher.request?.admits(grant) ?? true)
-          ? grant.anonymousFilter
-          : undefined;
+      searcher.kind === 'user' ? grant.filter : grant.anonymousFilter;
     if (!filter) {
       continue;
     }

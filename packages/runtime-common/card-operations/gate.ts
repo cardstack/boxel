@@ -14,7 +14,8 @@ import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
 import type { OperationCore, OperationScope } from './dispatch.ts';
 import type { AnonymousRateLimit } from '../anonymous-access.ts';
-import { ANONYMOUS_ACTOR, settleActingUser } from './grant-expressions.ts';
+import { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
+import { settleActingUser } from './grant-expressions.ts';
 import type {
   ActingUserResolution,
   ActingUserResolver,
@@ -666,13 +667,13 @@ async function decide(
   // admitting anyone at all through one would widen it past what its author
   // wrote.
   if (scope.caller.kind === 'anonymous') {
-    matched = scope.anonymousRequest.withBudgetFirst(
-      matched.filter(
-        ({ grant }) =>
-          opensToAnonymous(grant) && scope.anonymousRequest.admits(grant),
-      ),
+    // Those with budget left come first, so a spent grant admits only what
+    // none of them does.
+    let { withBudget, spent } = scope.anonymousRequest.admitting(
+      matched.filter(({ grant }) => opensToAnonymous(grant)),
       ({ grant }) => grant,
     );
+    matched = [...withBudget, ...spent];
     // An operation whose program, template or output reads `actor()` is
     // refused to such a caller before it runs, so a grant that opens it to
     // one admits nobody. The definition is the one the target's own type

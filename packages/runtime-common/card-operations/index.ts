@@ -4,9 +4,10 @@ export {
   type ActingUserResolution,
   type ActingUserResolver,
 } from './anonymous-request.ts';
+export { ANONYMOUS_ACTOR } from './anonymous-actor.ts';
 export {
-  ANONYMOUS_ACTOR,
   blocklistCloses,
+  settleGrants,
   settleTraffic,
   type CompiledGrantExpression,
   type GrantRateLimit,

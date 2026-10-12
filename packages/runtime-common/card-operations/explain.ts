@@ -42,7 +42,7 @@ import { AnonymousRequest } from './anonymous-request.ts';
 import { actingUserResolver } from './gate.ts';
 import {
   blocklistCloses,
-  settleTraffic,
+  settleGrants,
   type GrantTraffic,
 } from './grant-expressions.ts';
 import {
@@ -410,31 +410,28 @@ async function anonymousAdmission(
   let policy = await core.policy?.compiledPolicy();
   let platformLimit =
     core.policy?.platformAnonymousRateLimit?.() ?? DEFAULT_ANONYMOUS_RATE_LIMIT;
-  let traffic = new Map<string, GrantTraffic>();
-  let eligible = new Set<string>();
-  let context = {
-    realmConfig: await core.realmConfig(),
-    policy: policy?.fields ?? {},
-  };
-  for (let rule of policy?.rules ?? []) {
-    for (let grant of rule.grants) {
-      if (!grant.anonymous) {
-        continue;
-      }
-      let settled = await settleTraffic(
-        grant.anonymous,
-        context,
-        platformLimit,
-      );
-      traffic.set(grant.path, settled);
-      if (grantOpensToAnonymous(grant) && !blocklistCloses(settled)) {
-        eligible.add(grant.anonymous.id);
-      }
-    }
-  }
+  let settled = await settleGrants(
+    (policy?.rules ?? []).flatMap((rule) => rule.grants),
+    { realmConfig: await core.realmConfig(), policy: policy?.fields ?? {} },
+    platformLimit,
+  );
   return {
-    request: new AnonymousRequest(actingUserResolver(core), eligible),
-    traffic,
+    request: new AnonymousRequest(
+      actingUserResolver(core),
+      settled
+        .filter(
+          ({ grant, traffic }) =>
+            grantOpensToAnonymous(grant) && !blocklistCloses(traffic),
+        )
+        .map(({ grant, traffic }) => ({
+          id: grant.anonymous.id,
+          path: grant.path,
+          limit: traffic.limit,
+        })),
+    ),
+    traffic: new Map(
+      settled.map(({ grant, traffic }) => [grant.path, traffic]),
+    ),
     platformLimit: { ...platformLimit },
   };
 }
@@ -712,7 +709,7 @@ async function explainSearch(
       principal:
         actor.kind === 'user'
           ? { kind: 'user', user: actor.actor }
-          : { kind: 'anonymous', request: anonymous?.request },
+          : { kind: 'anonymous', request: anonymous!.request },
       transport: 'explain',
       hypothetical: true,
     });
