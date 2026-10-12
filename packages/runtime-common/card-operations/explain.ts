@@ -33,7 +33,11 @@ import {
   type GateDecision,
   type MatchedGrant,
 } from './gate.ts';
-import { resolveNamedQuery, searchInvocation } from './named-query.ts';
+import {
+  admitsNothing,
+  resolveNamedQuery,
+  searchInvocation,
+} from './named-query.ts';
 import { NO_ACTING_USER, type ActingUserResolution } from './acting-users.ts';
 import type { CompiledOperationGrant, CompiledRealmPolicy } from './policy.ts';
 import { policyQueryScope, type PolicyQueryScope } from './policy-query.ts';
@@ -567,7 +571,9 @@ async function explainSearch(
   };
   // A named query is resolved before anything consults a policy, for every
   // caller, and a request naming one that does not resolve is refused as it
-  // is sent. So is an ad-hoc filter the search grammar does not accept.
+  // is sent, or, for an actor who may not read its type's module, answered
+  // with no rows. An ad-hoc filter the search grammar does not accept is
+  // refused too.
   if ('filter' in search) {
     try {
       parseSearchEntryQueryFromPayload({ filter: search.filter });
@@ -586,6 +592,9 @@ async function explainSearch(
             : undefined,
         realms: [core.realmURL],
       });
+      if (admitsNothing(resolved)) {
+        return { ...base, reason: 'declaration-unreadable' };
+      }
       if (resolved.query.filter) {
         answer.filter = resolved.query.filter;
       }

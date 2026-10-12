@@ -1667,18 +1667,44 @@ module(basename(import.meta.filename), function (hooks) {
         operation: 'listNothing',
         search: { on: CLASSROOM },
       });
-      assert.strictEqual(unknown.reason, 'not-resolved');
-      let refused = await request
+      assert.strictEqual(unknown.decision, 'denied');
+      assert.strictEqual(
+        unknown.reason,
+        'declaration-unreadable',
+        'the teacher may not read the realm holding the type’s module',
+      );
+      assert.false(
+        'refusal' in unknown,
+        'the search answers no rows rather than refusing',
+      );
+      let unrefused = await request
         .post(`${path(EDUCATION)}_search`)
         .set('Accept', SupportedMimeType.CardJson)
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', AS_TEACHER())
         .send({ operation: 'listNothing', on: CLASSROOM });
+      assert.strictEqual(unrefused.status, 200);
+      assert.deepEqual(unrefused.body.data, []);
+
+      let refusedReader = await answer({
+        actor: READER,
+        target: EDUCATION,
+        operation: 'listNothing',
+        search: { on: CLASSROOM },
+      });
+      assert.strictEqual(refusedReader.reason, 'not-resolved');
+      let refused = await request
+        .post(`${path(EDUCATION)}_search`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', AS_READER())
+        .send({ operation: 'listNothing', on: CLASSROOM });
       assert.deepEqual(
-        unknown.refusal,
+        refusedReader.refusal,
         { status: refused.status, code: errorOf(refused)?.code },
-        'refused as the search itself refuses',
+        'a reader of the module is refused as the search itself refuses',
       );
 
       let unparsed = { 'item.on': CLASSROOM, nonsense: true };

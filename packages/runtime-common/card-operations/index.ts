@@ -206,6 +206,7 @@ export type {
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 export {
+  admitsNothing,
   isNamedQueryPayload,
   namedQueryInvocation,
   namedQueryRendering,
@@ -214,6 +215,7 @@ export {
   searchInvocation,
 } from './named-query.ts';
 export type {
+  NamedQueryAdmittingNothing,
   NamedQueryContext,
   NamedQueryStats,
   ResolvedNamedQuery,

@@ -69,6 +69,7 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  admitsNothing,
   effectiveLinkStrategy,
   errorsDocument,
   isNamedQueryPayload,
@@ -212,6 +213,10 @@ export default function handleSearch(opts: {
     // what they contribute. They are not when the search is one no realm can
     // answer rows to, which is then run with no filter of its own.
     let consultPolicies = true;
+    // Whether no realm is searched, the ones the caller reads included: a
+    // named query whose resolution refused a caller who may not read its
+    // type's module admits nothing, wherever it would have searched.
+    let admittingNothing = false;
     // How much of each result's link graph a named query's declaration lets
     // its results carry, and which formats it serves them data-only for. An
     // ad-hoc search declares neither.
@@ -279,13 +284,23 @@ export default function handleSearch(opts: {
           );
           if (!resolved) {
             return;
+          } else if (admitsNothing(resolved)) {
+            // Resolving refused a caller who may not read the type's module,
+            // who is answered as a declared query that admits nothing answers
+            // them: every realm the request names answers with no rows, the
+            // ones the caller reads included, so the request is searched as
+            // one no realm can answer a row to.
+            payload = { ...namedQueryRendering(payload), realms: named };
+            consultPolicies = false;
+            admittingNothing = true;
+          } else {
+            payload = resolved.query;
+            declaredLinks = resolved.links;
+            unshareableFormats = resolved.unshareableFormats;
+            // The declaration's own scope narrows what the request named, and
+            // its order is the order it is searched in.
+            named = resolved.query.realms!;
           }
-          payload = resolved.query;
-          declaredLinks = resolved.links;
-          unshareableFormats = resolved.unshareableFormats;
-          // The declaration's own scope narrows what the request named, and
-          // its order is the order it is searched in.
-          named = resolved.query.realms!;
         }
       }
     }
@@ -296,7 +311,7 @@ export default function handleSearch(opts: {
     // policy, and a realm-authority principal has none to ask. A named query
     // whose declaration could not be read searches no realm at all, so no
     // policy is asked about it.
-    let readable = new Set(realmList);
+    let readable = new Set(admittingNothing ? [] : realmList);
     let candidates = new Set(grantCandidates);
     // A request that authenticated nobody is counted by each realm that
     // admitted it, against the address the request came from.

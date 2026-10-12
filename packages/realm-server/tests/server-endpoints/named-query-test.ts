@@ -38,13 +38,15 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
 // type it is invoked on and its params, and is answered with the realm's own
 // resolution of that declaration.
 //
-// Two realms on one server. The School realm holds the type and most of its
+// Three realms on one server. The School realm holds the type and most of its
 // cards; the Other realm holds one more card of the same type, so a query's
-// realm scope is observable in which rows come back.
+// realm scope is observable in which rows come back. The Private realm holds
+// a type only provider A may read the module of, with a card of it in School.
 // ============================================================================
 
 const SCHOOL = 'http://127.0.0.1:4444/school/';
 const OTHER = 'http://127.0.0.1:4444/other/';
+const PRIVATE = 'http://127.0.0.1:4444/private/';
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
 const PROVIDER_B = '@provider-b:localhost';
@@ -118,6 +120,45 @@ const SCHEDULE_MODULE = `
   }
 `;
 
+const SECRET = { module: `${PRIVATE}secret`, name: 'Secret' };
+
+const SECRET_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation, params } from "@cardstack/base/operations";
+
+  export class Secret extends CardDef {
+    @field status = contains(StringField);
+
+    @operation static openSecrets = {
+      base: 'query',
+      query: { filter: { on: () => Secret, eq: { status: 'open' } } },
+    };
+
+    @operation static secretsByStatus = {
+      base: 'query',
+      params: { status: StringField },
+      query: { filter: { on: () => Secret, eq: { status: params('status') } } },
+    };
+
+    @operation static reveal = {
+      base: 'transform',
+      params: { status: StringField },
+      set: { status: params('status') },
+    };
+  }
+`;
+
+function secret(status: string) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { status },
+      meta: { adoptsFrom: { module: rri(SECRET.module), name: SECRET.name } },
+    },
+  });
+}
+
 // A type whose declaration the stale-lowering test rewrites, kept apart from
 // the one every other test reads.
 function driftingModule(status: string) {
@@ -168,6 +209,7 @@ function drifting(status: string) {
 module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
   let school: Realm;
   let other: Realm;
+  let privateRealm: Realm;
   let request: SuperTest<Test>;
   let server: Server;
 
@@ -215,6 +257,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
             }),
             'drifting/open.json': drifting('open'),
             'drifting/closed.json': drifting('closed'),
+            'secrets/open.json': secret('open'),
           },
           // Readable by anyone, so a request that authenticates nobody
           // reaches the query rather than being turned away at the door.
@@ -239,6 +282,14 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
             [PROVIDER_B]: ['read'],
           },
         },
+        {
+          realmURL: new URL(PRIVATE),
+          fileSystem: { 'secret.gts': SECRET_MODULE },
+          permissions: {
+            [OWNER]: ['read', 'write', 'realm-owner'],
+            [PROVIDER_A]: ['read'],
+          },
+        },
       ],
       dbAdapter,
       publisher,
@@ -249,6 +300,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     request = supertest(server);
     school = result.realms.find((realm) => realm.url === SCHOOL)!;
     other = result.realms.find((realm) => realm.url === OTHER)!;
+    privateRealm = result.realms.find((realm) => realm.url === PRIVATE)!;
   }
 
   // One server for the whole file, since every test but the stale-lowering one
@@ -264,7 +316,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     },
     after: async () => {
       // Guarded, so a boot that failed partway still closes what it opened.
-      for (let realm of [school, other]) {
+      for (let realm of [school, other, privateRealm]) {
         realm?.unsubscribe();
       }
       if (server) {
@@ -847,6 +899,185 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
 
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
       assert.strictEqual(response.body.errors[0].code, 'unknown-operation');
+    });
+  });
+
+  // Provider B reads School, which anyone may, and not Private, which holds
+  // the Secret type's module. Provider A reads both.
+  module('a type whose module the caller may not read', function () {
+    // Each request resolving refuses, for what it asks of the Secret type.
+    const REFUSED: Record<string, Record<string, unknown>> = {
+      'an operation the type does not declare': {
+        operation: 'revealAll',
+        on: SECRET,
+      },
+      'an operation that is not a query': {
+        operation: 'reveal',
+        on: SECRET,
+        params: { status: 'open' },
+      },
+      'a query missing its params': {
+        operation: 'secretsByStatus',
+        on: SECRET,
+      },
+      'a type its module does not export': {
+        operation: 'openSecrets',
+        on: { module: SECRET.module, name: 'Nothing' },
+      },
+    };
+    // A declared query that admits nothing.
+    const ADMITS_NOTHING = {
+      operation: 'secretsByStatus',
+      on: SECRET,
+      params: { status: 'none' },
+    };
+
+    test('a refusal is answered as a declared query that admits nothing is', async function (assert) {
+      let nothing = await federatedSearch(
+        { ...ADMITS_NOTHING, realms: [SCHOOL] },
+        PROVIDER_B,
+      );
+      assert.strictEqual(nothing.status, 200, 'HTTP 200 status');
+      assert.deepEqual(ids(nothing), [], 'the declared query admits nothing');
+
+      for (let [name, payload] of Object.entries(REFUSED)) {
+        let response = await federatedSearch(
+          { ...payload, realms: [SCHOOL] },
+          PROVIDER_B,
+        );
+        assert.strictEqual(response.status, 200, `${name}: HTTP 200 status`);
+        assert.strictEqual(
+          response.text,
+          nothing.text,
+          `${name}: byte-identical to the declared query that admits nothing`,
+        );
+      }
+    });
+
+    test('a declared query still returns its rows', async function (assert) {
+      let response = await federatedSearch(
+        { operation: 'openSecrets', on: SECRET, realms: [SCHOOL] },
+        PROVIDER_B,
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.deepEqual(ids(response), [`${SCHOOL}secrets/open`]);
+    });
+
+    test('a caller who reads the module is refused with the detail', async function (assert) {
+      let unknown = await federatedSearch(
+        {
+          ...REFUSED['an operation the type does not declare'],
+          realms: [SCHOOL],
+        },
+        PROVIDER_A,
+      );
+      assert.strictEqual(unknown.status, 404, 'HTTP 404 status');
+      assert.strictEqual(unknown.body.errors[0].code, 'unknown-operation');
+
+      let notAQuery = await federatedSearch(
+        { ...REFUSED['an operation that is not a query'], realms: [SCHOOL] },
+        PROVIDER_A,
+      );
+      assert.strictEqual(notAQuery.status, 400, 'HTTP 400 status');
+      assert.true(/declares no query/.test(notAQuery.body.errors[0].detail));
+
+      let missingParam = await federatedSearch(
+        { ...REFUSED['a query missing its params'], realms: [SCHOOL] },
+        PROVIDER_A,
+      );
+      assert.strictEqual(missingParam.status, 400, 'HTTP 400 status');
+      assert.true(
+        /requires a value for params\("status"\)/.test(
+          missingParam.body.errors[0].detail,
+        ),
+      );
+
+      let unexported = await federatedSearch(
+        { ...REFUSED['a type its module does not export'], realms: [SCHOOL] },
+        PROVIDER_A,
+      );
+      assert.strictEqual(unexported.status, 404, 'HTTP 404 status');
+    });
+
+    test('a module no realm on this server holds is judged unreadable', async function (assert) {
+      let nothing = await federatedSearch(
+        { ...ADMITS_NOTHING, realms: [SCHOOL] },
+        PROVIDER_A,
+      );
+      let response = await federatedSearch(
+        {
+          operation: 'openSecrets',
+          on: {
+            module: 'http://127.0.0.1:4444/nowhere/secret',
+            name: 'Secret',
+          },
+          realms: [SCHOOL],
+        },
+        PROVIDER_A,
+      );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.text, nothing.text);
+    });
+
+    module('on a realm’s own _search', function () {
+      test('a refusal is answered as a declared query that admits nothing is', async function (assert) {
+        let nothing = await realmSearch(school, ADMITS_NOTHING, PROVIDER_B);
+        assert.strictEqual(nothing.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(nothing), [], 'the declared query admits nothing');
+
+        for (let [name, payload] of Object.entries(REFUSED)) {
+          let response = await realmSearch(school, payload, PROVIDER_B);
+          assert.strictEqual(response.status, 200, `${name}: HTTP 200 status`);
+          assert.strictEqual(
+            response.text,
+            nothing.text,
+            `${name}: byte-identical to the declared query that admits nothing`,
+          );
+        }
+      });
+
+      test('a declared query still returns its rows', async function (assert) {
+        let response = await realmSearch(
+          school,
+          { operation: 'openSecrets', on: SECRET },
+          PROVIDER_B,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), [`${SCHOOL}secrets/open`]);
+      });
+
+      test('a caller who reads the module is refused with the detail', async function (assert) {
+        let unknown = await realmSearch(
+          school,
+          REFUSED['an operation the type does not declare'],
+          PROVIDER_A,
+        );
+        assert.strictEqual(unknown.status, 404, 'HTTP 404 status');
+        assert.strictEqual(unknown.body.errors[0].code, 'unknown-operation');
+
+        let notAQuery = await realmSearch(
+          school,
+          REFUSED['an operation that is not a query'],
+          PROVIDER_A,
+        );
+        assert.strictEqual(notAQuery.status, 400, 'HTTP 400 status');
+        assert.true(/declares no query/.test(notAQuery.body.errors[0].detail));
+
+        let missingParam = await realmSearch(
+          school,
+          REFUSED['a query missing its params'],
+          PROVIDER_A,
+        );
+        assert.strictEqual(missingParam.status, 400, 'HTTP 400 status');
+        assert.true(
+          /requires a value for params\("status"\)/.test(
+            missingParam.body.errors[0].detail,
+          ),
+        );
+      });
     });
   });
 
