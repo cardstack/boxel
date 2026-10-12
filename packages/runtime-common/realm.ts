@@ -10604,16 +10604,19 @@ export class Realm {
       }
       // The validators were built from the same stat, so when the opened
       // content has a different modification time they describe another
-      // version of the file. Sending them would let a client store these bytes
-      // under that version's validator; the response carries none instead,
-      // and the next request is answered from whatever the file is then.
+      // version of the file. Sending that ETag would let a client store these
+      // bytes under that version's validator, so the response carries none,
+      // and the next request is answered from whatever the file is then. The
+      // modification time is still sent, taken from the opened content: it
+      // describes the bytes this response delivers, and readers such as the
+      // indexer record it as the file's last-modified time.
       if (
         openedContent.lastModifiedMs != null &&
         ref.lastModifiedMs != null &&
         openedContent.lastModifiedMs !== ref.lastModifiedMs
       ) {
         delete headers['etag'];
-        delete headers['last-modified'];
+        headers['last-modified'] = formatRFC7231(openedContent.lastModifiedMs);
       }
     }
     let content = openedContent?.content ?? ref.content;
