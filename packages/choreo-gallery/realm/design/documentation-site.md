@@ -1,7 +1,9 @@
 # Choreo Documentation Website
 
 > The design of the test app's documentation site, which the gallery realm's
-> guides take over. Paths name the test app as it was.
+> guides take over. Paths into the test app name it as it was. The tools and
+> checks are named where they live now, in `packages/choreo-gallery`; the realm
+> check (`pnpm lint:realm`) replaced `docs:check`.
 
 The guides are part of `test-app`, sharing its brand mark, theme, navigation, and deployment. Open `/docs`; `/docs/:topic_id` is a guide, `/playground/:demo_id` is a live tuning workspace, and `/_widgets` opens the 3D gallery.
 
@@ -55,7 +57,7 @@ Publish the complete build and required static media using the chosen host. Do n
 
 ## API Coverage and Depth
 
-`packages/choreo-gallery/tools/api-inventory.json` maps 343 exported names and yielded vocabulary members to their concept guides. Each registered guide has at least 300 explanatory prose words, excluding code and API tables. Related aliases and supporting types share their behavior chapter. `scripts/check-guide-coverage.mjs` compares the inventory with the TypeScript declarations and checks depth, preambles, section goals, and internal guide links. Run `pnpm docs:check` after an API or documentation change.
+`packages/choreo-gallery/tools/api-inventory.json` maps the exported names and yielded vocabulary members to their concept guides. Each registered guide has at least 300 explanatory prose words, excluding code and API tables. Related aliases and supporting types share their behavior chapter. `packages/choreo-gallery/tools/check-realm.mjs` compares the inventory with the packages' exports and checks depth, preambles, section goals, and internal guide links. Run `pnpm lint:realm` in `packages/choreo-gallery` after an API or documentation change.
 
 The inventory appears at `/docs/core-api-inventory`. Keep it synchronized when adding a public API. Do not automatically map a new export to a broad introduction simply to satisfy the check: review whether its concept needs a dedicated treatment.
 
@@ -76,27 +78,27 @@ Use the same binding name wherever the same source variable is shared. Use disti
 Timing-only edits use the workbench’s `live-demo-motion.ts` adapter after
 Glimmer’s `postRender` hook. It retimes the existing Motion visual elements
 and preserves repeating animations’ phase; it does not remount the demo.
-Run `node scripts/check-demo-live-controls.mjs` against the dev server to
+Run `node packages/choreo-gallery/tools/check-demo-live-controls.mjs` against the dev server to
 verify live duration and target edits, DOM identity, and compact control rows.
 
 Each catalog demo includes two authored looks in DialKit’s Versions menu.
 `demo-presets.ts` maps each look to explicit demo variable names and values.
 Version 1 restores the source defaults; choosing a look keeps the demo mounted.
 Add presets only after their variables are registered, and keep all numeric
-values inside their declared ranges. Run `node scripts/check-demo-presets.mjs`
+values inside their declared ranges. Run `node packages/choreo-gallery/tools/check-demo-presets.mjs`
 against the development server to exercise both looks and restoration.
 
 Teaching coverage is tracked in `test-app/app/content/demo-lessons.json`. Each
 catalog example has a concept explanation, an experiment, a pitfall, a composition
 idea and a concept-guide link. The shared GuideDemo renders these beside the
 example code. Seven focused walkthroughs are registered in `demo-guides.ts`.
-`docs:check` verifies that all catalog examples remain embedded and have complete
+`pnpm lint:realm` verifies that all catalog examples remain embedded and have complete
 teaching records; prose correctness still requires source review.
 
 [docs-studies-plan.md](docs-studies-plan.md) specifies the planned docs-only spatial and film
 studies. Keep these separate from shipped demo coverage until implemented.
 The 3D room and its tile frames force a dark palette without overwriting the
-visitor’s saved theme. `scripts/check-guide-lessons.mjs` checks real embedded
+visitor’s saved theme. `packages/choreo-gallery/tools/check-guide-lessons.mjs` checks real embedded
 controls and this gallery theme behaviour against the development server.
 
 ## Complete tutorials

@@ -54,6 +54,8 @@ during the work.
   [towers-quality.md](towers-quality.md)
 - [sagrada-web-model.md](sagrada-web-model.md) — the Sagrada picture's
   procedural model pass
+- [choreo-player-reference-proof.md](choreo-player-reference-proof.md) — the
+  Playhead render with one and ten workers, and the 1.0 release gate
 - [gallery/](gallery/README.md) — the 3D gallery room and its narrated
   tours: room design, tile capacity, tour script and pacing, performance
 

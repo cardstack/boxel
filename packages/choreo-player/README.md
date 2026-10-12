@@ -129,5 +129,7 @@ barrier, and returns an event-listener cleanup function. It does not import
 HyperFrames or inspect the DOM.
 
 Parallel safety is a property of `renderFrameAt()`, not a promise made by this
-package. The reference Playhead fixture is verified with both one and ten
-workers and scanned for opening-frame flashes at every worker boundary.
+package. The reference Playhead fixture, in Choreo's original repository, was
+rendered once with one and once with ten workers, and scanned for opening-frame
+flashes at every worker boundary: see
+[the reference proof](https://choreo.boxel.site/design/choreo-player-reference-proof.md).

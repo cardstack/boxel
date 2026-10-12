@@ -25,6 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Marked } from 'marked';
+import { getHeadingList, gfmHeadingId } from 'marked-gfm-heading-id';
 import ts from 'typescript';
 
 const root = path.resolve(
@@ -334,42 +336,73 @@ function markdownFiles(dir) {
     .map((file) => path.join(dir, file));
 }
 const relative = (file) => path.relative(root, file);
-/** fenced code, which may quote link or import syntax it doesn't mean */
-const withoutFences = (markdown) =>
-  markdown.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
+/** each file is read, and each document's headings worked out, once */
+function memoized(fn) {
+  const cache = new Map();
+  return (key) => {
+    if (!cache.has(key)) {
+      cache.set(key, fn(key));
+    }
+    return cache.get(key);
+  };
+}
+const read = memoized((file) => fs.readFileSync(file, 'utf8'));
+/** undefined for a malformed escape, rather than a URIError */
+function decode(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
- * The ids GitHub gives a document's headings. The host computes the same
- * slugs but renders each id with a `user-content-` prefix
- * (runtime-common/marked-sync.ts), as GitHub does in its HTML.
+ * The ids a document's headings get, from the parser and slugger the host
+ * uses (runtime-common/marked-sync.ts), so setext headings, entities and
+ * repeats come out as they render. The host prefixes each id with
+ * `user-content-`, as GitHub does in its HTML.
  */
-function headingIds(markdown) {
-  const ids = new Set();
-  const seen = new Map();
-  for (const [, text] of withoutFences(markdown).matchAll(
-    /^#{1,6}\s+(.*?)\s*#*\s*$/gm,
-  )) {
-    // a code span keeps its text as written, `<Film>` and `/_sylva` included;
-    // outside one, tags, link targets and emphasis underscores drop out
-    const base = text
-      .split(/(`[^`]*`)/)
-      .map((part, i) =>
-        i % 2
-          ? part.slice(1, -1)
-          : part
-              .replace(/<[^>]+>/g, '')
-              .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-              .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, ''),
-      )
-      .join('')
-      .toLowerCase()
-      .replace(/[^\p{L}\p{M}\p{Nd}\p{Pc} -]/gu, '')
-      .replace(/ /g, '-');
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    ids.add(count ? `${base}-${count}` : base);
+const headingParser = new Marked().use(gfmHeadingId());
+const headingIds = memoized((file) => {
+  headingParser.parse(read(file));
+  return new Set(getHeadingList().map((heading) => heading.id));
+});
+/**
+ * The link and image targets in a document's prose. Code, fenced, indented
+ * or inline, isn't prose, so a link it quotes isn't one.
+ */
+const linkParser = new Marked();
+function linkTargets(file) {
+  const targets = [];
+  linkParser.walkTokens(linkParser.lexer(read(file)), (token) => {
+    if (token.type === 'link' || token.type === 'image') {
+      targets.push(token.href);
+    }
+  });
+  return targets;
+}
+/**
+ * What is wrong with a `#fragment` on a link to `target`, a Markdown file or a
+ * directory (whose README.md GitHub shows), if anything.
+ */
+function fragmentProblem(target, fragment) {
+  if (!fragment) {
+    return undefined;
   }
-  return ids;
+  const id = decode(fragment);
+  if (id === undefined) {
+    return 'has a malformed escape';
+  }
+  const isDirectory =
+    fs.existsSync(target) && fs.statSync(target).isDirectory();
+  // GitHub anchors a directory page's README at `#readme`
+  if (isDirectory && id === 'readme') {
+    return undefined;
+  }
+  const doc = isDirectory ? path.join(target, 'README.md') : target;
+  return doc.endsWith('.md') && fs.existsSync(doc) && !headingIds(doc).has(id)
+    ? 'names no heading'
+    : undefined;
 }
 
 const realmDocs = [
@@ -386,31 +419,28 @@ const brokenLinks = [];
 for (const file of [...realmDocs, ...packageReadmes]) {
   // a realm doc is published with the realm, so it may link only inside it
   const inRealm = file.startsWith(realm + path.sep);
-  const markdown = fs.readFileSync(file, 'utf8');
-  for (const [, target] of withoutFences(markdown).matchAll(
-    /\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g,
-  )) {
+  for (const target of linkTargets(file)) {
     if (/^[a-z][a-z+.-]*:/i.test(target)) {
       continue;
     }
     const [pathPart, fragment] = target.split('#');
+    const decoded = decode(pathPart);
+    if (decoded === undefined) {
+      brokenLinks.push(`${relative(file)}: ${target} has a malformed escape`);
+      continue;
+    }
     const resolved = pathPart
-      ? path.resolve(path.dirname(file), decodeURIComponent(pathPart))
+      ? path.resolve(path.dirname(file), decoded)
       : file;
     // an extensionless link is a card: `../demos/fold` is demos/fold.json
     const exists = fs.existsSync(resolved) || fs.existsSync(`${resolved}.json`);
+    const problem = exists && fragmentProblem(resolved, fragment);
     if (inRealm && (!resolved.startsWith(realm + path.sep) || !exists)) {
       brokenLinks.push(`${relative(file)}: ${target} is not a realm file`);
     } else if (!exists) {
       brokenLinks.push(`${relative(file)}: ${target} names no file`);
-    } else if (
-      fragment &&
-      resolved.endsWith('.md') &&
-      !headingIds(fs.readFileSync(resolved, 'utf8')).has(
-        decodeURIComponent(fragment),
-      )
-    ) {
-      brokenLinks.push(`${relative(file)}: ${target} names no heading`);
+    } else if (problem) {
+      brokenLinks.push(`${relative(file)}: ${target} ${problem}`);
     }
   }
 }
@@ -421,92 +451,111 @@ assert.deepEqual(brokenLinks, [], 'Broken links in the docs');
  * glimmer-motion into @cardstack/choreo, so a name imported from a package
  * has to be one that package exports today.
  */
-const packageSources = {
-  'glimmer-motion': 'packages/glimmer-motion/src',
-  '@cardstack/choreo': 'packages/choreo/src',
-  '@cardstack/choreo-player': 'packages/choreo-player/src',
+const packageDirs = {
+  'glimmer-motion': 'packages/glimmer-motion',
+  '@cardstack/choreo': 'packages/choreo',
+  '@cardstack/choreo-player': 'packages/choreo-player',
 };
 const retiredSpecifiers = new Set(['choreo', 'choreo-player']);
-function moduleFile(specifier) {
-  const name = Object.keys(packageSources)
+const packageOf = (specifier) =>
+  Object.keys(packageDirs)
     .sort((a, b) => b.length - a.length)
     .find((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`));
-  if (!name) {
-    return undefined;
+/**
+ * The source module a specifier reaches through its package's `exports` map,
+ * as a consumer resolves it: an exact subpath, else a `*` pattern.
+ */
+function moduleFile(specifier) {
+  const name = packageOf(specifier);
+  const dir = path.join(root, packageDirs[name]);
+  const { exports } = JSON.parse(read(path.join(dir, 'package.json')));
+  const subpath = `.${specifier.slice(name.length)}`;
+  let target = exports[subpath];
+  if (!target) {
+    for (const [key, value] of Object.entries(exports)) {
+      const [prefix, suffix] = key.split('*');
+      if (
+        suffix !== undefined &&
+        subpath.length >= prefix.length + suffix.length &&
+        subpath.startsWith(prefix) &&
+        subpath.endsWith(suffix)
+      ) {
+        const star = subpath.slice(
+          prefix.length,
+          subpath.length - suffix.length,
+        );
+        target = JSON.parse(JSON.stringify(value).replaceAll('*', star));
+        break;
+      }
+    }
   }
-  const base = path.join(
-    root,
-    packageSources[name],
-    specifier.slice(name.length + 1) || 'index',
-  );
-  return [
-    `${base}.ts`,
-    `${base}.gts`,
-    path.join(base, 'index.ts'),
-    path.join(base, 'index.gts'),
-  ].find((candidate) => fs.existsSync(candidate));
+  const source = target?.['developing:choreo'];
+  const file = source && path.join(dir, source);
+  return file && fs.existsSync(file) ? file : undefined;
 }
+/**
+ * A module's export names, `default` included. `unknown` names a re-export
+ * whose names can't be listed, so imports from the module can't be checked.
+ */
 function exportsOf(file) {
   const tree = ts.createSourceFile(
     file,
-    fs.readFileSync(file, 'utf8'),
+    read(file),
     ts.ScriptTarget.Latest,
     true,
   );
   const names = new Set();
+  const hasModifier = (node, kind) =>
+    node.modifiers?.some((modifier) => modifier.kind === kind);
   for (const node of tree.statements) {
     if (ts.isExportDeclaration(node) && !node.exportClause) {
-      // `export * from './x'`: follow it. From another package, anything may
-      // come through.
+      // `export * from './x'`: follow it
       const specifier = node.moduleSpecifier.text;
       const base = path.resolve(path.dirname(file), specifier);
       const target = specifier.startsWith('.')
-        ? [base, `${base}.ts`, `${base}.gts`].find(
+        ? [
+            base,
+            `${base}.ts`,
+            `${base}.gts`,
+            path.join(base, 'index.ts'),
+            path.join(base, 'index.gts'),
+          ].find(
             (candidate) =>
               fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
           )
         : undefined;
-      const inner = target && exportsOf(target);
-      if (!inner) {
-        return undefined;
+      const inner = target
+        ? exportsOf(target)
+        : { unknown: `export * from '${specifier}'` };
+      if (inner.unknown) {
+        return inner;
       }
-      inner.forEach((name) => names.add(name));
-      continue;
-    }
-    if (
-      ts.isExportDeclaration(node) &&
-      node.exportClause &&
-      ts.isNamespaceExport(node.exportClause)
-    ) {
-      names.add(node.exportClause.name.text);
-      continue;
-    }
-    if (
-      ts.isExportDeclaration(node) &&
-      node.exportClause &&
-      ts.isNamedExports(node.exportClause)
-    ) {
-      for (const item of node.exportClause.elements) {
-        names.add(item.name.text);
+      inner.names.forEach((name) => names.add(name));
+    } else if (ts.isExportDeclaration(node)) {
+      if (ts.isNamespaceExport(node.exportClause)) {
+        names.add(node.exportClause.name.text);
+      } else {
+        for (const item of node.exportClause.elements) {
+          names.add(item.name.text);
+        }
       }
-    } else if (
-      node.modifiers?.some(
-        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
-      )
-    ) {
-      if (node.name) {
-        names.add(node.name.text);
-      }
-      if (ts.isVariableStatement(node)) {
+    } else if (ts.isExportAssignment(node) && !node.isExportEquals) {
+      names.add('default');
+    } else if (hasModifier(node, ts.SyntaxKind.ExportKeyword)) {
+      if (hasModifier(node, ts.SyntaxKind.DefaultKeyword)) {
+        names.add('default');
+      } else if (ts.isVariableStatement(node)) {
         for (const item of node.declarationList.declarations) {
           names.add(item.name.getText(tree));
         }
+      } else if (node.name) {
+        names.add(node.name.text);
       }
     }
   }
-  return names;
+  return { names };
 }
-const exportCache = new Map();
+const moduleExports = memoized(exportsOf);
 const importedDocs = [
   ...realmDocs,
   ...markdownFiles(guidesDir),
@@ -516,8 +565,7 @@ const designDir = path.join(realm, 'design') + path.sep;
 const badImports = [];
 // the design records sketch APIs that were never built
 for (const file of importedDocs.filter((doc) => !doc.startsWith(designDir))) {
-  const markdown = fs.readFileSync(file, 'utf8');
-  for (const [statement, clause, specifier] of markdown.matchAll(
+  for (const [statement, clause, specifier] of read(file).matchAll(
     /\bimport\s+(?:type\s+)?([\w$]+\s*,\s*\{[^}]*\}|\{[^}]*\}|[\w$]+|\*\s+as\s+[\w$]+)\s+from\s+['"]([^'"]+)['"]/g,
   )) {
     const where = `${relative(file)}: ${statement.replace(/\s+/g, ' ')}`;
@@ -525,70 +573,66 @@ for (const file of importedDocs.filter((doc) => !doc.startsWith(designDir))) {
       badImports.push(`${where} — no such package`);
       continue;
     }
-    const isOurs = Object.keys(packageSources).some(
-      (pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`),
-    );
-    if (!isOurs) {
+    if (!packageOf(specifier)) {
       continue;
     }
     const module = moduleFile(specifier);
     if (!module) {
-      badImports.push(`${where} — no such module`);
+      badImports.push(`${where} — ${specifier} is not an entry point`);
       continue;
     }
-    if (!exportCache.has(module)) {
-      exportCache.set(module, exportsOf(module));
+    const exported = moduleExports(module);
+    if (exported.unknown) {
+      badImports.push(
+        `${where} — ${relative(module)} has \`${exported.unknown}\`, so its exports can't be checked`,
+      );
+      continue;
     }
-    const exported = exportCache.get(module);
-    const named = clause.match(/\{([^}]*)\}/)?.[1] ?? '';
-    for (const item of named.split(',')) {
-      const name = item
-        .trim()
-        .replace(/^type\s+/, '')
-        .split(/\s+as\s+/)[0];
-      if (name && exported && !exported.has(name)) {
-        badImports.push(`${where} — ${specifier} has no export ${name}`);
+    // `X` and `X, { … }` take the default export; `* as X` takes the module
+    const imported = clause.startsWith('*')
+      ? []
+      : [
+          ...(/^[\w$]/.test(clause) ? ['default'] : []),
+          ...(clause.match(/\{([^}]*)\}/)?.[1] ?? '')
+            .split(',')
+            .map(
+              (item) =>
+                item
+                  .trim()
+                  .replace(/^type\s+/, '')
+                  .split(/\s+as\s+/)[0],
+            )
+            .filter(Boolean),
+        ];
+    for (const name of imported) {
+      if (!exported.names.has(name)) {
+        badImports.push(
+          `${where} — ${specifier} has no ${name === 'default' ? 'default export' : `export ${name}`}`,
+        );
       }
     }
   }
 }
 assert.deepEqual(badImports, [], 'Imports the packages do not provide');
 
-/** a `#fragment` on a URL to a Markdown file, or to a directory's README */
-function namesNoHeading(target, fragment) {
-  if (!fragment) {
-    return false;
-  }
-  const isDirectory =
-    fs.existsSync(target) && fs.statSync(target).isDirectory();
-  // GitHub anchors a directory page's README at `#readme`
-  if (isDirectory && fragment === 'readme') {
-    return false;
-  }
-  const doc = isDirectory ? path.join(target, 'README.md') : target;
-  return (
-    doc.endsWith('.md') &&
-    fs.existsSync(doc) &&
-    !headingIds(fs.readFileSync(doc, 'utf8')).has(decodeURIComponent(fragment))
-  );
-}
-
 /** the hosted gallery is this realm, so its URLs name realm files */
 const siteURLs = [];
 for (const file of importedDocs) {
-  const markdown = fs.readFileSync(file, 'utf8');
-  for (const [url, pathname, fragment] of markdown.matchAll(
+  for (const [url, pathname, fragment] of read(file).matchAll(
     /https:\/\/choreo\.boxel\.site\/([^\s)"'<>`#?]*)(?:#([^\s)"'<>`]+))?/g,
   )) {
-    const target = path.join(realm, decodeURIComponent(pathname));
+    const decoded = decode(pathname);
+    const target =
+      decoded === undefined ? undefined : path.join(realm, decoded);
     const exists =
       pathname === '' ||
-      fs.existsSync(target) ||
-      fs.existsSync(`${target}.json`);
+      (target !== undefined &&
+        (fs.existsSync(target) || fs.existsSync(`${target}.json`)));
+    const problem = exists && target && fragmentProblem(target, fragment);
     if (!exists) {
       siteURLs.push(`${relative(file)}: ${url}`);
-    } else if (namesNoHeading(target, fragment)) {
-      siteURLs.push(`${relative(file)}: ${url} names no heading`);
+    } else if (problem) {
+      siteURLs.push(`${relative(file)}: ${url} ${problem}`);
     }
   }
 }
@@ -605,20 +649,25 @@ assert.deepEqual(
  */
 const repoLinks = [];
 for (const file of importedDocs) {
-  const markdown = fs.readFileSync(file, 'utf8');
+  const markdown = read(file);
   for (const [url, repoPath, fragment] of markdown.matchAll(
     /https:\/\/github\.com\/cardstack\/boxel\/(?:blob|tree)\/main\/([^\s)"'<>`#?]+)(?:#([^\s)"'<>`]+))?/g,
   )) {
-    const target = path.join(root, repoPath);
-    if (!fs.existsSync(target)) {
+    const decoded = decode(repoPath);
+    const target = decoded === undefined ? undefined : path.join(root, decoded);
+    if (!target || !fs.existsSync(target)) {
       repoLinks.push(`${relative(file)}: ${url} names no file`);
-    } else if (namesNoHeading(target, fragment)) {
-      repoLinks.push(`${relative(file)}: ${url} names no heading`);
+      continue;
+    }
+    const problem = fragmentProblem(target, fragment);
+    if (problem) {
+      repoLinks.push(`${relative(file)}: ${url} ${problem}`);
     }
   }
   if (!file.startsWith(designDir)) {
+    // `cardstack/choreo` itself, not a repository whose name starts with it
     for (const [url] of markdown.matchAll(
-      /https:\/\/github\.com\/cardstack\/choreo[^\s)"'<>`]*/g,
+      /https:\/\/github\.com\/cardstack\/choreo(?![\w.-])[^\s)"'<>`]*/g,
     )) {
       repoLinks.push(`${relative(file)}: ${url} is the archived repository`);
     }
