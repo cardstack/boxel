@@ -19,6 +19,19 @@ import {
   pathsFilterReads,
   readsPathAlike,
 } from './policy-filter.ts';
+import {
+  ANONYMOUS_ACTOR,
+  fixedText,
+  namesAnonymous,
+  settleActor,
+} from './anonymous-actor.ts';
+import {
+  compileGrantExpression,
+  GRANT_EXPRESSION_NAMES,
+  type CompiledGrantExpression,
+  type GrantExpressionName,
+} from './grant-expressions.ts';
+import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
 import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
@@ -86,6 +99,10 @@ export interface CompiledRealmPolicy {
   // Of those, the ones whose grants open a write, made as the user the grant's
   // `actingUser` names.
   anonymous?: { operations: string[]; writes: string[] };
+  // The policy card's fields as its index visit recorded them, which a grant's
+  // expressions read through `policy()`. Absent for a card that couldn't be
+  // read.
+  fields?: Record<string, unknown>;
 }
 
 export interface CompiledPolicyRule {
@@ -104,12 +121,9 @@ export interface CompiledOperationGrant {
   path: string;
   // Absent for a grant with no condition.
   where?: CompiledPolicyPredicate;
-  // Set on a grant that also admits callers who aren't signed in. A write
-  // grant names the key, in the governed realm's `realm.json` settings, whose
-  // value is the user its writes are made as, and no other grant carries one.
-  // The realm resolves it on every invocation, so the policy names a setting
-  // and never a user.
-  anonymous?: { actingUserKey?: string };
+  // Set on a grant whose `where` names the caller who isn't signed in
+  // (`"anonymous"`), which is the only kind of grant that admits one.
+  anonymous?: CompiledAnonymousGrant;
   // For a grant on a query, the search filter the grant admits: the cards of
   // the rule's type that its predicate holds for, as a wire filter template
   // whose `{ $ref: 'actor' }` markers a search fills in with the caller. A
@@ -122,6 +136,14 @@ export interface CompiledOperationGrant {
   // filter, which is recorded as a `policy-not-filterable` issue. That grant
   // admits no search, and its predicate is kept as it is.
   filter?: OperationQueryFilterTemplate;
+  // For a query grant whose `where` names the caller who isn't signed in, the
+  // filter it admits such a caller's search with: its predicate as it reads
+  // for that caller, with `actor()` settled as `"anonymous"` before it is
+  // compiled. `filter` is the predicate as it reads for a signed-in caller,
+  // for whom `actor() == "anonymous"` never holds. Either is absent where the
+  // predicate can never hold for that caller, and the grant admits no search by
+  // them.
+  anonymousFilter?: OperationQueryFilterTemplate;
   // For a grant carrying a filter, each path it compares that some card of
   // the governed realm reads differently from the rule's type, with the types
   // of those cards: descendants of the rule's type whose own declarations
@@ -131,6 +153,28 @@ export interface CompiledOperationGrant {
   // from judging those cards, and leaves the rest of the filter to. Absent
   // when no card of the realm reads a path differently.
   misreadingTypes?: { path: string; types: MisreadingType[] }[];
+}
+
+// How a grant treats the callers who aren't signed in that its `where` admits.
+export interface CompiledAnonymousGrant {
+  // What the realm counts such a caller's requests through the grant under.
+  // It identifies the grant's anonymous-access behavior, so moving an
+  // unchanged grant does not reset its budget while grants with different
+  // traffic or acting-user controls stay separate.
+  id: string;
+  // Whether the grant's operation writes.
+  writes: boolean;
+  // For a grant on a write: who such a caller's writes are made as. Settled
+  // for each write, once the target is known. A write grant without one admits
+  // no write by such a caller.
+  actingUser?: CompiledGrantExpression;
+  // The addresses the grant refuses. Settled once per request, before the
+  // target is read.
+  blocklist?: CompiledGrantExpression;
+  // How many requests one address may make through the grant in a window. A
+  // half left out is the platform's.
+  rateLimitRequests?: CompiledGrantExpression;
+  rateLimitWindowSeconds?: CompiledGrantExpression;
 }
 
 // A type whose cards read a path differently from the rule's type.
@@ -155,8 +199,9 @@ export interface CompiledPolicyPredicate {
   // reads the stored source alone is judged against the stored source, and
   // pays no index read.
   snapshot: boolean;
-  // Set when the predicate calls `actor()`. The realm doesn't evaluate such a
-  // predicate for a caller who isn't signed in, so it never admits one.
+  // Set when the predicate calls `actor()`. Such a predicate is evaluated only
+  // for a caller who has one: a signed-in caller's is their user id, and one
+  // who isn't signed in has `"anonymous"`.
   readsActor?: true;
 }
 
@@ -259,23 +304,32 @@ export interface RealmPolicyCacheEnvironment extends PolicyCompileEnvironment {
 // cache as any move does, and the refresh that follows compiles what the card
 // holds now.
 // What a realm's policy opens to callers who aren't signed in: the operations
-// its live grants open to them, and which of those write, made as the user the
-// grant's `actingUser` names. A capability check asks about a write lane, which
-// a named write opens as much as a base one does.
+// its live grants open to them, which of those write, made as the user the
+// grant's `actingUser` names, and the grants that open them, whose blocklists
+// and rate limits the realm judges such a caller by. A capability check asks
+// about a write lane, which a named write opens as much as a base one does.
 export interface AnonymousOpenings {
   operations: ReadonlySet<string>;
   writes: ReadonlySet<string>;
+  // In the order the policy card holds them.
+  grants: readonly CompiledOperationGrant[];
+  // The policy card's fields, which a grant's expressions read as `policy()`.
+  fields: Record<string, unknown>;
 }
 
 const NO_OPERATIONS: AnonymousOpenings = {
   operations: new Set(),
   writes: new Set(),
+  grants: [],
+  fields: {},
 };
 
-// Whether any grant in a policy card's attributes, as stored, opts in to
-// callers who aren't signed in. A card where none does opens nothing to them
-// however it compiles, so this answers for it without compiling. One where
-// some grant does is compiled to find out what that grant opens.
+// Whether any grant in a policy card's attributes, as stored, could name the
+// caller who isn't signed in: whether its `where` holds the text `anonymous`,
+// or a string escape that could spell it. A card where none does opens
+// nothing to such callers however it compiles, so this answers for it without
+// compiling. One where some grant might is compiled to find out what that
+// grant opens.
 function opensAnythingToAnonymous(attributes: unknown): boolean {
   let rules = (attributes as { rules?: unknown } | undefined)?.rules;
   return (
@@ -283,10 +337,17 @@ function opensAnythingToAnonymous(attributes: unknown): boolean {
     rules.some(
       (rule) =>
         Array.isArray(rule?.grants) &&
-        rule.grants.some(
-          (grant: unknown) =>
-            (grant as { anonymous?: unknown } | null)?.anonymous === true,
-        ),
+        rule.grants.some((grant: unknown) => {
+          let where = (grant as { where?: unknown } | null)?.where;
+          let source =
+            typeof where === 'string'
+              ? where
+              : (where as { bxl?: unknown } | null)?.bxl;
+          return (
+            typeof source === 'string' &&
+            (source.includes(ANONYMOUS_ACTOR) || source.includes('\\'))
+          );
+        }),
     )
   );
 }
@@ -358,8 +419,9 @@ export class RealmPolicyCache {
   // Cost matters here because this runs for every request the ACL rejects
   // for missing credentials, and the realm's own renders send such requests
   // while it indexes. So before compiling anything, we read the raw policy
-  // card from the index and look for a grant with `anonymous: true`, and
-  // remember the answer as long as a compile is kept. If there isn't one, we
+  // card from the index and look for a grant whose `where` could name the
+  // caller who isn't signed in (`opensAnythingToAnonymous`), and remember the
+  // answer as long as a compile is kept. If there isn't one, we
   // return "none" without compiling. If a fresh compile is already cached, we
   // skip that check and use it directly.
   async anonymousAdmission(): Promise<AnonymousOpenings> {
@@ -393,6 +455,10 @@ export class RealmPolicyCache {
     return {
       operations: new Set(compiled.anonymous.operations),
       writes: new Set(compiled.anonymous.writes),
+      grants: compiled.rules.flatMap((rule) =>
+        rule.grants.filter(opensToAnonymous),
+      ),
+      fields: structuredClone(compiled.fields ?? {}),
     };
   }
 
@@ -970,6 +1036,7 @@ async function compileDocument(
       rules,
       issues,
       ...anonymousSummary(rules),
+      ...(attributes ? { fields: structuredClone(attributes) } : {}),
     },
     definitions,
     inputs,
@@ -1080,19 +1147,111 @@ async function compileDocument(
       return grant;
     }
     let parser = await loadBxl();
-    let outcome = await compilePolicyFilter(targetType, definition, predicate, {
-      lookupDefinition: readDefinition,
-      validateBxlAst: (node, options) => parser.validateBxlAst(node, options),
-    });
-    if ('problem' in outcome) {
-      issue(
-        'policy-not-filterable',
-        `${grant.path}.where`,
-        `this grant is for a search, so its \`where\` condition has to work as a search filter, and it can't.\n\n${asSentence(outcome.problem)}`,
+    let compileFor = async (body: unknown) =>
+      await compilePolicyFilter(
+        targetType,
+        definition,
+        body === true || !predicate
+          ? undefined
+          : { body, snapshot: predicate.snapshot },
+        {
+          lookupDefinition: readDefinition,
+          validateBxlAst: (node, options) =>
+            parser.validateBxlAst(node, options),
+        },
       );
-      return grant;
+    // A search knows which kind of caller it is serving before it composes
+    // the grant, and a signed-in caller is never `"anonymous"`, so what that
+    // settles is folded away before the predicate is compiled, as a guard
+    // such as `actor() != "anonymous"` is. A grant that names the caller who
+    // isn't signed in reads differently for such a caller, so that reading is
+    // settled and compiled on its own too, and a part of the predicate that
+    // can never hold for one of them is no part of that one's filter.
+    let readings: { caller: 'signed-in' | 'anonymous'; body: unknown }[] =
+      predicate
+        ? [
+            {
+              caller: 'signed-in',
+              body: settleActor(predicate.body, 'signed-in'),
+            },
+            ...(grant.anonymous
+              ? [
+                  {
+                    caller: 'anonymous' as const,
+                    body: settleActor(predicate.body, 'anonymous'),
+                  },
+                ]
+              : []),
+          ]
+        : [{ caller: 'signed-in', body: true }];
+    let compiled = { ...grant };
+    for (let { caller, body } of readings) {
+      if (body === false) {
+        continue;
+      }
+      let outcome = await compileFor(body);
+      if ('problem' in outcome) {
+        issue(
+          'policy-not-filterable',
+          `${grant.path}.where`,
+          `this grant is for a search, so its \`where\` condition has to work as a search filter${
+            grant.anonymous
+              ? caller === 'anonymous'
+                ? " for a caller who isn't signed in"
+                : ' for a signed-in caller'
+              : ''
+          }, and it can't.\n\n${asSentence(outcome.problem)}`,
+        );
+        continue;
+      }
+      if (caller === 'anonymous') {
+        compiled.anonymousFilter = outcome.filter;
+      } else {
+        compiled.filter = outcome.filter;
+      }
     }
-    return { ...grant, filter: outcome.filter };
+    return compiled;
+  };
+  // A grant's expressions, compiled, or undefined where one can't be used,
+  // which leaves the grant out.
+  let compileExpressions = async (
+    grant: Record<string, unknown> | undefined,
+    grantPath: string,
+  ): Promise<
+    Partial<Record<GrantExpressionName, CompiledGrantExpression>> | undefined
+  > => {
+    let compiled: Partial<
+      Record<GrantExpressionName, CompiledGrantExpression>
+    > = {};
+    for (let name of GRANT_EXPRESSION_NAMES) {
+      let source = grant?.[name];
+      if (source == null || (typeof source === 'string' && !source.trim())) {
+        continue;
+      }
+      if (typeof source !== 'string') {
+        issue(
+          'invalid-grant-expression',
+          `${grantPath}.${name}`,
+          `\`${name}\` should be BXL text`,
+        );
+        return undefined;
+      }
+      let outcome = compileGrantExpression(await loadBxl(), name, source);
+      if ('problem' in outcome) {
+        issue(outcome.code, `${grantPath}.${name}`, outcome.problem);
+        if (outcome.code !== 'grant-expression-wrong-type') {
+          return undefined;
+        }
+        // An expression of the wrong kind is kept: it settles as one that
+        // produced nothing usable would.
+        if (outcome.compiled) {
+          compiled[name] = outcome.compiled;
+        }
+        continue;
+      }
+      compiled[name] = outcome;
+    }
+    return compiled;
   };
   // What in `chain`, a rule's type and the types it descends from, keeps
   // `name` out of every policy's reach, if anything does, judged as the gate
@@ -1253,8 +1412,29 @@ async function compileDocument(
         );
         continue;
       }
-      let anonymous: CompiledOperationGrant['anonymous'];
-      if (grant?.anonymous === true) {
+      let where = readPredicate(grant?.where);
+      if (where === 'malformed') {
+        issue(
+          'invalid-grant',
+          `${grantPath}.where`,
+          '`where` should be either BXL text or `{ bxl, snapshot }`',
+        );
+        continue;
+      }
+      let outcome = where ? await compilePredicate(where.source) : undefined;
+      if (outcome && 'problem' in outcome) {
+        issue(outcome.code, `${grantPath}.where`, outcome.problem);
+        continue;
+      }
+      // Only a grant whose `where` names the caller who isn't signed in admits
+      // one, so a grant written for signed-in callers never starts admitting
+      // anyone, whatever its `where` would say for one.
+      let opensToAnonymous = outcome?.namesAnonymous ?? false;
+      // Set where the grant names such a caller but its operation reads
+      // `actor()`. The grant opens nothing to them for that reason alone, so
+      // what it says about them is reported once, against the operation.
+      let readsActorForAnonymous = false;
+      if (opensToAnonymous) {
         // A named query runs a stored query on the search lane, where a
         // grant's filter is all that scopes it, so it stays a contract for
         // signed-in callers. Every other operation is one invocation of its
@@ -1265,7 +1445,7 @@ async function compileDocument(
         ) {
           issue(
             'anonymous-not-base-operation',
-            `${grantPath}.anonymous`,
+            `${grantPath}.where`,
             `\`${operation}\` can't be opened to callers who aren't signed in: only ${ANONYMOUS_ELIGIBLE_OPERATIONS.map(
               (name) => `\`${name}\``,
             ).join(
@@ -1275,44 +1455,82 @@ async function compileDocument(
           continue;
         }
         // An operation whose program, template or output reads `actor()` is
-        // refused to a caller with no actor before it runs, so opening it to
-        // one would admit nobody. The grant still applies to signed-in
-        // callers.
+        // refused to a caller who isn't signed in before it runs, so this
+        // grant admits none. It still applies to signed-in callers.
         if (granted.readsActor) {
           issue(
             'anonymous-grant-reads-actor',
             `${grantPath}.operation`,
-            `this grant opens \`${operation}\` to callers who aren't signed in, but ${resolved.name}'s \`${operation}\` uses \`actor()\`, and a caller who isn't signed in has no actor, so it never admits one. It still applies to signed-in callers. To open it to anyone, declare an operation that doesn't read \`actor()\`; a write such a caller makes is made as the user \`actingUser\` names`,
+            `this grant's \`where\` names \`"anonymous"\`, but ${resolved.name}'s \`${operation}\` uses \`actor()\`, which a caller who isn't signed in can't run, so it never admits one. It still applies to signed-in callers. To open it to anyone, declare an operation that doesn't read \`actor()\`; a write such a caller makes is made as the user \`actingUser\` names`,
           );
-        } else {
-          // Used exactly as written, so the key the policy shows is the key the
-          // realm looks up. One that is blank names nothing.
-          let actingUserKey =
-            typeof grant.actingUser === 'string' && grant.actingUser.trim()
-              ? grant.actingUser
-              : undefined;
-          if (isWrite(granted.base) && !actingUserKey) {
-            issue(
-              'anonymous-write-without-acting-user',
-              `${grantPath}.actingUser`,
-              `\`${operation}\` writes, so a grant opening it to callers who aren't signed in has to name the setting in the realm's \`realm.json\` whose value is the user those writes are made as, in \`actingUser\``,
-            );
-            continue;
-          }
-          anonymous =
-            isWrite(granted.base) && actingUserKey ? { actingUserKey } : {};
+          opensToAnonymous = false;
+          readsActorForAnonymous = true;
         }
       }
-      let where = readPredicate(grant?.where);
-      if (where === 'malformed') {
-        issue(
-          'invalid-grant',
-          `${grantPath}.where`,
-          '`where` should be either BXL text or `{ bxl, snapshot }`',
-        );
+      let expressions = await compileExpressions(grant, grantPath);
+      if (!expressions) {
         continue;
       }
-      if (!where) {
+      let anonymous: CompiledAnonymousGrant | undefined;
+      if (opensToAnonymous) {
+        if (isWrite(granted.base) && !expressions.actingUser) {
+          issue(
+            'anonymous-write-without-acting-user',
+            `${grantPath}.actingUser`,
+            `\`${operation}\` writes, and this grant's \`where\` names \`"anonymous"\`, so it needs an \`actingUser\` saying which user those writes are made as, such as \`realmConfig("publicWriter")\`. Without one it admits no write by a caller who isn't signed in. It still applies to signed-in callers`,
+          );
+        }
+        anonymous = {
+          id: computeContentHash(
+            stableStringify([
+              card,
+              resolved,
+              operation,
+              outcome?.canonical ?? null,
+              Object.fromEntries(
+                GRANT_EXPRESSION_NAMES.map((name) => [
+                  name,
+                  expressions[name]?.canonical ?? null,
+                ]),
+              ),
+            ]) ?? '',
+          ),
+          writes: isWrite(granted.base),
+          ...(isWrite(granted.base) && expressions.actingUser
+            ? { actingUser: expressions.actingUser }
+            : {}),
+          ...(expressions.blocklist
+            ? { blocklist: expressions.blocklist }
+            : {}),
+          ...(expressions.rateLimitRequests
+            ? { rateLimitRequests: expressions.rateLimitRequests }
+            : {}),
+          ...(expressions.rateLimitWindowSeconds
+            ? { rateLimitWindowSeconds: expressions.rateLimitWindowSeconds }
+            : {}),
+        };
+      }
+      if (
+        expressions.actingUser &&
+        !readsActorForAnonymous &&
+        !(anonymous?.actingUser && isWrite(granted.base))
+      ) {
+        issue(
+          'acting-user-never-used',
+          `${grantPath}.actingUser`,
+          isWrite(granted.base)
+            ? `\`actingUser\` is used only for a write by a caller who isn't signed in, and this grant's \`where\` never names \`"anonymous"\`, so it admits no such caller. A signed-in caller's writes are made as themselves.\n\nTo admit callers who aren't signed in, name them in \`where\`, such as \`actor() == "anonymous"\``
+            : `\`actingUser\` is used only for a write by a caller who isn't signed in, and \`${operation}\` doesn't write`,
+        );
+      }
+      if (anonymous?.actingUser?.readsInstance && granted.base === 'create') {
+        issue(
+          'acting-user-from-submitted-card',
+          `${grantPath}.actingUser`,
+          `\`actingUser\` reads \`instance()\`, and on a create that is the card the caller sends, so a caller who isn't signed in chooses who the card is created as: any user who may write the realm.\n\nTo make every such write as one user, read them from somewhere the caller can't set, such as \`realmConfig("publicWriter")\` or a field on the policy card`,
+        );
+      }
+      if (!where || !outcome) {
         grants.push(
           await withFilter(
             { operation, path: grantPath, ...(anonymous ? { anonymous } : {}) },
@@ -1323,18 +1541,6 @@ async function compileDocument(
           ),
         );
         continue;
-      }
-      let outcome = await compilePredicate(where.source);
-      if ('problem' in outcome) {
-        issue(outcome.code, `${grantPath}.where`, outcome.problem);
-        continue;
-      }
-      if (anonymous && outcome.readsActor) {
-        issue(
-          'anonymous-grant-reads-actor',
-          `${grantPath}.where`,
-          `this grant opens \`${operation}\` to callers who aren't signed in, but its \`where\` uses \`actor()\`, which isn't evaluated for a caller with no actor, so it never admits one. It still applies to signed-in callers. To open it to anyone, give the anonymous grant a \`where\` that reads only the card`,
-        );
       }
       // Which tier the predicate reads is settled here, from the rule's type,
       // and ahead of the search filter: a predicate that reads the index
@@ -1715,11 +1921,21 @@ function safeURL(
   return attempt(() => env.toURL(identifier).href);
 }
 
+// Whether a compiled grant admits any caller who isn't signed in: its `where`
+// names them, a search grant has a filter for them, and a write grant says who
+// their writes are made as.
+export function opensToAnonymous(grant: CompiledOperationGrant): boolean {
+  let anonymous = grant.anonymous;
+  return (
+    anonymous !== undefined &&
+    (grant.operation !== 'query' || grant.anonymousFilter !== undefined) &&
+    (!anonymous.writes || anonymous.actingUser !== undefined)
+  );
+}
+
 // The operations the policy's live grants open to callers who aren't signed
-// in, and which of those write, recorded on the compiled policy when there
-// are any. A query grant that has no search filter admits no search, and a
-// grant whose `where` reads the caller admits nobody without one, so neither
-// opens anything.
+// in, and which of those write, recorded on the compiled policy when there are
+// any.
 function anonymousSummary(
   rules: CompiledPolicyRule[],
 ): Pick<CompiledRealmPolicy, 'anonymous'> {
@@ -1727,13 +1943,9 @@ function anonymousSummary(
   let writes = new Set<string>();
   for (let rule of rules) {
     for (let grant of rule.grants) {
-      if (
-        grant.anonymous &&
-        !grant.where?.readsActor &&
-        (grant.operation !== 'query' || grant.filter)
-      ) {
+      if (opensToAnonymous(grant)) {
         operations.add(grant.operation);
-        if (grant.anonymous.actingUserKey) {
+        if (grant.anonymous?.writes) {
           writes.add(grant.operation);
         }
       }
@@ -1785,19 +1997,18 @@ function readPredicate(
   return 'malformed';
 }
 
-// The request-context calls a policy predicate reads: who is asking, the card
-// it asks about, and the governed realm's own settings. The `policy` profile
+// The request-context calls a policy predicate reads. The `policy` profile
 // denies every request-context call, because a request's payload is not an
-// authorization input. A predicate is still written against its caller and its
-// target, so these three are admitted. `params()` is not admitted. It reads
-// the payload, and a caller-supplied value must not decide its own
-// authorization.
-//
-// The profile reports a denied call only in its message, so the exception is
-// matched there. If that wording changes, nothing matches. The calls are then
-// refused rather than admitted, so a drift fails closed.
-const ADMITTED_CALL_DENIAL =
-  / does not allow call (?:actor|instance|realmConfig):/;
+// authorization input. A predicate is still written against its caller, its
+// target, the governed realm's own settings and the policy card's own fields,
+// so those are admitted. `params()` is not admitted. It reads the payload, and
+// a caller-supplied value must not decide its own authorization.
+const PREDICATE_CALLS: readonly RequestContextCall[] = [
+  'actor',
+  'instance',
+  'realmConfig',
+  'policy',
+];
 
 // The builtins a predicate may not call, because each can hold for a value it
 // matches only in part. `.teacherIds | contains([actor()])` holds for the
@@ -1871,15 +2082,6 @@ const ANCHORED_BUILTINS = new Set([
   'trimstr',
 ]);
 
-function isFixedString(node: unknown): boolean {
-  let { type, valueType, interpolated } = node as {
-    type?: unknown;
-    valueType?: unknown;
-    interpolated?: unknown;
-  };
-  return type === 'literal' && valueType === 'string' && interpolated !== true;
-}
-
 // The partial-match builtins a predicate calls, each named once in the order
 // it first appears, with what makes it partial.
 function partialMatchCalls(
@@ -1906,7 +2108,11 @@ function partialMatchCalls(
       );
     } else if (
       ANCHORED_BUILTINS.has(name) &&
-      !(Array.isArray(args) && args.length === 1 && isFixedString(args[0]))
+      !(
+        Array.isArray(args) &&
+        args.length === 1 &&
+        fixedText(args[0]) !== undefined
+      )
     ) {
       calls.set(name, 'is given a prefix or suffix that is not fixed text');
     }
@@ -1919,10 +2125,14 @@ type PredicateProblem = {
   problem: string;
 };
 
-async function compilePredicate(
-  source: string,
-): Promise<
-  { canonical: string; body: unknown; readsActor: boolean } | PredicateProblem
+async function compilePredicate(source: string): Promise<
+  | {
+      canonical: string;
+      body: unknown;
+      readsActor: boolean;
+      namesAnonymous: boolean;
+    }
+  | PredicateProblem
 > {
   let bxl = await loadBxl();
   let program;
@@ -1934,14 +2144,7 @@ async function compilePredicate(
       problem: `\`where\` has a syntax error: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
-  let refusals = program.profileIssues.filter(
-    (issue) =>
-      issue.severity === 'error' &&
-      !(
-        issue.code === 'policy-call-banned' &&
-        ADMITTED_CALL_DENIAL.test(issue.message)
-      ),
-  );
+  let refusals = profileRefusals(program.profileIssues, PREDICATE_CALLS);
   // A `where` with nothing in it parses to a program with no body, which the
   // profile has nothing to refuse. It is not a grant with no condition: that
   // is written by leaving `where` out, and an empty one is what an editor
@@ -1976,6 +2179,7 @@ async function compilePredicate(
     canonical: program.canonicalSource,
     body: program.body,
     readsActor: callsActor(bxl, program.body),
+    namesAnonymous: namesAnonymous(bxl, program.body),
   };
 }
 

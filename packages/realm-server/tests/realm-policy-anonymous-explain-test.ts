@@ -4,7 +4,11 @@ import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  DEFAULT_ANONYMOUS_RATE_LIMIT,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -28,11 +32,12 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
 // A notice board nobody may read or write without signing in, governed by a
 // policy card in an Org realm. Its policy opens edits of a notice to callers
-// who aren't signed in through four grants, each made as a different key of
-// the board's `realm.json` `config`: one naming a user who may write the
-// board, one naming a user who may only read it, one naming nobody, and one
-// the config doesn't hold. `claim` reads the caller, so the grant opening it
-// to such callers is warned about. A second board sets no limit of its own.
+// who aren't signed in through four grants, each with an `actingUser` reading
+// a different key of the board's `realm.json` `config`: one naming a user who
+// may write the board, one naming a user who may only read it, one naming
+// nobody, and one the config doesn't hold, which the expression fails on.
+// `claim` reads the caller, so the grant opening it to such callers is warned
+// about. A second board's grants carry no rate limit of their own.
 const BOARD = 'http://127.0.0.1:4444/board/';
 const PLAIN = 'http://127.0.0.1:4444/plain/';
 const ORG = 'http://127.0.0.1:4444/org/';
@@ -67,9 +72,15 @@ const BOARD_CONFIG = {
   submitter: SUBMITTER,
   reader: READER,
   bogus: 'not a user',
+  blockedIps: '',
+  requests: 5,
+  windowSeconds: 30,
 };
 
 const BOARD_LIMIT = { requests: 5, windowSeconds: 30 };
+
+// What a grant's `where` says to open it to callers who aren't signed in.
+const ANONYMOUS = 'actor() == "anonymous"';
 
 const NOTICE = `${BOARD}notices/welcome`;
 const PLAIN_NOTICE = `${PLAIN}notices/welcome`;
@@ -84,7 +95,14 @@ function notice(message: string) {
   });
 }
 
-function policyCard(realm: string) {
+function policyCard(realm: string, { limited }: { limited: boolean }) {
+  let traffic = limited
+    ? {
+        blocklist: 'realmConfig("blockedIps")',
+        rateLimitRequests: 'realmConfig("requests")',
+        rateLimitWindowSeconds: 'realmConfig("windowSeconds")',
+      }
+    : {};
   return JSON.stringify({
     data: {
       type: 'card',
@@ -93,19 +111,43 @@ function policyCard(realm: string) {
           {
             targetType: { module: `${realm}board`, name: 'Notice' },
             grants: [
-              { operation: 'update', anonymous: true, actingUser: 'submitter' },
-              { operation: 'update', anonymous: true, actingUser: 'reader' },
-              { operation: 'update', anonymous: true, actingUser: 'bogus' },
-              { operation: 'update', anonymous: true, actingUser: 'missing' },
-              { operation: 'read', anonymous: true },
-              { operation: 'claim', anonymous: true, actingUser: 'submitter' },
+              {
+                operation: 'update',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("submitter")',
+              },
+              {
+                operation: 'update',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("reader")',
+              },
+              {
+                operation: 'update',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("bogus")',
+              },
+              {
+                operation: 'update',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("missing")',
+              },
+              { operation: 'read', where: ANONYMOUS, ...traffic },
+              {
+                operation: 'claim',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("submitter")',
+              },
               // Signed-in grants that put a warned grant at index 10, whose
               // path `rules[0].grants[1]` is a string prefix of.
               { operation: 'delete' },
               { operation: 'delete' },
               { operation: 'delete' },
               { operation: 'delete' },
-              { operation: 'claim', anonymous: true, actingUser: 'reader' },
+              {
+                operation: 'claim',
+                where: ANONYMOUS,
+                actingUser: 'realmConfig("reader")',
+              },
             ],
           },
         ],
@@ -145,7 +187,6 @@ module(basename(import.meta.filename), function (hooks) {
               name: 'Board',
               policy: BOARD_POLICY,
               config: BOARD_CONFIG,
-              anonymousRateLimit: BOARD_LIMIT,
             }),
             'board.gts': BOARD_MODULE,
             'notices/welcome.json': notice('Welcome'),
@@ -178,8 +219,8 @@ module(basename(import.meta.filename), function (hooks) {
           realmURL: new URL(ORG),
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
-            'policies/board.json': policyCard(BOARD),
-            'policies/plain.json': policyCard(PLAIN),
+            'policies/board.json': policyCard(BOARD, { limited: true }),
+            'policies/plain.json': policyCard(PLAIN, { limited: false }),
           },
           permissions: { [ORG_ADMIN]: ['read', 'write', 'realm-owner'] },
         },
@@ -262,87 +303,129 @@ module(basename(import.meta.filename), function (hooks) {
     let explanation = await explain(BOARD_POLICY, '', NOTICE, 'update');
     assert.strictEqual(explanation.decision, 'allowed', 'the submitter writes');
     assert.deepEqual(
-      grantsOf(explanation).map(({ path, anonymous }) => ({ path, anonymous })),
+      grantsOf(explanation).map(({ path, anonymous }) => ({
+        path,
+        actingUser: anonymous?.actingUser,
+      })),
       [
         {
           path: 'rules[0].grants[0]',
-          anonymous: { actingUserKey: 'submitter', actingUser: SUBMITTER },
+          actingUser: {
+            expression: 'realmConfig("submitter")',
+            user: SUBMITTER,
+          },
         },
         {
           path: 'rules[0].grants[1]',
-          anonymous: { actingUserKey: 'reader', actingUserFailure: 'no-write' },
+          actingUser: {
+            expression: 'realmConfig("reader")',
+            failure: 'no-write',
+          },
         },
         {
           path: 'rules[0].grants[2]',
-          anonymous: {
-            actingUserKey: 'bogus',
-            actingUserFailure: 'not-a-matrix-id',
+          actingUser: {
+            expression: 'realmConfig("bogus")',
+            failure: 'not-a-matrix-id',
           },
         },
         {
           path: 'rules[0].grants[3]',
-          anonymous: {
-            actingUserKey: 'missing',
-            actingUserFailure: 'key-missing',
+          actingUser: {
+            expression: 'realmConfig("missing")',
+            failure: 'expression-failed',
           },
         },
       ],
     );
     let read = await explain(BOARD_POLICY, '', NOTICE, 'read');
     assert.deepEqual(
-      grantsOf(read).map(({ anonymous }) => anonymous),
-      [{}],
+      grantsOf(read).map(({ anonymous }) => anonymous?.actingUser),
+      [undefined],
       'a read opted in names no acting user',
     );
   });
 
-  test('an explanation for a caller who is not signed in says how the realm limits and blocks them', async function (assert) {
+  test('a grant opened to such callers says what it blocks them by and what it limits them to', async function (assert) {
     let own = await explain(BOARD_POLICY, '', NOTICE, 'read');
-    assert.deepEqual(own.anonymous, {
-      limit: BOARD_LIMIT,
-      limitFrom: 'realm',
-      invalidBlocklistEntries: [],
-    });
+    assert.deepEqual(
+      grantsOf(own).map(({ anonymous }) => anonymous),
+      [
+        {
+          blocklist: {
+            expression: 'realmConfig("blockedIps")',
+            entries: [],
+          },
+          rateLimit: {
+            ...BOARD_LIMIT,
+            requestsFrom: 'grant',
+            windowSecondsFrom: 'grant',
+            requestsExpression: 'realmConfig("requests")',
+            windowSecondsExpression: 'realmConfig("windowSeconds")',
+          },
+        },
+      ],
+    );
+    assert.deepEqual(
+      own.anonymous,
+      { platformLimit: DEFAULT_ANONYMOUS_RATE_LIMIT },
+      'and the explanation says what a grant that sets none falls back to',
+    );
+
     let inherited = await explain(PLAIN_POLICY, '', PLAIN_NOTICE, 'read');
-    assert.strictEqual(
-      inherited.anonymous?.limitFrom,
-      'platform',
-      'a realm that sets no limit has the platform default',
+    assert.deepEqual(
+      grantsOf(inherited).map(({ anonymous }) => anonymous?.rateLimit),
+      [
+        {
+          ...DEFAULT_ANONYMOUS_RATE_LIMIT,
+          requestsFrom: 'platform',
+          windowSecondsFrom: 'platform',
+        },
+      ],
+      'a grant that sets no limit of its own counts against the platform default',
     );
-    assert.true(
-      (inherited.anonymous?.limit.requests ?? 0) > 0,
-      'and says what that default is',
-    );
+
     let signedIn = await explain(BOARD_POLICY, READER, NOTICE, 'update');
     assert.strictEqual(
       signedIn.anonymous,
       undefined,
       'a question about a signed-in caller says nothing about it',
     );
+    assert.notOk(
+      grantsOf(signedIn).some(({ anonymous }) => anonymous),
+      'and neither do its grants',
+    );
   });
 
-  test('an invalid blocklist entry is reported, since it closes the realm to every such caller', async function (assert) {
+  test('an invalid blocklist entry is reported, since it closes the grant to every such caller', async function (assert) {
     await board.write(
       'realm.json',
       realmConfigCardJSON({
         name: 'Board',
         policy: BOARD_POLICY,
-        config: BOARD_CONFIG,
-        anonymousRateLimit: BOARD_LIMIT,
-        anonymousBlocklist: ['198.51.100.0/24', 'not an address'],
+        config: {
+          ...BOARD_CONFIG,
+          blockedIps: '198.51.100.0/24, not an address',
+        },
       }),
     );
     await board.indexing();
     let explanation = await explain(BOARD_POLICY, '', NOTICE, 'read');
-    assert.deepEqual(explanation.anonymous?.invalidBlocklistEntries, [
-      'not an address',
-    ]);
+    assert.deepEqual(
+      grantsOf(explanation).map(({ anonymous }) => anonymous?.blocklist),
+      [
+        {
+          expression: 'realmConfig("blockedIps")',
+          entries: ['198.51.100.0/24'],
+          invalid: ['not an address'],
+        },
+      ],
+    );
     assert.strictEqual(
       explanation.decision,
       'denied',
-      'the grant that would admit such a caller does not, since the realm turns them away first',
+      'the grant that would admit such a caller does not, since it turns them away first',
     );
-    assert.strictEqual(explanation.reason, 'blocklist-invalid');
     assert.deepEqual(explanation.refusal, {
       status: 401,
       code: 'actor-required',

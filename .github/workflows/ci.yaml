@@ -57,6 +57,7 @@ jobs:
       bxl: ${{ steps.filter.outputs.bxl }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
+      deployed-realms: ${{ steps.filter.outputs.deployed-realms }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -148,6 +149,16 @@ jobs:
               - 'packages/glimmer-motion/**'
             glimmer-motion:
               - *shared
+              - 'packages/glimmer-motion/**'
+            # Realm content the realm-server image carries and each deploy
+            # copies onto the realm's disk, so a change to it needs a staging
+            # deploy even when it touches no other boxel package. The gallery
+            # realm's film app is built from choreo-film-app, which compiles
+            # choreo and glimmer-motion from source.
+            deployed-realms:
+              - 'packages/choreo-gallery/realm/**'
+              - 'packages/choreo-film-app/**'
+              - 'packages/choreo/**'
               - 'packages/glimmer-motion/**'
             matrix:
               - *shared
@@ -1663,7 +1674,7 @@ jobs:
 
   deploy:
     name: Deploy boxel to staging
-    if: needs.change-check.outputs.boxel == 'true' && github.ref == 'refs/heads/main'
+    if: (needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.deployed-realms == 'true') && github.ref == 'refs/heads/main'
     needs:
       - change-check
       - ai-bot-test
