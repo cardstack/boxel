@@ -62,7 +62,7 @@
 //     law), and all three are policy the caller owns.
 //   • Optimistic mutation. This is a reading contract; writing is not here.
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 // type-only gap: 'ember-modifier' resolves at realm runtime; glint can't see
 // it here (accepted parse baseline, same as overlay.gts / structure-data.gts)
@@ -573,14 +573,31 @@ export interface ExpansionArgs {
   onExpandedChange?: (keys: RowKey[]) => void;
 }
 
+/** One row's expansion, everything its expander and detail need. */
+export interface ExpansionView {
+  expanded: boolean;
+  expandedFlag: 'true' | 'false';
+  /** the detail region's id */
+  detailId: string;
+  /** the detail id while it exists — a collapsed row's detail is not rendered */
+  controls: string | undefined;
+  /** "Expand {label}" / "Collapse {label}" */
+  expandLabel: string;
+}
+
 /**
- * Which rows are expanded, by key. Controlled when `@expandedKeys` is passed
- * (the host never moves itself, it only reports), uncontrolled otherwise,
- * seeded from `@defaultExpandedKeys`. Takes a thunk for the same reason
- * DataSource does: every read goes through the live args.
+ * Which rows are expanded, by key, and the ARIA wiring for each row's
+ * expander. Controlled when `@expandedKeys` is passed (the host never moves
+ * itself, it only reports), uncontrolled otherwise, seeded from
+ * `@defaultExpandedKeys`. Takes a thunk for the same reason DataSource does:
+ * every read goes through the live args. DataTable and List both use it, so
+ * the state rule and the ARIA contract cannot drift between them.
  */
 export class ExpansionState {
-  constructor(private readArgs: () => ExpansionArgs) {}
+  constructor(
+    private readArgs: () => ExpansionArgs,
+    private idPrefix: string,
+  ) {}
 
   @tracked private internal: readonly RowKey[] | undefined = undefined;
 
@@ -592,7 +609,27 @@ export class ExpansionState {
     return this.internal ?? a.defaultExpandedKeys ?? [];
   }
 
-  isExpanded = (key: RowKey): boolean => this.keys.includes(key);
+  /** A Set keeps 1 and '1' distinct, as `includes` does. */
+  @cached
+  get keySet(): Set<RowKey> {
+    return new Set(this.keys);
+  }
+
+  isExpanded = (key: RowKey): boolean => this.keySet.has(key);
+
+  /** The detail id is built from the row's position: a key can hold
+   * spaces, and 1 and '1' are distinct keys. */
+  viewFor(key: RowKey, index: number, label: string): ExpansionView {
+    let expanded = this.isExpanded(key);
+    let detailId = this.idPrefix + '-d-' + String(index);
+    return {
+      expanded,
+      expandedFlag: expanded ? 'true' : 'false',
+      detailId,
+      controls: expanded ? detailId : undefined,
+      expandLabel: (expanded ? 'Collapse ' : 'Expand ') + label,
+    };
+  }
 
   toggle = (key: RowKey) => {
     let current = this.keys;

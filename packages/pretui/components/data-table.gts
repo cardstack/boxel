@@ -6,6 +6,7 @@ import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { cssDeclaration, cssStyleFrom, cssValue } from '../pretui-css';
 import { DataShell, DataSource, ExpansionState } from '../data-component';
+import type { ExpansionView } from '../data-component';
 import type {
   DataArgs,
   DataLoad,
@@ -122,11 +123,7 @@ interface TableLine<T> {
   selected: boolean;
   ariaSelected: 'true' | 'false' | undefined;
   selectedFlag: string | undefined;
-  expanded: boolean;
-  expandedFlag: 'true' | 'false';
-  detailId: string;
-  /** the detail id while it exists — a collapsed row's detail is not rendered */
-  controls: string | undefined;
+  expansion: ExpansionView;
   label: string;
 }
 
@@ -249,7 +246,7 @@ export interface DataTableSignature<T> {
      */
     cell: [text: string, row: T, col: DataColumn<T>];
     /** per-row detail. Supplying it turns on the expander column. */
-    expanded: [row: T];
+    expanded: [row: T, index: number];
     /** the row's action affordance — a Menu, an IconButton */
     actions: [row: T];
     /** extra toolbar content, before the built-in filters */
@@ -285,7 +282,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
 
   @tracked private internalVisible: readonly string[] | undefined = undefined;
   @tracked private internalFilters: FilterState | undefined = undefined;
-  expansion = new ExpansionState(() => this.args);
+  expansion = new ExpansionState(() => this.args, guidFor(this));
   @tracked private internalPage: number | undefined = undefined;
 
   // ── args plumbing ──────────────────────────────────────────────────────
@@ -663,11 +660,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
   // assertion. Everything that needs the fact takes it as an argument
   // (`colspanFor`, `showToolbarWith`) or resolves it in CSS.
 
-  isExpanded = (key: RowKey): boolean => this.expansion.isExpanded(key);
   toggleExpanded = (key: RowKey) => this.expansion.toggle(key);
-
-  // by position: a key can hold spaces, and 1 and '1' are distinct keys
-  detailId = (index: number): string => this.guid + '-d-' + String(index);
 
   // ── paging ─────────────────────────────────────────────────────────────
 
@@ -760,7 +753,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       let index = offset + i;
       let key = this.table.keyFor(row, index);
       let selected = this.table.isSelected(row, index);
-      let expanded = this.isExpanded(key);
+      let label = this.labelFor(row, index);
       return {
         key,
         row,
@@ -772,11 +765,8 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
             : ('false' as const)
           : undefined,
         selectedFlag: selected ? 'true' : undefined,
-        expanded,
-        expandedFlag: expanded ? ('true' as const) : ('false' as const),
-        detailId: this.detailId(index),
-        controls: expanded ? this.detailId(index) : undefined,
-        label: this.labelFor(row, index),
+        expansion: this.expansion.viewFor(key, index, label),
+        label,
         cells: cols.map((col) => {
           let value = this.rawValue(col, row);
           return {
@@ -910,9 +900,6 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       String(this.selectedCount) + ' of ' + String(this.shown) + ' selected'
     );
   }
-
-  expandLabel = (line: TableLine<T>): string =>
-    (line.expanded ? 'Collapse ' : 'Expand ') + line.label;
 
   <template>
     <div
@@ -1145,9 +1132,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                         <button
                           type='button'
                           class='pretui-dt-expbtn'
-                          aria-expanded={{line.expandedFlag}}
-                          aria-controls={{line.controls}}
-                          aria-label={{this.expandLabel line}}
+                          aria-expanded={{line.expansion.expandedFlag}}
+                          aria-controls={{line.expansion.controls}}
+                          aria-label={{line.expansion.expandLabel}}
                           data-test-pretui-dt-expand
                           {{on 'click' (fn this.toggleExpanded line.key)}}
                         >
@@ -1179,15 +1166,15 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                       </td>
                     {{/if}}
                   </tr>
-                  {{#if line.expanded}}
-                    <tr class='pretui-dt-detail' id={{line.detailId}}>
+                  {{#if line.expansion.expanded}}
+                    <tr class='pretui-dt-detail' id={{line.expansion.detailId}}>
                       <td
                         colspan={{this.colspanFor
                           (has-block 'expanded')
                           (has-block 'actions')
                         }}
                       >
-                        {{yield line.row to='expanded'}}
+                        {{yield line.row line.index to='expanded'}}
                       </td>
                     </tr>
                   {{/if}}

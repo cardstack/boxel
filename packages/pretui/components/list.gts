@@ -3,7 +3,9 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import { modifier } from 'ember-modifier';
 import { DataShell, DataSource, ExpansionState } from '../data-component';
+import type { ExpansionView } from '../data-component';
 import type {
   DataArgs,
   DataLoad,
@@ -67,12 +69,29 @@ interface ListLine<T> {
   active: boolean;
   api: ListRowApi;
   label: string;
-  expanded: boolean;
-  expandedFlag: 'true' | 'false';
-  detailId: string;
-  /** the detail id while it exists — a collapsed row's detail is not rendered */
-  controls: string | undefined;
+  expansion: ExpansionView;
 }
+
+/**
+ * A collapse removes the detail, and focus inside it would fall to <body>.
+ * The row remembers (from focusin) that focus was in its detail; after a
+ * collapse — by the expander, a controlled `@expandedKeys` change or a
+ * reload — focus lands on the row's expander instead, unless it has already
+ * moved somewhere real.
+ */
+const restoreFocusOnCollapse = modifier(
+  (row: HTMLElement, [expanded]: [boolean]) => {
+    if (expanded || row.dataset['detailFocus'] !== 'true') {
+      return;
+    }
+    row.dataset['detailFocus'] = 'false';
+    let doc = row.ownerDocument;
+    let active = doc.activeElement;
+    if (!active || active === doc.body) {
+      (row.querySelector('.pretui-list-expbtn') as HTMLElement | null)?.focus();
+    }
+  },
+);
 
 export interface ListSignature<T> {
   Args: {
@@ -160,7 +179,7 @@ export class List<T> extends Component<ListSignature<T>> {
   source = new DataSource<T>(() => this.dataArgs);
   cursor = new RowCursor(() => this.rows.length);
   /** The same expanded-rows state DataTable uses. */
-  expansion = new ExpansionState(() => this.args);
+  expansion = new ExpansionState(() => this.args, this.guid);
 
   private get dataArgs(): DataArgs<T> {
     let a = this.args;
@@ -219,9 +238,7 @@ export class List<T> extends Component<ListSignature<T>> {
     return this.rows.map((row, index) => {
       let selected = this.source.isSelected(row, index);
       let key = this.source.keyFor(row, index);
-      let expanded = this.expansion.isExpanded(key);
-      // by position: a key can hold spaces, and 1 and '1' are distinct keys
-      let detailId = this.guid + '-d-' + String(index);
+      let label = this.labelFor(row, index);
       return {
         key,
         row,
@@ -235,11 +252,8 @@ export class List<T> extends Component<ListSignature<T>> {
           active: this.cursor.isActive(index),
           toggle: () => this.source.toggleSelected(row, index),
         },
-        label: this.labelFor(row, index),
-        expanded,
-        expandedFlag: expanded ? ('true' as const) : ('false' as const),
-        detailId,
-        controls: expanded ? detailId : undefined,
+        label,
+        expansion: this.expansion.viewFor(key, index, label),
       };
     });
   }
@@ -255,6 +269,13 @@ export class List<T> extends Component<ListSignature<T>> {
   }
 
   onFocusIn = (event: Event) => {
+    let target = event.target as HTMLElement | null;
+    let row = target?.closest('[data-list-index]') as HTMLElement | null;
+    if (row) {
+      row.dataset['detailFocus'] = target?.closest('.pretui-list-detail')
+        ? 'true'
+        : 'false';
+    }
     let index = this.indexFromEvent(event);
     if (index !== undefined) {
       this.cursor.follow(index);
@@ -292,8 +313,6 @@ export class List<T> extends Component<ListSignature<T>> {
   };
 
   toggleExpanded = (key: RowKey) => this.expansion.toggle(key);
-  expandLabel = (line: ListLine<T>): string =>
-    (line.expanded ? 'Collapse ' : 'Expand ') + line.label;
   detailLabel = (line: ListLine<T>): string => line.label + ' details';
 
   toggleRow = (row: T, index: number) => {
@@ -362,10 +381,14 @@ export class List<T> extends Component<ListSignature<T>> {
                 class='pretui-list-row'
                 data-list-index={{line.index}}
                 data-selected={{line.selectedFlag}}
-                data-expanded={{if (has-block 'expanded') line.expandedFlag}}
+                data-expanded={{if
+                  (has-block 'expanded')
+                  line.expansion.expandedFlag
+                }}
                 data-test-pretui-list-row
                 {{rovingTabindex (this.isRoving line.index)}}
                 {{focusWhen (this.isFocusTarget line.index)}}
+                {{restoreFocusOnCollapse line.expansion.expanded}}
               >
                 <div class='pretui-list-line'>
                   {{#if this.selectable}}
@@ -402,9 +425,9 @@ export class List<T> extends Component<ListSignature<T>> {
                     <button
                       type='button'
                       class='pretui-list-expbtn'
-                      aria-expanded={{line.expandedFlag}}
-                      aria-controls={{line.controls}}
-                      aria-label={{this.expandLabel line}}
+                      aria-expanded={{line.expansion.expandedFlag}}
+                      aria-controls={{line.expansion.controls}}
+                      aria-label={{line.expansion.expandLabel}}
                       data-test-pretui-list-expand
                       {{on 'click' (fn this.toggleExpanded line.key)}}
                     >
@@ -416,11 +439,12 @@ export class List<T> extends Component<ListSignature<T>> {
                   </div>
                 </div>
                 {{#if (has-block 'expanded')}}
-                  {{#if line.expanded}}
+                  {{#if line.expansion.expanded}}
                     <div
                       class='pretui-list-detail'
-                      id={{line.detailId}}
+                      id={{line.expansion.detailId}}
                       role='region'
+                      tabindex='-1'
                       aria-label={{this.detailLabel line}}
                       data-test-pretui-list-detail
                     >
@@ -491,21 +515,28 @@ export class List<T> extends Component<ListSignature<T>> {
           min-width: 0;
         }
         .pretui-list-row {
-          container-type: inline-size;
           min-width: 0;
           position: relative;
         }
         .pretui-list-line {
+          container-type: inline-size;
           display: flex;
           align-items: center;
           gap: var(--space-3, 8px);
           min-width: 0;
           padding: 0.62em var(--space-4, 11px);
         }
-        .pretui-list[data-divided] .pretui-list-row + .pretui-list-row {
+        /* The divider and the hover both sit on the summary line, so a hover
+           tint never paints over the hairline above it. */
+        .pretui-list[data-divided]
+          .pretui-list-row
+          + .pretui-list-row
+          > .pretui-list-line {
           box-shadow: inset 0 1px 0 var(--border);
         }
-        .pretui-list-line:hover {
+        /* A selected row keeps its tint under the pointer, summary and
+           detail alike. */
+        .pretui-list-row:not([data-selected='true']) > .pretui-list-line:hover {
           background: var(--hover, var(--boxel-100));
         }
         .pretui-list-row:focus-visible {
@@ -563,6 +594,11 @@ export class List<T> extends Component<ListSignature<T>> {
         }
         .pretui-list-expbtn[aria-expanded='true'] .pretui-list-chev {
           transform: rotate(90deg);
+        }
+        /* tabindex=-1 so a click in the detail focuses the detail, not the
+           row, and the row's Enter/Space stay with the row. */
+        .pretui-list-detail:focus {
+          outline: none;
         }
         .pretui-list-detail {
           min-width: 0;

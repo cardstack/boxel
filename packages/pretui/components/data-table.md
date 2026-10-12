@@ -25,7 +25,7 @@ Not built, and not stubbed: virtualization (the kit already has one windowing en
 @busy? | @loading?                    — aria-busy without replacing the rows
 @placeholder?, @itemNoun?, @emptyTitle?, @emptyMessage?, @loadingLabel?, @skeletonRows?
 <:cell as |text row col|>             — one block for every column; switch on col.key
-<:expanded as |row|>                  — supplying it turns on the expander column
+<:expanded as |row index|>            — supplying it turns on the expander column
 <:actions as |row|>                   — the row's Menu or IconButton
 <:toolbar> <:empty> <:loading> <:error>
 ```
@@ -97,7 +97,7 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 | `columnVisibility`                      | `@visibleColumns` / `@onVisibleColumnsChange`         |
 | `columnFilters`                         | `@filters` / `@onFiltersChange`                       |
 | `pagination`                            | `@pageSize` / `@page` / `@onPageChange`               |
-| Ant `expandable`                        | `<:expanded as \|row\|>`                              |
+| Ant `expandable`                        | `<:expanded as \|row index\|>`                        |
 | Ant `fixed`                             | `pin` on the column (`fixed: true` accepted)          |
 | Ant `size` / density                    | `@size`                                               |
 | `getRowId`                              | `@key`                                                |

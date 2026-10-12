@@ -34,7 +34,7 @@ The kit has other things that draw rows, and none of them is this. **Feed** is `
 
 **`@rowLabel` defaults to "Row N".** That is honest and poor. Pass it: it names the selection control, the expander and the detail region, and there is nothing else to name them.
 
-**Expansion is DataTable's, row for row.** Supplying `<:expanded>` adds an expander button to every row, after the selection control (the same column order as DataTable, so a pane that switches between the two keeps the chevron in place). `@expandedKeys` controls which rows are open and `@defaultExpandedKeys` seeds the uncontrolled case; `@onExpandedChange` reports every change either way. Both components share one `ExpansionState`, so the rule cannot drift. **A row's detail renders only while it is open**: fifty collapsed rows render fifty summaries and no bodies. The detail sits inside the row's `<li>`, below the summary, so the selected tint runs through it. Clicks inside the detail never activate the row, and expanding never changes selection.
+**Expansion is DataTable's, row for row.** Supplying `<:expanded>` adds an expander button to every row, after the selection control (the same column order as DataTable, so a pane that switches between the two keeps the chevron in place). `@expandedKeys` controls which rows are open and `@defaultExpandedKeys` seeds the uncontrolled case; `@onExpandedChange` reports every change either way. Both components share one `ExpansionState`, so the rule cannot drift. **A row's detail renders only while it is open**: fifty collapsed rows render fifty summaries and no bodies. The detail sits inside the row's `<li>`, below the summary, so the selected tint runs through it. Clicks inside the detail never activate the row, and expanding never changes selection. The detail takes `tabindex='-1'`, so a click on its text focuses the detail rather than the row, and the row's Enter and Space don't fire from there. If focus is inside a detail when its row collapses (by the expander, a controlled `@expandedKeys` change or a reload), focus moves to that row's expander rather than falling to `<body>`.
 
 ## Prior art
 
@@ -71,7 +71,7 @@ The selection control is drawn by the same declarations **DataTable** uses (15px
 
 The expander matches DataTable's: a 1.7em ghost button with a `›` chevron that turns 90° when open (no transition under `prefers-reduced-motion`), 2.4em on coarse pointers. The detail is padded like the row, with a `--border` hairline above it.
 
-Each `<li>` is `container-type: inline-size`, which is what lets an **Item** inside it wrap its trailing meta under the body at 22rem.
+Each row's summary line is `container-type: inline-size`, which is what lets an **Item** inside it wrap its trailing meta under the body at 22rem.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

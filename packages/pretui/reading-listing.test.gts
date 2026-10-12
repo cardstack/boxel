@@ -560,8 +560,9 @@ module('Pretui | reading-listing', function (hooks) {
           @rowLabel={{rowLabel}}
           @onExpandedChange={{knobs.onExpandedChange}}
         >
-          <:expanded as |row|>
+          <:expanded as |row index|>
             <p data-test-detail>{{row.place}}</p>
+            <p data-test-detail-index>{{index}}</p>
           </:expanded>
         </DataTable>
       </template>,
@@ -586,6 +587,9 @@ module('Pretui | reading-listing', function (hooks) {
     let detail = tableRoot().querySelector('#' + controls) as HTMLElement;
     assert.ok(detail, 'aria-controls resolves to a real element');
     assert.dom(detail.querySelector('[data-test-detail]')).hasText('Uji');
+    assert
+      .dom(detail.querySelector('[data-test-detail-index]'))
+      .hasText('0', 'the block gets the row index, as List does');
     assert.strictEqual(
       detail.querySelector('td')?.getAttribute('colspan'),
       '5',
@@ -1036,6 +1040,82 @@ module('Pretui | reading-listing', function (hooks) {
     );
     assert.deepEqual(knobs.selections, [], 'and selection is untouched');
     assert.dom('[data-test-pretui-list-select]:checked').doesNotExist();
+  });
+
+  test('focus inside a detail moves to its expander when the row collapses', async function (assert) {
+    let state = new ExpandHolder();
+    state.keys = ['B-2'];
+    let noop = () => {};
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @expandedKeys={{state.keys}}
+          @onExpandedChange={{noop}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><input
+              aria-label='Note'
+              data-test-note
+              value={{row.place}}
+            /></:expanded>
+        </List>
+      </template>,
+    );
+    let field = listRoot().querySelector(
+      '[data-test-note]',
+    ) as HTMLInputElement;
+    field.focus();
+    await settled();
+    assert.strictEqual(document.activeElement, field, 'focus is in the detail');
+
+    state.keys = [];
+    await settled();
+    assert.dom('[data-test-note]').doesNotExist('the detail is gone');
+    let expander = listRows()[1]!.querySelector(
+      '[data-test-pretui-list-expand]',
+    );
+    assert.strictEqual(
+      document.activeElement,
+      expander,
+      "focus landed on that row's expander",
+    );
+  });
+
+  test("a click in the detail focuses the detail, so the row's Enter stays quiet", async function (assert) {
+    let knobs = new Knobs();
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @defaultExpandedKeys={{EXPAND_FIRST}}
+          @onActivate={{knobs.onActivate}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><p data-test-detail>{{row.place}}</p></:expanded>
+        </List>
+      </template>,
+    );
+    let detail = listRoot().querySelector(
+      '[data-test-pretui-list-detail]',
+    ) as HTMLElement;
+    assert.strictEqual(detail.getAttribute('tabindex'), '-1');
+    await click(listRoot().querySelector('[data-test-detail]') as HTMLElement);
+    detail.focus();
+    await triggerKeyEvent(
+      document.activeElement as HTMLElement,
+      'keydown',
+      'Enter',
+    );
+    assert.deepEqual(
+      knobs.activations,
+      [],
+      'Enter from the detail does not activate the row',
+    );
   });
 
   test('List yields the row API and shows an empty state', async function (assert) {
