@@ -1,17 +1,18 @@
-import type { Join } from '@cardstack/choreo/film';
 import type { TOC } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
+import type { NotesSignature } from '../demo';
+
 /**
  * Deep dive for the Sagrada film — the wall plate under the exhibit, on
  * the house dive template (see notes/towers.gts). The one film-only
- * element is the strip of live junction triggers, wired to the film's
- * previewJoin through @preview.
+ * element is the strip of live junction triggers: @preview plays a join
+ * over the film in the stage above. The demo page passes it while the
+ * film's frame is attached, so the strip shows before the film can play
+ * anything: a join plays once the viewer has opened the film.
  */
-const SagradaNotes: TOC<{
-  Args: { preview?: (join: Join) => void };
-}> = <template>
+const SagradaNotes: TOC<NotesSignature> = <template>
   <section class='dive' aria-label='How it works'>
     <header class='dive-head'>
       <p class='dive-kicker'>The cutting room</p>
@@ -142,53 +143,93 @@ const SagradaNotes: TOC<{
       <h3>The junctions, live</h3>
       <div class='dd-col'>
         <p>
-          Each button plays one join over the running picture — no beat change,
-          no snap — the transition itself, exhibited.
+          Open the film above, and each button plays one join over the running
+          picture — no beat change, no snap — the transition itself, exhibited.
         </p>
         {{#if @preview}}
           <p class='dd-joins'>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'wipe')}}
             >wipe</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'blend')}}
             >blend</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'blur')}}
             >blur</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'luma')}}
             >luma</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'iris')}}
             >iris</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'dip')}}
             >dip</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'flash')}}
             >flash</button>
             <button
+              class='dd-join'
               type='button'
               {{on 'click' (fn @preview 'whip')}}
             >whip</button>
           </p>
         {{else}}
           <p class='dd-fn'>
-            The strip is live on the film itself: open the picture above in
-            Theater and the buttons play each join over the running frame.
+            The strip appears here once the film above is on the page.
           </p>
         {{/if}}
       </div>
     </section>
   </section>
+  <style scoped>
+    .dd-joins {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .dd-join {
+      appearance: none;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.125rem;
+      padding: 0.5rem 0.8125rem;
+      border: 1px solid var(--line);
+      border-radius: 0.625rem;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition:
+        transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-color 180ms ease;
+    }
+
+    .dd-join:hover {
+      transform: translateY(-0.125rem);
+      border-color: var(--ember);
+    }
+  </style>
 </template>;
 
 export default SagradaNotes;

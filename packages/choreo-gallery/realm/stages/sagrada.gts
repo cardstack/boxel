@@ -28,6 +28,7 @@ const SagradaStage: TOC<StageSignature> = <template>
   <FilmStage
     class='sg-face'
     @face={{@face}}
+    @filmLink={{@filmLink}}
     @theater={{@theater}}
     @film='sagrada'
     @title='Sagrada Família — the film'

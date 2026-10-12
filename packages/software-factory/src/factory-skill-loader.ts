@@ -44,15 +44,10 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
  *   `boxel-ui-component-discovery`, `ember-best-practices`, …), the same
  *   release the plugin marketplace installs for end users. `pnpm
  *   factory:setup` clones it, and preflight refuses a run without it.
- * - The monorepo root `.agents/skills/` is a fallback slot for shared domain
- *   skills that agents following the `.agents/skills` convention read
- *   directly. Searched after the boxel-skills clone, so it cannot shadow a
- *   released skill.
  */
 const DEFAULT_FALLBACK_DIRS = [
   join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
   boxelSkillsDir(),
-  join(MONOREPO_ROOT, '.agents', 'skills'),
   // Package-local interactive skills (`packages/software-factory/.agents/skills`)
   // are the primary skill set for the runbook (interactive Claude Code) loop.
   // Listing them here lets the orchestrator's resolver pick them up too.
@@ -302,7 +297,7 @@ export class SkillLoader implements SkillLoaderInterface {
    * @param skillsDir      Primary directory to search for skills.
    * @param fallbackDirs   Additional directories checked (in order) when a
    *                        skill is not found in the primary directory. Defaults
-   *                        to the monorepo root `.agents/skills/`.
+   *                        to the configured fallback directories.
    */
   constructor(
     skillsDir: string = DEFAULT_SKILLS_DIR,

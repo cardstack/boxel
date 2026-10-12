@@ -6,6 +6,7 @@
     "@babel/plugin-proposal-decorators": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/bxl": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/pretui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",

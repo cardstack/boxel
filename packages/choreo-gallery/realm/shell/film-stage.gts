@@ -238,7 +238,12 @@ export class FilmStage extends Component<Signature> {
             data-test-film-poster
           />
           {{#unless this.curtain}}
-            <FilmFrame class='film-frame' @film={{@film}} @title={{@title}} />
+            <FilmFrame
+              class='film-frame'
+              @film={{@film}}
+              @link={{@filmLink}}
+              @title={{@title}}
+            />
           {{/unless}}
           {{#if @theater}}
             {{#unless this.inTheater}}

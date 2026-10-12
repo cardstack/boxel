@@ -45,6 +45,9 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl='https://realms-staging.stack.cards/openrouter/' \
   \
+  --fromUrl='https://realms-staging.stack.cards/choreo-gallery/' \
+  --toUrl='https://realms-staging.stack.cards/choreo-gallery/' \
+  \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
   

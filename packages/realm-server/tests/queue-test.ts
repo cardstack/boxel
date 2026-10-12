@@ -894,6 +894,68 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('from-scratch dedup: a realm publish does NOT attach to an in-flight from-scratch', async function (assert) {
+      // A realm publish enqueues its pass after it swaps in new files. An
+      // already-running from-scratch may have read the file mtimes before
+      // that swap, so joining it would let the publish observe a successful
+      // job that never indexed the new files.
+      await runner.destroy();
+      let realmURL = 'http://example.com/from-scratch-realm-publish/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'from-scratch-realm-publish-worker',
+      });
+      worker.register('from-scratch-index', async () => {
+        started.fulfill();
+        await release.promise;
+        return {
+          invalidations: [],
+          ignoreData: {},
+          stats: {
+            instancesIndexed: 0,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 0,
+          },
+        };
+      });
+
+      try {
+        await worker.start();
+
+        let first = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner' },
+        });
+        await started.promise;
+
+        let second = await publishFromScratchIndexJob({
+          priority: userInitiatedPriority,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            awaitedByPublish: true,
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'realm publish does not attach to the in-flight job',
+        );
+
+        release.fulfill();
+        await Promise.all([first.done, second.done]);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('from-scratch does not coalesce onto pending incremental in same group', async function (assert) {
       await runner.destroy();
 
