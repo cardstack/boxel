@@ -82,6 +82,16 @@ import type { Skill } from '@cardstack/base/skill';
 import type { TaskInstance } from 'ember-concurrency';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
+// Statuses of an event this client is still sending. Until the server's copy
+// arrives, its origin_server_ts is this client's clock, not the server's. A
+// send that failed ('not_sent', 'cancelled') keeps the time it was made.
+const IN_FLIGHT_EVENT_STATUSES: ReadonlySet<string> = new Set([
+  'encrypting',
+  'queued',
+  'sending',
+  'sent',
+]);
+
 interface CompactionEvent {
   type: typeof APP_BOXEL_COMPACTION_EVENT_TYPE;
   sender: string;
@@ -332,7 +342,9 @@ export class RoomResource extends Resource<Args> {
    * While a stop is in force no person has written since it, and ai-bot
    * starts no new answer, so the stopped message is the latest one from the
    * bot. Timestamps aren't compared: a stop's local echo carries this
-   * client's clock, which can disagree with the server's.
+   * client's clock, which can disagree with the server's. For the same
+   * reason the stop rule reads `sortedEvents`, which puts a stop still being
+   * sent after every confirmed event.
    */
   @cached
   get stoppedMessageEventId(): string | undefined {
@@ -398,9 +410,26 @@ export class RoomResource extends Resource<Args> {
     return this.matrixRoom?.waitForNextEvent();
   }
 
+  // The room's events in timeline order: by origin_server_ts, except that an
+  // event this client is still sending comes after every event the server has
+  // confirmed. It is newer than all of them, whatever this client's clock
+  // says. Sorts a copy, so the room's own list keeps its order.
   @cached
   private get sortedEvents() {
-    return this.events.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+    let inFlight = (event: DiscreteMatrixEvent) =>
+      event.status != null && IN_FLIGHT_EVENT_STATUSES.has(event.status);
+    return [...this.events].sort((a, b) => {
+      let aInFlight = inFlight(a);
+      let bInFlight = inFlight(b);
+      if (aInFlight !== bInFlight) {
+        return aInFlight ? 1 : -1;
+      }
+      // Events still being sent keep the order they were sent in.
+      if (aInFlight) {
+        return 0;
+      }
+      return a.origin_server_ts - b.origin_server_ts;
+    });
   }
 
   private get allSkillFileDefs(): SerializedFile[] {

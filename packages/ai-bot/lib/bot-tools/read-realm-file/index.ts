@@ -34,6 +34,7 @@ export const readRealmFileBotTool: BotTool = {
           roomId: target.roomId,
           requestEventId: target.requestEventId,
           agentId: target.agentId,
+          stopped: target.stopped,
           onBehalfOf: room.onBehalfOf,
           delegatedUserRealmSessions: room.delegatedUserRealmSessions,
         });

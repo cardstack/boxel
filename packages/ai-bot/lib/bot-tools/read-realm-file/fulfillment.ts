@@ -13,7 +13,12 @@ import {
   selectReadRealmFileUrls,
   type ReadRealmFileTool,
 } from './read.ts';
-import { publishToolResult, uploadToMatrix } from '../results.ts';
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
+import {
+  publishCanceledResult,
+  publishToolResult,
+  uploadToMatrix,
+} from '../results.ts';
 import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from '../../user-delegated-realm-server-session.ts';
 
@@ -32,6 +37,8 @@ export interface ReadRealmFileFulfillmentDeps {
   // this only needs to be the anchoring bot message.
   requestEventId: string;
   agentId: string | undefined;
+  // Whether the user has stopped the assistant; checked before each call.
+  stopped?: () => boolean;
   onBehalfOf: string;
   delegatedUserRealmSessions: Pick<
     DelegatedUserRealmSessionManager,
@@ -89,6 +96,14 @@ export async function fulfillReadRealmFileCalls(
   let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
   for (let call of botToolCalls) {
     if (call.type !== 'function') {
+      continue;
+    }
+    if (deps.stopped?.()) {
+      outcomes.push({
+        ...(await publishCanceledResult(call, deps)),
+        ok: false,
+        error: STOPPED_TOOL_CALL_REASON,
+      });
       continue;
     }
     outcomes.push(await fulfillOne(call, deps, upload));

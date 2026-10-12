@@ -3048,18 +3048,29 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
   });
 
-  // Passes every tool's validation, after `release()` when held, and records
-  // each tool result the host sends (still sending it).
-  function stubToolValidation({ held = false } = {}) {
+  // Passes every tool's validation, after `release()` when held (every tool,
+  // or only those in `heldToolIds`), and records each tool result the host
+  // sends (still sending it).
+  function stubToolValidation({
+    held = false,
+    heldToolIds,
+  }: { held?: boolean; heldToolIds?: string[] } = {}) {
     let toolService = getService('tool-service');
     let matrixService = getService('matrix-service');
     let release!: () => void;
-    let released = held
-      ? new Promise<void>((resolve) => (release = resolve))
-      : Promise.resolve();
+    let released =
+      held || heldToolIds
+        ? new Promise<void>((resolve) => (release = resolve))
+        : Promise.resolve();
+    let validating = new Set<string>();
     let originalValidate = toolService.validate;
-    toolService.validate = async () => {
-      await released;
+    toolService.validate = async (messageTool) => {
+      if (messageTool.id) {
+        validating.add(messageTool.id);
+      }
+      if (!heldToolIds || heldToolIds.includes(messageTool.id ?? '')) {
+        await released;
+      }
       return true;
     };
     let results: Array<{
@@ -3081,6 +3092,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     };
     return {
       results,
+      validating,
       release: () => release?.(),
       restore() {
         release?.();
@@ -3250,6 +3262,146 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         JSON.stringify([
           { toolCallId: 'stopped-with-skewed-clock', status: 'canceled' },
         ]),
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('a stop the server has not confirmed yet holds although its clock reads earlier than the prompt', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    let releaseSend!: () => void;
+    // Holds only the first send, the stop; the tool results after it go out.
+    let held = false;
+    mockMatrixUtils.setSendEventInterceptor(async () => {
+      if (held) {
+        return;
+      }
+      held = true;
+      await new Promise<void>((resolve) => (releaseSend = resolve));
+    });
+    try {
+      // The server's clock runs an hour ahead of this client's, so the stop's
+      // local echo, stamped by this client, reads earlier than the prompt.
+      let serverAhead = Date.now() + 60 * 60 * 1000;
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          body: 'check it',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+        },
+        { origin_server_ts: serverAhead },
+      );
+      let streamingEventId = simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Checking',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: false,
+          data: {
+            context: { agentId: getService('matrix-service').agentId },
+          },
+        },
+        { origin_server_ts: serverAhead + 1 },
+      );
+      await waitFor('[data-test-stop-generating]');
+
+      // The send is held, so the stop stays a local echo.
+      let matrixService = getService('matrix-service');
+      void matrixService.sendStopGeneratingEvent(roomId);
+      let roomResource = matrixService.roomResources.get(roomId)!;
+      await waitUntil(() =>
+        roomResource.events.some(
+          (event) =>
+            (event.type as string) === APP_BOXEL_STOP_GENERATING_EVENT_TYPE &&
+            event.status === 'sending',
+        ),
+      );
+
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Checking correctness',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          ...checkCorrectnessCall('stopped-while-sending'),
+          'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
+        },
+        { origin_server_ts: serverAhead + 2 },
+      );
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status }) => ({
+            toolCallId,
+            status,
+          })),
+        ),
+        JSON.stringify([
+          { toolCallId: 'stopped-while-sending', status: 'canceled' },
+        ]),
+      );
+    } finally {
+      mockMatrixUtils.setSendEventInterceptor(undefined);
+      releaseSend?.();
+      stub.restore();
+    }
+  });
+
+  test("a stop during a later tool's validation keeps the tools validated before it from starting", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation({ heldToolIds: ['validated-last'] });
+    try {
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'checking correctness twice',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          { id: 'validated-first', name: 'checkCorrectness', arguments: '{}' },
+          { id: 'validated-last', name: 'checkCorrectness', arguments: '{}' },
+        ],
+        data: {
+          context: { agentId: getService('matrix-service').agentId },
+        },
+      });
+      // The first tool has passed validation and waits for the second.
+      await waitUntil(() => stub.validating.has('validated-last'), {
+        timeout: 10000,
+      });
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {},
+        { type: APP_BOXEL_STOP_GENERATING_EVENT_TYPE },
+      );
+      let roomResource =
+        getService('matrix-service').roomResources.get(roomId)!;
+      await waitUntil(() => roomResource.stoppedMessageEventId !== undefined);
+      stub.release();
+
+      await waitUntil(() => stub.results.length === 2, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status }) => ({
+            toolCallId,
+            status,
+          })),
+        ),
+        JSON.stringify([
+          { toolCallId: 'validated-last', status: 'canceled' },
+          { toolCallId: 'validated-first', status: 'canceled' },
+        ]),
+        'neither tool had started when the user stopped, so neither runs',
       );
     } finally {
       stub.restore();

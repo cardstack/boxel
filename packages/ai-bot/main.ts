@@ -49,7 +49,10 @@ import {
   releasedToolCalls,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
-import { publishCanceledResults } from './lib/bot-tools/results.ts';
+import {
+  publishCanceledResult,
+  publishCanceledResults,
+} from './lib/bot-tools/results.ts';
 import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
@@ -1082,15 +1085,19 @@ Common issues are:
           // handler just released. Fulfilling here (rather than inside the
           // lock) is what lets the continuation proceed.
           for (let released of pendingReleasedCalls) {
-            let [outcome] =
-              (await botToolTurns
-                .get(released.toolName)
-                ?.fulfill([released.call], {
-                  client,
-                  roomId: room.roomId,
-                  requestEventId: released.requestEventId,
-                  agentId: pendingReleasedAgentId,
-                })) ?? [];
+            let releasedTarget = {
+              client,
+              roomId: room.roomId,
+              requestEventId: released.requestEventId,
+              agentId: pendingReleasedAgentId,
+            };
+            // The user approved this call, then stopped the assistant before
+            // it started.
+            let [outcome] = thisRoomTurn.stopped
+              ? [await publishCanceledResult(released.call, releasedTarget)]
+              : ((await botToolTurns
+                  .get(released.toolName)
+                  ?.fulfill([released.call], releasedTarget)) ?? []);
             // A result that never reached the room leaves the call to be
             // run on a later handler run.
             if (!outcome?.published) {
@@ -1113,6 +1120,7 @@ Common issues are:
                   roomId: room.roomId,
                   requestEventId: pendingFulfillRequestEventId,
                   agentId: pendingFulfillAgentId,
+                  stopped: () => thisRoomTurn.stopped,
                 };
                 if (thisRoomTurn.stopped) {
                   await publishCanceledResults(calls, target);

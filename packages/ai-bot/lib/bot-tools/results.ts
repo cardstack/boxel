@@ -101,23 +101,32 @@ export async function publishCanceledResults(
 ): Promise<BotToolOutcome[]> {
   let outcomes: BotToolOutcome[] = [];
   for (let call of calls) {
-    let published = await publishToolResult(
-      target.client,
-      target.roomId,
-      {
-        msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-        commandRequestId: call.id,
-        failureReason: STOPPED_TOOL_CALL_REASON,
-        'm.relates_to': {
-          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
-          key: 'canceled',
-          event_id: target.requestEventId,
-        },
-        data: { context: { agentId: target.agentId } },
-      },
-      call.type === 'function' ? call.function.name : 'unknown',
-    );
-    outcomes.push({ commandRequestId: call.id, published });
+    outcomes.push(await publishCanceledResult(call, target));
   }
   return outcomes;
+}
+
+// Answers one call the user's stop kept from running (see
+// publishCanceledResults).
+export async function publishCanceledResult(
+  call: ChatCompletionMessageToolCall,
+  target: Omit<BotToolTarget, 'stopped'>,
+): Promise<BotToolOutcome> {
+  let published = await publishToolResult(
+    target.client,
+    target.roomId,
+    {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      commandRequestId: call.id,
+      failureReason: STOPPED_TOOL_CALL_REASON,
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'canceled',
+        event_id: target.requestEventId,
+      },
+      data: { context: { agentId: target.agentId } },
+    },
+    call.type === 'function' ? call.function.name : 'unknown',
+  );
+  return { commandRequestId: call.id, published };
 }

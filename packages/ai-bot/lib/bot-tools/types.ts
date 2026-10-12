@@ -70,6 +70,10 @@ export interface BotToolTarget {
   // The bot message carrying the calls; their results relate back to it.
   requestEventId: string;
   agentId: string | undefined;
+  // Whether the user has stopped the assistant since this turn's calls were
+  // handed over. Checked before each call starts: a call already running
+  // finishes, and the ones after it are answered as canceled.
+  stopped?: () => boolean;
 }
 
 export interface BotToolOutcome {

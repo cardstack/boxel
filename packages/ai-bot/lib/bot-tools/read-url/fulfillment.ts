@@ -13,7 +13,12 @@ import {
   type ReadUrlOptions,
   type ReadUrlResult,
 } from './read.ts';
-import { publishToolResult, uploadToMatrix } from '../results.ts';
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
+import {
+  publishCanceledResult,
+  publishToolResult,
+  uploadToMatrix,
+} from '../results.ts';
 
 let log = logger('ai-bot:read-url');
 
@@ -28,6 +33,8 @@ export interface ReadUrlFulfillmentDeps {
   // to it.
   requestEventId: string;
   agentId: string | undefined;
+  // Whether the user has stopped the assistant; checked before each call.
+  stopped?: () => boolean;
   readOptions: ReadUrlOptions;
   // Why a call's URL must not be read at all, if it must not.
   refusal?: (url: string) => string | undefined;
@@ -65,6 +72,14 @@ export async function fulfillReadUrlCalls(
   let read = 0;
   for (let call of calls) {
     if (call.type !== 'function') {
+      continue;
+    }
+    if (deps.stopped?.()) {
+      outcomes.push({
+        ...(await publishCanceledResult(call, deps)),
+        ok: false,
+        error: STOPPED_TOOL_CALL_REASON,
+      });
       continue;
     }
     // Calls past the cap still get a result, so the turn settles and the

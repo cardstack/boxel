@@ -648,6 +648,19 @@ export default class ToolService extends Service {
           }
         }
 
+        // Each tool above was checked for a stop when it was validated, but
+        // the ones validated earlier waited for the rest: a stop that landed
+        // meanwhile must keep them from starting too.
+        if (
+          readyTools.length > 0 &&
+          roomResource.stoppedMessageEventId === message.eventId
+        ) {
+          for (let messageTool of readyTools) {
+            await this.sendCanceledToolResult(roomId!, messageTool);
+          }
+          readyTools = [];
+        }
+
         // Execute ready commands, tracking accept-all state if multiple commands
         if (readyTools.length > 0) {
           // This is an "accept all" operation - multiple commands ready for execution
