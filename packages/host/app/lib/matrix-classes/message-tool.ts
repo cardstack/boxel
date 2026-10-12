@@ -216,24 +216,6 @@ export default class MessageTool {
     return this.resolution?.actionVerb ?? 'Apply';
   }
 
-  // Whether this call must wait for the user's click, whatever the room's
-  // mode. Read from the current arguments, so it is right once they finish
-  // streaming.
-  get neverAutoExecutes(): boolean {
-    let resolution = this.resolution;
-    if (resolution?.neverAutoExecutes) {
-      return true;
-    }
-    let attributes = this.arguments?.attributes;
-    return (
-      resolution?.neverAutoExecutesFor?.(
-        attributes && typeof attributes === 'object'
-          ? (attributes as Record<string, unknown>)
-          : undefined,
-      ) === true
-    );
-  }
-
   @service declare toolService: ToolService;
   @service declare matrixService: MatrixService;
   @service declare store: StoreService;
@@ -250,6 +232,25 @@ export default class MessageTool {
   // readRealmFile). When set, the host records it in the timeline but never runs it.
   get executedBy() {
     return this.toolRequest.executedBy;
+  }
+
+  // Whether this call must wait for the user's click, whatever the room's
+  // mode. Read from the current arguments, so it is right once they finish
+  // streaming. False while the tool is still resolving; nothing runs a call
+  // automatically until it has resolved (the tool drain validates first).
+  get neverAutoExecutes(): boolean {
+    let resolution = this.resolution;
+    if (resolution?.neverAutoExecutes) {
+      return true;
+    }
+    let attributes = this.arguments?.attributes;
+    return (
+      resolution?.neverAutoExecutesFor?.(
+        attributes && typeof attributes === 'object'
+          ? (attributes as Record<string, unknown>)
+          : undefined,
+      ) === true
+    );
   }
 
   get argumentsError() {
