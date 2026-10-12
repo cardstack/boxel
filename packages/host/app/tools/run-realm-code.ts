@@ -1,6 +1,11 @@
 import { service } from '@ember/service';
 
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  isBinaryContentType,
+  logger,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -36,9 +41,6 @@ const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
 // A script that loops by mistake must not fill the user's workspace list.
 const MAX_WORKSPACES = 5;
-// Content types the realm serves for files whose content is not text.
-const BINARY_CONTENT_TYPE_RE =
-  /^(?:(?:image|audio|video|font)\/(?!svg\+xml)|application\/(?:octet-stream|pdf|zip|gzip|wasm)\b)/i;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -408,10 +410,14 @@ class RealmFsSession {
     }
     let source = await this.readSource(url);
     // Read as text, a binary file comes back mangled, and saving that text
-    // would corrupt any copy or edit of it.
+    // would corrupt any copy or edit of it. A content type that is not known
+    // text is not enough on its own: a text file with no extension or an
+    // unknown one is served as application/octet-stream, so the decoded
+    // content decides.
     if (
       source.status === 200 &&
-      BINARY_CONTENT_TYPE_RE.test(source.contentType ?? '')
+      isBinaryContentType(source.contentType ?? '') &&
+      looksDecodedFromBinary(source.content)
     ) {
       throw new Error(`${url} is a binary file; realm.fs reads only text`);
     }
@@ -442,6 +448,12 @@ class RealmFsSession {
     this.known.set(url, saved);
     this.saved.add(url);
   }
+}
+
+// Text decoding turns bytes that are not UTF-8 into U+FFFD, and text files
+// carry no NUL.
+function looksDecodedFromBinary(content: string): boolean {
+  return content.includes('\uFFFD') || content.includes('\u0000');
 }
 
 export default class RunRealmCodeTool extends HostBaseTool<

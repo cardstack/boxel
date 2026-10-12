@@ -91,6 +91,11 @@ export class Pet extends CardDef {
           'images/dot.png': Uint8Array.from(atob(PNG_BASE64), (char) =>
             char.charCodeAt(0),
           ),
+          // A zip local-file header followed by bytes that are not UTF-8.
+          'docs/report.docx': Uint8Array.from([
+            0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00, 0xff, 0xfe, 0x9c,
+          ]),
+          'docs/README': 'Plain text with no extension\n',
         },
       }),
     );
@@ -316,23 +321,44 @@ await realm.fs.replace('Pet/mango-copy.json', '"Mango"', '"Mango Two"');`,
     );
   });
 
-  test('realm.fs.copy refuses a binary file', async function (assert) {
+  test('realm.fs.copy refuses binary files, whatever their content type', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
 
-    await assert.rejects(
-      command.execute({
-        realm: testRealmURL,
-        roomId: '!room:example.com',
-        code: `await realm.fs.copy('images/dot.png', 'images/dot-copy.png');`,
-      }),
-      /is a binary file/,
-    );
+    for (let [from, to] of [
+      ['images/dot.png', 'images/dot-copy.png'],
+      ['docs/report.docx', 'docs/report-copy.docx'],
+    ]) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.fs.copy('${from}', '${to}');`,
+        }),
+        /is a binary file/,
+        `refuses ${from}`,
+      );
+      let copy = await cardService.getSource(new URL(`${testRealmURL}${to}`));
+      assert.strictEqual(copy.status, 404, `no copy of ${from} is saved`);
+    }
+  });
+
+  test('realm.fs.copy copies a text file that has no extension', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.copy('docs/README', 'docs/README-copy');`,
+    });
+
     let copy = await cardService.getSource(
-      new URL(`${testRealmURL}images/dot-copy.png`),
+      new URL(`${testRealmURL}docs/README-copy`),
     );
-    assert.strictEqual(copy.status, 404, 'no copy is saved');
+    assert.strictEqual(copy.content, 'Plain text with no extension\n');
   });
 
   test('resolves paths against the realm root', async function (assert) {
