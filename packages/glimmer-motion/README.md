@@ -217,11 +217,12 @@ whole declaration whenever the bound value changes, wiping out the transform Mot
 symptom is quiet: a card that stays put while the drag logic runs perfectly around it.
 
 ```gts
-{{! ✗ the next re-render erases the drag transform }}
+{{! ✗ the next re-render erases the drag transform. accentStyle = '--accent: …' }}
 <div class='card' style={{this.accentStyle}} {{motion drag=true}}>
 
-{{! ✓ Motion applies these itself, custom properties included }}
-<div class='card' {{motion style=this.accentStyle drag=true}}>
+{{!-- ✓ Motion applies these itself, custom properties included.
+     The modifier takes an object: accentVars = { '--accent': … } --}}
+<div class='card' {{motion style=this.accentVars drag=true}}>
 ```
 
 **2. A leaving child stays live, so read exiting content from the yielded item.** React keeps the
@@ -256,7 +257,7 @@ module('the card', function (hooks) {
   test('it lands', async function (assert) {
     await render(<template><Card /></template>);
     await animationsSettled();
-    assert.strictEqual(bounds(find('.card')!).x, 120);
+    assert.strictEqual(bounds(find('.card')!).left, 120);
   });
 });
 ```
@@ -266,7 +267,7 @@ module('the card', function (hooks) {
 | `setupMotion(hooks)`                              | resets what outlives an owner (the projection root, the layout-loop guard, motion speed, and every registered reset) around each test, and fails a test that ran a layout loop |
 | `animationsSettled(opts?)`                        | resolves when every motion element, layout animation and registered busy probe has stopped, and names what was still moving when it times out                                  |
 | `bounds(el)` / `shape(el)` / `boundsAndShape(el)` | rects relative to the test root; the cumulative 2×2 transform                                                                                                                  |
-| `velocityOf(el, prop)`                            | how fast a value is moving right now                                                                                                                                           |
+| `velocityOf(el)`                                  | async: how fast the element is moving right now, as `{ x, y }` in px/s, sampled across two frames                                                                              |
 | `isMotionIdle()` / `whatIsBusy()`                 | the probe underneath, for a custom wait                                                                                                                                        |
 | `registerMotionReset(fn)` / `resetMotion()`       | add a reset of your own, for a layer that keeps document-wide state; run them all                                                                                              |
 

@@ -467,7 +467,7 @@ measured reads; the transport; the front door; and the end card.
 ```gts
 import { Film, IframePicture } from '@cardstack/choreo/film';
 
-<Film @name='sagrada' @seek='exact' @clock={{CLOCK}} @over='everything'>
+<Film @name='sagrada' @menuTitle='Sagrada Família' @seek='exact' @clock={{CLOCK}} @over='everything'>
   <:picture as |register|>
     <IframePicture @register={{register}} @src={{this.src}}
       @assets={{this.assets}} @standing={{T_TODAY}} @grades={{GRADES}} />

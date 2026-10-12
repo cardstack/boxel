@@ -11,9 +11,12 @@
  *   guides state their motivation and goals, and internal guide links
  *   resolve.
  * - The docs and design records in the realm link only to files and
- *   headings that exist; every import written in them, in the guides and in
- *   the package READMEs names an export its package has; and every
- *   choreo.boxel.site URL names a file in the realm.
+ *   headings that exist; every import written in the docs, the guides and
+ *   the package READMEs names an export its package has (the design
+ *   records sketch APIs that were never built, so their imports aren't
+ *   checked); and every choreo.boxel.site URL names a file in the realm,
+ *   and every link into the monorepo a file that exists, down to the
+ *   heading a `#fragment` names.
  *
  * Reads sources and JSON only, so it needs no build.
  */
@@ -335,7 +338,11 @@ const relative = (file) => path.relative(root, file);
 const withoutFences = (markdown) =>
   markdown.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '');
 
-/** the ids GitHub (and the host's renderer) give a document's headings */
+/**
+ * The ids GitHub gives a document's headings. The host computes the same
+ * slugs but renders each id with a `user-content-` prefix
+ * (runtime-common/marked-sync.ts), as GitHub does in its HTML.
+ */
 function headingIds(markdown) {
   const ids = new Set();
   const seen = new Map();
@@ -449,7 +456,30 @@ function exportsOf(file) {
   const names = new Set();
   for (const node of tree.statements) {
     if (ts.isExportDeclaration(node) && !node.exportClause) {
-      return undefined; // `export *`: anything may come through
+      // `export * from './x'`: follow it. From another package, anything may
+      // come through.
+      const specifier = node.moduleSpecifier.text;
+      const base = path.resolve(path.dirname(file), specifier);
+      const target = specifier.startsWith('.')
+        ? [base, `${base}.ts`, `${base}.gts`].find(
+            (candidate) =>
+              fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
+          )
+        : undefined;
+      const inner = target && exportsOf(target);
+      if (!inner) {
+        return undefined;
+      }
+      inner.forEach((name) => names.add(name));
+      continue;
+    }
+    if (
+      ts.isExportDeclaration(node) &&
+      node.exportClause &&
+      ts.isNamespaceExport(node.exportClause)
+    ) {
+      names.add(node.exportClause.name.text);
+      continue;
     }
     if (
       ts.isExportDeclaration(node) &&
@@ -482,8 +512,10 @@ const importedDocs = [
   ...markdownFiles(guidesDir),
   ...packageReadmes,
 ];
+const designDir = path.join(realm, 'design') + path.sep;
 const badImports = [];
-for (const file of importedDocs) {
+// the design records sketch APIs that were never built
+for (const file of importedDocs.filter((doc) => !doc.startsWith(designDir))) {
   const markdown = fs.readFileSync(file, 'utf8');
   for (const [statement, clause, specifier] of markdown.matchAll(
     /\bimport\s+(?:type\s+)?([\w$]+\s*,\s*\{[^}]*\}|\{[^}]*\}|[\w$]+|\*\s+as\s+[\w$]+)\s+from\s+['"]([^'"]+)['"]/g,
@@ -522,12 +554,31 @@ for (const file of importedDocs) {
 }
 assert.deepEqual(badImports, [], 'Imports the packages do not provide');
 
+/** a `#fragment` on a URL to a Markdown file, or to a directory's README */
+function namesNoHeading(target, fragment) {
+  if (!fragment) {
+    return false;
+  }
+  const isDirectory =
+    fs.existsSync(target) && fs.statSync(target).isDirectory();
+  // GitHub anchors a directory page's README at `#readme`
+  if (isDirectory && fragment === 'readme') {
+    return false;
+  }
+  const doc = isDirectory ? path.join(target, 'README.md') : target;
+  return (
+    doc.endsWith('.md') &&
+    fs.existsSync(doc) &&
+    !headingIds(fs.readFileSync(doc, 'utf8')).has(decodeURIComponent(fragment))
+  );
+}
+
 /** the hosted gallery is this realm, so its URLs name realm files */
 const siteURLs = [];
 for (const file of importedDocs) {
   const markdown = fs.readFileSync(file, 'utf8');
-  for (const [url, pathname] of markdown.matchAll(
-    /https:\/\/choreo\.boxel\.site\/([^\s)"'<>`#?]*)/g,
+  for (const [url, pathname, fragment] of markdown.matchAll(
+    /https:\/\/choreo\.boxel\.site\/([^\s)"'<>`#?]*)(?:#([^\s)"'<>`]+))?/g,
   )) {
     const target = path.join(realm, decodeURIComponent(pathname));
     const exists =
@@ -536,6 +587,8 @@ for (const file of importedDocs) {
       fs.existsSync(`${target}.json`);
     if (!exists) {
       siteURLs.push(`${relative(file)}: ${url}`);
+    } else if (namesNoHeading(target, fragment)) {
+      siteURLs.push(`${relative(file)}: ${url} names no heading`);
     }
   }
 }
@@ -551,14 +604,16 @@ assert.deepEqual(
  * Choreo's archived repository.
  */
 const repoLinks = [];
-const designDir = path.join(realm, 'design') + path.sep;
 for (const file of importedDocs) {
   const markdown = fs.readFileSync(file, 'utf8');
-  for (const [url, repoPath] of markdown.matchAll(
-    /https:\/\/github\.com\/cardstack\/boxel\/(?:blob|tree)\/main\/([^\s)"'<>`#?]+)/g,
+  for (const [url, repoPath, fragment] of markdown.matchAll(
+    /https:\/\/github\.com\/cardstack\/boxel\/(?:blob|tree)\/main\/([^\s)"'<>`#?]+)(?:#([^\s)"'<>`]+))?/g,
   )) {
-    if (!fs.existsSync(path.join(root, repoPath))) {
+    const target = path.join(root, repoPath);
+    if (!fs.existsSync(target)) {
       repoLinks.push(`${relative(file)}: ${url} names no file`);
+    } else if (namesNoHeading(target, fragment)) {
+      repoLinks.push(`${relative(file)}: ${url} names no heading`);
     }
   }
   if (!file.startsWith(designDir)) {

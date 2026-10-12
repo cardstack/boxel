@@ -115,11 +115,13 @@ against the libraries it documents:
 - every guide meets the prose floor, has a preamble, and links only to guides
   that exist;
 - `docs/` and `design/` link only to realm files and headings that exist;
-- every import written in the docs, the guides and the package READMEs names
+- every import written in `docs/`, the guides and the package READMEs names
   an export its package has, so none still reaches Choreo or Film through
-  `glimmer-motion`;
+  `glimmer-motion` (`design/` sketches APIs that were never built, so its
+  imports aren't checked);
 - every `choreo.boxel.site` URL names a file in the realm, and every link into
-  the monorepo names a file that exists.
+  the monorepo names a file that exists, along with the heading any `#fragment`
+  names.
 
 The guides themselves, and the guide pages that embed the demos, are still
 `choreo-test-app` sources; the check reads them from there.
