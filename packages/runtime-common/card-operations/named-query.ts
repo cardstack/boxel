@@ -295,7 +295,7 @@ function callerOf(principal: SearchPrincipal | undefined): ScopeCaller {
 // whose realm the caller cannot be shown to read, and so is a type nothing is
 // described for, as is one whose code ref does not resolve. A caller who isn't
 // signed in reads what the realm opens to everyone.
-export async function readsModuleOf(
+async function readsModuleOf(
   core: OperationCore,
   on: CodeRef,
   caller: ScopeCaller,

@@ -1,5 +1,5 @@
 import { isCodeRef } from '../card-document-shape.ts';
-import type { CodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
 import { runWithSearchTimeBudget, SearchBoundError } from '../search-bounds.ts';
@@ -35,7 +35,6 @@ import {
 } from './gate.ts';
 import {
   admitsNothing,
-  readsModuleOf,
   resolveNamedQuery,
   searchInvocation,
 } from './named-query.ts';
@@ -301,13 +300,13 @@ export async function explainOperation(
   }
   // Explaining a named query reports what resolving its declaration did for
   // the actor: the refusal it gave, or the filter it lowered to. Either one
-  // describes the type, so it is answered only to a caller who may read the
-  // realm holding the type's module, whoever the actor is, and is refused
-  // whole otherwise.
+  // describes the type, so it is refused whole to a caller who may not read
+  // the realm this server serves the type's module from, whoever the actor
+  // is, as a draft naming such a type is.
   if (
     question.search &&
     'on' in question.search &&
-    !(await readsModuleOf(targetCore, question.search.on, asker))
+    (await servesUnreadableModule(targetCore, question.search.on, asker))
   ) {
     throw new OperationFailure({
       id: policyCard.href,
@@ -617,6 +616,28 @@ async function readsUnreadable(
     }
   }
   return false;
+}
+
+// Whether the realm this server serves `on`'s module from is one the asker may
+// not read. A module no realm here serves is read as the owner of the realm
+// that looked it up, as the draft rule above reads it, and so is not one. Nor
+// is a code ref that does not resolve, which describes no declaration.
+async function servesUnreadableModule(
+  core: OperationCore,
+  on: CodeRef,
+  asker: ScopeCaller,
+): Promise<boolean> {
+  let type: ResolvedCodeRef | undefined;
+  try {
+    type = core.resolveCodeRef(on, new URL(core.realmURL));
+  } catch {
+    return false;
+  }
+  if (!type) {
+    return false;
+  }
+  let served = await core.readsRealmOf?.(type.module, asker);
+  return served !== undefined && !served.read;
 }
 
 // What a search asked of the target's realm would compose, for the actor, and
