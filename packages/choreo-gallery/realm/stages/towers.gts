@@ -24,6 +24,7 @@ const TowersStage: TOC<StageSignature> = <template>
   <FilmStage
     class='tw-face'
     @face={{@face}}
+    @filmLink={{@filmLink}}
     @theater={{@theater}}
     @film='towers'
     @title='Towers — the film'
