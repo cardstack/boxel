@@ -176,10 +176,11 @@ export default class OperationsService
   // Who a render tab renders as: the actor the render server pinned on this
   // tab when it handed the tab its auth.
   //
-  // A render a user asks for — a capture, a command — runs on that user's
-  // ordinary sessions, and the realm server scopes its searches and judges its
-  // writes as that user, so the actor is that user: the one the realm already
-  // authenticates the render's requests as.
+  // A render a user asks for — a capture, a command — is handed that user's
+  // ordinary sessions, so the actor is the user who asked for it. The pinned
+  // value names who the render is for; it does not track which sessions the
+  // tab's requests end up carrying, which this tab's shared storage can still
+  // change.
   //
   // A render a realm makes of its own cards — indexing, the HTML render, a
   // module's definition render — runs on realm-authority sessions, and what it

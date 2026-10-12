@@ -150,7 +150,7 @@ export function renderActorFor(auth: string): string | null {
     if (typeof token !== 'string') {
       return null;
     }
-    let claims: { user?: unknown; realmAuthority?: unknown };
+    let claims: { user?: unknown; realmAuthority?: unknown } | null;
     try {
       claims = JSON.parse(
         Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
@@ -158,7 +158,12 @@ export function renderActorFor(auth: string): string | null {
     } catch (_e) {
       return null;
     }
-    if (claims.realmAuthority || typeof claims.user !== 'string') {
+    if (
+      !claims ||
+      typeof claims !== 'object' ||
+      claims.realmAuthority ||
+      typeof claims.user !== 'string'
+    ) {
       return null;
     }
     users.add(claims.user);
