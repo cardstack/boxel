@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
   archiveRealm,
+  Deferred,
   insertPermissions,
   param,
   query,
@@ -268,6 +269,52 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           await catalogRealmIds(),
           [],
           'the realm is no longer listed as a catalog',
+        );
+      });
+
+      test('a catalog change made while the list is being refreshed is not overwritten by that refresh', async function (assert) {
+        await query(context.dbAdapter, [
+          `INSERT INTO realm_metadata (url, show_as_catalog) VALUES (`,
+          param(testRealmURL.href),
+          `, `,
+          param(true),
+          `) ON CONFLICT (url) DO UPDATE SET show_as_catalog = `,
+          param(true),
+        ]);
+        resetCatalogRealms();
+
+        // Hold the refresh at its `_info` call until the catalog has changed.
+        let infoRequested = new Deferred<void>();
+        let releaseInfo = new Deferred<void>();
+        let holding = true;
+        context.virtualNetwork.mount(
+          async (req: Request) => {
+            if (holding && req.url.endsWith('/_info')) {
+              holding = false;
+              infoRequested.fulfill();
+              await releaseInfo.promise;
+            }
+            return null;
+          },
+          { prepend: true },
+        );
+        let staleRefresh = context.request
+          .get('/_catalog-realms')
+          .set('Accept', 'application/json')
+          .then((response) => response);
+        await infoRequested.promise;
+
+        let removed = await setRealmCatalog(
+          `realm=${encodeURIComponent(testRealmURL.href)}&catalog=false`,
+        );
+        assert.strictEqual(removed.status, 200, 'HTTP 200 removing the realm');
+        releaseInfo.fulfill();
+        await staleRefresh;
+
+        assert.deepEqual(
+          await catalogRealmIds(),
+          [],
+          'the list read after the change leaves the realm out',
         );
       });
 
