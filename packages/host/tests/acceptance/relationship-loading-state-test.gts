@@ -1,5 +1,15 @@
 import { settled, waitFor } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  getRelationshipMembershipState,
+  linksTo,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -14,21 +24,8 @@ import {
   testRealmURL,
   visitOperatorMode,
 } from '../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  getRelationshipMembershipState,
-  linksTo,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const SUBJECTS_MODULE = `${testRealmURL}subjects`;
 const LINKSTO_URL = `${testRealmURL}linksto-subject`;
@@ -84,7 +81,7 @@ async function mountGatedCard(
 }
 
 function relationship(url: string, fieldName: string) {
-  let card = getService('store').peek(url) as CardDefType;
+  let card = getService('store').peek(url) as CardDef;
   return getRelationshipMembershipState(card, fieldName);
 }
 
@@ -92,7 +89,6 @@ module(
   'Acceptance | getRelationshipMembershipState loading state',
   function (hooks) {
     setupApplicationTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

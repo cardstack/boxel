@@ -1,5 +1,16 @@
 import { click, render, waitFor } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  getDataBucket,
+  getRelationshipMembershipState,
+  linksTo,
+} from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -20,23 +31,9 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  Component,
-  contains,
-  field,
-  FileDef,
-  getDataBucket,
-  getRelationshipMembershipState,
-  linksTo,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const GHOST_URL = `${testRealmURL}Pet/ghost`;
 // A file reference is a path, so the realm never holds a `.json` alongside it —
@@ -44,11 +41,9 @@ const GHOST_URL = `${testRealmURL}Pet/ghost`;
 // `<Type>/<id>` shape a card reference has.
 const MISSING_IMAGE_URL = `${testRealmURL}Widget/images/photo.jpg`;
 
-// The cards are declared inside a helper rather than at module scope because the
-// base-realm helpers (CardDef, field, …) are only populated once
-// `setupBaseRealm` has run. The Person isolated template renders the same `pet`
-// link in all four view formats so a single render exercises the whole
-// placeholder format matrix; the edit template routes through LinksToEditor.
+// The Person isolated template renders the same `pet` link in all four view
+// formats so a single render exercises the whole placeholder format matrix; the
+// edit template routes through LinksToEditor.
 function makeCards() {
   // The `{{#if @model}}` guard keeps an unset link from rendering the card
   // chrome with an empty model, so "not-set renders nothing" can be asserted
@@ -115,7 +110,7 @@ function makeCards() {
 // the link 404s and the producer plants a `link-not-found` sentinel.
 async function createPerson(
   relationships: LooseCardResource['relationships'],
-): Promise<CardDefType> {
+): Promise<CardDef> {
   let store = getService('store');
   let resource: LooseCardResource = {
     attributes: { firstName: 'Hassan' },
@@ -126,10 +121,10 @@ async function createPerson(
     resource,
     { data: resource },
     new URL(testRealmURL),
-  )) as CardDefType;
+  )) as CardDef;
 }
 
-async function createWidget(): Promise<CardDefType> {
+async function createWidget(): Promise<CardDef> {
   let store = getService('store');
   let resource: LooseCardResource = {
     attributes: {},
@@ -139,7 +134,7 @@ async function createWidget(): Promise<CardDefType> {
     resource,
     { data: resource },
     new URL(testRealmURL),
-  )) as CardDefType;
+  )) as CardDef;
 }
 
 let loader: Loader;
@@ -148,7 +143,6 @@ module(
   'Integration | linksTo broken-link placeholder (singular)',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

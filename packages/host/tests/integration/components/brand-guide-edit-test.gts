@@ -7,8 +7,6 @@ import type { Loader } from '@cardstack/runtime-common';
 import { PermissionsContextName } from '@cardstack/runtime-common';
 
 import { provideConsumeContext } from '../../helpers';
-
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -17,7 +15,6 @@ import type * as StructuredThemeVarsModule from '@cardstack/base/structured-them
 
 module('Integration | brand-guide | edit view', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let BrandGuide: typeof BrandGuideModule.default;

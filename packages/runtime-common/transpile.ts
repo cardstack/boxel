@@ -18,7 +18,10 @@ import decoratorTransforms from 'decorator-transforms';
 //@ts-ignore no upstream types
 import * as emberCompiler from 'ember-source/ember-template-compiler/index.js';
 
-import * as ContentTag from 'content-tag';
+import {
+  contentTagPreprocessor,
+  loadContentTag,
+} from './content-tag-loader.ts';
 
 import { md5 } from 'super-fast-md5';
 
@@ -56,7 +59,8 @@ export async function transpileJS(
     return '';
   }
 
-  const processor = new ContentTag.Preprocessor();
+  await loadContentTag();
+  const processor = contentTagPreprocessor();
   // content-tag surfaces this filename in user-facing "Parse Error at ..."
   // messages. The caller passes an absolute path (e.g. "/broken.gts") so
   // babel's moduleName resolution is deterministic, but for error messages

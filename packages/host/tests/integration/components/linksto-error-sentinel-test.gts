@@ -1,5 +1,18 @@
 import { render, waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  contains,
+  field,
+  getBrokenLinks,
+  getDataBucket,
+  getRelationshipMembershipState,
+  linksTo,
+  linksToMany,
+  subscribeToChanges,
+  unsubscribeFromChanges,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -19,20 +32,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  contains,
-  field,
-  getBrokenLinks,
-  getDataBucket,
-  getRelationshipMembershipState,
-  linksTo,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-  subscribeToChanges,
-  unsubscribeFromChanges,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -40,13 +39,12 @@ import type {
   RelationshipState,
   RelationshipStatus,
 } from '@cardstack/base/card-api';
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as FieldSupportModule from '@cardstack/base/field-support';
 
 // A terminal sentinel never escapes the field getter — userland reads
 // `undefined` — so tests read the raw bucket entry to observe the planted
 // shape, and `getRelationshipMembershipState` to observe the structured failure.
-function bucketEntry(instance: CardDefType, fieldName: string): any {
+function bucketEntry(instance: CardDef, fieldName: string): any {
   return getDataBucket(instance).get(fieldName);
 }
 
@@ -58,9 +56,6 @@ function singularState(rel: RelationshipStatus): RelationshipState {
   return membership[0];
 }
 
-// The base-realm helpers (CardDef, field, …) are only populated once
-// `setupBaseRealm` has run, so cards must be declared inside a test rather than
-// at module scope.
 function makeCards() {
   class Pet extends CardDef {
     @field firstName = contains(StringField);
@@ -78,7 +73,7 @@ function makeCards() {
 // (and its failure path) rather than surfacing a persisted error doc.
 async function createPerson(
   relationships: LooseCardResource['relationships'],
-): Promise<CardDefType & { pet: unknown; pets: unknown }> {
+): Promise<CardDef & { pet: unknown; pets: unknown }> {
   let store = getService('store');
   let resource: LooseCardResource = {
     attributes: { firstName: 'Hassan' },
@@ -89,7 +84,7 @@ async function createPerson(
     resource,
     { data: resource },
     new URL(testRealmURL),
-  )) as CardDefType & { pet: unknown; pets: unknown };
+  )) as CardDef & { pet: unknown; pets: unknown };
 }
 
 let loader: Loader;
@@ -98,7 +93,6 @@ let isLinkNotFound: (typeof FieldSupportModule)['isLinkNotFound'];
 
 module('Integration | linksTo error sentinel producer', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {

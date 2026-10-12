@@ -186,4 +186,21 @@ module('Pretui | components/table', function (hooks) {
     assert.strictEqual(table.getAttribute('aria-labelledby'), 'lots-heading', 'the on-screen name is used');
     assert.notOk(table.hasAttribute('aria-label'), 'and the typed-in name is dropped, so the two cannot disagree');
   });
+
+  test('a table is framed by default, and @framed=false marks it frameless', async function (assert) {
+    await render(
+      <template>
+        <Table data-test-framed>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+        <Table @framed={{false}} data-test-frameless>
+          <:head><tr><th>Lot</th></tr></:head>
+          <:body><tr><td>Keemun</td></tr></:body>
+        </Table>
+      </template>,
+    );
+    assert.notOk(q('[data-test-framed]').hasAttribute('data-framed'), 'the default carries no frameless marker');
+    assert.strictEqual(q('[data-test-frameless]').getAttribute('data-framed'), 'false', 'a frameless table says so');
+  });
 });

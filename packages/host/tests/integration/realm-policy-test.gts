@@ -7,6 +7,7 @@ import {
   type RenderingTestContext,
 } from '@ember/test-helpers';
 
+import { serializeCard } from '@cardstack/base/card-api';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -32,7 +33,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { serializeCard, setupBaseRealm } from '../helpers/base-realm';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
@@ -163,7 +163,6 @@ const classroomPolicy = policyDocument([
 
 module('Integration | realm policy', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 
@@ -602,7 +601,7 @@ module('Integration | realm policy', function (hooks) {
       'each grant reads as it now stands',
     );
 
-    let rules = serializeCard(policy).data.attributes?.rules as {
+    let rules = serializeCard(policy, {}).data.attributes?.rules as {
       grants: {
         operation: string;
         where: unknown;
@@ -676,7 +675,7 @@ module('Integration | realm policy', function (hooks) {
     let grant = policy.rules[0].grants[1];
     (grant as { where: unknown }).where = providerPredicate;
     assert.throws(
-      () => serializeCard(policy),
+      () => serializeCard(policy, {}),
       /a policy predicate in memory must be \{ source, snapshot \}/,
       'a bare string on the instance fails the save instead of being written',
     );
@@ -686,13 +685,13 @@ module('Integration | realm policy', function (hooks) {
       snapshot: true,
     };
     assert.throws(
-      () => serializeCard(policy),
+      () => serializeCard(policy, {}),
       /a policy predicate in memory must be \{ source, snapshot \}/,
       'so does the annotated document shape',
     );
 
     grant.where = { source: providerPredicate, snapshot: true };
-    let serialized = serializeCard(policy);
+    let serialized = serializeCard(policy, {});
     assert.deepEqual(
       (
         serialized.data.attributes?.rules as {
@@ -1451,7 +1450,6 @@ function definedClassroom(teacherIds: string[]) {
 
 module('Integration | realm policy explain forms', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 

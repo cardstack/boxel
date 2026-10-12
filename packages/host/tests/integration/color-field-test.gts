@@ -1,14 +1,13 @@
 import { settled } from '@ember/test-helpers';
 
+import ColorField from '@cardstack/base/color';
 import { module, test } from 'qunit';
 
-import { setupBaseRealm, ColorField } from '../helpers/base-realm';
 import { renderConfiguredField } from '../helpers/field-test-helpers';
 import { setupRenderingTest } from '../helpers/setup';
 
 module('Integration | color field configuration', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   // ============================================
   // Valid Variant Configuration Tests

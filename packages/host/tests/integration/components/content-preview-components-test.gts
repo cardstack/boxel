@@ -6,7 +6,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -23,7 +22,6 @@ import type * as VideoDefModule from '@cardstack/base/video-file-def';
 // which stays with the default FileDef format templates.
 module('Integration | content-only file preview components', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   let loader: Loader;
   let fileFormats: typeof FileFormatsModule;

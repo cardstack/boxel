@@ -1,5 +1,15 @@
 import { waitUntil } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  FieldDef,
+  contains,
+  field,
+  getDataBucket,
+  getRelationshipMembershipState,
+  linksToMany,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -20,24 +30,10 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  FieldDef,
-  contains,
-  field,
-  getDataBucket,
-  getRelationshipMembershipState,
-  linksToMany,
-  setupBaseRealm,
-  StringField,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-import type {
-  CardDef as CardDefType,
-  RelationshipState as RelationshipStateType,
-} from '@cardstack/base/card-api';
+import type { RelationshipState as RelationshipStateType } from '@cardstack/base/card-api';
 
 const MANGO_URL = `${testRealmURL}Pet/mango`;
 const VANGOGH_URL = `${testRealmURL}Pet/vangogh`;
@@ -70,7 +66,6 @@ module(
     let loader: Loader;
 
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -172,7 +167,7 @@ module(
         if (c == null) {
           continue;
         }
-        names.push((c as CardDefType & { firstName: string }).firstName);
+        names.push((c as CardDef & { firstName: string }).firstName);
       }
       assert.deepEqual(
         names,
@@ -274,7 +269,7 @@ module(
         resource,
         { data: resource },
         new URL(testRealmURL),
-      )) as CardDefType & { pets: ({ firstName: string } | undefined)[] };
+      )) as CardDef & { pets: ({ firstName: string } | undefined)[] };
 
       // First read returns the array (length 2) with both slots hidden while the
       // loads are in flight, and kicks off lazilyLoadLink for each.

@@ -7,6 +7,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import { CardDef, contains, field, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { provide, consume } from 'ember-provide-consume-context';
 import { module, test } from 'qunit';
 
@@ -22,14 +24,6 @@ import {
   testRealmURL,
   testRRI,
 } from '../../helpers';
-import {
-  CardDef,
-  StringField,
-  contains,
-  field,
-  setupBaseRealm,
-  Component,
-} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -76,8 +70,6 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
-
-  setupBaseRealm(hooks);
 
   module('getCards', function (hooks) {
     hooks.beforeEach(async function (this: RenderingTestContext) {

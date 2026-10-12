@@ -13,6 +13,9 @@ export default defineConfig([
     'docs/film-graph/**/*.gts',
     'docs/film-graph/**/*.mjs',
     'out/**',
+    // the film app's build (choreo-film-app) and the films' vendored scripts
+    'realm/film-app/**',
+    'realm/asset/**',
   ]),
   base,
   {

@@ -19,6 +19,7 @@ import {
 import type {
   DBAdapter,
   DefinitionLookup,
+  ExecuteOptions,
   Expression,
   LooseSingleCardDocument,
   Prerenderer,
@@ -2364,6 +2365,64 @@ module(basename(import.meta.filename), function () {
               row.realm_url === foreignRealmURL && row.hash === foreignHash,
           ),
           "another realm's rows are untouched, even unreferenced ones",
+        );
+      });
+
+      // The sweep's scan is a snapshot, so a hash it selected can be interned
+      // again — and referenced — before the delete reaches it. Interning
+      // refreshes `last_interned_at`, which is what the grace window reads, so
+      // the delete has to re-apply the cutoff rather than trust the scan's
+      // list. This drives that ordering by interleaving the intern on the
+      // adapter, between the scan's SELECT and the delete.
+      test('sweepUnreferencedScopedCSS keeps a row re-interned after its scan', async function (assert) {
+        let racedHash = 'd'.repeat(32);
+        let sweepable = Date.now() - 2 * 24 * 60 * 60 * 1000;
+        await testDbAdapter.execute(
+          `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at)
+           VALUES ($1, $2, $3, $4)`,
+          { bind: [realm.url, racedHash, '.raced {}', sweepable] },
+        );
+
+        let interned = false;
+        let interleavingAdapter = new Proxy(testDbAdapter, {
+          get(target, prop, receiver) {
+            if (prop !== 'execute') {
+              return Reflect.get(target, prop, receiver);
+            }
+            return async (sql: string, opts?: ExecuteOptions) => {
+              let result = await target.execute(sql, opts);
+              // The scan that builds the delete list; everything before it is
+              // the reference scan over the index tables.
+              if (!interned && /SELECT hash FROM scoped_css/i.test(sql)) {
+                interned = true;
+                await target.execute(
+                  `UPDATE scoped_css SET last_interned_at = $1
+                     WHERE realm_url = $2 AND hash = $3`,
+                  { bind: [Date.now(), realm.url, racedHash] },
+                );
+              }
+              return result;
+            };
+          },
+        }) as DBAdapter;
+
+        let swept = await sweepUnreferencedScopedCSS(
+          interleavingAdapter,
+          realm.url,
+        );
+
+        assert.true(
+          interned,
+          'precondition: the intern was interleaved on the scan',
+        );
+        let survived = (await testDbAdapter.execute(
+          `SELECT hash FROM scoped_css WHERE realm_url = $1 AND hash = $2`,
+          { bind: [realm.url, racedHash] },
+        )) as { hash: string }[];
+        assert.deepEqual(
+          { swept, survived: survived.length },
+          { swept: 0, survived: 1 },
+          'the re-interned row is withheld from the delete and not counted as swept',
         );
       });
 

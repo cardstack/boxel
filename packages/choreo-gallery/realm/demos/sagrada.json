@@ -45,8 +45,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../demo",
-        "name": "GalleryDemo"
+        "module": "../stages/sagrada",
+        "name": "SagradaDemo"
       }
     }
   }

@@ -328,6 +328,13 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: '@cardstack/choreo/film/titles',
     resolve: () => import('@cardstack/choreo/film/titles'),
   });
+  // choreo-player, the headless transport that drives Choreo runs from an
+  // external clock: a card that composes runs into one timeline, such as the
+  // gallery's feature reel, seeks them through it.
+  virtualNetwork.shimAsyncModule({
+    id: '@cardstack/choreo-player',
+    resolve: () => import('@cardstack/choreo-player'),
+  });
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),

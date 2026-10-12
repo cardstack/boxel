@@ -8,13 +8,13 @@
 // 1. `cssValue` — the guard for caller-supplied strings that reach CSS
 // ─────────────────────────────────────────────────────────────────────────
 //
-// Law 2 routes a hue through nearly every component, and a hue arrives as a
+// A hue is routed through nearly every component, and it arrives as a
 // caller string. Interpolating that string into an inline style and handing
 // it to `htmlSafe` lets `red; background: url(https://evil/x)` inject
 // arbitrary declarations — `htmlSafe` means "I have already made this safe",
 // and nothing had.
 //
-// The guard is an ALLOWLIST, not a sanitiser: it validates and returns the
+// The guard is an ALLOWLIST, not a sanitizer: it validates and returns the
 // value unchanged, or returns `undefined` for anything it does not fully
 // understand. It never strips-and-continues, because strip-and-continue is
 // how a value that looked harmless after cleaning turns out not to be.
@@ -28,10 +28,10 @@
 // 2. `--pretui-z-*` — the stacking scale
 // ─────────────────────────────────────────────────────────────────────────
 //
-// Seven components in the kit float above the page — Popup, Popover, Dialog,
-// Drawer, Tooltip, Menu, Toast — and before this scale each picked its own
-// integer, so they could not be ordered among themselves, and a host
-// application could not slot its own chrome between them.
+// The kit's floating surfaces (Popup, and Popover through it; Dialog,
+// Drawer, Tooltip, Menu and the other dropdowns; Toaster) take their tier
+// from one scale, so they order among themselves and a host can slot its own
+// chrome between them.
 //
 // The order, and why it is this order:
 //
@@ -51,9 +51,13 @@
 //                floating surface. Always one step BELOW the surface it
 //                dismisses and above everything the surface covers — a scrim
 //                that outranks its own panel eats the panel's clicks.
-//   dropdown 60  Menu, Select's listbox, Combobox, CommandPalette. Anchored
-//                to a trigger, dismissed by an outside click, and always
-//                subordinate to a panel that may contain it.
+//   dropdown 60  Menu (MenuPanel), MultiSelect, TreeSelect, Cascader,
+//                NavigationMenu, Mentions, EmojiPicker and Autocomplete.
+//                Anchored to a trigger, dismissed by an outside click, and
+//                always subordinate to a panel that may contain it. Select and
+//                Combobox render boxel-ui's listbox, which takes boxel-ui's
+//                own layer (above toast), and CommandPalette is a modal
+//                <dialog> in the top layer.
 //   overlay 70   Popup and Popover — a deliberate floating panel. Above
 //                dropdown because a Popover can contain a Select, and the
 //                containing panel must never paint under its own content.
@@ -64,21 +68,27 @@
 //   dialog  90   Dialog and Drawer. FALLBACK ONLY: both use native
 //                `<dialog>` + `showModal()`, which promotes them to the top
 //                layer, above every z-index on the page regardless of value.
-//                The token exists so a non-modal or polyfilled variant lands
-//                in the right place, and so the intended rank is written
-//                down rather than implied by the platform.
+//                Nothing reads this token; it records the intended rank
+//                rather than leaving it implied by the platform.
 //   toast   100  the last word. A toast reports something that just happened
 //                and must stay readable over whatever is open, including a
 //                modal — so it is the only tier deliberately above `dialog`.
+//                Toaster's fixed region and SkipLink take it; a bare Toast is
+//                in flow and takes no tier, so whatever positions one owns
+//                its z-index.
 //
 // The numbers are gapped so a host can interleave its own chrome (a global
 // nav at 65, an assistant panel at 85) without editing Pretui.
 //
-// **Consumption rule.** Every component writes
-// `z-index: var(--pretui-z-<tier>, <the number above>)`. The literal fallback
-// is not optional and is not a guess — it is this table, restated, so a
-// season that has never defined these tokens renders in exactly the same
-// order. A season redefines a token to move a whole tier at once.
+// **Consumption rule.** A component that stacks against OTHER components
+// writes `z-index: var(--pretui-z-<tier>, <the number above>)`. The literal
+// fallback is not optional and is not a guess — it is this table, restated,
+// so a host that has never defined these tokens renders in exactly the same
+// order; a host redefines a token to move a whole tier at once. Layering
+// inside one component's own box (a 1, 2 or 3) is the `raised` role and
+// stays literal. Exceptions that still pick their own number: PageScaffold's
+// skip link (20) and sticky masthead (10), FloatButton (--pretui-float-z, 20)
+// and Backdrop (--pretui-backdrop-z, 50).
 
 import { htmlSafe } from '@ember/template';
 
@@ -119,7 +129,7 @@ const ALLOWED_FUNCTIONS = new Set([
   'clamp',
   'round',
   'abs',
-  // colour
+  // color
   'rgb',
   'rgba',
   'hsl',
@@ -131,8 +141,7 @@ const ALLOWED_FUNCTIONS = new Set([
   'oklch',
   'color',
   'color-mix',
-  // gradients — added 2026-08-13 after the colour work measured the gap.
-  // Their ARGUMENTS are still validated by the same character and function
+  // gradients. Their ARGUMENTS are still validated by the same character and function
   // allowlist, so admitting the names widens nothing: `url()` and `attr()`
   // remain rejected wherever they appear, at any nesting depth.
   'linear-gradient',
@@ -158,12 +167,9 @@ const CALL = /([A-Za-z][A-Za-z0-9-]*)?\(/g;
 /** Anything starting `#` up to the next separator. */
 const HEXISH = /#[^\s,()]*/g;
 
-/** Longer than any legitimate colour, length or gradient stop list. */
-// 256 was chosen for hand-authored values and was wrong for GENERATED ones: a
-// 32-step channel track measures 1069 chars and a 20-step track 629, so an
-// 8-stop gradient already exceeded the old cap and was silently dropped. The
-// cap exists to bound the parser's work, not to police intent — 4096 keeps
-// that bound while admitting every gradient the kit actually emits.
+/** Longer than any legitimate color, length or gradient stop list. */
+// Bounds the parser's work; generated gradient tracks run past 1000
+// characters (a 32-step channel track is 1069), so the cap sits well above.
 const MAX_VALUE_LENGTH = 4096;
 
 /** Deeper than `color-mix(in oklch, var(--a, oklch(…)) 40%, var(--b))`. */
@@ -226,7 +232,7 @@ export function cssValue(raw: unknown): string | undefined {
     }
     call = CALL.exec(value);
   }
-  // Every `#` introduces a well-formed hex colour.
+  // Every `#` introduces a well-formed hex color.
   HEXISH.lastIndex = 0;
   let hex = HEXISH.exec(value);
   while (hex !== null) {
@@ -252,7 +258,6 @@ const NUMERIC = /^-?(?:\d+\.?\d*|\.\d+)$/;
  * falls through to whatever the stylesheet's own fallback is — the caller
  * loses their override, never the component's rendering.
  */
-
 export function cssDeclaration(
   property: string,
   raw: unknown,
@@ -363,7 +368,7 @@ export function zVarName(layer: PretuiZLayer): string {
 }
 
 /**
- * The scale as CSS custom properties, for a season or host stylesheet that
+ * The scale as CSS custom properties, for a host stylesheet that
  * wants to declare them explicitly. Declaring them changes nothing on its
  * own — every consumer already falls back to these exact numbers — but it
  * gives one place to shift a whole tier.

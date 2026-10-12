@@ -40,7 +40,7 @@ export default class AddFieldToCardDefinitionTool extends HostBaseTool<
       await this.cardService.getSource(input.cardDefinitionToModify.module)
     ).content;
 
-    let moduleSyntax = new ModuleSyntax(
+    let moduleSyntax = await ModuleSyntax.create(
       moduleSource,
       input.cardDefinitionToModify.module,
       this.network.virtualNetwork,

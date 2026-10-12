@@ -61,9 +61,10 @@ export class EmptyState extends Component<EmptyStateSignature> {
       {{#if this.showTexture}}<div class='pretui-empty-texture'></div>{{/if}}
       <div class='pretui-empty-title'>{{@title}}</div>
       {{#if (has-block)}}
+        {{! A div, not a p: the caller's markup may contain block elements. }}
         <div class='pretui-empty-msg'>{{yield}}</div>
       {{else if @message}}
-        <div class='pretui-empty-msg'>{{@message}}</div>
+        <p class='pretui-empty-msg'>{{@message}}</p>
       {{/if}}
       {{#if (has-block 'altAction')}}
         <div class='pretui-empty-paths'>
@@ -81,16 +82,17 @@ export class EmptyState extends Component<EmptyStateSignature> {
           display: grid;
           place-items: center;
           text-align: center;
-          gap: var(--space-3, 8px);
-          padding: var(--space-9, 45px) var(--space-6, 19px);
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-3xl) var(--boxel-sp-lg);
           position: relative;
           overflow: hidden;
-          border-radius: var(--radius-surface, 10px);
-          background: var(--canvas, var(--boxel-100));
+          border-radius: var(--radius);
+          background-color: var(--canvas);
+          color: var(--foreground);
         }
         /* compact: the well an empty note sits in inside a card section */
         .pretui-empty[data-size='s'] {
-          padding: 1rem;
+          padding: var(--boxel-sp);
         }
         .pretui-empty-texture {
           position: absolute;
@@ -105,20 +107,21 @@ export class EmptyState extends Component<EmptyStateSignature> {
         .pretui-empty-title {
           position: relative;
           font-family: var(--font-serif);
-          font-size: var(--text-heading, 19px);
+          font-size: var(--boxel-heading-font-size);
+          font-weight: var(--boxel-heading-font-weight);
         }
         .pretui-empty[data-size='s'] .pretui-empty-title {
-          font-size: var(--boxel-font-size, 1rem);
+          font-size: var(--boxel-font-size);
         }
         .pretui-empty-msg {
           position: relative;
-          font-size: var(--text-ui-md, 12.5px);
-          color: var(--muted-foreground);
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
           max-width: 34ch;
         }
         .pretui-empty-action {
           position: relative;
-          margin-top: var(--space-2, 6px);
+          margin-top: var(--boxel-sp-2xs);
         }
         /* Two equal paths with a rule between. The rule is drawn on the
            separator itself so it stretches to whatever the row/column is —
@@ -134,27 +137,24 @@ export class EmptyState extends Component<EmptyStateSignature> {
           flex-wrap: wrap;
           align-items: center;
           justify-content: center;
-          gap: var(--space-4, 11px);
+          gap: var(--boxel-sp-sm);
         }
         .pretui-empty-sep {
           display: flex;
           align-items: center;
-          gap: var(--space-3, 8px);
-          margin-top: var(--space-2, 6px);
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--ink-3, var(--boxel-400));
+          flex: 1 1 6rem;
+          gap: var(--boxel-sp-xs);
+          margin-top: var(--boxel-sp-2xs);
+          font-size: var(--boxel-font-size-2xs);
           text-transform: lowercase;
         }
         .pretui-empty-sep::before,
         .pretui-empty-sep::after {
           content: '';
           flex: 1;
-          min-inline-size: 12px;
+          min-inline-size: var(--boxel-sp-sm);
           block-size: 1px;
-          background: var(--border);
-        }
-        .pretui-empty-sep {
-          flex: 1 1 6rem;
+          background-color: var(--border);
         }
       }
     </style>

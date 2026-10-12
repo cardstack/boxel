@@ -1,8 +1,6 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { motion } from 'glimmer-motion';
-import { animate } from 'motion';
-import { motionValue } from 'motion-dom';
+import { animate, motion, motionValue } from 'glimmer-motion';
 import { tuneMotion } from 'test-app/lib/demo-tuning';
 import { preventSelect } from 'test-app/lib/pointer';
 

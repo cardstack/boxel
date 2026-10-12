@@ -27,8 +27,8 @@ The canonical spec is **GOV.UK's Error Summary**: render at the top of `<main>` 
 
 Two deliberate deltas from the pattern as usually written:
 
-1. **Rows are buttons, not `href="#id"` anchors.** An anchor mutates the URL, and inside a Boxel card the URL is the *card's* — a fragment jump there is a navigation, not a focus move. The button calls `focusPath()` and lands focus on exactly the element the anchor would have. This is the right call in this environment and it is worth noting that it costs you the ability to copy a link to a specific error.
-2. **The shell is not **Alert****, even though it would have been one line. Alert hardcodes `role="alert"` (danger) or `role="status"` — a live region that would re-announce the whole list on every keystroke in `live` mode, and double-announce at submit on top of the focus move. **The summary announces by taking focus**, which is the whole point of it.
+1. **Rows are buttons, not `href="#id"` anchors.** An anchor mutates the URL, and inside a Boxel card the URL is the _card's_ — a fragment jump there is a navigation, not a focus move. The button calls `focusPath()` and lands focus on exactly the element the anchor would have. This is the right call in this environment and it is worth noting that it costs you the ability to copy a link to a specific error.
+2. **The shell is not **Alert\***\*, even though it would have been one line. Alert hardcodes `role="alert"` (danger) or `role="status"` — a live region that would re-announce the whole list on every keystroke in `live` mode, and double-announce at submit on top of the focus move. **The summary announces by taking focus\*\*, which is the whole point of it.
 
 The third improvement over the pattern: GOV.UK's summary lists only the errors it was given. Pretui's marks unrouted issues explicitly, which is the difference between a summary you can trust and one you hope is complete.
 
@@ -47,7 +47,7 @@ Gaps:
 
 - **The summary is not focused automatically on render** — it is focused only when `Form.focusInvalid()` runs with `@focusOnInvalid='summary'`, or as the fallback when no invalid field element can be found. GOV.UK's pattern focuses the summary on page load after a server-side rejection; there is no equivalent hook here, so a form re-rendered with issues from a server round trip announces nothing until the user submits again.
 - **Messages are printed verbatim from the rule author.** That is the right architectural choice — rewriting rule copy in a component is how enterprise forms end up lying about what failed — but it means WCAG 3.3.3 conformance depends entirely on how the rules were written, and no component can save you there.
-- **`@showAdvisory` defaults to false**, so warnings and info are absent from the summary by default while still appearing on their fields. That is defensible (the summary is a blocking-issues index) but it means the summary is *not* a complete list of what the form is saying unless you turn it on.
+- **`@showAdvisory` defaults to false**, so warnings and info are absent from the summary by default while still appearing on their fields. That is defensible (the summary is a blocking-issues index) but it means the summary is _not_ a complete list of what the form is saying unless you turn it on.
 - The unrouted marking is visible text, not a distinct role or state — assistive tech hears it as part of the row, which is adequate but undifferentiated.
 - Buttons rather than links means the rows do not appear in a screen reader's link list, which is where some users would look for them.
 
@@ -55,6 +55,6 @@ Gaps:
 
 `--destructive`, `--warning`, `--pretui-info` and their on-colours for the severity tiers; `--card` or `--inset` for the shell, `--border` and `--pretui-shadow-hairline` for its edge, `--foreground` and `--muted-foreground` for heading and body ink, plus **Token**'s tokens when rule provenance is shown.
 
-Severity is carried by the same glyph vocabulary as **Alert** (`✕` / `!` / `i`) so a field message, a summary row and a banner about the same thing read as one system. A season that retunes those hues must retune them in all three places or the correspondence breaks — and because severity is conveyed by glyph *and* hue, it survives WCAG 1.4.1 even if a season's hues collapse.
+Severity is carried by a glyph and a hue, as in **Alert**, so a field message, a summary row and a banner about the same thing read as one system. A theme that retunes those hues must retune them in all three places or the correspondence breaks — and because severity is conveyed by glyph _and_ hue, it survives WCAG 1.4.1 even if a season's hues collapse.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

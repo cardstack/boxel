@@ -17,7 +17,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -181,7 +180,6 @@ function recordingTransport(): { sent: SentRequest[] } {
 
 module('Integration | tools | invoke-card-operation', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(hooks, async () =>
     getService('loader-service').loader.import('@cardstack/base/card-api'),

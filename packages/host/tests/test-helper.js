@@ -5,6 +5,7 @@ import { setApplication } from '@ember/test-helpers';
 import { setConfig as setBasicDropdownConfig } from 'ember-basic-dropdown/config';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
 import { start as examStart } from 'ember-exam/test-support';
+import { loadContentTag } from '@cardstack/runtime-common/content-tag-loader';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
@@ -14,6 +15,10 @@ import { selectShardModules } from './helpers/shard-modules';
 import testModuleTimings from './test-module-timings.json';
 
 export async function start(examOptions) {
+  // Tests compare and parse .gts source synchronously (`assert.codeEqual`,
+  // `new ModuleSyntax`), which needs content-tag already loaded.
+  await loadContentTag();
+
   // Before anything renders: card code reads the clock through a seam, and
   // pinning it here is what stops a rendered elapsed time depending on when
   // the suite ran.

@@ -25,7 +25,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupCatalogTestSubset } from '../../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -133,7 +132,6 @@ module('Integration | policy-scoped search', function (hooks) {
   let storeService: StoreService;
 
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 

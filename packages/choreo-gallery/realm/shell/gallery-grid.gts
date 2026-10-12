@@ -326,6 +326,9 @@ export class GalleryGrid extends Component<Signature> {
             class={{if (this.veiled demo.slug) 'card is-veiled' 'card'}}
             {{! the crossing finds the tile it lands on by this attribute }}
             data-gallery-tile={{demo.slug}}
+            {{! a leaving tile is on its way out: it takes no pointer, focus or
+              screen reader, so nothing reaches a tile that is fading away }}
+            inert={{unless h.isPresent true}}
             {{motion
               role='card'
               presence=h
@@ -343,13 +346,18 @@ export class GalleryGrid extends Component<Signature> {
               {{motion id=(concat 'stage-' demo.slug) role='stage'}}
             >
               {{#if (this.stageLive demo.slug)}}
-                <DemoStage @demo={{demo}} />
+                <DemoStage
+                  @demo={{demo}}
+                  @face='tile'
+                  @open={{fn @nav.openInTheater demo.slug}}
+                />
               {{/if}}
             </div>
             <GalleryLink
               @href={{@nav.hrefFor demo.slug}}
               @onFollow={{fn @nav.go demo.slug}}
               class='card-meta'
+              data-test-gallery-tile-link={{demo.slug}}
             >
               <span
                 class='card-group'

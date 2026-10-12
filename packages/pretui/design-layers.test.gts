@@ -722,8 +722,14 @@ module('Pretui | design-layers | demo pages', function (hooks) {
       assert.ok(Demo, name + ' is in the registry');
       await render(<template><Demo /></template>);
       assert.ok(
-        root().querySelector('.FreestyleUsage'),
+        root().querySelector('[data-test-pretui-usage]'),
         name + ' rendered its usage shell',
+      );
+      assert.ok(
+        Array.from(root().querySelectorAll('[data-test-pretui-viewport-specimen]')).some(
+          (s) => s.childElementCount > 0 || Boolean(s.textContent?.trim()),
+        ),
+        name + ' shows its example',
       );
     });
   }

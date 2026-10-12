@@ -29,8 +29,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../demo",
-        "name": "GalleryDemo"
+        "module": "../stages/subdivision",
+        "name": "SubdivisionDemo"
       }
     }
   }

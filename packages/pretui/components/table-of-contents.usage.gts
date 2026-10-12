@@ -212,7 +212,7 @@ class TableOfContentsUsage extends Component {
       .toc-layout {
         display: grid;
         grid-template-columns: 13rem 1fr;
-        gap: var(--space-5, 14px);
+        gap: var(--boxel-sp);
         align-items: start;
         min-width: 0;
       }
@@ -223,38 +223,35 @@ class TableOfContentsUsage extends Component {
       .toc-doc {
         max-height: 19rem;
         overflow-y: auto;
-        padding: var(--space-4, 11px) var(--space-5, 14px);
-        border-radius: var(--radius-surface, 10px);
-        background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        box-shadow: 0 0 0 1px var(--border);
         min-width: 0;
       }
       .toc-h {
-        margin: 14px 0 4px;
-        font-size: var(--text-ui-lg, 13.5px);
+        margin: var(--boxel-sp) 0 var(--boxel-sp-3xs);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
-        color: var(--foreground);
       }
       .toc-h-sub {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
       .toc-doc section:first-child .toc-h {
         margin-top: 0;
       }
       .toc-p {
-        margin: 0 0 6px;
-        font-size: var(--text-ui-md, 12.5px);
+        margin: 0 0 var(--boxel-sp-2xs);
+        font-size: var(--boxel-font-size-xs);
         line-height: 1.55;
         color: var(--muted-foreground);
         max-width: 56ch;
       }
       .sd-readout {
-        margin: 10px 0 0;
-        font-size: var(--text-ui-sm, 11.5px);
+        margin: var(--boxel-sp-xs) 0 0;
+        font-size: var(--boxel-font-size-2xs);
         color: var(--muted-foreground);
       }
       /* unnamed container query only — the named forms silently delete every

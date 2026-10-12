@@ -7,6 +7,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { CardsGrid } from '@cardstack/base/cards-grid';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -46,8 +47,6 @@ import {
 // distinct in the host config, but in this test environment they
 // resolve to the same value, so one const covers both.
 const publishedSpaceHost = ENV.publishedRealmBoxelSpaceDomain;
-
-import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -122,8 +121,6 @@ module('Acceptance | host submode', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
-
-  setupBaseRealm(hooks);
 
   let realmContents: any;
 

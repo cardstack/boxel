@@ -1,3 +1,5 @@
+import { CardDef, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -5,16 +7,7 @@ import CardStore, {
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-card-store';
 
-import {
-  CardDef,
-  contains,
-  field,
-  StringField,
-  setupBaseRealm,
-} from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
-
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 const CARD = 'http://test-realm/test/Pet/mango';
 const OTHER_CARD = 'http://test-realm/other/Pet/ghost';
@@ -26,7 +19,6 @@ const OTHER_CARD = 'http://test-realm/other/Pet/ghost';
 // with none of them says no.
 module('Unit | resident instance reuse', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.afterEach(function () {
     delete (globalThis as any).__boxelRenderContext;
@@ -38,13 +30,11 @@ module('Unit | resident instance reuse', function (hooks) {
     (globalThis as any).__boxelJobId = '17.23';
   }
 
-  // Built per test: the base-realm definitions these extend are only loaded
-  // once `setupBaseRealm` has run.
-  function makePet(name: string): CardDefType {
+  function makePet(name: string): CardDef {
     class Pet extends CardDef {
       @field firstName = contains(StringField);
     }
-    return new Pet({ firstName: name }) as CardDefType;
+    return new Pet({ firstName: name }) as CardDef;
   }
 
   function makeStore(coveredIds?: string[]): CardStore {

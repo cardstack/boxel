@@ -1,5 +1,16 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 
+import {
+  FieldDef,
+  contains,
+  containsMany,
+  linksTo,
+  linksToMany,
+  Component,
+  CardDef,
+  field,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -32,18 +43,6 @@ import {
   getFileCreatedAt,
   realmConfigCardJSON,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  FieldDef,
-  contains,
-  containsMany,
-  linksTo,
-  linksToMany,
-  Component,
-  CardDef,
-  StringField,
-  field,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { searchCardsForTest } from '../helpers/search-cards';
 import { setupRenderingTest } from '../helpers/setup';
@@ -57,7 +56,6 @@ let loader: Loader;
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;

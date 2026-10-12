@@ -29,8 +29,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../demo",
-        "name": "GalleryDemo"
+        "module": "../stages/path",
+        "name": "PathDrawDemo"
       }
     }
   }

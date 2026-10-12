@@ -14,6 +14,7 @@ import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
@@ -692,6 +693,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_TOOL_RESULT_EVENT_TYPE:
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
+      case APP_BOXEL_COMPACTION_EVENT_TYPE:
       case APP_BOXEL_REALM_EVENT_TYPE:
       case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':

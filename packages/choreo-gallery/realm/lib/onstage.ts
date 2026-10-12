@@ -19,8 +19,33 @@ import { modifier } from 'ember-modifier';
  * `rootMargin` is generous on purpose. A demo that starts the instant its top
  * edge crosses the fold arrives already moving; one that waits for the exact
  * boundary arrives frozen and then jerks into life a frame later, which reads
- * as a bug rather than as an optimisation.
+ * as a bug rather than as an optimisation. The margin is measured against the
+ * element that actually scrolls the stage — in the host that is the stack item
+ * the card sits in, not the viewport — so a stage just below the item's edge is
+ * already running when it scrolls in.
  */
+/**
+ * The nearest ancestor set to scroll, taken to be the one that does. That
+ * holds where the gallery renders: a card's stack item is sized to its pane
+ * and scrolls its content. The choice is made when the stage mounts, before
+ * the content above and below it has necessarily rendered, so it goes by the
+ * overflow style rather than by whether the box overflows yet. An ancestor
+ * set to scroll that instead grows with its content clips nothing, and every
+ * stage under it counts as visible: they keep running, which costs frames but
+ * never freezes a demo someone is looking at.
+ */
+function scrollRoot(el: Element): Element | null {
+  let node = el.parentElement;
+  while (node) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 function roomOwner(el: Element): HTMLElement | null {
   const local = el.closest<HTMLElement>('[data-widget-active]');
   if (local) {
@@ -52,10 +77,13 @@ export function observeStage(
       tell(visible);
     }
   };
-  const io = new IntersectionObserver((entries) => {
-    intersecting = entries.some((entry) => entry.isIntersecting);
-    update();
-  }, options);
+  const io = new IntersectionObserver(
+    (entries) => {
+      intersecting = entries.some((entry) => entry.isIntersecting);
+      update();
+    },
+    { root: scrollRoot(el), ...options },
+  );
   const changes = new MutationObserver(update);
   if (owner) {
     changes.observe(owner, {

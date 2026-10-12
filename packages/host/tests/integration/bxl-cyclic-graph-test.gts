@@ -10,7 +10,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import {
   bxlTrackingPol100Renewal,
   bxlTrackingRealmContents,
@@ -33,7 +32,6 @@ import { setupRenderingTest } from '../helpers/setup';
 // clean entry, which is what these assertions turn on.
 module('Integration | bxl cyclic card graphs', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   let loader: Loader;
   let realm: Realm;
 

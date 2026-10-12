@@ -7,6 +7,17 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  CardInfoField,
+  Component,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+} from '@cardstack/base/card-api';
+import { CardsGrid } from '@cardstack/base/cards-grid';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import window from 'ember-window-mock';
@@ -57,22 +68,11 @@ import {
   catalogRealmURL,
   realmConfigCardJSON,
 } from '../helpers';
-
 import {
-  CardDef,
-  CardInfoField,
-  Component,
-  CardsGrid,
-  contains,
-  linksTo,
-  linksToMany,
-  field,
   setupBaseRealm,
-  StringField,
   SystemCard,
   ModelConfiguration,
 } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';

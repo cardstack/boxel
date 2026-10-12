@@ -89,7 +89,7 @@ class AvatarUsage extends GlimmerComponent {
         <Css.Basic
           @name='pretui-chip-hue'
           @type='color'
-          @description='Colour the fill, initials and hairline are mixed from. Set per instance to one of --chart-1 to --chart-5 from the name hash, or through @hue; a value in the caller style wins over the name hash. Falls back to --primary when @hue is rejected.'
+          @description='Color the fill and hairline are mixed from. Set per instance to one of --chart-1 to --chart-5 from the name hash, or through @hue; a value in the caller style wins over the name hash. Falls back to --primary when @hue is rejected.'
         />
       </:cssVars>
     </FreestyleUsage>

@@ -15,13 +15,11 @@ import {
   setupRealmServerEndpoints,
   withCachedRealmSetup,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
 
@@ -460,5 +458,256 @@ return found;`,
       }),
       /Directory not found/,
     );
+  });
+
+  // The realm-server mock has no realm-creation endpoint, so `createRealm` is
+  // stubbed to hand back the URL the server would mint for the endpoint, and
+  // the realm-info fetch for the unmounted new realm is skipped.
+  function stubWorkspaceCreation() {
+    let calls: { endpoint: string; name: string }[] = [];
+    let realmServer = getService('realm-server');
+    realmServer.createRealm = async (args) => {
+      calls.push(args);
+      return new URL(`http://test-realm/testuser/${args.endpoint}/`);
+    };
+    getService('realm').ensureRealmMeta = async () => {};
+    return calls;
+  }
+
+  test('realm.workspaces.create creates a workspace, returns its URL, and opens it after the run', async function (assert) {
+    let createRealmCalls = stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let created = await realm.workspaces.create({ name: 'Sales Pipeline' });
+return { created, realmAfterCreate: realm.current.url };`,
+    });
+
+    assert.deepEqual(
+      createRealmCalls.map(({ endpoint, name }) => ({ endpoint, name })),
+      [{ endpoint: 'sales-pipeline', name: 'Sales Pipeline' }],
+      'the endpoint is derived from the name, as the create-workspace tool does',
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      created: {
+        url: 'http://test-realm/testuser/sales-pipeline/',
+        name: 'Sales Pipeline',
+      },
+      realmAfterCreate: testRealmURL,
+    });
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      'http://test-realm/testuser/sales-pipeline/index',
+      'the new workspace is opened once the run ends',
+    );
+    assert.deepEqual(
+      result.createdWorkspaces,
+      ['http://test-realm/testuser/sales-pipeline/'],
+      'the result names the created workspace',
+    );
+  });
+
+  test('a failed run names the workspaces it created and opens none', async function (assert) {
+    stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let stackBefore = operatorModeStateService.state?.stacks[0]?.[0]?.id;
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.create({ name: 'First Try' });
+throw new Error('boom');`,
+      }),
+      /boom.*Workspaces already created by this run: http:\/\/test-realm\/testuser\/first-try\//,
+    );
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      stackBefore,
+      'no workspace is opened after a failed run',
+    );
+  });
+
+  test('a run that saves files and creates a workspace stays in its realm', async function (assert) {
+    stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let stackBefore = operatorModeStateService.state?.stacks[0]?.[0]?.id;
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('notes/new-workspace.txt', 'hello');
+await realm.workspaces.create({ name: 'Side Project' });`,
+    });
+
+    assert.deepEqual(result.createdWorkspaces, [
+      'http://test-realm/testuser/side-project/',
+    ]);
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      stackBefore,
+      'the new workspace is not opened, so the next run defaults to this realm',
+    );
+  });
+
+  test('realm.workspaces.create refuses options that are not strings', async function (assert) {
+    let createRealmCalls = stubWorkspaceCreation();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.create({ name: 42 });`,
+      }),
+      /expects name to be a string/,
+    );
+    assert.strictEqual(createRealmCalls.length, 0, 'no realm is created');
+  });
+
+  // The realm-server mock has no realm-deletion endpoint, so `deleteRealm` is
+  // stubbed to record its argument. The workspace to delete is not mounted,
+  // so its ownership is stubbed too.
+  function stubWorkspaceDeletion(ownedRealmURL: string) {
+    let calls: string[] = [];
+    getService('realm-server').deleteRealm = async (realmURL) => {
+      calls.push(realmURL);
+    };
+    let realmService = getService('realm');
+    let isRealmOwner = realmService.isRealmOwner.bind(realmService);
+    realmService.isRealmOwner = (url) =>
+      url === ownedRealmURL || isRealmOwner(url);
+    return calls;
+  }
+
+  test('a script that deletes a workspace always waits for the user', function (assert) {
+    assert.true(
+      RunRealmCodeTool.neverAutoExecutesFor({
+        code: `await realm.workspaces.delete('http://test-realm/testuser/old/');`,
+      }),
+      'a run that names realm.workspaces.delete waits for a click',
+    );
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({
+        code: `await realm.fs.writeText('a.json', '{}');`,
+      }),
+      'other runs keep the room mode',
+    );
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor(undefined),
+      'a call whose input has not arrived yet is not judged',
+    );
+  });
+
+  test('realm.workspaces.delete deletes a workspace the user owns', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    let deleteRealmCalls = stubWorkspaceDeletion(oldWorkspace);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.workspaces.delete('${oldWorkspace}');`,
+    });
+
+    assert.deepEqual(deleteRealmCalls, [oldWorkspace]);
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      url: oldWorkspace,
+      deleted: true,
+    });
+  });
+
+  test('the result names the deleted workspace when the script does not return it', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    stubWorkspaceDeletion(oldWorkspace);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.workspaces.delete('${oldWorkspace}');`,
+    });
+
+    assert.deepEqual(result.deletedWorkspaces, [oldWorkspace]);
+  });
+
+  test('a failed run names the workspaces it deleted', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    stubWorkspaceDeletion(oldWorkspace);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.delete('${oldWorkspace}');
+throw new Error('boom');`,
+      }),
+      /boom.*Workspaces already deleted by this run: http:\/\/test-realm\/testuser\/old\//,
+    );
+  });
+
+  test('a workspace recreated at a URL the run deleted is opened', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    stubWorkspaceDeletion(oldWorkspace);
+    stubWorkspaceCreation();
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.workspaces.delete('${oldWorkspace}');
+await realm.workspaces.create({ name: 'Old' });`,
+    });
+
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0]?.[0]?.id,
+      `${oldWorkspace}index`,
+    );
+  });
+
+  test('realm.workspaces.delete refuses a workspace the user does not own', async function (assert) {
+    let deleteRealmCalls = stubWorkspaceDeletion(
+      'http://test-realm/testuser/old/',
+    );
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.workspaces.delete('http://test-realm/someone-else/theirs/');`,
+      }),
+      /the current user is not its owner/,
+    );
+    assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
+  });
+
+  test('a script that reaches realm.workspaces.delete another way is refused', async function (assert) {
+    let oldWorkspace = 'http://test-realm/testuser/old/';
+    let deleteRealmCalls = stubWorkspaceDeletion(oldWorkspace);
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `let workspaces = realm.workspaces;
+await workspaces['del' + 'ete']('${oldWorkspace}');`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'this run would not wait for a click',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      }),
+      /must be called by that name/,
+    );
+    assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
   });
 });

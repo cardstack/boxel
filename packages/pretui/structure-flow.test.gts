@@ -834,7 +834,7 @@ module('Pretui | structure-flow | usage pages', function (hooks) {
       assert.ok(Demo, name + ' is present in the registry');
       await render(<template><Demo /></template>);
       assert.ok(
-        document.querySelector('.FreestyleUsage'),
+        document.querySelector('[data-test-pretui-usage]'),
         name + ' rendered a FreestyleUsage shell',
       );
     });

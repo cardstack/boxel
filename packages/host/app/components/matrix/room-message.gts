@@ -257,6 +257,7 @@ export default class RoomMessage extends Component<Signature> {
         @isCodePatchCorrectness={{this.message.isCodePatchCorrectness}}
         @commands={{this.message.tools}}
         @usage={{this.message.usage}}
+        @compaction={{this.message.compaction}}
         data-test-boxel-message-from={{this.message.author.name}}
         class={{cn bot-tools-only=this.isBotToolsOnlyMessage}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}

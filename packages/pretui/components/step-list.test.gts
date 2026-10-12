@@ -41,7 +41,7 @@ module('Pretui | components/step-list', function (hooks) {
     );
   });
 
-  test('StepList gives every step a text state, not only a coloured marker', async function (assert) {
+  test('StepList gives every step a text state, not only a colored marker', async function (assert) {
     await render(<template><StepList @steps={{STEPS}} @current={{1}} /></template>);
     assert.deepEqual(
       all('.pretui-step .pretui-vh').map((s) => s.textContent?.trim()),

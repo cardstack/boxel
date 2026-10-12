@@ -1,19 +1,14 @@
+import { serializeFileDef } from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
 import { module, test } from 'qunit';
 
 import type { LooseSingleFileMetaDocument } from '@cardstack/runtime-common';
 import { baseRRI, isSingleFileMetaDocument } from '@cardstack/runtime-common';
 
-import {
-  setupBaseRealm,
-  FileDef,
-  serializeFileDef,
-} from '../../helpers/base-realm';
-
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | serializeFileDef', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
 
   test('produces a LooseSingleFileMetaDocument with type "file-meta"', function (assert) {
     let fileDef = new FileDef({
@@ -22,7 +17,7 @@ module('Integration | serializeFileDef', function (hooks) {
       contentType: 'text/plain',
     });
 
-    let doc = serializeFileDef(fileDef);
+    let doc = serializeFileDef(fileDef, {});
 
     assert.strictEqual(doc.data.type, 'file-meta');
   });
@@ -34,7 +29,7 @@ module('Integration | serializeFileDef', function (hooks) {
       contentType: 'text/plain',
     });
 
-    let doc = serializeFileDef(fileDef);
+    let doc = serializeFileDef(fileDef, {});
 
     assert.strictEqual(doc.data.id, 'https://test-realm/hello.txt');
   });
@@ -46,7 +41,7 @@ module('Integration | serializeFileDef', function (hooks) {
       contentType: 'text/plain',
     });
 
-    let doc = serializeFileDef(fileDef);
+    let doc = serializeFileDef(fileDef, {});
 
     assert.deepEqual(doc.data.meta.adoptsFrom, {
       module: baseRRI('card-api'),
@@ -63,7 +58,7 @@ module('Integration | serializeFileDef', function (hooks) {
       sourceUrl: 'https://origin.example/image.png',
     });
 
-    let doc = serializeFileDef(fileDef);
+    let doc = serializeFileDef(fileDef, {});
 
     assert.strictEqual(doc.data.attributes?.name, 'image.png');
     assert.strictEqual(doc.data.attributes?.contentType, 'image/png');
@@ -81,7 +76,7 @@ module('Integration | serializeFileDef', function (hooks) {
       contentType: 'application/json',
     });
 
-    let doc = serializeFileDef(fileDef);
+    let doc = serializeFileDef(fileDef, {});
 
     // Cast to unknown first to test the type guard properly
     assert.true(
@@ -100,7 +95,7 @@ module('Integration | serializeFileDef', function (hooks) {
       // sourceUrl intentionally omitted to test relative URL handling
     });
 
-    let doc = serializeFileDef(fileDef);
+    let doc = serializeFileDef(fileDef, {});
 
     // id should be present and exactly match
     assert.strictEqual(doc.data.id, fileId);
@@ -121,7 +116,7 @@ module('Integration | serializeFileDef', function (hooks) {
       contentSize: 512,
     });
 
-    let doc: LooseSingleFileMetaDocument = serializeFileDef(fileDef);
+    let doc: LooseSingleFileMetaDocument = serializeFileDef(fileDef, {});
 
     assert.ok(doc.data, 'document has a data property');
     assert.strictEqual(doc.data.type, 'file-meta', 'type is file-meta');

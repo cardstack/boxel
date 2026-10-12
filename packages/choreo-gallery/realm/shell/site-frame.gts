@@ -5,6 +5,7 @@ import { modifier } from 'ember-modifier';
 
 import type { Crossing } from '../lib/crossing';
 import { factor } from '../lib/tempo';
+import type { Theater } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { ChoreoRoot } from './choreo-root';
 import { GalleryLink } from './gallery-link';
@@ -45,6 +46,8 @@ interface Signature {
     goHome: () => void;
     /** where the brand mark points: the gallery card's own URL */
     homeHref: string;
+    /** in theater the bar steps out and the film's page opens on the picture */
+    theater: Theater;
   };
   Blocks: { default: [] };
 }
@@ -55,7 +58,10 @@ export class SiteFrame extends Component<Signature> {
   });
 
   <template>
-    <ChoreoRoot class='app-shell'>
+    <ChoreoRoot
+      class='app-shell {{if @theater.on "is-theater"}}'
+      data-test-theater={{@theater.on}}
+    >
       <header class='topbar'>
         <GalleryLink
           @href={{@homeHref}}
@@ -242,6 +248,18 @@ export class SiteFrame extends Component<Signature> {
         margin: 0 auto;
         padding: 56px 0 96px;
         flex: 1;
+      }
+
+      /* the bar carries the mark at the top left; in theater it is gone and
+         the demo page draws the mark over the picture instead, so the two
+         are never on screen at once — and the page opens on the picture,
+         not on a band of ground above it */
+      .app-shell.is-theater .topbar {
+        display: none;
+      }
+
+      .app-shell.is-theater .page {
+        padding-top: 0;
       }
 
       .footer {

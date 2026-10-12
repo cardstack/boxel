@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
 
-import type { GalleryDemo } from '../demo';
+import type { GalleryDemo, StageSignature } from '../demo';
 
 interface Signature {
-  Args: { demo: GalleryDemo };
+  Args: StageSignature['Args'] & { demo: GalleryDemo };
 }
 
 /**
@@ -17,7 +17,7 @@ export class DemoStage extends Component<Signature> {
 
   <template>
     {{#if this.Stage}}
-      <this.Stage />
+      <this.Stage @face={{@face}} @open={{@open}} @theater={{@theater}} />
     {{else}}
       <div class='stage-pending' data-stage-pending>
         <span>Stage coming soon</span>

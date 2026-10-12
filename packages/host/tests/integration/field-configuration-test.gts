@@ -1,6 +1,17 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 
+import {
+  createFromSerialized,
+  field,
+  contains,
+  linksTo,
+  linksToMany,
+  CardDef,
+  FieldDef,
+  Component,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -18,27 +29,11 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import {
-  setupBaseRealm,
-  createFromSerialized,
-  field,
-  contains,
-  linksTo,
-  linksToMany,
-  CardDef,
-  FieldDef,
-  Component,
-  StringField,
-} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
-import type {
-  CardStore,
-  CardDef as CardDefType,
-  StoreSearchResource,
-} from '@cardstack/base/card-api';
+import type { CardStore, StoreSearchResource } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 
 let loader: Loader;
@@ -58,7 +53,7 @@ class DeferredLinkStore implements CardStore {
   realmForId(id: string): string | undefined {
     return this.#virtualNetwork.realmForReference(id);
   }
-  private cardInstances = new Map<string, CardDefType>();
+  private cardInstances = new Map<string, CardDef>();
   private fileMetaInstances = new Map<string, FileDef>();
   private readyCardDocs = new Map<string, SingleCardDocument>();
   private pendingCardDocs = new Map<string, Deferred<SingleCardDocument>>();
@@ -78,7 +73,7 @@ class DeferredLinkStore implements CardStore {
     return this.fileMetaInstances.get(this.normalize(url));
   }
 
-  setCard(url: string, instance: CardDefType) {
+  setCard(url: string, instance: CardDef) {
     this.cardInstances.set(this.normalize(url), instance);
   }
 
@@ -86,7 +81,7 @@ class DeferredLinkStore implements CardStore {
     this.fileMetaInstances.set(this.normalize(url), instance);
   }
 
-  setCardNonTracked(url: string, instance: CardDefType) {
+  setCardNonTracked(url: string, instance: CardDef) {
     this.cardInstances.set(this.normalize(url), instance);
   }
   setFileMetaNonTracked(url: string, instance: FileDef) {
@@ -164,7 +159,7 @@ class DeferredLinkStore implements CardStore {
     }
   }
 
-  getSearchResource<T extends CardDefType = CardDefType>(
+  getSearchResource<T extends CardDef = CardDef>(
     _parent: object,
     _getQuery: () => any,
     _getRealms?: () => string[] | undefined,
@@ -196,9 +191,6 @@ function buildThemeDocument(palette: string): SingleCardDocument {
 
 module('Integration | field configuration', function (hooks) {
   setupRenderingTest(hooks);
-  // Initialize base realm helpers so createFromSerialized/ensureLinksLoaded
-  // use the test loader bound to this environment.
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;

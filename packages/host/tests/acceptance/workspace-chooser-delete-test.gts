@@ -18,7 +18,6 @@ import {
   visitOperatorMode,
   realmConfigCardJSON,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { assertRecentFileURLs } from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
@@ -37,8 +36,6 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [ownedRealmURL, sharedRealmURL, delegatedOwnerRealmURL],
   });
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     setupUserSubscription();

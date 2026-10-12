@@ -45,7 +45,7 @@ module('Pretui | components/breadcrumb', function (hooks) {
       [['Wuyi Origins', 'page']],
       'only the leaf is announced as the current page',
     );
-    let seps = Array.from(nav.querySelectorAll('.sep'));
+    let seps = Array.from(nav.querySelectorAll('[data-test-pretui-breadcrumb-sep]'));
     assert.strictEqual(seps.length, 2, 'separators sit between, not before the first');
     assert.deepEqual(
       seps.map((s) => s.getAttribute('aria-hidden')),
@@ -70,6 +70,6 @@ module('Pretui | components/breadcrumb', function (hooks) {
       'page',
       'a lone crumb with an href is still the current page, not a link',
     );
-    assert.strictEqual(all('.sep').length, 0);
+    assert.strictEqual(all('[data-test-pretui-breadcrumb-sep]').length, 0);
   });
 });

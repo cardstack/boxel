@@ -344,6 +344,21 @@ export default class RoomMessageTool extends Component<Signature> {
     return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
+  // Until its command is resolved a call can't say how it will run (its
+  // action verb, whether it waits for approval), so it shows as preparing, the
+  // same as while its request streams in. A call already answered shows its
+  // result.
+  private get isPreparing() {
+    if (this.args.isStreaming) {
+      return true;
+    }
+    let { messageTool } = this.args;
+    return (
+      messageTool.isResolving &&
+      (messageTool.status === 'ready' || messageTool.status === undefined)
+    );
+  }
+
   private get commandDescription() {
     return this.args.messageTool.description ?? 'Preparing tool call...';
   }
@@ -370,7 +385,7 @@ export default class RoomMessageTool extends Component<Signature> {
       data-tool-arguments-length={{this.argumentsLength}}
       ...attributes
     >
-      {{#if @isStreaming}}
+      {{#if this.isPreparing}}
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           @monacoSDK={{@monacoSDK}}

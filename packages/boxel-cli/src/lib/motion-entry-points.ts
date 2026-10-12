@@ -1,13 +1,13 @@
 /**
- * The glimmer-motion and `@cardstack/choreo` specifiers card code may
- * import: exactly the ids the host shims for them (`shimExternals` in
- * `packages/host/app/lib/externals.ts`).
+ * The glimmer-motion, `@cardstack/choreo` and `@cardstack/choreo-player`
+ * specifiers card code may import: exactly the ids the host shims for them
+ * (`shimExternals` in `packages/host/app/lib/externals.ts`).
  *
- * Both packages publish more subpaths than this through their `./*`
- * export pattern, but a card can only load what the host shims. `boxel
- * parse` aliases these ids, and only these, onto the bundled source, so a
- * card importing any other subpath is reported as an unresolved module
- * instead of type-checking clean and then failing to load.
+ * The packages publish more subpaths than this, glimmer-motion and Choreo
+ * through their `./*` export pattern, but a card can only load what the host
+ * shims. `boxel parse` aliases these ids, and only these, onto the bundled
+ * source, so a card importing any other subpath is reported as an unresolved
+ * module instead of type-checking clean and then failing to load.
  * `tests/card-runtime-packages.test.ts` holds this list equal to the shims.
  */
 export const MOTION_ENTRY_POINTS = [
@@ -35,6 +35,7 @@ export const MOTION_ENTRY_POINTS = [
   '@cardstack/choreo/film/player',
   '@cardstack/choreo/film/rail',
   '@cardstack/choreo/film/titles',
+  '@cardstack/choreo-player',
 ] as const;
 
 /**
@@ -46,10 +47,12 @@ export const MOTION_ENTRY_POINTS = [
 export function motionEntryPointPaths(sourceDirs: {
   glimmerMotion: string;
   choreo: string;
+  choreoPlayer: string;
 }): Record<string, string[]> {
   let roots: [string, string][] = [
     ['glimmer-motion', sourceDirs.glimmerMotion],
     ['@cardstack/choreo', sourceDirs.choreo],
+    ['@cardstack/choreo-player', sourceDirs.choreoPlayer],
   ];
   let paths: Record<string, string[]> = {};
   for (let specifier of MOTION_ENTRY_POINTS) {

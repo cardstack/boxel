@@ -87,6 +87,12 @@ function rebaseSpecifier(
 // `shimAsyncModule` calls in externals.ts: the boxel-cli guard that reads
 // literal shim ids out of that file covers `@cardstack/base/*` through its
 // path alias already, so nothing is lost to it here.
+//
+// One precondition is not checked by `lint:bundled-base`: the host's static
+// module graph must contain no top-level `await`. Safari before 27 can
+// otherwise evaluate a bundled chunk before its imports are initialized, so
+// a field module calls `contains(X)` while `X` is still undefined. See
+// runtime-common/content-tag-loader.ts.
 
 export const BUNDLED_BASE_MODULES: Record<
   string,

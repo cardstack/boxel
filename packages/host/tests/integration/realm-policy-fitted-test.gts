@@ -15,7 +15,6 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { renderComponent } from '../helpers/render-component';
@@ -49,7 +48,6 @@ function policyDocument(
 // operations it grants.
 module('Integration | realm policy fitted view', function (hooks) {
   setupRenderingTest(hooks);
-  setupBaseRealm(hooks);
   setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
 

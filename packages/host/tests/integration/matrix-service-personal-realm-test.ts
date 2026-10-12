@@ -17,9 +17,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../helpers';
-
-import { setupBaseRealm } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../helpers/setup';
@@ -44,7 +41,6 @@ module(
   'Integration | matrix-service | personal realm auto-provisioning',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -109,7 +105,6 @@ module(
   'Integration | matrix-service | personal realm not duplicated',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -163,7 +158,6 @@ module(
   'Integration | matrix-service | personal realm provisioned despite a shared foreign one',
   function (hooks) {
     setupRenderingTest(hooks);
-    setupBaseRealm(hooks);
     setupLocalIndexing(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {

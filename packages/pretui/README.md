@@ -37,7 +37,7 @@ Every component's `<style scoped>` content sits in one of two layers, so a calle
 
 Rules that restyle a boxel-ui component whose own CSS is unlayered stay outside the layer, since unlayered CSS beats any layer. Select is the one case: BoxelSelect's trigger and option styles are unlayered.
 
-The `Pret` prefix matters because layer names are document-global. Usage pages, example galleries, `pretui-component.gts` and `pretui-note.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
+The `Pret` prefix matters because layer names are document-global. Usage pages and their shell (`freestyle-usage`, the `usage-*` argument rows and `internal/freestyle`), example galleries, `pretui-component.gts` and `pretui-note.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
 
 ## Development
 

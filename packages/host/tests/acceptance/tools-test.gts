@@ -12,6 +12,16 @@ import {
 
 import { fillIn } from '@ember/test-helpers';
 
+import {
+  CardDef,
+  Component,
+  contains,
+  linksTo,
+  linksToMany,
+  field,
+} from '@cardstack/base/card-api';
+import { CardsGrid } from '@cardstack/base/cards-grid';
+import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -63,19 +73,6 @@ import {
   waitForNewRoomSkillsLoaded,
   realmConfigCardJSON,
 } from '../helpers';
-
-import {
-  CardDef,
-  Component,
-  CardsGrid,
-  contains,
-  linksTo,
-  linksToMany,
-  field,
-  setupBaseRealm,
-  StringField,
-} from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   registerRealmServerRoute,
@@ -119,8 +116,6 @@ module('Acceptance | Tools tests', function (hooks) {
     getRoomState,
     createAndJoinRoom,
   } = mockMatrixUtils;
-
-  setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
     savedMeetingCardId = undefined;

@@ -41,6 +41,7 @@
       "@cardstack/boxel-host/lib/*": ["../host/app/lib/*"],
       "@cardstack/boxel-ui": ["../boxel-ui"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/*"],
+      "@cardstack/choreo-player": ["../choreo-player/src/index.ts"],
       "*": ["../host/types/*"]
     },
     "types": ["@cardstack/local-types", "qunit", "qunit-dom"],

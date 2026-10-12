@@ -22,6 +22,9 @@ function hue(el: HTMLElement): string {
   return el.style.getPropertyValue('--pretui-chip-hue').trim();
 }
 // Caller styles as a card would pass them: a bound SafeString.
+// A 1x1 GIF, so the image loads and the photo markup stays.
+const LOADABLE_PHOTO =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const RING_STYLE = htmlSafe('--status-ring: var(--chart-2); margin: 2px');
 const CALLER_HUE_STYLE = htmlSafe('--pretui-chip-hue: var(--muted-foreground)');
 const CALLER_SIZE_STYLE = htmlSafe('--pretui-avatar-size: 3rem');
@@ -31,6 +34,26 @@ const CALLER_IMPORTANT_STYLE = htmlSafe(
 
 module('Pretui | components/avatar', function (hooks) {
   setupCardTest(hooks);
+
+  test('the initials case is an image with the name as its label; the photo case leaves that to the img alt', async function (assert) {
+    await render(
+      <template>
+        <Avatar @name='Ada Lovelace' data-test-initials />
+        <Avatar @name='Ada Lovelace' @src={{LOADABLE_PHOTO}} data-test-photo />
+      </template>,
+    );
+    let initials = q('[data-test-initials]');
+    assert.strictEqual(initials.getAttribute('role'), 'img');
+    assert.strictEqual(initials.getAttribute('aria-label'), 'Ada Lovelace');
+    assert.strictEqual(initials.textContent?.trim(), 'AL');
+    assert.notOk(initials.hasAttribute('data-has-image'));
+
+    let photo = q('[data-test-photo]');
+    assert.notOk(photo.hasAttribute('role'), 'no role on the root with a photo');
+    assert.notOk(photo.hasAttribute('aria-label'), 'no label on the root with a photo');
+    assert.strictEqual(photo.getAttribute('data-has-image'), 'true');
+    assert.strictEqual(photo.querySelector('img')?.getAttribute('alt'), 'Ada Lovelace', 'the img alt carries the name');
+  });
 
   test('@size is written as rem, and no size is written without it', async function (assert) {
     await render(

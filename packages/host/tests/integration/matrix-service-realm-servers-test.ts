@@ -12,9 +12,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
 } from '../helpers';
-
-import { setupBaseRealm } from '../helpers/base-realm';
-
 import { setupMockMatrix } from '../helpers/mock-matrix';
 
 import { setupRenderingTest } from '../helpers/setup';
@@ -34,8 +31,6 @@ module(
       activeRealms: [baseRealm.url, testRealmURL],
       autostart: true,
     });
-
-    setupBaseRealm(hooks);
 
     hooks.beforeEach(async function (this: RenderingTestContext) {
       await setupIntegrationTestRealm({

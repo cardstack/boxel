@@ -3,6 +3,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import ChevronLeft from '@cardstack/boxel-icons/chevron-left';
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 
 export interface PaginationSignature {
   Args: { page?: number; defaultPage?: number; pages: number; onPageChange?: (n: number) => void };
@@ -49,7 +51,7 @@ export class Pagination extends Component<PaginationSignature> {
   isActive = (n: number | '…') => n === this.page;
   <template>
     <nav class='pretui-pagination' aria-label='Pagination' data-test-pretui-pagination ...attributes>
-      <button type='button' class='pretui-page' aria-disabled={{if this.atStart 'true'}} aria-label='Previous' {{on 'click' this.prev}}>‹</button>
+      <button type='button' class='pretui-page' aria-disabled={{if this.atStart 'true'}} aria-label='Previous' {{on 'click' this.prev}}><ChevronLeft class='pretui-chevron' width='12' height='12' aria-hidden='true' /></button>
       {{#each this.list as |n|}}
         {{#if (this.isGap n)}}
           <span class='pretui-gap'>…</span>
@@ -57,44 +59,73 @@ export class Pagination extends Component<PaginationSignature> {
           <button
             type='button'
             class='pretui-page'
+            aria-label='Page {{n}}'
             data-state={{if (this.isActive n) 'active'}}
             aria-current={{if (this.isActive n) 'page'}}
             {{on 'click' (fn this.go n)}}
           >{{n}}</button>
         {{/if}}
       {{/each}}
-      <button type='button' class='pretui-page' aria-disabled={{if this.atEnd 'true'}} aria-label='Next' {{on 'click' this.next}}>›</button>
+      <button type='button' class='pretui-page' aria-disabled={{if this.atEnd 'true'}} aria-label='Next' {{on 'click' this.next}}><ChevronRight class='pretui-chevron' width='12' height='12' aria-hidden='true' /></button>
     </nav>
     <style scoped>
       @layer PretComponent {
         .pretui-pagination {
           display: flex;
           align-items: center;
-          gap: 2px;
-          font-size: var(--text-ui-md, 12.5px);
+          gap: var(--boxel-sp-6xs);
+          font-size: var(--boxel-font-size-xs);
         }
         .pretui-page {
-          min-width: 26px;
-          height: 26px;
-          padding: 0 6px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 1.625rem;
+          height: 1.625rem;
+          padding: 0 var(--boxel-sp-2xs);
           border: 0;
-          border-radius: 6px;
-          background: none;
+          border-radius: var(--boxel-border-radius-sm);
+          background-color: transparent;
           color: var(--muted-foreground);
-          cursor: pointer;
-          font: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          font-weight: inherit;
+          font-style: inherit;
+          font-stretch: inherit;
+          font-variant: inherit;
+          line-height: inherit;
           letter-spacing: inherit;
           font-variant-numeric: tabular-nums;
+          transition-property: scale;
+          transition-duration: 150ms;
+          transition-timing-function: ease-out;
         }
-        .pretui-page:hover:not([aria-disabled='true']) {
-          background: var(--hover, var(--boxel-100));
-          color: var(--foreground);
+        /* The current page keeps its selected fill and ink under the pointer:
+           this rule's specificity would otherwise beat the data-state rule.
+           Gated on a hovering pointer, so a tapped button on a touch screen
+           does not keep the fill. */
+        @media (hover: hover) {
+          .pretui-page:hover:not([aria-disabled='true'], [data-state='active']) {
+            background-color: var(--hover);
+            color: var(--foreground);
+          }
+        }
+        /* Press feedback. Edge arrows that are aria-disabled still receive
+           presses, and the current page ignores them, so neither reacts. */
+        .pretui-page:active:not([aria-disabled='true'], [data-state='active']) {
+          scale: 0.96;
         }
         .pretui-page[data-state='active'] {
-          background: var(--pretui-selected, var(--boxel-100));
-          color: var(--pretui-primary-ink, var(--primary));
+          background-color: var(--selected);
+          color: var(--primary-ink);
           font-weight: 600;
-          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
+          box-shadow: 0 0 0 1px var(--border);
+          cursor: default;
+        }
+        /* The arrows are fixed SVGs, so they flip with the writing direction
+           the way the bidi-mirrored glyphs they replace did. */
+        .pretui-chevron:dir(rtl) {
+          scale: -1 1;
         }
         .pretui-page:focus-visible {
           outline: 2px solid var(--ring);
@@ -105,8 +136,13 @@ export class Pagination extends Component<PaginationSignature> {
           cursor: default;
         }
         .pretui-gap {
-          color: var(--ink-3, var(--boxel-400));
-          padding: 0 4px;
+          color: var(--subtle-foreground);
+          padding: 0 var(--boxel-sp-3xs);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-page {
+            transition-duration: 0s;
+          }
         }
       }
     </style>

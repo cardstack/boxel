@@ -129,14 +129,19 @@ export interface QueuePublishRequest {
   // of lanes that share the same work, such as one realm's index, and it
   // separates two kinds of member:
   //
-  // - Exclusive work runs with nothing else in the family. A job is exclusive
-  //   when its group names the family itself, or when it names no family at
-  //   all, which is every job published without one.
+  // - Exclusive work runs with nothing else in the family at its own priority
+  //   tier or above. A job is exclusive when its group names the family
+  //   itself, or when it names no family at all, which is every job published
+  //   without one.
   // - A writer lane is a group inside the family with a name of its own. Its
-  //   jobs run alongside other writer lanes' jobs, but never alongside
-  //   exclusive work. A pending exclusive job is a barrier that later writer
-  //   jobs at its priority tier or below wait behind; later writer jobs at a
-  //   higher tier start past it, one writer lane at a time.
+  //   jobs run alongside other writer lanes' jobs, and alongside exclusive
+  //   work of a lower tier. A pending exclusive job is a barrier that later
+  //   writer jobs at its priority tier or below wait behind; later writer jobs
+  //   at a higher tier start past it, at the family's full lane count.
+  //
+  // So a job never waits on work beneath its own tier, pending or running. An
+  // exclusive job that must have the family to itself has to be published at
+  // or above the tier of every writer it needs to exclude.
   //
   // Readers that ask about the family as a whole (is the realm's index behind,
   // cancel the realm's work) match on `laneFamilyPredicate`, so they see every
