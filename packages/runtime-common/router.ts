@@ -1,3 +1,4 @@
+import { withholdsErrorStacks } from './create-response.ts';
 import { CardError, responseWithError } from './error.ts';
 import type { RequestContext } from './index.ts';
 import { RealmPaths, logger } from './index.ts';
@@ -48,9 +49,12 @@ type Handler = (
   requestContext: RequestContext,
 ) => Promise<Response>;
 
-function formatUnknownError(error: unknown): string {
+function formatUnknownError(
+  error: unknown,
+  { withStack = true }: { withStack?: boolean } = {},
+): string {
   if (error instanceof Error) {
-    return error.stack?.trim() || error.message;
+    return (withStack && error.stack?.trim()) || error.message;
   }
 
   if (
@@ -514,12 +518,15 @@ export class Router {
 
       this.log.error(err);
 
-      return new Response(
-        `unexpected exception in realm ${formatUnknownError(err)}`,
-        {
-          status: 500,
-        },
-      );
+      // The full error stays in the log above; the response names only what
+      // went wrong for a caller that may not see a stack (see
+      // `withholdsErrorStacks`).
+      let detail = withholdsErrorStacks(500, requestContext)
+        ? formatUnknownError(err, { withStack: false })
+        : formatUnknownError(err);
+      return new Response(`unexpected exception in realm ${detail}`, {
+        status: 500,
+      });
     }
   }
 }

@@ -1642,7 +1642,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "blocklist: the realm's anonymousBlocklist names the address. ip-undetermined: no address reached the realm, usually a hop misconfiguration. blocklist-invalid: an entry isn't an address or range, which closes the realm to every such caller.",
+        "description": "blocklist: the blocklist of every grant that could admit the caller names the address. ip-undetermined: no address reached the realm, usually a hop misconfiguration. blocklist-invalid: a grant's blocklist isn't a list of addresses and ranges, or didn't evaluate, which closes that grant to every such caller.",
         "fieldConfig": {
           "defaults": {
             "custom": {
@@ -1770,7 +1770,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "A: admitted writes by the first user they were made as. B: refused writes whose grants named no one who may write the realm, by the failure (key-missing, not-a-matrix-id, no-write).",
+        "description": "A: admitted writes by the first user they were made as. B: refused writes whose grants named no one who may write the realm, by the failure (expression-failed, not-a-matrix-id, no-write).",
         "fieldConfig": {
           "defaults": {
             "custom": {

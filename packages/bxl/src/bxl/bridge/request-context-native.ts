@@ -1,6 +1,6 @@
 /**
- * The request-context builtins: `params`, `actor`, `instance` and
- * `realmConfig`.
+ * The request-context builtins: `params`, `actor`, `instance`, `realmConfig`
+ * and `policy`.
  *
  * A mutation program can see the document it is editing through `.`. These
  * four add the rest of what a card operation needs — what the caller sent,
@@ -21,6 +21,11 @@
  * whichever realm's answer it was authored against. It reaches a program the
  * same way the other three do because it varies per invocation for the same
  * reason they do: the realm is decided by the target, not by the type.
+ *
+ * `policy` is the policy card a realm's permissions are judged against, read
+ * the way `realmConfig` is: a keyed object of the card's fields. Only a policy
+ * host supplies it, so that a grant can keep a setting it uses — an address
+ * list, a limit — on the policy card itself.
  *
  * They are functions rather than `$`-prefixed variables, matching the form
  * card operations are authored in, and named `params` rather than the more
@@ -64,11 +69,12 @@ const SLOT_DESCRIPTIONS: Record<ContextSlot, string> = {
   actor: 'the caller identity',
   instance: 'the stored document being edited',
   realmConfig: 'the realm configuration',
+  policy: 'the policy card',
 };
 
 /**
- * How to ask for a key that may legitimately be absent. `instance()` and
- * `realmConfig()` hand back the whole object with no argument, so a program
+ * How to ask for a key that may legitimately be absent. `instance()`,
+ * `realmConfig()` and `policy()` hand back the whole object with no argument, so a program
  * that wants a default rather than a failure has somewhere to go; a missing
  * payload key has no such reading, since the operation declares its keys.
  *
@@ -79,6 +85,7 @@ const SLOT_DESCRIPTIONS: Record<ContextSlot, string> = {
 const OPTIONAL_KEY_HINTS: Partial<Record<ContextSlot, string>> = {
   instance: 'Use `instance()` and index it if the key may be absent.',
   realmConfig: 'Use `realmConfig()` and index it if the setting may be absent.',
+  policy: 'Use `policy()` and index it if the field may be absent.',
 };
 
 /** The slot's value, once the host is known to have supplied one. */
@@ -244,6 +251,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   'realmConfig/1': function* (_input, key) {
     yield requireKey('realmConfig', 'realmConfig(key)', key);
+  },
+  'policy/0': function* () {
+    yield readable(slotObject('policy', 'policy()'));
+  },
+  'policy/1': function* (_input, key) {
+    yield requireKey('policy', 'policy(key)', key);
   },
 };
 

@@ -11,6 +11,7 @@ It is easy to confuse with two neighbours. **CopyFit** is a container-query _ide
 @tone? (default neutral), @appearance? (default outlined), @size? (default m)
 @orientation? | @direction? (default vertical)
 @interactive?, @scroll?
+@selected?, @onSelect?, @selectLabel?
 <:header>       — replaces the whole generated header
 <:title>        — the title line, when it needs markup
 <:description>  — the description line, when it needs markup
@@ -29,6 +30,10 @@ Element: HTMLElement (the root <section>)
 
 **`@interactive` does not make the card clickable.** It adds a hover elevation and a `:focus-within` ring so the card reacts as one surface around the control it contains. A card-sized `<button>` around arbitrary content is a nested-interactive trap; the caller's own link or button stays the target.
 
+**`@onSelect` makes the whole surface a select target, without wrapping anything.** Card renders one native `<button type='button'>` as the section's first child, as wide as the card and behind its content. That button carries the keyboard, the accessible name and `aria-pressed`, and its focus ring outlines the card. A pointer click lands on the content as usual, and the card's own click handler selects the card unless the click landed on something that keeps its own click. That covers every control the kit treats as owning a press (`a[href]`, `button`, `input`, `select`, `textarea`, `label`, `summary`, the `button` and `link` roles, `contenteditable`), anything with a `tabindex`, native media and embeds (`video`, `audio`, `iframe`, `object`, `embed`), and inline overlays (`dialog`, `[popover]`, and the `dialog`, `menu`, `listbox`, `tooltip` and `slider` roles). The walk runs over the composed path, so the controls inside an open shadow root, such as media-chrome's, count too. A click that ends a text selection inside the card doesn't select it either. Nothing in the content is disabled: scrolling, media controls, hover tooltips and text selection behave as they would outside the card. The content is positioned only so it paints after the button, with no z-index and no stacking context, so an inline Popup or Menu still rises above neighbouring cards. Use it for a card that filters a list or drives a detail pane; for a card whose one action is navigation, put a link in the title instead.
+
+**`@selected` is the state, `@onSelect` is the control.** `@selected` reflects as `data-selected` and draws a `--primary` rule on the inline start, the same signal as **List**. On `outlined`, `filled` and `filled-outlined` cards it also lays a `--pretui-selected` tint over the card's own fill, so a tone fill or a caller's `--pretui-card-bg` still shows through. `plain` has no fill to tint, and an `accent` fill under its on-tone ink would be unreadable, so both carry selection on the rule alone; on `accent` the rule is wider and drawn in that ink. With `@onSelect`, `@selected` is also `aria-pressed` on the select control. `@selected` alone draws the state for a card selected from elsewhere. `@onSelect` implies the hover elevation, and replaces `@interactive`'s `:focus-within` ring with the select button's own, so the two never stack.
+
 **`@scroll` scrolls the body, and pins the header and footer.** The caller supplies the height; the body gets `overflow-y: auto` with a stable scrollbar gutter.
 
 `@tone` and `@appearance` are the kit's two axes (`neutral | primary | info | success | warning | danger | attention` × `outlined | filled | filled-outlined | accent | plain`), so a `danger` `filled` card is the same recipe as a `danger` `filled` Button. `@size` takes the house scale and the `sm`/`md`/`lg`/`default` aliases, and sets only the host font-size; every internal dimension is em. `@direction` is an alias for `@orientation` and also accepts `row`/`column`.
@@ -43,6 +48,7 @@ Where Pretui is better:
 
 - **The title is a heading and names the region.** Every shadcn part is a `<div>`, so a page of cards has no outline and no accessible names. Here the title is an `<h3>` with an id and the `<section>` is `aria-labelledby` it.
 - **The root does not clip.** Mantine's `overflow: hidden` clips every Popover, Menu, Tooltip and focus ring rendered inline — and this kit renders overlays in place. Only the media band clips, and it carries its own logical corner radii.
+- **A whole-card target that can still hold controls.** MUI's `CardActionArea` is a `<button>` around the content, so a link or button inside it is invalid nested-interactive markup, and Ant's `hoverable` + `onClick` is a click handler on a `<div>` that no keyboard reaches. `@onSelect` is a real button beside the content, with `aria-pressed`, and the controls inside stay valid.
 - **Keyboard focus shows.** Every kit's interactive card recipe is a hover shadow; `@interactive` adds the `:focus-within` state that actually exists when a keyboard user is inside.
 - **Named blocks cannot be wrapped away**, unlike Mantine's type-sniffed sections, and the action column is a block test rather than a selector probe.
 - **Tone is the kit's two-axis grid**, not a colour prop resolved somewhere the component cannot document.
@@ -50,7 +56,7 @@ Where Pretui is better:
 Where it is thinner:
 
 - **No heading-level arg.** The title is always `<h3>`; a card under an `<h3>` section heading needs `<:header>` to supply the right level, which also means supplying the id and naming by hand.
-- **No whole-card link.** MUI's `CardActionArea` and Ant's `hoverable` + `onClick` make the surface the target; here that is deliberately absent, and the stretched-link pattern (one link whose `::after` covers the card) is left to the caller.
+- **No whole-card link.** `@onSelect` makes the surface a select target, not a navigation target; the stretched-link pattern (one link whose `::after` covers the card) is left to the caller.
 - **No `extra` / `actions` array.** Ant's footer action row and header `extra` are blocks here, with no divided action-bar layout.
 - **No loading state.** Ant's `loading` skeleton has no analogue; compose **Skeleton** into the body.
 - **No inset media.** The media band is full-bleed only; Mantine's `inheritPadding` section has no equivalent.
@@ -63,6 +69,9 @@ No APG pattern — a card is a sectioning element, and the component leans on na
 - **An untitled card adds nothing.** No title means no heading and no `aria-labelledby`, so the `<section>` has no name and exposes no landmark; the tests assert there is no dangling reference.
 - **`<:header>` hands naming back to the caller.** The generated heading and `aria-labelledby` are both dropped (asserted), so a caller header that should name the card must set `aria-labelledby` itself through `...attributes`.
 - **The heading level is fixed at `<h3>`.** Whether that fits the page outline is the caller's problem; nothing adapts it.
+- **The select control is a native button.** Enter and Space come from the platform, and it carries `aria-pressed` from `@selected`. Its name is `@selectLabel`, or the generated title through `aria-labelledby` (asserted). A selectable card with neither a title nor `@selectLabel` has an unnamed button, so give a `<:header>` card a `@selectLabel`. Its `:focus-visible` outline rings the whole card.
+- **Selection does not rely on colour.** The inline-start rule carries it in greyscale, and `aria-pressed` carries it to assistive tech.
+- **The select control comes first in Tab order**, before the card's own controls, and each control inside keeps its own name and focus style.
 - **`@interactive` is presentational.** The card gains no role and no tabindex. The `:focus-within` ring shows keyboard presence, but the control inside must still have its own focus style and accessible name.
 - **A scrolling body is not focusable.** `@scroll` sets `overflow-y: auto` without a tabindex, so a body of plain text cannot be scrolled from the keyboard unless the browser makes the scroller focusable itself. Put a focusable element inside, or add `tabindex="0"` and a label on the content.
 - **Contrast on `accent` is the caller's to check.** `accent` paints the fill with the tone and sets ink to `--pretui-tone-on`, but the description and eyebrow keep `--muted-foreground`, which is tuned for the `--card` ground, not a saturated fill.
@@ -70,7 +79,7 @@ No APG pattern — a card is a sectioning element, and the component leans on na
 
 ## Theming
 
-The per-component knobs: `--pretui-card-pad` (header, body and footer padding, default `1.1em`), `--pretui-card-gap` (header column gap, `0.9em`), `--pretui-card-radius` (defaults to `--radius-surface`; the media band inherits the corners it touches), `--pretui-card-media-size` (media width when horizontal, `34%`), `--pretui-card-bg` (overrides the fill of every appearance except `plain`), `--pretui-card-shadow` (the outlined / filled-outlined hairline) and `--pretui-card-shadow-hover` (the interactive hover).
+The per-component knobs: `--pretui-card-pad` (header, body and footer padding, default `1.1em`), `--pretui-card-gap` (header column gap, `0.9em`), `--pretui-card-radius` (defaults to `--radius-surface`; the media band inherits the corners it touches), `--pretui-card-media-size` (media width when horizontal, `34%`), `--pretui-card-bg` (overrides the fill of every appearance except `plain`), `--pretui-card-shadow` (the outlined / filled-outlined hairline) and `--pretui-card-shadow-hover` (the interactive and selectable hover). Selection reads `--pretui-selected` for the tint and `--primary` for the inline-start rule.
 
 The surface reads `--card`, `--card-foreground`, `--border`, `--muted-foreground`, `--ring`, `--pretui-shadow-card` and `--pretui-shadow-raised`. Tone resolves through the shared channel `--pretui-tone` / `--pretui-tone-on`, fed from `--primary`, `--pretui-info`, `--success`, `--warning`, `--destructive` and `--pretui-attention` (with their `--pretui-on-*` partners). Size reads `--pretui-size-*` with `--text-ui-*` fallbacks. Type reads `--track-ui`, `--track-heading`, `--track-eyebrow` and `--font-mono`; motion reads `--pretui-dur-snap` and `--pretui-ease-snap`.
 
@@ -90,6 +99,7 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 | `CardContent`                              | `<:default>`                        |
 | `CardFooter` / Ant `actions`               | `<:footer>`                         |
 | `CardMedia` / Ant `cover` / `Card.Section` | `<:media>`                          |
-| Ant `hoverable` / MUI `CardActionArea`     | `@interactive` (hover + focus ring) |
+| Ant `hoverable`                            | `@interactive` (hover + focus ring) |
+| MUI `CardActionArea` / a selectable tile   | `@onSelect` + `@selected`           |
 | Mantine `Paper` / a bare surface           | **Panel**                           |
 | A record tile that resizes with its slot   | **CopyFit**                         |
