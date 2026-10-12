@@ -1,8 +1,9 @@
 // Pretui — Card unit tests, for the select control. What is asserted is the
-// markup contract: one native button that is a sibling of the content, its
-// name and pressed state, and that the card's own controls keep their
-// clicks. The pointer-events stacking lives in `<style scoped>`, which is
-// inert here.
+// markup contract (one native button beside the content, its name and
+// pressed state) and the surface click: a click on the card's plain content
+// selects it, and a click on anything that keeps its own click (a control,
+// an inline overlay, a scroll body's controls) or that ends a text selection
+// does not. None of it depends on CSS, so it holds in this harness.
 //
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
@@ -130,7 +131,33 @@ module('Pretui | components/card', function (hooks) {
     );
   });
 
-  test("the card's own link and button keep their clicks", async function (assert) {
+  test("a click on the card's plain content selects it", async function (assert) {
+    let h = new Holder();
+    await render(
+      <template>
+        <Card
+          @title='Lot B-201'
+          @description='First flush'
+          @selected={{h.selected}}
+          @onSelect={{h.toggle}}
+        >
+          <:default><p class='plain-text'>Body text</p></:default>
+          <:footer><span class='footer-note'>3 chests</span></:footer>
+        </Card>
+      </template>,
+    );
+    await click('.pretui-card-title');
+    assert.strictEqual(h.selects, 1, 'the title selects');
+    await click('.plain-text');
+    assert.strictEqual(h.selects, 2, 'the body text selects');
+    await click('.footer-note');
+    assert.strictEqual(h.selects, 3, 'the footer selects');
+    assert
+      .dom('[data-test-pretui-card-select]')
+      .hasAttribute('aria-pressed', 'true');
+  });
+
+  test("the card's own controls and overlays keep their clicks", async function (assert) {
     let h = new Holder();
     let follow = (event: Event) => event.preventDefault();
     await render(
@@ -141,24 +168,54 @@ module('Pretui | components/card', function (hooks) {
               class='inner-button'
               {{on 'click' h.press}}
             >Edit</button></:action>
-          <:default><a
-              href='#lot'
-              class='inner-link'
-              {{on 'click' follow}}
-            >Open</a></:default>
+          <:default>
+            <a href='#lot' class='inner-link' {{on 'click' follow}}>Open</a>
+            <div role='dialog' aria-label='Menu' class='inner-popup'><p
+                class='popup-text'
+              >Popup body</p></div>
+            <div tabindex='0' class='scroller'><span
+                class='scroller-text'
+              >Scrolling code</span></div>
+            <input aria-label='Note' class='inner-input' />
+          </:default>
         </Card>
       </template>,
     );
     await click('.inner-button');
     assert.strictEqual(h.inner, 1, 'the inner button handled its click');
     await click('.inner-link');
+    await click('.popup-text');
+    await click('.scroller-text');
+    await click('.inner-input');
     assert.strictEqual(
       h.selects,
       0,
-      '@onSelect never fired from the inner controls',
+      '@onSelect never fired from controls, overlays or focusable regions',
     );
     assert
       .dom('[data-test-pretui-card-select]')
       .hasAttribute('aria-pressed', 'false');
+  });
+
+  test('ending a text selection inside the card does not select it', async function (assert) {
+    let h = new Holder();
+    await render(
+      <template>
+        <Card @title='Lot B-201' @onSelect={{h.toggle}}>
+          <:default><p class='plain-text'>Select this text</p></:default>
+        </Card>
+      </template>,
+    );
+    let text = q('.plain-text');
+    let range = document.createRange();
+    range.selectNodeContents(text);
+    let selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    await click(text);
+    assert.strictEqual(h.selects, 0, 'a drag-selection is not a select');
+    selection.removeAllRanges();
+    await click(text);
+    assert.strictEqual(h.selects, 1, 'a plain click still is');
   });
 });

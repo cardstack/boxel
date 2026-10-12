@@ -2,6 +2,7 @@
 import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
 import { on } from '@ember/modifier';
+import { OWNS_PRESS, listen } from '../focus';
 import type {
   PretuiAppearance,
   PretuiSize,
@@ -70,6 +71,27 @@ import type {
 //      Button rather than a parallel table.
 //   7. **`className` is the styling API upstream.** Here it is tokens plus
 //      `...attributes`; `--pretui-card-pad` / `-radius` / `-gap` are the knobs.
+
+/** What keeps its own clicks inside a selectable card: every control the
+ * kit treats as owning a press, plus native media, embeds and inline
+ * overlays. The walk runs over the composed path, so the controls inside an
+ * open shadow root (media-chrome's buttons) count too. */
+const KEEPS_ITS_CLICK = [
+  OWNS_PRESS,
+  '[tabindex]',
+  'video',
+  'audio',
+  'iframe',
+  'object',
+  'embed',
+  'dialog',
+  '[popover]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[role="tooltip"]',
+  '[role="slider"]',
+].join(', ');
 
 export type CardAppearance = Exclude<PretuiAppearance, 'accent'> | 'accent';
 
@@ -177,8 +199,35 @@ export class Card extends Component<CardSignature> {
       ? undefined
       : this.labelledBy(hasHeader, hasTitleBlock);
 
-  select = () => {
-    this.args.onSelect?.();
+  /** A click anywhere on a selectable card selects it, unless it landed on
+   * something that keeps its own click, or ends a text selection. The card's
+   * content stays fully interactive: scrolling, media, hover tooltips and
+   * drag-selecting text all work as they would outside the card. */
+  onSurfaceClick = (event: Event) => {
+    let onSelect = this.args.onSelect;
+    if (!onSelect) {
+      return;
+    }
+    let card = event.currentTarget as HTMLElement;
+    for (let node of event.composedPath()) {
+      if (node === card) {
+        break;
+      }
+      let el = node as Element;
+      if (typeof el.matches === 'function' && el.matches(KEEPS_ITS_CLICK)) {
+        return;
+      }
+    }
+    let selection = card.ownerDocument.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.anchorNode &&
+      card.contains(selection.anchorNode)
+    ) {
+      return;
+    }
+    onSelect();
   };
 
   get orientation(): Orientation {
@@ -206,6 +255,7 @@ export class Card extends Component<CardSignature> {
       }}
       data-test-pretui-card
       ...attributes
+      {{listen 'click' this.onSurfaceClick}}
     >
       {{#if @onSelect}}
         <button
@@ -218,7 +268,7 @@ export class Card extends Component<CardSignature> {
             (has-block 'title')
           }}
           data-test-pretui-card-select
-          {{on 'click' this.select}}
+          {{on 'click' @onSelect}}
         ></button>
       {{/if}}
       {{#if (has-block 'media')}}
@@ -492,26 +542,27 @@ export class Card extends Component<CardSignature> {
             )
           );
         }
-        .pretui-card[data-interactive='true']:focus-within {
+        .pretui-card[data-interactive='true']:not(
+            [data-selectable='true']
+          ):focus-within {
           box-shadow: 0 0 0 2px var(--ring);
         }
-        /* selectable — the select button covers the card from BEHIND the
-           content; the content lets pointer events fall through to it, and
-           only the caller's own controls take them back. Nothing of the
-           caller's position or z-index is touched, and no z-index is set
-           here: a stacking context on the card would trap an inline
-           Popup or Menu under the next card. Paint order does the layering —
-           both layers are positioned with z-index auto, and the content
-           comes later in the DOM. */
+        /* selectable — the select button sits BEHIND the content, as wide as
+           the card, so its focus ring outlines the card. It carries the
+           keyboard and the accessible name; pointer clicks land on the
+           content and select through the card's own click handler. The
+           content is positioned (z-index auto) only so it paints after the
+           button: no z-index is set and no stacking context is created, so an
+           inline Popup or Menu still rises above neighbouring cards. */
         .pretui-card[data-selectable='true'] {
           position: relative;
+          cursor: pointer;
         }
         .pretui-card-select {
           all: unset;
           position: absolute;
           inset: 0;
           border-radius: inherit;
-          cursor: pointer;
         }
         .pretui-card-select:focus-visible {
           outline: 2px solid var(--ring);
@@ -520,31 +571,6 @@ export class Card extends Component<CardSignature> {
         .pretui-card[data-selectable='true'] > .pretui-card-media,
         .pretui-card[data-selectable='true'] > .pretui-card-column {
           position: relative;
-          pointer-events: none;
-        }
-        /* A scrolling body keeps its pointer, or the wheel and the scrollbar
-           would land on the select button; in a scroll card the body is not
-           a select target. */
-        .pretui-card[data-selectable='true'][data-scroll='true']
-          .pretui-card-body {
-          pointer-events: auto;
-        }
-        .pretui-card[data-selectable='true'] :deep(a),
-        .pretui-card[data-selectable='true'] :deep(button),
-        .pretui-card[data-selectable='true'] :deep(input),
-        .pretui-card[data-selectable='true'] :deep(select),
-        .pretui-card[data-selectable='true'] :deep(textarea),
-        .pretui-card[data-selectable='true'] :deep(label),
-        .pretui-card[data-selectable='true'] :deep(summary),
-        .pretui-card[data-selectable='true'] :deep([tabindex]),
-        .pretui-card[data-selectable='true'] :deep([contenteditable]),
-        .pretui-card[data-selectable='true'] :deep(dialog),
-        .pretui-card[data-selectable='true'] :deep([popover]),
-        .pretui-card[data-selectable='true'] :deep([role='dialog']),
-        .pretui-card[data-selectable='true'] :deep([role='menu']),
-        .pretui-card[data-selectable='true'] :deep([role='listbox']),
-        .pretui-card[data-selectable='true'] :deep([role='tooltip']) {
-          pointer-events: auto;
         }
         .pretui-card[data-selectable='true']:hover {
           box-shadow: var(
@@ -561,24 +587,42 @@ export class Card extends Component<CardSignature> {
         .pretui-card[data-selected='true'] {
           position: relative;
         }
-        /* An accent card keeps its fill — the tint under its on-tone ink
-           would be unreadable — and carries selection on the rule alone. */
-        .pretui-card[data-selected='true']:not([data-appearance='accent']) {
-          background: var(--pretui-selected, var(--boxel-100));
+        /* The tint is laid OVER the appearance's own fill, so a tone fill or
+           a caller's --pretui-card-bg still shows through. plain has no fill
+           to tint and accent's on-tone ink would be unreadable on it; both
+           carry selection on the rule alone. */
+        .pretui-card[data-selected='true']:is(
+            [data-appearance='outlined'],
+            [data-appearance='filled'],
+            [data-appearance='filled-outlined']
+          ) {
+          background-image: linear-gradient(
+            color-mix(
+              in oklch,
+              var(--pretui-selected, var(--boxel-100)) 70%,
+              transparent
+            ),
+            color-mix(
+              in oklch,
+              var(--pretui-selected, var(--boxel-100)) 70%,
+              transparent
+            )
+          );
         }
-        .pretui-card[data-selected='true']::before {
+        /* ::after, last in paint order, so it draws over the media band
+           without a z-index. */
+        .pretui-card[data-selected='true']::after {
           content: '';
           position: absolute;
           inset-block: 0;
           inset-inline-start: 0;
-          z-index: 1;
           inline-size: 2px;
           border-start-start-radius: inherit;
           border-end-start-radius: inherit;
           background: var(--primary);
           pointer-events: none;
         }
-        .pretui-card[data-selected='true'][data-appearance='accent']::before {
+        .pretui-card[data-selected='true'][data-appearance='accent']::after {
           inline-size: 3px;
           background: var(--pretui-tone-on);
         }
