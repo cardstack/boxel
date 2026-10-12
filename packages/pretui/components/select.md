@@ -44,7 +44,7 @@ Gaps and cautions:
 
 ## Theming
 
-Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--ring`, `--radius`, `--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`, `--shadow-inset`.
+Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--ring`, `--radius`, `--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`.
 
 Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-display`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. Hovered or keyboard-highlighted, the selected row darkens a shade in both schemes, the same as an accent Button's hover.
 

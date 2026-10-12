@@ -351,9 +351,7 @@ export class Select extends Component<SelectSignature> {
            a focus indicator there */
         outline: 1px solid transparent;
         outline-offset: 1px;
-        box-shadow:
-          0 0 0 1px var(--ring),
-          var(--shadow-inset);
+        box-shadow: 0 0 0 1px var(--ring);
       }
       .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
         opacity: 0.45;
