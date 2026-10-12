@@ -176,8 +176,9 @@ export default class OperationsService
   // Who a render tab renders as, read from the realm sessions it holds.
   //
   // A render a user asks for — a capture, a command — holds that user's
-  // ordinary sessions, and the realm server scopes its searches as that user,
-  // so the actor is that user and what it draws is served back to them alone.
+  // ordinary sessions, and the realm server scopes its searches and judges its
+  // writes as that user, so the actor is that user: the one the realm already
+  // authenticates the render's requests as.
   //
   // A render a realm makes of its own cards — indexing, the HTML render, a
   // module's definition render — holds realm-authority sessions. The `user`

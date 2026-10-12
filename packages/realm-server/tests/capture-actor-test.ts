@@ -33,12 +33,14 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 //
 // One realm, which both readers may read. It holds a schedule type whose
 // `listMine` is a named query comparing against `actor()`, one schedule for
-// each reader, and a board whose isolated template runs `listMine` and draws
-// each row it gets back at a height that says whose schedule it is.
+// each reader and one for the realm's owner, and a board whose isolated
+// template runs `listMine` and draws each row it gets back at a height that
+// says whose schedule it is.
 //
 // A capture a reader asks for renders on that reader's ordinary session, so
 // the board draws their schedule alone. The realm's own render of the board
-// runs on a realm-authority session, which has no actor, so it draws none.
+// runs on a realm-authority session whose user is the owner. That session has
+// no actor, so it draws none, not even the owner's.
 // ============================================================================
 
 // A path of this file's own: a prerender tab pooled by realm keeps the
@@ -180,6 +182,7 @@ module(basename(import.meta.filename), function (hooks) {
               },
             }),
             'schedules/requester.json': schedule("The requester's", REQUESTER),
+            'schedules/owner.json': schedule("The owner's", OWNER),
             'schedules/other.json': schedule(
               "The other reader's",
               OTHER_READER,
@@ -307,7 +310,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.notOk(
       html.includes('board-row'),
-      `the realm's render, which has no actor, drew no schedule: ${html}`,
+      `the realm's render, which has no actor, drew no schedule, not even its owner's: ${html}`,
     );
   });
 });

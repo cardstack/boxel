@@ -501,11 +501,32 @@ module('Integration | operations query', function (hooks) {
     );
   });
 
-  test('a render has no viewer, so a search that compares against one answers none', async function (assert) {
-    // The prerender app authenticates as itself so it can render any card, and
-    // what it produces is served to everyone. A saved search that resolved the
-    // caller there would put one identity's rows into shared HTML.
+  // Re-marks every session this tab holds as a realm-authority one, the kind a
+  // realm renders its own cards under, and answers how to put them back.
+  function holdRealmAuthoritySessions(): () => void {
+    let resources = [...getService('realm').realms.values()].filter(
+      (resource) => resource.token,
+    );
+    let originals = resources.map((resource) => resource.token!);
+    for (let resource of resources) {
+      let [header, payload, signature] = resource.token!.split('.');
+      let claims = JSON.parse(atob(payload));
+      resource.token = [
+        header,
+        btoa(JSON.stringify({ ...claims, realmAuthority: true })),
+        signature,
+      ].join('.');
+    }
+    return () =>
+      resources.forEach((resource, i) => (resource.token = originals[i]));
+  }
+
+  test("a realm's render of its own cards has no viewer, so a search that compares against one answers none", async function (assert) {
+    // A realm renders its own cards on realm-authority sessions, and what it
+    // produces is served to everyone. A saved search that resolved the caller
+    // there would put one identity's rows into shared HTML.
     (globalThis as any).__boxelPrerenderApp = true;
+    let restoreSessions = holdRealmAuthoritySessions();
     try {
       assert.strictEqual(
         saved('myReports').query(),
@@ -517,6 +538,7 @@ module('Integration | operations query', function (hooks) {
         'and a saved search that does not read the caller is unaffected',
       );
     } finally {
+      restoreSessions();
       delete (globalThis as any).__boxelPrerenderApp;
     }
 
@@ -524,6 +546,21 @@ module('Integration | operations query', function (hooks) {
       saved('myReports').query(),
       'outside a render the same search resolves against the signed-in user',
     );
+  });
+
+  test('a render a user asks for has that user as its viewer', async function (assert) {
+    // A capture or a command renders on the sessions of the user who asked
+    // for it, and the realm scopes the render's searches as that user.
+    (globalThis as any).__boxelPrerenderApp = true;
+    try {
+      assert.deepEqual(
+        saved('myReports').query()?.filter,
+        { 'item.on': reportRef(), eq: { 'item.postedBy': CALLER } },
+        "the actor-scoped search compares against the sessions' user",
+      );
+    } finally {
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
   });
 
   module('a query declaring `none`', function () {
