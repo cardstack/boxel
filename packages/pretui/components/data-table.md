@@ -2,7 +2,7 @@
 
 The record listing an agent means by "data table": sortable headers, per-column filters, a column switcher, row selection, expandable detail rows, pinned columns, paging and density, over a plain `<table>`. It is the fourth of the kit's row-drawing things, and the other three are worth naming because the wrong one is a common reach. **Table** is the markup primitive: you write the `<tr>`s. **DataGrid** is the read-only structured grid, args in and rows out, with no toolbar and no view state. **Sheet** is the spreadsheet — editable cells, a real `role='grid'`, the boxel-grid engine. When the pane is too narrow for columns, the same rows go into **List** with **Item** rows, which share this component's selection model and load chrome.
 
-Not built, and not stubbed: virtualization (the kit already has one windowing engine in **AssetGrid**; page instead), tree data (**Tree** is the kit's tree; `<:expanded>` covers per-row detail), multi-column sort, column resize and drag-reorder, and server-side filtering as a mode (hold `@filters` yourself, feed them into `@loadKey`, and let `@load` return the narrowed set).
+Not built, and not stubbed: virtualization (the kit already has one windowing engine in **AssetGrid**; page instead), tree data (**Tree** is the kit's tree; `<:expanded>` covers per-row detail, and **List** takes the same `<:expanded>` and `@expandedKeys` for the narrow pane), multi-column sort, column resize and drag-reorder, and server-side filtering as a mode (hold `@filters` yourself, feed them into `@loadKey`, and let `@load` return the narrowed set).
 
 ## The contract
 
@@ -69,7 +69,7 @@ What the component does, from its rendered markup and its tests:
 - **The sort control is a `<button>`** whose text includes a hidden hint naming the state it will move to.
 - **Selectable rows carry `aria-selected`** (`'false'` before anything is picked); a non-selectable table carries no `aria-selected` anywhere. Each row's checkbox or radio is named by `@rowLabel` — pass it, or the name is "Row N". Single-select radios share one `name`, so the browser enforces the single choice.
 - **Select-all is a genuinely mixed checkbox** (`indeterminate` set as a property, so `aria-checked='mixed'` follows) and is named with the count it covers.
-- **The expander is a `<button>`** with `aria-expanded`, `aria-controls` resolving to the detail `<tr>`'s id, and an `aria-label` built from the row's name ("Expand Gyokuro").
+- **The expander is a `<button>`** with `aria-expanded`, an `aria-label` built from the row's name ("Expand Gyokuro"), and `aria-controls` resolving to the detail `<tr>`'s id while the row is open. A collapsed row's detail is not rendered, so it carries no `aria-controls` then rather than a dangling one.
 - **The scroll box is `role='region'`** with an `aria-label` (from `@label`, falling back to `@caption`, then "Table") and `tabindex='0'`.
 - **A `role='status'` live region** announces the settled count: "6 of 24 lots", "3 lots", or "No lots". It is rendered empty at first and filled only from settled load state, so a filter keystroke that re-queries announces once when the results land. Paging composes **Pagination**, whose current page carries `aria-current='page'`.
 - **`@busy` sets `aria-busy`** and dims the scroll box without replacing the rows, so focus and scroll position survive.
@@ -88,17 +88,17 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| TanStack / Ant / shadcn | Pretui |
-| --- | --- |
-| `columns` / `accessorKey` / `header` | `@columns` with `key` / `label` / `value` |
-| `data` / `dataSource` | `@rows` (`@dataSource` accepted) |
-| `sorting` / `onSortingChange` | `@sort` / `@onSortChange` |
+| TanStack / Ant / shadcn                 | Pretui                                                |
+| --------------------------------------- | ----------------------------------------------------- |
+| `columns` / `accessorKey` / `header`    | `@columns` with `key` / `label` / `value`             |
+| `data` / `dataSource`                   | `@rows` (`@dataSource` accepted)                      |
+| `sorting` / `onSortingChange`           | `@sort` / `@onSortChange`                             |
 | `rowSelection` / `onRowSelectionChange` | `@selected` / `@onSelectionChange` + `@selectionMode` |
-| `columnVisibility` | `@visibleColumns` / `@onVisibleColumnsChange` |
-| `columnFilters` | `@filters` / `@onFiltersChange` |
-| `pagination` | `@pageSize` / `@page` / `@onPageChange` |
-| Ant `expandable` | `<:expanded as \|row\|>` |
-| Ant `fixed` | `pin` on the column (`fixed: true` accepted) |
-| Ant `size` / density | `@size` |
-| `getRowId` | `@key` |
-| empty / loading | `<:empty>` / `<:loading>` / `@busy` |
+| `columnVisibility`                      | `@visibleColumns` / `@onVisibleColumnsChange`         |
+| `columnFilters`                         | `@filters` / `@onFiltersChange`                       |
+| `pagination`                            | `@pageSize` / `@page` / `@onPageChange`               |
+| Ant `expandable`                        | `<:expanded as \|row\|>`                              |
+| Ant `fixed`                             | `pin` on the column (`fixed: true` accepted)          |
+| Ant `size` / density                    | `@size`                                               |
+| `getRowId`                              | `@key`                                                |
+| empty / loading                         | `<:empty>` / `<:loading>` / `@busy`                   |

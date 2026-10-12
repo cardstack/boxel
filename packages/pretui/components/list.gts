@@ -3,8 +3,14 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
-import { DataShell, DataSource } from '../data-component';
-import type { DataArgs, DataLoad, RowKey, RowKeyFn, SelectionMode } from '../data-component';
+import { DataShell, DataSource, ExpansionState } from '../data-component';
+import type {
+  DataArgs,
+  DataLoad,
+  RowKey,
+  RowKeyFn,
+  SelectionMode,
+} from '../data-component';
 import type { PretuiSize } from '../pretui-primitives';
 import { OWNS_PRESS, focusWhen, listen, rovingTabindex } from '../focus';
 import { RowCursor } from '../internal/reading-listing';
@@ -61,6 +67,11 @@ interface ListLine<T> {
   active: boolean;
   api: ListRowApi;
   label: string;
+  expanded: boolean;
+  expandedFlag: 'true' | 'false';
+  detailId: string;
+  /** the detail id while it exists — a collapsed row's detail is not rendered */
+  controls: string | undefined;
 }
 
 export interface ListSignature<T> {
@@ -98,6 +109,12 @@ export interface ListSignature<T> {
      * row's own label. Defaults to `Row N`, which is honest but poor —
      * pass this. */
     rowLabel?: (row: T, index: number) => string;
+    /** controlled expanded rows (by `@key`); needs `<:expanded>` */
+    expandedKeys?: readonly RowKey[];
+    /** uncontrolled seed for the expanded rows */
+    defaultExpandedKeys?: readonly RowKey[];
+    /** fires with the next expanded set, in both modes */
+    onExpandedChange?: (keys: RowKey[]) => void;
     /** hairline between rows (default true) */
     divided?: boolean;
     /** frame the whole list (default false) */
@@ -118,6 +135,9 @@ export interface ListSignature<T> {
   Blocks: {
     /** one row — receives the row, its index, and the row API */
     item: [row: T, index: number, api: ListRowApi];
+    /** a row's detail, rendered only while that row is expanded. Supplying
+     * it turns on the per-row expander. */
+    expanded: [row: T, index: number];
     /** above the rows, inside the frame */
     header: [];
     /** below the rows, inside the frame */
@@ -139,6 +159,8 @@ export class List<T> extends Component<ListSignature<T>> {
    * One implementation, two components. */
   source = new DataSource<T>(() => this.dataArgs);
   cursor = new RowCursor(() => this.rows.length);
+  /** The same expanded-rows state DataTable uses. */
+  expansion = new ExpansionState(() => this.args);
 
   private get dataArgs(): DataArgs<T> {
     let a = this.args;
@@ -187,7 +209,7 @@ export class List<T> extends Component<ListSignature<T>> {
     return this.args.bordered ? 'true' : undefined;
   }
   get busy(): 'true' | undefined {
-    return this.args.busy ?? this.args.loading ? 'true' : undefined;
+    return (this.args.busy ?? this.args.loading) ? 'true' : undefined;
   }
 
   labelFor = (row: T, index: number): string =>
@@ -196,8 +218,11 @@ export class List<T> extends Component<ListSignature<T>> {
   get lines(): ListLine<T>[] {
     return this.rows.map((row, index) => {
       let selected = this.source.isSelected(row, index);
+      let key = this.source.keyFor(row, index);
+      let expanded = this.expansion.isExpanded(key);
+      let detailId = this.guid + '-d-' + String(key);
       return {
-        key: this.source.keyFor(row, index),
+        key,
         row,
         index,
         selected,
@@ -210,6 +235,10 @@ export class List<T> extends Component<ListSignature<T>> {
           toggle: () => this.source.toggleSelected(row, index),
         },
         label: this.labelFor(row, index),
+        expanded,
+        expandedFlag: expanded ? ('true' as const) : ('false' as const),
+        detailId,
+        controls: expanded ? detailId : undefined,
       };
     });
   }
@@ -261,6 +290,11 @@ export class List<T> extends Component<ListSignature<T>> {
     }
   };
 
+  toggleExpanded = (key: RowKey) => this.expansion.toggle(key);
+  expandLabel = (line: ListLine<T>): string =>
+    (line.expanded ? 'Collapse ' : 'Expand ') + line.label;
+  detailLabel = (line: ListLine<T>): string => line.label + ' details';
+
   toggleRow = (row: T, index: number) => {
     this.source.toggleSelected(row, index);
   };
@@ -268,14 +302,19 @@ export class List<T> extends Component<ListSignature<T>> {
     this.args.onActivate?.(row, index);
   };
 
-  /** A click on a row activates it, unless it landed on a control inside. */
+  /** A click on a row activates it, unless it landed on a control or in the
+   * row's expanded detail. */
   onClick = (event: Event) => {
     if (!this.args.onActivate) {
       return;
     }
     let target = event.target as Element | null;
     let li = target?.closest?.('li[data-list-index]');
-    if (!li || target?.closest?.(OWNS_PRESS)) {
+    if (
+      !li ||
+      target?.closest?.(OWNS_PRESS) ||
+      target?.closest?.('.pretui-list-detail')
+    ) {
       return;
     }
     let index = Number(li.getAttribute('data-list-index'));
@@ -322,37 +361,72 @@ export class List<T> extends Component<ListSignature<T>> {
                 class='pretui-list-row'
                 data-list-index={{line.index}}
                 data-selected={{line.selectedFlag}}
+                data-expanded={{if (has-block 'expanded') line.expandedFlag}}
                 data-test-pretui-list-row
                 {{rovingTabindex (this.isRoving line.index)}}
                 {{focusWhen (this.isFocusTarget line.index)}}
               >
-                {{#if this.selectable}}
-                  <span class='pretui-list-pick'>
-                    {{#if this.multi}}
-                      <input
-                        type='checkbox'
-                        class='pretui-list-box'
-                        checked={{line.selected}}
-                        aria-label={{line.label}}
-                        data-test-pretui-list-select
-                        {{on 'change' (fn this.toggleRow line.row line.index)}}
-                      />
-                    {{else}}
-                      <input
-                        type='radio'
-                        class='pretui-list-box pretui-list-radio'
-                        name={{this.radioName}}
-                        checked={{line.selected}}
-                        aria-label={{line.label}}
-                        data-test-pretui-list-select
-                        {{on 'change' (fn this.toggleRow line.row line.index)}}
-                      />
-                    {{/if}}
-                  </span>
-                {{/if}}
-                <div class='pretui-list-body'>
-                  {{yield line.row line.index line.api to='item'}}
+                <div class='pretui-list-line'>
+                  {{#if this.selectable}}
+                    <span class='pretui-list-pick'>
+                      {{#if this.multi}}
+                        <input
+                          type='checkbox'
+                          class='pretui-list-box'
+                          checked={{line.selected}}
+                          aria-label={{line.label}}
+                          data-test-pretui-list-select
+                          {{on
+                            'change'
+                            (fn this.toggleRow line.row line.index)
+                          }}
+                        />
+                      {{else}}
+                        <input
+                          type='radio'
+                          class='pretui-list-box pretui-list-radio'
+                          name={{this.radioName}}
+                          checked={{line.selected}}
+                          aria-label={{line.label}}
+                          data-test-pretui-list-select
+                          {{on
+                            'change'
+                            (fn this.toggleRow line.row line.index)
+                          }}
+                        />
+                      {{/if}}
+                    </span>
+                  {{/if}}
+                  {{#if (has-block 'expanded')}}
+                    <button
+                      type='button'
+                      class='pretui-list-expbtn'
+                      aria-expanded={{line.expandedFlag}}
+                      aria-controls={{line.controls}}
+                      aria-label={{this.expandLabel line}}
+                      data-test-pretui-list-expand
+                      {{on 'click' (fn this.toggleExpanded line.key)}}
+                    >
+                      <span class='pretui-list-chev' aria-hidden='true'>›</span>
+                    </button>
+                  {{/if}}
+                  <div class='pretui-list-body'>
+                    {{yield line.row line.index line.api to='item'}}
+                  </div>
                 </div>
+                {{#if (has-block 'expanded')}}
+                  {{#if line.expanded}}
+                    <div
+                      class='pretui-list-detail'
+                      id={{line.detailId}}
+                      role='region'
+                      aria-label={{this.detailLabel line}}
+                      data-test-pretui-list-detail
+                    >
+                      {{yield line.row line.index to='expanded'}}
+                    </div>
+                  {{/if}}
+                {{/if}}
               </li>
             {{/each}}
           </ul>
@@ -389,10 +463,7 @@ export class List<T> extends Component<ListSignature<T>> {
         .pretui-list[data-bordered] {
           border-radius: var(--radius-surface, 10px);
           background: var(--card);
-          box-shadow: var(
-            --pretui-shadow-hairline,
-            0 0 0 1px var(--border)
-          );
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
           overflow: hidden;
         }
         .pretui-list[aria-busy='true'] {
@@ -420,17 +491,20 @@ export class List<T> extends Component<ListSignature<T>> {
         }
         .pretui-list-row {
           container-type: inline-size;
+          min-width: 0;
+          position: relative;
+        }
+        .pretui-list-line {
           display: flex;
           align-items: center;
           gap: var(--space-3, 8px);
           min-width: 0;
           padding: 0.62em var(--space-4, 11px);
-          position: relative;
         }
         .pretui-list[data-divided] .pretui-list-row + .pretui-list-row {
           box-shadow: inset 0 1px 0 var(--border);
         }
-        .pretui-list-row:hover {
+        .pretui-list-line:hover {
           background: var(--hover, var(--boxel-100));
         }
         .pretui-list-row:focus-visible {
@@ -459,13 +533,56 @@ export class List<T> extends Component<ListSignature<T>> {
           flex: 1 1 auto;
           min-width: 0;
         }
+        .pretui-list-expbtn {
+          flex: none;
+          display: inline-grid;
+          place-content: center;
+          inline-size: 1.7em;
+          block-size: 1.7em;
+          padding: 0;
+          border: 0;
+          border-radius: 6px;
+          background: none;
+          color: var(--muted-foreground);
+          cursor: pointer;
+        }
+        .pretui-list-expbtn:hover {
+          background: var(--hover, var(--boxel-100));
+          color: var(--foreground);
+        }
+        .pretui-list-expbtn:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 1px;
+        }
+        .pretui-list-chev {
+          display: block;
+          line-height: 1;
+          transition: transform var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, cubic-bezier(0.2, 0.9, 0.25, 1.05));
+        }
+        .pretui-list-expbtn[aria-expanded='true'] .pretui-list-chev {
+          transform: rotate(90deg);
+        }
+        .pretui-list-detail {
+          min-width: 0;
+          padding: 0.62em var(--space-4, 11px) 0.85em;
+          box-shadow: inset 0 1px 0 var(--border);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .pretui-list-chev {
+            transition: none;
+          }
+        }
         .pretui-list-box {
           appearance: none;
           width: 15px;
           height: 15px;
           margin: 0;
           border-radius: 5px;
-          background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
+          background: var(
+            --pretui-control-rest,
+            var(--field, var(--boxel-light))
+          );
           box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
           cursor: pointer;
           display: inline-grid;
@@ -486,7 +603,14 @@ export class List<T> extends Component<ListSignature<T>> {
           width: 9px;
           height: 9px;
           background: var(--primary-foreground);
-          clip-path: polygon(14% 47%, 38% 70%, 86% 18%, 96% 30%, 39% 89%, 4% 58%);
+          clip-path: polygon(
+            14% 47%,
+            38% 70%,
+            86% 18%,
+            96% 30%,
+            39% 89%,
+            4% 58%
+          );
         }
         .pretui-list-radio:checked::before {
           clip-path: circle(50%);
@@ -500,8 +624,12 @@ export class List<T> extends Component<ListSignature<T>> {
         /* Coarse pointers get the 44px floor without changing the fine-pointer
            rhythm. */
         @media (pointer: coarse) {
-          .pretui-list-row {
+          .pretui-list-line {
             min-block-size: 44px;
+          }
+          .pretui-list-expbtn {
+            inline-size: 2.4em;
+            block-size: 2.4em;
           }
           .pretui-list-box {
             width: 20px;

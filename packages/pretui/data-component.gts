@@ -371,7 +371,10 @@ export class DataShell extends Component<DataShellSignature> {
         {{#if @hasEmpty}}
           {{yield to='empty'}}
         {{else}}
-          <EmptyState @title={{this.emptyTitle}} @message={{this.emptyMessage}} />
+          <EmptyState
+            @title={{this.emptyTitle}}
+            @message={{this.emptyMessage}}
+          />
         {{/if}}
       {{else}}
         {{yield}}
@@ -414,10 +417,7 @@ export class DataShell extends Component<DataShellSignature> {
         padding: var(--space-4, 11px) var(--space-5, 14px);
         border-radius: var(--radius-surface, 10px);
         background: var(--card);
-        box-shadow: var(
-          --pretui-shadow-hairline,
-          0 0 0 1px var(--border)
-        );
+        box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
       }
       .pretui-data-errmsg {
         margin: 0 0 var(--space-2, 6px);
@@ -561,6 +561,50 @@ export interface DataComponentSignature<
   Args: DataArgs<T>;
   Blocks: DataBlocks<T>;
   Element: El;
+}
+
+/** The expanded-rows args DataTable and List share. */
+export interface ExpansionArgs {
+  /** controlled expanded rows */
+  expandedKeys?: readonly RowKey[];
+  /** uncontrolled seed */
+  defaultExpandedKeys?: readonly RowKey[];
+  /** fires with the next expanded set, in both modes */
+  onExpandedChange?: (keys: RowKey[]) => void;
+}
+
+/**
+ * Which rows are expanded, by key. Controlled when `@expandedKeys` is passed
+ * (the host never moves itself, it only reports), uncontrolled otherwise,
+ * seeded from `@defaultExpandedKeys`. Takes a thunk for the same reason
+ * DataSource does: every read goes through the live args.
+ */
+export class ExpansionState {
+  constructor(private readArgs: () => ExpansionArgs) {}
+
+  @tracked private internal: readonly RowKey[] | undefined = undefined;
+
+  get keys(): readonly RowKey[] {
+    let a = this.readArgs();
+    if (a.expandedKeys !== undefined) {
+      return a.expandedKeys;
+    }
+    return this.internal ?? a.defaultExpandedKeys ?? [];
+  }
+
+  isExpanded = (key: RowKey): boolean => this.keys.includes(key);
+
+  toggle = (key: RowKey) => {
+    let current = this.keys;
+    let next = current.includes(key)
+      ? current.filter((k) => k !== key)
+      : [...current, key];
+    let a = this.readArgs();
+    if (a.expandedKeys === undefined) {
+      this.internal = next;
+    }
+    a.onExpandedChange?.([...next]);
+  };
 }
 
 /**
@@ -735,7 +779,9 @@ export class DataSource<T> implements DataState {
   }
 
   get errorMessage(): string {
-    return this.a.rows === undefined && this.failure ? this.failure.message : '';
+    return this.a.rows === undefined && this.failure
+      ? this.failure.message
+      : '';
   }
 
   /** The rows as given: `@rows` when eager, the loaded set otherwise. */
@@ -967,7 +1013,6 @@ export class DataSource<T> implements DataState {
       reload: this.reload,
     };
   }
-
 }
 
 /**

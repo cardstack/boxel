@@ -22,11 +22,17 @@ class ListUsage extends Component {
   @tracked bordered = true;
   @tracked lastSelection = '—';
   @tracked lastActivated = '—';
+  @tracked expandable = true;
+  @tracked lastExpanded = 'none';
 
   setSelectionMode = (v: string) => (this.selectionMode = v as SelectionMode);
   setSize = (v: string) => (this.size = v as ListingSizeArg);
   setDivided = (v: boolean) => (this.divided = v);
   setBordered = (v: boolean) => (this.bordered = v);
+  setExpandable = (v: boolean) => (this.expandable = v);
+  onExpandedChange = (keys: RowKey[]) => {
+    this.lastExpanded = keys.length ? keys.join(', ') : 'none';
+  };
 
   rowKey = (row: Lot): RowKey => row.id;
   rowLabel = (row: Lot): string => lotLabel(row);
@@ -51,38 +57,76 @@ class ListUsage extends Component {
               <strong>{{this.lastSelection}}</strong></span>
             <span>activated
               <strong>{{this.lastActivated}}</strong></span>
+            <span>expanded
+              <strong>{{this.lastExpanded}}</strong></span>
           </div>
           <p class='ls-hint'>Tab to the list, then ↑/↓ to walk it, Home/End for
             the ends, Space to select, Enter to open.</p>
 
-          <List
-            @items={{this.lots}}
-            @key={{this.rowKey}}
-            @rowLabel={{this.rowLabel}}
-            @label='Lots on the desk'
-            @size={{this.size}}
-            @selectionMode={{this.selectionMode}}
-            @divided={{this.divided}}
-            @bordered={{this.bordered}}
-            @itemNoun='lot'
-            @onSelectionChange={{this.onSelectionChange}}
-            @onActivate={{this.onActivate}}
-          >
-            <:header>Twelve lots, newest first</:header>
-            <:item as |row|>
-              <Item @title={{row.tea}} @description={{row.supplier}}>
-                <:leading>
-                  <Chip @label={{row.id}} />
-                </:leading>
-                <:trailing>
-                  {{this.meta row}}
-                </:trailing>
-                <:actions>
-                  <StatusChip @value={{row.grade}} />
-                </:actions>
-              </Item>
-            </:item>
-          </List>
+          {{#if this.expandable}}
+            <List
+              @items={{this.lots}}
+              @key={{this.rowKey}}
+              @rowLabel={{this.rowLabel}}
+              @label='Lots on the desk'
+              @size={{this.size}}
+              @selectionMode={{this.selectionMode}}
+              @divided={{this.divided}}
+              @bordered={{this.bordered}}
+              @itemNoun='lot'
+              @onSelectionChange={{this.onSelectionChange}}
+              @onActivate={{this.onActivate}}
+              @onExpandedChange={{this.onExpandedChange}}
+            >
+              <:header>Twelve lots, newest first</:header>
+              <:item as |row|>
+                <Item @title={{row.tea}} @description={{row.supplier}}>
+                  <:leading>
+                    <Chip @label={{row.id}} />
+                  </:leading>
+                  <:trailing>
+                    {{this.meta row}}
+                  </:trailing>
+                  <:actions>
+                    <StatusChip @value={{row.grade}} />
+                  </:actions>
+                </Item>
+              </:item>
+              <:expanded as |row|>
+                <p class='ls-detail'>{{row.note}}</p>
+                <p class='ls-detail-meta'>{{row.place}} · {{row.price}}</p>
+              </:expanded>
+            </List>
+          {{else}}
+            <List
+              @items={{this.lots}}
+              @key={{this.rowKey}}
+              @rowLabel={{this.rowLabel}}
+              @label='Lots on the desk'
+              @size={{this.size}}
+              @selectionMode={{this.selectionMode}}
+              @divided={{this.divided}}
+              @bordered={{this.bordered}}
+              @itemNoun='lot'
+              @onSelectionChange={{this.onSelectionChange}}
+              @onActivate={{this.onActivate}}
+            >
+              <:header>Twelve lots, newest first</:header>
+              <:item as |row|>
+                <Item @title={{row.tea}} @description={{row.supplier}}>
+                  <:leading>
+                    <Chip @label={{row.id}} />
+                  </:leading>
+                  <:trailing>
+                    {{this.meta row}}
+                  </:trailing>
+                  <:actions>
+                    <StatusChip @value={{row.grade}} />
+                  </:actions>
+                </Item>
+              </:item>
+            </List>
+          {{/if}}
         </div>
       </:example>
       <:api as |Args|>
@@ -125,6 +169,13 @@ class ListUsage extends Component {
           @description='Frame the whole list, header and footer included.'
           @onInput={{this.setBordered}}
         />
+        <Args.Bool
+          @name='expanded block'
+          @value={{this.expandable}}
+          @defaultValue={{false}}
+          @description='Supplying an expanded block (row, index) adds an expander button to every row, after the selection control. A row’s detail renders only while it is open, so a long list of collapsed rows renders no bodies. expandedKeys controls which rows are open, defaultExpandedKeys seeds them, and onExpandedChange reports every change either way, by the same rule as DataTable.'
+          @onInput={{this.setExpandable}}
+        />
         <Args.Action
           @name='onActivate'
           @description='(row, index) => void — Enter on the focused row. A row with one obvious destination should carry a real anchor inside the item block instead; a click handler on a row is not a link.'
@@ -141,7 +192,7 @@ class ListUsage extends Component {
           @hideControls={{true}}
         />
         <Args.Yield
-          @description='Named blocks: item (row, index, api) where api is { index, selected, active, toggle }; header and footer inside the frame; and loading / empty / error.'
+          @description='Named blocks: item (row, index, api) where api is { index, selected, active, toggle }; expanded (row, index) for the per-row detail; header and footer inside the frame; and loading / empty / error.'
           @hideControls={{true}}
         />
       </:api>
@@ -163,6 +214,16 @@ class ListUsage extends Component {
       .ls-readout strong {
         color: var(--foreground);
         font-weight: 500;
+      }
+      .ls-detail,
+      .ls-detail-meta {
+        margin: 0;
+        font-size: var(--text-ui-sm, 11.5px);
+        line-height: 1.5;
+      }
+      .ls-detail-meta {
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
       }
       .ls-hint {
         margin: 0;

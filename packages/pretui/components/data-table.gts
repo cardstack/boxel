@@ -5,8 +5,15 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import { cssDeclaration, cssStyleFrom, cssValue } from '../pretui-css';
-import { DataShell, DataSource } from '../data-component';
-import type { DataArgs, DataLoad, RowKey, RowKeyFn, SelectionMode, SortState } from '../data-component';
+import { DataShell, DataSource, ExpansionState } from '../data-component';
+import type {
+  DataArgs,
+  DataLoad,
+  RowKey,
+  RowKeyFn,
+  SelectionMode,
+  SortState,
+} from '../data-component';
 import { Button } from './button';
 import { FilterChips } from './filter-chips';
 import type { FilterChipOption } from './filter-chips';
@@ -16,7 +23,11 @@ import { Pagination } from './pagination';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
 import { rovingTabindex } from '../focus';
-import { printValue, readField, setsIndeterminate } from '../internal/reading-listing';
+import {
+  printValue,
+  readField,
+  setsIndeterminate,
+} from '../internal/reading-listing';
 import type { ListingSizeArg } from '../internal/reading-listing';
 import { resolveSize } from '../pretui-primitives';
 
@@ -114,6 +125,8 @@ interface TableLine<T> {
   expanded: boolean;
   expandedFlag: 'true' | 'false';
   detailId: string;
+  /** the detail id while it exists — a collapsed row's detail is not rendered */
+  controls: string | undefined;
   label: string;
 }
 
@@ -272,7 +285,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
 
   @tracked private internalVisible: readonly string[] | undefined = undefined;
   @tracked private internalFilters: FilterState | undefined = undefined;
-  @tracked private internalExpanded: readonly RowKey[] | undefined = undefined;
+  expansion = new ExpansionState(() => this.args);
   @tracked private internalPage: number | undefined = undefined;
 
   // ── args plumbing ──────────────────────────────────────────────────────
@@ -329,7 +342,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     return (this.args.stickyHeader ?? true) ? 'true' : undefined;
   }
   get busy(): 'true' | undefined {
-    return this.args.busy ?? this.args.loading ? 'true' : undefined;
+    return (this.args.busy ?? this.args.loading) ? 'true' : undefined;
   }
   get selectionMode(): SelectionMode {
     return this.table.selectionMode;
@@ -347,7 +360,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     return this.args.label ?? this.args.caption ?? 'Table';
   }
   get scrollStyle() {
-    return cssStyleFrom([cssDeclaration('--pretui-dt-min-w', this.args.minWidth)]);
+    return cssStyleFrom([
+      cssDeclaration('--pretui-dt-min-w', this.args.minWidth),
+    ]);
   }
 
   labelFor = (row: T, index: number): string =>
@@ -400,9 +415,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     let current = this.visibleKeys;
     let next = current.includes(key)
       ? current.filter((k) => k !== key)
-      : [...this.allColumns.map((c) => c.key).filter(
-          (k) => k === key || current.includes(k),
-        )];
+      : [
+          ...this.allColumns
+            .map((c) => c.key)
+            .filter((k) => k === key || current.includes(k)),
+        ];
     if (this.args.visibleColumns === undefined) {
       this.internalVisible = next;
     }
@@ -519,7 +536,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     if (this.args.filters !== undefined) {
       return this.args.filters as FilterState;
     }
-    return this.internalFilters ?? (this.args.defaultFilters as FilterState) ?? {};
+    return (
+      this.internalFilters ?? (this.args.defaultFilters as FilterState) ?? {}
+    );
   }
 
   get filterControls(): FilterControl<T>[] {
@@ -629,7 +648,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       return rows;
     }
     return rows.filter((row) =>
-      cols.every((col) => this.matches(col, row, state[col.key] as FilterValue)),
+      cols.every((col) =>
+        this.matches(col, row, state[col.key] as FilterValue),
+      ),
     );
   }
 
@@ -642,25 +663,8 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
   // assertion. Everything that needs the fact takes it as an argument
   // (`colspanFor`, `showToolbarWith`) or resolves it in CSS.
 
-  get expandedKeys(): readonly RowKey[] {
-    if (this.args.expandedKeys !== undefined) {
-      return this.args.expandedKeys;
-    }
-    return this.internalExpanded ?? this.args.defaultExpandedKeys ?? [];
-  }
-
-  isExpanded = (key: RowKey): boolean => this.expandedKeys.includes(key);
-
-  toggleExpanded = (key: RowKey) => {
-    let current = this.expandedKeys;
-    let next = current.includes(key)
-      ? current.filter((k) => k !== key)
-      : [...current, key];
-    if (this.args.expandedKeys === undefined) {
-      this.internalExpanded = next;
-    }
-    this.args.onExpandedChange?.([...next]);
-  };
+  isExpanded = (key: RowKey): boolean => this.expansion.isExpanded(key);
+  toggleExpanded = (key: RowKey) => this.expansion.toggle(key);
 
   detailId = (key: RowKey): string => this.guid + '-d-' + String(key);
 
@@ -770,6 +774,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         expanded,
         expandedFlag: expanded ? ('true' as const) : ('false' as const),
         detailId: this.detailId(key),
+        controls: expanded ? this.detailId(key) : undefined,
         label: this.labelFor(row, index),
         cells: cols.map((col) => {
           let value = this.rawValue(col, row);
@@ -844,9 +849,12 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       // the browser unchecked the group's previous radio too; put every radio
       // back to what its row says, which is the owner's selection
       let table = box.closest('table');
-      table?.querySelectorAll<HTMLInputElement>('input.pretui-dt-radio').forEach((radio) => {
-        radio.checked = radio.closest('tr')?.getAttribute('aria-selected') === 'true';
-      });
+      table
+        ?.querySelectorAll<HTMLInputElement>('input.pretui-dt-radio')
+        .forEach((radio) => {
+          radio.checked =
+            radio.closest('tr')?.getAttribute('aria-selected') === 'true';
+        });
       box.checked = this.table.isSelected(row, index);
     } else {
       box.checked = this.table.isSelected(row, index);
@@ -891,19 +899,14 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       return 'No ' + plural;
     }
     if (this.shown === this.total) {
-      return (
-        String(this.shown) + ' ' + (this.shown === 1 ? noun : plural)
-      );
+      return String(this.shown) + ' ' + (this.shown === 1 ? noun : plural);
     }
     return String(this.shown) + ' of ' + String(this.total) + ' ' + plural;
   }
 
   get selectionSummary(): string {
     return (
-      String(this.selectedCount) +
-      ' of ' +
-      String(this.shown) +
-      ' selected'
+      String(this.selectedCount) + ' of ' + String(this.shown) + ' selected'
     );
   }
 
@@ -923,9 +926,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
       aria-busy={{this.busy}}
       ...attributes
     >
-      {{!-- The live region is always present and always empty to start: an
+      {{! The live region is always present and always empty to start: an
             aria-live element inserted with text already in it is not
-            reliably announced. --}}
+            reliably announced. }}
       <p class='pretui-sr' role='status' data-test-pretui-dt-live>
         {{this.announcement}}
       </p>
@@ -982,11 +985,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           {{/if}}
 
           {{#if this.showColumnMenu}}
-            <Menu
-              @items={{this.columnMenuItems}}
-              @label='Columns'
-              @align='end'
-            >
+            <Menu @items={{this.columnMenuItems}} @label='Columns' @align='end'>
               <:trigger as |isOpen toggle|>
                 <Button
                   @appearance='outlined'
@@ -1012,10 +1011,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         @skeletonRows={{@skeletonRows}}
       >
         <:default>
-          {{!-- A scrollable box is a keyboard trap when it has no tab stop.
+          {{! A scrollable box is a keyboard trap when it has no tab stop.
                 MUI, Tremor and shadcn all ship it without one; this is the
                 documented fix — a named region that can be reached and
-                scrolled with the keyboard. --}}
+                scrolled with the keyboard. }}
           <div
             class='pretui-dt-scroll'
             role='region'
@@ -1030,7 +1029,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
               <thead>
                 <tr>
                   {{#if this.selectable}}
-                    <th scope='col' class='pretui-dt-pick-h' data-pin={{this.leadPin}}>
+                    <th
+                      scope='col'
+                      class='pretui-dt-pick-h'
+                      data-pin={{this.leadPin}}
+                    >
                       {{#if this.multi}}
                         <input
                           type='checkbox'
@@ -1047,7 +1050,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                     </th>
                   {{/if}}
                   {{#if (has-block 'expanded')}}
-                    <th scope='col' class='pretui-dt-exp-h' data-pin={{this.leadPin}}>
+                    <th
+                      scope='col'
+                      class='pretui-dt-exp-h'
+                      data-pin={{this.leadPin}}
+                    >
                       <span class='pretui-sr'>Detail</span>
                     </th>
                   {{/if}}
@@ -1069,8 +1076,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                           data-test-pretui-dt-sort
                           {{on 'click' (fn this.sortBy head.key)}}
                         >
-                          <span class='pretui-dt-sort-text'>{{head.label}}</span>
-                          <span class='pretui-dt-mark' aria-hidden='true'>{{head.mark}}</span>
+                          <span
+                            class='pretui-dt-sort-text'
+                          >{{head.label}}</span>
+                          <span
+                            class='pretui-dt-mark'
+                            aria-hidden='true'
+                          >{{head.mark}}</span>
                           <span class='pretui-sr'>{{head.hint}}</span>
                         </button>
                       {{else}}
@@ -1079,7 +1091,11 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                     </th>
                   {{/each}}
                   {{#if (has-block 'actions')}}
-                    <th scope='col' class='pretui-dt-act-h' data-pin={{this.tailPin}}>
+                    <th
+                      scope='col'
+                      class='pretui-dt-act-h'
+                      data-pin={{this.tailPin}}
+                    >
                       <span class='pretui-sr'>Actions</span>
                     </th>
                   {{/if}}
@@ -1102,7 +1118,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                             checked={{line.selected}}
                             aria-label={{line.label}}
                             data-test-pretui-dt-select
-                            {{on 'change' (fn this.toggleRow line.row line.index)}}
+                            {{on
+                              'change'
+                              (fn this.toggleRow line.row line.index)
+                            }}
                           />
                         {{else}}
                           <input
@@ -1112,7 +1131,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                             checked={{line.selected}}
                             aria-label={{line.label}}
                             data-test-pretui-dt-select
-                            {{on 'change' (fn this.toggleRow line.row line.index)}}
+                            {{on
+                              'change'
+                              (fn this.toggleRow line.row line.index)
+                            }}
                           />
                         {{/if}}
                       </td>
@@ -1123,12 +1145,15 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                           type='button'
                           class='pretui-dt-expbtn'
                           aria-expanded={{line.expandedFlag}}
-                          aria-controls={{line.detailId}}
+                          aria-controls={{line.controls}}
                           aria-label={{this.expandLabel line}}
                           data-test-pretui-dt-expand
                           {{on 'click' (fn this.toggleExpanded line.key)}}
                         >
-                          <span class='pretui-dt-chev' aria-hidden='true'>›</span>
+                          <span
+                            class='pretui-dt-chev'
+                            aria-hidden='true'
+                          >›</span>
                         </button>
                       </td>
                     {{/if}}
@@ -1171,9 +1196,9 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           </div>
 
           {{#if this.noResults}}
-            {{!-- Distinct from DataShell's empty state, which means "this
+            {{! Distinct from DataShell's empty state, which means "this
                   dataset has no rows". This one means "your filters matched
-                  nothing", and it has to offer a way back out. --}}
+                  nothing", and it has to offer a way back out. }}
             <div class='pretui-dt-noresults' data-test-pretui-dt-noresults>
               <EmptyState
                 @title='Nothing matches these filters'
@@ -1297,7 +1322,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           min-inline-size: 9em;
           padding-inline: 0.7em;
           color: var(--foreground);
-          background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
+          background: var(
+            --pretui-control-rest,
+            var(--field, var(--boxel-light))
+          );
           border: 0;
           border-radius: var(--radius);
           box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
@@ -1316,10 +1344,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           max-width: 100%;
           border-radius: var(--radius-surface, 10px);
           background: var(--card);
-          box-shadow: var(
-            --pretui-shadow-hairline,
-            0 0 0 1px var(--border)
-          );
+          box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
         }
         .pretui-dt-scroll:focus-visible {
           outline: 2px solid var(--ring);
@@ -1480,7 +1505,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           height: 15px;
           margin: 0;
           border-radius: 5px;
-          background: var(--pretui-control-rest, var(--field, var(--boxel-light)));
+          background: var(
+            --pretui-control-rest,
+            var(--field, var(--boxel-light))
+          );
           box-shadow: 0 0 0 1px var(--pretui-control-border, var(--input));
           cursor: pointer;
           display: inline-grid;
@@ -1501,7 +1529,14 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           width: 9px;
           height: 9px;
           background: var(--primary-foreground);
-          clip-path: polygon(14% 47%, 38% 70%, 86% 18%, 96% 30%, 39% 89%, 4% 58%);
+          clip-path: polygon(
+            14% 47%,
+            38% 70%,
+            86% 18%,
+            96% 30%,
+            39% 89%,
+            4% 58%
+          );
         }
         .pretui-dt-radio:checked::before {
           clip-path: circle(50%);
