@@ -15,7 +15,8 @@ export default class CopyCardToRealmTool extends HostBaseTool<
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
 
-  description = 'Copy a card to a realm';
+  description =
+    'Copy a card to a realm. The result card holds newCardId, the URL of the copy.';
   static actionVerb = 'Copy';
 
   async getInputType() {
