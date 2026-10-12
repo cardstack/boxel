@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import { render, click, fillIn, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Select } from './select';
+import { Dialog } from './dialog';
 
 const OPTIONS = [
   { value: 'green', label: 'Green' },
@@ -26,6 +27,24 @@ module('Pretui | components/select', function (hooks) {
     assert.ok(listbox, 'the list is open');
     assert.notOk(wrapper().contains(listbox), 'in the wormhole, not in place');
     assert.strictEqual(listbox.querySelectorAll('[data-test-pretui-select-option]').length, OPTIONS.length);
+  });
+
+  test('inside a modal Dialog the list renders in place and an option can be chosen', async function (assert) {
+    let chosen: string | undefined;
+    let onChange = (value: string) => (chosen = value);
+    await render(
+      <template>
+        <Dialog @open={{true}} @label='Pick a tea'>
+          <Select @options={{OPTIONS}} @onValueChange={{onChange}} />
+        </Dialog>
+      </template>,
+    );
+    await click(trigger());
+    let listbox = document.querySelector("[role='listbox']") as HTMLElement;
+    assert.ok(wrapper().contains(listbox), 'the list is inside the dialog, not in the inert wormhole');
+    let oolong = Array.from(listbox.querySelectorAll('[data-test-pretui-select-option]')).find((o) => o.textContent?.trim() === 'Oolong') as HTMLElement;
+    await click(oolong);
+    assert.strictEqual(chosen, 'oolong', 'the option takes the click');
   });
 
   test('@searchEnabled adds a search box that takes focus on open and filters by label', async function (assert) {

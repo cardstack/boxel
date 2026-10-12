@@ -69,6 +69,7 @@ interface PoweredSelectSignature {
     beforeOptionsComponent?: unknown;
     matchTriggerWidth?: boolean;
     dropdownClass?: string;
+    renderInPlace?: boolean;
     ariaLabel?: string;
     ariaLabelledBy?: string;
   };
@@ -226,6 +227,12 @@ class SelectSearch extends Component<SelectSearchSignature> {
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
+  // A modal <dialog> sits in the top layer and makes everything outside it
+  // inert, the wormhole included, so inside one the list renders in place.
+  @tracked inDialog = false;
+  detectDialog = modifier((wrap: HTMLElement) => {
+    this.inDialog = wrap.closest('dialog') !== null;
+  });
   get explicitName(): boolean {
     return this.args.label !== undefined || this.args.labelledBy !== undefined;
   }
@@ -257,6 +264,7 @@ export class Select extends Component<SelectSignature> {
     <div
       class='pretui-selectwrap'
       {{nameFromLabel @controlId this.explicitName}}
+      {{this.detectDialog}}
       data-test-pretui-select
       ...attributes
     >
@@ -275,6 +283,7 @@ export class Select extends Component<SelectSignature> {
         @beforeOptionsComponent={{SelectSearch}}
         @matchTriggerWidth={{true}}
         @dropdownClass='pretui-select-dropdown'
+        @renderInPlace={{this.inDialog}}
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
         data-pretui-select-trigger
