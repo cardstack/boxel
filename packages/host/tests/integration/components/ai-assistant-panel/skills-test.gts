@@ -100,10 +100,13 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
   // Applying a tool call can keep running after the click's settled():
   // executing the tool awaits work no test waiter tracks, and the room's
-  // skills are re-uploaded only once it finishes. The tool's result event is
-  // sent after that re-upload, so waiting for it on the mock homeserver is
-  // what makes the room state safe to read. A result other than "applied"
-  // fails with the reason the tool gave.
+  // skills are re-uploaded only once it finishes. A run that completes sends
+  // its result event after that re-upload, so waiting for the event on the
+  // mock homeserver is what makes the room state safe to read. A result other
+  // than "applied" fails with the reason the tool gave. A re-upload that
+  // throws still sends "applied" (the tool's effects landed), so that case
+  // surfaces in the room-state assertions and in the tool service's error
+  // log instead.
   async function waitForToolResult(
     assert: Assert,
     roomId: string,
