@@ -239,6 +239,12 @@ export async function forwardJsonResponse(
     );
   }
 
+  // The body is written straight to the socket. An explicit null body tells
+  // Koa there is nothing more to send, so once the handler returns — after
+  // the call's cost is recorded — Koa only ends the response. A client that
+  // sees its response complete can therefore rely on the charge and the
+  // in-flight slot having been settled, as when the body was sent whole.
+  ctxt.body = null;
   ctxt.status = externalResponse.status;
   ctxt.message = externalResponse.statusText;
   ctxt.set('Content-Type', SupportedMimeType.JSON);
@@ -276,9 +282,6 @@ export async function forwardJsonResponse(
     );
     res.destroy();
     return undefined;
-  }
-  if (!clientGone()) {
-    res.end();
   }
   if (!chargesForUsage) {
     return undefined;
