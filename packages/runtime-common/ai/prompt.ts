@@ -1278,8 +1278,14 @@ type FormattedCorrectnessSummary = {
 const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Make awaited realm.fs.replace calls with exact current text.
 2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
+// Sent as a user-role follow-up after a clean check, so the model reads it
+// as the newest request. A bare "summarize in one sentence" there replaces
+// the answer the user asked for before the write (the question that came
+// with the request, a skill's required closing line) with the sentence. The
+// note therefore sizes itself at one line and sends the model back to the
+// user's message to finish.
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
-  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
+  'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 

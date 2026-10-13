@@ -5109,6 +5109,171 @@ ${patchedFileSource}
     );
   });
 
+  test('a passing correctness check asks the model to finish its answer, not to stop', async function () {
+    const roomId = '!room:localhost';
+    const aiMessageId = 'ai-message-1';
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Save the timetable, then tell me which lessons are still unplaced and why.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the timetable.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'check-1',
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: 'Check file correctness',
+                attributes: {
+                  targetType: 'file',
+                  targetRef: 'http://localhost/timetable.gts',
+                  roomId,
+                  correctnessCheckAttempt: 1,
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'command-result',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'check-1',
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: 'http://localhost/correctness/1.json',
+              url: 'http://localhost/correctness/1.json',
+              name: 'correctness-1.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: true,
+                    errors: [],
+                    warnings: ['22 lessons are still unplaced'],
+                  },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'command-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const successNote =
+      'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
+    const trailingSummary =
+      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.ok(messages, 'Expected prompt messages to be constructed');
+
+    let toolIndex = messages!.findIndex(
+      (message) =>
+        message.role === 'tool' && (message as any).tool_call_id === 'check-1',
+    );
+    assert.notStrictEqual(toolIndex, -1, 'The check result is a tool message');
+    assert.true(
+      messageText(messages![toolIndex]).includes(
+        'Warnings:\n- 22 lessons are still unplaced',
+      ),
+      'The tool message carries the warning',
+    );
+
+    // The note lands as the user-role message right after the result, so it
+    // is the newest "request" the model sees. It must send the model back to
+    // the user's own message rather than ask for a one-sentence reply.
+    let followUp = messages![toolIndex + 1];
+    assert.strictEqual(followUp?.role, 'user');
+    assert.strictEqual(messageText(followUp), successNote);
+
+    let allText = messages!.map((message) => messageText(message)).join('\n');
+    assert.false(
+      allText.includes('one short sentence confirming'),
+      'A clean check never asks for a one-sentence reply',
+    );
+    assert.false(
+      allText.includes('auto-corrected'),
+      'A clean check never describes the target as auto-corrected',
+    );
+    assert.false(
+      allText.includes('Fix the errors above'),
+      'A clean check never asks for fixes',
+    );
+
+    // The failure-path sibling still rides the trailing context unchanged.
+    let trailingMessage = messages!.at(-1);
+    assert.strictEqual(trailingMessage?.role, 'user');
+    assert.true(
+      messageText(trailingMessage).endsWith(trailingSummary),
+      'The trailing summary instruction is unchanged',
+    );
+  });
+
   test('system message parts include cache_control directive on last part', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
