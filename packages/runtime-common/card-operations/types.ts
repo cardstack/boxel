@@ -311,8 +311,8 @@ export interface OperationDefinition {
   html?: HtmlDeclaration;
   // The author's short, plain-text phrase for people, shown wherever the
   // operation is presented to someone. Read as data and acted on by nothing,
-  // so it takes no part in any fingerprint of the operation. Absent, the
-  // operation is shown under its name split into words.
+  // so a fingerprint of what the operation sends or does leaves it out.
+  // Absent, the operation is shown under its name split into words.
   label?: string;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;

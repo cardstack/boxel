@@ -1,8 +1,9 @@
 // An operation's `label`: a short, plain-text phrase for people, such as "List
 // your open pull requests", shown wherever an operation is presented to
 // someone — beside the request it makes, never in place of it. It is the
-// author's description and nothing the realm acts on, so it takes no part in
-// what an operation does or in any fingerprint of it.
+// author's description and nothing the realm acts on, so a fingerprint of what
+// an operation sends or does leaves it out: rewording a label changes nothing
+// anyone agreed to.
 //
 // The authoring decorator and lowering both read these, so a label the
 // decorator accepts is exactly one lowering stores.
