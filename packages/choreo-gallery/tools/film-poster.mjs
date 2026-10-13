@@ -12,13 +12,17 @@
  * Headless and muted, which matters: this boots a narrated film.
  *
  *   pnpm --filter choreo-film-app start   # in another shell
- *   node packages/choreo-gallery/tools/film-poster.mjs towers 18 13
- *   cwebp -q 78 out/towers-18.jpg -o packages/choreo-gallery/realm/asset/towers-poster.webp
+ *   node packages/choreo-gallery/tools/film-poster.mjs sagrada 24 18
+ *   cwebp -q 78 out/sagrada-24.jpg -o out/sagrada-poster.webp
  *
  * A shot is a beat index, opened as `?film=<name>&from=N` on the film
- * app's dev server (FILM_ORIGIN, Vite's port by default). The Sagrada
- * poster is beat 24, its centenary night; capture several and look at
- * them before choosing.
+ * app's dev server (FILM_ORIGIN, Vite's port by default; FILM_PORT is
+ * Chrome's debugging port). The Sagrada poster is beat 24, its centenary
+ * night; capture several and look at them before copying one over
+ * `packages/choreo-gallery/realm/asset/<film>-poster.webp`. The Towers
+ * poster is the film's gate, its own door, which this tool can't capture:
+ * the film app mounts every film embedded, and an embedded film stands its
+ * gate down.
  */
 /* An authoring tool, not shipped code: it needs Node 22 for the built-in
    WebSocket it drives Chrome's debugging protocol over, and it is a CLI,
@@ -56,7 +60,7 @@ const chrome = spawn(CHROME, [
   '--hide-scrollbars',
   /* the scene is WebGL and headless has no GPU */
   '--enable-unsafe-swiftshader',
-  '--user-data-dir=/tmp/cf-poster-profile',
+  `--user-data-dir=/tmp/cf-poster-profile-${PORT}`,
   'about:blank',
 ]);
 chrome.stderr.on('data', () => {});
