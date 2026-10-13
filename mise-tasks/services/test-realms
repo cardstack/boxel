@@ -102,6 +102,8 @@ NODE_ENV=test \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   --migrateDB \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
+  --securePort="${SECURE_TEST_PORT}" \
+  --secureOriginURL="${SECURE_TEST_ORIGIN_URL}" \
   $WORKER_MANAGER_ARG \
   $SERVICE_NAME_ARG \
   \

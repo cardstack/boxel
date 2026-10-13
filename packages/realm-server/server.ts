@@ -47,6 +47,11 @@ import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
+import {
+  createSecureOrigin,
+  secureOriginGate,
+  type SecureOrigin,
+} from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 
@@ -148,7 +153,7 @@ export function patchKoaResponseForH2Head() {
 // gives http://localhost:4201 → https://localhost:4201 the same-port
 // redirect UX without running two listeners on different ports.
 // Exported for tests in `tests/listener-dispatcher-test.ts` — the
-// production caller is `RealmServer.listen()` below.
+// production callers are `RealmServer.listen()` and `listenSecureOrigin()`.
 export function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
@@ -720,6 +725,7 @@ export class RealmServer {
   private liveSearchCache: LiveSearchCache | undefined;
   private linkShapePolicy: LinkShapePolicy | undefined;
   private clientAddress: ReturnType<typeof clientAddressSettingsFromEnv>;
+  private secureOrigin: SecureOrigin | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -750,6 +756,7 @@ export class RealmServer {
     liveSearchCache,
     linkShapePolicy,
     clientAddress: clientAddressSettings,
+    secureOriginURL,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -799,6 +806,10 @@ export class RealmServer {
     // How the caller's address is worked out from each request. Unset, read
     // from the environment (see `clientAddressSettingsFromEnv`).
     clientAddress?: ReturnType<typeof clientAddressSettingsFromEnv>;
+    // Where the secure origin's page shell is served (see
+    // `lib/secure-origin.ts`). Requests to its host are answered by the
+    // secure origin alone. Unset, this server has no secure origin.
+    secureOriginURL?: URL;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -853,6 +864,9 @@ export class RealmServer {
     this.linkShapePolicy = linkShapePolicy;
     this.clientAddress =
       clientAddressSettings ?? clientAddressSettingsFromEnv(process.env);
+    this.secureOrigin = secureOriginURL
+      ? createSecureOrigin(secureOriginURL)
+      : undefined;
   }
 
   get app() {
@@ -885,7 +899,10 @@ export class RealmServer {
     });
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
-      // First, so nothing downstream reads a client-supplied copy of the
+      // Ahead of everything, so a request to the secure origin can never
+      // reach realm routing, CORS or request logging.
+      .use(secureOriginGate(this.secureOrigin))
+      // Next, so nothing downstream reads a client-supplied copy of the
       // headers it sets.
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
@@ -1015,6 +1032,34 @@ export class RealmServer {
     });
 
     return app;
+  }
+
+  // A listener that serves the secure origin and nothing else, for
+  // development, where the secure origin is a port of its own rather than a
+  // hostname routed to the main listener.
+  listenSecureOrigin(port: number): RealmHttpServer {
+    let secureOrigin = this.secureOrigin;
+    if (!secureOrigin) {
+      throw new Error(
+        `cannot listen for the secure origin: this realm server has no secureOriginURL`,
+      );
+    }
+    let app = new Koa<Koa.DefaultState, Koa.Context>().use((ctx) =>
+      secureOrigin.handle(ctx),
+    );
+    let { server: instance, proto } = createListener(this.log, app);
+    instance.listen(port);
+    instance.on('listening', () => {
+      let actualPort =
+        (instance.address() as import('net').AddressInfo | null)?.port ?? port;
+      this.log.info(
+        `Secure origin %s listening on port %s (%s)\n`,
+        secureOrigin.url.href,
+        actualPort,
+        proto,
+      );
+    });
+    return instance;
   }
 
   listen(port: number): RealmHttpServer {
