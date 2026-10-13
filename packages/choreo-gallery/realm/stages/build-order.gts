@@ -6,7 +6,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { motion, motionValue } from 'glimmer-motion';
+import { motion, motionValue, styles } from 'glimmer-motion';
 
 import { GalleryDemo } from '../demo';
 import {
@@ -632,10 +632,6 @@ export class BuildOrder extends Component {
   tipD = TIP;
   bead = BEAD;
 
-  get head() {
-    return { x: this.headX };
-  }
-
   <template>
     <div
       class='ex bo-stage no-select'
@@ -1006,7 +1002,10 @@ export class BuildOrder extends Component {
           {{#each this.links key='index' as |link|}}
             <i class='bo-sync' style={{link.style}}></i>
           {{/each}}
-          <span class='bo-playhead' {{motion style=this.head}}></span>
+          <span
+            class='bo-playhead'
+            {{motion style=(styles x=this.headX)}}
+          ></span>
           {{! a real range input, transparent over the drawing: keyboard scrub
               and a11y for free }}
           {{! max and value are written by `paint` each frame — a tracked

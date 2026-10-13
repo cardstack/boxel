@@ -34,6 +34,8 @@ export interface Config {
   uploadContentInterceptor?: () => Promise<void>;
   sendEventInterceptor?: () => Promise<void>;
   workspaceFavorites?: string[];
+  // Public realms the user added to their dashboard's Catalogs section.
+  catalogRealms?: string[];
   loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
   ssoLoginUrl?: string;
   loginWithTokenInterceptor?: (

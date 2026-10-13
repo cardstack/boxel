@@ -33,4 +33,4 @@ Test round trips as arithmetic, then test the visible interface under the actual
 
 **@cardstack/choreo**: `PlanePoint`, `appliedCamera`, `toLocal`, `toPage`, `Rect`.
 
-Read the implementation: [`space.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/space.ts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts).
+Read the implementation: [`space.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/space.ts), [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/types.ts).

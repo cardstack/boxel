@@ -51,9 +51,14 @@ export function to(values: TargetAndTransition = {}): TargetAndTransition {
  * helper for that reason, and because `style` is the one prop you must not
  * pass as an attribute (Glimmer would rewrite the whole declaration and wipe
  * the transform Motion just rendered).
+ *
+ * A motion value of any type is accepted, the way Motion's own `MotionStyle`
+ * accepts one: `MotionValue` is invariant in its type, so neither a narrower
+ * parameter nor a `MotionValue<number> | MotionValue<string>` union would take
+ * every value a style can be bound to.
  */
 export function styles(
-  values: Record<string, MotionValue<never> | number | string> = {},
+  values: Record<string, MotionValue<any> | number | string> = {},
 ): Record<string, unknown> {
   return values;
 }

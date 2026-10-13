@@ -8,7 +8,11 @@ import type {
   PgAdapter,
 } from '@cardstack/postgres';
 import { finalizeOrphanedReservations } from '../lib/finalize-orphan-reservations.ts';
-import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 async function insertJob(
   adapter: PgAdapter,
@@ -68,7 +72,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('closes every open reservation owned by the dying worker', async function (assert) {

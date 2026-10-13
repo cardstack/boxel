@@ -113,10 +113,10 @@ module(basename(import.meta.filename), function () {
     // mounting; the mount happens later via the normal request path
     // when the holder of the JWT actually hits a realm endpoint.
     //
-    // Mounting per row inside _realm-auth was rejected because
-    // fetchUserPermissions(onlyOwnRealms:false) returns every
-    // '*'-readable realm, so a single boxel realm list / host login
-    // would cold-mount the entire accessible set after a restart.
+    // Mounting per row inside _realm-auth was rejected because with
+    // public realms included it enumerates every '*'-readable realm, so a
+    // single boxel realm list / host login would cold-mount the entire
+    // accessible set after a restart.
     test('POST /_realm-auth issues a token for a realm absent from realms[] and reconciler.mounted (post-restart)', async function (assert) {
       sinon
         .stub(MatrixClient.prototype, 'createDM')
@@ -230,6 +230,77 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         restored.body[testRealmHref],
         'unarchived realm reappears in the response',
+      );
+    });
+
+    test('POST /_realm-auth leaves out realms readable only through the public grant with include-public=false', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!public-test-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      const publicOnlyRealmURL = 'http://127.0.0.1:4444/someone-else/public/';
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: publicOnlyRealmURL,
+        diskId: 'someone-else/public',
+        ownerUsername: 'someone-else',
+      });
+      await insertPermissions(dbAdapter, new URL(publicOnlyRealmURL), {
+        '*': ['read'],
+        '@someone-else:localhost': ['read', 'write', 'realm-owner'],
+      });
+
+      let realmAuthRequest = (path: string) =>
+        request
+          .post(path)
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: matrixUserId, sessionRoom: 'server-session-room' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send('{}');
+
+      let byDefault = await realmAuthRequest('/_realm-auth');
+      assert.strictEqual(byDefault.status, 200, 'HTTP 200 status');
+      assert.ok(
+        byDefault.body[testRealmHref],
+        'a realm the user has their own row for is listed by default',
+      );
+      assert.ok(
+        byDefault.body[publicOnlyRealmURL],
+        'the public-only realm is listed by default',
+      );
+
+      let ownOnly = await realmAuthRequest('/_realm-auth?include-public=false');
+      assert.strictEqual(ownOnly.status, 200, 'HTTP 200 status');
+      assert.ok(
+        ownOnly.body[testRealmHref],
+        'a public realm the user has their own row for is listed with include-public=false',
+      );
+      assert.notOk(
+        ownOnly.body[publicOnlyRealmURL],
+        'a realm readable only through the public grant is left out with include-public=false',
+      );
+
+      let withPublic = await realmAuthRequest(
+        '/_realm-auth?include-public=true',
+      );
+      assert.strictEqual(withPublic.status, 200, 'HTTP 200 status');
+      assert.ok(
+        withPublic.body[testRealmHref],
+        'a realm the user has their own row for is still listed with include-public=true',
+      );
+      assert.ok(
+        withPublic.body[publicOnlyRealmURL],
+        'the public-only realm is listed with include-public=true',
       );
     });
 

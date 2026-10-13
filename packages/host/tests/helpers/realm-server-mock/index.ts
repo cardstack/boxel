@@ -56,6 +56,7 @@ function ensureRealmServerMockState(
     };
     state = {
       realmPermissions,
+      publicReadableRealms: new Map<string, { name: string | null }>(),
       archivedRealms: new Map<string, { archivedAt: string }>(),
       handler,
       ensureSessionRoom: sessionRoomEnsurer,
@@ -84,6 +85,22 @@ export function setupAuthEndpoints(
       ensureTrailingSlash(realmURL),
       permissions as RealmAction[],
     );
+  }
+}
+
+// Make realms readable by everyone without giving the test user a permission
+// row of their own for them, so they're reachable but not the user's own. A
+// realm given as `{ url, name }` carries that display name in
+// `/_public-realms`.
+export function setupPublicReadableRealms(
+  realms: (string | { url: string; name: string })[],
+) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  for (let realm of realms) {
+    let { url, name } =
+      typeof realm === 'string' ? { url: realm, name: null } : realm;
+    state.publicReadableRealms.set(ensureTrailingSlash(url), { name });
   }
 }
 

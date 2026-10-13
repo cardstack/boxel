@@ -34,6 +34,7 @@ import type { PrerenderHtmlArgs } from '@cardstack/runtime-common/tasks/prerende
 import type { SpawningIndexPass } from '@cardstack/runtime-common/jobs/prerender-html';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  closeTestPgAdapter,
   createTestPgAdapter,
   prepareTestDB,
   testRealm,
@@ -723,7 +724,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     const url = (name: string) => `${testRealm}${name}.json`;
@@ -936,7 +937,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     function jobInfo() {

@@ -8,7 +8,7 @@
  * tree. `node()` is pure and cheap: it reads args and returns plain data;
  * the host compiles the tree to the table (`compile.ts`).
  *
- * The vocabulary is what the six sketches in docs/film-graph settled on:
+ * The vocabulary is what the six sketches in packages/choreo-gallery/realm/design/film-graph settled on:
  * `Spine` / `Chapter` / `Sequence` (groups, with defaults), `Shot` (the
  * head pose as its own args), `To`, `Eye`, `Join` (a sibling before the
  * shot it cuts into), `Type`, `Voice`, `Stamp`, `Sky`, `Mark`, `Trace`,

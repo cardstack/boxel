@@ -1,6 +1,6 @@
 /**
  * Move's flights and skins — @path, @rotate, @swap
- * (docs/choreo-constructs.md §4.4, §6.3).
+ * (packages/choreo-gallery/realm/docs/choreo-constructs.md §4.4, §6.3).
  */
 import { Choreo } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';

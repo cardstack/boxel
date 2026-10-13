@@ -36,4 +36,4 @@ For export, verify the actual source frame after a direct seek. A visually corre
 
 **FilmVocabulary**: `f.Attach`, `f.Freeze`, `f.Insert`, `f.Inset`, `f.Video`.
 
-Read the implementation: [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts), [`host.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/host.gts).
+Read the implementation: [`nodes.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/nodes.gts), [`host.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/host.gts).

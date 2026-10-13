@@ -243,6 +243,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
       } else {
         let allUserPermissions = await fetchUserPermissions(dbAdapter, {
           userId: renderedAs,
+          includePublicRealms: true,
         });
         for (let realm of await fetchRealmsNamingPolicy(dbAdapter)) {
           allUserPermissions[realm] = await fetchEffectiveRealmPermissions(

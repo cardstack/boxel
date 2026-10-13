@@ -25,14 +25,29 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 import { logger, ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
+import { catalogRealmURL } from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
+import ManageCatalogs from './manage-catalogs';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
+
+// Moves `first` to the front of `urls` when it's there, keeping the rest in
+// order.
+export function leadWith<T extends string>(
+  urls: T[],
+  first: string | null,
+): T[] {
+  let index = first ? urls.indexOf(first as T) : -1;
+  if (index <= 0) {
+    return urls;
+  }
+  return [urls[index], ...urls.slice(0, index), ...urls.slice(index + 1)];
+}
 
 interface SortOption {
   label: string;
@@ -152,13 +167,6 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.selectedSortOption.value;
   }
 
-  private get displayCatalogWorkspaces() {
-    return (
-      this.realmServer.displayedCatalogRealmIdentifiers &&
-      this.realmServer.displayedCatalogRealmIdentifiers.length > 0
-    );
-  }
-
   private get communityRealmIdentifiers() {
     let realmURLs = this.realmServer.displayedCatalogRealmIdentifiers ?? [];
     if (config.environment !== 'production') {
@@ -212,9 +220,13 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.filterByHosted(this.realmServer.userRealmIdentifiers);
   }
 
+  // Newest first, except the Boxel catalog, which always leads the section.
   private get filteredCatalogRealmIdentifiers() {
     return this.filterByHosted(
-      this.sortByCreatedAtDesc(this.communityRealmIdentifiers),
+      leadWith(
+        this.sortByCreatedAtDesc(this.communityRealmIdentifiers),
+        catalogRealmURL,
+      ),
     );
   }
 
@@ -262,13 +274,12 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get catalogEmptyMessage(): string | null {
-    if (
-      this.sortOrder === 'hosted-only' &&
-      this.filteredCatalogRealmIdentifiers.length === 0
-    ) {
-      return 'No matching results';
+    if (this.filteredCatalogRealmIdentifiers.length > 0) {
+      return null;
     }
-    return null;
+    return this.sortOrder === 'hosted-only'
+      ? 'No matching results'
+      : 'No catalogs yet. Add public realms with the gear.';
   }
 
   private get favoritesEmptyMessage(): string | null {
@@ -386,7 +397,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get renderedCatalogCount() {
-    if (!this.displayCatalogWorkspaces || this.catalogEmptyMessage) {
+    if (this.catalogEmptyMessage) {
       return 0;
     }
     return this.filteredCatalogRealmIdentifiers.length;
@@ -695,36 +706,35 @@ export default class WorkspaceChooser extends Component<Signature> {
               </div>
             {{/if}}
           </div>
-          {{#if this.displayCatalogWorkspaces}}
-            <div class='workspace-section'>
-              <div class='section-header'>
-                <IconGlobe width='20' height='20' class='section-header-icon' />
-                <span class='workspace-chooser__title'>Catalogs</span>
-              </div>
-              {{#if this.catalogEmptyMessage}}
-                <span
-                  class='section-empty'
-                  data-test-catalog-empty
-                >{{this.catalogEmptyMessage}}</span>
-              {{else}}
-                <div class='workspace-list' data-test-catalog-list>
-                  {{#each
-                    this.filteredCatalogRealmIdentifiers
-                    as |realmIdentifier i|
-                  }}
-                    {{#let (add this.catalogNavBase i) as |navIndex|}}
-                      <Workspace
-                        @realmIdentifier={{realmIdentifier}}
-                        @navIndex={{navIndex}}
-                        @isSelected={{eq this.currentIndex navIndex}}
-                        @selectionActive={{this.isSelectionActive}}
-                      />
-                    {{/let}}
-                  {{/each}}
-                </div>
-              {{/if}}
+          <div class='workspace-section'>
+            <div class='section-header'>
+              <IconGlobe width='20' height='20' class='section-header-icon' />
+              <span class='workspace-chooser__title'>Catalogs</span>
+              <ManageCatalogs />
             </div>
-          {{/if}}
+            {{#if this.catalogEmptyMessage}}
+              <span
+                class='section-empty'
+                data-test-catalog-empty
+              >{{this.catalogEmptyMessage}}</span>
+            {{else}}
+              <div class='workspace-list' data-test-catalog-list>
+                {{#each
+                  this.filteredCatalogRealmIdentifiers
+                  as |realmIdentifier i|
+                }}
+                  {{#let (add this.catalogNavBase i) as |navIndex|}}
+                    <Workspace
+                      @realmIdentifier={{realmIdentifier}}
+                      @navIndex={{navIndex}}
+                      @isSelected={{eq this.currentIndex navIndex}}
+                      @selectionActive={{this.isSelectionActive}}
+                    />
+                  {{/let}}
+                {{/each}}
+              </div>
+            {{/if}}
+          </div>
           <div class='workspace-section' data-test-archived-section>
             <button
               type='button'

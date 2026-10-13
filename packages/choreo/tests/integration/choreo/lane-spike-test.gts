@@ -1,7 +1,7 @@
 /**
  * SPIKE 1 — a lane: steps written in a PARENT that play in a CHILD region.
  *
- * The question the film graph hangs on (docs/film-graph/PLAN.md, spike 1):
+ * The question the film graph hangs on (packages/choreo-gallery/realm/design/film-graph/PLAN.md, spike 1):
  * can a parent contribute nodes to a child region's timeline so that the
  * child's queries resolve in the child's changeset, the child's run can
  * be driven from outside, and an unrelated re-render of the parent does

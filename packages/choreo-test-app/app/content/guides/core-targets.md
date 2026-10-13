@@ -40,4 +40,4 @@ When debugging, first check ownership. If state changes correctly but movement d
 
 **glimmer-motion**: `perValue`, `styles`, `to`.
 
-Read the implementation: [`helpers.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts).
+Read the implementation: [`helpers.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/helpers.ts).

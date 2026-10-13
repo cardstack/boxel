@@ -120,6 +120,7 @@ module(basename(import.meta.filename), function () {
 
       let permissions = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
+        includePublicRealms: true,
       });
 
       assert.deepEqual(
@@ -140,6 +141,55 @@ module(basename(import.meta.filename), function () {
       assert.false(
         publishedRealmURL in permissions,
         'filters out published realms when fetching all permissions',
+      );
+    });
+
+    test('leaves out realms readable only through the public grant unless includePublicRealms', async function (assert) {
+      const userId = '@user:localhost';
+      const ownRealmURL = 'http://example.com/own/';
+      const publicOnlyRealmURL = 'http://example.com/public-only/';
+      const sharedPublicRealmURL = 'http://example.com/shared-public/';
+
+      await insertPermissions(dbAdapter, new URL(ownRealmURL), {
+        [userId]: ['read', 'write', 'realm-owner'],
+      });
+      await insertPermissions(dbAdapter, new URL(publicOnlyRealmURL), {
+        '*': ['read'],
+      });
+      await insertPermissions(dbAdapter, new URL(sharedPublicRealmURL), {
+        '*': ['read'],
+        [userId]: ['read'],
+      });
+
+      let ownRows = await fetchUserPermissions(dbAdapter, { userId });
+      assert.deepEqual(
+        ownRows[ownRealmURL],
+        ['read', 'write', 'realm-owner'],
+        'default: a realm the user owns is enumerated',
+      );
+      assert.deepEqual(
+        ownRows[sharedPublicRealmURL],
+        ['read'],
+        'default: a public realm the user also has a row for is enumerated',
+      );
+      assert.false(
+        publicOnlyRealmURL in ownRows,
+        'default: a realm readable only through the public grant is left out',
+      );
+
+      let withPublic = await fetchUserPermissions(dbAdapter, {
+        userId,
+        includePublicRealms: true,
+      });
+      assert.deepEqual(
+        withPublic[publicOnlyRealmURL],
+        ['read'],
+        'includePublicRealms: the public-only realm is enumerated with read',
+      );
+      assert.deepEqual(
+        withPublic[ownRealmURL],
+        ['read', 'write', 'realm-owner'],
+        'includePublicRealms: the owned realm is still enumerated',
       );
     });
 
@@ -175,6 +225,7 @@ module(basename(import.meta.filename), function () {
       // seed template carries.
       let active = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
+        includePublicRealms: true,
       });
       assert.true(
         activeOwned in active,
@@ -196,6 +247,7 @@ module(basename(import.meta.filename), function () {
       let withArchived = await fetchUserPermissions(dbAdapter, {
         userId: ownerUserId,
         includeArchived: true,
+        includePublicRealms: true,
       });
       assert.true(
         activeOwned in withArchived,
