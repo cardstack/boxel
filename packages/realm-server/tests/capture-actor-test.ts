@@ -20,6 +20,7 @@ import {
   realmSecretSeed,
   runTestRealmServerWithRealms,
   setupDB,
+  setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import {
   maxPrerenderHtmlJobId,
@@ -246,8 +247,17 @@ module(basename(import.meta.filename), function (hooks) {
     realm = result.realms[0];
   }
 
-  // Booting indexes the realm and renders the board's HTML, which runs inside
-  // the first test's budget, and each capture is a render of its own.
+  async function stop() {
+    realm?.__testOnlyClearCaches();
+    realm?.unsubscribe();
+    if (server) {
+      await closeServer(server);
+    }
+  }
+
+  // Indexing the realm and rendering the board's HTML runs once, while the
+  // template database builds, inside the first test's budget; each capture is
+  // a render of its own.
   hooks.before(function (assert) {
     assert.timeout(300_000);
   });
@@ -255,24 +265,34 @@ module(basename(import.meta.filename), function (hooks) {
     assert.timeout(300_000);
   });
 
+  // The host checks that a search goes to the realm server it was configured
+  // with, and this realm is served from a test origin. It is patched on each
+  // page the render server hands out, so it has to be in place before the
+  // template build first indexes the realm.
+  hooks.before(function () {
+    pagePatch = installRealmServerAssertOwnRealmServerBypassPatch();
+  });
+  hooks.after(async function () {
+    await pagePatch?.restore();
+  });
+
+  // Each test starts from a copy of the indexed database and its own realm
+  // directory, so a test that writes to the realm leaves the next one
+  // untouched.
+  let templateDatabase = setupTestDatabaseTemplate(hooks, {
+    key: import.meta.filename,
+    build: async (args) => {
+      await start(args);
+      return stop;
+    },
+  });
+
   setupDB(hooks, {
-    before: async (dbAdapter, publisher, runner) => {
-      // The host checks that a search goes to the realm server it was
-      // configured with, and this realm is served from a test origin. It is
-      // patched on each page the render server hands out, so it has to be in
-      // place before the realm first indexes.
-      pagePatch = installRealmServerAssertOwnRealmServerBypassPatch();
+    templateDatabase,
+    beforeEach: async (dbAdapter, publisher, runner) => {
       await start({ dbAdapter, publisher, runner });
-      await settlePrerenderHtmlJobs(db, REALM, { timeout: 120_000 });
     },
-    after: async () => {
-      // Guarded, so a boot that failed partway still closes what it opened.
-      realm?.unsubscribe();
-      if (server) {
-        await closeServer(server);
-      }
-      await pagePatch?.restore();
-    },
+    afterEach: stop,
   });
 
   function postCapture(user: string) {
