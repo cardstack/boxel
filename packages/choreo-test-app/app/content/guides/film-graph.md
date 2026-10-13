@@ -39,4 +39,4 @@ The `FilmVocabulary` and `VOCABULARY` exports expose the same typed component se
 
 **FilmVocabulary**: `f.Chapter`, `f.Sequence`, `f.Spine`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`host.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/host.gts), [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/types.ts), [`host.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/host.gts), [`nodes.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/nodes.gts).

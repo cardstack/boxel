@@ -1,5 +1,5 @@
 /**
- * The coordinate contract (docs/planes-and-cameras.md): toPage/toLocal
+ * The coordinate contract (packages/choreo-gallery/realm/docs/planes-and-cameras.md): toPage/toLocal
  * over CameraState are pure, exact inverses, and need no DOM — which is
  * the entire point. Every cross-plane flight, hit test, and drag reduces
  * to these two functions, so they are proven here as arithmetic, not as

@@ -34,4 +34,4 @@ Give each logical subject a stable identity and use roles for choreography categ
 
 **ChoreoContext**: `c.all`, `c.counterpart`, `c.id`, `c.inserted`, `c.kept`, `c.moved`, `c.onstage`, `c.received`, `c.removed`, `c.role`, `c.still`.
 
-Read the implementation: [`changeset.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/changeset.ts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts), [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`changeset.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/changeset.ts), [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/types.ts), [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

@@ -44,4 +44,4 @@ Verify both initial mount and later state changes. Also verify that removing the
 
 **glimmer-motion**: `stagger`.
 
-Read the implementation: [`helpers.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts).
+Read the implementation: [`helpers.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/helpers.ts).

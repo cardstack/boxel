@@ -33,4 +33,4 @@ Test a cold request in the middle of the film, repeated requests for the same ti
 
 **@cardstack/choreo/film**: `FilmHandle`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/types.ts).

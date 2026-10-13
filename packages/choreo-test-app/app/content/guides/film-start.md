@@ -49,7 +49,7 @@ Start with [Driving an External Clock](/docs/film-clock), then read [Building a 
 
 **@cardstack/choreo/film**: `Film`, `FilmContext`, `FilmSignature`.
 
-Read the implementation: [`film.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film.ts), [`film.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/film.gts).
+Read the implementation: [`film.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film.ts), [`film.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/film.gts).
 
 ## A complete working tutorial
 

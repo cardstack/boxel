@@ -1,10 +1,11 @@
-# glimmer-motion
+# <img src="https://choreo.boxel.site/icon.svg" width="32" height="32" alt=""> glimmer-motion
 
 The [Motion](https://motion.dev) engine for Ember. `{{motion}}`, `<Presence>`, `<LayoutGroup>`,
 Reorder and drag, verified by ports of Motion's own test suites.
 
 `<Choreo>`, a changeset and a timeline over a whole render pass, is a separate package built on this
-one: [`@cardstack/choreo`](../choreo).
+one: [`@cardstack/choreo`](https://github.com/cardstack/boxel/tree/main/packages/choreo#readme).
+Both are demonstrated, with their source, in the [Choreo gallery](https://choreo.boxel.site/).
 
 ```gts
 import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
@@ -42,8 +43,8 @@ Peers: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glim
 at a version outside glimmer-motion's ranges puts a second copy of the engine on the page. A v2 addon — Embroider and Vite apps consume it directly, with
 TypeScript types and Glint signatures.
 
-New here? The [guide](https://github.com/cardstack/choreo/blob/main/docs/guide.md) teaches this
-from a Glimmer card rather than from a React translation table.
+New here? The [guide](https://choreo.boxel.site/docs/guide.md) teaches this from a Glimmer card
+rather than from a React translation table.
 
 ## Features
 
@@ -60,10 +61,10 @@ from a Glimmer card rather than from a React translation table.
   `<MotionConfig>` tree defaults, `scrollProgress()` / `InView` over Motion's `scroll()` / `inView()`
 - **Reorder** — `<ReorderGroup>` / `<ReorderItem>`, axis `x` / `y` / `xy` (detected), auto-scroll
 - **Glimmer** — `.gts`, Glint signatures, named exports, plain-function template helpers
-  (`to` / `spring` / `tween` / `styles` / `start`), and `prefers-reduced-motion` honoured by default
-- **Testing** — `glimmer-motion/test-support`: `animationsSettled()`, `bounds()`, `shape()`,
-  `setupMotion(hooks)`, and `registerMotionReset()` for a layer that keeps document-wide state of
-  its own. No `sleep()` in a motion test
+  (`to` / `styles` / `spring` / `tween` / `inertia` / `stagger` / `ease` / `perValue`), and
+  `prefers-reduced-motion` honoured by default
+- **Testing** — `glimmer-motion/test-support` ([below](#testing)): settle on real activity instead
+  of `sleep()`, and measure in test-root coordinates
 - **Re-hostable** — host hooks are ~40 lines plus the components; everything above that line is
   framework-free
 
@@ -204,6 +205,76 @@ one.
 | `useDragControls()`              | `createDragControls()`                                    |
 | `Reorder.Group` / `.Item`        | `<ReorderGroup>` / `<ReorderItem>`                        |
 
+### Three rules React does not need
+
+React's model hides three things that Glimmer's doesn't, and each surfaced while porting a real app
+onto this binding. They are the only places where the port isn't a mechanical translation.
+
+**1. Motion owns a motion element's inline style, so pass CSS through the modifier, not a `style`
+attribute.** In React the `style` prop belongs to Motion: it merges what you write with the
+transforms it renders. In Glimmer a bound `style="…"` attribute is yours, and Glimmer rewrites the
+whole declaration whenever the bound value changes, wiping out the transform Motion just wrote. The
+symptom is quiet: a card that stays put while the drag logic runs perfectly around it.
+
+```gts
+{{! ✗ the next re-render erases the drag transform. accentStyle = '--accent: …' }}
+<div class='card' style={{this.accentStyle}} {{motion drag=true}}>
+
+{{!-- ✓ Motion applies these itself, custom properties included.
+     The modifier takes an object: accentVars = { '--accent': … } --}}
+<div class='card' {{motion style=this.accentVars drag=true}}>
+```
+
+**2. A leaving child stays live, so read exiting content from the yielded item.** React keeps the
+_element tree_ it captured before the diff, so a leaving child can't re-render. A Glimmer block
+re-runs from live tracked state for as long as the leaver is on screen. Anything the exit needs (the
+symbol the panel was showing, the rect the modal flew from) has to ride on the item `<Presence>`
+yields, not be read back out of state that has already moved on.
+
+**3. Declare what you want tweened, because a value in the stylesheet is invisible to the engine.**
+A layout animation moves and resizes by transform, and the engine corrects `borderRadius` and
+`boxShadow` against the scale in force, but only for values it holds. A radius that lives in CSS
+isn't one, and a square tile growing into a wide hero comes out with oval corners. Hand the value to
+Motion and every frame is corrected.
+
+```gts
+{{! ✗ the engine can't correct what it doesn't know about: .card { border-radius: 14px } }}
+<article class='card' {{motion layout=true}}></article>
+
+{{! ✓ corrected per frame, against whatever scale the layout animation is applying }}
+<article class='card' {{motion layout=true style=(styles borderRadius='14px')}}></article>
+```
+
+## Testing
+
+```ts
+import { animationsSettled, bounds, setupMotion } from 'glimmer-motion/test-support';
+
+module('the card', function (hooks) {
+  setupRenderingTest(hooks);
+  setupMotion(hooks);
+
+  test('it lands', async function (assert) {
+    await render(<template><Card /></template>);
+    await animationsSettled();
+    assert.strictEqual(bounds(find('.card')!).left, 120);
+  });
+});
+```
+
+| export                                            | what it is for                                                                                                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `setupMotion(hooks)`                              | resets what outlives an owner (the projection root, the layout-loop guard, motion speed, and every registered reset) around each test, and fails a test that ran a layout loop |
+| `animationsSettled(opts?)`                        | resolves when every motion element, layout animation and registered busy probe has stopped, and names what was still moving when it times out                                  |
+| `bounds(el)` / `shape(el)` / `boundsAndShape(el)` | rects relative to the test root; the cumulative 2×2 transform                                                                                                                  |
+| `velocityOf(el)`                                  | async: how fast the element is moving right now, as `{ x, y }` in px/s, sampled across two frames                                                                              |
+| `isMotionIdle()` / `whatIsBusy()`                 | the probe underneath, for a custom wait                                                                                                                                        |
+| `registerMotionReset(fn)` / `resetMotion()`       | add a reset of your own, for a layer that keeps document-wide state; run them all                                                                                              |
+
+`animationsSettled()` is explicit rather than a test waiter on purpose. A test that clicks again
+while something is still in flight is testing interruption, and a waiter would silently turn that
+click into a wait for completion.
+
 ## How it works
 
 Motion's React library is an engine (`motion-dom`) plus glue. This package is only the glue, redone for
@@ -221,9 +292,33 @@ The pan/drag session, the gesture and animation features and the Reorder utiliti
 modules too, inlined at build time from framer-motion's build. `VENDORED.md` lists them and the two places
 glimmer-motion's drag deliberately differs.
 
-The full story — why the engine is untouched, how the binding was built by porting Motion's test suites and
-what that surfaced — is in the
-[repository README](https://github.com/cardstack/choreo#readme).
+### How it was made
+
+The binding was built by porting Motion's own test suites, in order, and letting them drive it: the
+animate prop, variants, AnimatePresence, LayoutGroup, keyframes and delay, the style prop and
+unmount, then the `layout-*` and `drag-*` Cypress specs, then Reorder. Each fixture was rebuilt as a
+Glimmer component with its literal expected pixel values kept, and nothing was declared done until
+the upstream test was green in a real Chrome. Whatever failed was a place where the binding's
+ordering differed from React's, and almost all of them were timing rules:
+
+- Glimmer installs modifiers children-first, so a child can't find its parent's visual element when
+  its modifier first runs. First runs queue, then construct in document order and mount post-order
+  after the pass. Sibling order matters, because the engine builds its stagger index from it.
+- There is no `getSnapshotBeforeUpdate`. A render detector, a getter that consumes a volatile tag
+  and so re-evaluates on every render pass, lets `<LayoutGroup>` snapshot every projection node before
+  the DOM changes, the way React re-rendering each motion component would.
+- The engine's update microtask must not run between Glimmer's render and the mounts, or it clears
+  the snapshots and layout animations become identity transitions. There is one settle per pass,
+  after the mounts.
+- An element created already-absent must still mount _present_ and then leave, or its exit is
+  swallowed.
+- AnimatePresence renders a leaving child from its last present element, but a live Glimmer block
+  doesn't, so the modifier freezes an exiting element's props.
+- `initial` values must be in the DOM before the projection first measures. React has them in the
+  style attribute synchronously, so the binding renders them synchronously at mount.
+
+Those ports are this package's test suite, `tests/` in this package. Where a literal changed, the
+reason is inline.
 
 ## Not ported (yet)
 

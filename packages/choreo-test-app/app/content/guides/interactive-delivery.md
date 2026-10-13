@@ -30,4 +30,4 @@ Inspect the build-order and presentation examples for timing relationships aroun
 
 **@cardstack/choreo**: `DeliveryBy`, `DeliveryOrder`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/types.ts).

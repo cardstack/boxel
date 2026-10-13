@@ -31,6 +31,6 @@ At a close reading position, aim for a useful native CSS scale. Inspect the resu
 
 Check a real control after moving the camera. Its visible position and hit target must agree. Test scrolling, dragging, and keyboard focus, as well as ordinary clicks. If a model should obscure part of the screen, verify that the visual and input behavior agree about that overlap.
 
-The [long take demo](/long-take) combines a device view with a live screen. The [DOM in 3D reference](https://github.com/cardstack/choreo/blob/main/docs/dom-in-3d.md) explains the projection and occlusion decisions in more detail.
+The [long take demo](/long-take) combines a device view with a live screen. The [DOM in 3D reference](https://choreo.boxel.site/docs/dom-in-3d.md) explains the projection and occlusion decisions in more detail.
 
 Check the relationship after a viewport resize as well as a camera move. Both the renderer projection and the DOM plane dimensions need to reflect the new frame before the next interaction.

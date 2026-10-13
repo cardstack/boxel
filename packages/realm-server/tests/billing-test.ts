@@ -9,6 +9,7 @@ import { logger, param, query } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
+  closeTestPgAdapter,
   createTestPgAdapter,
   fetchSubscriptionsByUserId,
   insertPlan,
@@ -112,7 +113,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await dbAdapter.close();
+      await closeTestPgAdapter(dbAdapter);
     });
 
     module('invoice payment succeeded', function () {

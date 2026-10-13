@@ -34,4 +34,4 @@ Inspect a cold capture at the first transition and a repeated capture after asse
 
 **@cardstack/choreo/film**: `Seam`.
 
-Read the implementation: [`seam.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/seam.ts).
+Read the implementation: [`seam.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/seam.ts).

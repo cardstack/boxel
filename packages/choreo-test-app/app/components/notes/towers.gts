@@ -237,9 +237,9 @@ const TowersNotes: TOC<{
           wet, a frame budget that owns the pixel ratio, a master fader and a
           hold — and the one-frame synchronous snapshot that makes every
           still-based join possible. The full design note lives at
-          <code>docs/choreo-splices.md</code>; the quality pass and its numbers
-          in
-          <code>notes/towers-quality.md</code>.
+          <code>packages/choreo-gallery/realm/docs/choreo-splices.md</code>; the
+          quality pass and its numbers in
+          <code>packages/choreo-gallery/realm/design/towers-quality.md</code>.
         </p>
       </div>
     </section>
