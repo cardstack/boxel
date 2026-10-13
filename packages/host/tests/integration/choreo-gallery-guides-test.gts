@@ -347,6 +347,34 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
     );
   });
 
+  test('the lab writes only the values that differ from the demo’s own', async function (assert) {
+    let { changedValues } = await gallery.import<typeof LabModule>('lib/lab');
+    let definitions = {
+      Carry: { type: 'spring', stiffness: 130, damping: 15 },
+      'Delay (s)': [0.2, 0, 1, 0.01],
+    } as const;
+    assert.deepEqual(
+      changedValues(definitions as never, {
+        Carry: { type: 'spring', stiffness: 130, damping: 15 },
+        'Delay (s)': 0.2,
+        'Carry.__mode': 'advanced',
+      }),
+      {},
+      'the demo’s own values are no edit',
+    );
+    assert.deepEqual(
+      changedValues(definitions as never, {
+        Carry: { type: 'spring', stiffness: 130, damping: 15, mass: 2 },
+        'Delay (s)': 0.5,
+      }),
+      {
+        Carry: { type: 'spring', stiffness: 130, damping: 15, mass: 2 },
+        'Delay (s)': 0.5,
+      },
+      'a field the editor adds is an edit, and so is a moved number',
+    );
+  });
+
   test('a film has no lab: it plays in a document the lab cannot reach', async function (assert) {
     await gallery.renderGallery();
     await click(live("[data-gallery-tile='towers'] .card-meta")!);

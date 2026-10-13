@@ -118,8 +118,9 @@ export class DemoLab {
 /**
  * The panel's values that differ from the demo's own, by control. A control's
  * own value is its definition, or the first entry of a `[value, min, max,
- * step]` range; an object value differs when any field its definition names
- * does.
+ * step]` range. An object value differs when any field on either side does,
+ * so a field the editor adds (a spring's `mass` beside an authored stiffness
+ * and damping) counts as an edit.
  */
 export function changedValues(
   definitions: DialConfig,
@@ -134,10 +135,9 @@ export function changedValues(
     let own = Array.isArray(definition) ? definition[0] : definition;
     let same =
       own && typeof own === 'object' && value && typeof value === 'object'
-        ? Object.entries(own).every(
-            ([field, ownValue]) =>
-              JSON.stringify((value as Record<string, unknown>)[field]) ===
-              JSON.stringify(ownValue),
+        ? sameFields(
+            own as Record<string, unknown>,
+            value as Record<string, unknown>,
           )
         : own === value;
     if (!same) {
@@ -145,4 +145,10 @@ export function changedValues(
     }
   }
   return changed;
+}
+
+function sameFields(a: Record<string, unknown>, b: Record<string, unknown>) {
+  return [...new Set([...Object.keys(a), ...Object.keys(b)])].every(
+    (field) => JSON.stringify(a[field]) === JSON.stringify(b[field]),
+  );
 }
