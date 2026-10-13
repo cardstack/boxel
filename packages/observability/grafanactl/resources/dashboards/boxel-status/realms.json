@@ -952,6 +952,183 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
+        "description": "Operator action: add the realm selected in the **Realm** picker (template variable `${realm_url}`) to the Catalogs section of every signed-in user's dashboard, or take it out. Only public realms (a `*` read grant) can be catalogs; every other public realm stays reachable by URL without being listed. The choice persists in `realm_metadata.show_as_catalog`. Clicks POST to `/_grafana-set-realm-catalog?realm=...&catalog=true|false` with `Authorization: Bearer ${grafana_secret}`. Other realm-server instances serve the change within a minute.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 24,
+          "x": 0,
+          "y": 34
+        },
+        "id": 101,
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "public_readable",
+              "type": "disabled",
+              "title": "Public",
+              "tooltip": "Whether the realm has a `*` read grant. Only public realms can be catalogs.",
+              "labelWidth": 28,
+              "section": "current",
+              "fieldName": "public_readable",
+              "queryField": {
+                "refId": "A",
+                "value": "public_readable"
+              }
+            },
+            {
+              "id": "in_catalog",
+              "type": "disabled",
+              "title": "In Catalogs",
+              "tooltip": "Whether realm_metadata.show_as_catalog is set, which lists the realm in every signed-in user's Catalogs section.",
+              "labelWidth": 28,
+              "section": "current",
+              "fieldName": "in_catalog",
+              "queryField": {
+                "refId": "A",
+                "value": "in_catalog"
+              }
+            },
+            {
+              "id": "btn_add_to_catalog",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Add ${realm_url:text} to Catalogs",
+              "tooltip": "POST /_grafana-set-realm-catalog?realm=${realm_url}&catalog=true. Disabled unless the realm is public and not already in Catalogs.",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "disableIf": "return (context.panel.elements.find(function(e){return e.id==='public_readable';})||{}).value !== 'yes' || (context.panel.elements.find(function(e){return e.id==='in_catalog';})||{}).value === 'yes';",
+              "customCode": "const realm = ${realm_url:doublequote};\nif (!window.confirm('Add to Catalogs: ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-set-realm-catalog?realm=' + encodeURIComponent(realm) + '&catalog=true', { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Added to Catalogs', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Added to Catalogs failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Added to Catalogs failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            },
+            {
+              "id": "btn_remove_from_catalog",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Remove ${realm_url:text} from Catalogs",
+              "tooltip": "POST /_grafana-set-realm-catalog?realm=${realm_url}&catalog=false. Disabled unless the realm is in Catalogs.",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "secondary",
+              "value": "",
+              "disableIf": "return (context.panel.elements.find(function(e){return e.id==='in_catalog';})||{}).value !== 'yes';",
+              "customCode": "const realm = ${realm_url:doublequote};\nif (!window.confirm('Remove from Catalogs: ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-set-realm-catalog?realm=' + encodeURIComponent(realm) + '&catalog=false', { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Removed from Catalogs', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Removed from Catalogs failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Removed from Catalogs failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "current",
+                "name": "Current state"
+              },
+              {
+                "id": "actions",
+                "name": "Actions"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        },
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  '${realm_url}' AS realm,\n  CASE WHEN EXISTS (\n    SELECT 1 FROM realm_user_permissions\n     WHERE realm_url = '${realm_url}' AND username = '*' AND read = true\n  ) THEN 'yes' ELSE 'no' END AS public_readable,\n  CASE WHEN COALESCE(\n    (SELECT show_as_catalog FROM realm_metadata WHERE url = '${realm_url}'),\n    false\n  ) THEN 'yes' ELSE 'no' END AS in_catalog;",
+            "refId": "A"
+          }
+        ],
+        "title": "Operator Actions: Catalogs section",
+        "type": "volkovlabs-form-panel"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
         "description": "Files in this realm whose latest index attempt errored. Click a row to open Logs filtered to this realm.",
         "fieldConfig": {
           "defaults": {
@@ -1032,7 +1209,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 34
+          "y": 41
         },
         "id": 8,
         "options": {
@@ -1338,7 +1515,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 44
+          "y": 51
         },
         "id": 9,
         "options": {

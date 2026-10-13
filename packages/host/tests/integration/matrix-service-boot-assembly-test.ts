@@ -14,6 +14,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setRealmAuthFailure,
+  setupPublicReadableRealms,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 
@@ -79,6 +80,31 @@ module(
         realms,
         [testRealmURL],
         'returns the trusted server’s realms',
+      );
+    });
+
+    test("a realm readable only through the public grant is not listed as the user's own", async function (assert) {
+      let publicOnlyRealmURL = 'http://test-realm/someone-else/public/';
+      setupPublicReadableRealms([publicOnlyRealmURL]);
+      let realmServer = getService('realm-server') as RealmServerService;
+
+      let realms = await realmServer.fetchUserRealmsFromTrustedServers([
+        testRealmServerURL,
+      ]);
+      assert.deepEqual(
+        realms,
+        [testRealmURL],
+        'the realm list leaves out the public-only realm',
+      );
+
+      let tokens =
+        (await realmServer.fetchTokensForAccessibleRealms()) as Record<
+          string,
+          string
+        >;
+      assert.ok(
+        tokens[publicOnlyRealmURL],
+        'sessions are still minted for the public-only realm',
       );
     });
 

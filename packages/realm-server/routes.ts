@@ -17,6 +17,7 @@ import handleCreateRealmRequest, {
 } from './handlers/create-realm.ts';
 import handleDeleteRealm from './handlers/handle-delete-realm.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
@@ -47,6 +48,7 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleSetRealmCatalog from './handlers/handle-set-realm-catalog.ts';
 import handleDelegateSession from './handlers/handle-delegate-session.ts';
 import handleWorkerRequest from './handlers/handle-worker-request.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
@@ -190,6 +192,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get(
+    '/_public-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleFetchPublicRealmsRequest(args),
+  );
   router.get('/_queue-status', handleQueueStatusRequest(args));
   // Monitoring endpoint validating that every skill's command codeRefs
   // resolve in the deployed host. Self-authenticated with the monitoring
@@ -375,6 +382,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint(
     '/_grafana-revoke-user-sessions',
     handleRevokeUserSessions(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-set-realm-catalog',
+    handleSetRealmCatalog(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(

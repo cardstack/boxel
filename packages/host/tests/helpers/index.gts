@@ -102,6 +102,7 @@ export {
   setRealmArchived,
   setRealmAuthFailure,
   setupAuthEndpoints,
+  setupPublicReadableRealms,
   setCatalogRealmURL,
 } from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
