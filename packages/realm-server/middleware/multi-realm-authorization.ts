@@ -278,19 +278,20 @@ export function multiRealmAuthorization(
         publishedRealmURLs,
       );
 
-      // A realm reads to its `users` grant any caller with a Matrix account,
-      // and the readability above, built from the caller's own rows and the
-      // `*` grant, leaves that grant out. Each realm still unreadable is judged
-      // here as the realm judges it, so that a caller the realm lets read is
-      // searched as a reader rather than reached only through a policy.
+      // The readability above is built from the caller's own rows and, for a
+      // realm they have no row of their own on, its `*` grant. A realm judges a
+      // caller by the union of their row, its `*` grant, and its `users` grant
+      // for any caller with a Matrix account, so each realm still unreadable is
+      // judged here by the grants it shares with callers, as the realm judges
+      // it.
       let unauthorizedRealms = realmList.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
-      for (let realmURL of await realmsReadableToUsers(
+      for (let realmURL of await realmsReadableThroughSharedGrants(
         dbAdapter,
         matrixClient,
         unauthorizedRealms,
-        token.user,
+        principal,
       )) {
         readableRealms.add(realmURL);
       }
@@ -431,35 +432,71 @@ async function admitAnonymousSearch(
   return admitted;
 }
 
-// The realms among `urls` whose `users` grant lets `user` read them: those
-// that grant `read` to every caller with a Matrix account, when the homeserver
-// has a profile for `user`, as `effectiveRealmPermissions` judges the grant.
-// The profile is asked for only when one of them carries such a grant, and
-// once however many do, so a search naming none costs no homeserver round
-// trip. An archived realm is sealed, and lets no one read it.
-async function realmsReadableToUsers(
+// The realms among `urls` that let `principal` read them through a grant they
+// share with callers rather than through a row of the caller's own: their `*`
+// grant, which lets anyone read, or their `users` grant, which lets any caller
+// with a Matrix account read, judged as `effectiveRealmPermissions` judges it.
+//
+// The `users` grant is a user's alone. A realm-authority principal is a render,
+// and what it renders is served to every viewer, signed in or not, so it reads
+// only what the realm's ACL grants it by name or grants everyone.
+//
+// The homeserver is asked for the user's profile only when one of the realms
+// carries a `users` grant, and once however many do, so a search naming none
+// costs no round trip. A homeserver that can't answer leaves those realms
+// unread rather than failing the request, so the realms the caller reads
+// outright still answer. An archived realm is sealed, and lets no one read it.
+async function realmsReadableThroughSharedGrants(
   dbAdapter: DBAdapter,
   matrixClient: MatrixClient,
   urls: string[],
-  user: string,
+  principal: SearchPrincipal | undefined,
 ): Promise<string[]> {
   if (urls.length === 0) {
     return [];
   }
   let rows = (await query(dbAdapter, [
-    `SELECT realm_url FROM realm_user_permissions WHERE username = 'users' AND read = true
+    `SELECT realm_url, username FROM realm_user_permissions
+     WHERE username IN ('*', 'users') AND read = true
      AND realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
      AND realm_url IN (`,
     ...separatedByCommas(urls.map((url) => [param(url)])),
     ')',
-  ] as Expression)) as { realm_url: string }[];
-  if (rows.length === 0) {
-    return [];
+  ] as Expression)) as { realm_url: string; username: string }[];
+  let readable = new Set(
+    rows
+      .filter(({ username }) => username === '*')
+      .map(({ realm_url }) => ensureTrailingSlash(realm_url)),
+  );
+  let readableToUsers = rows
+    .filter(({ username }) => username === 'users')
+    .map(({ realm_url }) => ensureTrailingSlash(realm_url))
+    .filter((realmURL) => !readable.has(realmURL));
+  if (
+    readableToUsers.length > 0 &&
+    principal?.kind === 'user' &&
+    (await hasMatrixProfile(matrixClient, principal.user))
+  ) {
+    for (let realmURL of readableToUsers) {
+      readable.add(realmURL);
+    }
   }
-  if (!(await matrixClient.getProfile(user))) {
-    return [];
+  return [...readable];
+}
+
+async function hasMatrixProfile(
+  matrixClient: MatrixClient,
+  user: string,
+): Promise<boolean> {
+  try {
+    return !!(await matrixClient.getProfile(user));
+  } catch (e) {
+    log.warn(
+      `could not get the Matrix profile of ${user}, so the realms they would read through a \`users\` grant are left unread`,
+      e,
+    );
+    return false;
   }
-  return rows.map(({ realm_url }) => ensureTrailingSlash(realm_url));
 }
 
 export function getMultiRealmAuthorization(

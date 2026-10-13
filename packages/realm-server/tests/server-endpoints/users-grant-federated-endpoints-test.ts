@@ -5,7 +5,12 @@ import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
 import sinon from 'sinon';
-import { rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  param,
+  query,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
   QueueRunner,
@@ -29,24 +34,32 @@ import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 
 // ============================================================================
 // A signed-in session on the endpoints that answer for several realms at once,
-// for a realm it reads only through the realm's `users` grant.
+// for a realm it reads only through a grant the realm shares with callers.
 //
 // A realm's `users` grant lets every caller with a Matrix account read it, and
-// the federated endpoints read it to such a caller as the realm itself does.
+// its `*` grant lets anyone read it. The federated endpoints read such a realm
+// to a caller as the realm itself does. No realm here names a policy.
 //
 // - Lib: anyone may read it, token or not. It holds the note type.
 // - Members: any registered Matrix user reads it, through its `users` grant.
-//   It names no policy.
-// - Private: only its owner reads it. It names no policy.
+// - Private: only its owner reads it.
+// - Own: Lee reads it through a row of their own.
+// - Open: anyone may read it, and Lee has a row of their own on it that grants
+//   `write` but not `read`.
+// - Archived: any registered Matrix user would read it through its `users`
+//   grant, but it is archived.
 // ============================================================================
 
 const SERVER = 'http://127.0.0.1:4444/';
 const LIB = `${SERVER}lib/`;
 const MEMBERS = `${SERVER}members/`;
 const PRIVATE = `${SERVER}private/`;
+const OWN = `${SERVER}own/`;
+const OPEN = `${SERVER}open/`;
+const ARCHIVED = `${SERVER}archived/`;
 
 const OWNER = '@owner:localhost';
-// Holds no permission row anywhere.
+// Holds a permission row only on Own and Open.
 const LEE = '@lee:localhost';
 
 const NOTE = { module: `${LIB}note`, name: 'Note' };
@@ -74,6 +87,8 @@ function note(title: string) {
 }
 
 const MEMBERS_NOTES = [`${MEMBERS}notes/one`, `${MEMBERS}notes/two`];
+const OWN_NOTES = [`${OWN}notes/one`];
+const OPEN_NOTES = [`${OPEN}notes/one`];
 
 // The endpoints that refuse a realm the caller may not read, rather than
 // carrying it to its policy as `_federated-search` does.
@@ -129,6 +144,21 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               fileSystem: { 'notes/one.json': note('Private one') },
               permissions: { ...owner },
             },
+            {
+              realmURL: new URL(OWN),
+              fileSystem: { 'notes/one.json': note('Own one') },
+              permissions: { ...owner, [LEE]: ['read'] },
+            },
+            {
+              realmURL: new URL(OPEN),
+              fileSystem: { 'notes/one.json': note('Open one') },
+              permissions: { ...owner, '*': ['read'], [LEE]: ['write'] },
+            },
+            {
+              realmURL: new URL(ARCHIVED),
+              fileSystem: { 'notes/one.json': note('Archived one') },
+              permissions: { ...owner, users: ['read'] },
+            },
           ],
           dbAdapter,
           publisher,
@@ -138,12 +168,17 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         server = result.testRealmHttpServer;
         request = supertest(server);
         realms = result.realms;
+        await query(dbAdapter, [
+          'INSERT INTO realm_metadata (url, archived_at) VALUES (',
+          param(ARCHIVED),
+          ', NOW()) ON CONFLICT (url) DO UPDATE SET archived_at = EXCLUDED.archived_at',
+        ]);
       }
 
       setupCatalogTestSubset(hooks);
 
       // One server for the whole module: no test changes any realm. Booting it
-      // indexes three realms inside the first test's budget, so that budget is
+      // indexes six realms inside the first test's budget, so that budget is
       // extended.
       hooks.before(function (assert) {
         assert.timeout(300_000);
@@ -190,6 +225,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         sinon
           .stub(MatrixClient.prototype, 'getProfile')
           .resolves({ displayname: 'Lee' });
+      }
+
+      // A session a realm renders its own cards under.
+      function renderSession(user: string) {
+        return createRealmServerJWT(
+          {
+            user,
+            sessionRoom: `session-room-${user}`,
+            realmAuthority: true as const,
+          },
+          realmSecretSeed,
+        );
       }
 
       function hasNoProfile() {
@@ -273,6 +320,51 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             .send({ realms: [MEMBERS] });
           assert.strictEqual(response.status, 403, `${path} refuses the realm`);
         }
+      });
+
+      test("a realm's render finds no rows in a `users`-grant realm, since what it renders is served to callers who aren't signed in", async function (assert) {
+        hasProfile();
+
+        let response = await federatedSearch([MEMBERS], renderSession(LEE));
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), [], 'no rows');
+      });
+
+      test("a homeserver that can't answer leaves the `users`-grant realm unread, and the realms the user reads outright still answer", async function (assert) {
+        sinon
+          .stub(MatrixClient.prototype, 'getProfile')
+          .rejects(new Error('homeserver unavailable'));
+
+        let response = await federatedSearch([OWN, MEMBERS], session(LEE));
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), OWN_NOTES, "the readable realm's rows");
+      });
+
+      test('an archived realm reads to no one through its `users` grant', async function (assert) {
+        hasProfile();
+
+        let search = await federatedSearch([ARCHIVED], session(LEE));
+        assert.strictEqual(search.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(search), [], 'no rows');
+
+        let types = await request
+          .post('/_federated-types')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Accept', 'application/json')
+          .set('Authorization', `Bearer ${session(LEE)}`)
+          .send({ realms: [ARCHIVED] });
+        assert.strictEqual(types.status, 403, 'a refusing endpoint refuses it');
+      });
+
+      test("a realm anyone may read answers a user whose own row on it doesn't grant `read`", async function (assert) {
+        hasNoProfile();
+
+        let response = await federatedSearch([OPEN], session(LEE));
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), OPEN_NOTES, "the realm's rows");
       });
     },
   );
