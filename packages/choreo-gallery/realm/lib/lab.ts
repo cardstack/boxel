@@ -1,0 +1,137 @@
+import { tracked } from '@glimmer/tracking';
+import type { DialConfig, DialValue } from 'dialkit/vanilla';
+import { DialStore } from 'dialkit/vanilla';
+
+import { Dial, type DialTune } from './dial';
+import { demoPresets } from './presets';
+import { demoTuning } from './tuning';
+
+/**
+ * A demo's tuning on a dialkit panel: the lab.
+ *
+ * The panel's controls are the values the demo registers through
+ * `demoTuning(slug)` as it renders, so the panel grows as the stage does. An
+ * edit on the panel is written back into `demoTuning(slug).values`, where the
+ * demo reads it. Only the values that differ from the demo's own are written,
+ * so an untouched spring comes back from `tuneMotion` as the same object and
+ * never replays a scene.
+ *
+ * The panel is neither persisted nor retained: closing the lab puts the demo
+ * back as it was written.
+ */
+export class DemoLab {
+  readonly dial: Dial<DialConfig>;
+  /** bumped as the demo registers controls, which the presets depend on */
+  @tracked private registered = 0;
+
+  private slug: string;
+  private stop: () => void;
+  private writing = false;
+  private gone = false;
+
+  constructor(slug: string, name: string) {
+    this.slug = slug;
+    this.dial = new Dial(`lab:${slug}`, name, this.config(), {
+      persist: false,
+      retain: false,
+    });
+    this.state.listeners.add(this.refresh);
+    this.stop = DialStore.subscribe(this.dial.panelId, this.write);
+    this.write();
+  }
+
+  private get state() {
+    return demoTuning(this.slug);
+  }
+
+  private config(): DialConfig {
+    return { ...this.state.definitions };
+  }
+
+  /**
+   * The demo's authored looks whose every control the demo has registered;
+   * the panel offers them as its shipped tunes.
+   */
+  get presets(): DialTune[] {
+    void this.registered;
+    let definitions = this.state.definitions;
+    return (demoPresets[this.slug] ?? []).filter((preset) =>
+      Object.keys(preset.values).every((key) => key in definitions),
+    );
+  }
+
+  private refresh = () => {
+    if (this.gone) {
+      return;
+    }
+    this.dial.configure(this.config());
+    this.registered += 1;
+  };
+
+  /**
+   * A store notification can arrive inside a render pass (a panel registering
+   * notifies its subscribers), and the values it writes are tracked state the
+   * stage has already read in that pass, so the write waits for the pass to
+   * close.
+   */
+  private write = () => {
+    if (this.writing || this.gone) {
+      return;
+    }
+    this.writing = true;
+    queueMicrotask(() => {
+      this.writing = false;
+      if (this.gone) {
+        return;
+      }
+      let changed = changedValues(
+        this.state.definitions,
+        DialStore.getValues(this.dial.panelId),
+      );
+      if (JSON.stringify(this.state.values) !== JSON.stringify(changed)) {
+        this.state.values = changed;
+      }
+    });
+  };
+
+  teardown() {
+    this.gone = true;
+    this.state.listeners.delete(this.refresh);
+    this.stop();
+    this.dial.teardown();
+    DialStore.unregisterPanel(this.dial.panelId);
+    this.state.values = {};
+  }
+}
+
+/**
+ * The panel's values that differ from the demo's own, by control. A control's
+ * own value is its definition, or the first entry of a `[value, min, max,
+ * step]` range; an object value differs when any field its definition names
+ * does.
+ */
+export function changedValues(
+  definitions: DialConfig,
+  values: Record<string, DialValue>,
+): Record<string, DialValue> {
+  let changed: Record<string, DialValue> = {};
+  for (let [key, value] of Object.entries(values)) {
+    let definition = definitions[key];
+    if (definition === undefined) {
+      continue;
+    }
+    let own = Array.isArray(definition) ? definition[0] : definition;
+    let same =
+      own && typeof own === 'object' && value && typeof value === 'object'
+        ? Object.entries(own).every(
+            ([field, ownValue]) =>
+              JSON.stringify((value as Record<string, unknown>)[field]) ===
+              JSON.stringify(ownValue),
+          )
+        : own === value;
+    if (!same) {
+      changed[key] = value;
+    }
+  }
+  return changed;
+}

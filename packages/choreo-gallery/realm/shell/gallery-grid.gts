@@ -11,6 +11,7 @@ import type { GalleryNavigation } from '../lib/navigation';
 import { restWhenOff } from '../lib/onstage';
 import { DemoStage } from './demo-stage';
 import { GalleryLink } from './gallery-link';
+import { GuideLink } from './guide-link';
 
 const ALL = 'All';
 const DEEP_DIVE = 'Deep Dive';
@@ -377,6 +378,9 @@ export class GalleryGrid extends Component<Signature> {
                 {{motion id=(concat 'lede-' demo.slug) role='type'}}
               >{{demo.lede}}</span>
             </GalleryLink>
+            <div class='card-guide'>
+              <GuideLink @demo={{demo}} />
+            </div>
           </article>
         </Presence>
       </div>
@@ -692,6 +696,13 @@ export class GalleryGrid extends Component<Signature> {
         gap: 6px;
         padding: 16px 18px 18px;
         border-top: 1px solid var(--line);
+        background: rgba(var(--surface-tint-rgb), 0.015);
+      }
+
+      /* the tile's second link, under the one that opens its page: the two
+         share the tile's chin */
+      .card-guide {
+        padding: 0 18px 16px;
         background: rgba(var(--surface-tint-rgb), 0.015);
       }
 
