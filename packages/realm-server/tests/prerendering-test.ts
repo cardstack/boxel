@@ -8385,7 +8385,13 @@ module(basename(import.meta.filename), function () {
       assert.true(result.pool.evicted, 'the attempt reports the tab evicted');
       assert.deepEqual(
         disposed,
-        [toAffinityKey({ affinityType: 'realm', affinityValue: realm })],
+        [
+          toAffinityKey({
+            affinityType: 'realm',
+            affinityValue: realm,
+            auth: 'test-auth',
+          }),
+        ],
         'the tab is disposed so the next attempt gets a fresh one',
       );
     });
@@ -10207,13 +10213,27 @@ module(basename(import.meta.filename), function () {
         affinityType: 'realm',
         affinityValue: realmURL,
       });
+      // Indexing renders a realm's cards under realm authority, which keeps
+      // the realm's own affinity, the one a batch claims and releases.
+      let indexAuth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions, {
+            realmAuthority: true,
+          }),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
       let indexVisit = (fileName: string, extra?: Record<string, unknown>) =>
         prerenderer.prerenderVisit({
           affinityType: 'realm',
           affinityValue: realmURL,
           realm: realmURL,
           url: `${realmURL}${fileName}`,
-          auth: auth(),
+          auth: indexAuth(),
           visitType: 'index',
           renderOptions: {
             cardRender: true,
