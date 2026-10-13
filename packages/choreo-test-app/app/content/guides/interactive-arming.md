@@ -37,4 +37,4 @@ Test no-op navigation, aborted changes, repeated selections, and a successor run
 
 **@cardstack/choreo**: `Arming`, `ArmingOptions`, `ArmingRegion`, `createArming`.
 
-Read the implementation: [`arming.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/arming.ts).
+Read the implementation: [`arming.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/arming.ts).

@@ -1,5 +1,5 @@
 /**
- * The camera under an external transport (docs/external-clock-camera-seek-handoff.md).
+ * The camera under an external transport (packages/choreo-gallery/realm/design/external-clock-camera-seek-handoff.md).
  *
  * `run.time = t` must produce the same camera still as playing forward
  * from zero to `t`. The failure this guards against: a camera cue whose

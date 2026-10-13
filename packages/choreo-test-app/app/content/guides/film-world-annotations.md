@@ -36,4 +36,4 @@ Check the annotation's beginning, its readable interval, and its removal. Test b
 
 **FilmVocabulary**: `f.Lineup`, `f.Mark`, `f.Sky`, `f.Stamp`, `f.Trace`.
 
-Read the implementation: [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts), [`host.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/host.gts).
+Read the implementation: [`nodes.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/nodes.gts), [`host.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/host.gts).

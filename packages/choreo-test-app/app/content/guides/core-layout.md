@@ -68,4 +68,4 @@ LayoutGroup also supplies the render observation that lets the binding capture o
 
 **glimmer-motion**: `layoutChange`, `closestLayoutGroup`, `LayoutGroup`, `snapshotOnRender`.
 
-Read the implementation: [`layout.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout.ts), [`layout-group.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/layout-group.gts).
+Read the implementation: [`layout.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/layout.ts), [`layout-group.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/layout-group.gts).

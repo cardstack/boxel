@@ -35,4 +35,4 @@ Keep these operations separate from a 3D camera. Raising a DOM participant chang
 
 **ChoreoContext**: `c.Raise`, `c.Scroll`.
 
-Read the implementation: [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

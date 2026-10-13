@@ -46,7 +46,7 @@ Seeking the motion run alone cannot reopen a panel that application state has re
 
 For each frame, prepare the owned score, apply the state for that time, await the Glimmer render, and reassert the run's time before capture. The exact render barrier belongs to the host application.
 
-Test by seeking forward and backward in a nonsequential order. If the same timestamp produces different content, some state is still depending on playback history. See the [recording contract](https://github.com/cardstack/choreo/blob/main/docs/demo-recording.md) for the complete lifecycle.
+Test by seeking forward and backward in a nonsequential order. If the same timestamp produces different content, some state is still depending on playback history. See the [recording contract](https://choreo.boxel.site/docs/demo-recording.md) for the complete lifecycle.
 
 ## Selecting the Appropriate Transport
 

@@ -35,4 +35,4 @@ Check nested configurations in the actual DOM structure. A component hierarchy t
 
 **glimmer-motion**: `MotionConfigContext`, `closestMotionConfig`, `MotionConfig`.
 
-Read the implementation: [`motion-config.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion-config.gts).
+Read the implementation: [`motion-config.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/motion-config.gts).

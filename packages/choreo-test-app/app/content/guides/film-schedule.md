@@ -34,4 +34,4 @@ When publishing runtime information, derive it from this schedule. A hard-coded 
 
 **@cardstack/choreo/film**: `TICK`, `beatStart`, `chapterHeads`, `Content`, `contents`, `Cue`, `cues`, `joinInto`, `Schedule`, `schedule`, `secsBefore`, `tailFor`, `totalSecs`, `Waypoint`, `waypoints`, `FilmClock`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`film.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/film.gts), [`schedule.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/schedule.ts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/types.ts), [`film.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/film.gts), [`schedule.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/schedule.ts).

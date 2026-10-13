@@ -57,4 +57,4 @@ Give each item a stable key so the presence model can distinguish a changed item
 
 **glimmer-motion**: `Presence`, `PresenceHandle`.
 
-Read the implementation: [`presence.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/presence.gts), [`presence-types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/presence-types.ts).
+Read the implementation: [`presence.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/presence.gts), [`presence-types.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/presence-types.ts).

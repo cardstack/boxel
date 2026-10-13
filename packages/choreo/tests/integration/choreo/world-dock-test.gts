@@ -1,6 +1,6 @@
 /**
  * The world dock: a far-match flight received into a camera'd world whose
- * score is mid-flight (docs/planes-and-cameras.md, the open case).
+ * score is mid-flight (packages/choreo-gallery/realm/docs/planes-and-cameras.md, the open case).
  *
  * The receiving plane is not a held pose here — it is a WORLD: a region
  * with its own running score whose camera is in force when the dock

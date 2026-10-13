@@ -37,4 +37,4 @@ Test a direct cold load, a missing subordinate asset, a frame request before ord
 
 **@cardstack/choreo/film**: `IframePicture`, `IframePictureSignature`, `PictureSpec`, `Picture`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`picture.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/picture.gts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/types.ts), [`picture.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/picture.gts).

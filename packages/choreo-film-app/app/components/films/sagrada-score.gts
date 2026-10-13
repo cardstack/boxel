@@ -2,7 +2,7 @@
  * SAGRADA FAMÍLIA, AS A GRAPH — the film's score in the film vocabulary.
  *
  * Generated from the beat table in `lib/films/sagrada.ts` by
- * `docs/film-graph/tograph.mjs` (PREFIX='@f.'), so every pose, phrase,
+ * `tools/tograph.mjs` (PREFIX='@f.'), so every pose, phrase,
  * stamp and trace is the table's; only the shape differs. It takes the
  * vocabulary as an argument so it can be rendered inside `<Film as |f|>`
  * and, in `tests/integration/film/graph-test.gts`, inside a bare

@@ -50,4 +50,4 @@ When adding a real 3D device, share the renderer's projection and object matrice
 
 Before adding assets, keep this example's useful checks: the visible button and its hit target agree after movement, changing application state does not reset the camera, resizing does not clip essential controls, and leaving the route stops its work. The browser verification command in the first tutorial checks that the angled button remains usable and that the transition changes the plane transform.
 
-The complete source is [spatial-card.gts](https://github.com/cardstack/choreo/blob/main/test-app/app/components/tutorials/spatial-card.gts). Once that host boundary is clear, continue to [recording a scene](/docs/film-first-export) to learn how an external clock can request completed frames.
+The complete source is [spatial-card.gts](https://github.com/cardstack/boxel/blob/main/packages/choreo-test-app/app/components/tutorials/spatial-card.gts). Once that host boundary is clear, continue to [recording a scene](/docs/film-first-export) to learn how an external clock can request completed frames.
