@@ -1884,7 +1884,11 @@ function gatherPatchedFiles(
     }
     for (let file of result.content.data?.attachedFiles ?? []) {
       let sourceUrl = file.sourceUrl ?? file.url ?? file.name ?? '';
-      if (!sourceUrl || filesByKey.has(sourceUrl)) {
+      if (
+        !sourceUrl ||
+        filesByKey.has(sourceUrl) ||
+        !hasCheckableSource(file.contentType)
+      ) {
         continue;
       }
       filesByKey.set(sourceUrl, {
@@ -1894,6 +1898,19 @@ function gatherPatchedFiles(
     }
   }
   return Array.from(filesByKey.values());
+}
+
+// Correctness validation reads a file's source. A binary file a script saved,
+// such as an image, has none to check.
+function hasCheckableSource(contentType?: string): boolean {
+  if (!contentType) {
+    return true;
+  }
+  return (
+    requiredModality(contentType) === undefined &&
+    !/^(image|audio|video|font)\//.test(contentType) &&
+    contentType !== 'application/octet-stream'
+  );
 }
 
 function gatherPatchedCards(

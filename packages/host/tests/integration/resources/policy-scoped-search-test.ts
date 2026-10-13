@@ -12,6 +12,7 @@ import {
   type LooseSingleCardDocument,
   type NamedSearchWireQuery,
   type Query,
+  type RealmAction,
 } from '@cardstack/runtime-common';
 
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
@@ -20,7 +21,6 @@ import type StoreService from '@cardstack/host/services/store';
 
 import {
   realmConfigCardJSON,
-  setupAuthEndpoints,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -46,10 +46,13 @@ import type { CardDef } from '@cardstack/base/card-api';
 // Two realms. The test user reads Coarse outright. Scoped is one they do not
 // read: its policy lets them read any schedule they are handed, and grants
 // them `listOpen` only over their own. Every card the user could be shown in
-// one realm has a twin in the other.
+// one realm has a twin in the other. Scoped judges requests by its own ACL, so
+// what it contributes to a search is the realm's own decision for the user's
+// session, not one the realm-server mock makes for it.
 
 const COARSE = testRealmURL;
 const SCOPED = 'http://test-realm/scoped/';
+const UNJUDGED = 'http://test-realm/unjudged/';
 const USER = '@testuser:localhost';
 const OWNER = '@owner:localhost';
 
@@ -160,11 +163,15 @@ module('Integration | policy-scoped search', function (hooks) {
         }),
       },
     });
+  });
+
+  async function setupScoped(userPermissions: RealmAction[] = []) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       realmURL: SCOPED,
+      enforcePermissions: true,
       permissions: {
-        [USER]: [],
+        [USER]: userPermissions,
         [OWNER]: ['read', 'write', 'realm-owner'],
       },
       contents: {
@@ -190,7 +197,7 @@ module('Integration | policy-scoped search', function (hooks) {
         }),
       },
     });
-  });
+  }
 
   function liveSearch(owner: object, query: Query, realms: string[]) {
     return SearchResource.from(owner, () => ({
@@ -227,6 +234,7 @@ module('Integration | policy-scoped search', function (hooks) {
   }
 
   test('a matching card of a policy-scoped realm that the server did not return is not merged into the result', async function (this: RenderingTestContext, assert) {
+    await setupScoped();
     // Read through the policy's `read` grant, which lets the user hold a
     // schedule they were handed without letting them enumerate the type.
     let theirs = (await storeService.get(THEIRS_OPEN)) as ScheduleCard;
@@ -253,6 +261,7 @@ module('Integration | policy-scoped search', function (hooks) {
   });
 
   test('a local create appears in the realm the result does not scope, and not in the realm it does', async function (this: RenderingTestContext, assert) {
+    await setupScoped();
     let search = liveSearch(this.owner, OPEN, [SCOPED, COARSE]);
     await search.loaded;
     await settled();
@@ -270,9 +279,9 @@ module('Integration | policy-scoped search', function (hooks) {
   });
 
   test('the same local create is merged when the result does not scope its realm', async function (this: RenderingTestContext, assert) {
-    // The user now reads the realm outright, so the server consults no policy
-    // for it and the result carries no mark.
-    setupAuthEndpoints({ [SCOPED]: ['read'] });
+    // The user reads the realm outright, so it consults no policy for them
+    // and the result carries no mark.
+    await setupScoped(['read']);
 
     let search = liveSearch(this.owner, OPEN, [SCOPED, COARSE]);
     await search.loaded;
@@ -295,6 +304,7 @@ module('Integration | policy-scoped search', function (hooks) {
   // Until a search answers for a realm, the result holds no mark for it, so
   // the arm widens only into a realm the session already knows it reads.
   test('before the first answer lands, a matching card of a realm the session does not read is not merged', async function (this: RenderingTestContext, assert) {
+    await setupScoped();
     await storeService.get(COARSE_OPEN);
     await storeService.get(THEIRS_OPEN);
 
@@ -333,6 +343,7 @@ module('Integration | policy-scoped search', function (hooks) {
   });
 
   test('after a search fails, a matching card of a realm the session does not read is not merged', async function (this: RenderingTestContext, assert) {
+    await setupScoped();
     await storeService.get(COARSE_OPEN);
     await storeService.get(THEIRS_OPEN);
 
@@ -356,7 +367,52 @@ module('Integration | policy-scoped search', function (hooks) {
     }
   });
 
+  test('a realm the user does not read stays scoped when its search fails', async function (this: RenderingTestContext, assert) {
+    // Its realm.json names a policy card that does not exist, so its policy
+    // cannot be judged and the realm fails the search rather than answering
+    // it.
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: UNJUDGED,
+      enforcePermissions: true,
+      permissions: {
+        [USER]: [],
+        [OWNER]: ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          name: 'Unjudged',
+          policy: `${UNJUDGED}policies/missing`,
+        }),
+        'schedules/theirs-open.json': schedule({
+          title: 'Unjudged open',
+          providerId: OWNER,
+          status: 'open',
+        }),
+      },
+    });
+
+    let search = liveSearch(this.owner, OPEN, [UNJUDGED, COARSE]);
+    await search.loaded;
+    await settled();
+    assert.deepEqual(
+      search.meta.policyScopedRealms,
+      [UNJUDGED],
+      'the result marks the realm that did not answer',
+    );
+    assert.deepEqual(ids(search), [COARSE_OPEN]);
+
+    await createLocally(UNJUDGED, 'schedules/local');
+    await settled();
+    assert.deepEqual(
+      ids(search),
+      [COARSE_OPEN],
+      'a matching local create in that realm is not merged',
+    );
+  });
+
   test('a row a policy-scoped result returned still drops out when a local edit stops it matching', async function (this: RenderingTestContext, assert) {
+    await setupScoped();
     // A policy composes its grants into a declared query, which this resource
     // does not send, so the answer to one is replayed to it exactly as the
     // realm server produced it.

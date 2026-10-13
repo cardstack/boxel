@@ -7,7 +7,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { motion, motionValue } from 'glimmer-motion';
+import { motion, motionValue, styles } from 'glimmer-motion';
 import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';
@@ -658,14 +658,6 @@ export class Playhead extends Component {
     return this.mode === 'playing';
   }
 
-  get bar() {
-    return { scaleX: this.fill };
-  }
-
-  get head() {
-    return { x: this.hp };
-  }
-
   get total() {
     const cents =
       42 + (this.state.speed === 'express' ? 9 : 0) + (this.state.wrap ? 4 : 0);
@@ -1064,8 +1056,11 @@ export class Playhead extends Component {
 
         <div class="ph-track">
           <span class="ph-rail"></span>
-          <span class="ph-fill" {{motion style=this.bar}}></span>
-          <span class="ph-thumb" {{motion style=this.head}}></span>
+          <span
+            class="ph-fill"
+            {{motion style=(styles scaleX=this.fill)}}
+          ></span>
+          <span class="ph-thumb" {{motion style=(styles x=this.hp)}}></span>
           {{#each this.marks key="cue" as |mark|}}
             <i class="ph-mark" style={{mark.style}}></i>
           {{/each}}

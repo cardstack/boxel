@@ -1,3 +1,4 @@
+import { withholdsErrorStacks } from './create-response.ts';
 import { CardError, responseWithError } from './error.ts';
 import type { RequestContext } from './index.ts';
 import { RealmPaths, logger } from './index.ts';
@@ -48,9 +49,12 @@ type Handler = (
   requestContext: RequestContext,
 ) => Promise<Response>;
 
-function formatUnknownError(error: unknown): string {
+function formatUnknownError(
+  error: unknown,
+  { withStack = true }: { withStack?: boolean } = {},
+): string {
   if (error instanceof Error) {
-    return error.stack?.trim() || error.message;
+    return (withStack && error.stack?.trim()) || error.message;
   }
 
   if (
@@ -267,9 +271,9 @@ export interface RouteOptions {
   // which is the one place anything may admit it. Every other route is
   // refused with the ACL's own refusal before its handler runs.
   consumesCoarseOutcome?: true;
-  // No policy grant reaches what the route serves: module source, the file
-  // tree, and a file's stored bytes wherever `grantableBytes` does not hand
-  // them to the gate. Only the realm ACL admits a caller to it. In
+  // No policy grant reaches what the route serves: the file tree, and a
+  // file's stored bytes wherever `grantableBytes` does not hand them to the
+  // gate. Only the realm ACL admits a caller to it. In
   // a realm with a policy, a caller the ACL does not let read the realm is
   // told nothing is there, as they are told of every card no grant admits
   // them to, rather than that they may not look. A `HEAD`, which the ACL
@@ -285,9 +289,9 @@ export interface RouteOptions {
   // ACL's outcome can take this. Every other route that does meets such a
   // caller with the seal as soon as it admits them.
   appliesArchivedSeal?: true;
-  // The route serves a path's stored bytes, and for a path that names a data
-  // file or a card's document those bytes are a `readSource` a policy grant
-  // can reach. A request for one consumes the ACL's outcome and is resolved
+  // The route serves a path's stored bytes, and for a path that names a file
+  // or a card's document those bytes are a `readSource` a policy grant can
+  // reach. A request for one consumes the ACL's outcome and is resolved
   // through the gate, `HEAD` included. Every other path the route serves stays
   // `coarseReadOnly`.
   grantableBytes?: true;
@@ -499,12 +503,15 @@ export class Router {
 
       this.log.error(err);
 
-      return new Response(
-        `unexpected exception in realm ${formatUnknownError(err)}`,
-        {
-          status: 500,
-        },
-      );
+      // The full error stays in the log above; the response names only what
+      // went wrong for a caller that may not see a stack (see
+      // `withholdsErrorStacks`).
+      let detail = withholdsErrorStacks(500, requestContext)
+        ? formatUnknownError(err, { withStack: false })
+        : formatUnknownError(err);
+      return new Response(`unexpected exception in realm ${detail}`, {
+        status: 500,
+      });
     }
   }
 }

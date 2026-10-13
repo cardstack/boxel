@@ -82,15 +82,15 @@ const readProbes: Probe[] = [
     send: (r) =>
       r.get('/person-1.json').set('Accept', SupportedMimeType.CardJson),
   },
+  // The card+source read and the raw file serve consume it for any path that
+  // names a file: module source, a data file's or a card's document's bytes
+  // are what a grant can reach.
   {
     label: 'GET card+source',
-    consumes: false,
+    consumes: true,
     send: (r) =>
       r.get('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
-  // The card+source read and the raw file serve consume it for any path but
-  // module source: a data file's or a card's document's bytes are what a grant
-  // can reach, and a name with no extension is read exactly as named.
   {
     label: 'GET card+source of a data file',
     consumes: true,
@@ -669,6 +669,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
               .set('Accept', SupportedMimeType.CardSource),
           ],
           ['the file serve of a data file', request.get('/sample.md')],
+          [
+            'card+source of module source',
+            request
+              .get('/person.gts')
+              .set('Accept', SupportedMimeType.CardSource),
+          ],
+          ['the module serve of module source', request.get('/person.gts')],
+          [
+            'the module serve of the name a module is imported by',
+            request.get('/person'),
+          ],
         ];
         for (let [label, read] of reads) {
           let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
@@ -680,20 +691,16 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
             `admitting: ${label}: the refusal is the gate’s`,
           );
         }
-        // A name with no extension reaches the route too, which reads it
-        // exactly as named. Nothing is stored under these names, so there is
-        // nothing for the gate to judge, and no module or card the name would
-        // resolve to for a reader is reached.
+        // The card+source read reads a name with no extension exactly as
+        // named. Nothing is stored under this one, so there is nothing for the
+        // gate to judge, and the card it would redirect a reader to is not
+        // reached.
         for (let [label, read] of [
           [
             'card+source of a name with no extension',
             request
               .get('/person-1')
               .set('Accept', SupportedMimeType.CardSource),
-          ],
-          [
-            'the file serve of a name with no extension',
-            request.get('/person'),
           ],
         ] as [string, Test][]) {
           assert.strictEqual(
@@ -704,12 +711,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         }
         let before = testRealm.__testOnlyPolicyGateStats().policyLoads;
         for (let [label, read] of [
-          [
-            'module source',
-            request
-              .get('/person.gts')
-              .set('Accept', SupportedMimeType.CardSource),
-          ],
           [
             'a directory listing',
             request.get('/').set('Accept', SupportedMimeType.DirectoryListing),

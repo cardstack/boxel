@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
@@ -112,6 +113,8 @@ const captureElement = modifier(
     callback(element);
   },
 );
+
+const openingWaiter = buildWaiter('card-chooser:opening');
 
 export default class CardChooserModal extends Component<Signature> {
   <template>
@@ -381,75 +384,83 @@ export default class CardChooserModal extends Component<Signature> {
         preselectedCardUrls?: string[];
       } = {},
     ) => {
-      await this.realmServer.ready;
-      // Preload realm info without blocking the modal from opening.
-      let prefetchRealmInfo = Promise.all(
-        this.realmServer.availableRealmIdentifiers.map(async (realmURL) => {
-          let resource = this.realm.getOrCreateRealmResource(realmURL);
-          try {
-            await resource.fetchInfo();
-          } catch (error) {
-            // Keep any existing realm info if the fetch fails; non-fatal for modal.
+      // The task stays running until the user picks, so the waiter covers
+      // only the opening: settled() then means the chooser is showing.
+      let opening = openingWaiter.beginAsync();
+      let request: Request;
+      try {
+        await this.realmServer.ready;
+        // Preload realm info without blocking the modal from opening.
+        let prefetchRealmInfo = Promise.all(
+          this.realmServer.availableRealmIdentifiers.map(async (realmURL) => {
+            let resource = this.realm.getOrCreateRealmResource(realmURL);
+            try {
+              await resource.fetchInfo();
+            } catch (error) {
+              // Keep any existing realm info if the fetch fails; non-fatal for modal.
 
-            console.warn(
-              'Failed to fetch realm info for',
-              realmURL.toString?.() ?? realmURL,
-              error,
-            );
-          }
-        }),
-      );
-      if (isTesting()) {
-        await prefetchRealmInfo;
-      } else {
-        void prefetchRealmInfo;
-      }
-      this.stateId++;
-      let title = await chooseCardTitle(
-        query.filter,
-        this.loaderService.loader,
-        opts?.multiSelect,
-      );
-      let request = new TrackedObject<Request>({
-        deferred: new Deferred(),
-        opts,
-      });
-      let preselectedCardUrl: string | undefined;
-      if (opts?.preselectedCardTypeQuery) {
-        // The result is used as a card instance; store.search pins
-        // `scope: 'cards'`, so the raw query resolves to card instances only.
-        let instances: CardDef[] = await this.store.search(
-          opts.preselectedCardTypeQuery,
-          this.realmServer.availableRealmIdentifiers,
+              console.warn(
+                'Failed to fetch realm info for',
+                realmURL.toString?.() ?? realmURL,
+                error,
+              );
+            }
+          }),
         );
-        if (instances?.[0]?.id) {
-          preselectedCardUrl = `${instances[0].id}.json`;
+        if (isTesting()) {
+          await prefetchRealmInfo;
+        } else {
+          void prefetchRealmInfo;
         }
-      }
-      let preselectedCardUrls = (
-        opts?.preselectedCardUrls?.length
-          ? opts.preselectedCardUrls
-          : preselectedCardUrl
-            ? [preselectedCardUrl]
-            : []
-      ).map((url) => (url.endsWith('.json') ? url : `${url}.json`));
+        this.stateId++;
+        let title = await chooseCardTitle(
+          query.filter,
+          this.loaderService.loader,
+          opts?.multiSelect,
+        );
+        request = new TrackedObject<Request>({
+          deferred: new Deferred(),
+          opts,
+        });
+        let preselectedCardUrl: string | undefined;
+        if (opts?.preselectedCardTypeQuery) {
+          // The result is used as a card instance; store.search pins
+          // `scope: 'cards'`, so the raw query resolves to card instances only.
+          let instances: CardDef[] = await this.store.search(
+            opts.preselectedCardTypeQuery,
+            this.realmServer.availableRealmIdentifiers,
+          );
+          if (instances?.[0]?.id) {
+            preselectedCardUrl = `${instances[0].id}.json`;
+          }
+        }
+        let preselectedCardUrls = (
+          opts?.preselectedCardUrls?.length
+            ? opts.preselectedCardUrls
+            : preselectedCardUrl
+              ? [preselectedCardUrl]
+              : []
+        ).map((url) => (url.endsWith('.json') ? url : `${url}.json`));
 
-      let cardChooserState = new TrackedObject<State>({
-        id: this.stateId,
-        request,
-        chooseCardTitle: title,
-        searchKey: '',
-        dismissModal: false,
-        baseFilter: query.filter,
-        availableRealmUrls: this.realmServer.availableRealmIdentifiers,
-        selectedCards: preselectedCardUrls,
-        multiSelect: opts?.multiSelect ?? false,
-        hasPreselectedCard: preselectedCardUrls.length > 0,
-        consumingRealm: opts.consumingRealm,
-        preselectConsumingRealm: opts.preselectConsumingRealm,
-        lockConsumingRealm: opts.lockConsumingRealm,
-      });
-      this.stateStack.push(cardChooserState);
+        let cardChooserState = new TrackedObject<State>({
+          id: this.stateId,
+          request,
+          chooseCardTitle: title,
+          searchKey: '',
+          dismissModal: false,
+          baseFilter: query.filter,
+          availableRealmUrls: this.realmServer.availableRealmIdentifiers,
+          selectedCards: preselectedCardUrls,
+          multiSelect: opts?.multiSelect ?? false,
+          hasPreselectedCard: preselectedCardUrls.length > 0,
+          consumingRealm: opts.consumingRealm,
+          preselectConsumingRealm: opts.preselectConsumingRealm,
+          lockConsumingRealm: opts.lockConsumingRealm,
+        });
+        this.stateStack.push(cardChooserState);
+      } finally {
+        openingWaiter.endAsync(opening);
+      }
       return await request.deferred.promise;
     },
   );

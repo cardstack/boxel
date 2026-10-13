@@ -46,7 +46,7 @@ Each of these produces a believable wrong conclusion.
 
 ### 1. An absent decision line means the gate was never reached
 
-A caller the ACL allows is never judged by the policy and writes nothing. So "no `policy-decision` line for this user" means either the ACL let them through (and whatever refused them was not the policy), or the request was refused before the gate — by authentication (`realm-auth`), on a route no grant reaches (the directory listing, module source), or by an archived realm's seal. It never means "the policy allowed it silently".
+A caller the ACL allows is never judged by the policy and writes nothing. So "no `policy-decision` line for this user" means either the ACL let them through (and whatever refused them was not the policy), or the request was refused before the gate — by authentication (`realm-auth`), on a route no grant reaches (the directory listing, code mode's routes), or by an archived realm's seal. It never means "the policy allowed it silently".
 
 ### 2. What the caller saw depends on `coarseDeclined`, not on the reason
 
@@ -117,7 +117,7 @@ The fault line is plain text, so its filter needs no unwrap. `--no-follow` retur
 The fields that answer "why" (cost fields are `policy-performance`'s):
 
 - `outcome` — `allow`, `deny`, `error`, or `pending` (trap 5).
-- `reason` — `granted`; `pending`; a refusal before any predicate ran: `non-grantable` (the operation is declared `nonGrantable`, or is an explain or a validate), `query-lane` (a query, which only the search lane grants), `authorization-infrastructure` (the realm's policy card or config card, or any policy card), `unmatchable-target` (a card whose index row is an error row, a type for anything but `create`, a file for anything but `readSource`, or stored bytes with no type, such as module source), `no-grant` (no rule on the type has a grant for the operation, or the realm names no policy at all), `reads-actor` (a grant opens the operation to a caller who isn't signed in, but the operation as the target's type declares it reads `actor()`); `predicate` (every matching grant's predicate ran and none held); `target-missing` (no index row); `stored-card-refused` (under the lock: the card is gone, stored as another type, or stored as a policy card); `policy-unavailable` (the policy did not compile); `predicate-threw`; `gate-failed` (anything else that threw).
+- `reason` — `granted`; `pending`; a refusal before any predicate ran: `non-grantable` (the operation is declared `nonGrantable`, or is an explain or a validate), `query-lane` (a query, which only the search lane grants), `authorization-infrastructure` (the realm's policy card or config card, or any policy card), `unmatchable-target` (a card whose index row is an error row, a type for anything but `create`, a file for anything but `readSource`, or stored bytes no rule could type, such as a path that holds nothing or one the realm ignores), `no-grant` (no rule on the type has a grant for the operation, or the realm names no policy at all), `reads-actor` (a grant opens the operation to a caller who isn't signed in, but the operation as the target's type declares it reads `actor()`); `predicate` (every matching grant's predicate ran and none held); `target-missing` (no index row); `stored-card-refused` (under the lock: the card is gone, stored as another type, or stored as a policy card); `policy-unavailable` (the policy did not compile); `predicate-threw`; `gate-failed` (anything else that threw).
 - `rules` / `grants` — every rule matched on the target's type and every grant in them for the operation, comma-separated in policy order: what a denial was judged by. Empty `rules` means no rule governs the type; `rules` with empty `grants` means a rule governs it but grants nothing under that name.
 - `rule` / `grant` — the one that admitted the invocation; null on anything but an allow.
 - `tier` — `none` (no predicate ran), `stored` (the card's own source), `snapshot` (at least one read the index row).
@@ -184,7 +184,7 @@ sum by (realmURL, outcome, uncompilable) (count_over_time(<ops> | kind="policy-c
 {service="realm-server", env="$env"} |= "compiled with issues that leave part of it inactive" |= "realms.example.com/alice/"
 ```
 
-Whole-policy codes (path `(card)`): `policy-card-missing` (the pointer names a card the index doesn't hold), `policy-card-unloadable` (the index holds it only as an error, or its latest visit was withheld), `not-a-policy`, `invalid-rule` at the top level. Rule- and grant-level codes name a path like `rules[1].targetType` or `rules[1].grants[0].where`: `unresolved-type`, `grants-module-source`, `invalid-grant`, `unknown-operation`, `grants-invalid-operation`, `grants-authorization-infrastructure`, `invalid-predicate`, `partial-match`, `policy-not-filterable`, `unsnapshotted-policy-read`. The full list with meanings is `PolicyIssueCode` in `card-operations/types.ts`. A grant left out for one of these admits nothing; the rest of the policy still applies.
+Whole-policy codes (path `(card)`): `policy-card-missing` (the pointer names a card the index doesn't hold), `policy-card-unloadable` (the index holds it only as an error, or its latest visit was withheld), `not-a-policy`, `invalid-rule` at the top level. Rule- and grant-level codes name a path like `rules[1].targetType` or `rules[1].grants[0].where`: `unresolved-type`, `invalid-grant`, `unknown-operation`, `grants-invalid-operation`, `grants-authorization-infrastructure`, `invalid-predicate`, `partial-match`, `policy-not-filterable`, `unsnapshotted-policy-read`. The full list with meanings is `PolicyIssueCode` in `card-operations/types.ts`. A grant left out for one of these admits nothing; the rest of the policy still applies.
 
 **Step 3 — `policy-card-unloadable` after a healthy edit is usually a withheld visit.** When an index visit of the policy card fails with the failure kept off its row, the row reads as healthy but what it holds is an earlier visit's, so the card compiles to no rules and every declined caller gets a 500. Nothing else would visit it again, so the cache asks for a fresh visit itself the moment it reads such a row, and then at most once a minute while the cause lasts. Expect the policy back within about a minute of the cause clearing, plus however long the visit waits in the queue. A visit that fails outright logs `could not be indexed again after its latest visit was withheld`. If it stays unloadable, the card itself won't index: `indexing-diagnostics`.
 
@@ -305,7 +305,7 @@ A user admitted after they should have lost access, on a grant that shows up her
 
 ## Callers who aren't signed in
 
-A grant with `anonymous: true` admits a caller who authenticated nobody; the governed realm's `realm.json` sets the limit (`anonymousRateLimit`, falling back to `BOXEL_ANONYMOUS_RATE_LIMIT`, `300/60`) and the blocklist (`anonymousBlocklist`), and a write is made as the user its grant's `actingUser` key names in the realm's `config`. This section is about reading what those callers leave behind.
+A grant admits a caller who authenticated nobody only when its `where` names them: for such a caller `actor()` is `"anonymous"`, and the grant's `where` compares `actor()` with `"anonymous"` in a way that can hold for one, as in `actor() == "anonymous"` or `OR(actor() == "anonymous", …)`. A guard such as `actor() != "anonymous"` keeps them out and opens nothing to them. Each such grant carries its own controls, as BXL expressions that may read the governed realm's `config` (`realmConfig("key")`) or the policy card's fields (`policy("field")`): `blocklist` (the addresses it refuses), `rateLimitRequests` and `rateLimitWindowSeconds` (each falling back to `BOXEL_ANONYMOUS_RATE_LIMIT`, `300/60`, when the grant leaves it out or it produces no whole number), and for a write, `actingUser` (the user the write is made as). This section is about reading what those callers leave behind.
 
 ### The record
 
@@ -315,25 +315,28 @@ An `anonymous-request` line for a request from a caller who isn't signed in that
   - `admitted` — a grant admitted it and it was counted; `count` is the window's count after it.
   - `infra` — one of the platform's own egress addresses: admitted, never counted or blocked.
   - `refused` — admitted to the route, but no grant admitted what it asked for; the caller got the 401, or, for a `HEAD`, the realm's 200 discovery answer.
-  - `blocked` — the realm refused the address before any grant was asked; see `blockReason`.
-  - `rate-limited` — the address had used up its budget; nothing ran.
+  - `blocked` — every grant that could admit the request refused the address before anything about the target was read; see `blockReason`.
+  - `rate-limited` — the address had used up its budget through every grant that could admit it, or through the one that did; nothing ran.
   - `unavailable` — the realm couldn't read or update the count, so it turned the caller away (503).
-- `blockReason` — `blocklist`, `ip-undetermined` (the realm server couldn't work out an address: more trusted hops configured than `X-Forwarded-For` entries, or an entry that isn't an address), `blocklist-invalid` (an entry in the realm's blocklist isn't an address or range, which closes the realm to every such caller).
+- `blockReason` — `blocklist`, `ip-undetermined` (the realm server couldn't work out an address: more trusted hops configured than `X-Forwarded-For` entries, or an entry that isn't an address), `blocklist-invalid` (a grant's blocklist produced something that isn't a list of addresses and ranges, which closes that grant to every such caller). Where grants refused for different reasons, the first grant's reason is recorded.
+- `grant` — the grant the request was counted against, by its path in the policy card (`rules[i].grants[j]`): the first grant to admit it, or for a refusal before anything ran, the first that could have.
 - `clientIP` (canonical, not reduced to its `/64`: an IPv4-mapped address reads as a dotted quad), `rateLimitKey` (what the budget is keyed on: the address, or an IPv6 caller's `/64`), `realmURL`, `operation` (what the route was admitted to, or `*` on `/_operations` and `_capabilities`, which run whatever the request names), `route` (`<METHOD> <path>`), `correlationId` (what the request carried in `x-boxel-logging-correlation-id`, which the host sends and a bot or a third-party page usually doesn't; join on `clientIP`, `route` and the timestamp when it is null).
-- `limit` (`requests`, `windowSeconds`, `from: realm|platform`; `| json` flattens these to `limit_requests`, `limit_windowSeconds`, `limit_from`), `retryAfterSeconds`, `cost` (when a request counted more than one unit: a capability check's pairs, a batch's entries).
+- `limit` (`requests`, `windowSeconds`, `requestsFrom` and `windowSecondsFrom`, each `grant` or `platform`; `| json` flattens these to `limit_requests`, `limit_windowSeconds`, `limit_requestsFrom`, `limit_windowSecondsFrom`), `retryAfterSeconds`, `cost` (when a request counted more than one unit: a capability check's pairs, a batch's entries).
 - `actingUsers` — for an admitted write, the users it was made as.
-- `actingUserFailures` — for a refused write, each grant key that named no one who may write the realm, with `key-missing`, `not-a-matrix-id` or `no-write`.
+- `actingUserFailures` — for a refused write, each grant (by path) whose `actingUser` named no one who may write the realm, with `expression-failed` (the expression produced nothing, such as `realmConfig("key")` for a key the realm's `config` doesn't have), `not-a-matrix-id` (it produced something that isn't a user id, `"anonymous"` included) or `no-write` (the user it named may not write the realm).
 
-Two plain-text warnings belong with it: `could not count a request to <realm> from a caller who isn't signed in, so it was turned away` (beside every `unavailable` record), and `<realm> could not say whether it admits a search from a caller who isn't signed in, so it admits none` (a federated search's admission that threw).
+Three plain-text warnings belong with it: `could not count a request to <realm> from a caller who isn't signed in, so it was turned away` (beside every `unavailable` record), `<realm> could not say whether it admits a search from a caller who isn't signed in, so it admits none` (a federated search's admission that threw), and `the blocklist of the grant at <path> of <realm>'s policy isn't a list of IP addresses and CIDR ranges` (beside a `blocklist-invalid` block, naming what it produced).
 
 ### Traps
 
 - **A realm whose policy opens nothing to such callers records nothing.** Their 401 never reaches admission. No line is not a missing line.
 - **A realm anyone may read (`'*': ['read']`) records nothing for reads.** Its ACL admits the read; the policy, its limit and its blocklist never see it.
-- **The budget is the realm's and the address's, shared by every grant.** A visitor rate-limited on a search was spending the same budget as their reads and form posts. Realms never share one: a federated search records one line per realm, each with its own `count`.
+- **The budget is the grant's and the address's.** Each grant counts what it admits on its own, so a visitor rate-limited on a search through one grant can still read through another. A request is charged once, to the grant that admitted it (`grant`). Where several grants admit the same card, one whose budget is spent admits it only where none with budget left does, so a visitor over one grant's limit keeps reading through another that admits the same card, and gets 429 only once every grant that would admit it is spent. A search is scoped type by type the same way: for each type a grant with budget left scopes, the spent grants are left out, so rows only a spent grant admits on that type are not returned (no 429, no `meta.incomplete`); a type only spent grants scope answers 429. Realms never share a budget either: a federated search records one line per realm, each with its own `count`.
+- **A grant that never names `"anonymous"` never admits such a caller**, whatever its `where` would say for one. A grant whose `where` is missing, `true`, compares `actor()` with a field, compares a field with the text `"anonymous"`, or only rules such a caller out (`actor() != "anonymous"`) is for signed-in callers only.
 - **`refused` and `rate-limited` are not the same caller experience.** A refused caller saw the 401 a missing card gives; a rate-limited one saw 429 `rate-limited` with `Retry-After`. Neither did anything.
 - **The hop configuration shows up two ways.** `ip-undetermined` usually means `BOXEL_TRUSTED_PROXY_HOPS` is set higher than the proxies in front of the realm server. Many visitors sharing one `clientIP` that is the load balancer's address means it is unset: with no trusted hops the address is the socket peer.
-- **`blocklist-invalid` closes the whole realm** to every caller who isn't signed in until the realm's `realm.json` is fixed.
+- **`blocklist-invalid` closes the grant** to every caller who isn't signed in until what its `blocklist` reads is fixed: the policy card, or the realm `config` value it names. A `realmConfig("key")` for a key the realm's `config` doesn't hold produces nothing, which closes the grant the same way; an empty string blocks nobody.
+- **A rate limit that reads text falls back silently.** `rateLimitRequests` / `rateLimitWindowSeconds` must produce a number: a `config` value of `"300"` (text) is no limit, so the platform default applies with no warning, and the record's `requestsFrom` / `windowSecondsFrom` reads `platform`.
 - **Capability checks count, explains don't.** A page that asks `canInvoke` about many controls spends a unit per pair.
 - **A write's acting user is a real account.** Its index jobs run in that user's writer lane, and its reads wait for them. A realm that names a person who edits it sees their own edits slow down under visitor traffic.
 
@@ -362,21 +365,21 @@ From a laptop, narrow on `anonymous-request` with `tail-logs.sh --filter 'anonym
 
 ### Investigation: a public form says "Too many requests"
 
-1. Find the realm's `rate-limited` lines for the time; read `limit` and `from`. `from: platform` means the realm sets nothing and the platform default applies.
+1. Find the realm's `rate-limited` lines for the time; read `grant`, `limit` and its `requestsFrom` / `windowSecondsFrom`. `platform` means the grant sets nothing for that half (or its expression produced no whole number) and the platform default applies.
 2. Count `admitted` lines per `rateLimitKey` for that realm over one `windowSeconds`, since that is what the budget is keyed on (an IPv6 visitor's addresses within one `/64` share it). One address spending the budget alone is a burst or a bot; many visitors sharing one `clientIP` is the hop misconfiguration above.
 3. Check `cost`: a page asking a capability check about many controls, or a batch of many entries, spends more than one unit per request.
-4. The fix is the realm's: raise `anonymousRateLimit` in its `realm.json`, or block the address. Nothing in the policy card changes the limit.
+4. The fix is on the grant: raise its `rateLimitRequests` / `rateLimitWindowSeconds`, or the realm `config` value or policy-card field they read, or block the address. An explain with an empty `actor` reports each grant's limit and where each half comes from.
 
 ### Investigation: spam submissions — find the source and block it
 
 1. Admitted writes for the realm, grouped by `rateLimitKey` and `clientIP`: select on the acting user (`| json actingUser="actingUsers[0]" | actingUser!=""`) rather than on `operation`, which is `*` for a batch posted to `/_operations`. An IPv6 sender is counted by its `/64`, so block the `/64`.
-2. Add the addresses or ranges to the realm's `anonymousBlocklist`; the next request from them gets the 401 and a `blocked` line with `blockReason: blocklist`.
-3. Confirm no `blocklist-invalid` lines follow the edit: one malformed entry closes the realm to every visitor.
+2. Add the addresses or ranges to what the admitting grant's `blocklist` reads (its expression, the realm `config` value it names, or the policy-card field); the next request from them gets the 401 and a `blocked` line with `blockReason: blocklist`. Every grant that opens the route needs it, since a grant whose blocklist doesn't name the address still admits it.
+3. Confirm no `blocklist-invalid` lines follow the edit: one malformed entry closes the grant to every visitor.
 
 ### Investigation: a public form's submissions are refused
 
-1. Find the `refused` lines on the route. `actingUserFailures` names the cause when it is the acting user: `key-missing` (the realm's `config` has no such key), `not-a-matrix-id` (the value isn't a user id), `no-write` (the user lost write on the realm).
-2. With no `actingUserFailures`, no grant admitted the write: the grant doesn't opt in, its `where` doesn't hold for what was sent, or it reads `actor()` (which never admits such a caller). Hand off to explain with an empty `actor`, which judges exactly that.
+1. Find the `refused` lines on the route. `actingUserFailures` names the grant and the cause when it is the acting user: `expression-failed` (its `actingUser` produced nothing, such as a `realmConfig` key the realm's `config` doesn't hold), `not-a-matrix-id` (the value isn't a user id), `no-write` (the user lost write on the realm).
+2. With no `actingUserFailures`, no grant admitted the write: no grant's `where` names `"anonymous"`, its `where` doesn't hold for what was sent, it has no `actingUser` (`anonymous-write-without-acting-user`), or its operation's program reads `actor()`. Hand off to explain with an empty `actor`, which judges exactly that and reports each grant's acting user.
 
 ### Investigation: the public page stopped showing cards
 

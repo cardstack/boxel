@@ -1,9 +1,7 @@
-// How a realm controls the callers its policy admits without a session: the
-// rate limit their invocations are counted against, and the addresses it
-// refuses outright. Both are the governed realm's own settings, read from its
-// `realm.json`, never from a policy card. A policy card can live in another
-// realm, and its writers must not decide how hard this realm can be hit or
-// who is kept out of it.
+// What the realm reads about the callers its policy admits without a session:
+// their addresses, the rate limit their invocations are counted against, and
+// the address lists a grant refuses (see `grant-expressions.ts`, which settles
+// a grant's limit and blocklist).
 //
 // Pure TypeScript, without Node's `net`, because the host compiles and
 // explains policies in the browser as well as on the server.
@@ -14,9 +12,9 @@ export interface AnonymousRateLimit {
   windowSeconds: number;
 }
 
-// The limit a realm's anonymous callers get when its `realm.json` sets none.
-// The realm server can replace it with `BOXEL_ANONYMOUS_RATE_LIMIT`; a realm
-// overrides either with its own `anonymousRateLimit`.
+// The limit a grant counts callers who aren't signed in against where it sets
+// none. The realm server can replace it with `BOXEL_ANONYMOUS_RATE_LIMIT`; a
+// grant overrides either with its own rate-limit expressions.
 export const DEFAULT_ANONYMOUS_RATE_LIMIT: AnonymousRateLimit = {
   requests: 300,
   windowSeconds: 60,
@@ -28,8 +26,8 @@ export const DEFAULT_ANONYMOUS_RATE_LIMIT: AnonymousRateLimit = {
 const MAX_WINDOW_SECONDS = 86_400;
 const MAX_REQUESTS = 1_000_000;
 
-// A limit as written in `realm.json`, or undefined when it is not one: both
-// fields present, whole, and within the bounds above. Anything else is
+// A limit, or undefined when it is not one: both fields present, whole, and
+// within the bounds above. Anything else is
 // rejected whole rather than repaired, since a half-understood limit is a
 // limit nobody wrote.
 export function parseRateLimit(value: unknown): AnonymousRateLimit | undefined {
@@ -274,6 +272,16 @@ export function parseAddressRange(text: string): AddressRange | undefined {
   return { family: address.family, base: address.value, prefixLength };
 }
 
+// A range as an address and prefix length, or the bare address for a range of
+// one address.
+export function formatAddressRange(range: AddressRange): string {
+  let address = formatIP({ family: range.family, value: range.base });
+  let width = range.family === 4 ? 32 : 128;
+  return range.prefixLength === width
+    ? address
+    : `${address}/${range.prefixLength}`;
+}
+
 export function rangeContains(range: AddressRange, address: IPAddress) {
   if (range.family !== address.family) {
     return false;
@@ -308,50 +316,6 @@ export function parseAddressRanges(entries: readonly unknown[]): {
     }
   }
   return { ranges, invalid };
-}
-
-// Whether a written limit says nothing: absent, or the shape a saved
-// RealmConfig card gives a limit field nobody filled in, every value null.
-export function isUnsetLimit(value: unknown): boolean {
-  return (
-    value == null ||
-    (typeof value === 'object' &&
-      !Array.isArray(value) &&
-      Object.values(value as Record<string, unknown>).every((v) => v == null))
-  );
-}
-
-// What the realm's `realm.json` says about anonymous callers, resolved
-// against the platform default.
-export interface AnonymousAccessSettings {
-  limit: AnonymousRateLimit;
-  // Whether the limit is the realm's own or the platform's.
-  limitFrom: 'realm' | 'platform';
-  blocklist: AddressRange[];
-  // Entries that are not an address or a range, as written. A realm with any
-  // admits no anonymous caller at all: dropping an entry would let in the
-  // address its author meant to keep out.
-  invalidBlocklistEntries: string[];
-}
-
-export function resolveAnonymousAccess(
-  written: { rateLimit?: unknown; blocklist?: unknown },
-  platformLimit: AnonymousRateLimit = DEFAULT_ANONYMOUS_RATE_LIMIT,
-): AnonymousAccessSettings {
-  let realmLimit = isUnsetLimit(written.rateLimit)
-    ? undefined
-    : parseRateLimit(written.rateLimit);
-  let entries = Array.isArray(written.blocklist) ? written.blocklist : [];
-  let { ranges, invalid } = parseAddressRanges(entries);
-  if (written.blocklist != null && !Array.isArray(written.blocklist)) {
-    invalid.push(JSON.stringify(written.blocklist));
-  }
-  return {
-    limit: realmLimit ?? platformLimit,
-    limitFrom: realmLimit ? 'realm' : 'platform',
-    blocklist: ranges,
-    invalidBlocklistEntries: invalid,
-  };
 }
 
 // The headers the realm server sets on every request it hands a realm, naming

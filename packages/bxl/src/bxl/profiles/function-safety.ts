@@ -305,13 +305,15 @@ export const BXL_METADATA_CALLS = names([
 /**
  * The request-context builtins. They read state that belongs to one request —
  * the payload, the caller, the stored document, the settings of the realm the
- * edit lands in — so they are only meaningful where a program runs once per
- * request, which is the `mutation` profile.
+ * edit lands in, the policy card a permission is judged against — so they are
+ * only meaningful where a program runs once per request, which is the
+ * `mutation` profile, or once per decision, which is a policy's.
  */
 export const BXL_REQUEST_CONTEXT_CALLS = names([
   'actor',
   'instance',
   'params',
+  'policy',
   'realmConfig',
 ]);
 

@@ -12,6 +12,7 @@ import {
   type TransformContext,
 } from './transforms.ts';
 import {
+  actingUserResolver,
   GATE_FAULTED,
   GATE_MISSING,
   GATE_REFUSED,
@@ -26,7 +27,7 @@ import {
   type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
-import { ActingUsers, NO_ACTING_USER } from './acting-users.ts';
+import { AnonymousRequest } from './anonymous-request.ts';
 import type { GateTrace } from './gate-trace.ts';
 import { INTERNAL_ROUTE, type PolicyRoute } from './telemetry.ts';
 import { explainOperation, type TargetRealm } from './explain.ts';
@@ -289,6 +290,11 @@ export interface OperationIndexQueryEngine {
 }
 
 export interface RunOperationOptions {
+  // The request a caller who isn't signed in made this invocation in. Its
+  // grants judge the invocation, and it records the grant that admitted it, so
+  // the request is counted against that grant's limit. Without it, the
+  // invocation is judged in a request of its own.
+  anonymousRequest?: AnonymousRequest;
   // The gate's decision about this very invocation, where the caller already
   // resolved it in the same request: the operations envelope resolves every
   // entry before it runs any. The read then runs on that decision rather than
@@ -374,10 +380,10 @@ export interface OperationScope {
   // The request surface and route this invocation arrived on, which the
   // gate's decision record names (see `PolicyDecisionEvent`).
   readonly route: PolicyRoute;
-  // Who the request's writes are made as, where it authenticated nobody and
-  // a grant naming an acting user admits them (see `ActingUsers`). One for the
+  // Which grants may admit the request where it authenticated nobody, which
+  // did, and who its writes are made as (see `AnonymousRequest`). One for the
   // request, shared by every scope derived from this one.
-  readonly actingUsers: ActingUsers;
+  readonly anonymousRequest: AnonymousRequest;
   // The archived realm's refusal, where the realm holds one for this caller
   // (see `OperationRequest.seal`). `resolveOperation` answers with it what the
   // gate grants.
@@ -414,10 +420,11 @@ export interface ScopeInvocation {
   seal?: Error;
   advisory?: boolean;
   route?: PolicyRoute;
-  // The request's acting users, where its caller supplies the one its
-  // records read from. Otherwise the scope resolves them through the realm's
-  // policy access.
-  actingUsers?: ActingUsers;
+  // The request's anonymous admission, where its caller supplies the one its
+  // records read from. Otherwise any grant that opens anything to callers who
+  // aren't signed in may admit one, and acting users resolve through the
+  // realm's policy access.
+  anonymousRequest?: AnonymousRequest;
 }
 
 // What the realm ACL declined for a request, judged per invocation rather than
@@ -436,16 +443,48 @@ export function scopeCallerFor(actor: string): ScopeCaller {
   return actor ? { kind: 'user', actor } : { kind: 'anonymous' };
 }
 
+// The realms this server serves that one of the URLs is in, each once in the
+// order first read, when the caller may read every one of them. Undefined
+// when they may not, and from a core that cannot say.
+//
+// This is the one reader gate for what compiling a policy reports, since what
+// it reports describes the definitions compiling read: a validate and an
+// explain against a draft both answer only when this is defined. An archived
+// realm is one no caller may read, so a definition read from one refuses the
+// answer. A URL no realm here serves is skipped: the definition lookup reads
+// it as the owner of the realm asking, as every card in that realm reads it.
+export async function servedRealmsRead(
+  core: OperationCore,
+  asker: ScopeCaller,
+  urls: string[],
+): Promise<string[] | undefined> {
+  if (!core.readsRealmOf) {
+    return undefined;
+  }
+  let realms: string[] = [];
+  for (let url of new Set(urls)) {
+    let served = await core.readsRealmOf(url, asker);
+    if (!served) {
+      continue;
+    }
+    if (!served.read) {
+      return undefined;
+    }
+    if (!realms.includes(served.realm)) {
+      realms.push(served.realm);
+    }
+  }
+  return realms;
+}
+
 export function newOperationScope(
   core: OperationCore,
   invocation: ScopeInvocation = {},
 ): OperationScope {
   let rows = new Map<string, Promise<InstanceOrError | undefined>>();
-  let actingUsers =
-    invocation.actingUsers ??
-    new ActingUsers(
-      (key) => core.policy?.actingUser?.(key) ?? NO_ACTING_USER(),
-    );
+  let anonymousRequest =
+    invocation.anonymousRequest ??
+    new AnonymousRequest(actingUserResolver(core));
   let peekInstance = (url: URL) => {
     let cached = rows.get(url.href);
     if (!cached) {
@@ -472,7 +511,7 @@ export function newOperationScope(
     seal,
     advisory,
     route,
-    actingUsers,
+    anonymousRequest,
     derive: (next) =>
       scopeFor(
         next.caller ?? caller,
@@ -1327,6 +1366,9 @@ export async function runOperation(
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
     ...(canonical.seal ? { seal: canonical.seal } : {}),
     ...(canonical.route ? { route: canonical.route } : {}),
+    ...(opts.anonymousRequest
+      ? { anonymousRequest: opts.anonymousRequest }
+      : {}),
   });
   // A decision made in the same request is reused only for the target it was
   // made about. The envelope canonicalizes the realm root to its index card for

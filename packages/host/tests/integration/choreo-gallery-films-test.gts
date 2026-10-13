@@ -1,4 +1,10 @@
-import { click, find, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  find,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
@@ -116,6 +122,106 @@ module('Integration | Choreo gallery | films', function (hooks) {
     assert.dom('.tw-face .film-grip').exists('the frame can be resized');
   });
 
+  test('the film’s poster stands in its frame’s place until the film’s first frame is up', async function (assert) {
+    await renderFilm('towers', 'TowersDemo', 'isolated');
+    assert
+      .dom('[data-test-film="towers"] [data-test-film-poster]')
+      .hasAttribute(
+        'src',
+        `${testRealmURL}asset/towers-poster.webp`,
+        'the page’s stage shows the film’s still from its first render',
+      );
+
+    await waitFor('[data-test-film="towers"] [data-test-film-frame]');
+    let frame = find(
+      '[data-test-film="towers"] [data-test-film-frame]',
+    ) as HTMLIFrameElement;
+    await waitUntil(() => frame.contentDocument?.readyState === 'complete');
+    assert
+      .dom(frame)
+      .doesNotHaveAttribute(
+        'data-test-film-shown',
+        'the frame stays clear of the poster while the film loads',
+      );
+    assert
+      .dom('[data-test-film="towers"] [role="status"]')
+      .hasText('Loading the film…', 'and a screen reader hears it is loading');
+
+    // the film app posts this from inside its own document once its picture
+    // is seated (choreo-film-app's lib/first-frame)
+    (frame.contentWindow as Window & typeof globalThis).eval(
+      "parent.postMessage({ type: 'choreo-film:first-frame' }, '*')",
+    );
+    await waitUntil(() => frame.hasAttribute('data-test-film-shown'));
+    assert
+      .dom(frame)
+      .hasAttribute(
+        'data-test-film-shown',
+        '',
+        'the film comes up over its poster',
+      );
+    assert
+      .dom('[data-test-film="towers"] [data-test-film-poster]')
+      .exists('the poster stays under the frame');
+    assert
+      .dom('[data-test-film="towers"] [role="status"]')
+      .doesNotExist('the loading status goes with the poster’s turn');
+  });
+
+  test('a film’s page leaving takes its frame down before the swap, so the poster is what flies', async function (assert) {
+    let { ChoreoGallery } = (await loader.import(`${testRealmURL}gallery`)) as {
+      ChoreoGallery: new (attrs: Record<string, unknown>) => CardDefType;
+    };
+    let module = (await loader.import(`${testRealmURL}stages/towers`)) as {
+      TowersDemo: new (attrs: Record<string, unknown>) => CardDefType;
+    };
+    let gallery = new ChoreoGallery({
+      demos: [
+        new module.TowersDemo({
+          slug: 'towers',
+          title: 'towers',
+          group: 'Film',
+          lede: 'The towers film',
+          apis: [],
+          sample: '',
+          slowmo: false,
+          theater: true,
+        }),
+      ],
+    });
+    await renderCard(loader, gallery, 'isolated');
+    await click('[data-test-gallery-tile-link="towers"]');
+    await waitFor('[data-test-film="towers"] [data-test-film-frame]');
+
+    // what the page held at the moment its frame went
+    let pageWhenFrameWent: boolean | undefined;
+    let observer = new MutationObserver(() => {
+      if (
+        pageWhenFrameWent === undefined &&
+        !document.querySelector(
+          '[data-test-film="towers"] [data-test-film-frame]',
+        )
+      ) {
+        pageWhenFrameWent = Boolean(
+          document.querySelector('[data-test-demo-body]'),
+        );
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    try {
+      await triggerEvent('[data-gallery-home]', 'click');
+      await waitUntil(() => !document.querySelector('[data-test-demo-body]'), {
+        timeout: 8000,
+      });
+    } finally {
+      observer.disconnect();
+    }
+    assert.true(
+      pageWhenFrameWent,
+      'the frame was gone while the page was still showing, with its poster in its place',
+    );
+  });
+
   test('the stage’s controls keep their own ink, type and cursor inside the site', async function (assert) {
     await renderFilm('towers', 'TowersDemo', 'isolated');
     await waitFor('.tw-face iframe.film-frame');
@@ -157,6 +263,49 @@ module('Integration | Choreo gallery | films', function (hooks) {
     await click('.theater-built');
     assert.dom('.demo-body.is-theater').doesNotExist('back on the page');
     assert.dom('[data-film-theater]').exists('the way in is back');
+  });
+
+  // The stand-in page has no film in it, so this listens where the film app
+  // would and checks what the notes send across the frame.
+  async function heardByFilm(face: string) {
+    await waitFor(`${face} iframe.film-frame`);
+    let frame = find(`${face} iframe.film-frame`) as HTMLIFrameElement;
+    await waitUntil(() => frame.contentDocument?.title === 'Film');
+    let heard: unknown[] = [];
+    // the data arrives as an object of the frame's realm; copy it into this
+    // one so deepEqual compares contents rather than prototypes
+    frame.contentWindow!.addEventListener('message', (event) =>
+      heard.push({ ...event.data }),
+    );
+    return heard;
+  }
+
+  test('the Towers notes play their joins on the film in the frame', async function (assert) {
+    await renderFilm('towers', 'TowersDemo', 'isolated');
+    let heard = await heardByFilm('.tw-face');
+
+    assert.dom('.dd-joins button').exists({ count: 10 }, 'the strip is live');
+    await click('.dd-joins button:first-child');
+    await waitUntil(() => heard.length > 0);
+    assert.deepEqual(
+      heard,
+      [{ type: 'choreo-film:preview-join', join: 'wipe' }],
+      'the join is posted to the film’s document',
+    );
+  });
+
+  test('the Sagrada notes play their joins on the film in the frame', async function (assert) {
+    await renderFilm('sagrada', 'SagradaDemo', 'isolated');
+    let heard = await heardByFilm('.sg-face');
+
+    assert.dom('.dd-joins button').exists({ count: 8 }, 'the strip is live');
+    await click('.dd-joins button:nth-child(5)');
+    await waitUntil(() => heard.length > 0);
+    assert.deepEqual(
+      heard,
+      [{ type: 'choreo-film:preview-join', join: 'iris' }],
+      'the join is posted to the film’s document',
+    );
   });
 
   test('Sylva has a theater but no resize grip', async function (assert) {

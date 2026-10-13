@@ -1,9 +1,19 @@
 // Pretui — Card: the hairline surface with header, media, body and footer bands.
 import Component from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
-import type { PretuiAppearance, PretuiSize, PretuiTone } from '../pretui-primitives';
+import { on } from '@ember/modifier';
+import { OWNS_PRESS, listen } from '../focus';
+import type {
+  PretuiAppearance,
+  PretuiSize,
+  PretuiTone,
+} from '../pretui-primitives';
 import { pretuiOrientation, pretuiSize } from '../internal/structure-layout';
-import type { Orientation, OrientationAlias, SizeAlias } from '../internal/structure-layout';
+import type {
+  Orientation,
+  OrientationAlias,
+  SizeAlias,
+} from '../internal/structure-layout';
 
 // ── Card ─────────────────────────────────────────────────────────────────
 //
@@ -62,6 +72,27 @@ import type { Orientation, OrientationAlias, SizeAlias } from '../internal/struc
 //   7. **`className` is the styling API upstream.** Here it is tokens plus
 //      `...attributes`; `--pretui-card-pad` / `-radius` / `-gap` are the knobs.
 
+/** What keeps its own clicks inside a selectable card: every control the
+ * kit treats as owning a press, plus native media, embeds and inline
+ * overlays. The walk runs over the composed path, so the controls inside an
+ * open shadow root (media-chrome's buttons) count too. */
+const KEEPS_ITS_CLICK = [
+  OWNS_PRESS,
+  '[tabindex]',
+  'video',
+  'audio',
+  'iframe',
+  'object',
+  'embed',
+  'dialog',
+  '[popover]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[role="tooltip"]',
+  '[role="slider"]',
+].join(', ');
+
 export type CardAppearance = Exclude<PretuiAppearance, 'accent'> | 'accent';
 
 export interface CardSignature {
@@ -91,6 +122,17 @@ export interface CardSignature {
     interactive?: boolean;
     /** Body scrolls instead of growing; the caller supplies the height. */
     scroll?: boolean;
+    /** Selected state: a tint plus an inline-start rule, and `aria-pressed`
+     * on the select control when `@onSelect` is set. */
+    selected?: boolean;
+    /**
+     * Makes the whole surface a select target. One full-size `<button>` sits
+     * BEHIND the content as a sibling, so the card's own links and buttons
+     * stay valid, stay their own targets, and never bubble into it.
+     */
+    onSelect?: () => void;
+    /** The select control's name. Defaults to the generated title. */
+    selectLabel?: string;
   };
   Blocks: {
     /** Replaces the whole generated header — for a header carrying controls. */
@@ -133,7 +175,10 @@ export class Card extends Component<CardSignature> {
    * replaces the whole header with `<:header>` owns the naming. */
   titleId = `${guidFor(this)}-title`;
   /** The title labels the card unless a custom header owns the top. */
-  labelledBy = (hasHeader: boolean, hasTitleBlock: boolean): string | undefined =>
+  labelledBy = (
+    hasHeader: boolean,
+    hasTitleBlock: boolean,
+  ): string | undefined =>
     !hasHeader && (hasTitleBlock || this.args.title) ? this.titleId : undefined;
 
   get tone(): PretuiTone {
@@ -145,6 +190,46 @@ export class Card extends Component<CardSignature> {
   get size(): PretuiSize {
     return pretuiSize(this.args.size);
   }
+  /** Names the select control by the title unless `@selectLabel` does. */
+  selectLabelledBy = (
+    hasHeader: boolean,
+    hasTitleBlock: boolean,
+  ): string | undefined =>
+    this.args.selectLabel
+      ? undefined
+      : this.labelledBy(hasHeader, hasTitleBlock);
+
+  /** A click anywhere on a selectable card selects it, unless it landed on
+   * something that keeps its own click, or ends a text selection. The card's
+   * content stays fully interactive: scrolling, media, hover tooltips and
+   * drag-selecting text all work as they would outside the card. */
+  onSurfaceClick = (event: Event) => {
+    let onSelect = this.args.onSelect;
+    if (!onSelect) {
+      return;
+    }
+    let card = event.currentTarget as HTMLElement;
+    for (let node of event.composedPath()) {
+      if (node === card) {
+        break;
+      }
+      let el = node as Element;
+      if (typeof el.matches === 'function' && el.matches(KEEPS_ITS_CLICK)) {
+        return;
+      }
+    }
+    let selection = card.ownerDocument.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.anchorNode &&
+      card.contains(selection.anchorNode)
+    ) {
+      return;
+    }
+    onSelect();
+  };
+
   get orientation(): Orientation {
     return pretuiOrientation(
       this.args.orientation,
@@ -162,10 +247,30 @@ export class Card extends Component<CardSignature> {
       data-orientation={{this.orientation}}
       data-interactive={{if @interactive 'true' 'false'}}
       data-scroll={{if @scroll 'true' 'false'}}
-      aria-labelledby={{this.labelledBy (has-block 'header') (has-block 'title')}}
+      data-selected={{if @selected 'true' 'false'}}
+      data-selectable={{if @onSelect 'true' 'false'}}
+      aria-labelledby={{this.labelledBy
+        (has-block 'header')
+        (has-block 'title')
+      }}
       data-test-pretui-card
       ...attributes
+      {{listen 'click' this.onSurfaceClick}}
     >
+      {{#if @onSelect}}
+        <button
+          type='button'
+          class='pretui-card-select'
+          aria-pressed={{if @selected 'true' 'false'}}
+          aria-label={{@selectLabel}}
+          aria-labelledby={{this.selectLabelledBy
+            (has-block 'header')
+            (has-block 'title')
+          }}
+          data-test-pretui-card-select
+          {{on 'click' @onSelect}}
+        ></button>
+      {{/if}}
       {{#if (has-block 'media')}}
         <div class='pretui-card-media'>{{yield to='media'}}</div>
       {{/if}}
@@ -286,10 +391,7 @@ export class Card extends Component<CardSignature> {
         }
         .pretui-card[data-tone='attention'] {
           --pretui-tone: var(--pretui-attention, var(--boxel-fuschia));
-          --pretui-tone-on: var(
-            --pretui-on-attention,
-            var(--background)
-          );
+          --pretui-tone-on: var(--pretui-on-attention, var(--background));
         }
         /* appearance — the five canonical recipes, reading the tone channel. */
         .pretui-card[data-appearance='outlined'] {
@@ -440,8 +542,89 @@ export class Card extends Component<CardSignature> {
             )
           );
         }
-        .pretui-card[data-interactive='true']:focus-within {
+        .pretui-card[data-interactive='true']:not(
+            [data-selectable='true']
+          ):focus-within {
           box-shadow: 0 0 0 2px var(--ring);
+        }
+        /* selectable — the select button sits BEHIND the content, as wide as
+           the card, so its focus ring outlines the card. It carries the
+           keyboard and the accessible name; pointer clicks land on the
+           content and select through the card's own click handler. The
+           content is positioned (z-index auto) only so it paints after the
+           button: no z-index is set and no stacking context is created, so an
+           inline Popup or Menu still rises above neighbouring cards. */
+        .pretui-card[data-selectable='true'] {
+          position: relative;
+          cursor: pointer;
+        }
+        .pretui-card-select {
+          all: unset;
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+        }
+        .pretui-card-select:focus-visible {
+          outline: 2px solid var(--ring);
+          outline-offset: 2px;
+        }
+        .pretui-card[data-selectable='true'] > .pretui-card-media,
+        .pretui-card[data-selectable='true'] > .pretui-card-column {
+          position: relative;
+        }
+        .pretui-card[data-selectable='true']:hover {
+          box-shadow: var(
+            --pretui-card-shadow-hover,
+            var(
+              --pretui-shadow-raised,
+              0 0 0 1px var(--border),
+              0 2px 10px var(--shadow-ink-mid, rgb(0 0 0 / 0.08))
+            )
+          );
+        }
+        /* Selection reads in greyscale: a rule on the inline start, not the
+           tint alone. Same recipe as List. */
+        .pretui-card[data-selected='true'] {
+          position: relative;
+        }
+        /* The tint is laid OVER the appearance's own fill, so a tone fill or
+           a caller's --pretui-card-bg still shows through. plain has no fill
+           to tint and accent's on-tone ink would be unreadable on it; both
+           carry selection on the rule alone. */
+        .pretui-card[data-selected='true']:is(
+            [data-appearance='outlined'],
+            [data-appearance='filled'],
+            [data-appearance='filled-outlined']
+          ) {
+          background-image: linear-gradient(
+            color-mix(
+              in oklch,
+              var(--pretui-selected, var(--boxel-100)) 70%,
+              transparent
+            ),
+            color-mix(
+              in oklch,
+              var(--pretui-selected, var(--boxel-100)) 70%,
+              transparent
+            )
+          );
+        }
+        /* ::after, last in paint order, so it draws over the media band
+           without a z-index. */
+        .pretui-card[data-selected='true']::after {
+          content: '';
+          position: absolute;
+          inset-block: 0;
+          inset-inline-start: 0;
+          inline-size: 2px;
+          border-start-start-radius: inherit;
+          border-end-start-radius: inherit;
+          background: var(--primary);
+          pointer-events: none;
+        }
+        .pretui-card[data-selected='true'][data-appearance='accent']::after {
+          inline-size: 3px;
+          background: var(--pretui-tone-on);
         }
         @media (prefers-reduced-motion: reduce) {
           .pretui-card {

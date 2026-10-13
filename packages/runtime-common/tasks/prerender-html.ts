@@ -387,7 +387,10 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     );
     reportStatus(jobInfo, 'start');
     let userId = userIdFromUsername(realmUsername, matrixURL);
-    let permissions = await fetchUserPermissions(dbAdapter, { userId });
+    let permissions = await fetchUserPermissions(dbAdapter, {
+      userId,
+      includePublicRealms: true,
+    });
     let prerenderPermissions = ensureRealmOwnerPermissions(
       permissions,
       realmURL,
