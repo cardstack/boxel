@@ -533,6 +533,98 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a read is charged to the grant that admitted it, not to another the address may use', async function (assert) {
+    await setNewsroomConfig(limitOf(10));
+    // Opens drafts, with a budget of its own written out on the grant. The
+    // read grant has budget left throughout, and admits no draft.
+    let draftsToAnonymous = {
+      operation: 'read',
+      where: 'actor() == "anonymous" and .status == "draft"',
+      rateLimitRequests: '1',
+      rateLimitWindowSeconds: '600',
+    };
+    await org.write(
+      'policies/newsroom.json',
+      policyCard(ARTICLE, [...NEWSROOM_GRANTS, draftsToAnonymous]),
+    );
+    await org.indexing();
+    assert.strictEqual((await readCard(DRAFT)).status, 200);
+    assert.strictEqual(
+      (await readCard(DRAFT)).status,
+      429,
+      "the drafts grant's own limit answers the second read",
+    );
+    assert.strictEqual(
+      (await readCard(PUBLISHED)).status,
+      200,
+      'the read grant has budget of its own',
+    );
+    assert.deepEqual(
+      articleRecords().map((r) => ({ outcome: r.outcome, grant: r.grant })),
+      [
+        { outcome: 'admitted', grant: 'rules[0].grants[4]' },
+        { outcome: 'rate-limited', grant: 'rules[0].grants[4]' },
+        { outcome: 'admitted', grant: READ_GRANT },
+      ],
+    );
+  });
+
+  test("a grant whose blocklist refuses an address admits none of that address's reads, though another grant lets it in", async function (assert) {
+    await setNewsroomConfig({ blockedIps: BLOCKED_RANGE });
+    // Open drafts, and their stored bytes, to every address: neither has a
+    // blocklist of its own.
+    let draftsToAnonymous = 'actor() == "anonymous" and .status == "draft"';
+    await org.write(
+      'policies/newsroom.json',
+      policyCard(ARTICLE, [
+        ...NEWSROOM_GRANTS,
+        { operation: 'read', where: draftsToAnonymous },
+        { operation: 'readSource', where: draftsToAnonymous },
+      ]),
+    );
+    await org.indexing();
+    assert.strictEqual(
+      (await readCard(DRAFT, BLOCKED_VISITOR)).status,
+      200,
+      'the grant without a blocklist admits the address',
+    );
+    unauthenticated(
+      await readCard(PUBLISHED, BLOCKED_VISITOR),
+      'a card only the blocking grant opens',
+      assert,
+    );
+    // A `HEAD` no grant admits gets the realm's discovery answer, which
+    // describes no card.
+    let head = (from: string) =>
+      request
+        .head(new URL(PUBLISHED).pathname)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('X-Forwarded-For', from);
+    assert.notOk(
+      (await head(BLOCKED_VISITOR)).headers['etag'],
+      'nor its headers',
+    );
+    assert.ok(
+      (await head(VISITOR)).headers['etag'],
+      'which describe the card to an address the blocklist leaves out',
+    );
+    assert.strictEqual(
+      (await readSource(DRAFT, BLOCKED_VISITOR)).status,
+      200,
+      "the grant without a blocklist serves the draft's stored bytes",
+    );
+    unauthenticated(
+      await readSource(PUBLISHED, BLOCKED_VISITOR),
+      'stored bytes only the blocking grant opens',
+      assert,
+    );
+    assert.strictEqual(
+      (await readCard(PUBLISHED, VISITOR)).status,
+      200,
+      'an address the blocklist leaves out reads it',
+    );
+  });
+
   test('a request no grant admits costs the caller nothing', async function (assert) {
     await setNewsroomConfig({
       ...limitOf(1),
