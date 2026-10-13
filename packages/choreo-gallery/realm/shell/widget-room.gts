@@ -307,6 +307,16 @@ export class WidgetRoom extends Component<Signature> {
   get count() {
     return this.entries.length;
   }
+  /** Nothing selected, toured, navigated or opened: Escape has nothing to undo. */
+  get atRest() {
+    return (
+      !this.selected &&
+      !this.quickMode &&
+      this.tourIndex < 0 &&
+      !this.navigating &&
+      this.activeBay < 0
+    );
+  }
   get stop() {
     return tourStops[this.tourIndex];
   }
@@ -985,18 +995,24 @@ export class WidgetRoom extends Component<Signature> {
     // Distant tiles use previews. Live trees are mounted only on approach and
     // retained thereafter; hidden content does not join layout or painting.
     //
-    // The keys are the room's own. It listens on its shell and stops the
-    // keys it handles there, so Escape and the arrows never also reach the
-    // host's shortcuts; a key a demo has already handled is the demo's. The
-    // shell takes focus when the visitor presses inside it, so the keys keep
-    // working after the button that had focus goes away.
+    // The room listens for Escape and the arrows on its shell and stops the
+    // ones it acts on, so they don't also reach the host's shortcuts. A key a
+    // demo has already handled is the demo's, and so is a held key's repeat,
+    // which a demo may ignore without handling it. Escape with nothing to back
+    // out of is the host's. The shell takes focus when the visitor presses
+    // inside it, so the keys keep working after the button that had focus
+    // goes away.
     const shell = el.closest<HTMLElement>('.wr-shell') ?? (el as HTMLElement);
     const key = (event: Event) => {
       const e = event as KeyboardEvent;
       if (
         e.defaultPrevented ||
+        e.repeat ||
         (e.target as HTMLElement).matches('input,textarea,select')
       ) {
+        return;
+      }
+      if (e.key === 'Escape' && this.atRest) {
         return;
       }
       const act =
@@ -1198,8 +1214,8 @@ export class WidgetRoom extends Component<Signature> {
         {{#if this.showWelcome}}<div class='wr-intro'><span
               class='wr-eyebrow'
             >THE CHOREO ATELIER / OPEN COLLECTION</span><h1>Feel the change.<br
-              />Enter the story.</h1><p>Forty-six living studies in interaction,
-              space, and film.</p><div><button
+              />Enter the story.</h1><p>{{this.count}}
+              living studies in interaction, space, and film.</p><div><button
                 type='button'
                 class='wr-primary'
                 {{on 'click' this.startQuickTour}}
