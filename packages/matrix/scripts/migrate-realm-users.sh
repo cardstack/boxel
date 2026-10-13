@@ -10,5 +10,6 @@ node ./scripts/migrate-realm-user.ts @boxel_homepage_realm:localhost
 node ./scripts/migrate-realm-user.ts @submission_realm:localhost
 node ./scripts/migrate-realm-user.ts @experiments_realm:localhost
 node ./scripts/migrate-realm-user.ts @software_factory_realm:localhost
+node ./scripts/migrate-realm-user.ts @choreo_gallery_realm:localhost
 node ./scripts/migrate-realm-user.ts @node-test_realm:localhost
 node ./scripts/migrate-realm-user.ts @test_realm:localhost

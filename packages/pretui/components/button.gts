@@ -128,6 +128,18 @@ export interface ButtonSignature {
   Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
+// The alias resolution, shared with the components that wrap Button and
+// need the same answer before they hand the arguments on.
+export function resolveBusy(args: ButtonSignature['Args']): boolean {
+  return (
+    firstDefined(args.busy, args.loading, args.isLoading, args.isPending) ??
+    false
+  );
+}
+export function resolveDisabled(args: ButtonSignature['Args']): boolean {
+  return firstDefined(args.disabled, args.isDisabled) ?? false;
+}
+
 export class Button extends Component<ButtonSignature> {
   private get axes(): [PretuiTone, PretuiAppearance] {
     return VARIANT_AXES[this.args.variant ?? 'primary'] ?? DEFAULT_AXES;
@@ -152,17 +164,10 @@ export class Button extends Component<ButtonSignature> {
       : 'rounded';
   }
   get busy() {
-    return (
-      firstDefined(
-        this.args.busy,
-        this.args.loading,
-        this.args.isLoading,
-        this.args.isPending,
-      ) ?? false
-    );
+    return resolveBusy(this.args);
   }
   get disabled() {
-    return firstDefined(this.args.disabled, this.args.isDisabled) ?? false;
+    return resolveDisabled(this.args);
   }
   // Busy keeps the button focusable (aria-disabled, not native disabled), so
   // activation is blocked here instead. Never both attributes at once.
@@ -335,6 +340,9 @@ export class Button extends Component<ButtonSignature> {
         .pretui-btn[data-size='s'] {
           font-size: var(--pretui-size-s, var(--text-ui-sm, 0.72rem));
         }
+        .pretui-btn[data-size='m'] {
+          font-size: var(--pretui-size-m, var(--text-ui-md, 0.78rem));
+        }
         .pretui-btn[data-size='l'] {
           font-size: var(--pretui-size-l, var(--text-ui-lg, 0.875rem));
         }
@@ -393,12 +401,12 @@ export class Button extends Component<ButtonSignature> {
         /* appearance recipes — written once, read the tone vars */
         .pretui-btn[data-appearance='accent'] {
           --pretui-btn-surface: var(--pretui-button-bg, var(--pretui-tone));
+          /* a shade darker in both schemes; a mix toward --foreground would
+             lighten the fill in dark mode instead */
           --pretui-btn-surface-hover: var(
             --pretui-btn-accent-hover,
-            color-mix(
-              in oklch,
-              var(--foreground) 10%,
-              var(--pretui-button-bg, var(--pretui-tone))
+            oklch(
+              from var(--pretui-button-bg, var(--pretui-tone)) calc(l * 0.9) c h
             )
           );
           --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-on));

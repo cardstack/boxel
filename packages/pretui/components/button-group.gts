@@ -95,22 +95,24 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
           border-radius: var(--pretui-button-radius, 0);
         }
         /* attach: square the inner corners, overlap the borders by 1px so
-           adjacent edges collapse into one shared line */
-        .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn:not(:first-child)) {
+           adjacent edges collapse into one shared line. Siblings are matched
+           by class, so a non-button child (CopyButton's status region) does
+           not count as a neighbor */
+        .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn ~ .pretui-btn) {
           margin-left: -1px;
           border-top-left-radius: 0;
           border-bottom-left-radius: 0;
         }
-        .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn:not(:last-child)) {
+        .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn:has(~ .pretui-btn)) {
           border-top-right-radius: 0;
           border-bottom-right-radius: 0;
         }
-        .pretui-btngroup[data-orientation='vertical'] :deep(.pretui-btn:not(:first-child)) {
+        .pretui-btngroup[data-orientation='vertical'] :deep(.pretui-btn ~ .pretui-btn) {
           margin-top: -1px;
           border-top-left-radius: 0;
           border-top-right-radius: 0;
         }
-        .pretui-btngroup[data-orientation='vertical'] :deep(.pretui-btn:not(:last-child)) {
+        .pretui-btngroup[data-orientation='vertical'] :deep(.pretui-btn:has(~ .pretui-btn)) {
           border-bottom-left-radius: 0;
           border-bottom-right-radius: 0;
         }
@@ -174,7 +176,7 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         }
         .pretui-btngroup[data-appearance='accent'] :deep(.pretui-btn[data-appearance]) {
           --pretui-btn-surface: var(--pretui-button-bg, var(--pretui-tone));
-          --pretui-btn-surface-hover: var(--pretui-btn-accent-hover, color-mix(in oklch, var(--foreground) 10%, var(--pretui-button-bg, var(--pretui-tone))));
+          --pretui-btn-surface-hover: var(--pretui-btn-accent-hover, oklch(from var(--pretui-button-bg, var(--pretui-tone)) calc(l * 0.9) c h));
           --pretui-btn-text: var(--pretui-button-fg, var(--pretui-tone-on));
           --pretui-btn-elevation: var(--shadow-2xs);
         }

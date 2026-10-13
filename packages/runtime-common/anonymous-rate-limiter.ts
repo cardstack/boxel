@@ -1,9 +1,12 @@
 import { param, query, type DBAdapter, type Expression } from './index.ts';
 import type { AnonymousRateLimit } from './anonymous-access.ts';
 
-// One anonymous invocation's charge against its realm's budget.
+// One anonymous invocation's charge against the budget of the grant that
+// admitted it.
 export interface AnonymousRateCharge {
   realmURL: string;
+  // The admitting grant's id (`CompiledAnonymousGrant.id`).
+  grantId: string;
   // What the caller is counted under (`rateLimitKey`).
   clientIP: string;
   limit: AnonymousRateLimit;
@@ -23,9 +26,10 @@ export type AnonymousRateOutcome =
       retryAfterSeconds: number;
     };
 
-// Counts anonymous invocations per realm and client address, in fixed windows.
-// Realms never share a count: a visitor's calls to one realm cost them nothing
-// in another, and a federated search charges each realm it reaches on its own.
+// Counts anonymous invocations per realm, grant and client address, in fixed
+// windows. Neither realms nor grants share a count: a visitor's calls through
+// one grant cost them nothing through another, nor in another realm, and a
+// federated search charges each realm it reaches on its own.
 export interface AnonymousRateLimiter {
   charge(charge: AnonymousRateCharge): Promise<AnonymousRateOutcome>;
   // Whether the caller has already used up the current window, without
@@ -68,13 +72,16 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
 
   async remaining({
     realmURL,
+    grantId,
     clientIP,
     limit,
   }: Omit<AnonymousRateCharge, 'cost'>): Promise<AnonymousRateOutcome> {
     let { windowStart, retryAfterSeconds } = this.#window(limit);
     let rows = await query(this.#dbAdapter, [
-      `SELECT count FROM anonymous_rate_limits WHERE realm_url =`,
+      `SELECT count FROM anonymous_grant_rate_limits WHERE realm_url =`,
       param(realmURL),
+      'AND grant_id =',
+      param(grantId),
       'AND client_ip =',
       param(clientIP),
       'AND window_start =',
@@ -90,6 +97,7 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
 
   async charge({
     realmURL,
+    grantId,
     clientIP,
     limit,
     cost,
@@ -109,10 +117,12 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
     // A charge that doesn't fit matches the conflict but not the `WHERE`, so
     // it updates nothing and returns no row.
     let rows = await query(this.#dbAdapter, [
-      `INSERT INTO anonymous_rate_limits
-         (realm_url, client_ip, window_start, window_seconds, count, expires_at)
+      `INSERT INTO anonymous_grant_rate_limits
+         (realm_url, grant_id, client_ip, window_start, window_seconds, count, expires_at)
        VALUES (`,
       param(realmURL),
+      ',',
+      param(grantId),
       ',',
       param(clientIP),
       ',',
@@ -123,9 +133,9 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
       param(cost),
       ',',
       param(expiresAt),
-      `) ON CONFLICT (realm_url, client_ip, window_start, window_seconds)
-       DO UPDATE SET count = anonymous_rate_limits.count + EXCLUDED.count
-       WHERE anonymous_rate_limits.count + EXCLUDED.count <=`,
+      `) ON CONFLICT (realm_url, grant_id, client_ip, window_start, window_seconds)
+       DO UPDATE SET count = anonymous_grant_rate_limits.count + EXCLUDED.count
+       WHERE anonymous_grant_rate_limits.count + EXCLUDED.count <=`,
       param(limit.requests),
       'RETURNING count',
     ] as Expression);
@@ -145,7 +155,7 @@ export class DBAnonymousRateLimiter implements AnonymousRateLimiter {
   async #sweep(nowSeconds: number) {
     try {
       await query(this.#dbAdapter, [
-        'DELETE FROM anonymous_rate_limits WHERE expires_at <=',
+        'DELETE FROM anonymous_grant_rate_limits WHERE expires_at <=',
         param(nowSeconds),
       ] as Expression);
     } catch {

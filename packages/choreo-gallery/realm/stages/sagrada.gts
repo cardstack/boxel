@@ -9,6 +9,8 @@ import { FilmTile } from '../shell/film-tile';
 /* one frame of the film, read back through the picture's own snapshot();
    the type over it is HTML, not baked in */
 const POSTER = realmFile('asset/sagrada-poster.webp');
+/* where the subject sits in that still: the tile and the page crop to it */
+const FOCUS = '38% 50%';
 /* the film's own inks, on the centenary night the still is taken from: the
    stone lit gold against a cold city, which is also the one frame where the
    building is finished and nothing is cropped off the top */
@@ -26,11 +28,14 @@ const SagradaStage: TOC<StageSignature> = <template>
   <FilmStage
     class='sg-face'
     @face={{@face}}
+    @filmLink={{@filmLink}}
     @theater={{@theater}}
     @film='sagrada'
     @title='Sagrada Família — the film'
     @ground='#e8dccb'
     @sizeKey='choreo-gallery:sagrada-size'
+    @poster={{POSTER}}
+    @focus={{FOCUS}}
   >
     <:tile>
       <FilmTile
@@ -39,7 +44,7 @@ const SagradaStage: TOC<StageSignature> = <template>
         @line='A hundred and forty-four years, in four minutes'
         @name='Sagrada'
         @open={{@open}}
-        @focus='38% 50%'
+        @focus={{FOCUS}}
         @palette={{PALETTE}}
         @poster={{POSTER}}
       />

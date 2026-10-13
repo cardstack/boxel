@@ -37,6 +37,9 @@ export function createResponse({
   varyOn,
 }: CreateResponseArgs): Response {
   let varyMembers = [...(varyOnAccept ? ['Accept'] : []), ...(varyOn ?? [])];
+  if (withholdsErrorStacks(init?.status ?? 200, requestContext)) {
+    body = withoutErrorStacks(body);
+  }
   return new Response(body, {
     ...init,
     headers: {
@@ -74,4 +77,81 @@ export function createResponse({
         'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-Archived,X-Boxel-Canonical-Path,X-Boxel-Not-Ready,Authorization,Cache-Control,ETag,Retry-After,Content-Range,Accept-Ranges,Content-Length,Content-Disposition',
     },
   });
+}
+
+// A server stack names the realm-server's internal file layout, functions and
+// dependency versions. A published realm is a public site, so it shows stacks
+// only to a caller it can identify — any session the realm-server signed, such
+// as a signed-in Boxel user or the prerender indexing the realm — and to its
+// own in-process dispatches. On a public realm a token is checked only for its
+// signature, so a session minted for another realm, or one revoked but not yet
+// expired, still counts: the line is between Boxel accounts and everyone else.
+// Everyone else (crawlers, link-preview bots, scanners) gets errors without
+// them, and that holds wherever a stack would reach the body: an error
+// response, or a stored error a 200 reports (`_indexing-errors`). The withheld
+// stack is not lost: an errored card's is kept in its index entry, and a
+// handler's unexpected exception is logged by the router.
+export function withholdsStacksFrom(requestContext: RequestContext): boolean {
+  return (
+    requestContext.realm.isPublished === true &&
+    !requestContext.realmInternal &&
+    requestContext.authenticatedUser === undefined
+  );
+}
+
+export function withholdsErrorStacks(
+  status: number,
+  requestContext: RequestContext,
+): boolean {
+  return status >= 400 && withholdsStacksFrom(requestContext);
+}
+
+function withoutErrorStacks(
+  body: BodyInit | null | undefined,
+): BodyInit | null | undefined {
+  if (typeof body !== 'string') {
+    return body;
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (
+    !doc ||
+    typeof doc !== 'object' ||
+    !Array.isArray((doc as { errors?: unknown }).errors)
+  ) {
+    return body;
+  }
+  return removeStacks((doc as { errors: unknown[] }).errors)
+    ? JSON.stringify(doc)
+    : body;
+}
+
+// Error documents nest stacks at several depths — the error itself, its
+// `meta`, each of its `additionalErrors` — so every `stack` key in the tree
+// goes. Answers whether any was there.
+export function removeStacks(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    let removed = false;
+    for (let item of value) {
+      removed = removeStacks(item) || removed;
+    }
+    return removed;
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  let record = value as Record<string, unknown>;
+  let removed = false;
+  if ('stack' in record) {
+    delete record.stack;
+    removed = true;
+  }
+  for (let child of Object.values(record)) {
+    removed = removeStacks(child) || removed;
+  }
+  return removed;
 }

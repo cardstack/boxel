@@ -1,8 +1,6 @@
 import { Deferred } from './deferred.ts';
 import {
-  isUnsetLimit,
-  resolveAnonymousAccess,
-  type AnonymousAccessSettings,
+  DEFAULT_ANONYMOUS_RATE_LIMIT,
   type AnonymousRateLimit,
 } from './anonymous-access.ts';
 import {
@@ -282,6 +280,7 @@ import type { ReadPlan } from './card-operations/dispatch.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
+  actingUserResolver,
   dischargePendingDecision,
   notPermitted,
   pendingWriteFor,
@@ -290,6 +289,7 @@ import {
   storedWriteRefusal,
   type PendingWrite,
   policyGateStats,
+  policyPredicatePreparations,
   policyUnavailable,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
@@ -396,7 +396,6 @@ import type {
   BatchEntryResult,
   CommitBatchOptions,
 } from './card-operations/coordinator.ts';
-import type { ActingUsers } from './card-operations/acting-users.ts';
 import type { BatchEntry } from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
@@ -438,7 +437,11 @@ import {
 } from './router.ts';
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
-import { createResponse } from './create-response.ts';
+import {
+  createResponse,
+  removeStacks,
+  withholdsStacksFrom,
+} from './create-response.ts';
 import { decodeLintFilename, LINT_FILENAME_HEADER } from './lint-headers.ts';
 import stableStringify from 'safe-stable-stringify';
 import {
@@ -509,6 +512,7 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import {
+  REALM_IGNORE_FILES,
   RealmIndexUpdater,
   type IncrementalIndexMeta,
   type IndexChange,
@@ -771,15 +775,11 @@ export type RealmInfo = {
   // on, and whose existence is not this realm's to announce on each of them.
   // `getRealmPolicy()` is where the realm reads it.
   policy?: RealmPolicyReference;
-  // How the realm's `realm.json` limits and blocks callers its policy admits
-  // without a session, as written. Assigned by the file overlay and handed
-  // back apart from the served info, as `policy` is. The realm stamps its info
-  // on every card response, including those it serves to callers a policy
-  // admits, who can't read `realm.json` and have no business learning which
-  // addresses it keeps out. Readers of the realm see both settings on the
-  // `realm.json` card itself. `getAnonymousAccess()` is where the realm reads
-  // it, resolved against the platform default.
-  anonymousAccess?: { rateLimit?: JsonValue; blocklist?: JsonValue };
+  // The rate limit a policy grant counts callers who aren't signed in against
+  // where it sets none: the realm server's, the same for every realm it
+  // serves. A policy's editor shows it beside a grant's own limit, so an
+  // administrator sees what applies when they set nothing.
+  anonymousRateLimitDefault?: AnonymousRateLimit;
   // Opt-in to producing the full prerendered isolated HTML for the
   // realm's default index card (CardsGrid or Workspace). When
   // undefined / null / false the host's render route substitutes a
@@ -2258,6 +2258,8 @@ export interface RealmAdapter {
   ): Promise<LintResult>;
 }
 
+const DEFAULT_PUBLISHED_ROBOTS_TXT = 'User-agent: *\nAllow: /\n';
+
 interface Options {
   // The rate limit a realm's anonymous callers get when its `realm.json` sets
   // none. Unset, `DEFAULT_ANONYMOUS_RATE_LIMIT`.
@@ -2271,6 +2273,12 @@ interface Options {
   linkShapePolicy?: LinkShapePolicy;
   disableModuleCaching?: true;
   fullIndexOnStartup?: true;
+  // The realm is a published snapshot of a source realm, served to the public
+  // as a site. Nobody authors in it, so an error it answers a caller it cannot
+  // identify carries no server stack (see `withholdsStacksFrom`), and, at a
+  // host's root, a crawler's `/robots.txt` gets a default answer when the
+  // realm holds none.
+  published?: true;
   fromScratchIndexPriority?: number;
   // When set, the realm mounts and serves source but does not run a
   // from-scratch index on startup, even when its index is empty (new). Card
@@ -2321,7 +2329,7 @@ export type RequestContext = {
   // Set by `checkPermission` when the request presented no Authorization
   // header at all. A provably credential-less caller has no read-your-writes
   // claim, since a write a policy admits for one is made as an acting user it
-  // holds no session for (see `ActingUsers`), so the read gate skips them
+  // holds no session for (see `AnonymousRequest`), so the read gate skips them
   // outright — unlike a
   // caller whose identity is merely unknown: a token that failed
   // verification, an assume-user indirection the public path cannot
@@ -2333,11 +2341,9 @@ export type RequestContext = {
   // (see `#admitsAnonymous`): the operation it was admitted to, and the
   // caller's address as the realm server worked it out. Such a caller is
   // counted against the realm's anonymous rate limit once what it asked for
-  // succeeds, and is told to authenticate wherever no grant admits it.
+  // succeeds, and is told to authenticate wherever no grant admits it. Which
+  // grants may admit it, and who its writes are made as, are its `request`'s.
   anonymousCaller?: AnonymousCaller;
-  // Who such a caller's writes are made as (see `ActingUsers`), resolved once
-  // for the request however many of its operations ask.
-  actingUsers?: ActingUsers;
   // The user this request's session vouches for as themselves, not just as
   // an identity: a token `checkPermission` verified end to end, whose session
   // is not revoked, which is not delegated to one realm, and which stands for
@@ -2352,8 +2358,11 @@ export type RequestContext = {
   // policy grants to. Identity, not authority, like `authenticatedUser`.
   realmAuthority?: true;
   // A token the public path verified without the checks above, which that
-  // path skips because nothing it serves reads them. `#sessionPrincipal`
-  // runs them, for a request that turns out to need a principal.
+  // path skips because nothing it serves turns on them. The one thing the
+  // token's identity decides there is whether a published realm's error keeps
+  // its stack (see `withholdsStacksFrom`), for which a signature the
+  // realm-server issued is enough. `#sessionPrincipal` runs the checks, for a
+  // request that turns out to need a principal.
   unvouchedSession?: {
     user: string;
     iat: number;
@@ -2381,6 +2390,11 @@ export type RequestContext = {
   // in place of running what the caller asked for, and gives every refusal
   // ahead of that as the realm gives it while active.
   archivedSeal?: ArchivedRealmError;
+  // Set for a dispatch made from inside the realm-server process (a worker's
+  // or definition lookup's in-process fetch), which never reaches the realm
+  // ACL and so records no identity. Every other context, including one a
+  // route builds for itself, is treated as an outside caller.
+  realmInternal?: true;
 };
 
 // What answers a request once it is routed: the answer itself, not yet run,
@@ -2523,8 +2537,11 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #published = false;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
+  // The root ignore files' mtimes when their rules were last read.
+  #ignoreFilesSignature: string | undefined;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
@@ -2636,10 +2653,9 @@ export class Realm {
   // what says a parse has been memoized: this one is undefined both before a
   // parse and for a realm with no policy.
   #cachedRealmPolicy: RealmPolicyReference | undefined;
-  // The `anonymousAccess` part, resolved. Written and cleared with
-  // `#cachedRealmConfig`, like the policy pointer.
-  #cachedAnonymousAccess: AnonymousAccessSettings | undefined;
-  #platformAnonymousRateLimit: AnonymousRateLimit | undefined;
+  // The limit a policy grant that sets none counts callers who aren't signed
+  // in against.
+  #platformAnonymousRateLimit: AnonymousRateLimit;
   // Decides about, and counts, the callers who aren't signed in that this
   // realm's policy admits.
   #anonymous: AnonymousAdmission;
@@ -2666,7 +2682,6 @@ export class Realm {
         info: RealmInfo;
         config: Record<string, JsonValue>;
         policy: RealmPolicyReference | undefined;
-        anonymousAccess: AnonymousAccessSettings;
       }>
     | undefined;
   // Realm lifecycle timestamps, served by `getDetailedRealmInfo` on top of the
@@ -2772,6 +2787,10 @@ export class Realm {
     return this.#virtualNetwork;
   }
 
+  get isPublished(): boolean {
+    return this.#published;
+  }
+
   constructor(
     {
       url,
@@ -2861,6 +2880,7 @@ export class Realm {
     this.#videoSizeLimitBytes =
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#published = Boolean(opts?.published);
     this.#linkShapePolicy =
       opts?.linkShapePolicy ?? LinkShapePolicy.pinned('full');
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -2869,33 +2889,18 @@ export class Realm {
       opts?.captureSyncWaitMs ?? CAPTURE_SYNC_WAIT_BUDGET_MS;
     this.#readIndexDrainBudgetMs =
       opts?.readIndexDrainBudgetMs ?? READ_INDEX_DRAIN_BUDGET_MS;
-    this.#platformAnonymousRateLimit = opts?.anonymousRateLimit;
+    this.#platformAnonymousRateLimit =
+      opts?.anonymousRateLimit ?? DEFAULT_ANONYMOUS_RATE_LIMIT;
     this.#anonymous = new AnonymousAdmission({
       realmURL: this.url,
-      // Who a key names in the realm's current `realm.json` `config`, and
-      // whether that user may write the realm, as its ACL says now.
-      actingUser: async (key) => {
-        let config = await this.getRealmConfig();
-        let user = config?.[key];
-        if (typeof user !== 'string' || user === '') {
-          return { failure: 'key-missing' };
-        }
-        if (!isMatrixUserId(user)) {
-          return { failure: 'not-a-matrix-id' };
-        }
-        let checker = new RealmPermissionChecker(
-          await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
-          this.#matrixClient,
-        );
-        return (await checker.can(user, 'write'))
-          ? { user }
-          : { failure: 'no-write' };
-      },
+      actingUser: (grant, instance) =>
+        actingUserResolver(this.operationCore)(grant, instance),
       log: this.#log,
       limiter: anonymousRateLimiter ?? new DBAnonymousRateLimiter(dbAdapter),
       hasPolicy: async () => (await this.getRealmPolicy()) !== undefined,
       openedOperations: () => this.getAnonymousAdmission(),
-      access: () => this.getAnonymousAccess(),
+      realmConfig: () => this.getRealmConfig(),
+      platformLimit: () => ({ ...this.#platformAnonymousRateLimit }),
     });
     let owner: string | undefined;
     let _fetch = fetcher(
@@ -2942,6 +2947,8 @@ export class Realm {
       dbAdapter,
       queue,
     });
+    this.#realmIndexUpdater.onIgnoreRulesChanged = () =>
+      this.#reindexForIgnoreRules();
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
@@ -4216,6 +4223,11 @@ export class Realm {
   // private state.
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
+    void this.#loadIgnoreRules().catch((err: unknown) => {
+      this.#log.warn(
+        `reloading the ignore rules of ${this.url} failed: ${String(err)}`,
+      );
+    });
     this.#cachedHostRoutingMap = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
@@ -5977,7 +5989,7 @@ export class Realm {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
       route: ENVELOPE_ROUTE,
-      actingUsers: this.#anonymous.actingUsersFor(requestContext),
+      anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
     });
     // An entry may describe the card it runs against with a query instead of
     // naming one, and this is where such a query becomes cards — against the
@@ -6640,6 +6652,7 @@ export class Realm {
         {
           caller: scopeCallerFor(actor),
           searchPrincipal: this.#searchPrincipal(requestContext),
+          anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
           ...lanes,
         },
       );
@@ -6722,20 +6735,29 @@ export class Realm {
       write.refusal,
       requestContext,
     );
-    if (
-      policyJudgesWrite ||
-      requestContext.anonymousCaller ||
-      (write.refusal instanceof CoarseAuthenticationRequired &&
-        !requestContext.authenticatedUser &&
-        (await this.#anonymous.callerFor(request, ANONYMOUS_WRITE_CHECK)))
-    ) {
+    // A caller the realm let in through its ACL rather than its policy has
+    // had no anonymous admission made for the request, so one is made for its
+    // writes here. Its pairs are judged through the grants it settles, as the
+    // writes themselves would be.
+    let writeCaller =
+      !policyJudgesWrite &&
+      !requestContext.anonymousCaller &&
+      write.refusal instanceof CoarseAuthenticationRequired &&
+      !requestContext.authenticatedUser
+        ? await this.#anonymous.callerFor(request, ANONYMOUS_WRITE_CHECK)
+        : undefined;
+    if (policyJudgesWrite || requestContext.anonymousCaller || writeCaller) {
       // The realm asks whether a caller it declined a write could read the
       // realm only where its policy judges the write
       // (`#recordCoarsePermission`), so any other write is declined outright
       // even where the ACL lets them read.
-      return coarseDeclined === 'writes' && !policyJudgesWrite
-        ? { coarseDeclined, writesDeclinedOutright: true }
-        : { coarseDeclined };
+      return {
+        coarseDeclined,
+        ...(coarseDeclined === 'writes' && !policyJudgesWrite
+          ? { writesDeclinedOutright: true as const }
+          : {}),
+        ...(writeCaller ? { anonymousRequest: writeCaller.request } : {}),
+      };
     }
     return {
       coarseDeclined,
@@ -7048,8 +7070,23 @@ export class Realm {
               document,
               this.#policyCompileEnvironment(),
             ),
-          actingUser: (key) => this.#anonymous.resolveActingUser(key),
-          anonymousAccess: () => this.getAnonymousAccess(),
+          // Whether the user a grant's `actingUser` names is a Matrix user
+          // who may write the realm, as its ACL says now.
+          checkActingUser: async (user) => {
+            if (!isMatrixUserId(user)) {
+              return { failure: 'not-a-matrix-id' as const };
+            }
+            let checker = new RealmPermissionChecker(
+              await fetchRealmPermissions(this.#dbAdapter, new URL(this.url)),
+              this.#matrixClient,
+            );
+            return (await checker.can(user, 'write'))
+              ? { user }
+              : { failure: 'no-write' as const };
+          },
+          platformAnonymousRateLimit: () => ({
+            ...this.#platformAnonymousRateLimit,
+          }),
         },
         targetRealm: (href) => this.#targetRealm(href),
         // Compiled as this realm's own policy cache compiles the card its
@@ -7291,7 +7328,10 @@ export class Realm {
     requestContext: RequestContext,
   ): SearchPrincipal | undefined {
     if (requestContext.anonymousCaller) {
-      return { kind: 'anonymous' };
+      return {
+        kind: 'anonymous',
+        request: requestContext.anonymousCaller.request,
+      };
     }
     return searchPrincipal(
       requestContext.authenticatedUser,
@@ -7465,6 +7505,7 @@ export class Realm {
     if (this.#skipBootIndex) {
       // Mount-and-serve only: no from-scratch index, even on a new index.
       // Definitions resolve lazily via the prerenderer on first lookup.
+      await this.#loadIgnoreRules();
     } else if (isNewIndex || this.#fullIndexOnStartup) {
       if (this.#fullIndexOnStartup) {
         // CS-11245: bootstrap realms (kind='bootstrap': base,
@@ -7503,11 +7544,50 @@ export class Realm {
         indexType: 'full',
         realmURL: this.url,
       });
+    } else {
+      await this.#loadIgnoreRules();
     }
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
+  }
+
+  // A changed root ignore file: the from-scratch pass rereads the rules and
+  // broadcasts what it hid or revealed, and the cache wipe after it tells the
+  // peer replicas to reread the rules too.
+  #reindexForIgnoreRules() {
+    let { completed } = this.startReindex();
+    completed
+      .then(() => this.clearRealmIndexCachesAndBroadcast())
+      .catch(() => {
+        // startReindex logs its own failure
+      });
+  }
+
+  // Applies the realm's ignore rules read from disk: on a boot with no
+  // from-scratch pass, and on a replica told another one changed the index.
+  // Rereads only when a root ignore file's mtime moved since the last load,
+  // since this runs on every index swap.
+  async #loadIgnoreRules() {
+    await this.#realmIndexUpdater.loadIgnoreRules(async () => {
+      let mtimes = await Promise.all(
+        REALM_IGNORE_FILES.map((name) => this.#adapter.lastModified(name)),
+      );
+      let signature = mtimes.map((mtime) => mtime ?? '-').join(',');
+      if (signature === this.#ignoreFilesSignature) {
+        return undefined;
+      }
+      let rules: string[] = [];
+      for (let name of REALM_IGNORE_FILES) {
+        let content = (await this.readFileAsText(name))?.content;
+        if (content) {
+          rules.push(content);
+        }
+      }
+      this.#ignoreFilesSignature = signature;
+      return rules;
+    });
   }
 
   // TODO get rid of this
@@ -7666,6 +7746,9 @@ export class Realm {
     let requestContext = await this.createRequestContext(requiredPermission, {
       asksBothLanes: localPath === CAPABILITIES_PATH,
     });
+    if (isLocal) {
+      requestContext.realmInternal = true;
+    }
 
     try {
       let dispatch = this.#routeRequest(request, localPath, requestContext);
@@ -8548,7 +8631,27 @@ export class Realm {
           });
           break;
         }
-        case 'not-found':
+        case 'not-found': {
+          // Every crawler asks a site for its robots.txt, so a published realm
+          // that holds none answers with rules allowing everything — what a
+          // crawler assumes of a 404 anyway — rather than an error document.
+          // Crawlers only ask at a host's root, so only a realm mounted there
+          // answers it; under a path the file would be one no crawler reads.
+          response =
+            this.#published &&
+            localPath === 'robots.txt' &&
+            new URL(this.url).pathname === '/'
+              ? createResponse({
+                  body: DEFAULT_PUBLISHED_ROBOTS_TXT,
+                  init: {
+                    status: 200,
+                    headers: { 'content-type': 'text/plain; charset=utf-8' },
+                  },
+                  requestContext,
+                })
+              : result.response;
+          break;
+        }
         case 'non-module':
         case 'shimmed': {
           response = result.response;
@@ -10551,16 +10654,19 @@ export class Realm {
       }
       // The validators were built from the same stat, so when the opened
       // content has a different modification time they describe another
-      // version of the file. Sending them would let a client store these bytes
-      // under that version's validator; the response carries none instead,
-      // and the next request is answered from whatever the file is then.
+      // version of the file. Sending that ETag would let a client store these
+      // bytes under that version's validator, so the response carries none,
+      // and the next request is answered from whatever the file is then. The
+      // modification time is still sent, taken from the opened content: it
+      // describes the bytes this response delivers, and readers such as the
+      // indexer record it as the file's last-modified time.
       if (
         openedContent.lastModifiedMs != null &&
         ref.lastModifiedMs != null &&
         openedContent.lastModifiedMs !== ref.lastModifiedMs
       ) {
         delete headers['etag'];
-        delete headers['last-modified'];
+        headers['last-modified'] = formatRFC7231(openedContent.lastModifiedMs);
       }
     }
     let content = openedContent?.content ?? ref.content;
@@ -12762,7 +12868,7 @@ export class Realm {
       caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
       coarseDeclined,
       route: cardJsonRoute(request.method),
-      actingUsers: this.#anonymous.actingUsersFor(requestContext),
+      anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
     });
     let decision = await resolveFacadeWrite(core, target, base, scope);
     let assertSideLoads = (included: readonly unknown[] | undefined) => {
@@ -14374,6 +14480,7 @@ export class Realm {
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
+    await this.#realmIndexUpdater.ignoreRulesLoaded();
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
@@ -15419,6 +15526,12 @@ export class Realm {
       }),
     };
 
+    // The stored error documents carry the stacks an error response would
+    // withhold, and this answers with a 200, so `createResponse` leaves it be.
+    if (withholdsStacksFrom(requestContext)) {
+      removeStacks(doc.data);
+    }
+
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -15755,7 +15868,9 @@ export class Realm {
   private async touchSourceRealmUpdatedAt(): Promise<void> {
     try {
       await query(this.#dbAdapter, [
-        `UPDATE realm_registry SET updated_at = now() WHERE url =`,
+        `UPDATE realm_registry SET updated_at =`,
+        dbExpression({ pg: 'now()', sqlite: 'CURRENT_TIMESTAMP' }),
+        `WHERE url =`,
         param(this.url),
         `AND kind = 'source'`,
       ]);
@@ -16007,22 +16122,6 @@ export class Realm {
     return policy ? { ...policy } : undefined;
   }
 
-  // How this realm limits and blocks the callers its policy admits without a
-  // session: the limit its `realm.json` sets, or the platform's when it sets
-  // none or sets one that isn't a limit, and the addresses it keeps out. Read
-  // from the file on disk, which is authoritative for it the way it is for the
-  // policy pointer, so a newly blocked address is kept out from the write on
-  // rather than from the next index pass.
-  async getAnonymousAccess(): Promise<AnonymousAccessSettings> {
-    let { anonymousAccess } = await this.#parsedRealmInfo();
-    return {
-      ...anonymousAccess,
-      limit: { ...anonymousAccess.limit },
-      blocklist: anonymousAccess.blocklist.map((range) => ({ ...range })),
-      invalidBlocklistEntries: [...anonymousAccess.invalidBlocklistEntries],
-    };
-  }
-
   // The realm's policy, compiled: the card its pointer names, loaded on the
   // realm server's own authority and compiled once, then answered from memory
   // until an index moves under the card or under a type its rules name, and
@@ -16059,6 +16158,10 @@ export class Realm {
 
   __testOnlyPolicyGateStats(): PolicyGateStats {
     return { ...policyGateStats(this.operationCore) };
+  }
+
+  __testOnlyPolicyPredicatePreparations(): number {
+    return policyPredicatePreparations(this.operationCore);
   }
 
   // The cache reads the policy card straight from the index, not through a
@@ -16180,34 +16283,6 @@ export class Realm {
     return types.includes(this.#policyTypeKey);
   }
 
-  // The anonymous-access settings as written, resolved against the platform
-  // default. A malformed limit falls back to that default, which is still a
-  // limit. A malformed blocklist entry closes the realm to anonymous callers
-  // (see `AnonymousAccessSettings`). Either says what it was in the log.
-  #resolveAnonymousAccess(
-    written: RealmInfo['anonymousAccess'],
-  ): AnonymousAccessSettings {
-    let access = resolveAnonymousAccess(
-      { rateLimit: written?.rateLimit, blocklist: written?.blocklist },
-      this.#platformAnonymousRateLimit,
-    );
-    if (access.limitFrom === 'platform' && !isUnsetLimit(written?.rateLimit)) {
-      this.#log.warn(
-        `ignoring the RealmConfig card's \`anonymousRateLimit\`, ${JSON.stringify(
-          written?.rateLimit,
-        )}, which is not a whole number of requests per whole number of seconds; anonymous callers get the platform's limit`,
-      );
-    }
-    if (access.invalidBlocklistEntries.length > 0) {
-      this.#log.warn(
-        `the RealmConfig card's \`anonymousBlocklist\` has entries that are not an IP address or CIDR range (${access.invalidBlocklistEntries.join(
-          ', ',
-        )}), so the realm admits no anonymous caller until they are fixed`,
-      );
-    }
-    return access;
-  }
-
   // Every part of one parse, which is why they are read together rather than
   // each through its own accessor: `clearRealmIndexCaches()` nulls the cache
   // on every index swap, so a settings read that primed the cache and then
@@ -16217,18 +16292,12 @@ export class Realm {
     info: RealmInfo;
     config: Record<string, JsonValue>;
     policy: RealmPolicyReference | undefined;
-    anonymousAccess: AnonymousAccessSettings;
   }> {
-    if (
-      this.#cachedRealmInfo &&
-      this.#cachedRealmConfig &&
-      this.#cachedAnonymousAccess
-    ) {
+    if (this.#cachedRealmInfo && this.#cachedRealmConfig) {
       return {
         info: this.#cachedRealmInfo,
         config: this.#cachedRealmConfig,
         policy: this.#cachedRealmPolicy,
-        anonymousAccess: this.#cachedAnonymousAccess,
       };
     }
     if (!this.#realmInfoPromise) {
@@ -16241,15 +16310,12 @@ export class Realm {
         // bytes a response carries — so editing a setting or the policy
         // pointer does not invalidate every card's cached representation in
         // the realm.
-        let { info, config, policy, anonymousAccess } =
-          await this.parseRealmInfo();
+        let { info, config, policy } = await this.parseRealmInfo();
         let settings = config ?? {};
-        let access = this.#resolveAnonymousAccess(anonymousAccess);
         if (generation === this.#realmInfoGeneration) {
           this.#cachedRealmInfo = info;
           this.#cachedRealmConfig = settings;
           this.#cachedRealmPolicy = policy;
-          this.#cachedAnonymousAccess = access;
           this.#cachedRealmInfoHash = computeContentHash(JSON.stringify(info));
         }
         // Answered either way: this is the realm as the caller asking for it
@@ -16260,7 +16326,6 @@ export class Realm {
           info,
           config: settings,
           policy,
-          anonymousAccess: access,
         };
       })();
       this.#realmInfoPromise = parse;
@@ -16300,7 +16365,6 @@ export class Realm {
     this.#cachedRealmInfo = null;
     this.#cachedRealmConfig = null;
     this.#cachedRealmPolicy = undefined;
-    this.#cachedAnonymousAccess = undefined;
     this.#cachedRealmInfoHash = null;
     this.#cachedRegistryTimestamps = null;
     this.#cachedIndexCounts = null;
@@ -16326,7 +16390,6 @@ export class Realm {
     info: RealmInfo;
     config: Record<string, JsonValue> | undefined;
     policy: RealmPolicyReference | undefined;
-    anonymousAccess: RealmInfo['anonymousAccess'];
   }> {
     let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
@@ -16345,6 +16408,7 @@ export class Realm {
       publishable: metadata.publishable,
       lastPublishedAt,
       includePrerenderedDefaultRealmIndex: null,
+      anonymousRateLimitDefault: { ...this.#platformAnonymousRateLimit },
     };
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
@@ -16408,12 +16472,6 @@ export class Realm {
             this.#log,
           );
         }
-        if ('anonymousRateLimit' in attrs || 'anonymousBlocklist' in attrs) {
-          realmInfo.anonymousAccess = {
-            rateLimit: attrs.anonymousRateLimit as JsonValue,
-            blocklist: attrs.anonymousBlocklist as JsonValue,
-          };
-        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -16465,8 +16523,8 @@ export class Realm {
       this.#log.warn(`failed to read RealmConfig card from index: ${e}`);
     }
 
-    let { config, policy, anonymousAccess, ...info } = realmInfo;
-    return { info, config, policy, anonymousAccess };
+    let { config, policy, ...info } = realmInfo;
+    return { info, config, policy };
   }
 
   // RealmInfo plus the realm-lifecycle timestamps, for the realm server's batch
