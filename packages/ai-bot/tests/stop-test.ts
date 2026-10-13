@@ -207,15 +207,17 @@ const CUT_OFF_READ = {
 
 // The ids of the calls the prompt's assistant messages make, and of the tool
 // messages that answer them.
-function promptToolCallIds(messages: { role: string }[]) {
-  let calls = messages.flatMap(
-    (m) =>
-      (m as { tool_calls?: { id: string }[] }).tool_calls?.map((c) => c.id) ??
-      [],
-  );
+function promptToolCallIds(
+  messages: {
+    role: string;
+    tool_calls?: { id: string }[];
+    tool_call_id?: string;
+  }[],
+) {
+  let calls = messages.flatMap((m) => m.tool_calls?.map((c) => c.id) ?? []);
   let answered = messages
     .filter((m) => m.role === 'tool')
-    .map((m) => (m as { tool_call_id: string }).tool_call_id);
+    .map((m) => m.tool_call_id);
   return { calls, answered };
 }
 
