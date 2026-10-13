@@ -47,6 +47,7 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
+  --secureOriginURL='https://secure.stack.cards/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

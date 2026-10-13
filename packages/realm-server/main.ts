@@ -230,6 +230,8 @@ let {
   workerManagerUrl,
   livenessPort,
   prerendererUrl,
+  secureOriginURL: secureOriginURLArg,
+  securePort,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -317,6 +319,16 @@ let {
         'Traefik service name for registration in branch mode (default: realm-server)',
       type: 'string',
     },
+    secureOriginURL: {
+      description:
+        'Where the secure origin serves its page shell. Requests to its host are answered by the secure origin alone. Defaults, when --securePort is given, to https://localhost:<securePort>/secure (its Traefik hostname in branch mode).',
+      type: 'string',
+    },
+    securePort: {
+      description:
+        'Port for a listener that serves the secure origin and nothing else, for local development. Omit where the secure origin is a hostname routed to --port.',
+      type: 'number',
+    },
   })
   .parseSync();
 
@@ -372,6 +384,24 @@ for (let i = 0; i < fromUrls.length; i++) {
     urlMappings.push([to, to]); // use toUrl for both in hrefs
   }
 }
+// The secure origin (see lib/secure-origin.ts). Guarded on a real port for the
+// same reason as `livenessPort` below; 0 is allowed in branch mode, where
+// Traefik finds the listener by the port it is given.
+const secureServiceName = `${serviceName}-secure`;
+const secureListenerPort =
+  typeof securePort === 'number' &&
+  Number.isInteger(securePort) &&
+  (securePort > 0 || (securePort === 0 && isEnvironmentMode()))
+    ? securePort
+    : undefined;
+const secureOriginURL =
+  secureOriginURLArg ??
+  (secureListenerPort === undefined
+    ? undefined
+    : isEnvironmentMode()
+      ? `${serviceURL(secureServiceName)}/secure`
+      : `https://localhost:${secureListenerPort}/secure`);
+
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
 for (let realmURL of publishableRealms) {
@@ -388,7 +418,7 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
+  )} secureOriginURL=${secureOriginURL ?? 'none'} securePort=${secureListenerPort ?? 'none'} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 
@@ -806,6 +836,17 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     prerenderer,
     reportHostShell: () => reportHostShellToManager(dbAdapter),
     linkShapePolicy,
+    ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
+  });
+
+  const secureHttpServer =
+    secureListenerPort === undefined
+      ? undefined
+      : server.listenSecureOrigin(secureListenerPort);
+  secureHttpServer?.on('listening', () => {
+    if (isEnvironmentMode()) {
+      registerService(secureHttpServer, secureServiceName, { http2: true });
+    }
   });
 
   let httpServer = server.listen(port);
@@ -853,9 +894,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     // keep-alive sessions instead of waiting for peers to release them —
     // without it `close()` can hang for a tab-keep-alive (or Traefik
     // backend session) lifetime.
-    if (typeof (httpServer as any).closeAllConnections === 'function') {
-      (httpServer as any).closeAllConnections();
+    for (let listener of [httpServer, secureHttpServer]) {
+      if (typeof (listener as any)?.closeAllConnections === 'function') {
+        (listener as any).closeAllConnections();
+      }
     }
+    secureHttpServer?.close();
     searchCache.stopJanitor();
     stopHealthSampler();
     httpServer.close(() => {

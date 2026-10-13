@@ -64,6 +64,7 @@ function environmentDefaults() {
       realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
+      secureOriginURL: 'https://localhost:4208/secure',
       matrixURL: 'http://localhost:8008',
       baseRealmURL: 'https://localhost:4201/base/',
       catalogRealmURL: 'https://localhost:4201/catalog/',
@@ -86,6 +87,7 @@ function environmentDefaults() {
     realmServerURL: `https://${realmHost}/`,
     realmHost,
     iconsURL: `https://icons.${slug}.localhost`,
+    secureOriginURL: `https://realm-server-secure.${slug}.localhost/secure`,
     matrixURL: `https://matrix.${slug}.localhost`,
     baseRealmURL: `https://${realmHost}/base/`,
     catalogRealmURL: `https://${realmHost}/catalog/`,
@@ -166,6 +168,12 @@ module.exports = function (environment) {
     iconsURL: process.env.BOXEL_ENVIRONMENT
       ? defaults.iconsURL
       : process.env.ICONS_URL || defaults.iconsURL,
+    // The secure origin's page shell, where credentials are typed (see
+    // packages/realm-server/lib/secure-origin.ts). Same env-mode rule as
+    // iconsURL above.
+    secureOriginURL: process.env.BOXEL_ENVIRONMENT
+      ? defaults.secureOriginURL
+      : process.env.SECURE_ORIGIN_URL || defaults.secureOriginURL,
     publishedRealmBoxelSpaceDomain:
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
