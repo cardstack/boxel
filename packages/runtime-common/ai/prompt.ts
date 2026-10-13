@@ -9,6 +9,7 @@ import type {
   PromptParts,
   TextContent,
 } from './types.ts';
+import { uniqBy } from 'lodash-es';
 import { constructHistory } from './history.ts';
 import {
   canonicalizeMatrixMediaKey,
@@ -378,6 +379,12 @@ function shouldPromptCheckCorrectnessSummary(
   if (!isCheckCorrectnessToolResultEvent(lastEvent, history)) {
     return false;
   }
+  // A batch that passed has its own note, sent after the tool results, and
+  // it is the only one the model should get: this summary sizes the reply
+  // at one sentence, which would cut short the answer that note asks for.
+  if (checkCorrectnessBatchPassed(lastEvent, history)) {
+    return false;
+  }
   let lastNonResultIndex = findLastIndex(
     history,
     (event) => !isToolResult(event),
@@ -387,6 +394,31 @@ function shouldPromptCheckCorrectnessSummary(
   }
   let lastNonResultEvent = history[lastNonResultIndex];
   return lastNonResultEvent.sender === aiBotUserId;
+}
+
+// Whether every check the message that `toolResult` answers asked for came
+// back applied with no errors. A pass with no result card counts as clean.
+function checkCorrectnessBatchPassed(
+  toolResult: ToolResultEvent,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  let sourceEventId = toolResult.content['m.relates_to']?.event_id;
+  let sourceEvent = history.find((event) => event.event_id === sourceEventId);
+  if (!sourceEvent) {
+    return false;
+  }
+  return getCheckCorrectnessToolRequests(sourceEvent).every((request) => {
+    let result = findLast(history, (event) =>
+      isTerminalToolResultEventFor(event, request.id!),
+    ) as ToolResultEvent | undefined;
+    if (result?.content['m.relates_to']?.key !== 'applied') {
+      return false;
+    }
+    let resultCard = extractCorrectnessResultCard(result);
+    return !resultCard?.errors.some(
+      (entry) => typeof entry === 'string' && entry.trim().length,
+    );
+  });
 }
 
 function getCheckCorrectnessToolRequests(
@@ -1192,11 +1224,15 @@ async function toResultMessages(
       .map((entry) => entry?.toolMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
-  let followUpMessages =
+  // Checks in one batch that end the same way share one note: the model
+  // reads the same instruction once, not once per file.
+  let followUpMessages = uniqBy(
     toolResultEntries
       .map((entry) => entry?.followUpMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
-    [];
+      [],
+    (message) => message.content,
+  );
   return [...toolMessages, ...followUpMessages];
 }
 
@@ -1278,18 +1314,21 @@ type FormattedCorrectnessSummary = {
 const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Make awaited realm.fs.replace calls with exact current text.
 2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
-// Sent as a user-role follow-up after a clean check, so the model reads it
-// as the newest request. A bare "summarize in one sentence" there replaces
-// the answer the user asked for before the write (the question that came
-// with the request, a skill's required closing line) with the sentence. The
-// note therefore sizes itself at one line and sends the model back to the
-// user's message to finish.
+// Sent once, as a user-role message after the tool results, when every check
+// in a batch passed; the trailing summary below is then left out, so this is
+// the last instruction the model reads. A bare "summarize in one sentence"
+// in that place replaces the answer the user asked for before the write (the
+// question that came with the request, a skill's required closing line) with
+// the sentence. The note therefore sizes itself at one line and sends the
+// model back to the user's message to finish.
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
-// This lands mid-answer, right after a file is written, and it is the last
+// Rides the trailing context message after a batch with a failed check (a
+// clean batch gets the success note above instead). This lands mid-answer,
+// right after a file is written, and it is the last
 // thing the model reads before replying — so an instruction that only asks
 // for a summary reads as the end of the work. It was: a build announced as
 // two cards delivered one, reported it was clean, and stopped, because

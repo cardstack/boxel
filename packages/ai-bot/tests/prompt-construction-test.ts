@@ -4988,7 +4988,7 @@ ${patchedFileSource}
     );
   });
 
-  test('getPromptParts includes the correctness summary in the trailing message', async function () {
+  test('getPromptParts includes the correctness summary in the trailing message after a failed check', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5061,7 +5061,7 @@ ${patchedFileSource}
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-1',
           'm.relates_to': {
             event_id: aiMessageId,
@@ -5069,6 +5069,21 @@ ${patchedFileSource}
             rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
+            card: {
+              sourceUrl: 'http://localhost/correctness/1.json',
+              url: 'http://localhost/correctness/1.json',
+              name: 'correctness-1.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: ['example.gts: unknown field type'],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
             context: {
               tools: [],
               functions: [],
@@ -5107,11 +5122,65 @@ ${patchedFileSource}
         .some((message) => messageText(message).includes(summaryMessage)),
       'Summary must not be a history entry — it vanishes on the next request',
     );
+    assert.true(
+      promptParts.messages?.some(
+        (message) =>
+          message.role === 'user' &&
+          messageText(message).includes('Fix the errors above'),
+      ),
+      'A failed check still asks for a fix',
+    );
   });
 
-  test('a passing correctness check asks the model to finish its answer, not to stop', async function () {
+  test('a passing correctness batch asks the model, once, to finish its answer', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = 'ai-message-1';
+    const targets = ['timetable.gts', 'Timetable/main.json'];
+
+    function checkResult(
+      index: number,
+      warnings: string[],
+    ): DiscreteMatrixEvent {
+      return {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: `command-result-${index}`,
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3 + index,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: `check-${index}`,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `http://localhost/correctness/${index}.json`,
+              url: `http://localhost/correctness/${index}.json`,
+              name: `correctness-${index}.json`,
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: { correct: true, errors: [], warnings },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `command-result-${index}`,
+        },
+        status: EventStatus.SENT,
+      };
+    }
+
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -5154,21 +5223,19 @@ ${patchedFileSource}
               functions: [],
             },
           },
-          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-            {
-              id: 'check-1',
-              name: 'checkCorrectness',
-              arguments: JSON.stringify({
-                description: 'Check file correctness',
-                attributes: {
-                  targetType: 'file',
-                  targetRef: 'http://localhost/timetable.gts',
-                  roomId,
-                  correctnessCheckAttempt: 1,
-                },
-              }),
-            },
-          ],
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: targets.map((target, index) => ({
+            id: `check-${index}`,
+            name: 'checkCorrectness',
+            arguments: JSON.stringify({
+              description: `Check ${target}`,
+              attributes: {
+                targetType: 'file',
+                targetRef: `http://localhost/${target}`,
+                roomId,
+                correctnessCheckAttempt: 1,
+              },
+            }),
+          })),
         },
         unsigned: {
           age: 0,
@@ -5176,54 +5243,12 @@ ${patchedFileSource}
         },
         status: EventStatus.SENT,
       },
-      {
-        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
-        event_id: 'command-result',
-        room_id: roomId,
-        sender: '@user:localhost',
-        origin_server_ts: 3,
-        content: {
-          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
-          commandRequestId: 'check-1',
-          'm.relates_to': {
-            event_id: aiMessageId,
-            key: 'applied',
-            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
-          },
-          data: {
-            card: {
-              sourceUrl: 'http://localhost/correctness/1.json',
-              url: 'http://localhost/correctness/1.json',
-              name: 'correctness-1.json',
-              contentType: 'application/json',
-              content: JSON.stringify({
-                data: {
-                  attributes: {
-                    correct: true,
-                    errors: [],
-                    warnings: ['22 lessons are still unplaced'],
-                  },
-                },
-              }),
-            },
-            context: {
-              tools: [],
-              functions: [],
-            },
-          },
-        },
-        unsigned: {
-          age: 0,
-          transaction_id: 'command-result',
-        },
-        status: EventStatus.SENT,
-      },
+      checkResult(0, ['22 lessons are still unplaced']),
+      checkResult(1, []),
     ];
 
     const successNote =
       'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
-    const trailingSummary =
-      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
     const { messages } = await getPromptParts(
       eventList,
@@ -5232,46 +5257,52 @@ ${patchedFileSource}
     );
     assert.ok(messages, 'Expected prompt messages to be constructed');
 
-    let toolIndex = messages!.findIndex(
-      (message) =>
-        message.role === 'tool' && (message as any).tool_call_id === 'check-1',
+    let lastToolIndex = messages!.findLastIndex(
+      (message) => message.role === 'tool',
     );
-    assert.notStrictEqual(toolIndex, -1, 'The check result is a tool message');
+    assert.deepEqual(
+      messages!
+        .filter((message) => message.role === 'tool')
+        .map((message) => (message as any).tool_call_id),
+      ['check-0', 'check-1'],
+      'Each check result is a tool message',
+    );
     assert.true(
-      messageText(messages![toolIndex]).includes(
+      messageText(messages![lastToolIndex - 1]).includes(
         'Warnings:\n- 22 lessons are still unplaced',
       ),
       'The tool message carries the warning',
     );
 
-    // The note lands as the user-role message right after the result, so it
-    // is the newest "request" the model sees. It must send the model back to
-    // the user's own message rather than ask for a one-sentence reply.
-    let followUp = messages![toolIndex + 1];
-    assert.strictEqual(followUp?.role, 'user');
-    assert.strictEqual(messageText(followUp), successNote);
-
-    let allText = messages!.map((message) => messageText(message)).join('\n');
-    assert.false(
-      allText.includes('one short sentence confirming'),
-      'A clean check never asks for a one-sentence reply',
+    // One note for the batch, right after the results. It sends the model
+    // back to the user's own message rather than asking for a summary.
+    let userMessagesAfterResults = messages!
+      .slice(lastToolIndex + 1)
+      .filter((message) => message.role === 'user');
+    assert.strictEqual(
+      messageText(userMessagesAfterResults[0]),
+      successNote,
+      'The success note follows the results',
     );
-    assert.false(
-      allText.includes('auto-corrected'),
-      'A clean check never describes the target as auto-corrected',
-    );
-    assert.false(
-      allText.includes('Fix the errors above'),
-      'A clean check never asks for fixes',
+    assert.strictEqual(
+      messages!.filter((message) => messageText(message) === successNote)
+        .length,
+      1,
+      'The batch gets the success note once, not once per check',
     );
 
-    // The failure-path sibling still rides the trailing context unchanged.
-    let trailingMessage = messages!.at(-1);
-    assert.strictEqual(trailingMessage?.role, 'user');
-    assert.true(
-      messageText(trailingMessage).endsWith(trailingSummary),
-      'The trailing summary instruction is unchanged',
-    );
+    // Nothing after a clean batch sizes the reply at one sentence, so the
+    // success note is the last instruction the model reads.
+    for (let message of messages!.filter((m) => m.role === 'user')) {
+      assert.false(
+        messageText(message).includes('one short sentence'),
+        'A clean batch never asks for a one-sentence reply',
+      );
+      assert.false(
+        messageText(message).includes('Fix the errors above'),
+        'A clean batch never asks for fixes',
+      );
+    }
   });
 
   test('system message parts include cache_control directive on last part', async () => {

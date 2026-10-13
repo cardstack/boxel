@@ -35,23 +35,29 @@ check were one sentence and skipped what the user asked for. Details are on the 
 
 ## Assumptions
 
-- Rewording the success instruction is enough. It stays a `role: 'user'` follow-up, so the
-  history shape, and therefore the prompt cache, does not change.
-- `CHECK_CORRECTNESS_SUMMARY_INSTRUCTION` is left untouched: it fires on the failure path too.
+- The success note stays a `role: 'user'` follow-up after the tool results, so the history
+  shape, and therefore the prompt cache, does not change.
+- `CHECK_CORRECTNESS_SUMMARY_INSTRUCTION` keeps its text and still fires after a batch with a
+  failed check. After a clean batch it is left out, so the success note is the last
+  instruction the model reads.
 
 ## Steps
 
 1. Reword the success instruction so the check note is at most one line of the reply, and the
    model then answers everything the user's last message asked for, any closing line its skills
    require, and any change it made unasked, with the same carry-on clause as the sibling.
-2. Add a prompt-construction test in `packages/ai-bot/tests/prompt-construction-test.ts`: a
-   passing check with a warning yields the new text as the user-role message right after the
-   tool result, the old one-sentence wording appears nowhere, and the trailing instruction is
-   unchanged.
-3. Confirm the existing failure-path tests pass unedited.
-4. Run `pnpm test` in ai-bot and `pnpm lint` in runtime-common and ai-bot.
-5. Add an evaluation that grades the final reply after a clean check, and run it before and
-   after the fix on GPT-6 Luna and Gemini 3.5 Flash, with Claude Sonnet 4.6 as control.
+2. Leave the trailing `CHECK_CORRECTNESS_SUMMARY_INSTRUCTION` out when every check in the
+   batch was applied with no errors, so nothing after the success note asks for one sentence.
+3. Send one follow-up per distinct note in a batch, not one per check: a batch of four passing
+   checks gets the success note once.
+4. Tests in `packages/ai-bot/tests/prompt-construction-test.ts`: a passing batch of two checks
+   gets the success note once, right after the results, and no user-role message asks for one
+   sentence or for fixes. The trailing-summary test uses a failed check and also asserts the
+   fix instruction. The attempt-cap and attempt-reset tests pass unedited.
+5. Run `pnpm test` in ai-bot and `pnpm lint` in runtime-common and ai-bot.
+6. Add an evaluation that grades the final reply after a clean check, and run it before and
+   after the fix on GPT-6 Luna and Gemini 3.5 Flash, with Claude Sonnet 4.6 as control. Its
+   criteria require a passing check before the final reply, so a pass shows the bug path ran.
 
 ## Target files
 
@@ -65,13 +71,17 @@ check were one sentence and skipped what the user asked for. Details are on the 
 `reading-list-save-then-answer`: build a small card with three instances, then, once
 everything is saved, list the unfinished books and end with a line starting "Next step:".
 
-| Instruction | Model             | Verdict       | Quality | Final reply                                                 |
-| ----------- | ----------------- | ------------- | ------- | ----------------------------------------------------------- |
-| original    | GPT-6 Luna        | pass          | 4/10    | one sentence: saved and "auto-corrected", nothing asked for |
-| original    | Gemini 3.5 Flash  | model-failure | 0/10    | stopped before writing; no check ran                        |
-| fixed       | GPT-6 Luna        | pass          | 10/10   | full answer, unfinished list, "Next step:" line             |
-| fixed       | Claude Sonnet 4.6 | pass          | 10/10   | full answer, unfinished list, "Next step:" line             |
-| fixed       | Gemini 3.5 Flash  | model-failure | 0/10    | full answer after a clean check, but never called show-card |
+| Instruction  | Model             | Verdict       | Quality | Final reply                                                 |
+| ------------ | ----------------- | ------------- | ------- | ----------------------------------------------------------- |
+| original     | GPT-6 Luna        | pass          | 4/10    | one sentence: saved and "auto-corrected", nothing asked for |
+| original     | Gemini 3.5 Flash  | model-failure | 0/10    | stopped before writing; no check ran                        |
+| fixed        | GPT-6 Luna        | pass          | 10/10   | full answer, unfinished list, "Next step:" line             |
+| fixed        | Claude Sonnet 4.6 | pass          | 10/10   | full answer, unfinished list, "Next step:" line             |
+| fixed        | Gemini 3.5 Flash  | model-failure | 0/10    | full answer after a clean check, but never called show-card |
+| review fixes | GPT-6 Luna        | pass          | 10/10   | full answer, unfinished list, "Next step:" line             |
+| review fixes | Claude Sonnet 4.6 | pass          | 10/10   | full answer, unfinished list, "Next step:" line             |
+
+The "review fixes" rows ran with the success note sent once per batch and no trailing summary after a clean batch. They used the prompt that says any look is fine: without it, GPT-6 Luna twice read the design skill and asked how the list should feel before writing anything.
 
 ## Out of scope
 
