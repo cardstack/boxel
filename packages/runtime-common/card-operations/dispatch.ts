@@ -443,6 +443,40 @@ export function scopeCallerFor(actor: string): ScopeCaller {
   return actor ? { kind: 'user', actor } : { kind: 'anonymous' };
 }
 
+// The realms this server serves that one of the URLs is in, each once in the
+// order first read, when the caller may read every one of them. Undefined
+// when they may not, and from a core that cannot say.
+//
+// This is the one reader gate for what compiling a policy reports, since what
+// it reports describes the definitions compiling read: a validate and an
+// explain against a draft both answer only when this is defined. An archived
+// realm is one no caller may read, so a definition read from one refuses the
+// answer. A URL no realm here serves is skipped: the definition lookup reads
+// it as the owner of the realm asking, as every card in that realm reads it.
+export async function servedRealmsRead(
+  core: OperationCore,
+  asker: ScopeCaller,
+  urls: string[],
+): Promise<string[] | undefined> {
+  if (!core.readsRealmOf) {
+    return undefined;
+  }
+  let realms: string[] = [];
+  for (let url of new Set(urls)) {
+    let served = await core.readsRealmOf(url, asker);
+    if (!served) {
+      continue;
+    }
+    if (!served.read) {
+      return undefined;
+    }
+    if (!realms.includes(served.realm)) {
+      realms.push(served.realm);
+    }
+  }
+  return realms;
+}
+
 export function newOperationScope(
   core: OperationCore,
   invocation: ScopeInvocation = {},
