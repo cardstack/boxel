@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { getOwner, type default as Owner } from '@ember/owner';
@@ -25,102 +25,82 @@ import {
   Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 
+import CredentialFieldsFrame from '@cardstack/host/components/matrix/credential-fields';
 import ModalContainer from '@cardstack/host/components/modal-container';
+import {
+  CredentialFields,
+  credentialFieldsError,
+} from '@cardstack/host/lib/credential-fields';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import type { IAuthData } from 'matrix-js-sdk';
-
 interface PasswordModalSignature {
   Args: {
-    confirmPassword: (password: string) => void;
-    clearPasswordError: () => void;
+    confirmPassword: () => void;
     togglePasswordModal: () => void;
-    passwordError: string | undefined;
+    passwordFields: CredentialFields;
   };
   Element: HTMLElement;
 }
 
-class PasswordModal extends Component<PasswordModalSignature> {
-  @tracked private password = '';
+const PasswordModal: TemplateOnlyComponent<PasswordModalSignature> = <template>
+  <ModalContainer
+    @onClose={{@togglePasswordModal}}
+    @title='Confirm Identity'
+    @size='small'
+    @centered={{true}}
+    @isOpen={{true}}
+    class='password-modal'
+    data-test-password-modal
+  >
+    <:content>
+      <div class='instructions'>
+        Confirm your identity by entering your password below.
+      </div>
+      <CredentialFieldsFrame
+        @form='confirm-password'
+        @fields={{@passwordFields}}
+      />
+    </:content>
+    <:footer>
+      <div class='buttons'>
+        <BoxelButton
+          data-test-password-confirm-cancel-button
+          @size='tall'
+          @kind='secondary-light'
+          {{on 'click' @togglePasswordModal}}
+        >
+          Cancel
+        </BoxelButton>
 
-  private get passwordInputState() {
-    return this.args.passwordError ? 'invalid' : 'initial';
-  }
-
-  @action private setPassword(password: string) {
-    this.args.clearPasswordError();
-    this.password = password;
-  }
-
-  <template>
-    <ModalContainer
-      @onClose={{@togglePasswordModal}}
-      @title='Confirm Identity'
-      @size='small'
-      @centered={{true}}
-      @isOpen={{true}}
-      class='password-modal'
-      data-test-password-modal
-    >
-      <:content>
-        <div class='instructions'>
-          Confirm your identity by entering your password below.
-        </div>
-        <FieldContainer @tag='label' @vertical={{true}}>
-          <BoxelInput
-            data-test-password-field
-            @type='password'
-            @value={{this.password}}
-            @state={{this.passwordInputState}}
-            @errorMessage={{@passwordError}}
-            @onInput={{this.setPassword}}
-          />
-        </FieldContainer>
-      </:content>
-      <:footer>
-        <div class='buttons'>
-          <BoxelButton
-            data-test-password-confirm-cancel-button
-            @size='tall'
-            @kind='secondary-light'
-            {{on 'click' @togglePasswordModal}}
-          >
-            Cancel
-          </BoxelButton>
-
-          <BoxelButton
-            @kind='primary'
-            @size='tall'
-            @disabled={{not this.password}}
-            class='confirm-button'
-            {{on 'click' (fn @confirmPassword this.password)}}
-            data-test-confirm-password-button
-          >
-            Confirm
-          </BoxelButton>
-        </div>
-      </:footer>
-    </ModalContainer>
-    <style scoped>
-      .password-modal :deep(.boxel-modal__inner) {
-        height: 21rem;
-        margin-top: calc((100vh - 21rem) / 2);
-      }
-      .password-modal :deep(.invalid) {
-        box-shadow: none;
-      }
-      .buttons {
-        margin-left: auto;
-        margin-top: auto;
-        margin-bottom: auto;
-      }
-      .buttons > :not(:first-child) {
-        margin-left: var(--boxel-sp-xs);
-      }
-    </style>
-  </template>
-}
+        <BoxelButton
+          @kind='primary'
+          @size='tall'
+          @disabled={{not @passwordFields.filled.current}}
+          class='confirm-button'
+          {{on 'click' @confirmPassword}}
+          data-test-confirm-password-button
+        >
+          Confirm
+        </BoxelButton>
+      </div>
+    </:footer>
+  </ModalContainer>
+  <style scoped>
+    .password-modal :deep(.boxel-modal__inner) {
+      height: 21rem;
+      margin-top: calc((100vh - 21rem) / 2);
+    }
+    .buttons {
+      margin-left: auto;
+      margin-top: auto;
+      margin-bottom: auto;
+    }
+    .buttons > :not(:first-child) {
+      margin-left: var(--boxel-sp-xs);
+    }
+  </style>
+</template>;
 
 interface EmailWrapperSignature {
   Args: {
@@ -308,18 +288,25 @@ export default class ProfileEmail extends Component<Signature> {
         </div>
       </FieldContainer>
     {{/if}}
-    {{#if this.showPasswordModal}}
+    {{#if this.passwordFields}}
       {{! The surrounding settings modal's .dialog-box has
           container-type: inline-size, whose layout containment captures
           position: fixed descendants. Portal this nested modal to the app
-          root so it positions and overlays against the viewport. }}
+          root so it positions and overlays against the viewport.
+
+          The password is in a frame that sends it again each time the flow
+          retries, so the modal stays mounted, hidden, until the flow ends. }}
       {{#in-element this.appRootElement insertBefore=null}}
-        <PasswordModal
-          @confirmPassword={{this.confirmPasswordForEmailChange}}
-          @clearPasswordError={{this.clearPasswordError}}
-          @togglePasswordModal={{this.cancelEmailChange}}
-          @passwordError={{this.passwordError}}
-        />
+        <div
+          class='password-modal-holder'
+          hidden={{not this.showPasswordModal}}
+        >
+          <PasswordModal
+            @confirmPassword={{this.confirmPasswordForEmailChange}}
+            @togglePasswordModal={{this.cancelEmailChange}}
+            @passwordFields={{this.passwordFields}}
+          />
+        </div>
       {{/in-element}}
     {{/if}}
 
@@ -424,20 +411,22 @@ export default class ProfileEmail extends Component<Signature> {
 
   @service declare private matrixService: MatrixService;
   @tracked private emailError: string | undefined;
+  // The password confirming the change is typed into a frame on the secure
+  // origin, which adds the new email. Present for as long as the change is in
+  // progress.
+  @tracked private passwordFields: CredentialFields | undefined;
   @tracked private emailState:
     | { type: 'initial' }
     | { type: 'setEmail'; email: string }
     | {
         type: 'askForPassword';
         email: string;
-        passwordError?: string;
       }
     | {
         type: 'requestEmailValidation';
         email: string;
         clientSecret: string;
         sendAttempt: number;
-        password: string;
       }
     | {
         type: 'sendPassword';
@@ -445,7 +434,6 @@ export default class ProfileEmail extends Component<Signature> {
         clientSecret: string;
         sid: string;
         sendAttempt: number;
-        password: string;
       }
     | {
         type: 'waitForValidation';
@@ -453,7 +441,6 @@ export default class ProfileEmail extends Component<Signature> {
         clientSecret: string;
         sid: string;
         sendAttempt: number;
-        password: string;
       } = { type: 'initial' };
 
   constructor(owner: Owner, args: any) {
@@ -462,6 +449,7 @@ export default class ProfileEmail extends Component<Signature> {
     this.args.onSetup(
       () => {
         if (this.emailState.type === 'setEmail') {
+          this.passwordFields = new CredentialFields();
           this.emailState = {
             type: 'askForPassword',
             email: this.emailState.email,
@@ -472,6 +460,7 @@ export default class ProfileEmail extends Component<Signature> {
         this.emailState = {
           type: 'initial',
         };
+        this.passwordFields = undefined;
       },
     );
   }
@@ -507,13 +496,6 @@ export default class ProfileEmail extends Component<Signature> {
     );
   }
 
-  private get passwordError() {
-    if (this.emailState.type === 'askForPassword') {
-      return this.emailState.passwordError;
-    }
-    return undefined;
-  }
-
   private get isResending() {
     return (
       (this.emailState.type === 'requestEmailValidation' ||
@@ -543,22 +525,11 @@ export default class ProfileEmail extends Component<Signature> {
   @action private cancelEmailChange() {
     this.doEmailFlow.cancelAll();
     this.emailState = { type: 'initial' };
+    this.passwordFields = undefined;
     this.args.changeEmailComplete();
   }
 
-  @action private clearPasswordError() {
-    if (this.emailState.type !== 'askForPassword') {
-      throw new Error(
-        `invalid state: cannot perform clearPasswordError in state ${this.emailState.type}`,
-      );
-    }
-    this.emailState = {
-      ...this.emailState,
-      passwordError: undefined,
-    };
-  }
-
-  @action private confirmPasswordForEmailChange(password: string) {
+  @action private confirmPasswordForEmailChange() {
     if (this.emailState.type !== 'askForPassword') {
       throw new Error(
         `invalid state: cannot perform confirmPasswordForEmailChange in state ${this.emailState.type}`,
@@ -566,7 +537,6 @@ export default class ProfileEmail extends Component<Signature> {
     }
     this.emailState = {
       ...this.emailState,
-      password,
       clientSecret: uuidv4(),
       sendAttempt: 1,
       type: 'requestEmailValidation',
@@ -639,23 +609,27 @@ export default class ProfileEmail extends Component<Signature> {
       }
     }
 
-    let auth = {
-      type: 'm.login.password',
-      user: this.matrixService.userId,
-      password: this.emailState.password,
-      identifier: {
-        type: 'm.id.user',
-        user: this.matrixService.userId,
-      },
-    } as IAuthData & { type: string };
-
     let emailAdded = false;
     try {
-      await this.matrixService.addThreePidOnly({
-        auth,
-        client_secret: this.emailState.clientSecret,
-        sid: this.emailState.sid,
+      let result = await this.passwordFields!.submit({
+        operation: 'add-threepid',
+        args: {
+          auth: {
+            type: 'm.login.password',
+            user: this.matrixService.userId,
+            identifier: {
+              type: 'm.id.user',
+              user: this.matrixService.userId,
+            },
+          },
+          accessToken: this.matrixService.accessToken ?? '',
+          clientSecret: this.emailState.clientSecret,
+          sid: this.emailState.sid,
+        },
       });
+      if (!result.ok) {
+        throw credentialFieldsError(result);
+      }
       emailAdded = true;
     } catch (e: any) {
       if ('errcode' in e.data) {
@@ -677,8 +651,8 @@ export default class ProfileEmail extends Component<Signature> {
             this.emailState = {
               ...this.emailState,
               type: 'askForPassword',
-              passwordError: 'Invalid password',
             };
+            this.passwordFields?.setFieldError('current', 'Invalid password');
             return;
         }
       }
@@ -694,6 +668,7 @@ export default class ProfileEmail extends Component<Signature> {
         ),
       );
       this.emailState = { type: 'initial' };
+      this.passwordFields = undefined;
       this.matrixService.reloadProfile();
     }
   });

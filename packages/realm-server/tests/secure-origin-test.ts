@@ -5,7 +5,11 @@ import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type { RealmServer, RealmHttpServer } from '../server.ts';
-import { closeServer, setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  closeServer,
+  matrixURL,
+  setupPermissionedRealmCached,
+} from './helpers/index.ts';
 import { secureOriginHeaders } from '../lib/secure-origin.ts';
 import {
   registerSecureOriginHost,
@@ -51,6 +55,8 @@ const NON_SHELL_PATHS: { path: string; accept: string }[] = [
   { path: '/', accept: 'text/html' },
   { path: '/secure/other', accept: 'text/html' },
   { path: '/secure/index.html', accept: 'text/html' },
+  { path: '/secure/credentials/', accept: 'text/html' },
+  { path: '/secure/credentials.html', accept: 'text/html' },
 ];
 
 function assertSecureOriginHeaders(
@@ -85,6 +91,22 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(headers['X-Frame-Options'], 'DENY');
       assert.strictEqual(headers['Referrer-Policy'], 'no-referrer');
+    });
+
+    test('a page that talks to another server names only that server', function (assert) {
+      let csp = secureOriginHeaders({
+        connectSrc: ['https://matrix.example.test'],
+      })['Content-Security-Policy'];
+      assert.ok(
+        csp.includes(`connect-src 'self' https://matrix.example.test`),
+        'connect-src names the server',
+      );
+      assert.notOk(
+        secureOriginHeaders()['Content-Security-Policy'].includes(
+          'connect-src',
+        ),
+        'by default a page talks to nothing but its own origin',
+      );
     });
 
     test('a route framed by the app names only that origin', function (assert) {
@@ -295,6 +317,100 @@ module(basename(import.meta.filename), function () {
       assert.notOk(
         shellPath.text.includes('/secure/shell.js'),
         'the shell is not served on the realm origin',
+      );
+    });
+
+    test('serves the credential fields to be framed by the app alone', async function (assert) {
+      let response = await request
+        .get('/secure/credentials')
+        .query({ form: 'login', origin: realmURL.origin })
+        .set('Host', secureHost)
+        .set('Accept', 'text/html');
+      assert.strictEqual(response.status, 200, 'status');
+      assert.ok(
+        response.headers['content-type'].startsWith('text/html'),
+        'content type',
+      );
+      let csp: string = response.headers['content-security-policy'];
+      assert.ok(
+        csp.includes(`frame-ancestors ${realmURL.origin}`),
+        `only the app's origin may frame it (${csp})`,
+      );
+      assert.ok(
+        csp.includes(`connect-src 'self' ${matrixURL.origin}`),
+        `it may talk to the Matrix server and nothing else (${csp})`,
+      );
+      assert.ok(csp.includes(`default-src 'self'`), 'default-src is self');
+      assert.notOk(csp.includes('unsafe-inline'), 'no inline script');
+      assert.strictEqual(
+        response.headers['x-frame-options'],
+        undefined,
+        'no X-Frame-Options, which would refuse the framing',
+      );
+      assert.strictEqual(response.headers['cache-control'], 'no-store');
+      assert.strictEqual(response.headers['referrer-policy'], 'no-referrer');
+      assert.strictEqual(
+        response.headers['access-control-allow-origin'],
+        undefined,
+        'no CORS headers',
+      );
+      assert.ok(
+        response.text.includes(
+          `<meta name="boxel-matrix-url" content="${matrixURL.href}" />`,
+        ),
+        'names the Matrix server a password is sent to',
+      );
+      assert.ok(
+        response.text.includes(
+          `<meta name="boxel-app-origins" content="${realmURL.origin}" />`,
+        ),
+        'names the app origins it talks to',
+      );
+      assert.ok(
+        response.text.includes(
+          '<script type="module" src="/secure/credentials.js">',
+        ),
+        "loads the fields' entry point",
+      );
+      assert.notOk(
+        /<script(?![^>]*\bsrc=)[^>]*>/.test(response.text),
+        'has no inline script',
+      );
+    });
+
+    test("serves the credential fields' script, stylesheet and font, framable by no one", async function (assert) {
+      for (let [path, type] of [
+        ['/secure/credentials.js', 'text/javascript'],
+        ['/secure/credentials.css', 'text/css'],
+        ['/secure/IBMPlexSansVar-Roman.woff2', 'font/woff2'],
+      ]) {
+        let response = await request.get(path).set('Host', secureHost);
+        assert.strictEqual(response.status, 200, `${path}: status`);
+        assert.ok(
+          response.headers['content-type'].startsWith(type),
+          `${path}: content type`,
+        );
+        assertSecureOriginHeaders(assert, response, path);
+      }
+    });
+
+    test('refuses other methods on the credential fields', async function (assert) {
+      let response = await request
+        .post('/secure/credentials')
+        .set('Host', secureHost)
+        .set('Content-Type', 'application/json')
+        .send({ password: 'hunter22' });
+      assert.strictEqual(response.status, 405);
+      assert.strictEqual(response.headers['allow'], 'GET, HEAD');
+    });
+
+    test('the credential fields are not served on the realm origin', async function (assert) {
+      let response = await request
+        .get('/secure/credentials')
+        .set('Accept', 'text/html');
+      assert.notOk(
+        response.text.includes('/secure/credentials.js'),
+        'the realm origin does not serve the fields',
       );
     });
 

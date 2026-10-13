@@ -645,6 +645,12 @@ export default class MatrixService extends Service {
     return this.client.getUserId();
   }
 
+  // Handed to the frame on the secure origin that changes this account's
+  // password or email, which makes those requests itself.
+  get accessToken(): string | undefined {
+    return this.client.getAccessToken() ?? undefined;
+  }
+
   get aiBotUserId() {
     let server = this.userId!.split(':')[1];
     return `@${aiBotUsername}:${server}`;
@@ -2410,29 +2416,6 @@ export default class MatrixService extends Service {
     );
   }
 
-  async login(usernameOrEmail: string, password: string) {
-    let waiterToken = signInWaiter.beginAsync();
-    try {
-      const cred = await this.client.loginWithPassword(
-        usernameOrEmail,
-        password,
-      );
-      return cred;
-    } catch (error) {
-      try {
-        const cred = await this.client.loginWithEmail(
-          usernameOrEmail,
-          password,
-        );
-        return cred;
-      } catch (error2) {
-        throw error;
-      }
-    } finally {
-      signInWaiter.endAsync(waiterToken);
-    }
-  }
-
   async loginFlows() {
     await this.ready;
     return this.client.loginFlows();
@@ -2656,10 +2639,6 @@ export default class MatrixService extends Service {
     return await this.client.getThreePids();
   }
 
-  async addThreePidOnly(data: MatrixSDK.IAddThreePidOnlyBody) {
-    return await this.client.addThreePidOnly(data);
-  }
-
   async deleteThreePid(medium: string, address: string) {
     return await this.client.deleteThreePid(medium, address);
   }
@@ -2782,21 +2761,6 @@ export default class MatrixService extends Service {
       sendAttempt,
       nextLink,
     );
-  }
-
-  async setPassword(
-    authDict: MatrixSDK.AuthDict,
-    newPassword: string,
-    logoutDevices?: boolean,
-  ) {
-    return await this.client.setPassword(authDict, newPassword, logoutDevices);
-  }
-
-  async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
-    // See requestRegisterEmailToken: registration can run before the SDK has
-    // loaded on the standalone /cli-auth route.
-    await this.ready;
-    return await this.client.registerRequest(data, kind);
   }
 
   // Type of matrixEvent is a partial MatrixEvent because a couple of places

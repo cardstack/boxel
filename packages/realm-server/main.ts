@@ -233,6 +233,7 @@ let {
   prerendererUrl,
   secureOriginURL: secureOriginURLArg,
   securePort,
+  secureOriginAppOrigin,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -329,6 +330,12 @@ let {
       description:
         'Port for a listener that serves the secure origin and nothing else, for local development. Omit where the secure origin is a hostname routed to --port.',
       type: 'number',
+    },
+    secureOriginAppOrigin: {
+      description:
+        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable; for the host's own dev server and test runner in development.",
+      type: 'array',
+      string: true,
     },
   })
   .parseSync();
@@ -847,6 +854,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     reportHostShell: () => reportHostShellToManager(dbAdapter),
     linkShapePolicy,
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
+    secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
   });
 
   const secureHttpServer =

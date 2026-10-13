@@ -441,21 +441,6 @@ export class MockClient implements ExtendedClient {
     } as unknown as MatrixSDK.Room);
   }
 
-  // Mirrors what `loggedInAs` bootstraps at setup, so a test can drive the
-  // real login form. Any password is accepted.
-  loginWithPassword(
-    user: string,
-    _password: string,
-  ): Promise<MatrixSDK.LoginResponse> {
-    let userId = user.startsWith('@') ? user : `@${user}:localhost`;
-    this.clientOpts.userId = userId;
-    return Promise.resolve({
-      access_token: 'mock-access-token',
-      device_id: 'mock-device-id',
-      user_id: userId,
-    } as MatrixSDK.LoginResponse);
-  }
-
   loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
     return Promise.resolve(
       this.sdkOpts.loginFlowsResponse ?? {
@@ -502,13 +487,6 @@ export class MockClient implements ExtendedClient {
     _clientSecret: string,
     _sendAttempt: number,
   ): Promise<MatrixSDK.IRequestTokenResponse> {
-    throw new Error('Method not implemented.');
-  }
-
-  loginWithEmail(
-    _email: string,
-    _password: string,
-  ): Promise<MatrixSDK.LoginResponse> {
     throw new Error('Method not implemented.');
   }
 
