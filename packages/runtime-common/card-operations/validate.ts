@@ -1,6 +1,7 @@
 import {
   instanceTargetURL,
   scopeCallerFor,
+  servedRealmsRead,
   type OperationCore,
   type ScopeCaller,
 } from './dispatch.ts';
@@ -148,33 +149,6 @@ function notReported(card: URL, compiling: string): OperationFailure {
       `compiling ${compiling} reads definitions in a realm you cannot ` +
       `read, so what it compiles to is not reported to you`,
   });
-}
-
-// The realms this server serves that one of the URLs is in, each once in the
-// order first read, when the caller may read every one of them. Undefined
-// when they may not, and from a core that cannot say.
-async function servedRealmsRead(
-  core: OperationCore,
-  asker: ScopeCaller,
-  urls: string[],
-): Promise<string[] | undefined> {
-  if (!core.readsRealmOf) {
-    return undefined;
-  }
-  let realms: string[] = [];
-  for (let url of urls) {
-    let served = await core.readsRealmOf(url, asker);
-    if (!served) {
-      continue;
-    }
-    if (!served.read) {
-      return undefined;
-    }
-    if (!realms.includes(served.realm)) {
-      realms.push(served.realm);
-    }
-  }
-  return realms;
 }
 
 function validation(

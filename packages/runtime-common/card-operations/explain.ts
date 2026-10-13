@@ -17,6 +17,7 @@ import {
   resolveGatedOperation,
   resolvesToWrite,
   scopeCallerFor,
+  servedRealmsRead,
   type CoarseDeclined,
   type OperationCore,
   type ScopeCaller,
@@ -283,10 +284,10 @@ export async function explainOperation(
   // What compiling a draft records describes the definitions it read, and a
   // draft names its own types, in any realm this server serves. So a draft is
   // answered only to a caller who may read every such realm compiling read
-  // from, and is refused whole otherwise.
+  // from, judged as a validate judges it, and is refused whole otherwise.
   if (
     'reads' in governing &&
-    (await readsUnreadable(core, asker, governing.reads))
+    !(await servedRealmsRead(core, asker, governing.reads))
   ) {
     throw new OperationFailure({
       id: policyCard.href,
@@ -598,29 +599,9 @@ async function draftGoverned(
   };
 }
 
-// Whether any of these URLs is in a realm this server serves that the asker
-// may not read, judged as the target's realm is: by a session vouched for as
-// their own, and without mounting the realm. A URL no realm here serves is
-// read as the owner of the realm that looked it up, as every card in that
-// realm reads it, so it discloses nothing that realm does not already disclose
-// to its readers.
-async function readsUnreadable(
-  core: OperationCore,
-  asker: ScopeCaller,
-  urls: string[],
-): Promise<boolean> {
-  for (let url of new Set(urls)) {
-    let served = await core.targetRealm?.(url);
-    if (served && !(await served.aclFor(asker)).read) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Whether the realm this server serves `on`'s module from is one the asker may
 // not read. A module no realm here serves is read as the owner of the realm
-// that looked it up, as the draft rule above reads it, and so is not one. Nor
+// that looked it up, and so is not one, as the draft gate above passes it. Nor
 // is a code ref that does not resolve, which describes no declaration.
 async function servesUnreadableModule(
   core: OperationCore,

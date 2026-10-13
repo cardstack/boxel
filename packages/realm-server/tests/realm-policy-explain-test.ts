@@ -1525,6 +1525,63 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a draft naming a type in an archived realm is refused as a validate of the same rules is', async function (assert) {
+      await stageHR();
+      await insertPermissions(db, new URL(HR), { [IT_ADMIN]: ['read'] });
+      let rules = [
+        {
+          targetType: { module: `${HR}salary`, name: 'Salary' },
+          grants: [{ operation: 'query', where: '.band == actor()' }],
+        },
+      ];
+      let question = {
+        actor: TEACHER,
+        target: ROOM_204,
+        operation: 'read',
+        draft: { rules },
+      };
+      await org.write('policies/salary.json', policyCard(rules));
+      await org.indexing();
+      let validate = () =>
+        send(
+          ORG,
+          ASKER.itAdmin(),
+          'query',
+          invoke('validate', { href: `${ORG}policies/salary` }),
+        );
+      assert.strictEqual(
+        (await validate()).status,
+        200,
+        'a validate of the rules is answered while their realm is live',
+      );
+      assert.ok((await answer(question)).draft, 'and so is a draft of them');
+
+      // An archived realm refuses everything, so no one may read it.
+      await archiveRealm(db, new URL(HR));
+      let validated = await validate();
+      assert.strictEqual(
+        validated.status,
+        403,
+        'a validate reading a definition from the archived realm is refused',
+      );
+      assert.strictEqual(errorOf(validated)?.code, 'operation-not-permitted');
+      let refused = await ask(ASKER.itAdmin(), question);
+      assert.strictEqual(
+        refused.status,
+        validated.status,
+        'a draft reading the same definition is refused the same way',
+      );
+      assert.strictEqual(
+        errorOf(refused)?.code,
+        errorOf(validated)?.code,
+        'with the same code',
+      );
+      assert.false(
+        refused.text.includes('band'),
+        'nothing compiling recorded about the type reaches them',
+      );
+    });
+
     test('a draft is refused to a caller missing read on either realm, as the live form is', async function (assert) {
       let question = { actor: TEACHER, operation: 'read', draft: WIDER_READ };
       let missing = await ask(ASKER.itAdmin(), {
