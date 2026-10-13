@@ -44,7 +44,8 @@ on:
       # false diagnostic this bundle exists to prevent — so a change to any
       # of them has to cut a release too. `BUNDLED_SOURCE_DIRS` in
       # `scripts/compute-release.ts` lists the same directories, which is
-      # what makes such a change count toward the version bump.
+      # what makes such a change count toward the version bump, and says
+      # which bundled packages belong on this list.
       - "packages/bxl/src/**"
       - "packages/glimmer-motion/src/**"
       - "packages/choreo/src/**"

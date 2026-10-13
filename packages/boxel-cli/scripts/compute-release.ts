@@ -44,8 +44,16 @@ const BUMP_BY_PREFIX = bumpByPrefixJson as Record<string, BumpLevel>;
 
 // Monorepo source that `scripts/build-types.ts` copies into `bundled-types/`,
 // the type surface `boxel parse` checks cards against. A change here ships
-// only in a new boxel-cli release, so it is npm surface like `src/`. The
-// publish workflow's `paths:` filter lists the same directories.
+// only in a new boxel-cli release, so it is npm surface like `src/`.
+//
+// Only bundled packages whose PRs must carry a conventional-commit title (a
+// `*-pr-title.yml` check) belong here: the bump comes from that title, so a
+// package whose PRs take plain titles would compute no bump even if listed.
+// The other bundled sources (base, runtime-common, host, boxel-ui,
+// local-types) reach the published CLI with the next release cut for any
+// other reason. The publish workflow's `paths:` filter lists the same
+// directories, and `tests/scripts/compute-release.test.ts` holds the three
+// in step.
 export const BUNDLED_SOURCE_DIRS = [
   'packages/bxl/src/',
   'packages/glimmer-motion/src/',
