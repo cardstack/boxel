@@ -61,10 +61,14 @@ module('Pretui | components/select', function (hooks) {
     let dialog = document.querySelector('[data-test-pretui-dialog]') as HTMLElement;
     dialog.scrollTop = dialog.scrollHeight;
     await click(trigger());
-    let listbox = document.querySelector("[role='listbox']") as HTMLElement;
-    let gap = listbox.getBoundingClientRect().top - trigger().getBoundingClientRect().bottom;
+    let list = (document.querySelector("[role='listbox']") as HTMLElement).getBoundingClientRect();
+    let at = trigger().getBoundingClientRect();
+    // the list flips above when there is no room below; either way it
+    // touches the trigger rather than sitting a scroll distance away
+    let below = Math.abs(list.top - at.bottom);
+    let above = Math.abs(at.top - list.bottom);
     assert.true(dialog.scrollTop > 0, 'the dialog is scrolled');
-    assert.true(Math.abs(gap) < 16, `the list sits under its trigger (gap ${gap}px)`);
+    assert.true(Math.min(below, above) < 16, `the list sits against its trigger (below ${below}px, above ${above}px)`);
   });
 
   test('inside a blur-commit EditInPlace the search box keeps the edit open', async function (assert) {
