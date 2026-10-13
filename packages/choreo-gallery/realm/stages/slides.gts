@@ -142,6 +142,7 @@ export class Slides extends Component {
         <Choreo
           class='slide'
           data-slide={{this.slide}}
+          data-stage-press
           {{on 'click' this.tap}}
           {{on 'pointerdown' this.down}}
           {{on 'pointerup' this.up}}

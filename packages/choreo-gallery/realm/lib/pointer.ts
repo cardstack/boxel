@@ -15,9 +15,13 @@ export const ownClicks = modifier((element: HTMLElement) => {
   return () => element.removeEventListener('click', stop);
 });
 
-/** what a press inside a live stage can land on that is the stage's own */
+/**
+ * What a press inside a live stage can land on that is the stage's own: a
+ * control, or a surface the stage marks `data-stage-press` because a plain
+ * tap or hold on it does something (advancing a slide, steering a car).
+ */
 const CONTROL =
-  'a[href], button, input, select, textarea, label, summary, [contenteditable], [role="button"], [role="slider"], [role="switch"], [role="checkbox"], [role="tab"], [tabindex]';
+  'a[href], button, input, select, textarea, label, summary, [contenteditable], [role="button"], [role="slider"], [role="switch"], [role="checkbox"], [role="tab"], [tabindex], [data-stage-press]';
 
 /** how far a press travels before it is a drag rather than a click */
 const DRAG_PX = 4;
@@ -45,10 +49,12 @@ export const ownControlClicks = modifier((element: HTMLElement) => {
       event.stopPropagation();
     }
   };
-  element.addEventListener('pointerdown', down);
+  // the press is read on the way down, so a stage that keeps its own
+  // pointerdown from bubbling still leaves the drag check its start
+  element.addEventListener('pointerdown', down, { capture: true });
   element.addEventListener('click', click);
   return () => {
-    element.removeEventListener('pointerdown', down);
+    element.removeEventListener('pointerdown', down, { capture: true });
     element.removeEventListener('click', click);
   };
 });

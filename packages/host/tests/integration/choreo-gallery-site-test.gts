@@ -142,6 +142,24 @@ module('Integration | Choreo gallery | site', function (hooks) {
       .doesNotExist('the gallery never shows a demo page itself');
   });
 
+  test('a tap the stage uses for itself stays with the stage', async function (assert) {
+    let opened = gallery.provideViewCard();
+    await gallery.renderGallery();
+    await waitFor("[data-gallery-tile='slides'] .slide");
+    await waitFor("[data-gallery-tile='drift'] .drift-view");
+
+    await click(live("[data-gallery-tile='slides'] .slide")!);
+    await click(live("[data-gallery-tile='drift'] .drift-view")!);
+    assert.deepEqual(
+      opened,
+      [],
+      'a tap that advances the slide or steers the car opens nothing',
+    );
+
+    await click(live("[data-gallery-tile='slides'] .tile-title")!);
+    assert.deepEqual(opened, ['slides'], 'the rest of the tile still opens it');
+  });
+
   test('a tile with no room for a stage is just the demo’s name', async function (assert) {
     let [keyframes] = await gallery.demos(['keyframes']);
     let { getComponent } = (await gallery.loader.import(
