@@ -814,6 +814,22 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a module costs one definition lookup once FileDef is known', async function (assert) {
+      await policy('anyCode');
+      await served(assert, TS_MODULE, 'a .ts under a TsFileDef grant');
+      assert.strictEqual(
+        gateStats().definitionLookups,
+        2,
+        'the chain of the code type its extension names, and FileDef’s key',
+      );
+      await served(assert, MODULE_SOURCE, 'a .gts under a TsFileDef grant');
+      assert.strictEqual(
+        gateStats().definitionLookups,
+        3,
+        'the next module looks up only its own chain',
+      );
+    });
+
     test('a realm with no policy reads no definition for a declined read', async function (assert) {
       await education.write(
         'realm.json',

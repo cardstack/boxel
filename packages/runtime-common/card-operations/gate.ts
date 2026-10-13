@@ -354,7 +354,8 @@ export interface StoredCardCheck {
 //
 // `definitionLookups` counts the lookups that type a stored-bytes read's
 // target, the one behavior resolved before any definition: one for the type a
-// card's document names, or one for the `FileDef` a file's extension names.
+// card's document names, or one for the `FileDef` a file's extension names,
+// and for a core's first module read, one more for `FileDef`'s own key.
 // It counts nothing else the gate reads — not the type of a card a pending
 // create would mint, and not the field lookups a predicate's projection makes
 // through the definition callback.
@@ -1096,18 +1097,34 @@ async function storedBytesSubject(
 }
 
 // The part of a module's chain that is code: its own type and every type
-// before `FileDef`, read from the definition cache the way the module's own
-// chain is.
+// before `FileDef`.
 async function codeTypes(
   core: OperationCore,
   types: string[],
   relativeTo: URL,
 ): Promise<string[] | undefined> {
-  let fileDefKey = (
-    await fileAdoptionChain(core, baseFileRef, relativeTo)
-  )?.[0];
+  let fileDefKey = await fileDefKeyFor(core, relativeTo);
   let end = fileDefKey ? types.indexOf(fileDefKey) : -1;
   return end > 0 ? types.slice(0, end) : undefined;
+}
+
+// `FileDef`'s key is the same for every module a realm serves, so it is read
+// from the definition cache once per core. A lookup that finds nothing is not
+// kept, and the next module read asks again.
+const fileDefKeys = new WeakMap<OperationCore, string>();
+
+async function fileDefKeyFor(
+  core: OperationCore,
+  relativeTo: URL,
+): Promise<string | undefined> {
+  let key = fileDefKeys.get(core);
+  if (key === undefined) {
+    key = (await fileAdoptionChain(core, baseFileRef, relativeTo))?.[0];
+    if (key !== undefined) {
+      fileDefKeys.set(core, key);
+    }
+  }
+  return key;
 }
 
 // A card's stored document, matched on the type the document itself names.
