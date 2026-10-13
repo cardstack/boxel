@@ -1,6 +1,11 @@
 import type Koa from 'koa';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
+import {
+  OutboundRefusedError,
+  OutboundTimeoutError,
+  outboundFetch,
+} from './outbound/client.ts';
 
 const log = logger('proxy-forward');
 
@@ -115,6 +120,32 @@ export function isClientDisconnectError(
   return false;
 }
 
+// How a proxy answers its caller when the outbound guard stops a call: a
+// forbidden forwarded header is the caller's mistake, any other refusal is a
+// destination the proxy will not reach, and a timeout is an upstream that did
+// not answer. Anything else is not the guard's, and gets undefined.
+export function outboundFailureResponse(
+  error: unknown,
+): { status: number; statusText: string; message: string } | undefined {
+  if (error instanceof OutboundRefusedError) {
+    return error.reason === 'forbidden-header'
+      ? { status: 400, statusText: 'Bad Request', message: error.message }
+      : {
+          status: 502,
+          statusText: 'Bad Gateway',
+          message: `Destination refused: ${error.message}`,
+        };
+  }
+  if (error instanceof OutboundTimeoutError) {
+    return {
+      status: 504,
+      statusText: 'Gateway Timeout',
+      message: error.message,
+    };
+  }
+  return undefined;
+}
+
 /**
  * Stream the upstream `text/event-stream` response back to the client, parsing
  * each `data:` line to capture the OpenRouter generation id / inline cost.
@@ -137,17 +168,21 @@ export async function handleStreamingRequest(
   requestBody: BodyInit | undefined,
   matrixUserId: string,
   signal: AbortSignal,
+  credentialHeaders: string[] = [],
 ): Promise<StreamUsage | undefined> {
   let usage: StreamUsage | undefined;
   try {
     setupSSEHeaders(ctxt);
 
-    const fetchInit: RequestInit = { method, headers, signal };
-    if (requestBody !== undefined) {
-      fetchInit.body = requestBody;
-    }
-
-    const externalResponse = await fetch(url, fetchInit);
+    const externalResponse = await outboundFetch({
+      url,
+      method,
+      headers,
+      body: requestBody,
+      signal,
+      sizePath: 'system-key',
+      credentialHeaders,
+    });
 
     if (!externalResponse.ok) {
       const errorData = await externalResponse.text();
@@ -224,6 +259,18 @@ export async function handleStreamingRequest(
       log.info(
         `Client disconnected during streaming request for user ${matrixUserId}; upstream call cancelled`,
       );
+      return undefined;
+    }
+    let failure = outboundFailureResponse(error);
+    if (failure) {
+      log.warn(
+        `Streaming request stopped by the outbound guard: ${failure.message}`,
+      );
+      if (!ctxt.res.headersSent) {
+        ctxt.status = failure.status;
+      }
+      ctxt.res.write(`data: ${JSON.stringify({ error: failure.message })}\n\n`);
+      ctxt.res.write('data: [DONE]\n\n');
       return undefined;
     }
     log.error('Error in streaming request:', error);

@@ -3,6 +3,7 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import {
   sendResponseForBadRequest,
+  sendResponseForError,
   sendResponseForSystemError,
   sendResponseForForbiddenRequest,
   setContextResponse,
@@ -13,8 +14,13 @@ import {
   clientDisconnectSignal,
   handleStreamingRequest,
   isClientDisconnectError,
+  outboundFailureResponse,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
+import {
+  forbiddenOutboundHeaders,
+  outboundFetch,
+} from '../lib/outbound/client.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
 import * as Sentry from '@sentry/node';
 
@@ -176,6 +182,18 @@ export default function handleRequestForward({
         return;
       }
 
+      // Outgoing headers are exactly the body's `headers` plus the
+      // credential; none of this request's own headers are forwarded. Boxel's
+      // internal headers may not be smuggled in through the body either.
+      let forbiddenHeaders = forbiddenOutboundHeaders(json.headers);
+      if (forbiddenHeaders.length > 0) {
+        await sendResponseForBadRequest(
+          ctxt,
+          `Header ${forbiddenHeaders.join(', ')} may not be forwarded`,
+        );
+        return;
+      }
+
       // 3. Validate proxy destination is allowed and get config
       const destinationsConfig =
         AllowedProxyDestinations.getInstance(dbAdapter);
@@ -212,6 +230,7 @@ export default function handleRequestForward({
       };
 
       // Add authentication based on the configured method
+      let credentialHeaders: string[] = [];
       if (destinationConfig.authMethod === 'url-parameter') {
         const paramName = destinationConfig.authParameterName || 'key';
         const url = new URL(json.url);
@@ -223,9 +242,11 @@ export default function handleRequestForward({
       ) {
         headers[destinationConfig.authParameterName] =
           `Bearer ${destinationConfig.apiKey}`;
+        credentialHeaders = [destinationConfig.authParameterName];
       } else {
         // Default to header authentication
         headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
+        credentialHeaders = ['Authorization'];
       }
 
       let finalBody: BodyInit | undefined;
@@ -306,6 +327,7 @@ export default function handleRequestForward({
               finalBody,
               matrixUserId,
               clientGone,
+              credentialHeaders,
             );
           }
 
@@ -316,27 +338,16 @@ export default function handleRequestForward({
           // cancelled — by then the provider has already generated and billed
           // for the tokens, and abandoning the read only loses the charge.
           const upstreamCall = upstreamCallSignal(clientGone);
-          const fetchOptions: RequestInit = {
+          const externalResponse = await outboundFetch({
+            url: finalUrl,
             method: json.method,
             headers,
+            // Only non-GET requests carry a body
+            body: json.method !== 'GET' ? finalBody : undefined,
             signal: upstreamCall.signal,
-          };
-
-          // Only add body for non-GET requests or when requestBody is provided
-          if (json.method !== 'GET' && finalBody !== undefined) {
-            fetchOptions.body = finalBody;
-          }
-
-          // FIXME undici or something is swallowing the errors, making them useless:
-          /*
-            Error in request forward handler: TypeError: fetch failed
-              at node:internal/deps/undici/undici:13510:13
-              at processTicksAndRejections (node:internal/process/task_queues:105:5)
-          */
-          const externalResponse = await globalThis.fetch(
-            finalUrl,
-            fetchOptions,
-          );
+            sizePath: 'system-key',
+            credentialHeaders,
+          });
           upstreamCall.release();
 
           const responseData = await externalResponse.json();
@@ -360,6 +371,19 @@ export default function handleRequestForward({
         // out of the error channel.
         log.info(
           'Client disconnected during request forward; upstream call cancelled',
+        );
+        return;
+      }
+      let failure = outboundFailureResponse(error);
+      if (failure) {
+        log.warn(
+          `Request forward stopped by the outbound guard: ${failure.message}`,
+        );
+        await sendResponseForError(
+          ctxt,
+          failure.status,
+          failure.statusText,
+          failure.message,
         );
         return;
       }

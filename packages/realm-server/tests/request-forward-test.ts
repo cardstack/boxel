@@ -29,6 +29,8 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
+import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -1801,6 +1803,192 @@ module(basename(import.meta.filename), function () {
         mockFetch.restore();
         global.fetch = originalFetch;
       }
+    });
+
+    // These forwards reach a real socket: the stub vendor on loopback, which
+    // the development allowlist names, so they pass through the outbound
+    // guard exactly as a deployed forward does.
+    module('through the outbound guard', function (hooks) {
+      let vendor: StubVendor;
+
+      hooks.before(async function () {
+        vendor = await startStubVendor();
+      });
+      hooks.after(async function () {
+        await vendor.close();
+      });
+      hooks.beforeEach(async function () {
+        vendor.requests.length = 0;
+        configureOutbound({ devAllowlist: ['127.0.0.1'] });
+        await dbAdapter.execute(
+          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+           VALUES
+             (gen_random_uuid(), '${vendor.url}/', 'stub-vendor-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             (gen_random_uuid(), 'https://10.0.0.1/', 'private-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        );
+        AllowedProxyDestinations.reset();
+      });
+      hooks.afterEach(function () {
+        resetOutbound();
+      });
+
+      function jwt() {
+        return createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+      }
+
+      test("the incoming request's own headers never reach the vendor", async function (assert) {
+        let token = jwt();
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${token}`)
+          .set('Cookie', 'session=browser-session')
+          .set('X-Boxel-Consuming-Realm', 'http://127.0.0.1:4445/test/')
+          .set('X-Custom-Incoming', 'from-the-browser')
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+            headers: { 'X-Vendor-Option': 'kept' },
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests.length,
+          1,
+          'one call reached the vendor',
+        );
+        let received = vendor.requests[0].headers;
+        assert.strictEqual(
+          received.authorization,
+          'Bearer stub-vendor-key',
+          'the vendor sees the stored credential, not the caller session token',
+        );
+        assert.false(
+          JSON.stringify(received).includes(token),
+          'the session token appears nowhere in what the vendor received',
+        );
+        assert.notOk(received.cookie, 'no cookie is forwarded');
+        assert.notOk(
+          received['x-custom-incoming'],
+          'no incoming header is forwarded',
+        );
+        assert.false(
+          Object.keys(received).some((name) => name.startsWith('x-boxel-')),
+          'no X-Boxel header is forwarded',
+        );
+        assert.strictEqual(
+          received['x-vendor-option'],
+          'kept',
+          "the body's own headers are sent",
+        );
+        assert.strictEqual(vendor.requests[0].body, '{"hello":"vendor"}');
+      });
+
+      test('an X-Boxel header in the forwarded headers is refused', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+            headers: { 'x-boxel-realm-url': 'http://127.0.0.1:4445/test/' },
+          });
+
+        assert.strictEqual(response.status, 400);
+        assert.true(
+          JSON.stringify(response.body).includes('x-boxel-realm-url'),
+          'the refusal names the header',
+        );
+        assert.strictEqual(
+          vendor.requests.length,
+          0,
+          'nothing reached the vendor',
+        );
+      });
+
+      test('an allowlisted destination on a private address is refused', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: 'https://10.0.0.1/v1/things',
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 502);
+        assert.false(
+          JSON.stringify(response.body).includes('private-key'),
+          'the refusal does not carry the credential',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
+      test("a vendor's error status passes through", async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/status/429`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 429);
+        assert.deepEqual(response.body, { status: 429 });
+      });
+
+      test('an OpenRouter-shaped stream is forwarded and charged', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'text/event-stream')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/sse?cost=0.003`,
+            method: 'POST',
+            requestBody: JSON.stringify({ stream: true }),
+            stream: true,
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.true(response.text.includes('"content":"Hello"'));
+        assert.true(response.text.includes('data: [DONE]'));
+        assert.strictEqual(
+          vendor.requests[0]?.headers.authorization,
+          'Bearer stub-vendor-key',
+        );
+
+        // 0.003 USD × 1000 = 3 credits.
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () =>
+            (await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            })) === 47,
+          { timeoutMessage: 'the stream should be charged (50 - 3 = 47)' },
+        );
+      });
     });
   });
 });
