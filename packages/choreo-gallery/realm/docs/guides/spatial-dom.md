@@ -8,7 +8,7 @@ A demo inside a 3D device can remain a real interface. The browser still lays ou
 
 ## Sharing the Projection
 
-The examples use the same camera and object matrices for the WebGL picture and the DOM plane. Three small functions in `test-app/app/lib/css3d.ts` provide the CSS projection and transforms.
+The examples use the same camera and object matrices for the WebGL picture and the DOM plane. Three small functions in the gallery's [`lib/css3d.ts`](../../lib/css3d.ts) provide the CSS projection and transforms.
 
 ```ts title="Projection Helpers — Existing Host Excerpt"
 const focal = perspective(camera.projectionMatrix.elements, viewportHeight);
