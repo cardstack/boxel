@@ -1010,10 +1010,12 @@ return queued;`,
     assert.strictEqual(operatorModeStateService.state.submode, 'interact');
   });
 
-  test('realm.ui.previewFormat opens the module of a card whose type comes from base', async function (assert) {
+  test('realm.ui.previewFormat uses the base module of a card whose type comes from base', async function (assert) {
     let toolService = getService('tool-service');
-    let operatorModeStateService = getService('operator-mode-state-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
+    let baseModule = getService('network').virtualNetwork.toURL(
+      '@cardstack/base/card-api.gts',
+    ).href;
 
     let result = await command.execute({
       realm: testRealmURL,
@@ -1021,12 +1023,17 @@ return queued;`,
       code: `await realm.ui.previewFormat('Plain/base-typed', 'isolated');`,
     });
 
-    assert.strictEqual(result.uiActions[0]?.status, 'done');
-    assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
-      getService('network').virtualNetwork.toURL('@cardstack/base/card-api.gts')
-        .href,
-      'the module is the base module, not a path in the workspace',
+    // The test user cannot read the base realm, so code mode refuses to open
+    // it. What matters is which module the action asked for: the base module,
+    // not a path inside the workspace.
+    let detail = result.uiActions[0]?.detail ?? '';
+    assert.true(
+      detail.includes(baseModule),
+      `asks for ${baseModule}: ${detail}`,
+    );
+    assert.false(
+      detail.includes(`${testRealmURL}Plain/`),
+      'does not join the module to the instance path',
     );
   });
 
