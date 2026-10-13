@@ -7,11 +7,26 @@
 // registration in `externals.ts`. Both paths land here.
 export async function loadThree(): Promise<{
   THREE: any;
+  DRACOLoader: any;
   GLTFLoader: any;
+  RectAreaLightUniformsLib: any;
   STLLoader: any;
   ThreeMFLoader: any;
 }> {
-  let { THREE, GLTFLoader, STLLoader, ThreeMFLoader } =
-    await import('./three.js');
-  return { THREE, GLTFLoader, STLLoader, ThreeMFLoader };
+  let {
+    THREE,
+    DRACOLoader,
+    GLTFLoader,
+    RectAreaLightUniformsLib,
+    STLLoader,
+    ThreeMFLoader,
+  } = await import('./three.js');
+  return {
+    THREE,
+    DRACOLoader,
+    GLTFLoader,
+    RectAreaLightUniformsLib,
+    STLLoader,
+    ThreeMFLoader,
+  };
 }

@@ -60,10 +60,11 @@ export interface NotesSignature {
 /**
  * The shape of the demo page's well, for a stage composed for a particular
  * frame: `wide` is a film composed about sixteen by nine, `tall` a film whose
- * subject runs to the top of the frame. The default well suits a demo that
- * fills its width.
+ * subject runs to the top of the frame, `laptop` a wide, short device that
+ * wants headroom above it and floor beneath, and `phone` a portrait device.
+ * The default well suits a demo that fills its width.
  */
-export type StageWell = 'tall' | 'wide';
+export type StageWell = 'laptop' | 'phone' | 'tall' | 'wide';
 
 /** One step of a demo's walkthrough: a sentence of why, then the code. */
 export class WalkthroughStep extends FieldDef {
