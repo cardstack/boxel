@@ -29,19 +29,21 @@ For browser delivery, verify the chosen video and audio encoding in Safari. Chec
 
 ## Deploying the Site and Gallery
 
-This documentation is part of the gallery application. Build it with the same asset base and routing mode as the rest of the site so links between guides, examples, and the 3D room remain on the same deployment.
+This documentation is realm content: the guides, the demos they embed and the 3D room are all files in the gallery realm, `packages/choreo-gallery/realm`, so links between them stay inside one realm wherever it is served. Each deploy copies that directory onto the realm's disk, so git is the gallery's source of truth.
 
-```sh title="A Build for a Subdirectory Host"
-APP_BASE=./ APP_LOCATION=hash pnpm --filter test-app build
+To publish a copy to a realm of your own, push the directory from the package:
+
+```sh title="Pushing the Gallery to Your Realm"
+pnpm --filter choreo-gallery push <your-realm-url> --delete
 ```
 
-For a Boxel host, upload the built application and its supporting assets to a realm you control. Use relative asset paths, publish the realm through your configured environment, and open the published entry document to verify it. Keep account names, realm identifiers, credentials, and private demo URLs out of reusable source and documentation.
+Then open the realm's gallery card to verify it. Keep account names, realm identifiers, credentials, and private demo URLs out of reusable source and documentation.
 
-The built application carries its own copies of `glimmer-motion` and `@cardstack/choreo`, so a site deployment uploads its static files and media together. Cards written directly in a realm instead import both packages by name from the Boxel host.
+The realm carries no copies of `glimmer-motion` or `@cardstack/choreo`: its cards import both packages by name, and the Boxel host serves them. Only the films, which play in documents of their own, carry a built bundle, which the push builds into the realm first.
 
 ## Checking Navigation
 
-From the deployed entry, open a guide, follow its next-page link, visit an example, and enter the [3D gallery](../../widget-room). Reload a nested guide URL and repeat the tour's Play, Pause, and Resume actions. These checks catch routing and media failures that a local build cannot reveal.
+From the deployed realm, open a guide, follow its next-page link, open the demo it embeds, and enter the [3D gallery](../../widget-room). Reload a guide's URL and repeat the tour's Play, Pause, and Resume actions. These checks catch linking and media failures that a local realm cannot reveal.
 
 ---
 
