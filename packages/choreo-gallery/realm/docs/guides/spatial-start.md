@@ -28,7 +28,7 @@ In Choreo's mockup demos, a WebGL scene draws the device and a DOM plane supplie
 
 Choreo's `c.Camera3D` directs camera values through the timeline. The renderer consumes those values; it continues to own lighting, geometry, and projection. This boundary lets a camera movement be paused or sought without introducing a second animation loop for the shot.
 
-Open the [mockup demo](../../demos/mockup) and switch to 3D to see the screen remain live as the device moves. The [DOM in 3D reference](https://choreo.boxel.site/docs/dom-in-3d.md) explains the matrix mapping used by the examples.
+Open the [mockup demo](../../demos/mockup) and switch to 3D to see the screen remain live as the device moves. The [DOM in 3D reference](../dom-in-3d.md) explains the matrix mapping used by the examples.
 
 ## Exploring the Gallery
 

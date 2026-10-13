@@ -33,7 +33,7 @@ The gallery's narration helper is application-level orchestration. It complement
 
 Keep lower thirds in a readable overlay region, clear of the controls being demonstrated. Use short labels for the capability and captions for the spoken content when available. Text should remain readable at the final delivery size, including on a phone.
 
-The [Film reference](https://choreo.boxel.site/docs/film.md) covers the built-in type, voice, and sound controls.
+The [Film reference](../film.md) covers the built-in type, voice, and sound controls.
 
 ---
 

@@ -44,7 +44,7 @@ Durations are expressed in seconds with `@duration`. Springs can determine their
 
 Keep the ordering in the timeline. Scheduling the next action with `setTimeout` creates a second clock that can drift when you change a duration, pause playback, or interrupt the interaction.
 
-Try the [interrupt demo](../../demos/interrupt) to see a new state change arrive before the previous movement has completed. For the full step vocabulary, read the [construct reference](https://choreo.boxel.site/docs/choreo-constructs.md).
+Try the [interrupt demo](../../demos/interrupt) to see a new state change arrive before the previous movement has completed. For the full step vocabulary, read the [construct reference](../choreo-constructs.md).
 
 ## Where to Go Deeper
 

@@ -44,7 +44,7 @@ Update the source and destination state together. Splitting the removal and inse
 
 The [inbox demo](../../demos/inbox) demonstrates movement toward a destination. The [far match demo](../../demos/far) demonstrates an item changing regions. Compare their state changes before choosing a pattern.
 
-Read the [nested Choreo reference](https://choreo.boxel.site/docs/nested-choreo.md) for selection boundaries and cross-region matching rules.
+Read the [nested Choreo reference](../nested-choreo.md) for selection boundaries and cross-region matching rules.
 
 ## Owning the Destination
 
