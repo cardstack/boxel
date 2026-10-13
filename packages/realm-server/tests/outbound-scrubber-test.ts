@@ -19,7 +19,10 @@ import {
   type StubVendorResponse,
 } from './helpers/stub-vendor.ts';
 
-const KEY = 'sk-test-0f3a9c27b4e14d5a8e6b21c0d9f7a3e5';
+// A key with no public prefix, so every byte of it is secret.
+const KEY = 'Zq0f3a9c27b4e14d5a8e6b21c0d9f7a3e5Lm';
+// The same secret behind a vendor-style public prefix.
+const PREFIXED_KEY = `sk-test-${KEY}`;
 
 // Every form a vendor might echo KEY back in.
 function encodedForms(value: string): Record<string, string> {
@@ -141,8 +144,7 @@ module(basename(import.meta.filename), function () {
     }
 
     test('removes a partial echo at the minimum length, in any case', function (assert) {
-      // From the part after the key's public `sk-test-` prefix.
-      let partial = KEY.slice(8, 8 + MIN_PARTIAL_LENGTH).toUpperCase();
+      let partial = KEY.slice(7, 7 + MIN_PARTIAL_LENGTH).toUpperCase();
       let output = scrubberFor(KEY).scrubText(`invalid key ending ${partial}.`);
       assert.strictEqual(output, `invalid key ending ${REDACTED}.`);
     });
@@ -159,11 +161,18 @@ module(basename(import.meta.filename), function () {
 
     test("leaves text about a vendor's key format alone", function (assert) {
       let text =
-        'curl -H "Authorization: Bearer sk-test-proj" … keys look like sk-test-0xxxxxxxx';
+        'curl -H "Authorization: Bearer sk-test-proj" … keys look like sk-test-Zxxxxxxxx';
       assert.strictEqual(
-        scrubberFor(KEY).scrubText(text),
+        scrubberFor(PREFIXED_KEY).scrubText(text),
         text,
         'neither the public prefix nor a scheme in front of it is a credential',
+      );
+    });
+
+    test("removes a prefixed key's secret part, leaving its public prefix", function (assert) {
+      assert.strictEqual(
+        scrubberFor(PREFIXED_KEY).scrubText(`{"echo":"${PREFIXED_KEY}"}`),
+        `{"echo":"sk-test-${REDACTED}"}`,
       );
     });
 
@@ -463,19 +472,19 @@ module(basename(import.meta.filename), function () {
 
     test('an attached header credential is removed, and text about the key format is not', async function (assert) {
       let mention =
-        'data: {"choices":[{"delta":{"content":"curl -H \\"Authorization: Bearer sk-test-abc\\" (keys start sk-test-0)"}}]}\n\n';
+        'data: {"choices":[{"delta":{"content":"curl -H \\"Authorization: Bearer sk-test-abc\\" (keys start sk-test-Z)"}}]}\n\n';
       let response = await outboundFetch({
         url: `${vendor.url}/respond`,
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           headers: { 'content-type': 'text/event-stream' },
-          chunks: [mention, `data: {"echo":"Bearer ${KEY}"}\n\n`],
+          chunks: [mention, `data: {"echo":"Bearer ${PREFIXED_KEY}"}\n\n`],
         }),
         sizePath: 'system-key',
         credential: {
           name: 'stub',
-          value: KEY,
+          value: PREFIXED_KEY,
           placement: {
             in: 'header',
             header: 'Authorization',
@@ -486,7 +495,7 @@ module(basename(import.meta.filename), function () {
       let body = await response.text();
       assert.strictEqual(
         vendor.requests.at(-1)?.headers.authorization,
-        `Bearer ${KEY}`,
+        `Bearer ${PREFIXED_KEY}`,
         'the vendor received the key',
       );
       assert.true(
