@@ -75,12 +75,15 @@ const MAX_TOOL_FINALIZATION_RETRIES = isTesting() ? 10 : 100;
 // only sent once execute settles.
 //
 // In tests the bound sits under the 10s budget of the tests' tool-chain waits
-// (such as the `waitForToolResult` mock-matrix helper), leaving 2s for the
-// rest of the chain: the result event, its delivery, and the room folding it
-// in. A tool that genuinely hangs
-// still reaches its failed result inside a test's wait, and a tool slowed by a
-// contended CI runner gets the rest of that window to finish rather than
-// failing partway.
+// (such as the `waitForToolResult` mock-matrix helper). That window also holds
+// the steps before execution (waiting out in-flight room processing and
+// validating the request), which take well under a second in a typical run,
+// and the result event's delivery after it. So a tool slowed by a contended CI
+// runner gets most of the window to finish rather than failing partway, and a
+// tool that genuinely hangs typically still reaches its failed result inside a
+// test's wait. When the earlier steps run long, a hang can surface as the
+// test's wait timing out instead; the timeout is then in the tool service's
+// error log.
 const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 8_000 : 120_000;
 // Upper bound on validating one tool request in the drain. Validation loads
 // the tool's module and input schema; a load that never settles would hold
