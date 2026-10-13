@@ -192,6 +192,27 @@ return { show: 'Pet/mango' };`,
     );
   });
 
+  test('show opens a file that is not a card in code mode', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return { show: 'notes/first.md' };`,
+    });
+
+    assert.strictEqual(result.shownCard, `${testRealmURL}notes/first.md`);
+    assert.notOk(result.showError);
+    assert.strictEqual(operatorModeStateService.state.submode, 'code');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}notes/first.md`,
+    );
+  });
+
   test('a card it cannot show does not fail the run', async function (assert) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
@@ -208,20 +229,8 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(result.files[0]?.status, 'saved', 'files still report');
     assert.notOk(result.shownCard);
     assert.true(
-      /Card not found: .*Pet\/missing/.test(result.showError ?? ''),
+      /Not found: .*Pet\/missing/.test(result.showError ?? ''),
       `says why: ${result.showError}`,
-    );
-
-    let file = await command.execute({
-      realm: testRealmURL,
-      roomId: '!room:example.com',
-      code: `return { show: 'notes/first.md' };`,
-    });
-    assert.true(
-      /notes\/first\.md is a file, not a card instance/.test(
-        file.showError ?? '',
-      ),
-      `names a file that is not a card: ${file.showError}`,
     );
 
     let outside = await command.execute({

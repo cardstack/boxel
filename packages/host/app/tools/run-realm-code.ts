@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import {
   coerceErrorMessage,
-  isCardErrorJSONAPI,
+  isCardInstance,
   logger,
   rri,
   SupportedMimeType,
@@ -33,6 +33,7 @@ import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
 import LintAndFixTool from './lint-and-fix';
 import SetActiveLLMTool from './set-active-llm';
 import ShowCardTool from './show-card';
+import ShowFileTool from './show-file';
 import UpdateRoomSkillsTool from './update-room-skills';
 
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
@@ -425,11 +426,11 @@ class RealmFsSession {
     return url.endsWith('/') ? url : `${url}/`;
   }
 
-  // The card a script names to show, as its instance URL without `.json`.
-  // Takes the same path forms as a file, with or without the extension.
+  // The card or file a script names to show, as a URL; a card's `.json` is
+  // dropped, so it is the instance URL. Takes the same path forms as a file.
   cardURL(path: unknown): string {
     if (typeof path !== 'string') {
-      throw new TypeError('`show` must be a card path string');
+      throw new TypeError('`show` must be a card or file path string');
     }
     return this.resolve('show', path).replace(/\.json$/, '');
   }
@@ -789,10 +790,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
   }
 
   // A script returns `{ show: 'Path/to-card' }` to open that card when the
-  // run ends. The sandbox has no access to the UI: the host opens the card,
-  // and only after it checks that the path is in this run's realm and is a
-  // card instance that exists. A card that cannot be shown does not fail the
-  // run; the result says why, next to the files it saved.
+  // run ends, or `{ show: 'path/to/file.png' }` to open another file in code
+  // mode. The sandbox has no access to the UI: the host opens it, and only
+  // after it checks that the path is in this run's realm and exists. A path
+  // that cannot be shown does not fail the run; the result says why, next to
+  // the files it saved.
   private async showCard(
     session: RealmFsSession,
     scriptResult: string,
@@ -816,16 +818,21 @@ export default class RunRealmCodeTool extends HostBaseTool<
       cardId = session.cardURL((value as { show: unknown }).show);
       let source = await this.cardService.getSource(new URL(`${cardId}.json`));
       if (source.status !== 200) {
-        // A path that names a file, such as an image, is not a card.
+        // A path that names another file, such as an image or a module,
+        // opens that file in code mode.
         let file = await this.cardService.getSource(new URL(cardId));
-        throw new Error(
-          file.status === 200
-            ? `${cardId} is a file, not a card instance`
-            : `Card not found: ${cardId}`,
-        );
+        if (file.status !== 200) {
+          throw new Error(`Not found: ${cardId}`);
+        }
+        await new ShowFileTool(this.toolContext).execute({
+          fileIdentifier: cardId,
+        });
+        return { shownCard: cardId };
       }
-      let card = await this.store.get(cardId);
-      if (isCardErrorJSONAPI(card)) {
+      // The store's cached copy can predate a write this run just made, so
+      // the card is read from the realm.
+      let card = await this.store.getWithoutCache(cardId);
+      if (!isCardInstance(card)) {
         throw new Error(`${cardId} is not a card instance: ${card.message}`);
       }
       await new ShowCardTool(this.toolContext).execute({ cardId });
