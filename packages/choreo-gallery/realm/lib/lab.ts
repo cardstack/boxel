@@ -18,6 +18,30 @@ export function labSlug(demo: {
   return demo.theater !== true && demo.slug ? demo.slug : undefined;
 }
 
+/**
+ * What a view showing a demo keeps for its lab: which demo the lab is open
+ * on, and how many times its stage has been replayed. The lab belongs to the
+ * demo it was opened on, so a view that moves to another demo shows it
+ * closed.
+ */
+export class LabState {
+  @tracked private openOn: string | null = null;
+  /** counts replays: each one mounts the stage afresh */
+  @tracked replays = 0;
+
+  isOpen(slug: string | undefined): boolean {
+    return slug !== undefined && this.openOn === slug;
+  }
+
+  toggle = (slug: string | undefined) => {
+    this.openOn = this.isOpen(slug) ? null : (slug ?? null);
+  };
+
+  replay = () => {
+    this.replays++;
+  };
+}
+
 /** how many labs are open on each demo, by its slug */
 const openLabs = new Map<string, number>();
 

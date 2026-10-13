@@ -1,12 +1,11 @@
 import { array, concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { motion } from 'glimmer-motion';
 
 import type { GalleryDemo } from '../demo';
 import { FilmLink } from '../lib/film-link';
-import { labSlug } from '../lib/lab';
+import { labSlug, LabState } from '../lib/lab';
 import type { GalleryNavigation } from '../lib/navigation';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
@@ -15,6 +14,7 @@ import { DemoStage } from './demo-stage';
 import { GalleryLink } from './gallery-link';
 import { GuideLink } from './guide-link';
 import { LabPanel } from './lab-panel';
+import { LabToggle } from './lab-toggle';
 import { SpeedPicker } from './speed-picker';
 
 interface Signature {
@@ -34,26 +34,17 @@ interface Signature {
 export class DemoPage extends Component<Signature> {
   /** the stage's film, when it has one, for the notes' join triggers */
   readonly filmLink = new FilmLink();
-  /** the demo whose lab is open; the lab belongs to the page it was opened on */
-  @tracked private labFor: string | null = null;
-  /** counts replays: each one mounts the stage afresh */
-  @tracked private replays = 0;
+  readonly lab = new LabState();
 
   get labSlug(): string | undefined {
     return labSlug(this.args.demo);
   }
 
   get labOpen(): boolean {
-    return this.labSlug !== undefined && this.labFor === this.labSlug;
+    return this.lab.isOpen(this.labSlug);
   }
 
-  toggleLab = () => {
-    this.labFor = this.labOpen ? null : (this.labSlug ?? null);
-  };
-
-  replay = () => {
-    this.replays++;
-  };
+  toggleLab = () => this.lab.toggle(this.labSlug);
 
   get Notes() {
     return (this.args.demo.constructor as typeof GalleryDemo).notes;
@@ -149,16 +140,7 @@ export class DemoPage extends Component<Signature> {
         {{/if}}
         <p class='demo-links'>
           {{#if this.labSlug}}
-            <button
-              type='button'
-              class='lab-toggle'
-              aria-expanded={{if this.labOpen 'true' 'false'}}
-              {{on 'click' this.toggleLab}}
-            >{{if
-                this.labOpen
-                'Close the DialKit lab'
-                'Tune this demo with DialKit'
-              }}</button>
+            <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
           {{/if}}
           <GuideLink @demo={{@demo}} />
         </p>
@@ -175,7 +157,7 @@ export class DemoPage extends Component<Signature> {
             {{motion id=(concat 'stage-' slug) role='stage'}}
             {{@theater.stage}}
           >
-            {{#each (array this.replays) key='@identity'}}
+            {{#each (array this.lab.replays) key='@identity'}}
               <DemoStage
                 @demo={{@demo}}
                 @face='stage'
@@ -203,7 +185,7 @@ export class DemoPage extends Component<Signature> {
               <LabPanel
                 @slug={{this.labSlug}}
                 @title={{@demo.title}}
-                @onReplay={{this.replay}}
+                @onReplay={{this.lab.replay}}
               />
             {{/if}}
           {{/if}}
@@ -416,28 +398,6 @@ export class DemoPage extends Component<Signature> {
         align-items: baseline;
         gap: 12px 24px;
         margin: 0 0 16px;
-      }
-
-      .lab-toggle {
-        padding: 0;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--ink-dim);
-        background: none;
-        border: 0;
-        cursor: pointer;
-      }
-
-      @media (hover: hover) {
-        .lab-toggle:hover {
-          color: var(--ink);
-        }
-      }
-
-      .lab-toggle[aria-expanded='true'] {
-        color: var(--copper-ink);
       }
 
       .stage-row {

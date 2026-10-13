@@ -11,12 +11,10 @@ import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
 import type { Join } from '@cardstack/choreo/film';
 import { array } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 
 import type { FilmLink } from './lib/film-link';
-import { labSlug } from './lib/lab';
+import { labSlug, LabState } from './lib/lab';
 import { ownClicks } from './lib/pointer';
 import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
@@ -24,6 +22,7 @@ import { DemoPage } from './shell/demo-page';
 import { DemoStage } from './shell/demo-stage';
 import { GuideLink } from './shell/guide-link';
 import { LabPanel } from './shell/lab-panel';
+import { LabToggle } from './shell/lab-toggle';
 
 /** the gallery's sections, in the order its filters list them */
 export const GROUPS = [
@@ -133,9 +132,7 @@ class Isolated extends Component<typeof GalleryDemo> {
  * it is, its guide, and the lab, opened under the stage.
  */
 class Embedded extends Component<typeof GalleryDemo> {
-  @tracked labOpen = false;
-  /** counts replays: each one mounts the stage afresh */
-  @tracked replays = 0;
+  readonly lab = new LabState();
 
   get demo() {
     return this.args.model as GalleryDemo;
@@ -145,18 +142,16 @@ class Embedded extends Component<typeof GalleryDemo> {
     return labSlug(this.demo);
   }
 
-  toggleLab = () => {
-    this.labOpen = !this.labOpen;
-  };
+  get labOpen(): boolean {
+    return this.lab.isOpen(this.labSlug);
+  }
 
-  replay = () => {
-    this.replays++;
-  };
+  toggleLab = () => this.lab.toggle(this.labSlug);
 
   <template>
     <ChoreoRoot class='tile'>
       <div class='tile-stage' {{ownClicks}}>
-        {{#each (array this.replays) key='@identity'}}
+        {{#each (array this.lab.replays) key='@identity'}}
           <DemoStage @demo={{this.demo}} @face='tile' />
         {{/each}}
       </div>
@@ -166,12 +161,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         <span class='tile-lede'>{{@model.lede}}</span>
         <span class='tile-links' {{ownClicks}}>
           {{#if this.labSlug}}
-            <button
-              type='button'
-              class='tile-lab-toggle'
-              aria-expanded={{if this.labOpen 'true' 'false'}}
-              {{on 'click' this.toggleLab}}
-            >{{if this.labOpen 'Close the lab' 'Tune with DialKit'}}</button>
+            <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
           {{/if}}
           <GuideLink @demo={{this.demo}} />
         </span>
@@ -182,7 +172,7 @@ class Embedded extends Component<typeof GalleryDemo> {
             <LabPanel
               @slug={{this.labSlug}}
               @title={{@model.title}}
-              @onReplay={{this.replay}}
+              @onReplay={{this.lab.replay}}
             />
           </div>
         {{/if}}
@@ -238,22 +228,6 @@ class Embedded extends Component<typeof GalleryDemo> {
         align-items: baseline;
         gap: 8px 20px;
         margin-top: 4px;
-      }
-
-      .tile-lab-toggle {
-        padding: 0;
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--ink-dim);
-        background: none;
-        border: 0;
-        cursor: pointer;
-      }
-
-      .tile-lab-toggle[aria-expanded='true'] {
-        color: var(--copper-ink);
       }
 
       .tile-lab {

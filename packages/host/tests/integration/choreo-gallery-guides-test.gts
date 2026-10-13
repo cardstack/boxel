@@ -153,7 +153,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
         'and links the guide its lesson names',
       );
 
-    await click(embed.querySelector('.tile-lab-toggle')!);
+    await click(embed.querySelector('.lab-toggle')!);
     await waitFor('.markdown-bfm-card-slot--block [data-demo-lab="enter"]');
     assert
       .dom('.markdown-bfm-card-slot--block [data-demo-lab="enter"]')
@@ -190,7 +190,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
       embed.querySelector<HTMLButtonElement>('.tile-stage button');
     assert.ok(stageButton, 'the stage has a control of its own');
     await click(stageButton!);
-    await click(embed.querySelector('.tile-lab-toggle')!);
+    await click(embed.querySelector('.lab-toggle')!);
     await waitFor('.markdown-bfm-card-slot--block [data-demo-lab] .lab-replay');
     await click(
       live('.markdown-bfm-card-slot--block [data-demo-lab] .lab-replay')!,
