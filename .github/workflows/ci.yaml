@@ -585,11 +585,12 @@ jobs:
       # The boxel-cli test engine mounts realm/ as an in-memory realm and
       # drives the host test harness bundled with that CLI release, so no
       # workspace install or realm-server is needed. The harness must shim
-      # glimmer-motion and Choreo, which 0.8.0-unstable.0 is the first release
-      # to do. The pin decides which host harness the tests run against; bump
-      # it deliberately.
+      # glimmer-motion, Choreo and DialKit (`dialkit/store`, `dialkit/vanilla`),
+      # which this release does and 0.8.0-unstable.0 did not for DialKit. The
+      # pin decides which host harness the tests run against; bump it
+      # deliberately.
       - name: Install Boxel CLI
-        run: npm install -g @cardstack/boxel-cli@0.8.0-unstable.0
+        run: npm install -g @cardstack/boxel-cli@0.9.0-unstable.1
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's nested playwright binary.
       - name: Install Chromium

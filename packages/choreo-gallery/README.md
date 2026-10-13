@@ -137,7 +137,7 @@ To work on a copy in a realm of your own instead, push the realm to it:
 
 1. Start the stack from the repository root: `mise run dev-all`.
 2. Install the Boxel CLI at the version CI uses:
-   `npm install -g @cardstack/boxel-cli@0.8.0-unstable.0`.
+   `npm install -g @cardstack/boxel-cli@0.9.0-unstable.1`.
 3. Sign in to the local stack: `boxel profile add --local`. Use the
    `@user:localhost` test user (`pnpm --filter matrix register-test-user`), or
    any account you have registered locally.
