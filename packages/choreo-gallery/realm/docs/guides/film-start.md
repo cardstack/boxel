@@ -45,7 +45,7 @@ Application state must also be reproducible. If a recorded click opens a panel a
 
 ## Seeing a Complete Presentation
 
-The [3D gallery](../../widget-room) includes a quick highlights tour and a longer guided tour. The [Towers film](../../demos/towers) demonstrates a presentation with chapters and narration.
+The 3D gallery includes a quick highlights tour and a longer guided tour. The [Towers film](../../demos/towers) demonstrates a presentation with chapters and narration.
 
 Start with [Driving an External Clock](film-clock.md), then read [Building a Film](film-shots.md). The final guide covers recording checks and portable deployment.
 

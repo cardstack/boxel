@@ -32,7 +32,7 @@ Open the [mockup demo](../../demos/mockup) and switch to 3D to see the screen re
 
 ## Exploring the Gallery
 
-The [3D gallery](../../widget-room) arranges the demos as framed exhibits. Its guided tour connects traditional interface motion, spatial interaction, and film direction in one room.
+The 3D gallery arranges the demos as framed exhibits. Its guided tour connects traditional interface motion, spatial interaction, and film direction in one room.
 
 Each exhibit needs enough layout space for its expanded state. Measure the demo at its largest useful size before choosing the frame; shrinking every component into the same tile can clip menus and make text difficult to read.
 

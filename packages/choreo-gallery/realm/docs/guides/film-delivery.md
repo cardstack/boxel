@@ -43,7 +43,7 @@ The realm carries no copies of `glimmer-motion` or `@cardstack/choreo`: its card
 
 ## Checking Navigation
 
-From the deployed realm, open a guide, follow its next-page link, open the demo it embeds, and enter the [3D gallery](../../widget-room). Reload a guide's URL and repeat the tour's Play, Pause, and Resume actions. These checks catch linking and media failures that a local realm cannot reveal.
+From the deployed realm, open a guide, follow its next-page link, open the demo it embeds, and enter the 3D gallery. Reload a guide's URL and repeat the tour's Play, Pause, and Resume actions. These checks catch linking and media failures that a local realm cannot reveal.
 
 ---
 
