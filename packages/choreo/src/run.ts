@@ -20,6 +20,7 @@ import {
   frame,
   type FrameData,
   generateLinearEasing,
+  mix,
   spring as springGenerator,
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
@@ -2379,12 +2380,31 @@ export class ChoreoRun implements Run {
         : [t.origin?.[key] ?? 0, raw as PropValue];
       const numeric = frames.map((f) => parseFloat(String(f)));
       if (numeric.some((n) => Number.isNaN(n))) {
-        // non-numeric values snap to the nearest keyframe
-        const index = Math.min(
-          frames.length - 1,
-          Math.floor(p * frames.length),
-        );
-        ve.getValue(key, frames[index]!)!.jump(frames[index]!);
+        // colors and complex strings mix as playback mixes them (motion's
+        // own mixer), so a still matches the frame a live run would draw;
+        // values with no common shape fall back to the mixer's snap
+        const segments = frames.length - 1;
+        if (segments < 1) {
+          ve.getValue(key, frames[0]!)!.jump(frames[0]!);
+          continue;
+        }
+        let at: number;
+        if (sprung) {
+          const generator = springGenerator({
+            keyframes: [0, segments],
+            ...(transition ?? {}),
+          } as never);
+          at = generator.next(now - t.start).value;
+        } else {
+          at = (ease ? ease(p) : p) * segments;
+        }
+        at = Math.min(segments - 1e-9, Math.max(0, at));
+        const index = Math.floor(at);
+        const value = mix(
+          frames[index]! as never,
+          frames[index + 1]! as never,
+        )(at - index) as PropValue;
+        ve.getValue(key, value)!.jump(value);
         continue;
       }
       let value: number;

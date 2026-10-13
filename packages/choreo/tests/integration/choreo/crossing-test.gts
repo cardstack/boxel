@@ -529,9 +529,11 @@ module('Integration | choreo | crossing', function (hooks) {
       1,
       'the flying box is never transparent: the ground cannot leak through',
     );
+    // at the midpoint the solid stands clear of both skins, so a carry that
+    // jumped to either endpoint fails
     assert.true(
-      mid!.r > 27 && mid!.r < 109 && mid!.b < 105 && mid!.b > 43,
-      `the solid tweens between the two effective colors (r ${mid!.r}, b ${mid!.b})`,
+      mid!.r > 38 && mid!.r < 98 && mid!.b < 94 && mid!.b > 54,
+      `the solid tweens between the two effective colors (r ${mid!.r}, b ${mid!.b} ${at})`,
     );
     assert.strictEqual(
       getComputedStyle(hero).opacity,
