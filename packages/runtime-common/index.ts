@@ -836,13 +836,11 @@ export interface RenderError extends ErrorEntry {
   diagnostics?: RenderTimeoutDiagnostics;
 }
 
-export interface FileExtractResponse {
+interface FileExtractResponseFields {
   id: string;
   nonce: string;
-  status: 'ready' | 'error';
   searchDoc: Record<string, any> | null;
   resource?: FileMetaResource | null;
-  types?: string[] | null;
   // Display names walked from the resolved FileDef subclass up its prototype
   // chain (e.g. `['Markdown', 'File']`). Persisted as `boxel_index.display_names`
   // so CardsGrid's "All Files" sidebar can label each subtype.
@@ -862,6 +860,15 @@ export interface FileExtractResponse {
   // the producing `FrontmatterField` subclass's own knowledge.
   frontmatterDiagnostics?: Partial<Diagnostics>;
 }
+
+// A ready extract always carries `types`: the full ancestor chain of the class
+// whose extraction succeeded, which the file indexer stamps on the row as-is.
+export type FileExtractResponse =
+  | (FileExtractResponseFields & { status: 'ready'; types: string[] })
+  | (FileExtractResponseFields & {
+      status: 'error';
+      types?: string[] | null;
+    });
 
 export interface FileRenderResponse {
   isolatedHTML: string | null;

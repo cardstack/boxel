@@ -173,7 +173,7 @@ export async function performFileIndexing({
   // whose extraction succeeded. When the extension's FileDef fails, that is the
   // nearest ancestor that succeeded, so the row is a member of that ancestor
   // and the classes above it, not of the class that failed.
-  let fileTypes = extractResult.types ?? undefined;
+  let fileTypes = extractResult.types;
   let deps = new Set(extractResult.deps ?? []);
 
   // Shared by the success entry and the dependency-error entry below, so the

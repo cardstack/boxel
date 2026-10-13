@@ -1462,7 +1462,7 @@ module(basename(import.meta.filename), function () {
       let idsMatching = async (filter: Query['filter']) =>
         (
           await searchCardsForTest(realm.realmIndexQueryEngine, { filter })
-        ).data.map((resource) => resource.id);
+        ).data.map((resource) => String(resource.id));
       let imageDef = {
         module: rri('@cardstack/base/card-api'),
         name: 'ImageDef',
