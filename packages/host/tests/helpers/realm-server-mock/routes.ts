@@ -22,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  admitsNothing,
   errorsDocument,
   isNamedQueryPayload,
   isOperationFailure,
@@ -207,6 +208,7 @@ function registerSearchRoutes() {
       let resolvedByServer = isNamedQueryPayload(payload);
       let requested = realmList;
       let unresolved = false;
+      let admittingNothing = false;
       if (isNamedQueryPayload(payload)) {
         let resolvingRealm = realmList
           .map(
@@ -236,12 +238,20 @@ function registerSearchRoutes() {
                 realms: realmList,
               },
             );
-            payload = resolved.query;
-            realmList = resolved.query.realms!;
-            links = duringRender ? 'full' : resolved.links;
-            unshareableFormats = duringRender
-              ? []
-              : resolved.unshareableFormats;
+            if (admitsNothing(resolved)) {
+              // As there, a caller who may not read the type's module is
+              // answered as a declared query that admits nothing answers
+              // them, by every realm the request names.
+              admittingNothing = true;
+              payload = { ...namedQueryRendering(payload), realms: realmList };
+            } else {
+              payload = resolved.query;
+              realmList = resolved.query.realms!;
+              links = duringRender ? 'full' : resolved.links;
+              unshareableFormats = duringRender
+                ? []
+                : resolved.unshareableFormats;
+            }
           } catch (e) {
             if (isOperationFailure(e)) {
               return new Response(JSON.stringify(errorsDocument(e.error)), {
@@ -297,6 +307,13 @@ function registerSearchRoutes() {
           ? !unanswered.unread.has(ensureTrailingSlash(realmURL))
           : callerReads(state, realmURL));
       let realms = realmList.map((realmURL) => {
+        if (admittingNothing) {
+          return {
+            url: realmURL,
+            searchEntries: async (query: SearchEntryQuery) =>
+              emptySearchEntryDocument(query),
+          };
+        }
         if (asksRealm(realmURL)) {
           return permissionCheckingRealm(
             realmURL,

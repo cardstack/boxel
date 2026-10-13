@@ -1166,7 +1166,10 @@ export type PolicyExplanationReason =
   // to match, which is what an empty path is.
   | 'unmatchable-target'
   // The operation is not one the target carries: resolving it refused before
-  // the policy could be consulted. `refusal` says how.
+  // the policy could be consulted. `refusal` says how. It is absent for a
+  // search naming a query on a type whose module the actor may not read: that
+  // search is answered with no rows, as a declared query that admits nothing
+  // is, rather than with a refusal that would describe what the type declares.
   | 'not-resolved'
   // The actor presented no credentials, and the ACL does not allow an
   // anonymous caller this lane. The policy admits only an authenticated

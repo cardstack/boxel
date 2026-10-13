@@ -1,7 +1,9 @@
 import { isCodeRef } from '../card-document-shape.ts';
-import type { CodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
+import { SearchRequestError } from '../search-utils.ts';
 import {
+  parseSearchEntryQueryFromPayload,
   wireFilterGrantTypes,
   type SearchEntryWireFilter,
   type SearchEntryWireQuery,
@@ -10,11 +12,18 @@ import {
   newOperationScope,
   resolveOperation,
   type OperationCore,
+  type ScopeCaller,
 } from './dispatch.ts';
 import { MAX_REMEMBERED_MS } from './gate.ts';
 import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
 import {
+  emitNamedQueryRefusalHidden,
+  recordSafely,
+  type NamedQueryRefusalHiddenEvent,
+} from './telemetry.ts';
+import {
+  isOperationFailure,
   linkStrategyOf,
   OperationFailure,
   unshareableFormatsOf,
@@ -144,6 +153,9 @@ export interface NamedQueryContext {
   // the realms the request named, each already authorized for the caller; on
   // a realm's own endpoint, that realm.
   realms: string[];
+  // The request's logging correlation id, which a refusal answered as no rows
+  // is recorded under. Null or absent where the request carried none.
+  correlationId?: string | null;
 }
 
 // What a named search request resolves to: the ad-hoc query it runs, and how
@@ -168,9 +180,36 @@ export interface ResolvedNamedQuery {
   unshareableFormats: PrerenderedHtmlFormat[];
 }
 
+// What a named query resolves to where resolving it refused, for a caller who
+// may not read the realm that holds its type's module. Such a caller is
+// answered as a declared query that admits nothing answers them: 200, with no
+// rows.
+//
+// Every refusal resolving gives describes the type: that it declares no such
+// operation, that the one it declares is no query, which params it requires,
+// which realms it searches. The declaration is read on the resolving realm's
+// authority, so it reads a type in a realm the caller cannot, and a refusal
+// carrying what it read would answer a caller what a read of that module would
+// refuse them. A caller who reads the module's realm may read the declaration
+// itself, so they are refused with the detail.
+export interface NamedQueryAdmittingNothing {
+  admitsNothing: true;
+}
+
+export function admitsNothing(
+  resolved: ResolvedNamedQuery | NamedQueryAdmittingNothing,
+): resolved is NamedQueryAdmittingNothing {
+  return 'admitsNothing' in resolved;
+}
+
 // The ad-hoc search request a named one resolves to, and the link strategy and
 // data-only formats its results are served under. Every refusal is an
-// `OperationFailure` carrying the status it is answered with.
+// `OperationFailure` carrying the status it is answered with, save for a
+// caller who may not read the realm holding the type's module: resolving
+// refuses them nothing, and answers that it admits nothing instead (see
+// `NamedQueryAdmittingNothing`). A request whose `operation` or `on` is not
+// what it must be names no type to hold its refusal back for, so it is refused
+// whoever asks.
 //
 // Where the declaration names a member, the declaration's stands; where it
 // names none, the caller's fills it. The filter is the exception: it is the
@@ -190,7 +229,7 @@ export async function resolveNamedQuery(
   core: OperationCore,
   payload: Record<string, unknown>,
   context: NamedQueryContext,
-): Promise<ResolvedNamedQuery> {
+): Promise<ResolvedNamedQuery | NamedQueryAdmittingNothing> {
   let {
     operation,
     on,
@@ -206,6 +245,141 @@ export async function resolveNamedQuery(
       `"on" must be the code ref of the type operation "${operation}" is invoked on`,
     );
   }
+  // The members the caller chose are checked before the declaration is read,
+  // so they are refused alike whether it resolves or not. Checked after, a
+  // member the search grammar refuses would be refused only once the
+  // declaration resolved, and a caller who may not read the type could tell an
+  // operation it declares from one it doesn't.
+  try {
+    parseSearchEntryQueryFromPayload({
+      ...callerMembers,
+      ...namedQueryRendering(payload),
+    });
+  } catch (e) {
+    if (e instanceof SearchRequestError) {
+      throw invalidNamedQuery(e.message);
+    }
+    throw e;
+  }
+  try {
+    return await resolveDeclaredQuery(
+      core,
+      { operation, on, params, callerFilter, callerMembers },
+      context,
+    );
+  } catch (e) {
+    if (!isOperationFailure(e) || !describesDeclaration(e)) {
+      throw e;
+    }
+    let reading = await readingOfModule(core, on, callerOf(context.principal));
+    if (reading.reads) {
+      throw e;
+    }
+    let failure = e;
+    recordSafely('named-query refusal answered as no rows', () =>
+      emitNamedQueryRefusalHidden({
+        kind: 'named-query-refusal-hidden',
+        realmURL: core.realmURL,
+        actor:
+          context.principal?.kind === 'user' ? context.principal.user : null,
+        operation,
+        on: 'module' in on ? `${on.module}/${on.name}` : JSON.stringify(on),
+        status: failure.error.status,
+        code: failure.error.code,
+        unreadableBecause: reading.because,
+        ...(reading.moduleRealm ? { moduleRealm: reading.moduleRealm } : {}),
+        ...(reading.error ? { error: reading.error } : {}),
+        correlationId: context.correlationId ?? null,
+      }),
+    );
+    return { admitsNothing: true };
+  }
+}
+
+// Whether a refusal resolving gives says something of the type's declaration.
+// Every one does but a 500, which is the server failing to read the
+// declaration at all. That includes `actor-required`: it is given only where
+// the declaration compares against the caller, so a caller who isn't signed in
+// would otherwise tell such an operation from one the type doesn't declare.
+function describesDeclaration(failure: OperationFailure): boolean {
+  return failure.error.status !== 500;
+}
+
+// The caller a search principal is judged as by a realm's permissions. A
+// realm-authority principal reads what the realm ACL grants its user.
+function callerOf(principal: SearchPrincipal | undefined): ScopeCaller {
+  return principal?.kind === 'user' || principal?.kind === 'realm-authority'
+    ? { kind: 'user', actor: principal.user }
+    : { kind: 'anonymous' };
+}
+
+// Whether a caller may read the realm that holds `on`'s module, by that
+// realm's own permissions, and if not, why not. A module no realm this server
+// serves holds is one whose realm the caller cannot be shown to read, and so is
+// a type nothing is described for, as is one whose code ref does not resolve,
+// and one whose realm's permissions can't be asked. A caller who isn't signed
+// in reads what the realm opens to everyone.
+type ModuleReading =
+  | { reads: true }
+  | {
+      reads: false;
+      because: NamedQueryRefusalHiddenEvent['unreadableBecause'];
+      moduleRealm?: string;
+      error?: string;
+    };
+
+async function readingOfModule(
+  core: OperationCore,
+  on: CodeRef,
+  caller: ScopeCaller,
+): Promise<ModuleReading> {
+  if (!core.readsRealmOf) {
+    return { reads: false, because: 'no-lookup' };
+  }
+  let type: ResolvedCodeRef | undefined;
+  try {
+    type = core.resolveCodeRef(on, new URL(core.realmURL));
+  } catch {
+    type = undefined;
+  }
+  if (!type) {
+    return { reads: false, because: 'unresolved' };
+  }
+  let served;
+  try {
+    served = await core.readsRealmOf(type.module, caller);
+  } catch (e: unknown) {
+    return {
+      reads: false,
+      because: 'lookup-failed',
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+  if (!served) {
+    return { reads: false, because: 'unserved' };
+  }
+  return served.read
+    ? { reads: true }
+    : { reads: false, because: 'not-readable', moduleRealm: served.realm };
+}
+
+async function resolveDeclaredQuery(
+  core: OperationCore,
+  {
+    operation,
+    on,
+    params,
+    callerFilter,
+    callerMembers,
+  }: {
+    operation: string;
+    on: CodeRef;
+    params: unknown;
+    callerFilter: unknown;
+    callerMembers: Record<string, unknown>;
+  },
+  context: NamedQueryContext,
+): Promise<ResolvedNamedQuery> {
   if (params !== undefined && !isPlainRecord(params)) {
     throw invalidNamedQuery(
       `"params" must be an object keyed the way operation "${operation}" declares them`,

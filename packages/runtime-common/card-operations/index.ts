@@ -139,6 +139,7 @@ export type {
 export {
   OPERATIONS_CHANNEL,
   emitCapabilityCheck,
+  emitNamedQueryRefusalHidden,
   emitOperationPerf,
   INTERNAL_ROUTE,
   emitPolicyCompile,
@@ -146,6 +147,7 @@ export {
   emitPolicySearchScope,
   emitPolicySnapshotRead,
   setCapabilityCheckSink,
+  setNamedQueryRefusalHiddenSink,
   setOperationPerfSink,
   setPolicyCompileSink,
   setPolicyDecisionSink,
@@ -154,6 +156,7 @@ export {
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
+  NamedQueryRefusalHiddenEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
@@ -222,6 +225,7 @@ export type {
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 export {
+  admitsNothing,
   isNamedQueryPayload,
   namedQueryInvocation,
   namedQueryRendering,
@@ -230,6 +234,7 @@ export {
   searchInvocation,
 } from './named-query.ts';
 export type {
+  NamedQueryAdmittingNothing,
   NamedQueryContext,
   NamedQueryStats,
   ResolvedNamedQuery,

@@ -1,5 +1,5 @@
 import { isCodeRef } from '../card-document-shape.ts';
-import type { CodeRef } from '../code-ref.ts';
+import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { ensureTrailingSlash } from '../paths.ts';
 import { runWithSearchTimeBudget, SearchBoundError } from '../search-bounds.ts';
@@ -34,7 +34,11 @@ import {
   type GateDecision,
   type MatchedGrant,
 } from './gate.ts';
-import { resolveNamedQuery, searchInvocation } from './named-query.ts';
+import {
+  admitsNothing,
+  resolveNamedQuery,
+  searchInvocation,
+} from './named-query.ts';
 import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
   formatAddressRange as formatRange,
@@ -293,6 +297,26 @@ export async function explainOperation(
       detail:
         `this draft uses card types from a realm you can't read, so what it ` +
         `would decide can't be shown to you`,
+    });
+  }
+  // Explaining a named query reports what resolving its declaration did for
+  // the actor: the refusal it gave, or the filter it lowered to. Either one
+  // describes the type, so it is refused whole to a caller who may not read
+  // the realm this server serves the type's module from, whoever the actor
+  // is, as a draft naming such a type is.
+  if (
+    question.search &&
+    'on' in question.search &&
+    (await servesUnreadableModule(targetCore, question.search.on, asker))
+  ) {
+    throw new OperationFailure({
+      id: policyCard.href,
+      status: 403,
+      code: 'operation-not-permitted',
+      title: 'Operation not permitted',
+      detail:
+        `this search names a card type from a realm you can't read, so what ` +
+        `it would decide can't be shown to you`,
     });
   }
   let actor = scopeCallerFor(question.actor);
@@ -575,6 +599,28 @@ async function draftGoverned(
   };
 }
 
+// Whether the realm this server serves `on`'s module from is one the asker may
+// not read. A module no realm here serves is read as the owner of the realm
+// that looked it up, and so is not one, as the draft gate above passes it. Nor
+// is a code ref that does not resolve, which describes no declaration.
+async function servesUnreadableModule(
+  core: OperationCore,
+  on: CodeRef,
+  asker: ScopeCaller,
+): Promise<boolean> {
+  let type: ResolvedCodeRef | undefined;
+  try {
+    type = core.resolveCodeRef(on, new URL(core.realmURL));
+  } catch {
+    return false;
+  }
+  if (!type) {
+    return false;
+  }
+  let served = await core.readsRealmOf?.(type.module, asker);
+  return served !== undefined && !served.read;
+}
+
 // What a search asked of the target's realm would compose, for the actor, and
 // how fresh an answer from it can be.
 //
@@ -622,7 +668,9 @@ async function explainSearch(
   };
   // A named query is resolved before anything consults a policy, for every
   // caller, and a request naming one that does not resolve is refused as it
-  // is sent. So is an ad-hoc filter the search grammar does not accept.
+  // is sent, or, for an actor who may not read its type's module, answered
+  // with no rows. An ad-hoc filter the search grammar does not accept is
+  // refused too.
   if ('filter' in search) {
     try {
       parseSearchEntryQueryFromPayload({ filter: search.filter });
@@ -641,6 +689,9 @@ async function explainSearch(
             : undefined,
         realms: [core.realmURL],
       });
+      if (admitsNothing(resolved)) {
+        return { ...base, reason: 'not-resolved' };
+      }
       if (resolved.query.filter) {
         answer.filter = resolved.query.filter;
       }

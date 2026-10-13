@@ -461,6 +461,73 @@ export function emitPolicySearchScope(event: PolicySearchScopeEvent): void {
 }
 
 // ============================================================================
+// Telemetry for a named query's refusal answered as no rows.
+//
+// A caller who may not read the realm holding a named query's type is told
+// nothing a refusal would say of its declaration: an operation the type
+// doesn't declare, params it refuses, and a type that isn't there are each
+// answered as a declared query that admits nothing. That is all the response
+// may carry, so what the caller would otherwise have been told is recorded
+// here, once per refusal answered that way, with why the type's module was
+// one they may not read. A count by `code` is what shows real queries taking
+// this path, which no 4xx count does, since each is answered with a 200.
+// ============================================================================
+
+export interface NamedQueryRefusalHiddenEvent {
+  kind: 'named-query-refusal-hidden';
+  // The realm the declaration was read through.
+  realmURL: string;
+  actor: string | null;
+  operation: string;
+  // The type the request named, as `module/name`.
+  on: string;
+  // What the refusal would have told the caller.
+  status: number;
+  code: string;
+  // Why the caller was judged unable to read the type's module:
+  // - `not-readable`: a realm this server serves holds it, and doesn't let
+  //   the caller read it.
+  // - `unresolved`: the code ref doesn't resolve to a module.
+  // - `unserved`: no realm this server serves holds the module.
+  // - `lookup-failed`: asking the realm's permissions threw (see `error`).
+  // - `no-lookup`: this realm can't ask another realm's permissions.
+  unreadableBecause:
+    | 'not-readable'
+    | 'unresolved'
+    | 'unserved'
+    | 'lookup-failed'
+    | 'no-lookup';
+  // The realm holding the module, where one was found.
+  moduleRealm?: string;
+  error?: string;
+  correlationId: string | null;
+}
+
+let namedQueryRefusalHiddenSink:
+  | ((event: NamedQueryRefusalHiddenEvent) => void)
+  | undefined;
+
+export function setNamedQueryRefusalHiddenSink(
+  sink: ((event: NamedQueryRefusalHiddenEvent) => void) | undefined,
+): void {
+  namedQueryRefusalHiddenSink = sink;
+}
+
+let namedQueryRefusalHiddenLog: ReturnType<typeof logger> | undefined;
+
+export function emitNamedQueryRefusalHidden(
+  event: NamedQueryRefusalHiddenEvent,
+): void {
+  if (namedQueryRefusalHiddenSink) {
+    namedQueryRefusalHiddenSink(event);
+    return;
+  }
+  (namedQueryRefusalHiddenLog ??= logger(OPERATIONS_CHANNEL)).info(
+    JSON.stringify({ channel: OPERATIONS_CHANNEL, ...event }),
+  );
+}
+
+// ============================================================================
 // Per-compile telemetry for a realm's policy.
 //
 // One line each time a realm's policy cache reads its policy card: a compile,

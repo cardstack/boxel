@@ -357,6 +357,7 @@ import {
 } from './card-operations/envelope.ts';
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
+  admitsNothing,
   isNamedQueryPayload,
   namedQueryRendering,
   resolveNamedQuery,
@@ -14797,6 +14798,10 @@ export class Realm {
     // ad-hoc search declares neither.
     let declaredLinks: LinkStrategy | undefined;
     let unshareableFormats: PrerenderedHtmlFormat[] = [];
+    // Whether a named query is answered with no rows without being searched:
+    // resolving it refused a caller who may not read its type's module, who
+    // is answered as a declared query that admits nothing answers them.
+    let admittingNothing = false;
     if (isNamedQueryPayload(payload)) {
       // A named query is granted by its own name, which no grant opens to a
       // caller who isn't signed in, so one is told to authenticate before the
@@ -14823,10 +14828,20 @@ export class Realm {
           let resolved = await resolveNamedQuery(this.operationCore, payload, {
             principal: this.#searchPrincipal(requestContext),
             realms: [this.url],
+            correlationId: sanitizeLoggingCorrelationId(
+              request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+            ),
           });
-          payload = resolved.query;
-          declaredLinks = resolved.links;
-          unshareableFormats = resolved.unshareableFormats;
+          if (admitsNothing(resolved)) {
+            // The rendering alone carries no filter, and is never searched:
+            // it only shapes the empty document answered below.
+            payload = namedQueryRendering(payload);
+            admittingNothing = true;
+          } else {
+            payload = resolved.query;
+            declaredLinks = resolved.links;
+            unshareableFormats = resolved.unshareableFormats;
+          }
         } catch (err: unknown) {
           if (!isOperationFailure(err)) {
             throw err;
@@ -14860,7 +14875,7 @@ export class Realm {
       // answer. A policy that did not compile is neither: the search is
       // refused with the 500 the gate gives every operation it would judge.
       let policyScope: PolicyQueryScope | undefined;
-      if (this.#coarseDeclined(requestContext) === 'all') {
+      if (!admittingNothing && this.#coarseDeclined(requestContext) === 'all') {
         try {
           policyScope = await this.#policyQueryScope(
             invocation,
@@ -14906,7 +14921,7 @@ export class Realm {
           },
           requestContext,
         });
-      if (policyScope?.kind === 'denied') {
+      if (admittingNothing || policyScope?.kind === 'denied') {
         return noRows();
       }
       if (policyScope) {
