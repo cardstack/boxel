@@ -2,7 +2,7 @@
 
 Use `choreo-scene` for the basic changeset and timeline. For these more specific
 problems, read the matching guide under
-`packages/choreo-test-app/app/content/guides/` and inspect the real example. Do not load the entire API inventory into the prompt.
+`packages/choreo-gallery/realm/docs/guides/` and inspect the real example. Do not load the entire API inventory into the prompt.
 
 | Problem                                           | Concept / guide                                                           | Example                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
