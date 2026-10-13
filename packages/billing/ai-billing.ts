@@ -109,16 +109,39 @@ export async function spendUsageCost(
   }
 }
 
+// Sends the cost lookup. The realm-server passes its guarded outbound client;
+// a caller that passes nothing uses `fetch`.
+export type GenerationCostFetch = (
+  url: string,
+  init: { headers: Record<string, string> },
+) => Promise<Response>;
+
+export interface GenerationCostLookupOptions {
+  fetch?: GenerationCostFetch;
+  // Whether a failed attempt is worth repeating. A failure that will fail
+  // the same way every time, such as the destination being refused, ends the
+  // lookup at once instead of backing off for minutes.
+  isRetryable?: (error: unknown) => boolean;
+}
+
 export async function fetchGenerationCostWithBackoff(
   generationId: string,
   openRouterApiKey: string,
+  options: GenerationCostLookupOptions = {},
 ): Promise<number | null> {
+  let sendLookup: GenerationCostFetch =
+    options.fetch ?? ((url, init) => fetch(url, init));
+  let isRetryable = options.isRetryable ?? (() => true);
   let startedAt = Date.now();
   let delayMs = INITIAL_BACKOFF_MS;
 
   for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++) {
     try {
-      let cost = await fetchGenerationCost(generationId, openRouterApiKey);
+      let cost = await fetchGenerationCost(
+        generationId,
+        openRouterApiKey,
+        sendLookup,
+      );
       if (cost !== null) {
         return cost;
       }
@@ -127,6 +150,9 @@ export async function fetchGenerationCostWithBackoff(
         `Attempt ${attempt} to fetch generation cost failed (generationId: ${generationId})`,
         error,
       );
+      if (!isRetryable(error)) {
+        return null;
+      }
     }
 
     let elapsed = Date.now() - startedAt;
@@ -149,8 +175,9 @@ export async function fetchGenerationCostWithBackoff(
 async function fetchGenerationCost(
   generationId: string,
   openRouterApiKey: string,
+  sendLookup: GenerationCostFetch,
 ): Promise<number | null> {
-  const response = await fetch(
+  const response = await sendLookup(
     `https://openrouter.ai/api/v1/generation?id=${generationId}`,
     {
       headers: {
