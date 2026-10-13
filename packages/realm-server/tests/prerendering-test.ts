@@ -10209,12 +10209,7 @@ module(basename(import.meta.filename), function () {
     // memo is scoped to the visit's jobId; visits without one (on-demand
     // renders) always render the icon and never touch the memo.
     module('index-visit icon memo', function () {
-      let affinityKey = toAffinityKey({
-        affinityType: 'realm',
-        affinityValue: realmURL,
-      });
-      // Indexing renders a realm's cards under realm authority, which keeps
-      // the realm's own affinity, the one a batch claims and releases.
+      // Indexing renders a realm's cards under realm authority.
       let indexAuth = () => {
         let sessions = JSON.parse(
           testCreatePrerenderAuth(testUserId, permissions, {
@@ -10227,6 +10222,11 @@ module(basename(import.meta.filename), function () {
         }
         return JSON.stringify(sessions);
       };
+      let affinityKey = toAffinityKey({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        auth: indexAuth(),
+      });
       let indexVisit = (fileName: string, extra?: Record<string, unknown>) =>
         prerenderer.prerenderVisit({
           affinityType: 'realm',

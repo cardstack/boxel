@@ -2,12 +2,13 @@ import { createHash } from 'crypto';
 
 import type { AffinityArgs } from '@cardstack/runtime-common';
 
-// Whose sessions a render's auth carries. A realm rendering its own cards
-// holds sessions with the `realmAuthority` claim; a render a user asks for
-// holds that user's ordinary sessions; an anonymous render holds none.
-// Anything else, including auth that cannot be read, is `unreadable`.
+// Whose sessions a render's auth carries. A realm rendering cards under
+// realm authority holds sessions with the `realmAuthority` claim, all minted
+// for one user; a render a user asks for holds that user's ordinary sessions;
+// an anonymous render holds none. Anything else, including auth that cannot
+// be read, is `unreadable`.
 export type RenderSession =
-  | { kind: 'realm-authority' }
+  | { kind: 'realm-authority'; user: string }
   | { kind: 'user'; user: string }
   | { kind: 'anonymous' }
   | { kind: 'unreadable' };
@@ -43,19 +44,23 @@ export function renderSessionOf(auth: string): RenderSession {
     if (!claims || typeof claims !== 'object') {
       return { kind: 'unreadable' };
     }
-    if (claims.realmAuthority) {
-      authorities++;
-    } else if (typeof claims.user === 'string') {
-      users.add(claims.user);
-    } else {
+    if (typeof claims.user !== 'string') {
       return { kind: 'unreadable' };
     }
+    users.add(claims.user);
+    if (claims.realmAuthority) {
+      authorities++;
+    }
   }
+  if (users.size !== 1) {
+    return { kind: 'unreadable' };
+  }
+  let [user] = users;
   if (authorities === values.length) {
-    return { kind: 'realm-authority' };
+    return { kind: 'realm-authority', user };
   }
-  if (authorities === 0 && users.size === 1) {
-    return { kind: 'user', user: [...users][0] };
+  if (authorities === 0) {
+    return { kind: 'user', user };
   }
   return { kind: 'unreadable' };
 }
@@ -65,14 +70,15 @@ export function renderSessionOf(auth: string): RenderSession {
 // render: a tab is reused, a released affinity's context is kept for its next
 // visit, and a context can hold more than one of the affinity's tabs. So an
 // affinity must never hold two sessions. A realm affinity is therefore split
-// by the sessions its render carries: the realm's own renders keep the bare
-// `realm:<url>` key, and a render under anyone else's sessions gets a key of
-// its own, `realm:<url>#<session>`. Auth that cannot be read gets a key no
-// other auth shares. A user affinity already names one user.
+// by the sessions its render carries, `realm:<url>#<session>`: realm-authority
+// sessions are keyed by the user they were minted for, ordinary sessions by
+// their user, and an anonymous render has a key of its own. Auth that cannot
+// be read gets a key no other auth shares. A user affinity already names one
+// user.
 //
-// Callers that build a key for a render pass its `auth`. Callers that act on
-// a realm's own affinity (releasing a batch, which only a realm's own render
-// holds) leave it out.
+// Callers that build a key for a render pass its `auth`. Without it the key
+// is the bare `realm:<url>` key the prerender manager routes by, which no
+// render runs on and which `isAffinityOfRealm` matches every session of.
 export function toAffinityKey({
   affinityType,
   affinityValue,
@@ -85,7 +91,7 @@ export function toAffinityKey({
   let session = renderSessionOf(auth);
   switch (session.kind) {
     case 'realm-authority':
-      return key;
+      return `${key}${SESSION_SEPARATOR}${AUTHORITY_SESSION_PREFIX}${session.user}`;
     case 'user':
       return `${key}${SESSION_SEPARATOR}${session.user}`;
     case 'anonymous':
@@ -101,6 +107,7 @@ export function toAffinityKey({
 // A realm URL has no fragment, and neither a user id nor the other session
 // names contain `#`, so the first `#` in a realm key starts its session.
 const SESSION_SEPARATOR = '#';
+const AUTHORITY_SESSION_PREFIX = 'authority:';
 
 export function fromAffinityKey(
   affinityKey: string,
@@ -139,11 +146,19 @@ export function realmAffinityKeyOf(affinityKey: string): string {
   return sessionStart >= 0 ? affinityKey.slice(0, sessionStart) : affinityKey;
 }
 
-// Whether `affinityKey` is the realm affinity `realmKey` (a bare
-// `realm:<url>` key) or one of its sessions' affinities.
+// Whether `affinityKey` is the bare realm key `realmKey` or the affinity of
+// one of that realm's sessions.
 export function isAffinityOfRealm(
   affinityKey: string,
   realmKey: string,
 ): boolean {
   return realmAffinityKeyOf(affinityKey) === realmKey;
+}
+
+// Whether `affinityKey` renders under realm authority: the renders a realm
+// makes of its own cards, which indexing and the HTML it serves come from.
+// A key without a session (one built without auth) counts as well.
+export function isRealmAuthorityAffinityKey(affinityKey: string): boolean {
+  let session = fromAffinityKey(affinityKey)?.session;
+  return session === undefined || session.startsWith(AUTHORITY_SESSION_PREFIX);
 }

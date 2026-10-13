@@ -5,6 +5,7 @@ import { PagePool } from '../prerender/page-pool.ts';
 import {
   fromAffinityKey,
   isAffinityOfRealm,
+  isRealmAuthorityAffinityKey,
   realmAffinityKeyOf,
   toAffinityKey,
 } from '../prerender/affinity.ts';
@@ -21,6 +22,7 @@ const REALM_KEY = `realm:${REALM}`;
 const USER_1 = '@user-1:localhost';
 const USER_2 = '@user-2:localhost';
 const OWNER = '@owner:localhost';
+const OTHER_OWNER = '@other-owner:localhost';
 
 const createPrerenderAuth = buildCreatePrerenderAuth(
   'page-pool-session-affinity-test-seed',
@@ -29,6 +31,11 @@ const createPrerenderAuth = buildCreatePrerenderAuth(
 const permissions = { [REALM]: ['read' as const] };
 
 const realmAuthorityAuth = createPrerenderAuth(OWNER, permissions, {
+  realmAuthority: true,
+});
+// Realm authority minted for another realm's owner, as a definition lookup
+// from that realm renders this realm's modules under.
+const otherOwnerAuthorityAuth = createPrerenderAuth(OTHER_OWNER, permissions, {
   realmAuthority: true,
 });
 const user1Auth = createPrerenderAuth(USER_1, permissions);
@@ -109,6 +116,7 @@ module(basename(import.meta.filename), function (hooks) {
     maxPages: number;
     browserManager: any;
     disableStandbyRefill?: boolean;
+    fileAdmission?: boolean;
   }): PagePool {
     // A pool sized by the environment could grow to give a render a fresh
     // tab, and these tests need it to hold at `maxPages`.
@@ -123,7 +131,7 @@ module(basename(import.meta.filename), function (hooks) {
         browserManager: opts.browserManager,
         boxelHostURL: 'http://localhost:4200',
         standbyTimeoutMs: 500,
-        disableFileAdmission: true,
+        disableFileAdmission: !opts.fileAdmission,
         disableStandbyRefill: opts.disableStandbyRefill ?? false,
       });
       pools.push(pool);
@@ -138,17 +146,25 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   module('the affinity key of a render', function () {
-    test("a realm's own render keeps the realm's key", function (assert) {
-      assert.strictEqual(realmKeyFor(realmAuthorityAuth), REALM_KEY);
+    test('a key built without auth is the realm key', function (assert) {
+      assert.strictEqual(
+        toAffinityKey({ affinityType: 'realm', affinityValue: REALM }),
+        REALM_KEY,
+      );
     });
 
-    test('every other session gets a key of its own under the realm', function (assert) {
-      let keys = [user1Auth, user2Auth, anonymousAuth, 'not json'].map(
-        realmKeyFor,
-      );
+    test('every session gets a key of its own under the realm', function (assert) {
+      let keys = [
+        realmAuthorityAuth,
+        otherOwnerAuthorityAuth,
+        user1Auth,
+        user2Auth,
+        anonymousAuth,
+        'not json',
+      ].map(realmKeyFor);
       assert.strictEqual(
         new Set([REALM_KEY, ...keys]).size,
-        5,
+        7,
         `the keys are distinct: ${keys.join(', ')}`,
       );
       for (let key of keys) {
@@ -159,6 +175,16 @@ module(basename(import.meta.filename), function (hooks) {
         );
         assert.true(isAffinityOfRealm(key, REALM_KEY));
         assert.strictEqual(fromAffinityKey(key)?.affinityValue, REALM);
+      }
+    });
+
+    test('only realm-authority sessions are keyed as realm authority', function (assert) {
+      assert.true(isRealmAuthorityAffinityKey(realmKeyFor(realmAuthorityAuth)));
+      assert.true(
+        isRealmAuthorityAffinityKey(realmKeyFor(otherOwnerAuthorityAuth)),
+      );
+      for (let auth of [user1Auth, anonymousAuth, 'not json']) {
+        assert.false(isRealmAuthorityAffinityKey(realmKeyFor(auth)));
       }
     });
 
@@ -183,14 +209,15 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
-  test('renders of one realm by its own indexing, two users and an anonymous reader each get a BrowserContext of their own', async function (assert) {
-    let pool = makePool({ maxPages: 4, browserManager: makeBrowserStub() });
+  test("renders of one realm by its own indexing, another realm's owner, two users and an anonymous reader each get a BrowserContext of their own", async function (assert) {
+    let pool = makePool({ maxPages: 5, browserManager: makeBrowserStub() });
     await pool.warmStandbys();
     // Each render releases its tab before the next one asks, so renders that
     // shared an affinity would share the tab.
     let contexts = new Set();
     for (let auth of [
       realmAuthorityAuth,
+      otherOwnerAuthorityAuth,
       user1Auth,
       user2Auth,
       anonymousAuth,
@@ -199,7 +226,7 @@ module(basename(import.meta.filename), function (hooks) {
       contexts.add((lease.page as any).browserContext());
       lease.release();
     }
-    assert.strictEqual(contexts.size, 4, 'four BrowserContexts');
+    assert.strictEqual(contexts.size, 5, 'five BrowserContexts');
   });
 
   test('a cross-affinity steal does not take a tab whose BrowserContext has another tab in it', async function (assert) {
@@ -254,5 +281,52 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(b.pageId, aIdle.pageId, "B took A's idle tab");
     b.release();
     aBusy.release();
+  });
+
+  test("a realm's sessions share one file-admission cap, and a module render under realm authority still gets a tab", async function (assert) {
+    // Two tabs per affinity leaves room for one file render at a time.
+    let previousTabMax = process.env.PRERENDER_AFFINITY_TAB_MAX;
+    process.env.PRERENDER_AFFINITY_TAB_MAX = '2';
+    let pool: PagePool;
+    try {
+      pool = makePool({
+        maxPages: 3,
+        browserManager: makeBrowserStub(),
+        fileAdmission: true,
+      });
+    } finally {
+      if (previousTabMax === undefined) {
+        delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+      } else {
+        process.env.PRERENDER_AFFINITY_TAB_MAX = previousTabMax;
+      }
+    }
+    await pool.warmStandbys();
+    let user1Capture = await pool.getPage(realmKeyFor(user1Auth), 'file');
+
+    let user2Admitted = false;
+    let user2Capture = pool
+      .getPage(realmKeyFor(user2Auth), 'file')
+      .then((lease) => {
+        user2Admitted = true;
+        return lease;
+      });
+    let moduleRender = await pool.getPage(
+      realmKeyFor(realmAuthorityAuth),
+      'module',
+    );
+    assert.false(
+      user2Admitted,
+      "another reader's capture of the realm waits for the first",
+    );
+    assert.ok(
+      moduleRender.pageId,
+      'the module render the capture waits on gets a tab',
+    );
+
+    moduleRender.release();
+    user1Capture.release();
+    (await user2Capture).release();
+    assert.true(user2Admitted, 'the second capture runs once the first ends');
   });
 });

@@ -266,6 +266,22 @@ export class RenderRunner {
     this.#lastAuthByAffinity.delete(affinityKey);
   }
 
+  // Drops the auth kept for every affinity not in `liveAffinityKeys`. A key
+  // can lose its last tab without being disposed (a steal moves it away), and
+  // its auth would otherwise stay for the life of the process.
+  pruneAuthCache(liveAffinityKeys: Set<string>) {
+    for (let affinityKey of [...this.#lastAuthByAffinity.keys()]) {
+      if (!liveAffinityKeys.has(affinityKey)) {
+        this.#lastAuthByAffinity.delete(affinityKey);
+      }
+    }
+  }
+
+  // The affinities that hold an icon memo for some job.
+  get iconMemoAffinityKeys(): string[] {
+    return [...this.#iconMemosByAffinity.keys()];
+  }
+
   // Resolve the icon memo for a visit. Only indexing visits participate
   // (they carry a jobId); the loader epoch rides the job key as
   // belt-and-braces so a memo can never outlive the module surface it was

@@ -465,6 +465,11 @@ export class PagePool {
   // calls bypass this semaphore entirely. Lazily created on first file
   // call per affinity; lifecycle is tied to the affinity itself,
   // cleared in `closeAll`.
+  //
+  // Keyed by realm (`realmAffinityKeyOf`), so a realm's session affinities
+  // share one cap. A file render on one session can wait on a module render
+  // that runs under realm authority, on another of the realm's affinities,
+  // and the headroom the cap holds back has to cover that render too.
   #fileAdmission = new Map<string, AsyncSemaphore>();
   // Effective per-affinity file-admission capacity.
   //
@@ -842,7 +847,7 @@ export class PagePool {
           }
         }
       }
-      let sem = this.#fileAdmission.get(affinityKey);
+      let sem = this.#fileAdmission.get(realmAffinityKeyOf(affinityKey));
       let admissionIdle = true;
       if (sem) {
         if (sem.pendingCount > 0) admissionIdle = false;
@@ -946,7 +951,7 @@ export class PagePool {
           tabQueuedByPriority[prio] = (tabQueuedByPriority[prio] ?? 0) + n;
         }
       }
-      let sem = this.#fileAdmission.get(affinityKey);
+      let sem = this.#fileAdmission.get(realmAffinityKeyOf(affinityKey));
       let admission = sem
         ? { pending: sem.pendingCount, cap: sem.capacity }
         : { pending: 0, cap: 0 };
@@ -1761,10 +1766,11 @@ export class PagePool {
       // this flag.
       return () => {};
     }
-    let semaphore = this.#fileAdmission.get(affinityKey);
+    let admissionKey = realmAffinityKeyOf(affinityKey);
+    let semaphore = this.#fileAdmission.get(admissionKey);
     if (!semaphore) {
       semaphore = new AsyncSemaphore(this.#fileAdmissionCap);
-      this.#fileAdmission.set(affinityKey, semaphore);
+      this.#fileAdmission.set(admissionKey, semaphore);
     }
     let rawRelease = await semaphore.acquire(signal, priority);
     // Wrap the raw release so every release path (success or any of
@@ -1775,7 +1781,7 @@ export class PagePool {
     // it away — bounded but not zero leak.
     return () => {
       rawRelease();
-      this.#maybeDropIdleFileAdmission(affinityKey);
+      this.#maybeDropIdleFileAdmission(admissionKey);
     };
   }
 
@@ -2974,7 +2980,14 @@ export class PagePool {
 
   #reassignAffinityTab(entry: PoolEntry, affinityKey: string): PoolEntry {
     let oldAffinityKey = entry.affinityKey;
-    this.#detachAffinityEntry(entry);
+    // The manager knows affinities only by realm. A tab moving between two
+    // affinities of one realm still serves that realm here, so the realm is
+    // not reported evicted on the way.
+    this.#detachAffinityEntry(entry, {
+      notifyManager:
+        !oldAffinityKey ||
+        realmAffinityKeyOf(oldAffinityKey) !== realmAffinityKeyOf(affinityKey),
+    });
     // CS-10817 step 2/3: the moving page takes its BrowserContext with
     // it — the context is still in use, just under a different
     // affinity. Transfer the shared-context row rather than running
@@ -3056,7 +3069,10 @@ export class PagePool {
     this.#touchLRU(affinityKey);
   }
 
-  #detachAffinityEntry(entry: PoolEntry): void {
+  #detachAffinityEntry(
+    entry: PoolEntry,
+    opts: { notifyManager?: boolean } = {},
+  ): void {
     let affinityKey = entry.affinityKey;
     if (!affinityKey) return;
     let entries = this.#affinityPages.get(affinityKey);
@@ -3065,7 +3081,9 @@ export class PagePool {
     if (entries.size === 0) {
       this.#affinityPages.delete(affinityKey);
       this.#lru.delete(affinityKey);
-      void this.#notifyManagerAffinityEvicted(affinityKey);
+      if (opts.notifyManager !== false) {
+        void this.#notifyManagerAffinityEvicted(affinityKey);
+      }
     }
   }
 
