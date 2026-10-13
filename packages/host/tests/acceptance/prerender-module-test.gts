@@ -131,6 +131,7 @@ module('Acceptance | prerender | module', function (hooks) {
 
       @operation static addTag = {
         base: 'transform',
+        label: 'Tag this note',
         params: { tag: StringField },
         append: { to: 'tags', value: params('tag') },
       };
@@ -154,6 +155,7 @@ module('Acceptance | prerender | module', function (hooks) {
 
       @operation static record = {
         base: 'appendLine',
+        label: 'Add a line to the log',
         params: { line: StringField },
       };
 
@@ -586,6 +588,15 @@ module('Acceptance | prerender | module', function (hooks) {
       'the convenience clause reaches the entry as canonical BXL',
     );
     assert.true(operations?.addNote.invalid, 'the bad declaration is flagged');
+    assert.strictEqual(
+      operations?.addTag.label,
+      'Tag this note',
+      'the label reaches the entry as data',
+    );
+    assert.false(
+      'label' in (operations?.logTag ?? {}),
+      'a declaration without one carries none',
+    );
     assert.deepEqual(
       operations?.logTag.items,
       { tags: { $ref: 'params', key: 'tag' } },
@@ -633,6 +644,11 @@ module('Acceptance | prerender | module', function (hooks) {
       'a realm setting lowers to the builtin of the same name',
     );
     assert.notOk(operations?.record.invalid, 'the appendLine has no findings');
+    assert.strictEqual(
+      operations?.record.label,
+      'Add a line to the log',
+      "a file def's declaration carries its label too",
+    );
     assert.notOk(
       operations?.readRedacted.invalid,
       'and neither does the read that reads a realm setting',

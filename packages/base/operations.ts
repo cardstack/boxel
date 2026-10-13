@@ -6,6 +6,7 @@ import {
   identifyCard,
   InvalidQueryError,
   localId,
+  operationLabelProblem,
   PRERENDERED_HTML_FORMATS,
   realmURL,
   type CarriedOperationInfo,
@@ -519,6 +520,13 @@ export type OperationQueryValue =
   | { readonly [key: string]: OperationQueryValue };
 
 interface OperationCommon {
+  // A short, plain-text phrase for people, written as what a person is
+  // agreeing to or about to do: "List your open pull requests". It is shown
+  // beside the operation's request wherever the operation is presented, never
+  // in place of it, and takes no part in what the operation does. At most
+  // `OPERATION_LABEL_MAX_LENGTH` characters on one line, without markup.
+  // Without one, the operation is shown under its name split into words.
+  readonly label?: string;
   readonly params?: ParamsSchema;
   // The author's override of the automatically-detected eligibility for the
   // client's optimistic path.
@@ -824,6 +832,7 @@ const operationDeclarations = Symbol.for('cardstack-operation-declarations');
 // `transformations` and `output` are the raw program's stages.
 const COMMON_DECLARATION_KEYS = [
   'base',
+  'label',
   'params',
   'optimistic',
   'nonGrantable',
@@ -1328,6 +1337,12 @@ function assertValidDeclaration(
     typeof declaration.nonGrantable !== 'boolean'
   ) {
     throw new Error(`${label}: \`nonGrantable\` must be a boolean`);
+  }
+  if (declaration.label !== undefined) {
+    let problem = operationLabelProblem(declaration.label);
+    if (problem) {
+      throw new Error(`${label}: ${problem}`);
+    }
   }
   if (declaration.links !== undefined) {
     let strategies: readonly string[] =

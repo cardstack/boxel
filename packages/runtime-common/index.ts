@@ -1824,6 +1824,11 @@ export type { JsonValue } from './json-validation.ts';
 // import; it reaches neither bxl nor a realm, so nothing here costs a consumer
 // the typecheck program the note below is about.
 export * from './card-operations/client.ts';
+// An operation's label rules and the name it is shown under without one, for
+// every place that presents an operation to a person and for the authoring
+// decorator that checks a label where it is written. Plain string handling,
+// reaching neither bxl nor a realm.
+export * from './card-operations/label.ts';
 // The capability check's wire shapes and its cap, for the same reason and on
 // the same terms: a card asking `@context.canInvoke` holds these and nothing
 // else, and this module reaches neither bxl nor a realm. The check itself does

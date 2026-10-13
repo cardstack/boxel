@@ -309,6 +309,10 @@ export interface OperationDefinition {
   // everyone or to no one, and the response never depends on how its caller
   // was authorized.
   html?: HtmlDeclaration;
+  // The author's short, plain-text phrase for people, shown wherever the
+  // operation is presented to someone. Read as data and acted on by nothing.
+  // Absent, the operation is shown under its name split into words.
+  label?: string;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -404,6 +408,9 @@ export type OperationLoweringIssueCode =
   // including `none` on a `read`: `none` is a query's strategy, since a card
   // the host loads without its links would have them replaced by an edit.
   | 'invalid-link-strategy'
+  // A `label` that is not a short line of plain text: empty, longer than the
+  // limit, or carrying markup, a line break or another control character.
+  | 'invalid-label'
   // An `html` declaration on a base other than `read` or `query`. It withholds
   // prerendered HTML a read of the target or a query's rows are served with,
   // and no other base serves any: a write answers with the card's data, and a

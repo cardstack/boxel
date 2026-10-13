@@ -608,6 +608,91 @@ module('Unit | operation lowering', function (hooks) {
     );
   });
 
+  test('a label is lowered onto the entry as written, on every base', async function (assert) {
+    let { field, contains, containsMany, CardDef } = api;
+    let { operation } = operations;
+    class Inbox extends CardDef {
+      static displayName = 'Inbox';
+      @field status = contains(StringField);
+      @field notes = containsMany(StringField);
+      @operation static archive = {
+        base: 'transform',
+        label: 'Archive this inbox',
+        set: { status: 'archived' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static read = {
+        base: 'read',
+        label: 'Read your inbox',
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static appendContainsMany = {
+        base: 'appendContainsMany',
+        label: 'Add a note',
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static reopen = {
+        base: 'transform',
+        set: { status: 'open' },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    shim({ Inbox });
+
+    let { operations: lowered, issues } = await lower(Inbox);
+    assert.deepEqual(issues, [], 'a valid label is no finding');
+    assert.strictEqual(lowered.archive.label, 'Archive this inbox');
+    assert.strictEqual(lowered.read.label, 'Read your inbox');
+    assert.deepEqual(
+      lowered.appendContainsMany,
+      { base: 'appendContainsMany', deterministic: true, label: 'Add a note' },
+      'the label rides beside the rest of the lowered declaration',
+    );
+    assert.false(
+      'label' in lowered.reopen,
+      'a declaration without a label lowers exactly as before',
+    );
+
+    // Lowering is exported over plain data, so an entry the decorator never
+    // saw can reach it. A label that is not a short line of plain text makes
+    // the entry invalid, so invoking it is refused, and is not stored.
+    let context: Parameters<typeof lowerOperationDeclarations>[1] = {
+      definition: buildDefinition(Inbox),
+      lookupDefinition,
+      identifyCard: (target) => identifyCard(target),
+    };
+    let refused = await lowerOperationDeclarations(
+      {
+        empty: { base: 'update', label: '  ' },
+        long: { base: 'update', label: 'x'.repeat(81) },
+        markup: { base: 'update', label: '<b>Archive</b>' },
+        multiline: { base: 'update', label: 'Archive\nthis inbox' },
+        notText: { base: 'update', label: 42 },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      context,
+    );
+    assert.deepEqual(
+      refused.issues.map(
+        (issue) => `${issue.operation} ${issue.path}: ${issue.code}`,
+      ),
+      [
+        'empty label: invalid-label',
+        'long label: invalid-label',
+        'markup label: invalid-label',
+        'multiline label: invalid-label',
+        'notText label: invalid-label',
+      ],
+    );
+    for (let name of Object.keys(refused.operations)) {
+      assert.true(refused.operations[name].invalid, `${name} is invalid`);
+      assert.false(
+        'label' in refused.operations[name],
+        `${name} stores no label`,
+      );
+      assert.deepEqual(
+        refused.operations[name].issues?.map((issue) => issue.code),
+        ['invalid-label'],
+        `${name} carries its finding`,
+      );
+    }
+  });
+
   test('an explain lowers to its params, and is non-grantable whatever reaches lowering', async function (assert) {
     let { CardDef } = api;
     let { operation } = operations;

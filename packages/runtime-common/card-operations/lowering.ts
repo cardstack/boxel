@@ -11,6 +11,7 @@ import {
   callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
+import { operationLabelProblem } from './label.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
 import {
   isDefinitionFreeBaseOperation,
@@ -328,6 +329,27 @@ export async function lowerOperationDeclarations(
       operations[name].base === 'validate'
     ) {
       operations[name].nonGrantable = true;
+    }
+    // A label describes the operation to people and changes nothing about
+    // what it does, so it is carried onto whichever entry the declaration
+    // produced. One that is not a short line of plain text makes the entry
+    // invalid rather than being dropped, as any other refused key does.
+    let label = raw[name]?.label;
+    if (label !== undefined) {
+      let problem = operationLabelProblem(label);
+      if (problem) {
+        let issue: OperationLoweringIssue = {
+          code: 'invalid-label',
+          operation: name,
+          path: 'label',
+          message: problem,
+        };
+        operations[name].invalid = true;
+        operations[name].issues = [...(operations[name].issues ?? []), issue];
+        issues.push(issue);
+      } else {
+        operations[name].label = label;
+      }
     }
   }
   return { operations, issues };
