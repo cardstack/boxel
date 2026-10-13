@@ -95,8 +95,10 @@ async function release({
  * the machine: under load a frame can land between the last move and the
  * lift, and a hand that was still for 100ms before letting go threw nothing.
  * Here the final move and the lift go out in one task, so no frame can fall
- * between them, and the velocity is the whole drag over the sampling window —
- * fast on any machine.
+ * between them, and the velocity is the whole drag over a little more than
+ * the 100ms window — fast unless a single frame stalls for most of a second
+ * just before the lift, which the trace shows as a large jump in ms with no
+ * jump in frames between `nudge` and `move`.
  *
  * The opening nudge takes the pointer past Motion's 3px start threshold, so
  * the drag is live and sampling while the hand waits out that window.
