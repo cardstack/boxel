@@ -1954,6 +1954,131 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(response.body, { status: 429 });
       });
 
+      test('a multi-megabyte JSON response reaches the caller as it arrives, and is charged from its usage', async function (assert) {
+        // The vendor sends everything but the usage at the end and then
+        // waits. The caller is sent megabytes before that wait ends only if
+        // the forward passes the body on as it arrives instead of holding
+        // it until it is whole.
+        const bodyBytes = 4 * 1024 * 1024;
+        const releaseAfterBytes = 2 * 1024 * 1024;
+        let receivedBytes = 0;
+        let receivedBeforeRelease: number | undefined;
+        let release = () => {
+          if (receivedBeforeRelease === undefined) {
+            receivedBeforeRelease = receivedBytes;
+            vendor.releaseHeld();
+          }
+        };
+        // If the forward buffers, nothing arrives until the vendor finishes;
+        // let it finish so the test fails on its assertion rather than
+        // timing out.
+        let fallback = setTimeout(release, 10_000);
+
+        let response;
+        try {
+          response = await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/completion?bytes=${bodyBytes}&cost=0.004&hold=1`,
+              method: 'POST',
+              requestBody: JSON.stringify({ model: 'image-model' }),
+            })
+            .buffer(true)
+            .parse((res, callback) => {
+              let chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => {
+                chunks.push(chunk);
+                receivedBytes += chunk.length;
+                if (receivedBytes >= releaseAfterBytes) {
+                  release();
+                }
+              });
+              res.on('end', () =>
+                callback(null, Buffer.concat(chunks).toString('utf8')),
+              );
+              res.on('error', (error: Error) => callback(error, null));
+            });
+        } finally {
+          clearTimeout(fallback);
+        }
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          response.headers['content-type'],
+          'application/json',
+        );
+        assert.true(
+          (receivedBeforeRelease ?? 0) >= releaseAfterBytes,
+          `the caller received ${receivedBeforeRelease} bytes before the vendor finished the body`,
+        );
+        let body = JSON.parse(response.body as string);
+        assert.strictEqual(body.id, 'gen-completion');
+        assert.strictEqual(
+          body.choices[0].message.content,
+          'A'.repeat(bodyBytes),
+          'the body arrives intact',
+        );
+        assert.deepEqual(body.usage, { cost: 0.004 });
+
+        // 0.004 USD × 1000 = 4 credits.
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () =>
+            (await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            })) === 46,
+          { timeoutMessage: 'the call should be charged (50 - 4 = 46)' },
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
+      test('a vendor answer that is not JSON is answered with a 500 and charges nothing', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/not-json`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 500);
+        assert.false(
+          response.text.includes('Bad gateway'),
+          "the vendor's page is not passed on",
+        );
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user!.id,
+          }),
+          50,
+          'nothing is charged',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
       test('an OpenRouter-shaped stream is forwarded and charged', async function (assert) {
         let response = await request
           .post('/_request-forward')

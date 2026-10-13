@@ -1,11 +1,12 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
+  forwardJsonResponse,
   handleStreamingRequest,
   isClientDisconnectError,
   outboundFailureResponse,
@@ -19,7 +20,6 @@ import {
   sendResponseForError,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
-  setContextResponse,
 } from '../middleware/index.ts';
 
 const log = logger('openrouter-passthrough');
@@ -160,15 +160,10 @@ export default function handleOpenRouterPassthrough({
             credentialHeaders: ['Authorization'],
           });
           upstreamCall.release();
-          const responseData = await externalResponse.json();
-
-          const response = new Response(JSON.stringify(responseData), {
-            status: externalResponse.status,
-            statusText: externalResponse.statusText,
-            headers: { 'content-type': SupportedMimeType.JSON },
+          return await forwardJsonResponse(ctxt, externalResponse, {
+            chargesForUsage: destinationConfig.creditStrategy.chargesForUsage,
+            signal: clientGone,
           });
-          await setContextResponse(ctxt, response);
-          return responseData;
         },
       );
     } catch (error) {

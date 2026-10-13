@@ -15,6 +15,13 @@ import zlib from 'node:zlib';
 //                           a redirect to <url> (default 302)
 //   /slow?ms=N              200 after N milliseconds
 //   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE]
+//   /completion?bytes=N&cost=<usd>&hold=1
+//                           an OpenRouter-shaped JSON completion whose message
+//                           carries N bytes of base64, with the generation id
+//                           first and the usage last. With `hold`, everything
+//                           up to the usage is sent and the rest waits for
+//                           `releaseHeld()`
+//   /not-json               502 with an HTML body
 
 export interface StubVendorRequest {
   method: string;
@@ -28,6 +35,8 @@ export interface StubVendor {
   // The same server under its other loopback name, a different origin.
   alternateUrl: string;
   requests: StubVendorRequest[];
+  // Sends the rest of every response `hold` is keeping back.
+  releaseHeld(): void;
   close(): Promise<void>;
 }
 
@@ -42,6 +51,7 @@ function numberParam(url: URL, name: string, fallback: number): number {
 
 export async function startStubVendor(): Promise<StubVendor> {
   let requests: StubVendorRequest[] = [];
+  let held: (() => void)[] = [];
   let server = http.createServer((req, res) => {
     let chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -107,6 +117,22 @@ export async function startStubVendor(): Promise<StubVendor> {
           `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }], usage: { cost } })}\n\n`,
         );
         res.end('data: [DONE]\n\n');
+      } else if (url.pathname === '/completion') {
+        let bytes = numberParam(url, 'bytes', 1024);
+        let cost = numberParam(url, 'cost', 0.002);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.write('{"id":"gen-completion","choices":[{"message":{"content":"');
+        res.write(Buffer.alloc(bytes, 'A'));
+        let finish = () =>
+          res.end(`"}}],"usage":{"cost":${JSON.stringify(cost)}}}`);
+        if (url.searchParams.has('hold')) {
+          held.push(finish);
+        } else {
+          finish();
+        }
+      } else if (url.pathname === '/not-json') {
+        res.writeHead(502, { 'content-type': 'text/html' });
+        res.end('<html><body>Bad gateway</body></html>');
       } else {
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -121,6 +147,11 @@ export async function startStubVendor(): Promise<StubVendor> {
     url: `http://127.0.0.1:${port}`,
     alternateUrl: `http://localhost:${port}`,
     requests,
+    releaseHeld: () => {
+      for (let finish of held.splice(0)) {
+        finish();
+      }
+    },
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();

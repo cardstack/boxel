@@ -1,11 +1,12 @@
 import type Koa from 'koa';
-import { logger } from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import {
   OutboundRefusedError,
   OutboundTimeoutError,
   outboundFetch,
 } from './outbound/client.ts';
+import { TopLevelJsonFieldScanner } from './top-level-json-fields.ts';
 
 const log = logger('proxy-forward');
 
@@ -144,6 +145,202 @@ export function outboundFailureResponse(
     };
   }
   return undefined;
+}
+
+// The first byte of a JSON document that is a bare string, number or literal
+// rather than an object or array.
+const JSON_SCALAR_START = new Set(
+  Array.from('"-0123456789tfn', (c) => c.charCodeAt(0)),
+);
+const OPEN_BRACE = 0x7b;
+const OPEN_BRACKET = 0x5b;
+
+// The most of a billing field's value kept while scanning a body for it.
+// `usage` is a handful of numbers; this is far above it.
+const MAX_BILLING_FIELD_BYTES = 64 * 1024;
+
+/**
+ * Forward a non-streamed upstream JSON response to the client as it arrives,
+ * and read the billing fields (`id`, `usage`) from it on the way past.
+ *
+ * The body is never held whole: each chunk is scanned and written on, so the
+ * memory a forward uses does not grow with the size of what it forwards. The
+ * caller receives the upstream's status and its body bytes as sent, under an
+ * `application/json` content type.
+ *
+ * Resolves with `{ id, usage }` in the shape of a response body, for the
+ * credit strategy to price, once the whole body has been read; or undefined
+ * when there is nothing to charge for: `chargesForUsage` is false, or the body
+ * turned out not to be a complete JSON document.
+ *
+ * A body that is plainly not JSON is refused before anything is sent, with
+ * the `SyntaxError` the handler answers with a 500, as it does for any
+ * unreadable upstream answer. A body that opens like JSON is committed to the
+ * client from its first chunk, so a fault found later — a malformed or
+ * truncated document, or the upstream failing mid-body — can no longer change
+ * the status: the connection is cut instead, so the client cannot mistake a
+ * partial body for a whole one.
+ *
+ * `signal` fires when the client goes away. When the call is charged for,
+ * the rest of the body is still read, and dropped, because the cost it
+ * reports comes at the end and the provider has already billed for it. When
+ * it is not, the upstream body is cancelled.
+ */
+export async function forwardJsonResponse(
+  ctxt: Koa.Context,
+  externalResponse: Response,
+  {
+    chargesForUsage,
+    signal,
+  }: { chargesForUsage: boolean; signal: AbortSignal },
+): Promise<StreamUsage | undefined> {
+  let reader = externalResponse.body?.getReader();
+  if (!reader) {
+    throw new SyntaxError('The upstream response has no body');
+  }
+
+  // Hold the opening chunks until the first byte that is not whitespace,
+  // which says whether this is a document worth streaming.
+  let held: Uint8Array[] = [];
+  let firstByte: number | undefined;
+  while (firstByte === undefined) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    held.push(value);
+    firstByte = value.find(
+      (byte) =>
+        byte !== 0x20 && byte !== 0x0a && byte !== 0x0d && byte !== 0x09,
+    );
+  }
+
+  if (firstByte !== OPEN_BRACE && firstByte !== OPEN_BRACKET) {
+    if (firstByte === undefined || !JSON_SCALAR_START.has(firstByte)) {
+      await reader.cancel().catch(() => undefined);
+      throw new SyntaxError('The upstream response is not JSON');
+    }
+    // A bare string, number or literal: small in practice, and the one shape
+    // whose validity needs the whole document, so it is read whole.
+    return await forwardJsonScalar(ctxt, externalResponse, reader, held);
+  }
+
+  let scanner = new TopLevelJsonFieldScanner(
+    chargesForUsage ? ['id', 'usage'] : [],
+    { maxValueBytes: MAX_BILLING_FIELD_BYTES },
+  );
+  for (let chunk of held) {
+    scanner.feed(chunk);
+  }
+  if (scanner.error) {
+    await reader.cancel().catch(() => undefined);
+    throw new SyntaxError(
+      `The upstream response is not JSON: ${scanner.error}`,
+    );
+  }
+
+  ctxt.status = externalResponse.status;
+  ctxt.message = externalResponse.statusText;
+  ctxt.set('Content-Type', SupportedMimeType.JSON);
+  let res = ctxt.res;
+  let clientGone = () => signal.aborted || res.destroyed;
+
+  try {
+    for (let chunk of held) {
+      await writeChunk(res, chunk, signal);
+    }
+    held = [];
+    for (;;) {
+      if (clientGone() && !chargesForUsage) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      scanner.feed(value);
+      if (!clientGone()) {
+        await writeChunk(res, value, signal);
+      }
+    }
+  } catch (error) {
+    res.destroy();
+    throw error;
+  }
+
+  scanner.finish();
+  if (scanner.error) {
+    log.warn(
+      `Forwarded upstream response was not a complete JSON document (${scanner.error}); nothing is charged for it`,
+    );
+    res.destroy();
+    return undefined;
+  }
+  if (!clientGone()) {
+    res.end();
+  }
+  if (!chargesForUsage) {
+    return undefined;
+  }
+  return {
+    id: scanner.values.get('id') as string | undefined,
+    usage: scanner.values.get('usage') as { cost: number | undefined },
+  };
+}
+
+async function forwardJsonScalar(
+  ctxt: Koa.Context,
+  externalResponse: Response,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  held: Uint8Array[],
+): Promise<StreamUsage | undefined> {
+  let decoder = new TextDecoder();
+  let text = held
+    .map((chunk) => decoder.decode(chunk, { stream: true }))
+    .join('');
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  text += decoder.decode();
+  // Throws the SyntaxError a body that is not JSON is refused with.
+  let parsed = JSON.parse(text);
+  ctxt.status = externalResponse.status;
+  ctxt.message = externalResponse.statusText;
+  ctxt.set('Content-Type', SupportedMimeType.JSON);
+  ctxt.body = JSON.stringify(parsed);
+  // A scalar carries no billing fields.
+  return undefined;
+}
+
+// Writes one chunk to the client, waiting out backpressure. Returns early,
+// without writing, once the client has gone.
+async function writeChunk(
+  res: Koa.Context['res'],
+  chunk: Uint8Array,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted || res.destroyed) {
+    return;
+  }
+  if (res.write(chunk)) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    let done = () => {
+      res.off('drain', done);
+      res.off('close', done);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    res.once('drain', done);
+    res.once('close', done);
+    signal.addEventListener('abort', done, { once: true });
+  });
 }
 
 /**
