@@ -2,11 +2,14 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { createHash, randomBytes } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { logger } from '@cardstack/runtime-common';
 import {
   DATA_KEY_ENCRYPTION_CONTEXT,
+  encodeSecretsKeyringIpc,
   KmsKeyProvider,
   LocalKeyProvider,
+  receiveSecretsKeyring,
   resetSecretsAtRest,
   SecretDecryptionError,
   secretEncryptionContext,
@@ -14,7 +17,9 @@ import {
   SecretsKeyring,
   secretsKeyProviderFromEnv,
   secretsKeyring,
+  SECRETS_KEYRING_REQUEST,
   startSecretsAtRest,
+  unwrapDataKeys,
   type KmsDecrypter,
   type SealedSecret,
   type SecretBinding,
@@ -92,7 +97,7 @@ function openError(
 }
 
 const SECRET = 'sk-live-correct-horse-battery-staple';
-const OWNER = '@alice:boxel.ai';
+const OWNER = '@secret-owner:example.test';
 const ROW_ID = 'b1f0c9a2-7f0e-4f53-9d2a-2c9e3f1d8a11';
 const DESTINATION = 'https://api.vendor.example/v1/';
 
@@ -155,7 +160,7 @@ module(basename(import.meta.filename), function (hooks) {
       let sealed = ring.seal(SECRET, binding);
 
       for (let [label, other] of [
-        ['owner', { ...binding, owner: '@mallory:boxel.ai' }],
+        ['owner', { ...binding, owner: '@other-owner:example.test' }],
         ['id', { ...binding, id: 'another-row' }],
         ['destination', { ...binding, destination: 'https://evil.example/' }],
         ['no destination', { owner: OWNER, id: ROW_ID }],
@@ -235,9 +240,9 @@ module(basename(import.meta.filename), function (hooks) {
         () =>
           ring.reseal(
             sealed,
-            { owner: '@mallory:boxel.ai', id: ROW_ID },
+            { owner: '@other-owner:example.test', id: ROW_ID },
             {
-              owner: '@mallory:boxel.ai',
+              owner: '@other-owner:example.test',
               id: ROW_ID,
               destination: DESTINATION,
             },
@@ -444,6 +449,91 @@ module(basename(import.meta.filename), function (hooks) {
       }
       assert.true(/InvalidCiphertextException/.test(String(error)));
       assert.throws(() => secretsKeyring(), /not loaded/);
+    });
+  });
+  module('worker keyring handoff', function () {
+    // The two ends of the IPC channel between a worker manager and one worker:
+    // the worker's `send` reaches the manager's handler, and the manager's
+    // answer is emitted on the worker's side.
+    function ipcPair(answer: (message: unknown) => string | undefined) {
+      let worker = new EventEmitter() as EventEmitter & {
+        send: (message: unknown) => boolean;
+      };
+      let sent: unknown[] = [];
+      worker.send = (message: unknown) => {
+        sent.push(message);
+        let reply = answer(message);
+        if (reply !== undefined) {
+          setImmediate(() => worker.emit('message', reply));
+        }
+        return true;
+      };
+      return { worker, sent };
+    }
+
+    test('workers take the keys the manager unwrapped, and never call KMS themselves', async function (assert) {
+      let dataKey = randomBytes(32);
+      let { kms, wrappedDataKey, calls } = fakeKms(dataKey);
+      let unwrapped = await unwrapDataKeys({
+        deployed: true,
+        env: {
+          SECRETS_KMS_KEY_ARN: 'arn:aws:kms:us-east-1:111122223333:key/test',
+          SECRETS_WRAPPED_DATA_KEY: wrappedDataKey,
+        },
+        kms,
+      });
+      let managerAnswer = encodeSecretsKeyringIpc(unwrapped);
+
+      let binding = { owner: OWNER, id: ROW_ID, destination: DESTINATION };
+      let sealed = new SecretsKeyring(
+        [{ keyId: unwrapped.currentKeyId, key: dataKey }],
+        unwrapped.currentKeyId,
+      ).seal(SECRET, binding);
+
+      for (let i = 0; i < 3; i++) {
+        resetSecretsAtRest();
+        let { worker, sent } = ipcPair((message) =>
+          message === SECRETS_KEYRING_REQUEST ? managerAnswer : undefined,
+        );
+        let lines = await secretsLogDuring(async () => {
+          await receiveSecretsKeyring({ channel: worker as any });
+        });
+        assert.deepEqual(sent, [SECRETS_KEYRING_REQUEST]);
+        assert.strictEqual(secretsKeyring().open(sealed, binding), SECRET);
+        assert.false(
+          lines.join('\n').includes(dataKey.toString('base64')),
+          'the worker does not log the key it received',
+        );
+      }
+      assert.strictEqual(
+        calls.length,
+        1,
+        'only the manager called KMS, once, however many workers started',
+      );
+    });
+
+    test('a worker refuses to start when the manager does not answer', async function (assert) {
+      let { worker } = ipcPair(() => undefined);
+      let error: unknown;
+      try {
+        await receiveSecretsKeyring({ channel: worker as any, timeoutMs: 50 });
+      } catch (e) {
+        error = e;
+      }
+      assert.true(/did not send the data keys within 50ms/.test(String(error)));
+      assert.throws(() => secretsKeyring(), /not loaded/);
+    });
+
+    test('a worker with no IPC channel refuses to start', async function (assert) {
+      let error: unknown;
+      try {
+        await receiveSecretsKeyring({
+          channel: { on() {}, off() {}, send: undefined } as any,
+        });
+      } catch (e) {
+        error = e;
+      }
+      assert.true(/has no IPC channel/.test(String(error)));
     });
   });
 });

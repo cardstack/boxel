@@ -33,15 +33,30 @@ export interface KmsDecrypter {
   }): Promise<{ Plaintext?: Uint8Array }>;
 }
 
-function defaultKmsDecrypter(): KmsDecrypter {
-  let client = new KMSClient({});
+// The client takes its region from the key's ARN, so it reaches the region the
+// key lives in whatever region the task runs in, and bounds each call so an
+// unreachable KMS fails startup instead of holding it open.
+function defaultKmsDecrypter(keyArn: string): KmsDecrypter {
+  let region = keyArn.split(':')[3];
+  if (!keyArn.startsWith('arn:') || !region) {
+    throw new Error(
+      `SECRETS_KMS_KEY_ARN is not a KMS key ARN with a region: ${keyArn}`,
+    );
+  }
+  let client = new KMSClient({
+    region,
+    maxAttempts: 3,
+    requestHandler: { connectionTimeout: 5_000, requestTimeout: 10_000 },
+  });
   return {
     decrypt: (input) => client.send(new DecryptCommand(input)),
   };
 }
 
 // Unwraps the data key KMS wrapped, once, at startup. After that every seal and
-// open is local, so a KMS outage doesn't stop a running process.
+// open is local, so a KMS outage doesn't stop a running process. A worker
+// manager unwraps once for all of its workers, so a respawned worker never
+// calls KMS either.
 export class KmsKeyProvider implements SecretsKeyProvider {
   readonly name = 'kms';
   #keyArn: string;
@@ -51,7 +66,7 @@ export class KmsKeyProvider implements SecretsKeyProvider {
   constructor({
     keyArn,
     wrappedDataKey,
-    kms = defaultKmsDecrypter(),
+    kms,
   }: {
     keyArn: string;
     // The base64 CiphertextBlob, as stored in SSM.
@@ -63,7 +78,7 @@ export class KmsKeyProvider implements SecretsKeyProvider {
     if (this.#wrappedDataKey.length === 0) {
       throw new Error('SECRETS_WRAPPED_DATA_KEY is not a base64 ciphertext');
     }
-    this.#kms = kms;
+    this.#kms = kms ?? defaultKmsDecrypter(keyArn);
   }
 
   // Names the data key by a hash of its wrapped form, which is public, stable

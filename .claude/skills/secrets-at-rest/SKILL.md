@@ -16,9 +16,13 @@ four things a table stores: `keyId` (which data key sealed it), `nonce`
 - A 32-byte **data key** seals every secret. KMS wraps it; the wrapped blob
   lives in SSM as `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY` and reaches the task
   as `SECRETS_WRAPPED_DATA_KEY`, with the key's ARN as `SECRETS_KMS_KEY_ARN`.
-- The realm server and each worker call `kms:Decrypt` **once, at startup**,
-  then seal and open locally. A KMS outage stops new tasks from starting but
-  never a running one, and no request makes a KMS call.
+- The realm server and the worker manager each call `kms:Decrypt` **once, at
+  startup**, then seal and open locally. Each worker the manager starts or
+  respawns asks the manager for the keys over their IPC channel instead of
+  calling KMS. A KMS outage stops new tasks from starting but never a running
+  one, a worker respawn included, and no request makes a KMS call.
+- The KMS client takes its region from the key ARN and gives up on a call
+  after 5 s to connect or 10 s to answer, with 3 attempts.
 - The unwrap uses the encryption context `{"purpose": "boxel-secrets-data-key"}`.
   The key policy lets only the realm-server and worker task roles decrypt, and
   only under that context. CloudTrail records each unwrap.
@@ -60,20 +64,29 @@ not loaded`.
 
 ## The startup self-check
 
-`startSecretsAtRest` runs first in `main.ts` and in every worker. It logs one
-line on the `secrets-at-rest` channel:
+The self-check (`unwrapDataKeys`) runs at startup in the realm server
+(`main.ts`) and the worker manager (`worker-manager.ts`). Each logs one line
+on the `secrets-at-rest` channel:
 
 ```
 secrets at rest: provider=kms deployed=true keyIds=kms-3f9c0a1b2c4d5e6f currentKeyId=kms-3f9c0a1b2c4d5e6f
 ```
 
-"Deployed" means the realm server's `--serverURL`, or any worker `--toUrl`,
-names a host that isn't `localhost`, `*.localhost` or a non-public IP literal
-— the same rule as the outbound guard's.
+Each worker then logs the keys it received from its manager, relayed through
+the manager's output:
+
+```
+secrets at rest: received keyIds=kms-3f9c0a1b2c4d5e6f currentKeyId=kms-3f9c0a1b2c4d5e6f from the worker manager
+```
+
+"Deployed" means the realm server's `--serverURL`, or any worker manager
+`--toUrl`, names a host that isn't `localhost`, `*.localhost` or a non-public
+IP literal — the same rule as the outbound guard's.
 
 ### When it refuses to start
 
-The process exits with `Secrets-at-rest self-check failed: <reason>`:
+The realm server or the worker manager exits with
+`Secrets-at-rest self-check failed: <reason>` before it starts any worker:
 
 | Reason                                                                   | Fix                                                                                                                                                                                         |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -81,6 +94,11 @@ The process exits with `Secrets-at-rest self-check failed: <reason>`:
 | `… must be set together, but only … is set`                              | One SSM parameter is missing or wasn't wired into the task definition. Check both `/<env>/boxel/SECRETS_*` parameters exist.                                                                |
 | `AccessDeniedException` / `InvalidCiphertextException` from KMS          | The task role isn't in the key policy, the wrapped blob was made under another key or context, or the parameter was edited. Compare the parameter's key-ARN tag with `SECRETS_KMS_KEY_ARN`. |
 | a network error from KMS                                                 | The task can't reach KMS (it goes through the NAT gateway). Running tasks are unaffected; new ones fail until it is reachable.                                                              |
+
+A worker that can't get its keys from the manager exits with
+`Could not get the secrets keyring: …` and the manager respawns it. That
+happens only when the IPC channel is broken or the manager doesn't answer
+within 10 s; it never depends on KMS.
 
 ## Plaintext census
 
