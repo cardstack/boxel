@@ -92,11 +92,17 @@ export async function publishToolResult(
   }
 }
 
+// Why a call never ran when a newer message from the user interrupted the
+// answer that made it.
+export const INTERRUPTED_TOOL_CALL_REASON =
+  'The user sent a new message before this tool call ran.';
+
 // Answers a call the user's stop kept from running with a 'canceled' result,
 // so every call the model made still has an outcome in the room.
 export async function publishCanceledResult(
   call: BotToolCall,
   target: BotToolTarget,
+  reason: string = STOPPED_TOOL_CALL_REASON,
 ): Promise<BotToolOutcome> {
   let published = await publishToolResult(
     target.client,
@@ -104,7 +110,7 @@ export async function publishCanceledResult(
     {
       msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
       commandRequestId: call.id,
-      failureReason: STOPPED_TOOL_CALL_REASON,
+      failureReason: reason,
       'm.relates_to': {
         rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
         key: 'canceled',

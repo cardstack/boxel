@@ -38,21 +38,28 @@ import {
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
+  abandonedBotToolCalls,
+  cancelBotToolCalls,
   classifyToolCalls,
   fulfillBotToolCalls,
   offeredBotTools,
   startBotToolTurns,
+  type BotToolCall,
   type BotToolCallEntry,
   type BotToolTurn,
   type ClassifiedToolCalls,
 } from './lib/bot-tools/index.ts';
+import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
   ApprovalClaims,
   releasedToolCalls,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
 import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
-import { readStopState } from '@cardstack/runtime-common/ai/stop';
+import {
+  readStopState,
+  STOPPED_TOOL_CALL_REASON,
+} from '@cardstack/runtime-common/ai/stop';
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
@@ -463,6 +470,14 @@ Common issues are:
         let pendingFulfillAgentId: string | undefined;
         let pendingReleasedCalls: ReleasedToolCall[] = [];
         let pendingReleasedAgentId: string | undefined;
+        // The bot-tool calls of an answer that was canceled mid-stream. They
+        // never run, but each is answered as canceled (after the lock is
+        // released, like the calls above), so no call is left without a
+        // result for the next prompt to trip over.
+        let pendingCanceledBotToolCalls: BotToolCall[] = [];
+        let pendingCanceledRequestEventId: string | undefined;
+        let pendingCanceledAgentId: string | undefined;
+        let pendingCanceledReason = STOPPED_TOOL_CALL_REASON;
         // Whether the user has stopped the loop the bot-tool calls belong
         // to: a stop already in the room when this run read it (after the
         // approval the run picks up, say), or one that lands while the run
@@ -1007,6 +1022,20 @@ Common issues are:
               } else if (error instanceof APIUserAbortError) {
                 log.info(`[${eventId}] Generation was canceled by user`);
                 await responder.finalize({ isCanceled: true });
+                // The canceled answer keeps the calls it had streamed, the
+                // last one possibly cut off mid-arguments. A stop or a newer
+                // message aborts the runner, and in neither case does a call
+                // run.
+                if (responder.responseEventId) {
+                  pendingCanceledBotToolCalls = abandonedBotToolCalls(
+                    responder.responseState.toolCalls,
+                  );
+                  pendingCanceledRequestEventId = responder.responseEventId;
+                  pendingCanceledAgentId = agentId;
+                  pendingCanceledReason = stopped()
+                    ? STOPPED_TOOL_CALL_REASON
+                    : INTERRUPTED_TOOL_CALL_REASON;
+                }
               } else {
                 log.error(
                   `[${eventId}] Error during generation or finalization`,
@@ -1128,6 +1157,18 @@ Common issues are:
                 }
               }
             }
+          }
+          if (pendingCanceledRequestEventId) {
+            await cancelBotToolCalls(
+              pendingCanceledBotToolCalls,
+              {
+                client,
+                roomId: room.roomId,
+                requestEventId: pendingCanceledRequestEventId,
+                agentId: pendingCanceledAgentId,
+              },
+              pendingCanceledReason,
+            );
           }
           let outcomes = await fulfillBotToolCalls(entries, stopped);
           // An approved call whose result never reached the room (or whose

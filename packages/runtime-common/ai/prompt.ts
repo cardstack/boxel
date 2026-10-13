@@ -1108,9 +1108,96 @@ function isCheckCorrectnessToolResultEvent(
   );
 }
 
-function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
-  const content = event.content as CardMessageContent;
-  return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
+// The latest result that is a call's outcome. A request can accumulate
+// several result events — a 'failed' from a first attempt and an 'applied'
+// from a later retry — and an approval is not an outcome at all.
+function findToolResultFor(
+  toolResults: ToolResultEvent[],
+  commandRequestId: string | undefined,
+): ToolResultEvent | undefined {
+  return findLast(
+    toolResults,
+    (toolResult) =>
+      (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
+        isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
+      !isApprovalResult(toolResult) &&
+      toolResult.content.commandRequestId === commandRequestId,
+  );
+}
+
+// Whether a call finished streaming: it has a name, and arguments that parse.
+function isCompleteToolRequest(request: Partial<EncodedToolRequest>): boolean {
+  if (!request.name) {
+    return false;
+  }
+  if (typeof request.arguments === 'object' && request.arguments !== null) {
+    // older format, already decoded
+    return true;
+  }
+  if (typeof request.arguments !== 'string') {
+    return false;
+  }
+  try {
+    JSON.parse(request.arguments);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isCanceledAnswer(event: CardMessageEvent): boolean {
+  return Boolean(
+    (event.content as CardMessageContent).isCanceled ||
+    (event as { status?: string }).status === 'cancelled',
+  );
+}
+
+// The calls of a bot message that go into the prompt. The provider rejects a
+// prompt whose call has no tool message after it ("No tool output found for
+// function call"), so every call carried here gets one from
+// `toResultMessages`, even when nothing answered it in the room. A call cut
+// off mid-stream, because its answer was stopped or interrupted, is not a
+// request the model finished making: it is left out, with its canceled
+// result, so the prompt never carries arguments that do not parse.
+function promptToolRequests(
+  event: CardMessageEvent,
+  toolResults: ToolResultEvent[],
+): Partial<EncodedToolRequest>[] {
+  let canceled = isCanceledAnswer(event);
+  return (
+    getToolRequests<Partial<EncodedToolRequest>>(
+      event.content as CardMessageContent,
+    ) ?? []
+  ).filter(
+    (toolRequest) =>
+      toolRequest.id &&
+      (isCompleteToolRequest(toolRequest) ||
+        (!canceled && findToolResultFor(toolResults, toolRequest.id))),
+  );
+}
+
+// The tool message for a call nothing in the room answered: the answer that
+// made it was canceled before the call ran, or its result never arrived (for
+// example ai-bot restarted, or the user wrote again without running it).
+function unansweredToolMessage(
+  event: CardMessageEvent,
+  toolCallId: string,
+): OpenAIPromptMessage {
+  let canceled = isCanceledAnswer(event);
+  return {
+    role: 'tool',
+    tool_call_id: toolCallId,
+    content: canceled
+      ? 'Tool call canceled: the answer that made this call was stopped before the call ran.\n'
+      : 'Tool call not run: no result was recorded for this call.\n',
+  };
+}
+
+function toToolCalls(
+  event: CardMessageEvent,
+  toolResults: ToolResultEvent[] = [],
+): ChatCompletionMessageToolCall[] {
+  return promptToolRequests(event, toolResults).map(
     (toolRequest: Partial<EncodedToolRequest>) => {
       return {
         id: toolRequest.id!,
@@ -1130,24 +1217,16 @@ async function toResultMessages(
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
 ): Promise<OpenAIPromptMessage[]> {
-  const messageContent = event.content as CardMessageContent;
   let toolResultEntries = await Promise.all(
-    (getToolRequests<Partial<EncodedToolRequest>>(messageContent) ?? []).map(
+    promptToolRequests(event, toolResults).map(
       async (toolRequest: Partial<EncodedToolRequest>) => {
         let decodedToolRequest = decodeToolRequestSafe(toolRequest);
-        // A request can accumulate several result events — a 'failed' from a
-        // first attempt and an 'applied' from a later retry — and the latest
-        // one is the call's actual outcome.
-        let toolResult = findLast(
-          toolResults,
-          (toolResult) =>
-            (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
-              isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
-            !isApprovalResult(toolResult) &&
-            toolResult.content.commandRequestId === toolRequest.id,
-        );
+        let toolResult = findToolResultFor(toolResults, toolRequest.id);
         if (!toolResult) {
-          return undefined;
+          return {
+            toolMessage: unansweredToolMessage(event, toolRequest.id!),
+            followUpMessage: undefined,
+          };
         }
         let content: string;
         let followUpUserMessage: string | undefined;
@@ -1594,7 +1673,8 @@ export async function buildPromptForModel(
       // prompt-cache prefix, and models imitate an elision placeholder in
       // place of real code.
       let content = body;
-      let toolCalls = toToolCalls(event as CardMessageEvent);
+      let toolResults = getToolResults(event as CardMessageEvent, history);
+      let toolCalls = toToolCalls(event as CardMessageEvent, toolResults);
       if (content || toolCalls.length) {
         let historicalMessage: OpenAIPromptMessage = {
           role: 'assistant',
@@ -1605,7 +1685,6 @@ export async function buildPromptForModel(
         }
         historicalMessages.push(historicalMessage);
       }
-      let toolResults = getToolResults(event as CardMessageEvent, history);
       (
         await toResultMessages(
           event as CardMessageEvent,

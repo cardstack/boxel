@@ -81,6 +81,45 @@ export async function fulfillBotToolCalls(
   return outcomes;
 }
 
+// The bot-tool calls an answer had streamed when it was canceled (a stop, or
+// a newer message interrupting it). None of them runs, but each still needs
+// a result: the next prompt carries the answer's calls, and the provider
+// rejects a call with no result after it. Includes a call whose arguments
+// were cut off mid-stream, and one that would have waited for approval.
+export function abandonedBotToolCalls(
+  toolCalls: {
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }[],
+): BotToolCall[] {
+  let calls: BotToolCall[] = [];
+  for (let toolCall of toolCalls) {
+    let name = toolCall?.function?.name;
+    if (toolCall?.id && name && botToolNamed(name)) {
+      calls.push({
+        id: toolCall.id,
+        type: 'function',
+        function: { name, arguments: toolCall.function?.arguments ?? '' },
+      });
+    }
+  }
+  return calls;
+}
+
+// Answers each call with a 'canceled' result, one at a time, in order (see
+// fulfillBotToolCalls for why in sequence). Returns each call's outcome by id.
+export async function cancelBotToolCalls(
+  calls: BotToolCall[],
+  target: BotToolTarget,
+  reason: string,
+): Promise<Map<string, BotToolOutcome>> {
+  let outcomes = new Map<string, BotToolOutcome>();
+  for (let call of calls) {
+    outcomes.set(call.id, await publishCanceledResult(call, target, reason));
+  }
+  return outcomes;
+}
+
 export interface ClassifiedToolCalls {
   // Tool calls ai-bot runs itself (see BOT_TOOLS).
   botToolCalls: ChatCompletionMessageToolCall[];

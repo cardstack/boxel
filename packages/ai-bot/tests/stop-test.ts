@@ -20,12 +20,17 @@ import {
 } from '@cardstack/runtime-common/ai/stop';
 import { RoomTurns } from '../lib/room-turns.ts';
 import {
+  abandonedBotToolCalls,
+  cancelBotToolCalls,
   fulfillBotToolCalls,
   type BotToolCall,
   type BotToolTarget,
   type BotToolTurn,
 } from '../lib/bot-tools/index.ts';
-import { publishCanceledResult } from '../lib/bot-tools/results.ts';
+import {
+  INTERRUPTED_TOOL_CALL_REASON,
+  publishCanceledResult,
+} from '../lib/bot-tools/results.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 
 const BOT = '@aibot:localhost';
@@ -160,6 +165,58 @@ function toolResult(
     event_id: eventId,
     status: EventStatus.SENT,
   } as unknown as DiscreteMatrixEvent;
+}
+
+// An answer the user stopped while it was streaming: it keeps the calls it
+// had streamed, the last one possibly cut off mid-arguments.
+function canceledAnswer(
+  eventId: string,
+  toolRequests: { id: string; name: string; arguments: string }[],
+): DiscreteMatrixEvent {
+  return {
+    type: 'm.room.message',
+    room_id: 'room-id-1',
+    sender: BOT,
+    content: {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      isCanceled: true,
+      data: { context: { functions: [] } },
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: toolRequests,
+    },
+    origin_server_ts: nextTs(),
+    unsigned: { age: 900, transaction_id: eventId },
+    event_id: eventId,
+    status: EventStatus.SENT,
+  } as unknown as DiscreteMatrixEvent;
+}
+
+const READ_SKILL_FILES = {
+  name: 'readRealmFile',
+  arguments: JSON.stringify({
+    urls: ['https://realm.example/skills/boxel-environment/SKILL.md'],
+  }),
+};
+// The same call, cut off by the stop before its arguments finished.
+const CUT_OFF_READ = {
+  name: 'readRealmFile',
+  arguments: '{"urls":["https://realm.example/skills/boxel-env',
+};
+
+// The ids of the calls the prompt's assistant messages make, and of the tool
+// messages that answer them.
+function promptToolCallIds(messages: { role: string }[]) {
+  let calls = messages.flatMap(
+    (m) =>
+      (m as { tool_calls?: { id: string }[] }).tool_calls?.map((c) => c.id) ??
+      [],
+  );
+  let answered = messages
+    .filter((m) => m.role === 'tool')
+    .map((m) => (m as { tool_call_id: string }).tool_call_id);
+  return { calls, answered };
 }
 
 function stopEvent(eventId: string, sender = USER): DiscreteMatrixEvent {
@@ -373,6 +430,86 @@ module('stop holds the assistant loop', (hooks) => {
     assert.strictEqual(
       textOf(toolMessage!.content).trim(),
       'Tool call canceled.\nThe user stopped the assistant before this tool call ran.',
+    );
+  });
+
+  test('an answer stopped mid-call leaves no call without a result in the next prompt', async (assert) => {
+    let history = [
+      userMessage('user-1', 'create five notes'),
+      stopEvent('stop-1'),
+      canceledAnswer('bot-1', [
+        { id: 'call-1', ...READ_SKILL_FILES },
+        { id: 'call-2', ...CUT_OFF_READ },
+      ]),
+      userMessage('user-2', 'never mind, just say hello'),
+    ];
+    let messages = await buildPromptForModel(
+      history,
+      BOT,
+      [],
+      [],
+      fakeMatrixClient as any,
+    );
+    let { calls, answered } = promptToolCallIds(messages);
+    assert.deepEqual(calls, ['call-1'], 'the cut-off call is left out');
+    assert.deepEqual(answered, ['call-1'], 'the finished call is answered');
+    let toolMessage = messages.find((m) => m.role === 'tool');
+    assert.strictEqual(
+      textOf(toolMessage!.content).trim(),
+      'Tool call canceled: the answer that made this call was stopped before the call ran.',
+    );
+  });
+
+  test("a cut-off call's canceled result stays out of the prompt with its call", async (assert) => {
+    let history = [
+      userMessage('user-1', 'create five notes'),
+      stopEvent('stop-1'),
+      canceledAnswer('bot-1', [
+        { id: 'call-1', ...READ_SKILL_FILES },
+        { id: 'call-2', ...CUT_OFF_READ },
+      ]),
+      toolResult('result-1', 'bot-1', 'call-1', {
+        status: 'canceled',
+        failureReason: STOPPED_TOOL_CALL_REASON,
+      }),
+      toolResult('result-2', 'bot-1', 'call-2', {
+        status: 'canceled',
+        failureReason: STOPPED_TOOL_CALL_REASON,
+      }),
+      userMessage('user-2', 'never mind, just say hello'),
+    ];
+    let messages = await buildPromptForModel(
+      history,
+      BOT,
+      [],
+      [],
+      fakeMatrixClient as any,
+    );
+    let { calls, answered } = promptToolCallIds(messages);
+    assert.deepEqual(calls, ['call-1']);
+    assert.deepEqual(answered, ['call-1']);
+  });
+
+  test('a call the user moved on from without running it is answered as not run', async (assert) => {
+    let history = [
+      userMessage('user-1', 'find the authors'),
+      botMessageWithToolCalls('bot-1', ['call-1']),
+      userMessage('user-2', 'actually, never mind'),
+    ];
+    let messages = await buildPromptForModel(
+      history,
+      BOT,
+      [],
+      [],
+      fakeMatrixClient as any,
+    );
+    let { calls, answered } = promptToolCallIds(messages);
+    assert.deepEqual(calls, ['call-1']);
+    assert.deepEqual(answered, ['call-1']);
+    let toolMessage = messages.find((m) => m.role === 'tool');
+    assert.strictEqual(
+      textOf(toolMessage!.content).trim(),
+      'Tool call not run: no result was recorded for this call.',
     );
   });
 });
@@ -721,6 +858,71 @@ module('fulfillBotToolCalls', (hooks) => {
       commandRequestId: 'call-1',
       published: false,
     });
+  });
+});
+
+module('abandonedBotToolCalls', () => {
+  test("picks a canceled answer's bot-tool calls, including one cut off mid-arguments", (assert) => {
+    let calls = abandonedBotToolCalls([
+      { id: 'call-1', function: READ_SKILL_FILES },
+      {
+        id: 'call-2',
+        function: { name: 'patchCardInstance', arguments: '{}' },
+      },
+      { id: 'call-3', function: CUT_OFF_READ },
+      // The first chunk of a call names nothing yet.
+      { function: { name: 'readUrl' } },
+      { id: 'call-4', function: {} },
+    ]);
+    assert.deepEqual(
+      calls.map((call) => [
+        call.id,
+        call.function.name,
+        call.function.arguments,
+      ]),
+      [
+        ['call-1', 'readRealmFile', READ_SKILL_FILES.arguments],
+        ['call-3', 'readRealmFile', CUT_OFF_READ.arguments],
+      ],
+      'host-tool calls and calls with no id or name are left out',
+    );
+  });
+});
+
+module('cancelBotToolCalls', () => {
+  test('answers every call as canceled, in order, with the reason given', async (assert) => {
+    let client = new FakeMatrixClient();
+    let outcomes = await cancelBotToolCalls(
+      abandonedBotToolCalls([
+        { id: 'call-1', function: READ_SKILL_FILES },
+        { id: 'call-2', function: CUT_OFF_READ },
+      ]),
+      {
+        client: client as any,
+        roomId: 'room-1',
+        requestEventId: 'bot-1',
+        agentId: 'agent-1',
+      },
+      INTERRUPTED_TOOL_CALL_REASON,
+    );
+    assert.deepEqual(
+      [...outcomes.keys()],
+      ['call-1', 'call-2'],
+      'each call has an outcome',
+    );
+    let sent = client.getSentEvents();
+    assert.deepEqual(
+      sent.map((event) => [
+        event.content.commandRequestId,
+        event.content['m.relates_to']?.key,
+        event.content['m.relates_to']?.event_id,
+        event.content.failureReason,
+      ]),
+      [
+        ['call-1', 'canceled', 'bot-1', INTERRUPTED_TOOL_CALL_REASON],
+        ['call-2', 'canceled', 'bot-1', INTERRUPTED_TOOL_CALL_REASON],
+      ],
+    );
   });
 });
 
