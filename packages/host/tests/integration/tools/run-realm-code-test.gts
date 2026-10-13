@@ -102,6 +102,17 @@ boxel:
               meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
             },
           },
+          'Plain/base-typed.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
         },
       }),
     );
@@ -997,6 +1008,26 @@ return queued;`,
       code: `await realm.ui.switchSubmode('interact');`,
     });
     assert.strictEqual(operatorModeStateService.state.submode, 'interact');
+  });
+
+  test('realm.ui.previewFormat opens the module of a card whose type comes from base', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ui.previewFormat('Plain/base-typed', 'isolated');`,
+    });
+
+    assert.strictEqual(result.uiActions[0]?.status, 'done');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      getService('network').virtualNetwork.toURL('@cardstack/base/card-api.gts')
+        .href,
+      'the module is the base module, not a path in the workspace',
+    );
   });
 
   test('realm.ui opens a file the same run wrote', async function (assert) {

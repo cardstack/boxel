@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   coerceErrorMessage,
   isCardInstance,
+  isRelativePath,
   logger,
   rri,
   SupportedMimeType,
@@ -446,8 +447,12 @@ class RealmFsSession {
           throw new Error(`Not a card instance: ${fileURL}`);
         }
         // `adoptsFrom` names the module without its extension, as code mode
-        // does for a card definition.
-        let modulePath = new URL(module, fileURL).href;
+        // does for a card definition. Only a relative module is joined to the
+        // instance; a prefix-form one, such as a type from base, stays as it
+        // is and becomes a URL when the action runs.
+        let modulePath = isRelativePath(module)
+          ? new URL(module, fileURL).href
+          : module;
         if (!/\.(gts|ts)$/.test(modulePath)) {
           modulePath = `${modulePath}.gts`;
         }
@@ -968,6 +973,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return { shownCard: cardId };
   }
 
+  // A module as a URL, for a prefix-form module such as
+  // `@cardstack/base/card-api.gts`.
+  private moduleURL(module: string): string {
+    let { virtualNetwork } = this.network;
+    return virtualNetwork.isRegisteredPrefix(module)
+      ? virtualNetwork.toURL(module).href
+      : module;
+  }
+
   // An action that fails does not fail the run: its files are saved already.
   // The result names the failure, and later actions still run.
   private async applyUiAction(
@@ -1000,7 +1014,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           await new PreviewFormatTool(this.toolContext).execute({
             cardId: action.cardId,
             format: action.format,
-            modulePath: action.modulePath,
+            modulePath: this.moduleURL(action.modulePath),
           });
           break;
         case 'openWorkspace':
