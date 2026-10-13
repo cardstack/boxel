@@ -16,6 +16,7 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
+import { grantExpressionPreparations } from '@cardstack/runtime-common/card-operations/grant-expressions';
 import {
   setAnonymousRequestSink,
   type AnonymousRequestEvent,
@@ -45,6 +46,10 @@ const NEWSROOM = 'http://127.0.0.1:4444/newsroom/';
 const LIBRARY = 'http://127.0.0.1:4444/library/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const NEWSROOM_POLICY = `${ORG}policies/newsroom`;
+const TS_FILE_DEF = {
+  module: rri('@cardstack/base/ts-file-def'),
+  name: 'TsFileDef',
+};
 const LIBRARY_POLICY = `${ORG}policies/library`;
 const EDITOR = '@editor:localhost';
 const READER = '@reader:localhost';
@@ -434,6 +439,38 @@ module(basename(import.meta.filename), function (hooks) {
         },
         operation: 'read',
       },
+    );
+  });
+
+  test("a grant's blocklist and limit are prepared once and settled for every request", async function (assert) {
+    await setNewsroomConfig(limitOf(50));
+    assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    let before = grantExpressionPreparations();
+    for (let i = 0; i < 3; i++) {
+      assert.strictEqual((await readCard(PUBLISHED)).status, 200);
+    }
+    assert.strictEqual(
+      grantExpressionPreparations() - before,
+      0,
+      'the later reads prepare nothing',
+    );
+    assert.deepEqual(
+      articleRecords().map((r) => ({
+        outcome: r.outcome,
+        limit: r.limit,
+        count: r.count,
+      })),
+      [1, 2, 3, 4].map((count) => ({
+        outcome: 'admitted' as const,
+        limit: {
+          requests: 50,
+          windowSeconds: 600,
+          requestsFrom: 'grant' as const,
+          windowSecondsFrom: 'grant' as const,
+        },
+        count,
+      })),
+      "every read is counted against the grant's own limit",
     );
   });
 
@@ -1009,6 +1046,73 @@ module(basename(import.meta.filename), function (hooks) {
     } finally {
       await unarchiveRealm(db, new URL(NEWSROOM));
     }
+  });
+
+  test('a module a code grant opens to a caller who is not signed in is served privately, and counted', async function (assert) {
+    // The newsroom's rule on its articles, and one beside it that opens every
+    // module to such callers, two requests at a time.
+    await org.write(
+      'policies/newsroom.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            rules: [
+              { targetType: ARTICLE, grants: NEWSROOM_GRANTS },
+              {
+                targetType: TS_FILE_DEF,
+                grants: [
+                  {
+                    operation: 'readSource',
+                    where: 'actor() == "anonymous"',
+                    rateLimitRequests: '2',
+                    rateLimitWindowSeconds: '600',
+                  },
+                ],
+              },
+            ],
+          },
+          meta: { adoptsFrom: REALM_POLICY },
+        },
+      }),
+    );
+    await org.indexing();
+    await clearOfRateLimitWindowEdge({ windowSeconds: 600 });
+    let importModule = (headers: Record<string, string> = {}) => {
+      let req = request
+        .get(`${new URL(NEWSROOM).pathname}article`)
+        .set('Accept', '*/*')
+        .set('X-Forwarded-For', VISITOR);
+      for (let [name, value] of Object.entries(headers)) {
+        req = req.set(name, value);
+      }
+      return req;
+    };
+    let served = await importModule();
+    assert.strictEqual(served.status, 200, 'the module is served');
+    assert.strictEqual(served.get('content-type'), 'text/javascript');
+    assert.true(
+      /^private\b/.test(served.get('cache-control') ?? ''),
+      'privately',
+    );
+    let revalidated = await importModule({
+      'If-None-Match': served.get('etag')!,
+    });
+    assert.strictEqual(revalidated.status, 304, 'and revalidated');
+    let over = await importModule();
+    assert.strictEqual(over.status, 429, 'each of which was counted');
+    assert.strictEqual(over.body.errors[0].code, 'rate-limited');
+    assert.deepEqual(
+      records
+        .filter((record) => record.route.endsWith('/article'))
+        .map(({ outcome, grant }) => ({ outcome, grant })),
+      [
+        { outcome: 'admitted', grant: 'rules[1].grants[0]' },
+        { outcome: 'admitted', grant: 'rules[1].grants[0]' },
+        { outcome: 'rate-limited', grant: 'rules[1].grants[0]' },
+      ],
+      'and recorded against the code grant',
+    );
   });
 
   test('what no anonymous grant can open stays closed to a caller who is not signed in', async function (assert) {

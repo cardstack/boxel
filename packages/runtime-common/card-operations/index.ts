@@ -37,6 +37,7 @@ export {
   pendingWriteFor,
   pendingWriteHolds,
   policyGateStats,
+  policyPredicatePreparations,
 } from './gate.ts';
 export { checkCapabilities, parseCapabilityChecks } from './capabilities.ts';
 export type { CapabilityCaller } from './capabilities.ts';

@@ -93,6 +93,9 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // a conditional *write*, which is what `If-Match` asks about, and that question
 // is about the card rather than about the representation it was read in.
 const PROJECTED_CARD_JSON_CACHE_CONTROL = 'private, no-store';
+// How a module compiled for a caller the policy gate admitted is cached:
+// by that caller alone, revalidated on every use like a reader's module.
+const GRANTED_MODULE_CACHE_CONTROL = 'private, max-age=0';
 
 // The request surfaces a policy decision record names as the one that reached
 // the gate (see `PolicyRoute`).
@@ -293,6 +296,7 @@ import {
   storedWriteRefusal,
   type PendingWrite,
   policyGateStats,
+  policyPredicatePreparations,
   policyUnavailable,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
@@ -515,6 +519,7 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import {
+  REALM_IGNORE_FILES,
   RealmIndexUpdater,
   type IncrementalIndexMeta,
   type IndexChange,
@@ -536,7 +541,6 @@ import {
   isSampledContentHash,
 } from './content-hash.ts';
 import { resolveFileDefCodeRef, urlNamesFile } from './file-def-code-ref.ts';
-import { policyFileDefCodeRef } from './policy-file-def.ts';
 
 import type { Utils } from './matrix-backend-authentication.ts';
 import { MatrixBackendAuthentication } from './matrix-backend-authentication.ts';
@@ -1031,17 +1035,18 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   the whole realm at once: every type it holds, every file's modification
 //   time, and every card's indexing state. A grant reaches a card, not the
 //   realm.
-// - `_dependencies`, `_card-dependencies` and `_lint` read the realm's
-//   modules, which are code.
+// - `_dependencies`, `_card-dependencies` and `_lint` analyze the realm's
+//   modules for code mode, which a caller works in only with the realm's own
+//   read.
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
-// differently on some of them (see `#refusalUnderPolicy`), as do the directory
-// listing and the module serve.
+// differently on some of them (see `#refusalUnderPolicy`), as does the
+// directory listing.
 //
-// The card+source read and the realm's fallback file serve consume it path by
-// path instead: for a data file or a card's document, whose bytes a
+// The card+source read and the realm's fallback file and module serve consume
+// it path by path instead: for a file or a card's document, whose bytes a
 // `readSource` grant reaches, and for nothing else they serve (see
 // `GRANTABLE_BYTES`).
 //
@@ -1072,35 +1077,34 @@ const APPLIES_ARCHIVED_SEAL = {
 // route below, and the permission the realm derives from the request's method,
 // which this path is the one `POST` exception to.
 const CAPABILITIES_PATH = '_capabilities';
-// Marks the routes that serve code and the file tree, which no policy grant
-// reaches: the directory listing, and the card+source read and its `HEAD`
-// wherever `GRANTABLE_BYTES` does not lift it. The fallback file and module
-// serve is one too, for a `GET` and a `HEAD`, on the same terms. See
+// Marks the routes that serve the file tree, which no policy grant reaches:
+// the directory listing, and the card+source read and its `HEAD` wherever
+// `GRANTABLE_BYTES` does not lift it. The fallback file and module serve is one
+// too, for a `GET` and a `HEAD`, on the same terms. See
 // `RouteOptions.coarseReadOnly`.
 const COARSE_READ_ONLY = { coarseReadOnly: true } as const;
-// Marks the card+source read and its `HEAD`, which serve a data file's or a
-// card's stored bytes as well as module source. A `readSource` grant reaches
-// the first two and never the third, so a request naming a data file or a
-// card's document consumes the ACL's outcome and every other request the
-// route takes stays coarse-read-only (see `namesGrantableBytes`). The fallback
-// file serve divides the same way, for a `GET` and a `HEAD`.
+// Marks the card+source read and its `HEAD`, which serve a file's or a card's
+// stored bytes, and a request naming a directory. A `readSource` grant reaches
+// the bytes and never the directory, so a request naming a file or a card's
+// document consumes the ACL's outcome and every other request the route takes
+// stays coarse-read-only (see `namesGrantableBytes`). The fallback file and
+// module serve divides the same way, for a `GET` and a `HEAD`.
 const GRANTABLE_BYTES = { coarseReadOnly: true, grantableBytes: true } as const;
 
 // Whether a byte route's read of `localPath` is one a `readSource` grant can
-// reach: any file but module source, typed as the gate types it (see
-// `policyFileDefCodeRef`), so a name with no extension, a `LICENSE` or a
-// `.gitignore`, is a data file here as it is over the operations envelope. It
+// reach: any file, typed as the gate types it (see `policyFileDefCodeRef`). It
 // is decided from the name alone, before anything is read, so it says nothing
 // about what the path holds. A directory is not a file at all.
 //
 // A name this admits can still be one a reader's read would extend: the byte
 // routes try module extensions on a name that has none of its own, so a
 // reader's `./classroom` is the transpiled module and a reader's `room.v2` can
-// be redirected to `room.v2.json`. For a caller the ACL declined, the handlers
-// read such a name exactly as named, so it reaches no module and no redirect.
+// be redirected to `room.v2.json`. For a caller the ACL declined, the module
+// serve extends a name as it does for a reader, so the name a module is
+// imported by reaches it, and the gate judges the module it resolved to. The
+// card+source read reads the name exactly as named, so it reaches no redirect.
 function namesGrantableBytes(localPath: LocalPath): boolean {
-  let name = localPath.slice(localPath.lastIndexOf('/') + 1);
-  return name !== '' && policyFileDefCodeRef(localPath) !== undefined;
+  return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
 }
 const ROUTER_METHODS: Method[] = [
   'GET',
@@ -2542,6 +2546,8 @@ export class Realm {
   #published = false;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
+  // The root ignore files' mtimes when their rules were last read.
+  #ignoreFilesSignature: string | undefined;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
@@ -2601,6 +2607,12 @@ export class Realm {
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
   // newer pending entry installed after a drop survives an older
   // promise's eventual settle.
+  // Compiles for callers the policy gate admitted, keyed by path and the
+  // validator of the version being compiled, so concurrent admitted callers
+  // share one and nothing outlives it (see `#moduleForGatedCaller`). Kept apart
+  // from `#inFlightTranspiles`, which a reader's request joins without the gate.
+  #inFlightGatedCompiles: Map<string, Promise<ModuleTranspileResult>> =
+    new Map();
   #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
     new Map();
   // Monotonic count of transpileJS invocations, used by the CS-11029
@@ -2947,6 +2959,8 @@ export class Realm {
       dbAdapter,
       queue,
     });
+    this.#realmIndexUpdater.onIgnoreRulesChanged = () =>
+      this.#reindexForIgnoreRules();
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
@@ -4221,6 +4235,11 @@ export class Realm {
   // private state.
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
+    void this.#loadIgnoreRules().catch((err: unknown) => {
+      this.#log.warn(
+        `reloading the ignore rules of ${this.url} failed: ${String(err)}`,
+      );
+    });
     this.#cachedHostRoutingMap = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
@@ -7162,9 +7181,9 @@ export class Realm {
   }
 
   // The realm this server serves `href` from, and whether a caller may read
-  // it, for a validate. Found the way an explain finds a target's realm, and
-  // judged from the database, so no realm is mounted to answer. Undefined
-  // where no realm here holds `href`.
+  // it, for what compiling a policy reports. Found the way an explain finds a
+  // target's realm, and judged from the database, so no realm is mounted to
+  // answer. Undefined where no realm here holds `href`.
   async #readsRealmOf(
     href: string,
     caller: ScopeCaller,
@@ -7512,6 +7531,7 @@ export class Realm {
     if (this.#skipBootIndex) {
       // Mount-and-serve only: no from-scratch index, even on a new index.
       // Definitions resolve lazily via the prerenderer on first lookup.
+      await this.#loadIgnoreRules();
     } else if (isNewIndex || this.#fullIndexOnStartup) {
       if (this.#fullIndexOnStartup) {
         // CS-11245: bootstrap realms (kind='bootstrap': base,
@@ -7550,11 +7570,50 @@ export class Realm {
         indexType: 'full',
         realmURL: this.url,
       });
+    } else {
+      await this.#loadIgnoreRules();
     }
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
+  }
+
+  // A changed root ignore file: the from-scratch pass rereads the rules and
+  // broadcasts what it hid or revealed, and the cache wipe after it tells the
+  // peer replicas to reread the rules too.
+  #reindexForIgnoreRules() {
+    let { completed } = this.startReindex();
+    completed
+      .then(() => this.clearRealmIndexCachesAndBroadcast())
+      .catch(() => {
+        // startReindex logs its own failure
+      });
+  }
+
+  // Applies the realm's ignore rules read from disk: on a boot with no
+  // from-scratch pass, and on a replica told another one changed the index.
+  // Rereads only when a root ignore file's mtime moved since the last load,
+  // since this runs on every index swap.
+  async #loadIgnoreRules() {
+    await this.#realmIndexUpdater.loadIgnoreRules(async () => {
+      let mtimes = await Promise.all(
+        REALM_IGNORE_FILES.map((name) => this.#adapter.lastModified(name)),
+      );
+      let signature = mtimes.map((mtime) => mtime ?? '-').join(',');
+      if (signature === this.#ignoreFilesSignature) {
+        return undefined;
+      }
+      let rules: string[] = [];
+      for (let name of REALM_IGNORE_FILES) {
+        let content = (await this.readFileAsText(name))?.content;
+        if (content) {
+          rules.push(content);
+        }
+      }
+      this.#ignoreFilesSignature = signature;
+      return rules;
+    });
   }
 
   // TODO get rid of this
@@ -8039,7 +8098,7 @@ export class Realm {
     }
     // The raw file serve and the transpiled module serve, both of which read
     // the stored bytes through the `readSource` operation, and any other
-    // method no route claimed. A `GET` or a `HEAD` of a data file or a card's
+    // method no route claimed. A `GET` or a `HEAD` of a file or a card's
     // document is divided from the rest as the card+source read's is: it
     // consumes the ACL's outcome, and the gate decides its read. Nothing else
     // here consumes it, so a caller the ACL refused is refused as it refused
@@ -8473,8 +8532,8 @@ export class Realm {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
     // A caller whose read the policy gate decides is never answered from the
-    // module cache, which holds what was compiled for a reader, and reaches no
-    // module to fill it with (see `loadModuleFromDisk`).
+    // module cache, which holds what was compiled for a reader, and nothing
+    // compiled for them fills it (see `#moduleForGatedCaller`).
     let moduleCachingDisabled =
       this.#coarseDeclined(requestContext) === 'all' ||
       this.#disableModuleCaching ||
@@ -8639,10 +8698,9 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ModuleLoadResult> {
     // A caller the realm ACL declined, whose read the policy gate decides (see
-    // `#grantableBytesDispatch`). They read a data file exactly as named, and
-    // are told of anything else as they are told of a path that holds nothing:
-    // the gate grants no module, and trying module extensions on the name
-    // would reach one.
+    // `#grantableBytesDispatch`). A name resolves for them as it does for a
+    // reader, module extensions included, so the name a module is imported by
+    // reaches it, and the gate judges the path it resolved to.
     let gated = this.#coarseDeclined(requestContext) === 'all';
     // Built once before any check runs, for the reason `#bytesNotThere` gives.
     let declinedNotThere = gated
@@ -8660,7 +8718,7 @@ export class Realm {
     });
     let maybeFileRef = await this.getFileWithFallbacks(
       localPath,
-      gated ? [] : executableExtensions,
+      executableExtensions,
     );
     if (!maybeFileRef) {
       return notThere();
@@ -8688,8 +8746,7 @@ export class Realm {
             // Nothing here holds on to the bytes, so a `HEAD` asks only for
             // what its headers are computed from.
             headersOnly: request.method === 'HEAD' ? true : undefined,
-            ...(gated ? { coarseDeclined: true as const } : {}),
-            ...this.#anonymousReadOptions(requestContext),
+            ...(gated ? this.#gatedRead(requestContext) : {}),
             route: byteRoute('module'),
           },
         );
@@ -8735,9 +8792,12 @@ export class Realm {
     }
 
     if (gated) {
-      // Not reached: a path the gate reads for names no module, and no module
-      // extension was tried on it.
-      return notThere();
+      return await this.#moduleForGatedCaller(
+        request,
+        requestContext,
+        fileRef,
+        notThere,
+      );
     }
 
     if (fileRef[Symbol.for('shimmed-module')]) {
@@ -8792,6 +8852,100 @@ export class Realm {
       etag,
       this.#callerOf(request, requestContext),
     );
+  }
+
+  // A module for a caller the realm ACL declined, whose read the policy gate
+  // decides. Its source is read through the gate, as the card+source read
+  // reads it, and compiled for this caller alone: no module cache answers
+  // them, and nothing compiled for them is kept, so what a reader's compile
+  // left behind reaches nobody the gate refuses and what was compiled for a
+  // granted caller reaches nobody else. Their validator is compared only once
+  // the gate has admitted the read, so a reader's `ETag` tells them nothing
+  // either, and what they are served is marked `private`.
+  //
+  // Admitted callers asking for the same version of a module at once share one
+  // compile, joined only once the gate has admitted each of them (see
+  // `#inFlightGatedCompiles`). A browser that has the module revalidates it on
+  // its next import and is answered 304 without a compile.
+  //
+  // A shimmed module is served from the host's own bundle rather than the
+  // realm's files, so no grant reaches it.
+  async #moduleForGatedCaller(
+    request: Request,
+    requestContext: RequestContext,
+    fileRef: FileRef,
+    notThere: () => ModuleLoadResult,
+  ): Promise<ModuleLoadResult> {
+    if (fileRef[Symbol.for('shimmed-module')]) {
+      return notThere();
+    }
+    let source: OperationSourceResult | undefined;
+    try {
+      source = await this.#readStoredSource(
+        this.#callerOf(request, requestContext),
+        fileRef.path,
+        { ...this.#gatedRead(requestContext), route: byteRoute('module') },
+      );
+    } catch (e: unknown) {
+      if (e instanceof CardError) {
+        return {
+          kind: 'non-module',
+          response: responseWithError(e, requestContext),
+        };
+      }
+      throw e;
+    }
+    if (!source) {
+      return notThere();
+    }
+    let etag = buildEtag(
+      totalEtagBase(
+        await this.#fileFingerprint(fileRef),
+        fileRef.lastModifiedMs ?? fileRef.lastModified,
+      ) ?? fileRef.lastModified,
+      MODULE_ETAG_VARIANT,
+    );
+    // What the caller asked for is served from here on, so a caller who isn't
+    // signed in is counted against the realm's limit for it.
+    servedAnonymous(requestContext);
+    if (etag && request.headers.get('if-none-match') === etag) {
+      return {
+        kind: 'not-modified',
+        canonicalPath: fileRef.path,
+        headers: {
+          'cache-control': GRANTED_MODULE_CACHE_CONTROL,
+          etag,
+          ...(fileRef.lastModified != null
+            ? { 'last-modified': formatRFC7231(fileRef.lastModified * 1000) }
+            : {}),
+          'X-Boxel-Canonical-Path': this.paths.fileURL(fileRef.path).href,
+        },
+      };
+    }
+    let compileKey = `${fileRef.path}\n${etag ?? ''}`;
+    let compiling = this.#inFlightGatedCompiles.get(compileKey);
+    if (!compiling) {
+      let pending: Promise<ModuleTranspileResult>;
+      pending = fileContentToText({
+        content: source.body as FileRef['content'],
+      })
+        .then((text) => this.#compileModule(fileRef, text, etag))
+        .finally(() => {
+          if (this.#inFlightGatedCompiles.get(compileKey) === pending) {
+            this.#inFlightGatedCompiles.delete(compileKey);
+          }
+        });
+      compiling = pending;
+      this.#inFlightGatedCompiles.set(compileKey, pending);
+    }
+    let compiled = await compiling;
+    return {
+      ...compiled,
+      headers: {
+        ...compiled.headers,
+        'cache-control': GRANTED_MODULE_CACHE_CONTROL,
+      },
+    };
   }
 
   // Dedups the materialize + transpile pipeline across concurrent
@@ -9290,6 +9444,17 @@ export class Realm {
     let source = await fileContentToText({
       content: stored.body as FileRef['content'],
     });
+    return await this.#compileModule(fileRef, source, etag);
+  }
+
+  // The module compiled from `source`, the text read from `fileRef`, with the
+  // headers the module serve answers it with.
+  async #compileModule(
+    fileRef: FileRef,
+    source: string,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let transpiled: string;
     let compileStart = 0;
     try {
@@ -10293,9 +10458,8 @@ export class Realm {
       skipStoredFileMeta?: true;
       coarseDeclined?: true;
       route?: PolicyRoute;
-      // The request's admission of a caller who isn't signed in (see
-      // `RunOperationOptions.anonymousRequest`). Absent for a read made inside
-      // work shared between requests.
+      // The request of a caller who isn't signed in, which the read is judged
+      // and counted in (see `RunOperationOptions.anonymousRequest`).
       anonymousRequest?: AnonymousRequest;
     } = {},
   ): Promise<OperationSourceResult | undefined> {
@@ -10353,6 +10517,20 @@ export class Realm {
       );
     }
     return result;
+  }
+
+  // How a byte route reads for a caller the realm ACL declined: through the
+  // gate, and for a caller who isn't signed in, within their request, so the
+  // grant that admits the read is the one it is counted against.
+  #gatedRead(requestContext: RequestContext): {
+    coarseDeclined: true;
+    anonymousRequest?: AnonymousRequest;
+  } {
+    let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
+    return {
+      coarseDeclined: true,
+      ...(anonymousRequest ? { anonymousRequest } : {}),
+    };
   }
 
   // What a byte route hands `serveLocalFile`: the operation's answer, in the
@@ -10626,16 +10804,19 @@ export class Realm {
       }
       // The validators were built from the same stat, so when the opened
       // content has a different modification time they describe another
-      // version of the file. Sending them would let a client store these bytes
-      // under that version's validator; the response carries none instead,
-      // and the next request is answered from whatever the file is then.
+      // version of the file. Sending that ETag would let a client store these
+      // bytes under that version's validator, so the response carries none,
+      // and the next request is answered from whatever the file is then. The
+      // modification time is still sent, taken from the opened content: it
+      // describes the bytes this response delivers, and readers such as the
+      // indexer record it as the file's last-modified time.
       if (
         openedContent.lastModifiedMs != null &&
         ref.lastModifiedMs != null &&
         openedContent.lastModifiedMs !== ref.lastModifiedMs
       ) {
         delete headers['etag'];
-        delete headers['last-modified'];
+        headers['last-modified'] = formatRFC7231(openedContent.lastModifiedMs);
       }
     }
     let content = openedContent?.content ?? ref.content;
@@ -11213,11 +11394,7 @@ export class Realm {
       let source = await this.#readStoredSource(
         this.#callerOf(request, requestContext),
         handle.path,
-        {
-          headersOnly,
-          ...(gated ? { coarseDeclined: true as const } : {}),
-          ...this.#anonymousReadOptions(requestContext),
-        },
+        { headersOnly, ...(gated ? this.#gatedRead(requestContext) : {}) },
       );
       if (!source) {
         return (
@@ -14465,6 +14642,7 @@ export class Realm {
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
+    await this.#realmIndexUpdater.ignoreRulesLoaded();
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
@@ -16142,6 +16320,10 @@ export class Realm {
 
   __testOnlyPolicyGateStats(): PolicyGateStats {
     return { ...policyGateStats(this.operationCore) };
+  }
+
+  __testOnlyPolicyPredicatePreparations(): number {
+    return policyPredicatePreparations(this.operationCore);
   }
 
   // The cache reads the policy card straight from the index, not through a

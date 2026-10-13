@@ -19,6 +19,8 @@ import {
   resolveGatedOperation,
   resolveOperation,
   scopeCallerFor,
+  setPolicyDecisionSink,
+  type PolicyDecisionEvent,
 } from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
@@ -61,6 +63,7 @@ const REALM_POLICY = {
 const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
 const BULLETIN = { module: `${EDUCATION}bulletin`, name: 'Bulletin' };
 const SYLLABUS = { module: `${EDUCATION}syllabus`, name: 'Syllabus' };
+const STUDENT = { module: `${EDUCATION}student`, name: 'Student' };
 
 // A type as a write's document names it.
 function adoptsFrom(ref: { module: string; name: string }) {
@@ -1044,6 +1047,120 @@ module(basename(import.meta.filename), function (hooks) {
         3,
         'the throwing predicate was evaluated each time',
       );
+      assert.strictEqual(
+        education.__testOnlyPolicyPredicatePreparations(),
+        1,
+        'and prepared once',
+      );
+    });
+
+    test('a realm whose settings cannot be read fails the gate, and no predicate is blamed for it', async function (assert) {
+      const ADA = `${EDUCATION}students/ada`;
+      const BEN = `${EDUCATION}students/ben`;
+      // The first grant reads the realm's settings. The second admits an
+      // honors student without reading them, so Ada is admitted by it alone
+      // once the settings cannot be read, and Ben by nothing. The third throws
+      // for any name that is not a number, so for Ben a predicate's fault and
+      // the realm's failure meet in one decision.
+      await org.write(
+        'policies/configured.json',
+        policyCard([
+          ...RULES,
+          {
+            targetType: STUDENT,
+            grants: [
+              {
+                operation: 'read',
+                where: 'realmConfig("approver") == actor()',
+              },
+              { operation: 'read', where: '.standing == "honors"' },
+              { operation: 'read', where: '(.name | tonumber) > 0' },
+            ],
+          },
+        ]),
+      );
+      await org.indexing();
+      await education.write(
+        'realm.json',
+        realmConfigCardJSON({
+          name: 'Education',
+          policy: `${ORG}policies/configured`,
+          config: { approver: TEACHER },
+        }),
+      );
+      await education.indexing();
+      assert.strictEqual(
+        (await getCard(BEN, AUTH.teacher())).status,
+        200,
+        'the predicate that reads the settings holds while they can be read',
+      );
+
+      let decisions: PolicyDecisionEvent[] = [];
+      let readSettings = education.getRealmConfig;
+      education.getRealmConfig = async () => {
+        throw new Error('the realm’s settings could not be read');
+      };
+      setPolicyDecisionSink((event) => decisions.push(event));
+      let card!: Response;
+      let batch!: Response;
+      let admitted!: Response;
+      let warnings: string[];
+      try {
+        warnings = await policyWarningsDuring(async () => {
+          card = await getCard(BEN, AUTH.teacher());
+          batch = await operations(
+            EDUCATION,
+            AUTH.teacher(),
+            invoke('read', { href: BEN }),
+          );
+          admitted = await getCard(ADA, AUTH.teacher());
+        });
+      } finally {
+        setPolicyDecisionSink(undefined);
+        education.getRealmConfig = readSettings;
+      }
+
+      assert.strictEqual(
+        card.status,
+        500,
+        'a card+json read is a 500, not the 404 a predicate fault gives a caller who may not read the realm, though a predicate did throw',
+      );
+      assert.strictEqual(batch.status, 500, 'as is an envelope read');
+      assert.strictEqual(
+        admitted.status,
+        200,
+        'a later grant that holds still admits, as grants union',
+      );
+      let configured = `rules[${RULES.length}]`;
+      let faults = warnings.filter((line) =>
+        line.includes('threw while deciding'),
+      );
+      assert.deepEqual(
+        faults.filter((line) => line.includes(`${configured}.grants[0]`)),
+        [],
+        'the grant that reads the settings is not logged as having thrown',
+      );
+      assert.strictEqual(
+        faults.filter((line) => line.includes(`${configured}.grants[2]`))
+          .length,
+        1,
+        'the grant that did throw is',
+      );
+      assert.deepEqual(
+        decisions
+          .filter((decision) => decision.operation === 'read')
+          .map(({ outcome, reason, grant }) => ({ outcome, reason, grant })),
+        [
+          { outcome: 'error', reason: 'gate-failed', grant: null },
+          { outcome: 'error', reason: 'gate-failed', grant: null },
+          {
+            outcome: 'allow',
+            reason: 'granted',
+            grant: `${configured}.grants[1]`,
+          },
+        ],
+        'each decision records the gate failing, not a predicate throwing',
+      );
     });
 
     test('a policy the realm cannot load is a 500, whether the target exists or not', async function (assert) {
@@ -1837,7 +1954,6 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Accept', SupportedMimeType.DirectoryListing)
         .set('Authorization', AUTH.teacher());
       assert.strictEqual(listing.status, 404, 'a directory listing');
-      assert.strictEqual(gateStats().policyLoads, 0, 'none of it is gated');
 
       assert.strictEqual(
         (await getSource(`${EDUCATION}classroom.gts`, AUTH.reader())).status,
@@ -1854,13 +1970,18 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         'and lists the directory',
       );
+      // Module source is read through the gate like any file, so a caller who
+      // presents no credentials is asked to sign in the way the gate asks.
       let anonymous = await getSource(`${EDUCATION}classroom.gts`);
       assert.strictEqual(
         anonymous.status,
         401,
         'and nobody is asked to sign in',
       );
-      assert.strictEqual(anonymous.text, MISSING_AUTH);
+      assert.strictEqual(
+        JSON.parse(anonymous.text).errors?.[0]?.code,
+        'actor-required',
+      );
     });
   });
 

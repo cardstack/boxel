@@ -770,12 +770,13 @@ export type NamedSearchWireQuery = SearchEntryWireQuery & NamedQueryInvocation;
 // against them answers nothing** — no query, which the resource reads as an
 // idle search and the search component renders as no rows. One rule, three
 // situations: nobody is signed in, a sign-out withdrew an actor the search
-// had, and the search is running inside a render, where the app authenticates
-// as itself rather than as a viewer. The last is why this is silence rather
-// than a refusal: a render must be a pure function of the document it was
-// handed, and an actor-scoped search that resolved there would bake one
-// identity's rows into HTML every viewer is then served. The live render that
-// follows fills them in.
+// had, and the search is running inside a realm's render of its own cards,
+// which authenticates as the realm rather than as a viewer. The last is why
+// this is silence rather than a refusal: that render must be a pure function
+// of the document it was handed, and an actor-scoped search that resolved
+// there would bake one identity's rows into HTML every viewer is then served.
+// The live render that follows fills them in. A render a user asks for — a
+// capture, a command — runs on that user's session, so its actor is them.
 //
 // A standing search also stops resolving when the realms it covers go out of
 // the session's view, which is what a sign-out does to them. It parks for the

@@ -8,7 +8,8 @@ import { now } from '../clock.ts';
 import { logger } from '../log.ts';
 import type { CardResource } from '../resource-types.ts';
 import { extensionOfName } from '../file-def-code-ref.ts';
-import { policyFileDefCodeRef } from '../policy-file-def.ts';
+import { baseFileRef } from '../constants.ts';
+import { isModuleSource, policyFileDefCodeRef } from '../policy-file-def.ts';
 import { routesForField } from '../searchable-routes.ts';
 import { chainType } from './adoption-chain.ts';
 import { localPathFor, pathsFor } from './dispatch.ts';
@@ -41,7 +42,11 @@ import {
   type CompiledPolicyRule,
   type CompiledRealmPolicy,
 } from './policy.ts';
-import { loadBxlTransform } from './transforms.ts';
+import {
+  loadBxlTransform,
+  type BxlTransformModule,
+  type PreparedTransformProgram,
+} from './transforms.ts';
 import {
   OperationFailure,
   isDefinitionFreeBaseOperation,
@@ -353,7 +358,8 @@ export interface StoredCardCheck {
 //
 // `definitionLookups` counts the lookups that type a stored-bytes read's
 // target, the one behavior resolved before any definition: one for the type a
-// card's document names, or one for the `FileDef` a file's extension names.
+// card's document names, or one for the `FileDef` a file's extension names,
+// and for a core's first module read, one more for `FileDef`'s own key.
 // It counts nothing else the gate reads — not the type of a card a pending
 // create would mint, and not the field lookups a predicate's projection makes
 // through the definition callback.
@@ -1034,8 +1040,12 @@ async function queryKeptOutOfReach(
 // the type the document names. A card whose type does not resolve is still a
 // card, so it is matched by nothing rather than read as a data file. Every
 // other stored file is typed by its extension, and an extension no def is
-// written for, a `.css` or a `.yml`, resolves to `FileDef` itself. Module
-// source resolves to no type at all.
+// written for, a `.css` or a `.yml`, resolves to `FileDef` itself.
+//
+// Module source is typed by its extension too, as `TsFileDef` or `GtsFileDef`,
+// and matched on the part of its chain that is code, which stops short of
+// `FileDef`. A rule on `FileDef` is written for the realm's data files, and a
+// module is what renders them, so only a rule naming a code type reaches one.
 //
 // A path with nothing stored at it is matched by nothing either, rather than
 // being typed by its name and left for the read to report missing. Otherwise a
@@ -1066,9 +1076,6 @@ async function storedBytesSubject(
   }
   let fileURL = pathsFor(core).fileURL(localPath);
   let codeRef = policyFileDefCodeRef(localPath);
-  if (!codeRef) {
-    return undefined;
-  }
   if (await core.isIgnored(fileURL)) {
     return undefined;
   }
@@ -1087,7 +1094,41 @@ async function storedBytesSubject(
     return undefined;
   }
   let types = await fileAdoptionChain(core, codeRef, fileURL);
-  return types ? { kind: 'file', url: fileURL, types } : undefined;
+  if (types && isModuleSource(localPath)) {
+    types = await codeTypes(core, types, fileURL);
+  }
+  return types?.length ? { kind: 'file', url: fileURL, types } : undefined;
+}
+
+// The part of a module's chain that is code: its own type and every type
+// before `FileDef`.
+async function codeTypes(
+  core: OperationCore,
+  types: string[],
+  relativeTo: URL,
+): Promise<string[] | undefined> {
+  let fileDefKey = await fileDefKeyFor(core, relativeTo);
+  let end = fileDefKey ? types.indexOf(fileDefKey) : -1;
+  return end > 0 ? types.slice(0, end) : undefined;
+}
+
+// `FileDef`'s key is the same for every module a realm serves, so it is read
+// from the definition cache once per core. A lookup that finds nothing is not
+// kept, and the next module read asks again.
+const fileDefKeys = new WeakMap<OperationCore, string>();
+
+async function fileDefKeyFor(
+  core: OperationCore,
+  relativeTo: URL,
+): Promise<string | undefined> {
+  let key = fileDefKeys.get(core);
+  if (key === undefined) {
+    key = (await fileAdoptionChain(core, baseFileRef, relativeTo))?.[0];
+    if (key !== undefined) {
+      fileDefKeys.set(core, key);
+    }
+  }
+  return key;
 }
 
 // A card's stored document, matched on the type the document itself names.
@@ -1553,8 +1594,12 @@ async function firstHolding(
   };
   // A predicate that throws is a fault in the policy, but another grant can
   // still hold. Grants union, so the fault is reported only when none does,
-  // and the answer is the same whatever order the grants are in.
+  // and the answer is the same whatever order the grants are in. A failure to
+  // evaluate a predicate at all is the gate's own, and is raised on the same
+  // terms: only when no grant holds, and ahead of a predicate's fault, since
+  // the grant it left unjudged might have held.
   let threw = false;
+  let failed: { error: unknown } | undefined;
   for (let candidate of grants) {
     let where = candidate.grant.where;
     if (!where) {
@@ -1574,11 +1619,19 @@ async function firstHolding(
     let started = performance.now();
     // A predicate judged against the snapshot does not hold for a target with
     // no index row to read: nothing says what its computed or linked values
-    // are.
-    let judged = where.snapshot ? await subject.snapshot?.() : subject;
-    let outcome = judged
-      ? await evaluate(core, candidate, where, judged, actor)
-      : 'fails';
+    // are. Reading that row is the realm's work, so a failure to read it is
+    // the gate's, as a failure inside `evaluate` is.
+    let judged: PredicateSubject | undefined;
+    let outcome: Awaited<ReturnType<typeof evaluate>>;
+    try {
+      judged = where.snapshot ? await subject.snapshot?.() : subject;
+      outcome = judged
+        ? await evaluate(core, candidate, where, judged, actor)
+        : 'fails';
+    } catch (error: unknown) {
+      failed ??= { error };
+      continue;
+    }
     notes?.evaluated(where, performance.now() - started);
     let said: GateTraceOutcome =
       outcome === 'holds'
@@ -1608,6 +1661,9 @@ async function firstHolding(
       return candidate;
     }
     threw ||= outcome === 'threw';
+  }
+  if (failed) {
+    throw failed.error;
   }
   return threw ? GATE_FAULTED : GATE_REFUSED;
 }
@@ -2385,11 +2441,15 @@ async function projector(
 }
 
 // Whether one predicate holds for this caller. Only `true` holds. Anything
-// else it answers fails, and any way its evaluation throws is reported as that.
+// else it answers fails, and any way the predicate throws is reported as that.
 // The one exception is a data file. It has no document, so a predicate that
 // throws reaching for one has found nothing, as `readSubject` says, and so it
 // does not hold. That is the subject's shape rather than a fault in the policy,
 // and it stays a refusal: the same answer as a path with nothing stored at it.
+//
+// Loading the evaluator and reading the realm's settings are the realm's work,
+// not the predicate's, so their failure propagates as the gate's own: an
+// infrastructure fault, not one blamed on the policy's author.
 //
 // It runs through the transform runner, the one BXL entry that carries the
 // request context a predicate reads. `params()` is not supplied, so a
@@ -2406,25 +2466,21 @@ async function evaluate(
   subject: PredicateSubject,
   actor: string | undefined,
 ): Promise<'holds' | 'fails' | 'threw'> {
+  let bxl = await loadBxlTransform();
+  let realmConfig = where.canonical.includes('realmConfig')
+    ? await core.realmConfig()
+    : undefined;
+  let policy = where.canonical.includes('policy')
+    ? matched.policy.fields
+    : undefined;
   try {
-    let bxl = await loadBxlTransform();
-    let realmConfig = where.canonical.includes('realmConfig')
-      ? await core.realmConfig()
-      : undefined;
-    let policy = where.canonical.includes('policy')
-      ? matched.policy.fields
-      : undefined;
-    let answer = bxl.runBxlTransform(
-      where.canonical,
-      subject.input,
-      {
-        ...(actor === undefined ? {} : { actor }),
-        ...(subject.instance ? { instance: subject.instance } : {}),
-        ...(realmConfig === undefined ? {} : { realmConfig }),
-        ...(policy === undefined ? {} : { policy }),
-      },
-      { syntax: 'solidified' },
-    );
+    let program = preparedPredicate(core, bxl, where);
+    let answer = program.run(subject.input, {
+      ...(actor === undefined ? {} : { actor }),
+      ...(subject.instance ? { instance: subject.instance } : {}),
+      ...(realmConfig === undefined ? {} : { realmConfig }),
+      ...(policy === undefined ? {} : { policy }),
+    });
     return answer === true ? 'holds' : 'fails';
   } catch (e: unknown) {
     if (subject.input === undefined) {
@@ -2441,6 +2497,41 @@ async function evaluate(
     );
     return 'threw';
   }
+}
+
+// Each predicate's program, parsed and checked once and run for every subject
+// it judges. Keyed on the compiled predicate, so a program lives exactly as
+// long as the compiled policy that holds it, and a recompiled policy prepares
+// its own. A predicate that fails to prepare is not held, and throws again on
+// its next evaluation, as one that throws on every subject does.
+const preparedPredicates = new WeakMap<
+  CompiledPolicyPredicate,
+  PreparedTransformProgram
+>();
+
+// How many predicate programs the gate has prepared for a core. Separate from
+// `PolicyGateStats`, which counts the work a decision does: a steady policy
+// prepares each predicate once however many decisions evaluate it.
+const preparationsByCore = new WeakMap<OperationCore, number>();
+
+export function policyPredicatePreparations(core: OperationCore): number {
+  return preparationsByCore.get(core) ?? 0;
+}
+
+function preparedPredicate(
+  core: OperationCore,
+  bxl: BxlTransformModule,
+  where: CompiledPolicyPredicate,
+): PreparedTransformProgram {
+  let program = preparedPredicates.get(where);
+  if (!program) {
+    program = bxl.prepareBxlTransform(where.canonical, {
+      syntax: 'solidified',
+    });
+    preparedPredicates.set(where, program);
+    preparationsByCore.set(core, policyPredicatePreparations(core) + 1);
+  }
+  return program;
 }
 
 // A caller who may not read the realm is told of a predicate's fault as a card

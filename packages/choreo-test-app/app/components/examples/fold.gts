@@ -6,7 +6,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
-import config from 'test-app/config/environment';
 import { tuneSeconds } from 'test-app/lib/demo-tuning';
 import { observeStage } from 'test-app/lib/onstage';
 
@@ -203,13 +202,7 @@ export class Fold extends Component {
           // The score is gated on `take`, so the region plays nothing until
           // something asks for a first pass — page loads do not animate.
           // Being looked at is what asks.
-          //
-          // Except under test, where the whole catalog is mounted at once by
-          // the popLayout subtree suite: a demo that starts a run the moment
-          // it is observed is a demo whose subtree is still busy when that
-          // suite asks it to leave, and it blows the budget for every demo
-          // after it. Tests start this one by hand.
-          if (this.take === 0 && config.environment !== 'test') {
+          if (this.take === 0) {
             this.take++;
           }
         } else {

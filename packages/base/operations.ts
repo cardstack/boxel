@@ -2337,10 +2337,11 @@ export interface QueryOperation<Declaration> {
     ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
   ): SearchEntries;
   // Answers no query when the session cannot say who the caller is — nobody
-  // signed in, or a render, which authenticates as itself rather than as a
-  // viewer. The search component reads that as an idle search, so a card hands
-  // the result over either way and an actor-scoped search renders its rows
-  // when a viewer is there to have them.
+  // signed in, or a realm's render of its own cards, which authenticates as
+  // the realm rather than as a viewer. The search component reads that as an
+  // idle search, so a card hands the result over either way and an
+  // actor-scoped search renders its rows when a viewer is there to have them.
+  // A render a user asks for, such as a capture, has that user as its caller.
   query(
     ...args: [...PayloadArgs<Declaration>, opts?: SearchInvokeOptions]
   ): SearchEntryWireQuery | undefined;
