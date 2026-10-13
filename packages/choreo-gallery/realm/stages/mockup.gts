@@ -1088,6 +1088,8 @@ export class Mockup extends Component {
     let pedestal = 0;
     let dispose: (() => void) | undefined;
     let stopTheme: (() => void) | undefined;
+    /** set by teardown; `build()` checks it after each await */
+    let gone = false;
     let keyLight: THREE.Object3D | undefined;
     let screenGlow: THREE.RectAreaLight | undefined;
 
@@ -1105,6 +1107,9 @@ export class Mockup extends Component {
       building = true;
       this.status = 'fetching the 3D engine…';
       const engine = await three();
+      if (gone) {
+        return;
+      }
       const { THREE: T, RectAreaLightUniformsLib, GLTFLoader } = engine;
 
       const draco = dracoLoader(engine, DRACO);
@@ -1127,6 +1132,9 @@ export class Mockup extends Component {
         }
       } finally {
         draco.dispose();
+      }
+      if (gone) {
+        return;
       }
       if (!gltf) {
         throw new Error('The phone model did not load.');
@@ -1952,6 +1960,7 @@ export class Mockup extends Component {
     };
 
     return () => {
+      gone = true;
       this.halt?.();
       this.holdRendering = undefined;
       dispose?.();

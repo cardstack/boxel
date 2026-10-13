@@ -626,6 +626,8 @@ export class LongTake extends Component {
     let pedestal = 0;
     let dispose: (() => void) | undefined;
     let stopTheme: (() => void) | undefined;
+    /** set by teardown; `build()` checks it after each await */
+    let gone = false;
 
     /**
      * Everything 3D lives behind this. three plus a GLTF loader, a DRACO
@@ -639,6 +641,9 @@ export class LongTake extends Component {
       building = true;
       this.status = 'fetching the 3D engine…';
       const engine = await three();
+      if (gone) {
+        return;
+      }
       const { THREE: T, RectAreaLightUniformsLib, GLTFLoader } = engine;
 
       const renderer = new T.WebGLRenderer({
@@ -1128,6 +1133,11 @@ export class LongTake extends Component {
       });
       // the model is decoded; the decoder's workers are not needed again
       draco.dispose();
+      if (gone) {
+        renderer.dispose();
+        themeWatch.disconnect();
+        return;
+      }
 
       tick = () => {
         raf = requestAnimationFrame(tick!);
@@ -1399,6 +1409,7 @@ export class LongTake extends Component {
     };
 
     return () => {
+      gone = true;
       this.halt?.();
       this.holdRendering = undefined;
       dispose?.();
