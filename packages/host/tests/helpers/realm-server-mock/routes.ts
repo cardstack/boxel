@@ -567,7 +567,7 @@ function registerAuthRoutes() {
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
       let accessibleRealms = [...state.realmPermissions.entries()];
-      if (_url.searchParams.get('include-public') === 'true') {
+      if (_url.searchParams.get('include-public') !== 'false') {
         for (let realmURL of state.publicReadableRealms.keys()) {
           if (!state.realmPermissions.has(realmURL)) {
             accessibleRealms.push([realmURL, ['read']]);

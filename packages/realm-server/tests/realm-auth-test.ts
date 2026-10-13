@@ -114,7 +114,7 @@ module(basename(import.meta.filename), function () {
     // when the holder of the JWT actually hits a realm endpoint.
     //
     // Mounting per row inside _realm-auth was rejected because with
-    // `include-public=true` it enumerates every '*'-readable realm, so a
+    // public realms included it enumerates every '*'-readable realm, so a
     // single boxel realm list / host login would cold-mount the entire
     // accessible set after a restart.
     test('POST /_realm-auth issues a token for a realm absent from realms[] and reconciler.mounted (post-restart)', async function (assert) {
@@ -233,7 +233,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('POST /_realm-auth lists realms readable only through the public grant only with include-public=true', async function (assert) {
+    test('POST /_realm-auth leaves out realms readable only through the public grant with include-public=false', async function (assert) {
       sinon
         .stub(MatrixClient.prototype, 'createDM')
         .resolves('!public-test-session-room:localhost');
@@ -268,15 +268,26 @@ module(basename(import.meta.filename), function () {
           )
           .send('{}');
 
-      let ownOnly = await realmAuthRequest('/_realm-auth');
+      let byDefault = await realmAuthRequest('/_realm-auth');
+      assert.strictEqual(byDefault.status, 200, 'HTTP 200 status');
+      assert.ok(
+        byDefault.body[testRealmHref],
+        'a realm the user has their own row for is listed by default',
+      );
+      assert.ok(
+        byDefault.body[publicOnlyRealmURL],
+        'the public-only realm is listed by default',
+      );
+
+      let ownOnly = await realmAuthRequest('/_realm-auth?include-public=false');
       assert.strictEqual(ownOnly.status, 200, 'HTTP 200 status');
       assert.ok(
         ownOnly.body[testRealmHref],
-        'a public realm the user has their own row for is listed by default',
+        'a public realm the user has their own row for is listed with include-public=false',
       );
       assert.notOk(
         ownOnly.body[publicOnlyRealmURL],
-        'a realm readable only through the public grant is left out by default',
+        'a realm readable only through the public grant is left out with include-public=false',
       );
 
       let withPublic = await realmAuthRequest(

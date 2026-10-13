@@ -75,7 +75,7 @@ export class RealmResponseError extends Error {
 // One matrix user talking to any number of realms. Realm sessions are minted
 // on first use per realm with the realm's own `_session` endpoint, which is
 // the path that honours a realm's `users` permission row (the realm server's
-// `_realm-auth` only lists a user's own realms, and the public ones on request).
+// `_realm-auth` only lists a user's own realms and the public ones).
 export class RealmClient {
   #accessToken: string;
   #userId: string;

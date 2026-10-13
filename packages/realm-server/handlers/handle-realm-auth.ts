@@ -43,12 +43,14 @@ export default function handleRealmAuth({
       return;
     }
 
-    // By default the response covers the realms the user has a permission row
-    // of their own for — the set the host lists as the user's workspaces.
-    // `?include-public=true` adds every world-readable realm, for a client
-    // that wants a session for any realm it may read.
+    // `?include-public=false` limits the response to the realms the user has
+    // a permission row of their own for — the set the host lists as the
+    // user's workspaces. `?include-public=true` adds every world-readable
+    // realm, for a client that wants a session for any realm it may read.
+    // Without the parameter, public realms are included, which is what
+    // clients that predate it rely on for their public-realm tokens.
     let includePublicRealms =
-      ctxt.URL.searchParams.get('include-public') === 'true';
+      ctxt.URL.searchParams.get('include-public') !== 'false';
     let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
       userId: matrixUserId,
       onlyOwnRealms: false,
@@ -57,7 +59,7 @@ export default function handleRealmAuth({
     let accessibleRealmUrls = Object.keys(permissionsForAllRealms);
 
     // Validate each accessible realm URL against the registry WITHOUT
-    // mounting it. With `include-public=true` the permissions include
+    // mounting it. Unless `include-public=false`, the permissions include
     // every '*'-readable realm in addition to the user's own; routing
     // each row through reconciler.lookupOrMount would cold-mount every
     // public-readable realm on the server on the first post-restart

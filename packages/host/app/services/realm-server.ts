@@ -469,8 +469,10 @@ export default class RealmServerService
     serverURL: string,
   ): Promise<string[]> {
     let normalizedServerURL = ensureTrailingSlash(serverURL);
+    // Only the realms the user has a permission row of their own for: public
+    // realms reach the dashboard through the Catalogs section instead.
     let response = await this.network.fetch(
-      `${normalizedServerURL}_realm-auth`,
+      `${normalizedServerURL}_realm-auth?include-public=false`,
       {
         method: 'POST',
         headers: {

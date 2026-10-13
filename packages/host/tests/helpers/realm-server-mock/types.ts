@@ -10,8 +10,8 @@ export type RealmServerMockState = {
   realmPermissions: Map<string, RealmAction[]>;
   // Realms anyone may read that the test user has no permission row of their
   // own for, keyed by normalized URL, with the display name `/_public-realms`
-  // reports. `_realm-auth` lists them only when asked with
-  // `include-public=true`, as the real endpoint does.
+  // reports. `_realm-auth` leaves them out when asked with
+  // `include-public=false`, as the real endpoint does.
   publicReadableRealms: Map<string, { name: string | null }>;
   // Realms archived via POST /_archive-realm, keyed by normalized URL. The
   // value carries the archived-at timestamp surfaced by GET /_archived-realms.
