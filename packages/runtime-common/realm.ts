@@ -283,7 +283,6 @@ import type {
   ReadPlan,
   RunOperationOptions,
 } from './card-operations/dispatch.ts';
-import type { AnonymousRequest } from './card-operations/anonymous-request.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
@@ -7386,7 +7385,7 @@ export class Realm {
   // What a read run for `requestContext` carries of its anonymous admission:
   // the request's own, so the gate admits the read only through the grants
   // the caller's address may use and records the one that did. Nothing for a
-  // signed-in caller.
+  // caller the realm didn't admit without a session.
   #anonymousReadOptions(
     requestContext: RequestContext,
   ): Pick<RunOperationOptions, 'anonymousRequest'> {
@@ -10458,10 +10457,7 @@ export class Realm {
       skipStoredFileMeta?: true;
       coarseDeclined?: true;
       route?: PolicyRoute;
-      // The request of a caller who isn't signed in, which the read is judged
-      // and counted in (see `RunOperationOptions.anonymousRequest`).
-      anonymousRequest?: AnonymousRequest;
-    } = {},
+    } & Pick<RunOperationOptions, 'anonymousRequest'> = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
     try {
@@ -10522,14 +10518,12 @@ export class Realm {
   // How a byte route reads for a caller the realm ACL declined: through the
   // gate, and for a caller who isn't signed in, within their request, so the
   // grant that admits the read is the one it is counted against.
-  #gatedRead(requestContext: RequestContext): {
-    coarseDeclined: true;
-    anonymousRequest?: AnonymousRequest;
-  } {
-    let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
+  #gatedRead(
+    requestContext: RequestContext,
+  ): { coarseDeclined: true } & Pick<RunOperationOptions, 'anonymousRequest'> {
     return {
       coarseDeclined: true,
-      ...(anonymousRequest ? { anonymousRequest } : {}),
+      ...this.#anonymousReadOptions(requestContext),
     };
   }
 
