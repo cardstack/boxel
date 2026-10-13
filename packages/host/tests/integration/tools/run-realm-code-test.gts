@@ -191,23 +191,23 @@ return await realm.capture('seen.json');`,
     let result = await command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
-      code: `await realm.fs.writeText('Pet/mango.json', JSON.stringify({
+      code: `await realm.fs.writeText('Pet/biscuit.json', JSON.stringify({
   data: {
-    attributes: { name: 'Mango' },
+    attributes: { name: 'Biscuit' },
     meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
   },
 }));
-return { show: 'Pet/mango' };`,
+return { show: 'Pet/biscuit' };`,
     });
 
     assert.strictEqual(result.files[0]?.status, 'saved');
-    assert.strictEqual(result.shownCard, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(result.shownCard, `${testRealmURL}Pet/biscuit`);
     assert.notOk(result.showError);
     let shownIds = operatorModeStateService.state.stacks
       .flat()
       .map((item) => item.id);
     assert.true(
-      shownIds.includes(`${testRealmURL}Pet/mango`),
+      shownIds.includes(`${testRealmURL}Pet/biscuit`),
       'the card is open on a stack',
     );
   });
