@@ -310,8 +310,7 @@ export interface OperationDefinition {
   // was authorized.
   html?: HtmlDeclaration;
   // The author's short, plain-text phrase for people, shown wherever the
-  // operation is presented to someone. Read as data and acted on by nothing,
-  // so a fingerprint of what the operation sends or does leaves it out.
+  // operation is presented to someone. Read as data and acted on by nothing.
   // Absent, the operation is shown under its name split into words.
   label?: string;
   // The author's override of the client's optimistic eligibility.

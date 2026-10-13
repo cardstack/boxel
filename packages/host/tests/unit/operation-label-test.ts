@@ -49,6 +49,17 @@ module('Unit | operation label', function () {
     }
   });
 
+  test('a name in any script splits the same way', function (assert) {
+    let cases: [string, string][] = [
+      ['öffnen', 'Öffnen'],
+      ['listÄpfel', 'List äpfel'],
+      ['ÖffneDatei', 'Öffne datei'],
+    ];
+    for (let [name, expected] of cases) {
+      assert.strictEqual(operationNameAsWords(name), expected, name);
+    }
+  });
+
   test('the display label is the declared label, or the name as words', function (assert) {
     assert.strictEqual(
       operationDisplayLabel('listOpenPRs', {
@@ -76,6 +87,22 @@ module('Unit | operation label', function () {
       undefined,
       'the limit counts characters, not UTF-16 code units',
     );
+    assert.strictEqual(
+      operationLabelProblem('🇺🇸'.repeat(80)),
+      undefined,
+      'a flag counts once, though it is two code points',
+    );
+    assert.strictEqual(
+      operationLabelProblem(
+        'Invite \u{1F468}\u200D\u{1F469}\u200D\u{1F467} to the trip',
+      ),
+      undefined,
+      'the joiners in an emoji sequence are plain text',
+    );
+    assert.strictEqual(
+      operationLabelProblem('🇺🇸'.repeat(81)),
+      'a label must be at most 80 characters, and this one is 81',
+    );
     let refused: [string, unknown][] = [
       ['empty', ''],
       ['blank', ' \u00a0 '],
@@ -84,6 +111,10 @@ module('Unit | operation label', function () {
       ['line feed', 'Archive\nnow'],
       ['carriage return', 'Archive\rnow'],
       ['line separator', 'Archive\u2028now'],
+      ['right-to-left override', 'Read \u202Eetirw'],
+      ['bidirectional isolate', 'Read \u2066this\u2069'],
+      ['only a zero-width space', '\u200B'],
+      ['an unpaired surrogate half', 'Archive \uD800'],
       ['not a string', 42],
     ];
     for (let [what, value] of refused) {
