@@ -8,7 +8,11 @@ import type {
   PgAdapter,
 } from '@cardstack/postgres';
 import { findStuckReservations } from '../lib/stuck-reservations.ts';
-import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 async function insertJob(adapter: PgAdapter): Promise<JobsTable['id']> {
   let rows = (await adapter.execute(
@@ -53,7 +57,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('reports an open reservation whose lease has lapsed past the grace period', async function (assert) {
