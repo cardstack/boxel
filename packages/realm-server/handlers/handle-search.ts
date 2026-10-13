@@ -553,6 +553,9 @@ export default function handleSearch(opts: {
       return await resolveNamedQuery(resolvingRealm.operationCore, payload, {
         principal,
         realms: scope,
+        correlationId: sanitizeLoggingCorrelationId(
+          ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+        ),
       });
     } catch (e) {
       if (!isOperationFailure(e)) {

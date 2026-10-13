@@ -8,8 +8,10 @@ import {
   isNamedQueryPayload,
   isOperationFailure,
   resolveNamedQuery,
+  setNamedQueryRefusalHiddenSink,
   type NamedQueryAdmittingNothing,
   type NamedQueryContext,
+  type NamedQueryRefusalHiddenEvent,
   type OperationCore,
   type OperationDefinition,
   type ResolvedNamedQuery,
@@ -101,9 +103,12 @@ const OPERATIONS: Record<string, OperationDefinition> = {
   retitle: { base: 'transform', deterministic: true },
 };
 
-// `reads` is whether the caller reads the realm holding the type's module, or
-// `unserved` for a module no realm on this server holds.
-function stubCore({ reads = true }: { reads?: boolean | 'unserved' } = {}) {
+// `reads` is whether the caller reads the realm holding the type's module,
+// `unserved` for a module no realm on this server holds, or `throws` for a
+// realm whose permissions can't be read.
+function stubCore({
+  reads = true,
+}: { reads?: boolean | 'unserved' | 'throws' } = {}) {
   let definition: Definition = {
     type: 'card-def',
     codeRef: REPORT,
@@ -130,6 +135,9 @@ function stubCore({ reads = true }: { reads?: boolean | 'unserved' } = {}) {
     resolveCodeRef: (codeRef: CodeRef) =>
       isResolvedCodeRef(codeRef) ? codeRef : undefined,
     async readsRealmOf() {
+      if (reads === 'throws') {
+        throw new Error('permissions lookup failed');
+      }
       return reads === 'unserved' ? undefined : { realm: REALM_A, read: reads };
     },
   } as unknown as OperationCore;
@@ -516,6 +524,107 @@ module(basename(import.meta.filename), function () {
     assert.true(/"params"/.test(listParams.detail));
   });
   module('a caller who may not read the type’s module', function () {
+    module('what the server records', function (hooks) {
+      let events: NamedQueryRefusalHiddenEvent[];
+      hooks.beforeEach(function () {
+        events = [];
+        setNamedQueryRefusalHiddenSink((event) => events.push(event));
+      });
+      hooks.afterEach(function () {
+        setNamedQueryRefusalHiddenSink(undefined);
+      });
+
+      test('a refusal answered as no rows records what it would have told the caller', async function (assert) {
+        let { core } = stubCore({ reads: false });
+        assert.deepEqual(
+          await resolveNamedQuery(
+            core,
+            { operation: 'everything', on: REPORT },
+            { ...CONTEXT, correlationId: 'corr-1' },
+          ),
+          { admitsNothing: true },
+        );
+        assert.deepEqual(events, [
+          {
+            kind: 'named-query-refusal-hidden',
+            realmURL: REALM_A,
+            actor: '@caller:localhost',
+            operation: 'everything',
+            on: `${REPORT.module}/${REPORT.name}`,
+            status: 404,
+            code: 'unknown-operation',
+            unreadableBecause: 'not-readable',
+            moduleRealm: REALM_A,
+            correlationId: 'corr-1',
+          },
+        ]);
+      });
+
+      test('records why the module is one the caller may not read', async function (assert) {
+        await resolveNamedQuery(
+          stubCore({ reads: 'unserved' }).core,
+          { operation: 'everything', on: REPORT },
+          CONTEXT,
+        );
+        await resolveNamedQuery(
+          stubCore({ reads: false }).core,
+          { operation: 'everything', on: { type: 'ancestorOf', card: REPORT } },
+          CONTEXT,
+        );
+        assert.deepEqual(
+          events.map((event) => event.unreadableBecause),
+          ['unserved', 'unresolved'],
+        );
+        assert.strictEqual(events[0].correlationId, null);
+      });
+
+      test('a permissions lookup that fails is answered as no rows, and recorded with its error', async function (assert) {
+        let { core } = stubCore({ reads: 'throws' });
+        assert.deepEqual(
+          await resolveNamedQuery(
+            core,
+            { operation: 'everything', on: REPORT },
+            CONTEXT,
+          ),
+          { admitsNothing: true },
+        );
+        assert.strictEqual(events[0].unreadableBecause, 'lookup-failed');
+        assert.strictEqual(events[0].error, 'permissions lookup failed');
+      });
+
+      test('a reader’s refusal and a declared query record nothing', async function (assert) {
+        await refusal(
+          resolveNamedQuery(
+            stubCore().core,
+            { operation: 'everything', on: REPORT },
+            CONTEXT,
+          ),
+        );
+        await resolves(
+          resolveNamedQuery(
+            stubCore({ reads: false }).core,
+            { operation: 'byStatus', on: REPORT, params: { status: 'open' } },
+            CONTEXT,
+          ),
+        );
+        assert.deepEqual(events, []);
+      });
+
+      test('a record that fails to write leaves the answer as it is', async function (assert) {
+        setNamedQueryRefusalHiddenSink(() => {
+          throw new Error('sink failed');
+        });
+        assert.deepEqual(
+          await resolveNamedQuery(
+            stubCore({ reads: false }).core,
+            { operation: 'everything', on: REPORT },
+            CONTEXT,
+          ),
+          { admitsNothing: true },
+        );
+      });
+    });
+
     // Every refusal resolving gives for a request that names a type.
     const REFUSED: Record<string, Record<string, unknown>> = {
       'an operation the type does not declare': {

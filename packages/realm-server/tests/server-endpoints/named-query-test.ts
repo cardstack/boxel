@@ -8,6 +8,7 @@ import {
   baseCardRef,
   DURING_PRERENDER_HEADER,
   rri,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 import type {
   QueuePublisher,
@@ -18,6 +19,8 @@ import type {
 import {
   lowerQueryOperation,
   namedQueryStats,
+  setNamedQueryRefusalHiddenSink,
+  type NamedQueryRefusalHiddenEvent,
 } from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
@@ -984,6 +987,53 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
           `${name}: byte-identical to the declared query that admits nothing`,
         );
       }
+    });
+
+    test('a refusal answered as no rows is recorded under the request’s correlation id', async function (assert) {
+      let events: NamedQueryRefusalHiddenEvent[] = [];
+      setNamedQueryRefusalHiddenSink((event) => events.push(event));
+      try {
+        await federatedSearch(
+          {
+            ...REFUSED['an operation the type does not declare'],
+            realms: [SCHOOL],
+          },
+          PROVIDER_B,
+          { [X_BOXEL_LOGGING_CORRELATION_ID_HEADER]: 'federated-corr' },
+        );
+        await realmSearch(
+          school,
+          REFUSED['a query missing its params'],
+          PROVIDER_B,
+          { [X_BOXEL_LOGGING_CORRELATION_ID_HEADER]: 'realm-corr' },
+        );
+      } finally {
+        setNamedQueryRefusalHiddenSink(undefined);
+      }
+      assert.deepEqual(
+        events.map(
+          ({ code, unreadableBecause, moduleRealm, correlationId }) => ({
+            code,
+            unreadableBecause,
+            moduleRealm,
+            correlationId,
+          }),
+        ),
+        [
+          {
+            code: 'unknown-operation',
+            unreadableBecause: 'not-readable',
+            moduleRealm: PRIVATE,
+            correlationId: 'federated-corr',
+          },
+          {
+            code: 'invalid-params',
+            unreadableBecause: 'not-readable',
+            moduleRealm: PRIVATE,
+            correlationId: 'realm-corr',
+          },
+        ],
+      );
     });
 
     test('a refusal reads the live-search cache as a declared query does', async function (assert) {

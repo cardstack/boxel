@@ -18,6 +18,11 @@ import { MAX_REMEMBERED_MS } from './gate.ts';
 import type { SearchPrincipal } from './policy-query.ts';
 import { lowerQueryOperation } from './query.ts';
 import {
+  emitNamedQueryRefusalHidden,
+  recordSafely,
+  type NamedQueryRefusalHiddenEvent,
+} from './telemetry.ts';
+import {
   isOperationFailure,
   linkStrategyOf,
   OperationFailure,
@@ -148,6 +153,9 @@ export interface NamedQueryContext {
   // the realms the request named, each already authorized for the caller; on
   // a realm's own endpoint, that realm.
   realms: string[];
+  // The request's logging correlation id, which a refusal answered as no rows
+  // is recorded under. Null or absent where the request carried none.
+  correlationId?: string | null;
 }
 
 // What a named search request resolves to: the ad-hoc query it runs, and how
@@ -260,14 +268,31 @@ export async function resolveNamedQuery(
       context,
     );
   } catch (e) {
-    if (
-      isOperationFailure(e) &&
-      describesDeclaration(e) &&
-      !(await readsModuleOf(core, on, callerOf(context.principal)))
-    ) {
-      return { admitsNothing: true };
+    if (!isOperationFailure(e) || !describesDeclaration(e)) {
+      throw e;
     }
-    throw e;
+    let reading = await readingOfModule(core, on, callerOf(context.principal));
+    if (reading.reads) {
+      throw e;
+    }
+    let failure = e;
+    recordSafely('named-query refusal answered as no rows', () =>
+      emitNamedQueryRefusalHidden({
+        kind: 'named-query-refusal-hidden',
+        realmURL: core.realmURL,
+        actor:
+          context.principal?.kind === 'user' ? context.principal.user : null,
+        operation,
+        on: 'module' in on ? `${on.module}/${on.name}` : JSON.stringify(on),
+        status: failure.error.status,
+        code: failure.error.code,
+        unreadableBecause: reading.because,
+        ...(reading.moduleRealm ? { moduleRealm: reading.moduleRealm } : {}),
+        ...(reading.error ? { error: reading.error } : {}),
+        correlationId: context.correlationId ?? null,
+      }),
+    );
+    return { admitsNothing: true };
   }
 }
 
@@ -289,32 +314,53 @@ function callerOf(principal: SearchPrincipal | undefined): ScopeCaller {
 }
 
 // Whether a caller may read the realm that holds `on`'s module, by that
-// realm's own permissions. A module no realm this server serves holds is one
-// whose realm the caller cannot be shown to read, and so is a type nothing is
-// described for, as is one whose code ref does not resolve. A caller who isn't
-// signed in reads what the realm opens to everyone.
-async function readsModuleOf(
+// realm's own permissions, and if not, why not. A module no realm this server
+// serves holds is one whose realm the caller cannot be shown to read, and so is
+// a type nothing is described for, as is one whose code ref does not resolve,
+// and one whose realm's permissions can't be asked. A caller who isn't signed
+// in reads what the realm opens to everyone.
+type ModuleReading =
+  | { reads: true }
+  | {
+      reads: false;
+      because: NamedQueryRefusalHiddenEvent['unreadableBecause'];
+      moduleRealm?: string;
+      error?: string;
+    };
+
+async function readingOfModule(
   core: OperationCore,
   on: CodeRef,
   caller: ScopeCaller,
-): Promise<boolean> {
+): Promise<ModuleReading> {
   if (!core.readsRealmOf) {
-    return false;
+    return { reads: false, because: 'no-lookup' };
   }
   let type: ResolvedCodeRef | undefined;
   try {
     type = core.resolveCodeRef(on, new URL(core.realmURL));
   } catch {
-    return false;
+    type = undefined;
   }
   if (!type) {
-    return false;
+    return { reads: false, because: 'unresolved' };
   }
+  let served;
   try {
-    return (await core.readsRealmOf(type.module, caller))?.read === true;
-  } catch {
-    return false;
+    served = await core.readsRealmOf(type.module, caller);
+  } catch (e: unknown) {
+    return {
+      reads: false,
+      because: 'lookup-failed',
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
+  if (!served) {
+    return { reads: false, because: 'unserved' };
+  }
+  return served.read
+    ? { reads: true }
+    : { reads: false, because: 'not-readable', moduleRealm: served.realm };
 }
 
 async function resolveDeclaredQuery(

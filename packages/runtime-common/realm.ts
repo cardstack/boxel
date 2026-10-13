@@ -14826,6 +14826,9 @@ export class Realm {
           let resolved = await resolveNamedQuery(this.operationCore, payload, {
             principal: this.#searchPrincipal(requestContext),
             realms: [this.url],
+            correlationId: sanitizeLoggingCorrelationId(
+              request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+            ),
           });
           if (admitsNothing(resolved)) {
             // The rendering alone carries no filter, and is never searched:

@@ -137,6 +137,7 @@ export type {
 export {
   OPERATIONS_CHANNEL,
   emitCapabilityCheck,
+  emitNamedQueryRefusalHidden,
   emitOperationPerf,
   INTERNAL_ROUTE,
   emitPolicyCompile,
@@ -144,6 +145,7 @@ export {
   emitPolicySearchScope,
   emitPolicySnapshotRead,
   setCapabilityCheckSink,
+  setNamedQueryRefusalHiddenSink,
   setOperationPerfSink,
   setPolicyCompileSink,
   setPolicyDecisionSink,
@@ -152,6 +154,7 @@ export {
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
+  NamedQueryRefusalHiddenEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
