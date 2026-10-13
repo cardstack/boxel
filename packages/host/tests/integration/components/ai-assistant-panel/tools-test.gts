@@ -3472,6 +3472,75 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
   });
 
+  test('a run-realm-code result says which card it opened, or why it could not', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let cardId = `${testRealmURL}Pet/mango`;
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-shown',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: JSON.stringify({ show: 'Pet/mango' }),
+        captures: [],
+        shownCard: cardId,
+      }),
+    });
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-not-shown',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: JSON.stringify({ show: 'images/red.png' }),
+        captures: [],
+        showError: 'The card was not shown. images/red.png is a file',
+      }),
+    });
+
+    await waitFor('[data-test-realm-code-show-error]');
+    assert
+      .dom('[data-test-realm-code-shown-card]')
+      .containsText(cardId, 'the opened card is named');
+    assert
+      .dom('[data-test-realm-code-show-error]')
+      .containsText('The card was not shown', 'the reason is shown');
+  });
+
+  test('a run-realm-code result lists its UI actions', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-ui-actions',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: '',
+        captures: [],
+        uiActions: [
+          {
+            action: 'openFile',
+            target: `${testRealmURL}pet.gts`,
+            status: 'done',
+          },
+          {
+            action: 'previewFormat',
+            target: `${testRealmURL}Pet/mango (fitted)`,
+            status: 'failed',
+            detail: 'Card not found',
+          },
+        ],
+      }),
+    });
+
+    await waitFor('[data-test-realm-code-ui-action="previewFormat"]');
+    assert
+      .dom('[data-test-realm-code-ui-action="openFile"]')
+      .containsText('done', 'a done action shows its status');
+    assert
+      .dom('[data-test-realm-code-ui-action="previewFormat"]')
+      .containsText('Card not found', 'a failed action says why');
+  });
+
   test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     // The chat makes the result card asynchronously; wait for that card, so

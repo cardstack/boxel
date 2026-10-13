@@ -2,6 +2,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
+import {
+  basicMappings,
+  type ObjectSchema,
+} from '@cardstack/runtime-common/helpers/ai';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
 import CopyCardToRealmTool from '@cardstack/host/tools/copy-card';
@@ -17,6 +21,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 
 const testRealm2URL = 'http://test-realm/test2/';
@@ -146,6 +151,101 @@ module('Integration | tools | copy-card', function (hooks) {
       );
     });
 
+    test('puts the copy beneath localDir, in a folder named after its type', async function (assert) {
+      let toolService = getService('tool-service');
+      let copyCardCommand = new CopyCardToRealmTool(toolService.toolContext);
+
+      let store = getService('store');
+      let sourceCard = (await store.get(`${testRealmURL}Pet/mango`)) as CardDef;
+
+      let result = await copyCardCommand.execute({
+        sourceCard,
+        targetRealm: testRealm2URL,
+        localDir: 'projects/acme',
+      });
+
+      assert.true(
+        result.newCardId.startsWith(`${testRealm2URL}projects/acme/Pet/`),
+        `copy lands at <targetRealm><localDir>/<CardTypeName>/<generated-id>, got ${result.newCardId}`,
+      );
+      let copiedCard = (await store.get(result.newCardId)) as CardDef;
+      assert.strictEqual(
+        (copiedCard as CardDef & { firstName: string }).firstName,
+        'Mango',
+        'the copy is readable at newCardId',
+      );
+    });
+
+    test('reads a leading slash in localDir as the realm root', async function (assert) {
+      let copyCardCommand = new CopyCardToRealmTool(
+        getService('tool-service').toolContext,
+      );
+      let store = getService('store');
+      let sourceCard = (await store.get(`${testRealmURL}Pet/mango`)) as CardDef;
+
+      let result = await copyCardCommand.execute({
+        sourceCard,
+        targetRealm: testRealm2URL,
+        localDir: '/projects/acme',
+      });
+
+      assert.true(
+        result.newCardId.startsWith(`${testRealm2URL}projects/acme/Pet/`),
+        `copy stays inside the target realm, got ${result.newCardId}`,
+      );
+    });
+
+    test('refuses a localDir that leaves the target realm', async function (assert) {
+      let copyCardCommand = new CopyCardToRealmTool(
+        getService('tool-service').toolContext,
+      );
+      let store = getService('store');
+      let sourceCard = (await store.get(`${testRealmURL}Pet/mango`)) as CardDef;
+
+      for (let localDir of ['../test', 'projects/../../test', '%2e%2e/test']) {
+        await assert.rejects(
+          copyCardCommand.execute({
+            sourceCard,
+            targetRealm: testRealm2URL,
+            localDir,
+          }),
+          /is not a folder inside/,
+          `localDir "${localDir}" is refused`,
+        );
+      }
+    });
+
+    test('the tool schema describes how targetRealm and localDir make up the path of the copy', async function (assert) {
+      let loader = getService('loader-service').loader;
+      let cardAPI = await loader.import<typeof CardAPI>(
+        '@cardstack/base/card-api',
+      );
+      let mappings = await basicMappings(loader);
+      let copyCardCommand = new CopyCardToRealmTool(
+        getService('tool-service').toolContext,
+      );
+
+      let schema = await copyCardCommand.getInputJsonSchema(
+        cardAPI,
+        mappings,
+        true,
+      );
+      let { properties } = schema.attributes as ObjectSchema;
+
+      assert.true(
+        properties.targetRealm?.description?.includes(
+          '<targetRealm><localDir>/<CardTypeName>/<generated-id>.json',
+        ),
+        'targetRealm states the path the copy is written to',
+      );
+      assert.true(
+        properties.localDir?.description?.includes(
+          'projects/acme/Incident/<generated-id>.json',
+        ),
+        'localDir gives an example of the folder it adds and the generated file name',
+      );
+    });
+
     test('errors when user does not have write permissions to target realm', async function (assert) {
       let toolService = getService('tool-service');
       let copyCardCommand = new CopyCardToRealmTool(toolService.toolContext);
@@ -236,6 +336,35 @@ module('Integration | tools | copy-card', function (hooks) {
         'copied card is in target realm',
       );
     });
+    test('puts the copy beneath localDir in the target stack realm', async function (assert) {
+      let copyCardToStackCommand = new CopyCardToStackTool(
+        getService('tool-service').toolContext,
+      );
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.topMostStackItems = () => [
+        new StackItem({
+          id: `${testRealm2URL}Pet/fluffy`,
+          format: 'isolated',
+          stackIndex: 0,
+        }),
+      ];
+
+      let store = getService('store');
+      let sourceCard = (await store.get(`${testRealmURL}Pet/mango`)) as CardDef;
+
+      let result = await copyCardToStackCommand.execute({
+        sourceCard,
+        targetStackIndex: 0,
+        localDir: 'projects/acme',
+      });
+
+      assert.true(
+        result.newCardId.startsWith(`${testRealm2URL}projects/acme/Pet/`),
+        `copy lands beneath localDir in the stack's realm, got ${result.newCardId}`,
+      );
+    });
+
     test('errors when targetStackIndex does not exist', async function (assert) {
       let toolService = getService('tool-service');
       let copyCardToStackCommand = new CopyCardToStackTool(

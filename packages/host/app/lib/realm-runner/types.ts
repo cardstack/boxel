@@ -1,4 +1,5 @@
-// The guest's `realm.*` calls leave the sandbox as `call` messages. The host
+// The guest's `realm.*` and `room.*` calls leave the sandbox as `call`
+// messages. The host
 // does the work and answers with `callResult`; the value is JSON-encoded so it
 // crosses into QuickJS as one string.
 export type RealmRunnerCallMethod =
@@ -7,9 +8,18 @@ export type RealmRunnerCallMethod =
   | 'fs.list'
   | 'fs.replace'
   | 'fs.writeText'
+  | 'fs.writeBytes'
+  | 'cards.search'
   | 'capture'
   | 'workspaces.create'
-  | 'workspaces.delete';
+  | 'workspaces.delete'
+  | 'room.enableSkills'
+  | 'room.disableSkills'
+  | 'room.setModel'
+  | 'ui.switchSubmode'
+  | 'ui.openFile'
+  | 'ui.previewFormat'
+  | 'ui.openWorkspace';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,

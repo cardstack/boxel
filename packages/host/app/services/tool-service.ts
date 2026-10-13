@@ -910,9 +910,16 @@ export default class ToolService extends Service {
         }
 
         if (toolToRun) {
+          let attributes = payload?.attributes;
+          if (
+            (toolToRun.constructor as { bindsToInvokingRoom?: boolean })
+              .bindsToInvokingRoom
+          ) {
+            attributes = { ...attributes, roomId: command.message.roomId };
+          }
           let typedInput = await this.instantiateToolInput(
             toolToRun,
-            payload?.attributes,
+            attributes,
             payload?.relationships,
           );
           return (await toolToRun.execute(typedInput as any)) as
