@@ -1,6 +1,5 @@
 import {
   inferContentType,
-  internalKeyFor,
   jobIdentity,
   type ErrorEntry,
   type FileEntry,
@@ -9,7 +8,6 @@ import {
   type FileRenderResponse,
   type JobInfo,
   type LocalPath,
-  type ResolvedCodeRef,
   type Diagnostics,
 } from '../index.ts';
 import {
@@ -20,11 +18,7 @@ import {
 } from '../error.ts';
 import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
 import { uniqueDeps } from './dependency-collections.ts';
-import {
-  BASE_FILE_DEF_CODE_REF,
-  resolveFileDefCodeRef,
-} from '../file-def-code-ref.ts';
-import { baseRef } from '../constants.ts';
+import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
@@ -96,19 +90,6 @@ export async function performFileIndexing({
   let contentType = inferContentType(name);
 
   let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
-  let fileTypeRefs = [fileDefCodeRef];
-  if (
-    fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
-    fileDefCodeRef.name !== BASE_FILE_DEF_CODE_REF.name
-  ) {
-    fileTypeRefs.push(BASE_FILE_DEF_CODE_REF);
-  }
-  // Terminate the chain at BaseDef (the common ancestor of FileDef and CardDef)
-  // so a `{ type: baseRef }` filter matches both file and card-instance rows —
-  // e.g. `scope: 'all'` searches wanting one type ref for "everything". The
-  // instance chain (render/meta.ts `getTypes`) and the extractor chain
-  // (file-def-attributes-extractor.ts `getTypes`) append it too.
-  fileTypeRefs.push(baseRef);
 
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
@@ -188,10 +169,11 @@ export async function performFileIndexing({
     );
   }
 
-  let fallbackTypes = fileTypeRefs.map((ref: ResolvedCodeRef) =>
-    internalKeyFor(ref, undefined, virtualNetwork),
-  );
-  let fileTypes = extractResult.types ?? fallbackTypes;
+  // The extractor stamps `types` with the full ancestor chain of the class
+  // whose extraction succeeded. When the extension's FileDef fails, that is the
+  // nearest ancestor that succeeded, so the row is a member of that ancestor
+  // and the classes above it, not of the class that failed.
+  let fileTypes = extractResult.types ?? undefined;
   let deps = new Set(extractResult.deps ?? []);
 
   // Shared by the success entry and the dependency-error entry below, so the
