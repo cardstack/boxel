@@ -68,13 +68,19 @@ export default class HostModeStateService extends Service {
     });
   }
 
+  // The URL is the source of truth for the stack. Every transition into the
+  // route lands here: the first load, the transition `persist` makes for a
+  // change made here (whose URL already matches, so nothing changes), and the
+  // browser's Back and Forward, whose URL holds a different stack that the
+  // page has to follow.
   private initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
-    if (this.isStateInitialized) {
-      return;
-    }
-    this.isStateInitialized = false;
     this.primaryCardItem = primaryCardId ?? null;
-    this.stackCardItems.push(...stack);
+    if (
+      this.stackCardItems.length !== stack.length ||
+      this.stackCardItems.some((id, index) => id !== stack[index])
+    ) {
+      this.stackCardItems.splice(0, this.stackCardItems.length, ...stack);
+    }
     this.currentRoutePath = routePath;
     this.isStateInitialized = true;
   }
