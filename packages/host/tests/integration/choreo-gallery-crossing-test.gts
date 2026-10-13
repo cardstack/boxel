@@ -1,6 +1,6 @@
 /**
  * The gallery ⇄ demo crossing, driven through the gallery card — the hero
- * use case of docs/choreo-constructs.md §4.7, asserted end to end: the
+ * use case of packages/choreo-gallery/realm/docs/choreo-constructs.md §4.7, asserted end to end: the
  * timeline arms when a tile is followed, the region's pass populates the
  * orphan layer with exactly the flying cast, the landing is clean, and
  * nothing is left stranded at a seeded opacity. Everything visual is

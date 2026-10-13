@@ -38,4 +38,4 @@ Test pause during asynchronous preparation, a replacement run followed by sync, 
 
 **choreo-player**: `ChoreoRun`, `ChoreoPlayer`, `ChoreoPlayerUpdateOptions`, `ChoreoPlayerOptions`, `createChoreoPlayer`.
 
-Read the implementation: [`index.ts`](https://github.com/cardstack/choreo/blob/main/packages/choreo-player/src/index.ts).
+Read the implementation: [`index.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo-player/src/index.ts).

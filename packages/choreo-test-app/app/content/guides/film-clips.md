@@ -41,4 +41,4 @@ Test a clip that starts late, a clip that spans the next beat, and a held clip r
 
 **@cardstack/choreo/film**: `Clip`, `ClipEnd`, `ClipKind`, `clipLanes`, `ClipSpec`, `ClipState`, `clipWindow`, `resolveClip`, `resolveClips`, `ResolvedClip`.
 
-Read the implementation: [`clip.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/clip.gts), [`clips.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/clips.ts).
+Read the implementation: [`clip.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/clip.gts), [`clips.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/clips.ts).

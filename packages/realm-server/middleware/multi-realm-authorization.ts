@@ -273,6 +273,7 @@ export function multiRealmAuthorization(
       let permissionsForAllRealms = await fetchUserPermissions(dbAdapter, {
         userId: token.user,
         onlyOwnRealms: false,
+        includePublicRealms: true,
       });
       readableRealms = buildReadableRealms(
         permissionsForAllRealms,

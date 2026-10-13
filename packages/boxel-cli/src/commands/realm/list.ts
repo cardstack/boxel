@@ -66,7 +66,7 @@ export async function listRealms(
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
   let response = await pm.authedRealmServerFetch(
-    `${realmServerUrl}/_realm-auth`,
+    `${realmServerUrl}/_realm-auth?include-public=true`,
     {
       method: 'POST',
       headers: {

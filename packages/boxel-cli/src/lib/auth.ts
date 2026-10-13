@@ -292,7 +292,9 @@ export async function getRealmTokens(
   realmServerUrl: string,
   serverToken: string,
 ): Promise<RealmTokens> {
-  let url = `${realmServerUrl.replace(/\/$/, '')}/_realm-auth`;
+  // `include-public=true`: a token for every realm the user may read, public
+  // ones included, since authed realm fetches resolve their token from this.
+  let url = `${realmServerUrl.replace(/\/$/, '')}/_realm-auth?include-public=true`;
 
   let response = await fetch(url, {
     method: 'POST',

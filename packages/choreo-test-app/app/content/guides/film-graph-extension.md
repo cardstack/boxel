@@ -39,4 +39,4 @@ Test the compiled graph before testing the pixels. Assert which beats receive th
 
 **@cardstack/choreo/film**: `Adjustment`, `Filter`, `AttachNode`, `CompiledGraph`, `compileGraph`, `EyeNode`, `GraphNode`, `GroupNode`, `JoinNode`, `Patch`, `PatchNode`, `ShotNode`, `ToNode`, `VoiceNode`, `collectGraph`, `GraphNodeComponent`, `GraphProvider`, `PatchComponent`.
 
-Read the implementation: [`adjust.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/adjust.gts), [`compile.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/compile.ts), [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts).
+Read the implementation: [`adjust.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/adjust.gts), [`compile.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/compile.ts), [`nodes.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/nodes.gts).

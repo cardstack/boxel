@@ -32,6 +32,7 @@ import {
   type RealmIndexCounts,
   type RealmInfo,
   type JWTPayload,
+  type PublicRealmSummary,
   type RealmServerTokenSource,
 } from '@cardstack/runtime-common';
 import {
@@ -94,8 +95,13 @@ type AuthStatus =
 
 interface AvailableRealm {
   url: string;
-  type: 'base' | 'catalog' | 'user';
+  // `catalog` realms are the ones the realm server lists for every user;
+  // `user-catalog` realms are public realms this user added to their own
+  // Catalogs section.
+  type: 'base' | 'catalog' | 'user' | 'user-catalog';
 }
+
+export type { PublicRealmSummary };
 
 // Display metadata for an archived realm, as returned by the owner-only
 // `GET /_archived-realms` endpoint. Archived realms are sealed (their `_info`
@@ -124,6 +130,11 @@ export default class RealmServerService
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
+  // The public realms this user added to their Catalogs section, as stored.
+  // `availableRealms` lists each as a `user-catalog` entry unless another list
+  // already shows it, and the entries are rebuilt from here whenever those
+  // lists change, so a pick hidden by an overlap comes back when it ends.
+  private userCatalogPickList = new TrackedArray<string>([]);
   private archivedRealmsList = new TrackedArray<ArchivedRealmInfo>([]);
   private archivedRealmsFetched = false;
   // Trusted servers whose `_realm-auth` call failed at boot assembly (network
@@ -370,6 +381,7 @@ export default class RealmServerService
       type: 'base',
       url: baseRealm.url,
     });
+    this.userCatalogPickList.splice(0, this.userCatalogPickList.length);
     this.unreachableRealmServersList.splice(
       0,
       this.unreachableRealmServersList.length,
@@ -379,14 +391,17 @@ export default class RealmServerService
 
   async fetchTokensForAccessibleRealms() {
     await this.login();
-    let response = await this.network.fetch(`${this.url.href}_realm-auth`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
+    let response = await this.network.fetch(
+      `${this.url.href}_realm-auth?include-public=true`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       let responseText = await response.text();
@@ -454,8 +469,10 @@ export default class RealmServerService
     serverURL: string,
   ): Promise<string[]> {
     let normalizedServerURL = ensureTrailingSlash(serverURL);
+    // Only the realms the user has a permission row of their own for: public
+    // realms reach the dashboard through the Catalogs section instead.
     let response = await this.network.fetch(
-      `${normalizedServerURL}_realm-auth`,
+      `${normalizedServerURL}_realm-auth?include-public=false`,
       {
         method: 'POST',
         headers: {
@@ -615,9 +632,27 @@ export default class RealmServerService
       .map((r) => ri(r.url));
   }
 
+  // Every public realm the user added to their Catalogs section, including
+  // any that another list shows instead.
+  get userCatalogPicks(): string[] {
+    return [...this.userCatalogPickList];
+  }
+
+  @cached
+  get userCatalogRealmIdentifiers(): RealmIdentifier[] {
+    return this.availableRealms
+      .filter((r) => r.type === 'user-catalog')
+      .map((r) => ri(r.url));
+  }
+
+  // The realms the dashboard's Catalogs section shows: the server's catalogs,
+  // then the ones this user added.
   @cached
   get displayedCatalogRealmIdentifiers(): RealmIdentifier[] {
-    return this.catalogRealmIdentifiers;
+    return [
+      ...this.catalogRealmIdentifiers,
+      ...this.userCatalogRealmIdentifiers,
+    ];
   }
 
   @cached
@@ -673,11 +708,9 @@ export default class RealmServerService
     // newest-created-first. Non-user entries (base, catalog) keep their
     // positions; a url already present as a non-user entry is not added
     // again as a user entry.
-    for (let i = this.availableRealms.length - 1; i >= 0; i--) {
-      if (this.availableRealms[i].type === 'user') {
-        this.availableRealms.splice(i, 1);
-      }
-    }
+    // A realm the user added as a catalog that is also one of their own
+    // realms is listed with their own realms.
+    this.removeEntries('user', 'user-catalog');
     userRealmIdentifiers.forEach((userRealmIdentifier) => {
       if (!this.availableRealms.find((r) => r.url === userRealmIdentifier)) {
         this.availableRealms.push({
@@ -686,6 +719,60 @@ export default class RealmServerService
         });
       }
     });
+    this.addUserCatalogEntries();
+  }
+
+  // Replaces the public realms this user added to their Catalogs section. A
+  // realm already listed some other way (a server catalog, one of the user's
+  // own realms) isn't added a second time.
+  setUserCatalogRealmIdentifiers(userCatalogRealmIdentifiers: string[]) {
+    this.userCatalogPickList.splice(
+      0,
+      this.userCatalogPickList.length,
+      ...userCatalogRealmIdentifiers,
+    );
+    this.removeEntries('user-catalog');
+    this.addUserCatalogEntries();
+  }
+
+  private removeEntries(...types: AvailableRealm['type'][]) {
+    for (let i = this.availableRealms.length - 1; i >= 0; i--) {
+      if (types.includes(this.availableRealms[i].type)) {
+        this.availableRealms.splice(i, 1);
+      }
+    }
+  }
+
+  private addUserCatalogEntries() {
+    for (let url of this.userCatalogPickList) {
+      if (!this.availableRealms.find((r) => r.url === url)) {
+        this.availableRealms.push({ type: 'user-catalog', url });
+      }
+    }
+  }
+
+  // The public realms on this realm server that the user can add to their
+  // Catalogs section.
+  async fetchPublicRealms(): Promise<PublicRealmSummary[]> {
+    await this.login();
+    let response = await this.network.fetch(`${this.url.href}_public-realms`, {
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch public realms for realm server ${this.url.origin}: ${response.status}`,
+      );
+    }
+    let { data } = (await response.json()) as {
+      data: {
+        id: string;
+        attributes: Omit<PublicRealmSummary, 'url'>;
+      }[];
+    };
+    return data.map(({ id, attributes }) => ({ url: id, ...attributes }));
   }
 
   async fetchCatalogRealms() {
@@ -703,6 +790,8 @@ export default class RealmServerService
 
     let { data } = await response.json();
 
+    // A server catalog that the user also added is listed as the server's.
+    this.removeEntries('user-catalog');
     data.forEach((publicRealm: { id: string }) => {
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
@@ -711,6 +800,7 @@ export default class RealmServerService
         });
       }
     });
+    this.addUserCatalogEntries();
 
     this._ready.fulfill();
   }

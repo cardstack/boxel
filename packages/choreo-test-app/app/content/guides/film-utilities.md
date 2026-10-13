@@ -37,4 +37,4 @@ Test edge values that your interface can produce: progress before the window, pr
 
 **@cardstack/choreo/film**: `clamp01`, `hex`, `lerp`, `luminance`, `mmss`, `RAD`, `rgba`, `smooth`.
 
-Read the implementation: [`math.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/math.ts).
+Read the implementation: [`math.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/math.ts).

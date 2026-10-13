@@ -24,6 +24,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+import type { CardDef } from '@cardstack/base/card-api';
+
 const otherRealmURL = 'http://test-realm/test2/';
 
 // A card instance written out by hand, so a test can match its exact text.
@@ -112,6 +114,20 @@ module('Integration | tools | run-realm-code', function (hooks) {
 }
 `,
           'notes/first.md': '# First\n',
+          'images/existing.png': Uint8Array.from(atob(PNG_BASE64), (char) =>
+            char.charCodeAt(0),
+          ),
+          // A zip local-file header followed by bytes that are not UTF-8.
+          'docs/report.docx': Uint8Array.from([
+            0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00, 0xff, 0xfe, 0x9c,
+          ]),
+          'docs/README': 'Plain text with no extension\n',
+          'docs/replacement.txt': 'A replacement character: \uFFFD\n',
+          // "café" in Latin-1, which is not UTF-8.
+          'docs/latin1.txt': Uint8Array.from([0x63, 0x61, 0x66, 0xe9, 0x0a]),
+          'unformatted.gts': `import { CardDef } from "@cardstack/base/card-api"
+export class Unformatted extends CardDef {}
+`,
           'skills/test-skill/SKILL.md': `---
 name: Test Skill
 description: A skill a script turns on
@@ -174,6 +190,20 @@ boxel:
               });
             }
           `,
+          'person.gts': `
+            import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+
+            export class Person extends CardDef {
+              @field firstName = contains(StringField);
+              @field friend = linksTo(() => Person);
+              @field cardTitle = contains(StringField, {
+                computeVia: function (this: Person) {
+                  return this.firstName;
+                },
+              });
+            }
+          `,
           'Chef/ana.json': recipeJSON('Chef', { name: 'Ana' }),
           'Recipe/pancakes.json': recipeJSON(
             'Recipe',
@@ -193,6 +223,25 @@ boxel:
             undefined,
             '../../recipe',
           ),
+          'people/hassan.json': {
+            data: {
+              attributes: { firstName: 'Hassan' },
+              relationships: {
+                friend: { links: { self: './mango' } },
+              },
+              meta: {
+                adoptsFrom: { module: '../person', name: 'Person' },
+              },
+            },
+          },
+          'people/mango.json': {
+            data: {
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: { module: '../person', name: 'Person' },
+              },
+            },
+          },
         },
       }),
     );
@@ -393,6 +442,73 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
   });
 
+  test('realm.cards.get returns a card as data, with computed fields and absolute URLs', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return {
+  bare: await realm.cards.get('people/hassan'),
+  withExtension: await realm.cards.get('people/hassan.json'),
+  byURL: await realm.cards.get(${JSON.stringify(`${testRealmURL}people/hassan`)}),
+};`,
+    });
+
+    assert.deepEqual(result.files, [], 'reading a card saves nothing');
+    let { bare, withExtension, byURL } = JSON.parse(result.scriptResult!);
+    assert.strictEqual(bare.path, 'people/hassan.json');
+    assert.strictEqual(bare.id, `${testRealmURL}people/hassan`);
+    assert.deepEqual(bare.type, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.strictEqual(bare.attributes.firstName, 'Hassan');
+    assert.strictEqual(
+      bare.attributes.cardTitle,
+      'Hassan',
+      'computed fields are included',
+    );
+    assert.deepEqual(
+      bare.relationships,
+      { friend: `${testRealmURL}people/mango` },
+      'links are keyed by field path, as realm.cards.search returns them',
+    );
+    assert.deepEqual(withExtension, bare, 'a .json path reads the same card');
+    assert.deepEqual(byURL, bare, 'a URL reads the same card');
+
+    let afterEdit = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.cards.get('people/hassan');
+await realm.fs.replace('people/hassan.json', '"Hassan"', '"Hassan Abdel"');
+return await realm.cards.get('people/hassan');`,
+    });
+    assert.strictEqual(
+      JSON.parse(afterEdit.scriptResult!).attributes.firstName,
+      'Hassan Abdel',
+      'a card read after an edit in the same run shows the edit',
+    );
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.cards.get('people/missing');`,
+      }),
+      /Card not found/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.cards.get('https://example.com/card');`,
+      }),
+      /Path is outside this realm/,
+    );
+  });
+
   test('replays a replacement against the source that was read', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
@@ -558,6 +674,171 @@ return { saved, exists: await realm.fs.exists('images/dot.png') };`,
         code: `await realm.fs.writeBytes('big.bin', 'AAAA'.repeat(700000));`,
       }),
       /at most 2000000 bytes per file.*No file was saved/,
+    );
+  });
+
+  test('realm.fs.copy copies a file and leaves the source as it was', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.fs.copy('notes/first.md', 'notes/second.md');`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      path: 'notes/second.md',
+      saved: true,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file?.fileUrl, file?.status]),
+      [[`${testRealmURL}notes/second.md`, 'saved']],
+    );
+    let copy = await cardService.getSource(
+      new URL(`${testRealmURL}notes/second.md`),
+    );
+    assert.strictEqual(copy.content, '# First\n');
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}notes/first.md`),
+    );
+    assert.strictEqual(source.content, '# First\n', 'the source is unchanged');
+  });
+
+  test('realm.fs.copy of a card instance in the same folder loads as the same card type', async function (assert) {
+    let toolService = getService('tool-service');
+    let store = getService('store');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.copy('Pet/mango.json', 'Pet/mango-copy.json');
+await realm.fs.replace('Pet/mango-copy.json', '"Mango"', '"Mango Two"');`,
+    });
+
+    let copy = (await store.get(`${testRealmURL}Pet/mango-copy`)) as CardDef;
+    assert.strictEqual((copy.constructor as typeof CardDef).displayName, 'Pet');
+    assert.strictEqual((copy as any).name, 'Mango Two');
+  });
+
+  test('realm.fs.copy refuses an existing target, a missing source, and paths outside the realm', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let run = (code: string) =>
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+
+    await assert.rejects(
+      run(`await realm.fs.copy('notes/first.md', 'task.json');`),
+      /File already exists: .*task\.json/,
+    );
+    let target = await cardService.getSource(
+      new URL(`${testRealmURL}task.json`),
+    );
+    assert.true(
+      target.content.includes('"Old title"'),
+      'the existing target is unchanged',
+    );
+    await assert.rejects(
+      run(`await realm.fs.copy('nope.md', 'copy.md');`),
+      /File not found: .*nope\.md/,
+    );
+    await assert.rejects(
+      run(`await realm.fs.copy('notes/first.md', '../elsewhere.md');`),
+      /Path must be relative to the realm root/,
+    );
+    await assert.rejects(
+      run(
+        `await realm.fs.copy('https://example.com/other/first.md', 'copy.md');`,
+      ),
+      /Path is outside this realm/,
+    );
+  });
+
+  test('realm.fs.copy refuses files that are not UTF-8 text', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    for (let [from, to] of [
+      ['images/existing.png', 'images/existing-copy.png'],
+      ['docs/report.docx', 'docs/report-copy.docx'],
+      ['docs/latin1.txt', 'docs/latin1-copy.txt'],
+    ]) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.fs.copy('${from}', '${to}');`,
+        }),
+        /is a binary file/,
+        `refuses ${from}`,
+      );
+      let copy = await cardService.getSource(new URL(`${testRealmURL}${to}`));
+      assert.strictEqual(copy.status, 404, `no copy of ${from} is saved`);
+    }
+  });
+
+  test('realm.fs.copy copies UTF-8 text byte for byte, whatever its content type', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let bytesOf = async (path: string) => {
+      let response = await network.authedFetch(`${testRealmURL}${path}`, {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      return Array.from(new Uint8Array(await response.arrayBuffer()));
+    };
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.copy('docs/README', 'docs/README-copy');
+await realm.fs.copy('docs/replacement.txt', 'docs/replacement-copy.txt');
+await realm.fs.copy('unformatted.gts', 'unformatted-copy.gts');`,
+    });
+
+    for (let path of [
+      'docs/README',
+      'docs/replacement.txt',
+      'unformatted.gts',
+    ]) {
+      let copyPath = path.replace(/(\.[^./]+)?$/, '-copy$1');
+      assert.deepEqual(
+        await bytesOf(copyPath),
+        await bytesOf(path),
+        `${copyPath} has the same bytes as ${path}`,
+      );
+    }
+  });
+
+  test('a binary file exists, and is not overwritten', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let run = (code: string) =>
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+
+    let result = await run(
+      `return await realm.fs.exists('images/existing.png');`,
+    );
+    assert.true(JSON.parse(result.scriptResult!), 'exists returns true');
+    await assert.rejects(
+      run(`await realm.fs.copy('notes/first.md', 'images/existing.png');`),
+      /File already exists: .*existing\.png/,
+    );
+    await assert.rejects(
+      run(`await realm.fs.writeText('images/existing.png', 'text');`),
+      /File already exists; use realm\.fs\.replace/,
     );
   });
 
