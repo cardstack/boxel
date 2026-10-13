@@ -672,7 +672,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
       ...attributes
     >
       <header class='xb-head'>
-        <h3 class='xb-title'>{{this.title}}</h3>
+        <h3 class='xb-title' data-test-pretui-expression-title>{{this.title}}</h3>
         <Chip
           @label={{this.countLabel}}
           @dot={{false}}

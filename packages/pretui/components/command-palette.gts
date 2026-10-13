@@ -6,6 +6,8 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
+import { provide } from 'ember-provide-consume-context';
+import { POPUPS_IN_PLACE } from '../internal/overlay';
 import {
   detectShortcutPlatform,
   parseShortcut,
@@ -238,6 +240,10 @@ const scrollIntoViewWhen = modifier((el: HTMLElement, [should]: [boolean]) => {
 });
 
 export class CommandPalette extends Component<CommandPaletteSignature> {
+  @provide(POPUPS_IN_PLACE)
+  get popupsInPlace() {
+    return true;
+  }
   private guid = guidFor(this);
   @tracked private query = '';
   /** keys of the submenu scopes the reader has descended into (kbar's model,

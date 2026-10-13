@@ -102,7 +102,7 @@ class EditInPlaceUsage extends Component {
             <EditInPlace
               @label='Status'
               @value={{this.status}}
-              @commitOn='action'
+              @commitOn={{this.commitOnValue}}
               @canEdit={{this.canEdit}}
               @onCommit={{this.commitStatus}}
             >
@@ -115,6 +115,7 @@ class EditInPlaceUsage extends Component {
                   @value={{editor.value}}
                   @controlId={{editor.controlId}}
                   @onValueChange={{editor.setValue}}
+                  @searchEnabled={{true}}
                 />
               </:editor>
             </EditInPlace>
