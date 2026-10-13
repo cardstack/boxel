@@ -38,9 +38,17 @@ export interface SecureOriginHeaderOptions {
 }
 
 // Headers on every response the secure origin sends, error responses
-// included. A route that is framed by the app passes that one origin in
-// `frameAncestors`; `X-Frame-Options` can't name an origin, so it is sent
-// only when no framing is allowed.
+// included. A document the app frames is served at a path of its own, never
+// the shell's, and that route alone passes the app's origin in
+// `frameAncestors`; `X-Frame-Options` can't name an origin, so it is sent only
+// when no framing is allowed.
+//
+// `Cross-Origin-Opener-Policy` severs the handle the page that opened a
+// secure window keeps to it. Same-origin policy already stops that page
+// reading the window, but not navigating it: without this, card code in the
+// app could swap the window for a look-alike partway through a credential
+// flow. It also cuts `postMessage` back to the opener, which no mode uses —
+// a mode never takes input from the page that opened it.
 export function secureOriginHeaders({
   frameAncestors = [],
 }: SecureOriginHeaderOptions = {}): Record<string, string> {
@@ -57,12 +65,20 @@ export function secureOriginHeaders({
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     'Cross-Origin-Resource-Policy': 'same-origin',
+    'Cross-Origin-Opener-Policy': 'same-origin',
     'Cache-Control': 'no-store',
   };
   if (frameAncestors.length === 0) {
     headers['X-Frame-Options'] = 'DENY';
   }
   return headers;
+}
+
+interface SecureOriginRoute {
+  body: string | Buffer;
+  contentType: string;
+  // Unset, the locked-down defaults.
+  headers?: SecureOriginHeaderOptions;
 }
 
 export interface SecureOrigin {
@@ -84,12 +100,21 @@ export function createSecureOrigin(url: URL): SecureOrigin {
     SHELL_BASE_PLACEHOLDER,
     shellBase,
   );
-  let assets = new Map(
-    Object.entries(SHELL_ASSETS).map(([name, { file, contentType }]) => [
-      `${shellBase}/${name}`,
-      { body: readFileSync(join(SHELL_DIR, file)), contentType },
-    ]),
-  );
+  // Everything the origin serves, by path, each with the headers its
+  // response carries.
+  let routes = new Map<string, SecureOriginRoute>();
+  let shell: SecureOriginRoute = {
+    body: indexHTML,
+    contentType: 'text/html; charset=utf-8',
+  };
+  routes.set(shellBase, shell);
+  routes.set(`${shellBase}/`, shell);
+  for (let [name, { file, contentType }] of Object.entries(SHELL_ASSETS)) {
+    routes.set(`${shellBase}/${name}`, {
+      body: readFileSync(join(SHELL_DIR, file)),
+      contentType,
+    });
+  }
   let expectedHost = url.host.toLowerCase();
   registerSecureOriginHost(expectedHost);
 
@@ -98,8 +123,9 @@ export function createSecureOrigin(url: URL): SecureOrigin {
     status: number,
     body: string | Buffer,
     contentType: string,
+    headerOptions?: SecureOriginHeaderOptions,
   ) {
-    ctx.set(secureOriginHeaders());
+    ctx.set(secureOriginHeaders(headerOptions));
     ctx.status = status;
     // Koa sends a HEAD response's headers and leaves out the body.
     ctx.body = body;
@@ -107,10 +133,8 @@ export function createSecureOrigin(url: URL): SecureOrigin {
   }
 
   function route(ctx: Koa.Context) {
-    let path = ctx.path;
-    let isShell = path === shellBase || path === `${shellBase}/`;
-    let asset = assets.get(path);
-    if (!isShell && !asset) {
+    let match = routes.get(ctx.path);
+    if (!match) {
       respond(ctx, 404, 'Not Found', 'text/plain; charset=utf-8');
       return;
     }
@@ -119,11 +143,7 @@ export function createSecureOrigin(url: URL): SecureOrigin {
       respond(ctx, 405, 'Method Not Allowed', 'text/plain; charset=utf-8');
       return;
     }
-    if (asset) {
-      respond(ctx, 200, asset.body, asset.contentType);
-    } else {
-      respond(ctx, 200, indexHTML, 'text/html; charset=utf-8');
-    }
+    respond(ctx, 200, match.body, match.contentType, match.headers);
   }
 
   return {
@@ -142,7 +162,9 @@ export function createSecureOrigin(url: URL): SecureOrigin {
     },
     async handle(ctx) {
       // Logged by path alone: the query string, headers and body of a request
-      // here can carry a credential or the ticket that authorizes one.
+      // here can carry a credential or the ticket that authorizes one. The
+      // shipped log line doesn't carry the logger's name, so the line names
+      // the origin itself, which is what a log search filters on.
       let startedAt = Date.now();
       try {
         route(ctx);
@@ -153,7 +175,7 @@ export function createSecureOrigin(url: URL): SecureOrigin {
         respond(ctx, 500, 'Internal Server Error', 'text/plain; charset=utf-8');
       }
       log.info(
-        `${ctx.method} ${ctx.path}: ${ctx.status} dur=${Date.now() - startedAt}ms`,
+        `secure-origin ${ctx.method} ${ctx.path}: ${ctx.status} dur=${Date.now() - startedAt}ms`,
       );
     },
   };

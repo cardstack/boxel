@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
+description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. It also covers finding the secure origin's (`secure.boxel.ai` / `secure.stack.cards`) access logs and app log lines. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -626,6 +626,23 @@ LB_ARN=$(aws --profile claude-staging elbv2 describe-load-balancers \
 aws --profile claude-staging elbv2 describe-load-balancer-attributes \
   --load-balancer-arn "$LB_ARN" --output table
 ```
+
+## The secure origin (`secure.boxel.ai` / `secure.stack.cards`)
+
+The secure origin, where credentials are typed, has no service of its own. It is a load balancer of its own, `boxel-secure-origin-<env>`, in front of the realm-server's tasks. The realm-server answers it ahead of all other routing (the `secure-origin` skill covers what it serves and why). So everything above reaches it, with nothing extra granted to the role:
+
+- **Its access logs** go to the same `boxel-alb-access-logs-<env>` bucket under the same `AWSLogs/<account>/elasticloadbalancing/us-east-1/<date>/` path. Each object's name, and field 3 of each record, names the load balancer that wrote it (`app.boxel-secure-origin-<env>.…` / `app/boxel-secure-origin-<env>/…`). Copy just its objects with `--exclude '*' --include '*boxel-secure-origin*'` on the `s3 cp` above, or filter records with `awk '$3 ~ /boxel-secure-origin/'`. A request line there includes the query string, which is why nothing secret may travel in one.
+- **Its configuration** shows up under `describe-load-balancers --names boxel-secure-origin-<env>`, like the realm-server's. HSTS is set as a listener attribute there.
+- **Its app logs** are the realm-server's CloudWatch and Loki streams. Its requests never reach the `realm:requests` logger. They log as one line each, with no query string, headers or body: `secure-origin GET /: 200 dur=1ms`. Shipped lines don't carry the logger's name, so filter on that prefix:
+
+  ```sh
+  AWS_PROFILE=claude-prod \
+    packages/observability/scripts/tail-logs.sh \
+    --env production --service realm-server --since 1h --no-follow --confirm \
+    --filter 'secure-origin '
+  ```
+
+- **No client telemetry.** The shell loads none of the host app, so nothing on that origin beacons to `/_client-telemetry`. Sentry events from a secure-origin request carry only the method and path, so look for those, not bodies.
 
 ## Future skill / scripting room
 

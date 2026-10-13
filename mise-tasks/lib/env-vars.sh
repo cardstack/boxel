@@ -130,11 +130,10 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export PRERENDER_MGR_URL="https://prerender-mgr.${ENV_SLUG}.localhost"
   export ICONS_URL="https://icons.${ENV_SLUG}.localhost"
   export HOST_URL="https://host.${ENV_SLUG}.localhost"
-  # The secure origin: a listener of each realm-server's own that serves only
-  # the secure page shell (packages/realm-server/lib/secure-origin.ts),
-  # registered with Traefik as `<service>-secure`.
+  # The secure origin: a listener of the dev realm-server's own that serves
+  # only the secure page shell (packages/realm-server/lib/secure-origin.ts),
+  # registered with Traefik as `realm-server-secure`.
   export SECURE_ORIGIN_URL="https://realm-server-secure.${ENV_SLUG}.localhost/secure"
-  export SECURE_TEST_ORIGIN_URL="https://realm-test-secure.${ENV_SLUG}.localhost/secure"
 
   # Database. Hyphens in slugs (e.g. `cs-12345-foo`) aren't valid in
   # unquoted Postgres identifiers, so use the underscored variant for
@@ -151,7 +150,6 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export PRERENDER_MGR_PORT=0
   export ICONS_PORT=0
   export SECURE_PORT=0
-  export SECURE_TEST_PORT=0
 
   # Paths
   export REALMS_ROOT="./realms/${ENV_SLUG}"
@@ -179,7 +177,6 @@ else
     export ICONS_URL="http://localhost:4206"
     export HOST_URL="https://localhost:4200"
     export SECURE_ORIGIN_URL="https://localhost:4208/secure"
-    export SECURE_TEST_ORIGIN_URL="https://localhost:4209/secure"
 
     # Database
     export PGDATABASE="boxel"
@@ -194,7 +191,6 @@ else
     export PRERENDER_MGR_PORT=4222
     export ICONS_PORT=4206
     export SECURE_PORT=4208
-    export SECURE_TEST_PORT=4209
 
     # Paths
     export REALMS_ROOT="./realms/localhost_4201"
@@ -216,7 +212,6 @@ else
     export ICONS_URL="${ICONS_URL:-http://localhost:4206}"
     export HOST_URL="${HOST_URL:-https://localhost:4200}"
     export SECURE_ORIGIN_URL="${SECURE_ORIGIN_URL:-https://localhost:4208/secure}"
-    export SECURE_TEST_ORIGIN_URL="${SECURE_TEST_ORIGIN_URL:-https://localhost:4209/secure}"
 
     # Database
     export PGDATABASE="${PGDATABASE:-boxel}"
@@ -231,7 +226,6 @@ else
     export PRERENDER_MGR_PORT="${PRERENDER_MGR_PORT:-4222}"
     export ICONS_PORT="${ICONS_PORT:-4206}"
     export SECURE_PORT="${SECURE_PORT:-4208}"
-    export SECURE_TEST_PORT="${SECURE_TEST_PORT:-4209}"
 
     # Paths
     export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
