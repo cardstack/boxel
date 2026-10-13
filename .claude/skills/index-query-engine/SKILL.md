@@ -186,10 +186,10 @@ canonical defining-module ref, since rows stamp `types` with the canonical
 key. Each predicate is a self-contained scalar test against the row's own
 `types` column; it joins nothing, so it never fans the row out and never
 shares an alias with another condition. `expressionToSql` renders it per
-adapter:
+adapter, with the key as a bind parameter rather than inlined SQL text:
 
-- Postgres: `COALESCE(i.types, '[]'::jsonb) @> '["<key>"]'::jsonb`
-- SQLite: `EXISTS (SELECT 1 FROM json_each(COALESCE(i.types, '[]')) WHERE value = ?)`
+- Postgres: `COALESCE(i.types, '[]'::jsonb) @> $n::jsonb`, bound to `["<key>"]`
+- SQLite: `EXISTS (SELECT 1 FROM json_each(COALESCE(i.types, '[]')) WHERE value = ?)`, bound to `<key>`
 
 So type conditions compose like ordinary boolean predicates:
 
