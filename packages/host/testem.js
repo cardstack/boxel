@@ -40,6 +40,9 @@ if (typeof module !== 'undefined') {
           '--mute-audio',
           '--remote-debugging-port=0',
           '--window-size=1440,900',
+          // The secure origin's page opens in a window of its own, and a test
+          // opening one has no user gesture to satisfy the popup blocker.
+          '--disable-popup-blocking',
           // The realm-server speaks HTTPS+HTTP/2 with a mkcert leaf cert
           // (see infra:ensure-dev-cert). `mkcert -install` is
           // best-effort in CI and doesn't reliably land mkcert's root

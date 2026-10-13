@@ -42,4 +42,4 @@ The secure origin must never share a host with the realm-server, the host app or
 ## Checks
 
 - `packages/realm-server/tests/secure-origin-test.ts`: the shell and its headers, 404s for realm, module, asset and server paths, the dedicated listener, and the telemetry scrub.
-- `packages/host/tests/unit/secure-origin-isolation-test.ts`: a page on the app origin can't read a window showing the shell.
+- `packages/host/tests/unit/secure-origin-isolation-test.ts`: a page on the app origin can't read a window showing the shell. A window that failed to load is just as unreadable, and the page can't confirm the shell loaded: its `Cross-Origin-Resource-Policy` refuses the app even a no-cors fetch. So `mise-tasks/test-services/host` doesn't report the stack ready until the shell answers.

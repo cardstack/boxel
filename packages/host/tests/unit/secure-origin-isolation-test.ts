@@ -36,14 +36,9 @@ module('Unit | secure origin isolation', function () {
     );
 
     // A window that fails to load lands on the browser's own error page,
-    // which is unreadable too, so first make sure the secure origin answers.
-    let response = await fetch(ENV.secureOriginURL, { mode: 'no-cors' });
-    assert.strictEqual(
-      response.type,
-      'opaque',
-      'the secure origin answers, and its response is opaque to this page',
-    );
-
+    // which is unreadable too. The page can't check the shell loaded — its
+    // Cross-Origin-Resource-Policy refuses this page even a no-cors fetch — so
+    // the host test stack waits on the shell before any test runs.
     let win = window.open(ENV.secureOriginURL, '_blank');
     assert.ok(win, 'the secure origin page opened in a window');
     try {
