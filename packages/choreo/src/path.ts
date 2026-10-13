@@ -126,7 +126,7 @@ function shotAt(
 /**
  * Sample the spline at overall progress p ∈ [0, 1] (uniform segments).
  *
- * SPLICES (docs/choreo-splices.md): a waypoint marked `cut` starts a new
+ * SPLICES (packages/choreo-gallery/realm/docs/choreo-splices.md): a waypoint marked `cut` starts a new
  * SHOT. Each shot is a clamped spline of its own points — endpoint
  * tangents one-sided, so no shot's velocity crosses a seam — and each
  * shot's window runs from its first slot to the next seam, its points

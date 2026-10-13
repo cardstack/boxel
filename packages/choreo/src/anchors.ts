@@ -1,6 +1,6 @@
 /**
  * Anchors — "with / after build N", as typed helpers rather than a string
- * micro-DSL (docs/choreo-constructs.md §4.2). A step names itself with
+ * micro-DSL (packages/choreo-gallery/realm/docs/choreo-constructs.md §4.2). A step names itself with
  * `@name`; any later step may start against it with `@at`:
  *
  *   <c.Tween @name='head' … />

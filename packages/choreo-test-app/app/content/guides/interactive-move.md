@@ -29,4 +29,4 @@ Watch the first frame, interruption, and landing. The first frame should reprodu
 
 **ChoreoContext**: `c.Move`.
 
-Read the implementation: [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

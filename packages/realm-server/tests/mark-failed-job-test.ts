@@ -10,7 +10,11 @@ import type {
 import { acquireConcurrencyGroupLock } from '@cardstack/postgres';
 import { markFailedJob } from '../lib/mark-failed-job.ts';
 import { Deferred } from '@cardstack/runtime-common';
-import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 const GROUP = 'indexing:https://example.com/a-realm/';
 
@@ -70,7 +74,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('rejects the job and closes the reservation as a genuine attempt', async function (assert) {

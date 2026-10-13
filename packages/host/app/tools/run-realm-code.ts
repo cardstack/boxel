@@ -75,6 +75,8 @@ const log = logger('tools:run-realm-code');
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
+// A UTF-8 character is at most 4 bytes, so a larger body is always too large.
+const MAX_READ_BYTES = MAX_FILE_SIZE * 4;
 // A script that loops by mistake must not fill the user's workspace list.
 const MAX_WORKSPACES = 5;
 // realm.fs.writeBytes limits, in decoded bytes. These are the limits that
@@ -101,25 +103,29 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
-// A file as the realm serves it. The body is read only for a text file, so
-// `content` is empty for a binary file.
+// A file as the realm serves it. `content` is empty unless the file is UTF-8
+// text; `tooLarge` marks a text file whose body was not read.
 type ReadSource = (url: string) => Promise<{
   status: number;
   content: string;
   binary: boolean;
+  tooLarge?: boolean;
 }>;
 // Saves one file and returns the content that was saved (lint may reformat
-// it). `expected` is the content the script last saw, undefined for a file
-// that did not exist; the save refuses if the realm no longer matches it.
+// it, unless `lint` is false). `expected` is the content the script last saw,
+// undefined for a file that did not exist; the save refuses if the realm no
+// longer matches it.
 type WriteFile = (
   url: string,
   content: string,
   expected: string | undefined,
+  options?: { lint?: boolean },
 ) => Promise<string>;
 
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
 
+// What `lookup` finds for a file that is not UTF-8 text.
 const BINARY = Symbol('binary');
 
 type DirectoryEntry = { name: string; kind: 'file' | 'directory' };
@@ -182,6 +188,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.list': false,
   'fs.replace': true,
   'fs.writeText': true,
+  'fs.copy': true,
   'fs.writeBytes': true,
   'cards.search': false,
   'cards.get': false,
@@ -392,13 +399,31 @@ class RealmFsSession {
         }
         // Only creates for now: an edit to an existing file always goes
         // through realm.fs.replace.
-        if ((await this.load(url)) !== undefined) {
+        if ((await this.lookup(url)) !== undefined) {
           throw new Error(
             `File already exists; use realm.fs.replace to edit it: ${url}`,
           );
         }
         await this.save(url, content, undefined);
         return { path: this.relative(url), saved: true };
+      }
+      // Copies the content as it is, the same as a readText then a writeText.
+      // Relative imports and card references are not rewritten, so they stay
+      // correct only in a copy at the same folder depth. The content is
+      // already in the realm, so it is saved without lint, which could only
+      // make the copy differ from its source.
+      case 'fs.copy': {
+        let from = this.resolve(method, args[0]);
+        let to = this.resolve(method, args[1]);
+        let content = await this.load(from);
+        if (content === undefined) {
+          throw new Error(`File not found: ${from}`);
+        }
+        if ((await this.lookup(to)) !== undefined) {
+          throw new Error(`File already exists: ${to}`);
+        }
+        await this.save(to, content, undefined, { lint: false });
+        return { path: this.relative(to), saved: true };
       }
       case 'fs.writeBytes': {
         let url = this.resolve(method, args[0]);
@@ -815,7 +840,10 @@ class RealmFsSession {
   }
 
   // A text file's content, BINARY for a binary file, or undefined for a file
-  // that does not exist.
+  // that does not exist. A file is text when its bytes are UTF-8, so saving
+  // the text back writes the same bytes. Any other file would come back
+  // changed, so a copy or edit of it is refused. The decode drops a leading
+  // BOM, as the realm does when it saves text.
   private async lookup(
     url: string,
   ): Promise<string | typeof BINARY | undefined> {
@@ -836,6 +864,9 @@ class RealmFsSession {
     if (source.status !== 200 && source.status !== 404) {
       throw new Error(`Unable to read ${url}: ${source.status}`);
     }
+    if (source.tooLarge) {
+      throw new Error(`File is too large: ${url}`);
+    }
     let content = source.status === 404 ? undefined : source.content;
     if (content !== undefined && content.length > MAX_FILE_SIZE) {
       throw new Error(`File is too large: ${url}`);
@@ -848,6 +879,7 @@ class RealmFsSession {
     url: string,
     content: string,
     expected: string | undefined,
+    options?: { lint?: boolean },
   ) {
     if (content.length > MAX_FILE_SIZE) {
       throw new Error(`File is too large after editing: ${url}`);
@@ -856,11 +888,13 @@ class RealmFsSession {
       this.refused += 1;
       throw new Error(`The run has ended; ${url} was not saved`);
     }
-    let saved = await this.writeFile(url, content, expected);
+    let saved = await this.writeFile(url, content, expected, options);
     this.known.set(url, saved);
     this.saved.add(url);
   }
 }
+
+const UTF8 = new TextDecoder('utf-8', { fatal: true });
 
 // Accepts plain base64, with or without line breaks, or a base64 data URL.
 // The base64 content of a writeBytes call, without a `data:` URL prefix or
@@ -974,8 +1008,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let session = new RealmFsSession(
       this.realmRootURL(realmURL),
       (url) => this.readSource(url),
-      (url, content, expected) =>
-        this.writeFile(roomId, url, content, expected),
+      (url, content, expected, options) =>
+        this.writeFile(roomId, url, content, expected, options),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
       (url) => this.listDirectory(url),
       // The run reads only the rows' own data, so the linked cards' resources
@@ -1369,15 +1403,17 @@ export default class RunRealmCodeTool extends HostBaseTool<
     );
   }
 
-  // Lints a .gts/.ts file, checks the realm still holds what the script last
-  // saw, and saves it. Returns the content that was saved.
+  // Lints a .gts/.ts file (unless `lint` is false), checks the realm still
+  // holds what the script last saw, and saves it. Returns the content that
+  // was saved.
   private async writeFile(
     roomId: string,
     url: string,
     content: string,
     expected: string | undefined,
+    options?: { lint?: boolean },
   ): Promise<string> {
-    if (/\.(gts|ts)$/.test(url)) {
+    if (options?.lint !== false && /\.(gts|ts)$/.test(url)) {
       let lint = await new LintAndFixTool(this.toolContext).execute({
         realm: this.realm.realmOf(rri(url))!,
         fileContent: content,
@@ -1393,7 +1429,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (current.status !== 404) {
         throw new Error(`File appeared while the script ran: ${url}`);
       }
-    } else if (current.status !== 200 || current.content !== expected) {
+    } else if (
+      current.status !== 200 ||
+      current.binary ||
+      current.content !== expected
+    ) {
       throw new Error(`File changed while the script ran: ${url}`);
     }
     let clientRequestId = this.toolService.trackAiAssistantCardRequest({
@@ -1408,23 +1448,32 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return content;
   }
 
-  // Reads a file's body only when it is text. A binary file can be large, and
-  // decoding it as text costs about three times its size, so for one the body
-  // is cancelled unread; the content type alone says what it is.
+  // Reads a file's source. A file is binary when its bytes are not UTF-8, so
+  // a text file saves back as the same bytes whatever content type the realm
+  // serves it as. A body larger than any file realm.fs reads is not
+  // downloaded: its content type alone says whether it is binary, and a text
+  // one is too large.
   private async readSource(url: string): ReturnType<ReadSource> {
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
-    let contentType = response.headers.get('content-type');
-    let binary =
-      response.status === 200 &&
-      !!contentType &&
-      isBinaryContentType(contentType);
-    if (binary || !response.ok) {
+    let { status } = response;
+    if (status !== 200) {
       await response.body?.cancel();
-      return { status: response.status, content: '', binary };
+      return { status, content: '', binary: false };
     }
-    return { status: response.status, content: await response.text(), binary };
+    if (Number(response.headers.get('content-length')) > MAX_READ_BYTES) {
+      await response.body?.cancel();
+      let contentType = response.headers.get('content-type');
+      let binary = !!contentType && isBinaryContentType(contentType);
+      return { status, content: '', binary, tooLarge: !binary };
+    }
+    let bytes = new Uint8Array(await response.arrayBuffer());
+    try {
+      return { status, content: UTF8.decode(bytes), binary: false };
+    } catch {
+      return { status, content: '', binary: true };
+    }
   }
 
   // Checks the file still does not exist, and saves the bytes as they are.

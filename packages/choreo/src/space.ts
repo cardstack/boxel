@@ -1,5 +1,5 @@
 /**
- * The coordinate contract (docs/planes-and-cameras.md).
+ * The coordinate contract (packages/choreo-gallery/realm/docs/planes-and-cameras.md).
  *
  * A plane's camera is pure arithmetic over frozen numbers: with
  * transform-origin pinned at 0 0, the applied transform is

@@ -54,7 +54,7 @@ Replace `my-app` with your application's module prefix. This example tests the m
 
 A completion test is only part of the behavior. Also trigger a second action while movement is in progress and verify the final application state. For Choreo scenes, `orphanCount()` and `strandedTransforms()` help detect leaving elements or transforms that were not cleaned up.
 
-The [test-support reference](https://github.com/cardstack/choreo#test-support) describes the available assertions and inspection helpers.
+The [test-support reference](https://github.com/cardstack/boxel/tree/main/packages/glimmer-motion#testing) describes the available assertions and inspection helpers.
 
 ## Choosing a Test Boundary
 

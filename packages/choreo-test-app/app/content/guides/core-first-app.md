@@ -68,4 +68,4 @@ node packages/choreo-gallery/scripts/verify-tutorials.mjs http://localhost:4600
 
 The check reverses and removes during movement, checks final row identity, tests the spatial button, and compares film frames reached from different times. It is a small regression check, not a substitute for your application's keyboard, focus-restoration, and reduced-motion tests. In particular, decide where focus should move when the user removes the focused task.
 
-The complete source is [task-board.gts](https://github.com/cardstack/choreo/blob/main/test-app/app/components/tutorials/task-board.gts). Next, reuse the same separation of state and motion in [your first spatial scene](/docs/spatial-first-scene), or consult [testing motion](/docs/core-testing) before adding more interactions.
+The complete source is [task-board.gts](https://github.com/cardstack/boxel/blob/main/packages/choreo-test-app/app/components/tutorials/task-board.gts). Next, reuse the same separation of state and motion in [your first spatial scene](/docs/spatial-first-scene), or consult [testing motion](/docs/core-testing) before adding more interactions.

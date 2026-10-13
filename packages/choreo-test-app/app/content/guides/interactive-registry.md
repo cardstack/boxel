@@ -34,4 +34,4 @@ Test lookup before mount, after replacement, and after teardown. Verify that des
 
 **@cardstack/choreo**: `ChoreoHost`, `choreoHostAt`, `choreoHostById`, `ChoreoProvider`, `closestChoreo`.
 
-Read the implementation: [`registry.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/registry.ts).
+Read the implementation: [`registry.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/registry.ts).

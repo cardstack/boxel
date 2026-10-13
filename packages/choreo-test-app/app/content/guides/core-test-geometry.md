@@ -41,4 +41,4 @@ Include an external scale and a clipped parent in fixtures for spatial or elevat
 
 **@cardstack/choreo/test-support**: `orphanCount`, `live`, `liveAll`, `strandedTransforms`.
 
-Read the implementation: [`test-support/index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts), [`choreo/test-support/index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts).
+Read the implementation: [`test-support/index.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/test-support/index.ts), [`choreo/test-support/index.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/test-support/index.ts).

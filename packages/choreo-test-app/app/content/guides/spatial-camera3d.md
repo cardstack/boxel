@@ -34,4 +34,4 @@ Verify a cold start, a paused midpoint, a direct seek, and an interrupted target
 
 **ChoreoContext**: `c.Camera3D`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts), [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/types.ts), [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

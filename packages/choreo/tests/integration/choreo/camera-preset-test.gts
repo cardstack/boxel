@@ -1,5 +1,5 @@
 /**
- * The camera presets (docs/choreo-composition.md, Phase C5): frame, aim,
+ * The camera presets (packages/choreo-gallery/realm/design/choreo-composition.md, Phase C5): frame, aim,
  * pan, slowZoom — direction vocabulary that expands into the SAME
  * seekable camera step, never a new runtime primitive. Frame must be the
  * fit camera to the pixel; Aim recentres with the zoom held; Pan and
