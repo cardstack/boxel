@@ -1231,9 +1231,11 @@ export function setupDB(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
+  let databaseName: string | undefined;
 
   const runBeforeHook = async () => {
     prepareTestDB();
+    databaseName = process.env.PGDATABASE;
     let templateDatabase =
       typeof args.templateDatabase === 'function'
         ? args.templateDatabase()
@@ -1258,9 +1260,11 @@ export function setupDB(
     let p = publisher;
     let r = runner;
     let a = dbAdapter;
+    let d = databaseName;
     publisher = undefined;
     runner = undefined;
     dbAdapter = undefined;
+    databaseName = undefined;
 
     // Each resource's cleanup is independent — a failure in one must
     // not skip the others. Matches the best-effort pattern used by
@@ -1289,6 +1293,16 @@ export function setupDB(
         } catch {
           // best-effort cleanup
         }
+      }
+    }
+    // The database is a full copy of its template, often an indexed realm.
+    // Dropping it here keeps a shard's disk use at one test database plus
+    // its templates, instead of one database per test it has run.
+    if (d) {
+      try {
+        await dropDatabase(d);
+      } catch {
+        // best-effort cleanup
       }
     }
   };
