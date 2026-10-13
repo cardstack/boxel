@@ -1421,9 +1421,14 @@ export async function setupIntegrationTestRealm({
   // the in-browser renderer reads too, and the renderer then fails the next
   // render it runs. The realm renders to read the definitions its policy names,
   // so a refusal of that kind can make the realm refuse what its policy grants.
-  // Setup signs the host in with the session its permissions call for, so none
-  // of the host's own requests is refused that way; a test that provokes such
-  // a refusal on purpose has to allow for it.
+  // Setup signs the host in with the session its permissions call for before
+  // the host sends the realm anything, the matrix boot's requests included,
+  // so none of the host's own requests is refused for want of a session. A
+  // signed-in user the realm's permissions refuse is still refused: the matrix
+  // boot reads the default system card from the realm at `testRealmURL`, so a
+  // realm there that won't let the user read it answers that read with a 403.
+  // A test that provokes a refusal on purpose, or sets up such a realm, has to
+  // allow for it.
   enforcePermissions?: true;
   startMatrix?: boolean;
   fileSizeLimitBytes?: number;
@@ -1725,7 +1730,6 @@ async function setupTestRealm({
     await settleRealmRenders();
   }
   if (startMatrix) {
-    await mockMatrixUtils.start();
     if (enforcePermissions) {
       // The host signs in to this realm now, with the session its permissions
       // call for, rather than on its first request. A session it holds from
@@ -1735,8 +1739,22 @@ async function setupTestRealm({
       // in-browser renderer shares the host's auth-error signal and fails its
       // next render on it, and the realm renders to read the definitions its
       // policy names.
-      await getService('realm').reauthenticate(realmURL);
+      //
+      // It signs in before the matrix boot, because the boot sends requests
+      // of its own: it reads the default system card, which lives in the
+      // realm at `testRealmURL`, so a realm set up there is asked for it
+      // before anything else.
+      //
+      // A session that can't be minted is reported as an auth error rather
+      // than thrown, and that would fail the renderer's next render far from
+      // here, so setup stops on it instead.
+      if (!(await getService('realm').reauthenticate(realmURL))) {
+        throw new Error(
+          `setup could not sign the host in to ${realmURL} before the matrix boot`,
+        );
+      }
     }
+    await mockMatrixUtils.start();
   }
 
   let realmServer = getService('realm-server');

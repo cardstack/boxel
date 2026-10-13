@@ -290,6 +290,11 @@ export interface OperationIndexQueryEngine {
 }
 
 export interface RunOperationOptions {
+  // The request a caller who isn't signed in made this invocation in. Its
+  // grants judge the invocation, and it records the grant that admitted it, so
+  // the request is counted against that grant's limit. Without it, the
+  // invocation is judged in a request of its own.
+  anonymousRequest?: AnonymousRequest;
   // The gate's decision about this very invocation, where the caller already
   // resolved it in the same request: the operations envelope resolves every
   // entry before it runs any. The read then runs on that decision rather than
@@ -1327,6 +1332,9 @@ export async function runOperation(
     ...(canonical.coarseDeclined ? { coarseDeclined: 'all' as const } : {}),
     ...(canonical.seal ? { seal: canonical.seal } : {}),
     ...(canonical.route ? { route: canonical.route } : {}),
+    ...(opts.anonymousRequest
+      ? { anonymousRequest: opts.anonymousRequest }
+      : {}),
   });
   // A decision made in the same request is reused only for the target it was
   // made about. The envelope canonicalizes the realm root to its index card for

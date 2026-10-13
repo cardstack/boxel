@@ -4,6 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import {
+  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_FALLBACK_MODELS,
+} from '@cardstack/runtime-common/matrix-constants';
+
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -72,6 +78,41 @@ module('Integration | tools | run-realm-code', function (hooks) {
 }
 `,
           'notes/first.md': '# First\n',
+          'skills/test-skill/SKILL.md': `---
+name: Test Skill
+description: A skill a script turns on
+boxel:
+  kind: skill
+---
+# Test Skill
+`,
+          'pet.gts': `
+            import { CardDef, field, contains } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+              @field name = contains(StringField);
+            }
+          `,
+          'Pet/mango.json': {
+            data: {
+              type: 'card',
+              attributes: { name: 'Mango' },
+              meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+            },
+          },
+          'Plain/base-typed.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
         },
       }),
     );
@@ -138,6 +179,93 @@ return await realm.capture('seen.json');`,
       attachments[1].url,
       result.captures[0].url,
       'the capture rides as the media already uploaded',
+    );
+  });
+
+  test('opens the card the script returns to show', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('Pet/biscuit.json', JSON.stringify({
+  data: {
+    attributes: { name: 'Biscuit' },
+    meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+  },
+}));
+return { show: 'Pet/biscuit' };`,
+    });
+
+    assert.strictEqual(result.files[0]?.status, 'saved');
+    assert.strictEqual(result.shownCard, `${testRealmURL}Pet/biscuit`);
+    assert.notOk(result.showError);
+    let shownIds = operatorModeStateService.state.stacks
+      .flat()
+      .map((item) => item.id);
+    assert.true(
+      shownIds.includes(`${testRealmURL}Pet/biscuit`),
+      'the card is open on a stack',
+    );
+  });
+
+  test('show opens a file that is not a card in code mode', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return { show: 'notes/first.md' };`,
+    });
+
+    assert.strictEqual(result.shownCard, `${testRealmURL}notes/first.md`);
+    assert.notOk(result.showError);
+    assert.strictEqual(operatorModeStateService.state.submode, 'code');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}notes/first.md`,
+    );
+  });
+
+  test('a card it cannot show does not fail the run', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('seen.json', '{}');
+return { show: 'Pet/missing' };`,
+    });
+
+    assert.strictEqual(result.files[0]?.status, 'saved', 'files still report');
+    assert.notOk(result.shownCard);
+    assert.true(
+      /Not found: .*Pet\/missing/.test(result.showError ?? ''),
+      `says why: ${result.showError}`,
+    );
+
+    let outside = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return { show: 'https://example.com/card' };`,
+    });
+    assert.true(
+      /Path is outside this realm/.test(outside.showError ?? ''),
+      `refuses another realm: ${outside.showError}`,
+    );
+    assert.deepEqual(
+      operatorModeStateService.state.stacks.flat(),
+      [],
+      'nothing is opened',
     );
   });
 
@@ -211,6 +339,132 @@ return await realm.capture('seen.json');`,
     let source = await cardService.getSource(new URL(fileUrl));
     assert.strictEqual(source.status, 200);
     assert.strictEqual(source.content, '{\n  "title": "New task"\n}\n');
+  });
+
+  test('realm.fs.writeBytes saves the decoded bytes of a new binary file', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let saved = await realm.fs.writeBytes('images/dot.png', ${JSON.stringify(PNG_BASE64)});
+return { saved, exists: await realm.fs.exists('images/dot.png') };`,
+    });
+
+    let expected = Uint8Array.from(atob(PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      saved: { path: 'images/dot.png', size: expected.byteLength, saved: true },
+      exists: true,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status, file.detail]),
+      [[`${testRealmURL}images/dot.png`, 'saved', 'Binary file saved.']],
+    );
+    let response = await network.authedFetch(
+      new URL('images/dot.png', testRealmURL),
+    );
+    assert.strictEqual(response.status, 200);
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(expected),
+      'the realm holds the decoded bytes',
+    );
+  });
+
+  test('realm.fs.writeBytes accepts a base64 data URL', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.fs.writeBytes('dot.png', ${JSON.stringify(
+        `data:image/png;base64,${PNG_BASE64}`,
+      )});`,
+    });
+
+    assert.true(JSON.parse(result.scriptResult!).saved);
+  });
+
+  test('realm.fs.writeBytes refuses a file that exists, and content that is not base64', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('task.json', ${JSON.stringify(PNG_BASE64)});`,
+      }),
+      /File already exists/,
+      'refuses an existing text file',
+    );
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});`,
+    });
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});`,
+      }),
+      /File already exists/,
+      'refuses an existing binary file',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('bad.png', 'not base64!');`,
+      }),
+      /not valid base64/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.readText('dot.png');`,
+      }),
+      /is a binary file/,
+      'readText names a binary file instead of failing on its status',
+    );
+    // A vendor binary type, such as a spreadsheet, is binary too, so replace
+    // cannot write a text-decoded copy over it.
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('report.xlsx', ${JSON.stringify(PNG_BASE64)});`,
+    });
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.replace('report.xlsx', 'a', 'b');`,
+      }),
+      /is a binary file/,
+      'replace refuses a vendor binary type',
+    );
+  });
+
+  test('realm.fs.writeBytes refuses a file over the size limit', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    // The script builds the base64 itself: it is larger than the code limit.
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeBytes('big.bin', 'AAAA'.repeat(700000));`,
+      }),
+      /at most 2000000 bytes per file.*No file was saved/,
+    );
   });
 
   test('resolves paths against the realm root', async function (assert) {
@@ -710,4 +964,367 @@ await workspaces['del' + 'ete']('${oldWorkspace}');`;
     );
     assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
   });
+
+  module('room actions', function (hooks) {
+    let roomId: string;
+    let skillId = `${testRealmURL}skills/test-skill/SKILL.md`;
+    let model = DEFAULT_FALLBACK_MODELS[0].modelId;
+
+    hooks.beforeEach(async function () {
+      await getService('matrix-service').ready;
+      roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-actions',
+      });
+    });
+
+    test('room actions change the room after the script finishes', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `return {
+  skills: await room.enableSkills([${JSON.stringify(skillId)}]),
+  model: await room.setModel(${JSON.stringify(model)}),
+};`,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        skills: { enable: [skillId], appliedAfterRun: true },
+        model: { model, appliedAfterRun: true },
+      });
+      let skills = mockMatrixUtils.getRoomState(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(
+        skills.enabledSkillCards.map((file: any) => file.sourceUrl),
+        [skillId],
+        'the skill is enabled',
+      );
+      assert.strictEqual(
+        mockMatrixUtils.getRoomState(roomId, APP_BOXEL_ACTIVE_LLM)?.model,
+        model,
+        'the model is set',
+      );
+      assert.deepEqual(result.roomChanges, [
+        `Enabled skills: ${skillId}`,
+        `Model set to ${model}`,
+      ]);
+
+      await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `await room.disableSkills([${JSON.stringify(skillId)}]);`,
+      });
+      skills = mockMatrixUtils.getRoomState(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      );
+      assert.deepEqual(skills.enabledSkillCards, [], 'the skill is disabled');
+      assert.deepEqual(
+        skills.disabledSkillCards.map((file: any) => file.sourceUrl),
+        [skillId],
+      );
+    });
+
+    test('a run that fails makes no room change', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await room.enableSkills([${JSON.stringify(skillId)}]);
+throw new Error('stop');`,
+        }),
+        /stop\. No file was saved\. The room changes it asked for were not made\./,
+      );
+      assert.notOk(
+        mockMatrixUtils
+          .getRoomEvents(roomId)
+          .some((event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE),
+        'the room skills are not changed',
+      );
+    });
+
+    test('room actions refuse a skill that does not exist and an unknown model', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await room.enableSkills([${JSON.stringify(`${testRealmURL}notes/first.md`)}]);`,
+        }),
+        /Not a skill card or skill markdown file/,
+      );
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await room.setModel('no-such/model');`,
+        }),
+        /Unknown model: no-such\/model/,
+      );
+    });
+  });
+
+  test('realm.ui actions run in order after the script finishes', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let queued = await realm.ui.openFile('pet.gts');
+await realm.ui.previewFormat('Pet/mango', 'fitted');
+return queued;`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      action: 'openFile',
+      runs: 'after the script finishes',
+    });
+    assert.deepEqual(
+      result.uiActions.map(({ action, target, status }) => ({
+        action,
+        target,
+        status,
+      })),
+      [
+        {
+          action: 'openFile',
+          target: `${testRealmURL}pet.gts`,
+          status: 'done',
+        },
+        {
+          action: 'previewFormat',
+          target: `${testRealmURL}Pet/mango (fitted)`,
+          status: 'done',
+        },
+      ],
+    );
+    assert.strictEqual(operatorModeStateService.state.submode, 'code');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}pet.gts`,
+    );
+    assert.strictEqual(
+      operatorModeStateService.state.moduleInspector,
+      'preview',
+    );
+    let selection = getService('playground-panel-service').getSelection(
+      `${testRealmURL}pet/Pet`,
+    );
+    assert.strictEqual(selection?.cardId, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(selection?.format, 'fitted');
+
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ui.switchSubmode('interact');`,
+    });
+    assert.strictEqual(operatorModeStateService.state.submode, 'interact');
+  });
+
+  test('realm.ui.previewFormat uses the base module of a card whose type comes from base', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let baseModule = getService('network').virtualNetwork.toURL(
+      '@cardstack/base/card-api.gts',
+    ).href;
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.ui.previewFormat('Plain/base-typed', 'isolated');`,
+    });
+
+    // The test user cannot read the base realm, so code mode refuses to open
+    // it. What matters is which module the action asked for: the base module,
+    // not a path inside the workspace.
+    let detail = result.uiActions[0]?.detail ?? '';
+    assert.true(
+      detail.includes(baseModule),
+      `asks for ${baseModule}: ${detail}`,
+    );
+    assert.false(
+      detail.includes(`${testRealmURL}Plain/`),
+      'does not join the module to the instance path',
+    );
+  });
+
+  test('realm.ui opens a file the same run wrote', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('notes/second.md', '# Second\\n');
+await realm.ui.openFile('notes/second.md');`,
+    });
+
+    assert.strictEqual(result.uiActions[0]?.status, 'done');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}notes/second.md`,
+    );
+  });
+
+  test('realm.ui refuses a missing file, a path outside the realm, and a file that is not a card', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let run = (code: string) =>
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+
+    await assert.rejects(
+      run(`await realm.ui.openFile('missing.gts');`),
+      /File not found/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.openFile('../elsewhere.gts');`),
+      /Path must be relative to the realm root/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.previewFormat('task', 'isolated');`),
+      /Not a card instance/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.previewFormat('Pet/mango', 'head');`),
+      /one of these formats/,
+    );
+    await assert.rejects(
+      run(`await realm.ui.switchSubmode('host');`),
+      /expects 'interact' or 'code'/,
+    );
+  });
+
+  test('a failed run does not do its realm.ui actions', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let submodeBefore = operatorModeStateService.state.submode;
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.ui.openFile('pet.gts');
+throw new Error('stop here');`,
+      }),
+      /stop here\. No file was saved\. The UI actions it asked for were not done\./,
+    );
+    assert.strictEqual(operatorModeStateService.state.submode, submodeBefore);
+  });
 });
+
+module(
+  'Integration | tools | run-realm-code | read-only workspace',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      autostart: true,
+      realmPermissions: { [testRealmURL]: ['read'] },
+    });
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        enforcePermissions: true,
+        permissions: { '*': ['read'] },
+        contents: {
+          'task.json': '{ "title": "Old title" }\n',
+          'notes/first.md': '# First\n',
+        },
+      });
+      await getService('realm').login(testRealmURL);
+    });
+
+    test('a script reads a workspace the user can only read', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return {
+  text: await realm.fs.readText('task.json'),
+  exists: await realm.fs.exists('task.json'),
+  notes: await realm.fs.list('notes'),
+};`,
+      });
+
+      assert.deepEqual(result.files, [], 'nothing is saved');
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        text: '{ "title": "Old title" }\n',
+        exists: true,
+        notes: [{ name: 'first.md', path: 'notes/first.md', kind: 'file' }],
+      });
+    });
+
+    test('each write is refused, and the script goes on', async function (assert) {
+      let toolService = getService('tool-service');
+      let cardService = getService('card-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `let refused = [];
+try { await realm.fs.writeText('new.json', '{}'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.replace('task.json', 'Old', 'New'); } catch (e) { refused.push(e.message); }
+return { refused, text: await realm.fs.readText('task.json') };`,
+      });
+
+      assert.deepEqual(result.files, [], 'nothing is saved');
+      let { refused, text } = JSON.parse(result.scriptResult!);
+      assert.strictEqual(refused.length, 2, 'both writes are refused');
+      for (let message of refused) {
+        assert.true(
+          /You can only read this workspace/.test(message),
+          `the refusal says why: ${message}`,
+        );
+      }
+      assert.strictEqual(text, '{ "title": "Old title" }\n');
+      let source = await cardService.getSource(
+        new URL(`${testRealmURL}new.json`),
+      );
+      assert.strictEqual(
+        source.status,
+        404,
+        'the new file is not in the realm',
+      );
+    });
+
+    test('a write the script does not catch fails the run, and the report says nothing was saved', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.fs.writeText('new.json', '{}');`,
+        }),
+        /You can only read this workspace.*No file was saved/,
+      );
+    });
+  },
+);

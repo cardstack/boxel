@@ -70,16 +70,29 @@ export class SaveCardInput extends CardDef {
   });
 }
 
+// The copy is created like any new card, so the realm picks its path: a
+// directory named after the card's type, beneath `localDir`, holding a file
+// with a generated name. The descriptions below spell that out because models
+// otherwise pass the path they want the new file to have as `localDir`.
 export class CopyCardToRealmInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
-  @field targetRealm = contains(StringField);
-  @field localDir = contains(StringField);
+  @field targetRealm = contains(StringField, {
+    description:
+      'URL of the realm to copy the card into, ending in a slash, e.g. "https://example.com/my-realm/". The copy is written to <targetRealm><localDir>/<CardTypeName>/<generated-id>.json — see localDir.',
+  });
+  @field localDir = contains(StringField, {
+    description:
+      'Optional folder inside targetRealm to put the copy under, relative to the realm root; it must stay inside the realm, so .. segments are refused. It is not the path of the new file: the realm always adds a folder named after the card\'s type (the name its class is exported under, e.g. Incident for export class Incident; for a default export, the module file name in PascalCase, e.g. IncidentRecord for export default from incident-record.gts) and generates the file name, and neither can be chosen. Copying an Incident card with localDir "projects/acme" writes projects/acme/Incident/<generated-id>.json; leaving localDir unset writes Incident/<generated-id>.json; localDir "Incident" writes Incident/Incident/<generated-id>.json. The result\'s newCardId is the URL of the copy.',
+  });
 }
 
 export class CopyCardToStackInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
   @field targetStackIndex = contains(NumberField);
-  @field localDir = contains(StringField);
+  @field localDir = contains(StringField, {
+    description:
+      'Optional folder to put the copy under, in the realm of the card on top of the target stack, relative to the realm root; it must stay inside the realm, so .. segments are refused. It is not the path of the new file: the realm always adds a folder named after the card\'s type (the name its class is exported under, e.g. Incident for export class Incident; for a default export, the module file name in PascalCase, e.g. IncidentRecord for export default from incident-record.gts) and generates the file name, and neither can be chosen. Copying an Incident card with localDir "projects/acme" writes projects/acme/Incident/<generated-id>.json; leaving localDir unset writes Incident/<generated-id>.json. The result\'s newCardId is the URL of the copy.',
+  });
 }
 
 export class CopyCardResult extends CardDef {
@@ -496,11 +509,21 @@ export class AttachedImageField extends FieldDef {
   @field height = contains(NumberField);
 }
 
+// A `realm.ui` action the script asked for. The host does it after the
+// script finishes; `status` is 'done' or 'failed'.
+export class RealmCodeUiActionResult extends FieldDef {
+  @field action = contains(StringField);
+  @field target = contains(StringField);
+  @field status = contains(StringField);
+  @field detail = contains(StringField);
+}
+
 export class RunRealmCodeResult extends CardDef {
   static displayName = 'Realm Code Result';
 
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
+  @field uiActions = containsMany(RealmCodeUiActionResult);
   // What the script looked at with `realm.capture`: each capture rides the tool
   // result as an attached image, so the model sees it.
   @field captures = containsMany(AttachedImageField);
@@ -508,12 +531,27 @@ export class RunRealmCodeResult extends CardDef {
   @field createdWorkspaces = containsMany(StringField);
   // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
   @field deletedWorkspaces = containsMany(StringField);
+  // What the run changed in the room with `room.*`, one line per change, made
+  // after the script finished.
+  @field roomChanges = containsMany(StringField);
+  // The card the script asked to show with `return { show: path }`, once it
+  // is open, or why it could not be shown.
+  @field shownCard = contains(StringField);
+  @field showError = contains(StringField);
 
-  // A run that saved no files and took no captures, such as one that only
+  // A run that saved no files, took no captures, changed nothing in the room,
+  // asked for no UI action and asked to show no card, such as one that only
   // read, has nothing for the chat to show. Its script result goes to the
   // model only.
   get [hasNothingToShow](): boolean {
-    return !this.files?.length && !this.captures?.length;
+    return (
+      !this.files?.length &&
+      !this.captures?.length &&
+      !this.roomChanges?.length &&
+      !this.uiActions?.length &&
+      !this.shownCard &&
+      !this.showError
+    );
   }
 
   // What the run changed and what it looked at. The script's own result is
@@ -534,6 +572,40 @@ export class RunRealmCodeResult extends CardDef {
           </ul>
         {{else}}
           <p class='no-files'>No files were changed.</p>
+        {{/if}}
+        {{#if @model.uiActions.length}}
+          <ul class='ui-actions'>
+            {{#each @model.uiActions as |uiAction|}}
+              <li
+                class='ui-action'
+                data-test-realm-code-ui-action={{uiAction.action}}
+              >
+                <span class='status'>{{uiAction.status}}</span>
+                <span>{{uiAction.action}} {{uiAction.target}}</span>
+                {{#if uiAction.detail}}
+                  <span class='status'>{{uiAction.detail}}</span>
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.roomChanges.length}}
+          <ul class='room-changes'>
+            {{#each @model.roomChanges as |change|}}
+              <li data-test-realm-code-room-change>{{change}}</li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.shownCard}}
+          <p class='shown-card' data-test-realm-code-shown-card>
+            Opened
+            <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
+          </p>
+        {{/if}}
+        {{#if @model.showError}}
+          <p class='show-error' data-test-realm-code-show-error>
+            {{@model.showError}}
+          </p>
         {{/if}}
         {{#if @model.captures.length}}
           <div class='captures'>
@@ -557,7 +629,9 @@ export class RunRealmCodeResult extends CardDef {
           padding: var(--boxel-sp-sm);
           font: var(--boxel-font-sm);
         }
-        .files {
+        .files,
+        .room-changes,
+        .ui-actions {
           margin: 0;
           padding: 0;
           list-style: none;
@@ -565,7 +639,8 @@ export class RunRealmCodeResult extends CardDef {
           flex-direction: column;
           gap: var(--boxel-sp-xxxs);
         }
-        .file {
+        .file,
+        .ui-action {
           display: flex;
           gap: var(--boxel-sp-xs);
           word-break: break-all;
@@ -578,6 +653,14 @@ export class RunRealmCodeResult extends CardDef {
         .no-files {
           margin: 0;
           color: var(--boxel-450);
+        }
+        .shown-card,
+        .show-error {
+          margin: 0;
+          word-break: break-all;
+        }
+        .show-error {
+          color: var(--boxel-error-200);
         }
         .captures {
           display: flex;

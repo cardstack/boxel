@@ -73,7 +73,7 @@ export interface NativeDialectOptions {
   runtimeLimits?: NativeRuntimeLimits;
 }
 
-interface ParsedNativeProgram {
+export interface ParsedNativeProgram {
   tokens: NativeToken[];
   ast: AstNode;
   source: string;
@@ -847,7 +847,22 @@ function prepareNativeProgram(
   options: NativeDialectOptions,
   includeTokens: boolean,
 ): PreparedNativeJq {
-  const parsed = parseNativeProgram(program, options, includeTokens);
+  return prepareParsedNativeJq(
+    parseNativeProgram(program, options, includeTokens),
+    options,
+  );
+}
+
+/**
+ * Prepare a program a caller has already parsed with `parseNativeJq`, for a
+ * caller that also inspects the parsed tree (a profile check, say) and would
+ * otherwise parse the same source twice. Takes ownership of `parsed`: the
+ * runtime annotation is written onto its tree.
+ */
+export function prepareParsedNativeJq(
+  parsed: ParsedNativeProgram,
+  options: NativeDialectOptions = {},
+): PreparedNativeJq {
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );

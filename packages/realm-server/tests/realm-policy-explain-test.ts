@@ -886,6 +886,91 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('a realm that cannot read its settings', function () {
+    test('an explanation fails as the gate does, and does not blame the predicate that reads them', async function (assert) {
+      const CONFIGURED = `${ORG}policies/configured`;
+      // The first rule's grant reads the realm's settings, and names a
+      // colleague as the approver. Every other grant is the education
+      // policy's own.
+      await org.write(
+        'policies/configured.json',
+        policyCard([
+          {
+            targetType: CLASSROOM,
+            grants: [
+              {
+                operation: 'read',
+                where: 'realmConfig("approver") == actor()',
+              },
+            ],
+          },
+          ...EDUCATION_RULES,
+        ]),
+      );
+      await org.indexing();
+      await education.write(
+        'realm.json',
+        realmConfigCardJSON({
+          name: 'Education',
+          policy: CONFIGURED,
+          config: { approver: COLLEAGUE },
+        }),
+      );
+      await education.indexing();
+      let outcomeOf = (explanation: PolicyExplanation) =>
+        explanation.rules
+          ?.flatMap(({ grants }) => grants)
+          .find((grant) => grant.path === 'rules[0].grants[0]')?.outcome;
+      let ask204 = async () =>
+        (
+          (
+            await ask(
+              ASKER.itAdmin(),
+              { actor: TEACHER, target: ROOM_204, operation: 'read' },
+              { policy: CONFIGURED },
+            )
+          ).body as { 'atomic:results': PolicyExplanation[] }
+        )['atomic:results'][0];
+      assert.strictEqual(
+        outcomeOf(await ask204()),
+        'did-not-hold',
+        'the grant is evaluated while the settings can be read',
+      );
+
+      let readSettings = education.getRealmConfig;
+      education.getRealmConfig = async () => {
+        throw new Error('the realm’s settings could not be read');
+      };
+      let admitted: PolicyExplanation;
+      let unadmitted: Response;
+      try {
+        admitted = await ask204();
+        unadmitted = await ask(
+          ASKER.itAdmin(),
+          { actor: TEACHER, target: ROOM_205, operation: 'read' },
+          { policy: CONFIGURED },
+        );
+      } finally {
+        education.getRealmConfig = readSettings;
+      }
+      assert.strictEqual(
+        admitted.decision,
+        'allowed',
+        'a later grant that holds admits, as it does at the gate',
+      );
+      assert.strictEqual(
+        outcomeOf(admitted),
+        'not-evaluated',
+        'and the grant the realm could not evaluate is reported as not evaluated, not as having thrown',
+      );
+      assert.strictEqual(
+        unadmitted.status,
+        500,
+        'where no grant holds, the explain fails as the gate does',
+      );
+    });
+  });
+
   module('who may ask', function () {
     test('a caller who cannot read the target’s realm is told what a missing target is told', async function (assert) {
       let asked = { actor: TEACHER, operation: 'read' };

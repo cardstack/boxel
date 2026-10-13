@@ -157,7 +157,7 @@ export type {
   PreparedBoxelRuntime,
 } from './boxel-runtime.ts';
 
-export const VERSION = '0.7.0-unstable.10';
+export const VERSION = '0.7.0-unstable.11';
 
 /**
  * Runtime identity: the version plus the set of behaviors this build of the

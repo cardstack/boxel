@@ -20,8 +20,16 @@
  * `try`, `label`/`break`, format filters, and every call that touches the
  * runtime or has a side effect.
  */
-import { parseBxlAst, validateBxlAst } from './bxl/ast/index.ts';
-import { runNativeJq } from './bxl/bridge/native.ts';
+import {
+  bxlAstProgramFromNativeParsed,
+  validateBxlAst,
+} from './bxl/ast/index.ts';
+import {
+  parseNativeJq,
+  prepareParsedNativeJq,
+  type ParsedNativeProgram,
+  type PreparedNativeJq,
+} from './bxl/bridge/native.ts';
 import {
   requestContextBuiltinLibraries,
   type BuiltinLibraryName,
@@ -87,10 +95,80 @@ export function checkBxlTransform(
   options: BxlTransformOptions = {},
 ): string[] {
   try {
-    return profileErrors(source, options);
+    return parseTransform(source, options).issues;
   } catch (err: unknown) {
     return [messageOf(err)];
   }
+}
+
+/**
+ * A transform program parsed, checked against the profile and annotated for
+ * the evaluator once, to be run over many values. A host that runs one stored
+ * program repeatedly, such as a policy predicate judged for every card a view
+ * asks about, holds one of these rather than paying the parse and the profile
+ * walk on every run.
+ *
+ * The program is immutable once prepared: evaluation reads the parsed tree and
+ * never writes to it, so runs are independent of each other and of the order
+ * they happen in.
+ */
+export interface PreparedBxlTransform {
+  /**
+   * Run the program over `input`, with `context` scoped to the run. Answers
+   * and refuses exactly as `runBxlTransform` does for the same source.
+   */
+  run(input: unknown, context?: BxlTransformContext): unknown;
+}
+
+/**
+ * Prepare `source` for running. A program that does not parse, or that
+ * reaches outside the `transform` profile, is refused here with the same
+ * `BxlTransformError` `runBxlTransform` throws for it, so nothing is
+ * prepared that could not run.
+ */
+export function prepareBxlTransform(
+  source: string,
+  options: BxlTransformOptions = {},
+): PreparedBxlTransform {
+  let { parsed, issues } = parseTransform(source, options);
+  if (issues.length > 0) {
+    throw new BxlTransformError('profile', issues.join('\n'));
+  }
+  let prepared: PreparedNativeJq;
+  try {
+    prepared = prepareParsedNativeJq(parsed, {
+      libraries: requestContextBuiltinLibraries(options.libraries),
+      ...(options.runtimeLimits
+        ? { runtimeLimits: options.runtimeLimits }
+        : {}),
+    });
+  } catch (err: unknown) {
+    throw new BxlTransformError('evaluate', messageOf(err));
+  }
+  return {
+    run(input: unknown, context: BxlTransformContext = {}): unknown {
+      let outputs: unknown[];
+      try {
+        // Synchronous on purpose: `withRequestContext` unwinds its stack when
+        // the callback returns, so anything deferred past that point would
+        // read another request's context. It refuses a promise rather than
+        // allowing one, and the evaluator this calls is the synchronous entry.
+        outputs = withRequestContext(
+          context,
+          () => prepared.run(input).outputs,
+        );
+      } catch (err: unknown) {
+        throw new BxlTransformError('evaluate', messageOf(err));
+      }
+      if (outputs.length !== 1) {
+        throw new BxlTransformError(
+          'evaluate',
+          `a transform produces one value, and this program produced ${outputs.length}`,
+        );
+      }
+      return outputs[0];
+    },
+  };
 }
 
 /**
@@ -103,6 +181,9 @@ export function checkBxlTransform(
  * none is refused for the same reason — `empty` is already denied, so the
  * only way here is a filter that matched nothing, and a payload silently
  * becoming absent is the failure these stages exist to avoid.
+ *
+ * Prepares the program on every call. A host running one program many times
+ * holds a `prepareBxlTransform` result instead.
  */
 export function runBxlTransform(
   source: string,
@@ -110,55 +191,31 @@ export function runBxlTransform(
   context: BxlTransformContext = {},
   options: BxlTransformOptions = {},
 ): unknown {
-  let issues = profileErrors(source, options);
-  if (issues.length > 0) {
-    throw new BxlTransformError('profile', issues.join('\n'));
-  }
-  let outputs: unknown[];
-  try {
-    // Synchronous on purpose: `withRequestContext` unwinds its stack when the
-    // callback returns, so anything deferred past that point would read
-    // another request's context. It refuses a promise rather than allowing
-    // one, and the evaluator this calls is the synchronous entry.
-    outputs = withRequestContext(
-      context,
-      () =>
-        runNativeJq(source, input, {
-          readableSyntax: options.syntax === 'readable',
-          libraries: requestContextBuiltinLibraries(options.libraries),
-          ...(options.runtimeLimits
-            ? { runtimeLimits: options.runtimeLimits }
-            : {}),
-        }).outputs,
-    );
-  } catch (err: unknown) {
-    throw new BxlTransformError('evaluate', messageOf(err));
-  }
-  if (outputs.length !== 1) {
-    throw new BxlTransformError(
-      'evaluate',
-      `a transform produces one value, and this program produced ${outputs.length}`,
-    );
-  }
-  return outputs[0];
+  return prepareBxlTransform(source, options).run(input, context);
 }
 
-/** The profile's error findings, with a parse failure reported as its own. */
-function profileErrors(source: string, options: BxlTransformOptions): string[] {
-  let program;
+/**
+ * Parse `source` once, and answer the parsed program with the profile's error
+ * findings on it. A parse failure is reported as its own phase.
+ */
+function parseTransform(
+  source: string,
+  options: BxlTransformOptions,
+): { parsed: ParsedNativeProgram; issues: string[] } {
+  let parsed;
   try {
-    program = parseBxlAst(source, {
+    parsed = parseNativeJq(source, {
       readableSyntax: options.syntax === 'readable',
-      profile: 'transform',
     });
   } catch (err: unknown) {
     throw new BxlTransformError('parse', messageOf(err));
   }
-  // Re-validated rather than read off `program.profileIssues`, so a caller
-  // handing in an already-parsed program later reaches the same answer.
-  return validateBxlAst(program, { profile: 'transform' })
+  let issues = validateBxlAst(bxlAstProgramFromNativeParsed(parsed), {
+    profile: 'transform',
+  })
     .filter((issue) => issue.severity === 'error')
     .map((issue) => `${issue.code}: ${issue.message}`);
+  return { parsed, issues };
 }
 
 function messageOf(err: unknown): string {

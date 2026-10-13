@@ -271,9 +271,9 @@ export interface RouteOptions {
   // which is the one place anything may admit it. Every other route is
   // refused with the ACL's own refusal before its handler runs.
   consumesCoarseOutcome?: true;
-  // No policy grant reaches what the route serves: module source, the file
-  // tree, and a file's stored bytes wherever `grantableBytes` does not hand
-  // them to the gate. Only the realm ACL admits a caller to it. In
+  // No policy grant reaches what the route serves: the file tree, and a
+  // file's stored bytes wherever `grantableBytes` does not hand them to the
+  // gate. Only the realm ACL admits a caller to it. In
   // a realm with a policy, a caller the ACL does not let read the realm is
   // told nothing is there, as they are told of every card no grant admits
   // them to, rather than that they may not look. A `HEAD`, which the ACL
@@ -300,9 +300,9 @@ export interface RouteOptions {
   // with none answers them with the ACL's refusal. A request that
   // authenticated nobody is told to authenticate either way.
   admitsVerifiedNonReaders?: true;
-  // The route serves a path's stored bytes, and for a path that names a data
-  // file or a card's document those bytes are a `readSource` a policy grant
-  // can reach. A request for one consumes the ACL's outcome and is resolved
+  // The route serves a path's stored bytes, and for a path that names a file
+  // or a card's document those bytes are a `readSource` a policy grant can
+  // reach. A request for one consumes the ACL's outcome and is resolved
   // through the gate, `HEAD` included. Every other path the route serves stays
   // `coarseReadOnly`.
   grantableBytes?: true;

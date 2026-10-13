@@ -397,6 +397,43 @@ module('Integration | a realm that checks permissions', function (hooks) {
     );
   });
 
+  test('a realm set up alone serves its policy card to its owner', async function (assert) {
+    // No realm is set up before this one, so the matrix boot asks this realm
+    // for the default system card, which lives at its URL. Answering for the
+    // policy card then has the realm render the policy's definition, which
+    // fails if any of the host's requests was refused before it.
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      realmURL: SCHOOL,
+      enforcePermissions: true,
+      permissions: { [TEST_USER]: ['read', 'write', 'realm-owner'] },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          name: 'School',
+          policy: `${SCHOOL}policies/classrooms`,
+        }),
+        'policies/classrooms.json': {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Classrooms' }, rules: [] },
+            meta: { adoptsFrom: REALM_POLICY },
+          },
+        },
+      },
+    });
+
+    let policy = await getService('store').get(`${SCHOOL}policies/classrooms`);
+    assert.notOk(
+      isCardErrorJSONAPI(policy),
+      `the policy card loads: ${JSON.stringify(policy)}`,
+    );
+    assert.strictEqual(
+      (policy as CardDef).cardInfo.name,
+      'Classrooms',
+      'as the card the realm stores',
+    );
+  });
+
   test('without enforcePermissions the realm answers the host as its own dispatch, and the policy decides nothing', async function (assert) {
     let adapter = await setupSchool({});
 

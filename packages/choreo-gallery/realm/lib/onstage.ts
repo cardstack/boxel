@@ -34,7 +34,7 @@ import { modifier } from 'ember-modifier';
  * stage under it counts as visible: they keep running, which costs frames but
  * never freezes a demo someone is looking at.
  */
-function scrollRoot(el: Element): Element | null {
+export function scrollRoot(el: Element): Element | null {
   let node = el.parentElement;
   while (node) {
     const { overflowY } = getComputedStyle(node);

@@ -43,6 +43,7 @@ export default class CopyCardToStackTool extends HostBaseTool<
     return await copyCardToRealmCommand.execute({
       sourceCard: input.sourceCard,
       targetRealm: realmToCopyTo,
+      localDir: input.localDir,
     });
   }
 
