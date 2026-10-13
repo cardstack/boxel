@@ -43,6 +43,8 @@
     "eslint": "^9.39.4",
     "glimmer-motion": "workspace:*",
     "globals": "^15.15.0",
+    "marked": "catalog:",
+    "marked-gfm-heading-id": "catalog:",
     "playwright": "1.61.0",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",

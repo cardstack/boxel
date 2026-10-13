@@ -5,7 +5,7 @@
  * privilege: a score names it with `<f.Join @presentation={{Curtain}}>`,
  * the compiler names it for the film and registers it, and `<Joins>`
  * plays it like any of the twelve. This is the acceptance test the
- * constructs doc asked for (docs/film-graph/CONSTRUCTS.md, "the join is
+ * constructs doc asked for (packages/choreo-gallery/realm/design/film-graph/CONSTRUCTS.md, "the join is
  * not an engine construct").
  */
 import {

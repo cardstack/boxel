@@ -2743,7 +2743,7 @@ The per-realm reindex endpoints (`POST <realm>_reindex`, `POST <realm>_full-rein
      -d '{ "user": "@user:server", "realms": ["<realm-url>/"] }'
    ```
 
-   The response carries a map of `{ <realm-url>: <realm-JWT> }`. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's _not_ the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
+   The response carries a map of `{ <realm-url>: <realm-JWT> }`, covering the realms the user has a permission row of their own for. Add `?include-public=true` to the URL to also get tokens for realms only world-readable to them. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's _not_ the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
 
 Three different JWTs float around in this area, so always be explicit about which one you mean:
 

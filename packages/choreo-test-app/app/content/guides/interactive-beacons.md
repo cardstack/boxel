@@ -40,7 +40,7 @@ Update the source and destination state together. Splitting the removal and inse
 
 The [inbox demo](/inbox) demonstrates movement toward a destination. The [far match demo](/far) demonstrates an item changing regions. Compare their state changes before choosing a pattern.
 
-Read the [nested Choreo reference](https://github.com/cardstack/choreo/blob/main/docs/nested-choreo.md) for selection boundaries and cross-region matching rules.
+Read the [nested Choreo reference](https://choreo.boxel.site/docs/nested-choreo.md) for selection boundaries and cross-region matching rules.
 
 ## Owning the Destination
 
@@ -52,4 +52,4 @@ A BeaconRef identifies measured geometry; it does not transfer ownership of the 
 
 **ChoreoContext**: `c.beacon`.
 
-Read the implementation: [`beacon.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/beacon.ts), [`beacons.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/beacons.ts), [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`beacon.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/beacon.ts), [`beacons.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/beacons.ts), [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

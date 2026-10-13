@@ -88,6 +88,7 @@ export async function prepareRunCommand({
 
   let allUserPermissions = await fetchUserPermissions(dbAdapter, {
     userId: runAsUserId,
+    includePublicRealms: true,
   });
   // Only the realm the command names carries the effective set. The sibling
   // entries come from the per-user enumeration, which reads each realm's own

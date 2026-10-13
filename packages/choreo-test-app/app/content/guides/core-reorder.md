@@ -32,4 +32,4 @@ Also test scrolling near the edge of a long list, dragging within a transformed 
 
 **glimmer-motion**: `ReorderGroup`, `ReorderItem`, `ReorderAxis`, `ReorderContextProps`.
 
-Read the implementation: [`group.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/group.gts), [`item.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/item.gts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/reorder/types.ts).
+Read the implementation: [`group.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/reorder/group.gts), [`item.gts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/reorder/item.gts), [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/reorder/types.ts).

@@ -27,6 +27,7 @@ import type { DependencyIndexRow } from '@cardstack/runtime-common/index-writer'
 import {
   setupPermissionedRealmsCached,
   createVirtualNetwork,
+  closeTestPgAdapter,
   createTestPgAdapter,
   prepareTestDB,
   testCreatePrerenderAuth,
@@ -2671,7 +2672,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
       nextPrerenderMeta = undefined;
       nextPersonDefinitionParts = undefined;
       nextPersonOperations = undefined;
@@ -3014,7 +3015,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.after(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     hooks.beforeEach(function () {
@@ -3460,7 +3461,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('explicit-context populate persists where the self-resolving lookup no-ops', async function (assert) {

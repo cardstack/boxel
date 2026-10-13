@@ -13,7 +13,16 @@ import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { ease, inertia, motion, spring, to, tween } from 'glimmer-motion';
+import {
+  ease,
+  inertia,
+  motion,
+  motionValue,
+  spring,
+  styles,
+  to,
+  tween,
+} from 'glimmer-motion';
 import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
@@ -83,6 +92,42 @@ module('Integration | motion | template helpers', function (hooks) {
       /120px/.test(box.style.transform),
       `and it arrived (${box.style.transform})`,
     );
+  });
+
+  test('(styles …) binds motion values of any type', async function (assert) {
+    // The template is the type test as much as the assertions are: a
+    // MotionValue<number> and a MotionValue<string> both have to be accepted
+    // by `styles`, or this file fails Glint.
+    class Follower extends Component {
+      x = motionValue(0);
+      color = motionValue('rgb(255, 255, 255)');
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        follower = this;
+      }
+      <template>
+        <div
+          id='dot'
+          {{motion style=(styles x=this.x backgroundColor=this.color)}}
+        ></div>
+      </template>
+    }
+    let follower: Follower | undefined;
+    await render(<template><Follower /></template>);
+
+    const dot = document.querySelector('#dot') as HTMLElement;
+    assert.strictEqual(dot.style.transform, 'none');
+    assert.strictEqual(dot.style.backgroundColor, 'rgb(255, 255, 255)');
+
+    follower!.x.set(40);
+    follower!.color.set('rgb(0, 0, 0)');
+    await nextFrame();
+    assert.strictEqual(
+      dot.style.transform,
+      'translateX(40px)',
+      'the element follows the value',
+    );
+    assert.strictEqual(dot.style.backgroundColor, 'rgb(0, 0, 0)');
   });
 
   test('a spring helper fits a <Choreo> step as well as a transition', function (assert) {

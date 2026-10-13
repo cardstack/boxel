@@ -3,9 +3,6 @@
 module.exports = {
   extends: ['recommended', '@cardstack/template-lint:recommended'],
   plugins: ['../template-lint/plugin'],
-  // the film-graph sketches are proposals written in a syntax that does not
-  // exist yet: read them, don't lint them
-  ignore: ['docs/film-graph/**'],
   rules: {
     // Only a <details> element's <summary> is interactive, so buttons in its
     // open panel are not nested controls.

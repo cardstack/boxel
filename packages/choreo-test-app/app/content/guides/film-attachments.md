@@ -33,4 +33,4 @@ Seek before, within, and after the window, then repeat those requests in reverse
 
 **ChoreoContext**: `c.Attach`.
 
-Read the implementation: [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

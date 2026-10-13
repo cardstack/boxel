@@ -10,6 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  closeTestPgAdapter,
   createTestPgAdapter,
   prepareTestDB,
   testRealm,
@@ -45,7 +46,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   hooks.afterEach(async function () {
-    await adapter.close();
+    await closeTestPgAdapter(adapter);
   });
 
   const url = (name: string) => `${testRealm}${name}.json`;

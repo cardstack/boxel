@@ -1,5 +1,5 @@
 /**
- * ATTACH — the driven run (docs/film-graph/CONSTRUCTS.md, construct 1).
+ * ATTACH — the driven run (packages/choreo-gallery/realm/design/film-graph/CONSTRUCTS.md, construct 1).
  *
  * A parent region carries `<c.Attach @region @duration>` in its score; the
  * child region named by `@id` has a score of its own. While the window is

@@ -19,7 +19,7 @@
  *
  * WHY THIS SCENE. It was picked for its geometry, not its looks: a moss root
  * with an arch and a hollow under it is a shape that can stand in FRONT of a
- * DOM card, which is exactly the case `docs/dom-in-3d.md` lists as unproven.
+ * DOM card, which is exactly the case `packages/choreo-gallery/realm/docs/dom-in-3d.md` lists as unproven.
  * A flat backdrop could not test occlusion at all.
  *
  * The one lucky alignment: its camera is already authored in pixels —
@@ -3170,7 +3170,7 @@ export function createSylva(hosts: SylvaHosts): Sylva {
    * branch it is naming the moment the composition reflows.
    *
    * The proxy is the whole occlusion answer, and it is the piece
-   * `docs/dom-in-3d.md` calls unproven: a plane at the card's pose with
+   * `packages/choreo-gallery/realm/docs/dom-in-3d.md` calls unproven: a plane at the card's pose with
    * `NoBlending`, which writes its own alpha straight into the framebuffer and
    * so cuts a card-shaped hole for the DOM underneath. Being ordinary
    * geometry, it is depth-tested like everything else — so moss standing

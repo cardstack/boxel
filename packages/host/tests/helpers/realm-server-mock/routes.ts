@@ -538,6 +538,22 @@ function registerCatalogRoutes() {
 
 function registerAuthRoutes() {
   registerRealmServerRoute({
+    path: '/_public-realms',
+    handler: async (_req, _url, state: RealmServerMockState) => {
+      let data = [...state.publicReadableRealms].map(
+        ([realmURL, { name }]) => ({
+          type: 'public-realm',
+          id: realmURL,
+          attributes: { name, iconURL: null, backgroundURL: null },
+        }),
+      );
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      });
+    },
+  });
+  registerRealmServerRoute({
     path: '/_realm-auth',
     handler: async (_req, _url, state: RealmServerMockState) => {
       if (state.failRealmAuth) {
@@ -545,7 +561,15 @@ function registerAuthRoutes() {
       }
       let realmServerURL = ensureTrailingSlash(_url.origin);
       const authTokens: Record<string, string> = {};
-      for (let [realmURL, permissions] of state.realmPermissions.entries()) {
+      let accessibleRealms = [...state.realmPermissions.entries()];
+      if (_url.searchParams.get('include-public') !== 'false') {
+        for (let realmURL of state.publicReadableRealms.keys()) {
+          if (!state.realmPermissions.has(realmURL)) {
+            accessibleRealms.push([realmURL, ['read']]);
+          }
+        }
+      }
+      for (let [realmURL, permissions] of accessibleRealms) {
         // Archived realms are omitted from enumeration, matching the real
         // `_realm-auth` so the active workspace list excludes them.
         if (state.archivedRealms.has(realmURL)) {

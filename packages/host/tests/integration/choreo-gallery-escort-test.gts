@@ -1,6 +1,6 @@
 /**
  * Escort — the acceptance page for the opened step vocabulary
- * (docs/step-vocabulary.md): a composite step the APP said for itself,
+ * (packages/choreo-gallery/realm/docs/step-vocabulary.md): a composite step the APP said for itself,
  * named and anchored against, with two values read from the flight it
  * names.
  *

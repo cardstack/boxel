@@ -38,4 +38,4 @@ Test the same gesture under the transforms the real product uses. A fixture at s
 
 **glimmer-motion**: `createDragControls`, `DragControls`, `correctParentTransform`, `transformViewBoxPoint`.
 
-Read the implementation: [`drag-controls.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/drag-controls.ts), [`transform-page-point.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/gestures/transform-page-point.ts).
+Read the implementation: [`drag-controls.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/gestures/drag-controls.ts), [`transform-page-point.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/gestures/transform-page-point.ts).
