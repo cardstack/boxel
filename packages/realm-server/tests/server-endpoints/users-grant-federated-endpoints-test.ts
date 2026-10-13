@@ -30,7 +30,6 @@ import {
   runTestRealmServerWithRealms,
   setupDB,
 } from '../helpers/index.ts';
-import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
 
 // ============================================================================
 // A signed-in session on the endpoints that answer for several realms at once,
@@ -174,8 +173,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           ', NOW()) ON CONFLICT (url) DO UPDATE SET archived_at = EXCLUDED.archived_at',
         ]);
       }
-
-      setupCatalogTestSubset(hooks);
 
       // One server for the whole module: no test changes any realm. Booting it
       // indexes six realms inside the first test's budget, so that budget is
