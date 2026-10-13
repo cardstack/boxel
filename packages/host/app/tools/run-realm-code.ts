@@ -1,6 +1,11 @@
 import { service } from '@ember/service';
 
-import { logger, rri, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  coerceErrorMessage,
+  logger,
+  rri,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
@@ -683,7 +688,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
           changes.push(`Disabled skills: ${skillsToDisable.join(', ')}`);
         }
       } catch (error) {
-        changes.push(`Skills were not changed: ${errorMessage(error)}`);
+        changes.push(
+          `Skills were not changed: ${coerceErrorMessage(error, 'unknown error')}`,
+        );
       }
     }
     if (model !== undefined) {
@@ -694,7 +701,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
         });
         changes.push(`Model set to ${model}`);
       } catch (error) {
-        changes.push(`Model was not changed: ${errorMessage(error)}`);
+        changes.push(
+          `Model was not changed: ${coerceErrorMessage(error, 'unknown error')}`,
+        );
       }
     }
     return changes;
@@ -705,7 +714,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     try {
       source = await loadSkillSource(this.store, id);
     } catch (error) {
-      throw new Error(`Unable to load skill ${id}: ${errorMessage(error)}`);
+      throw new Error(
+        `Unable to load skill ${id}: ${coerceErrorMessage(error, 'unknown error')}`,
+      );
     }
     if (!source) {
       throw new Error(`Not a skill card or skill markdown file: ${id}`);
@@ -848,10 +859,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ? virtualNetwork.toURL(realm).href
       : new URL(realm).href;
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export { RunRealmCodeTool as RunRealmCodeCommand };
