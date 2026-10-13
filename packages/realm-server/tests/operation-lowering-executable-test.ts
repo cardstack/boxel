@@ -672,6 +672,67 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('labels', function () {
+    test('a label reaches the stored entry as written, and only where declared', async function (assert) {
+      let { operations, issues } = await lower({
+        close: {
+          base: 'transform',
+          label: 'Close this report',
+          set: { status: 'closed' },
+        },
+        reopen: { base: 'transform', set: { status: 'open' } },
+        update: { base: 'update', label: 'Edit this report' },
+      });
+      assert.deepEqual(issues, [], 'every declaration lowers cleanly');
+      assert.strictEqual(operations.close.label, 'Close this report');
+      assert.deepEqual(
+        operations.update,
+        { base: 'update', deterministic: true, label: 'Edit this report' },
+        'the label rides beside the rest of the lowered declaration',
+      );
+      assert.false(
+        'label' in operations.reopen,
+        'a declaration without a label lowers exactly as before',
+      );
+    });
+
+    test('a label that is not a short line of plain text makes the entry invalid', async function (assert) {
+      let { operations, issues } = await lower({
+        empty: { base: 'update', label: '' },
+        long: { base: 'update', label: 'x'.repeat(81) },
+        markup: { base: 'update', label: 'Close <em>now</em>' },
+        multiline: { base: 'update', label: 'Close\nnow' },
+        broken: {
+          base: 'transform',
+          label: 'Close\nnow',
+          set: { missing: 'x' },
+        },
+      });
+      assert.deepEqual(
+        issues.map(
+          (issue) => `${issue.operation} ${issue.path}: ${issue.code}`,
+        ),
+        [
+          'broken set.missing: unknown-field',
+          'empty label: invalid-label',
+          'long label: invalid-label',
+          'markup label: invalid-label',
+          'multiline label: invalid-label',
+          'broken label: invalid-label',
+        ],
+      );
+      for (let name of Object.keys(operations)) {
+        assert.true(operations[name].invalid, `${name} is invalid`);
+        assert.false('label' in operations[name], `${name} stores no label`);
+      }
+      assert.deepEqual(
+        operations.broken.issues?.map((issue) => issue.code),
+        ['unknown-field', 'invalid-label'],
+        'a label finding joins the findings already against the declaration',
+      );
+    });
+  });
+
   module('non-grantable declarations', function () {
     test('the flag reaches the stored entry, and nothing else carries it', async function (assert) {
       let { operations, issues } = await lower({

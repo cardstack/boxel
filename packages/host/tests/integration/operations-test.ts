@@ -655,6 +655,91 @@ module('Integration | operations', function (hooks) {
     }, /`nonGrantable` must be a boolean/);
   });
 
+  test('label is a short line of plain text any declaration may carry', function (assert) {
+    class Inbox extends CardDef {
+      @operation static archive = {
+        base: 'transform',
+        label: 'Archive this inbox',
+        set: { status: 'archived' },
+      } satisfies OperationsModule.OperationDeclaration;
+      @operation static listOpen = {
+        base: 'query',
+        label: 'List open inboxes',
+        query: { filter: { on: () => Inbox, eq: { status: 'open' } } },
+      };
+      @operation static update = {
+        base: 'update',
+        label: 'Edit this inbox',
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    class LogFile extends FileDef {
+      @operation static record = {
+        base: 'appendLine',
+        label: 'Add a line to the log',
+        params: { line: StringField },
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries({
+          ...getDeclaredOperations(Inbox),
+          ...getDeclaredOperations(LogFile),
+        }).map(([name, declaration]) => [name, declaration.label]),
+      ),
+      {
+        archive: 'Archive this inbox',
+        listOpen: 'List open inboxes',
+        update: 'Edit this inbox',
+        record: 'Add a line to the log',
+      },
+      'a named operation, a saved search, a built-in and a file operation all carry one',
+    );
+
+    let refused: [string, unknown, RegExp][] = [
+      ['an empty label', '', /a label must not be empty/],
+      ['a blank label', '   ', /a label must not be empty/],
+      [
+        'a label over 80 characters',
+        'x'.repeat(81),
+        /a label must be at most 80 characters, and this one is 81/,
+      ],
+      ['a label with markup', 'Archive <b>now</b>', /without markup/],
+      [
+        'a label with a line break',
+        'Archive\nthis inbox',
+        /without line breaks/,
+      ],
+      ['a label with a tab', 'Archive\tthis inbox', /without line breaks/],
+      ['a label that is not a string', 42, /a label must be a string/],
+    ];
+    for (let [what, label, pattern] of refused) {
+      assert.throws(
+        () => {
+          class Loose extends CardDef {
+            @operation static update = {
+              base: 'update',
+              label: label as string,
+            };
+          }
+          return Loose;
+        },
+        pattern,
+        `${what} is refused`,
+      );
+    }
+    class AtTheLimit extends CardDef {
+      @operation static update = {
+        base: 'update',
+        label: 'x'.repeat(80),
+      } satisfies OperationsModule.OperationDeclaration;
+    }
+    assert.strictEqual(
+      getDeclaredOperations(AtTheLimit).update.label,
+      'x'.repeat(80),
+      'a label of exactly 80 characters is accepted',
+    );
+  });
+
   test('an explain is carried only where a card declares one, and is never grantable', function (assert) {
     class Plain extends CardDef {}
     assert.false(
