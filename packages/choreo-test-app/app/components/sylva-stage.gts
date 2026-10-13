@@ -18,7 +18,7 @@ import {
 
 /**
  * A SPIKE, at `/_sylva`. No catalog entry, no gallery card, not a demo — it
- * exists to answer the questions `docs/dom-in-3d.md` leaves open at the end of
+ * exists to answer the questions `packages/choreo-gallery/realm/docs/dom-in-3d.md` leaves open at the end of
  * cases 3 and 4, and it should be deleted or promoted rather than left lying
  * around.
  *

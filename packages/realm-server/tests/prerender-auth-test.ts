@@ -4,6 +4,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
+import { renderActorFor } from '../prerender/render-runner.ts';
 import { verifyJWT } from '../jwt.ts';
 
 const secretSeed = 'prerender-auth-test-seed';
@@ -121,5 +122,68 @@ module(basename(import.meta.filename), function () {
         `the token for ${realm} carries no claim`,
       );
     }
+  });
+
+  module('the actor a render runs as', function () {
+    let createPrerenderAuth = buildCreatePrerenderAuth(
+      secretSeed,
+      'http://realm-server.example',
+    );
+    let permissions = {
+      'http://localhost:4202/test/': ['read' as const],
+      'http://localhost:4202/other/': ['read' as const],
+    };
+
+    test('ordinary sessions for one user run as that user', function (assert) {
+      assert.strictEqual(
+        renderActorFor(createPrerenderAuth(userId, permissions)),
+        userId,
+      );
+    });
+
+    test('realm-authority sessions run as nobody', function (assert) {
+      assert.strictEqual(
+        renderActorFor(
+          createPrerenderAuth(userId, permissions, { realmAuthority: true }),
+        ),
+        null,
+      );
+    });
+
+    test('an anonymous render, with no session, runs as nobody', function (assert) {
+      assert.strictEqual(renderActorFor('{}'), null);
+    });
+
+    test('sessions naming more than one user run as nobody', function (assert) {
+      let mine = JSON.parse(
+        createPrerenderAuth(userId, {
+          'http://localhost:4202/test/': ['read'],
+        }),
+      );
+      let theirs = JSON.parse(
+        createPrerenderAuth('@someone-else:localhost', {
+          'http://localhost:4202/other/': ['read'],
+        }),
+      );
+      assert.strictEqual(
+        renderActorFor(JSON.stringify({ ...mine, ...theirs })),
+        null,
+      );
+    });
+
+    test('auth that cannot be read runs as nobody', function (assert) {
+      let nullPayload = `x.${Buffer.from('null').toString('base64url')}.y`;
+      for (let [label, auth] of [
+        ['not JSON', 'not json'],
+        ['a token that is not a string', JSON.stringify({ realm: 42 })],
+        ['a token that is not a JWT', JSON.stringify({ realm: 'opaque' })],
+        [
+          'a token whose claims are null',
+          JSON.stringify({ realm: nullPayload }),
+        ],
+      ]) {
+        assert.strictEqual(renderActorFor(auth), null, label);
+      }
+    });
   });
 });

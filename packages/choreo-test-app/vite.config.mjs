@@ -48,7 +48,7 @@ vendorDraco();
 /**
  * DIALKIT'S STYLESHEET COMES FROM THE PACKAGE, not from the repository.
  *
- * The dial spike (docs/dialkit.md) leans on the fact that all four of
+ * The dial spike (packages/choreo-gallery/realm/design/dialkit.md) leans on the fact that all four of
  * dialkit's UI ports render the same `dialkit-*` class names against one
  * shared `theme.css` — so an Ember port that emits the same markup inherits
  * the whole visual design. That only pays off if the stylesheet stays the

@@ -17,7 +17,7 @@ import { hex, RAD } from '@cardstack/choreo/film/math';
 /**
  * SAGRADA — a film, at `/sagrada`.
  *
- * The second reference film for the film construct (notes/film-construct.md),
+ * The second reference film for the film construct (packages/choreo-gallery/realm/design/film-construct.md),
  * and the first one cut ON it: everything here is the shot list, the
  * script, the chapters, the year clock, the traces sampled off the model,
  * and the front and back matter. The engine — the chased lens, the joins,
@@ -167,7 +167,7 @@ export const VO_GAIN: Record<string, number> = {
  * files in `public/sagrada/vo/`. The kinetic type is paced against the VOICE,
  * not against the beat: the last cue should land as the line is finishing,
  * whether the read is four seconds or thirteen. Estimating this went wrong
- * once already (see notes/towers-vo.md) — so it is measured, and a re-record
+ * once already (see packages/choreo-gallery/realm/design/towers-vo.md) — so it is measured, and a re-record
  * means re-measuring. A beat missing from here paces against its own length.
  */
 export const VO_SECS: Record<string, number> = {

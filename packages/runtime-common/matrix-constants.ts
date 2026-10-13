@@ -132,6 +132,9 @@ export interface AppBoxelRealmServersContent {
 }
 export const APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE =
   'app.boxel.workspace-favorites';
+// The public realms a user has added to the Catalogs section of their
+// dashboard, alongside the operator-chosen catalogs every user sees.
+export const APP_BOXEL_CATALOG_REALMS_EVENT_TYPE = 'app.boxel.catalog-realms';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';

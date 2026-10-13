@@ -44,6 +44,8 @@ const EDUCATION = 'http://127.0.0.1:4444/education/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const ADMIN = '@education-admin:localhost';
 const ORG_ADMIN = '@org-admin:localhost';
+// Reads both realms, so may ask what Education's policy decides.
+const IT_ADMIN = '@it-admin:localhost';
 const READER = '@reader:localhost';
 const TEACHER = '@teacher:localhost';
 
@@ -58,7 +60,8 @@ const CLASSROOM = { module: `${EDUCATION}classroom`, name: 'Classroom' };
 // a `.png` to `PngDef`, both of which descend from `FileDef`.
 const FILE_DEF = { module: rri('@cardstack/base/card-api'), name: 'FileDef' };
 const PDF_DEF = { module: rri('@cardstack/base/pdf-file-def'), name: 'PdfDef' };
-// The types the indexer gives module source, which no rule can grant.
+// The types module source is matched on: `.ts` and `.js` as `TsFileDef`, and
+// `.gts` and `.gjs` as `GtsFileDef`, which descends from it.
 const TS_FILE_DEF = {
   module: rri('@cardstack/base/ts-file-def'),
   name: 'TsFileDef',
@@ -77,6 +80,8 @@ const TEACHES = '.teacherIds | any(. == actor())';
 // the caller. The path is tested at its end, so a query string that repeated
 // it would satisfy the test if the query string reached the id.
 const PUBLIC_AND_TEACHER = `(instance().id | endswith("/public/handbook.pdf")) and (actor() == "${TEACHER}")`;
+// A predicate over the caller alone.
+const IS_TEACHER = `actor() == "${TEACHER}"`;
 
 const CLASSROOM_MODULE = `
   import { contains, containsMany, field, CardDef } from "@cardstack/base/card-api";
@@ -162,11 +167,18 @@ const POLICIES: Record<string, Rule[]> = {
   appendOnly: [
     { targetType: CLASSROOM, grants: [{ operation: 'appendContainsMany' }] },
   ],
-  // Rules on module source, beside one on a data file so the policy still
-  // admits the caller somewhere.
-  moduleSource: [
-    { targetType: TS_FILE_DEF, grants: [{ operation: 'readSource' }] },
+  // Every module, whatever its language.
+  anyCode: [{ targetType: TS_FILE_DEF, grants: [{ operation: 'readSource' }] }],
+  // Only the modules that carry a template.
+  gtsCode: [
     { targetType: GTS_FILE_DEF, grants: [{ operation: 'readSource' }] },
+  ],
+  // Every module, to one caller, beside a rule on data files.
+  codeForTeacher: [
+    {
+      targetType: TS_FILE_DEF,
+      grants: [{ operation: 'readSource', where: IS_TEACHER }],
+    },
     { targetType: PDF_DEF, grants: [{ operation: 'readSource' }] },
   ],
 };
@@ -299,6 +311,7 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
             [READER]: ['read'],
+            [IT_ADMIN]: ['read'],
           },
         },
         {
@@ -314,6 +327,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
           permissions: {
             [ORG_ADMIN]: ['read', 'write', 'realm-owner'],
+            [IT_ADMIN]: ['read'],
           },
         },
       ],
@@ -461,6 +475,7 @@ module(basename(import.meta.filename), function (hooks) {
     test('a FileDef grant does not reach module source', async function (assert) {
       await policy('anyFile');
       await refused(assert, MODULE_SOURCE, 'a .gts under a FileDef grant');
+      await refused(assert, TS_MODULE, 'a .ts under a FileDef grant');
     });
 
     test('renaming a file changes which rule matches it', async function (assert) {
@@ -472,6 +487,38 @@ module(basename(import.meta.filename), function (hooks) {
       await education.write('public/notes.pdf', 'term notes');
       await education.indexing();
       await served(assert, NOTES_PDF, 'the same bytes named notes.pdf');
+    });
+  });
+
+  module('module source is matched on its code types', function () {
+    test('a TsFileDef grant covers every module', async function (assert) {
+      await policy('anyCode');
+      await served(assert, TS_MODULE, 'a .ts under a TsFileDef grant');
+      await served(assert, MODULE_SOURCE, 'a .gts under a TsFileDef grant');
+    });
+
+    test('a GtsFileDef grant covers a .gts and not a .ts', async function (assert) {
+      await policy('gtsCode');
+      await served(assert, MODULE_SOURCE, 'a .gts under a GtsFileDef grant');
+      await refused(assert, TS_MODULE, 'a .ts under a GtsFileDef grant');
+    });
+
+    test('a code grant does not reach a data file', async function (assert) {
+      await policy('anyCode');
+      await refused(assert, HANDBOOK, 'a .pdf under a TsFileDef grant');
+      await refused(assert, LICENSE, 'a name with no extension');
+      await refused(assert, ROOM_204_SOURCE, 'a card’s raw source');
+    });
+
+    test('a code predicate reads the caller', async function (assert) {
+      await policy('codeForTeacher');
+      await served(assert, MODULE_SOURCE, 'the caller the predicate names');
+      await refused(
+        assert,
+        MODULE_SOURCE,
+        'a caller it does not name',
+        '@colleague:localhost',
+      );
     });
   });
 
@@ -767,6 +814,22 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a module costs one definition lookup once FileDef is known', async function (assert) {
+      await policy('anyCode');
+      await served(assert, TS_MODULE, 'a .ts under a TsFileDef grant');
+      assert.strictEqual(
+        gateStats().definitionLookups,
+        2,
+        'the chain of the code type its extension names, and FileDef’s key',
+      );
+      await served(assert, MODULE_SOURCE, 'a .gts under a TsFileDef grant');
+      assert.strictEqual(
+        gateStats().definitionLookups,
+        3,
+        'the next module looks up only its own chain',
+      );
+    });
+
     test('a realm with no policy reads no definition for a declined read', async function (assert) {
       await education.write(
         'realm.json',
@@ -920,7 +983,6 @@ module(basename(import.meta.filename), function (hooks) {
           assert.strictEqual(served.status, 200, `${label}: ${nameOf(url)}`);
         }
       }
-      let loads = gateStats().policyLoads;
       let source = await get(
         MODULE_SOURCE,
         SupportedMimeType.CardSource,
@@ -938,14 +1000,9 @@ module(basename(import.meta.filename), function (hooks) {
         { actual: nameOf(MODULE_SOURCE), expected: nameOf(GONE_MODULE_SOURCE) },
         'module source is refused as a missing module is',
       );
-      assert.strictEqual(
-        gateStats().policyLoads,
-        loads,
-        'module source does not reach the gate',
-      );
-      // A name with no extension is read exactly as named, so the module a
-      // reader's read of it would reach is not there: the transpiled module on
-      // the file serve, and the module the card+source read would redirect to.
+      // Nor is the module a name with no extension reaches: the transpiled
+      // module on the file serve, and the module the card+source read would
+      // redirect a reader to.
       for (let { label, accept } of BYTE_ROUTES) {
         let module = await get(`${EDUCATION}classroom`, accept, AS.teacher());
         assert.strictEqual(module.status, 404, `${label}: nor is the module`);
@@ -1374,297 +1431,457 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
-    // Code is readable only with the realm's own read permission: module
-    // source, raw and transpiled, and the directory listings code mode browses
-    // the realm by. No grant reaches any of them, so a caller a grant admits
-    // to the realm's data is told of each what they are told of a path that
-    // holds nothing.
-    module(
-      "code is read only with the realm's own read permission",
-      function () {
-        // The routes a module's bytes are served on: its source on card+source,
-        // and the module serve a browser's `import` reaches with `*/*`, which
-        // answers with the transpiled module. `image/png` is the fallback serve
-        // under an `Accept` a module import does not send.
-        const CODE_ROUTES = [
-          { label: 'card+source', accept: SupportedMimeType.CardSource },
-          { label: 'the module serve', accept: '*/*' },
-          { label: 'the file serve', accept: 'image/png' },
-        ];
-        const MODULES: [string, string][] = [
-          [MODULE_SOURCE, GONE_MODULE_SOURCE],
-          [TS_MODULE, GONE_TS_MODULE],
-        ];
-        // The names a module import spells, which a reader's module serve
-        // resolves to the transpiled `.gts` or `.ts`.
-        const IMPORT_NAMES: [string, string][] = [
-          [`${EDUCATION}classroom`, `${EDUCATION}classless`],
-          [`${EDUCATION}format`, `${EDUCATION}formal`],
-        ];
+    // Module source, raw and transpiled, is read through a grant on a code
+    // type, and through nothing else: a caller a grant on the realm's data
+    // admits is told of it what they are told of a path that holds nothing.
+    // The directory listings code mode browses the realm by are read only with
+    // the realm's own read permission.
+    module('code is read through a grant that names it', function () {
+      // The routes a module's bytes are served on: its source on card+source,
+      // and the module serve a browser's `import` reaches with `*/*`, which
+      // answers with the transpiled module. `image/png` is the fallback serve
+      // under an `Accept` a module import does not send.
+      const CODE_ROUTES = [
+        { label: 'card+source', accept: SupportedMimeType.CardSource },
+        { label: 'the module serve', accept: '*/*' },
+        { label: 'the file serve', accept: 'image/png' },
+      ];
+      const MODULES: [string, string][] = [
+        [MODULE_SOURCE, GONE_MODULE_SOURCE],
+        [TS_MODULE, GONE_TS_MODULE],
+      ];
+      // The names a module import spells, which a reader's module serve
+      // resolves to the transpiled `.gts` or `.ts`.
+      const IMPORT_NAMES: [string, string][] = [
+        [`${EDUCATION}classroom`, `${EDUCATION}classless`],
+        [`${EDUCATION}format`, `${EDUCATION}formal`],
+      ];
 
-        async function assertRefusedAsMissing(
-          assert: Assert,
-          pairs: [string, string][],
-          routes: { label: string; accept: string }[],
-        ) {
-          for (let { label, accept } of routes) {
-            for (let [url, missing] of pairs) {
-              let response = await get(url, accept, AS.teacher());
-              assert.strictEqual(
-                response.status,
-                404,
-                `${label}: ${nameOf(url)}`,
-              );
-              assertSameAnswer(
-                assert,
-                response,
-                await get(missing, accept, AS.teacher()),
-                { actual: nameOf(url), expected: nameOf(missing) },
-                `${label}: ${nameOf(url)} is refused as a missing name is`,
-              );
-            }
+      async function assertRefusedAsMissing(
+        assert: Assert,
+        pairs: [string, string][],
+        routes: { label: string; accept: string }[],
+      ) {
+        for (let { label, accept } of routes) {
+          for (let [url, missing] of pairs) {
+            let response = await get(url, accept, AS.teacher());
+            assert.strictEqual(
+              response.status,
+              404,
+              `${label}: ${nameOf(url)}`,
+            );
+            assertSameAnswer(
+              assert,
+              response,
+              await get(missing, accept, AS.teacher()),
+              { actual: nameOf(url), expected: nameOf(missing) },
+              `${label}: ${nameOf(url)} is refused as a missing name is`,
+            );
           }
         }
+      }
 
-        test('module source is refused on every route that serves it', async function (assert) {
-          await policy('anyFile');
-          assert.strictEqual(
-            (await get(HANDBOOK, SupportedMimeType.CardSource, AS.teacher()))
-              .status,
-            200,
-            'the caller reads a data file through their grant',
-          );
-          let loads = gateStats().policyLoads;
-          await assertRefusedAsMissing(assert, MODULES, CODE_ROUTES);
-          for (let { label, accept } of CODE_ROUTES) {
-            for (let [url, missing] of MODULES) {
-              assert.deepEqual(
-                headersOf(await head(url, accept, AS.teacher())),
-                headersOf(await head(missing, accept, AS.teacher())),
-                `${label}: a HEAD of ${nameOf(url)} is a HEAD of a missing name`,
-              );
-            }
+      test('a data-file grant reaches no module on any route that serves one', async function (assert) {
+        await policy('anyFile');
+        assert.strictEqual(
+          (await get(HANDBOOK, SupportedMimeType.CardSource, AS.teacher()))
+            .status,
+          200,
+          'the caller reads a data file through their grant',
+        );
+        await assertRefusedAsMissing(assert, MODULES, CODE_ROUTES);
+        for (let { label, accept } of CODE_ROUTES) {
+          for (let [url, missing] of MODULES) {
+            assert.deepEqual(
+              headersOf(await head(url, accept, AS.teacher())),
+              headersOf(await head(missing, accept, AS.teacher())),
+              `${label}: a HEAD of ${nameOf(url)} is a HEAD of a missing name`,
+            );
           }
-          assert.strictEqual(
-            gateStats().policyLoads,
-            loads,
-            'module source never reaches the gate',
-          );
-          await assertRefusedAsMissing(assert, IMPORT_NAMES, CODE_ROUTES);
-        });
+        }
+        await assertRefusedAsMissing(assert, IMPORT_NAMES, CODE_ROUTES);
+      });
 
-        test('a directory listing is refused', async function (assert) {
-          await policy('anyFile');
-          let listing = SupportedMimeType.DirectoryListing;
-          await assertRefusedAsMissing(
+      test('a directory listing is refused', async function (assert) {
+        await policy('anyFile');
+        let listing = SupportedMimeType.DirectoryListing;
+        await assertRefusedAsMissing(
+          assert,
+          [[PUBLIC_DIR, GONE_DIR]],
+          [{ label: 'the directory listing', accept: listing }],
+        );
+        let root = await get(EDUCATION, listing, AS.teacher());
+        assert.strictEqual(root.status, 404, "the realm's root listing too");
+        assert.deepEqual(
+          JSON.parse(textOf(root)).errors?.map(
+            ({ status, title }: { status: string; title: string }) => ({
+              status,
+              title,
+            }),
+          ),
+          JSON.parse(
+            textOf(await get(GONE_DIR, listing, AS.teacher())),
+          ).errors?.map(
+            ({ status, title }: { status: string; title: string }) => ({
+              status,
+              title,
+            }),
+          ),
+          "the root's refusal is a missing directory's",
+        );
+        // Named on the byte routes instead, with or without its slash, a
+        // directory is not a file a grant can reach either.
+        await assertRefusedAsMissing(
+          assert,
+          [
+            [PUBLIC_DIR, GONE_DIR],
+            [PUBLIC_DIR.slice(0, -1), GONE_DIR.slice(0, -1)],
+          ],
+          CODE_ROUTES,
+        );
+      });
+
+      test('a warm cache answers nobody the gate refuses', async function (assert) {
+        await policy('anyFile');
+        // What a reader's reads leave in memory: the module serve's transpiled
+        // modules, by path and by import name, and the card+source read's
+        // module source.
+        const WARMED = [
+          {
+            label: 'the transpiled module',
+            accept: '*/*',
+            url: MODULE_SOURCE,
+            missing: GONE_MODULE_SOURCE,
+          },
+          {
+            label: 'the transpiled module by its import name',
+            accept: '*/*',
+            url: `${EDUCATION}classroom`,
+            missing: `${EDUCATION}classless`,
+          },
+          {
+            label: 'module source',
+            accept: SupportedMimeType.CardSource,
+            url: MODULE_SOURCE,
+            missing: GONE_MODULE_SOURCE,
+          },
+        ];
+        let validators = new Map<string, string>();
+        for (let { label, accept, url } of WARMED) {
+          await get(url, accept, AS.reader());
+          let cached = await get(url, accept, AS.reader());
+          assert.strictEqual(cached.status, 200, `${label}: a reader reads it`);
+          assert.strictEqual(
+            cached.get('x-boxel-cache'),
+            'hit',
+            `${label}: from the cache their first read filled`,
+          );
+          validators.set(label, cached.get('etag')!);
+        }
+        for (let { label, accept, url, missing } of WARMED) {
+          let names = { actual: nameOf(url), expected: nameOf(missing) };
+          let refused = await get(url, accept, AS.teacher());
+          assert.strictEqual(refused.status, 404, `${label}: not there`);
+          assertSameAnswer(
             assert,
-            [[PUBLIC_DIR, GONE_DIR]],
-            [{ label: 'the directory listing', accept: listing }],
+            refused,
+            await get(missing, accept, AS.teacher()),
+            names,
+            `${label}: refused as a missing name is`,
           );
-          let root = await get(EDUCATION, listing, AS.teacher());
-          assert.strictEqual(root.status, 404, "the realm's root listing too");
-          assert.deepEqual(
-            JSON.parse(textOf(root)).errors?.map(
-              ({ status, title }: { status: string; title: string }) => ({
-                status,
-                title,
-              }),
-            ),
-            JSON.parse(
-              textOf(await get(GONE_DIR, listing, AS.teacher())),
-            ).errors?.map(
-              ({ status, title }: { status: string; title: string }) => ({
-                status,
-                title,
-              }),
-            ),
-            "the root's refusal is a missing directory's",
-          );
-          // Named on the byte routes instead, with or without its slash, a
-          // directory is not a file a grant can reach either.
-          await assertRefusedAsMissing(
-            assert,
-            [
-              [PUBLIC_DIR, GONE_DIR],
-              [PUBLIC_DIR.slice(0, -1), GONE_DIR.slice(0, -1)],
-            ],
-            CODE_ROUTES,
-          );
-        });
-
-        test('a warm cache answers nobody the gate refuses', async function (assert) {
-          await policy('anyFile');
-          // What a reader's reads leave in memory: the module serve's transpiled
-          // modules, by path and by import name, and the card+source read's
-          // module source.
-          const WARMED = [
-            {
-              label: 'the transpiled module',
-              accept: '*/*',
-              url: MODULE_SOURCE,
-              missing: GONE_MODULE_SOURCE,
-            },
-            {
-              label: 'the transpiled module by its import name',
-              accept: '*/*',
-              url: `${EDUCATION}classroom`,
-              missing: `${EDUCATION}classless`,
-            },
-            {
-              label: 'module source',
-              accept: SupportedMimeType.CardSource,
-              url: MODULE_SOURCE,
-              missing: GONE_MODULE_SOURCE,
-            },
-          ];
-          let validators = new Map<string, string>();
-          for (let { label, accept, url } of WARMED) {
-            await get(url, accept, AS.reader());
-            let cached = await get(url, accept, AS.reader());
-            assert.strictEqual(
-              cached.status,
-              200,
-              `${label}: a reader reads it`,
-            );
-            assert.strictEqual(
-              cached.get('x-boxel-cache'),
-              'hit',
-              `${label}: from the cache their first read filled`,
-            );
-            validators.set(label, cached.get('etag')!);
-          }
-          for (let { label, accept, url, missing } of WARMED) {
-            let names = { actual: nameOf(url), expected: nameOf(missing) };
-            let refused = await get(url, accept, AS.teacher());
-            assert.strictEqual(refused.status, 404, `${label}: not there`);
-            assertSameAnswer(
-              assert,
-              refused,
-              await get(missing, accept, AS.teacher()),
-              names,
-              `${label}: refused as a missing name is`,
-            );
-            let conditional = { 'If-None-Match': validators.get(label)! };
-            let revalidated = await get(url, accept, AS.teacher(), conditional);
-            assert.strictEqual(
-              revalidated.status,
-              404,
-              `${label}: and the reader's validator gets no 304`,
-            );
-            assertSameAnswer(
-              assert,
-              revalidated,
-              await get(missing, accept, AS.teacher(), conditional),
-              names,
-              `${label}: refused under the reader's validator as a missing name is`,
-            );
-          }
-          for (let { label, accept, url } of WARMED) {
-            let again = await get(url, accept, AS.reader());
-            assert.strictEqual(again.status, 200, `${label}: a reader again`);
-            assert.strictEqual(
-              again.get('x-boxel-cache'),
-              'hit',
-              `${label}: still answered from the cache`,
-            );
-          }
-        });
-
-        test('a rule naming module source grants nothing', async function (assert) {
-          await policy('moduleSource');
-          let compiled = await education.getCompiledPolicy();
-          assert.deepEqual(
-            compiled?.issues.map(({ code, path }) => ({ code, path })),
-            [
-              { code: 'grants-module-source', path: 'rules[0].targetType' },
-              { code: 'grants-module-source', path: 'rules[1].targetType' },
-            ],
-            'each rule naming module source is recorded where it was written',
-          );
-          assert.deepEqual(
-            compiled?.rules.map(({ path }) => path),
-            ['rules[2]'],
-            'and only the rule on a data file compiles',
-          );
+          let conditional = { 'If-None-Match': validators.get(label)! };
+          let revalidated = await get(url, accept, AS.teacher(), conditional);
           assert.strictEqual(
-            (await get(HANDBOOK, SupportedMimeType.CardSource, AS.teacher()))
-              .status,
-            200,
-            'which admits the caller to a .pdf',
+            revalidated.status,
+            404,
+            `${label}: and the reader's validator gets no 304`,
           );
-          await assertRefusedAsMissing(assert, MODULES, CODE_ROUTES);
-          await refused(assert, MODULE_SOURCE, 'a .gts over the envelope');
-          await refused(assert, TS_MODULE, 'a .ts over the envelope');
-        });
+          assertSameAnswer(
+            assert,
+            revalidated,
+            await get(missing, accept, AS.teacher(), conditional),
+            names,
+            `${label}: refused under the reader's validator as a missing name is`,
+          );
+        }
+        for (let { label, accept, url } of WARMED) {
+          let again = await get(url, accept, AS.reader());
+          assert.strictEqual(again.status, 200, `${label}: a reader again`);
+          assert.strictEqual(
+            again.get('x-boxel-cache'),
+            'hit',
+            `${label}: still answered from the cache`,
+          );
+        }
+      });
 
-        test('a reader reads code as before', async function (assert) {
-          let listing = await get(
-            PUBLIC_DIR,
-            SupportedMimeType.DirectoryListing,
-            AS.reader(),
+      test('a code grant serves module source on every route that serves it', async function (assert) {
+        await policy('anyCode');
+        for (let [url] of MODULES) {
+          let source = await get(
+            url,
+            SupportedMimeType.CardSource,
+            AS.teacher(),
           );
-          assert.strictEqual(listing.status, 200, 'a directory listing');
+          assert.strictEqual(source.status, 200, `card+source: ${nameOf(url)}`);
+          assert.strictEqual(
+            textOf(source),
+            textOf(await get(url, SupportedMimeType.CardSource, AS.reader())),
+            `card+source: ${nameOf(url)} is the source a reader reads`,
+          );
           assert.true(
-            'handbook.pdf' in
-              (JSON.parse(textOf(listing)).data.relationships ?? {}),
-            'which lists the directory',
+            /^private\b/.test(source.get('cache-control') ?? ''),
+            `card+source: ${nameOf(url)} is private`,
           );
-          assert.strictEqual(
-            (
-              await get(
-                EDUCATION,
-                SupportedMimeType.DirectoryListing,
-                AS.reader(),
-              )
-            ).status,
-            200,
-            "the realm's root listing",
-          );
-          for (let [url] of MODULES) {
-            let source = await get(
-              url,
-              SupportedMimeType.CardSource,
-              AS.reader(),
-            );
-            assert.strictEqual(
-              source.status,
-              200,
-              `${nameOf(url)}: its source`,
-            );
-            let transpiled = await get(url, '*/*', AS.reader());
+        }
+        for (let { label, accept } of CODE_ROUTES.slice(1)) {
+          for (let [url] of [...MODULES, ...IMPORT_NAMES]) {
+            let transpiled = await get(url, accept, AS.teacher());
             assert.strictEqual(
               transpiled.status,
               200,
-              `${nameOf(url)}: the transpiled module`,
+              `${label}: ${nameOf(url)}`,
             );
-            assert.notStrictEqual(
-              textOf(transpiled),
-              textOf(source),
-              `${nameOf(url)}: which is not its source`,
-            );
-          }
-          for (let [url] of IMPORT_NAMES) {
             assert.strictEqual(
-              (await get(url, '*/*', AS.reader())).status,
-              200,
-              `${nameOf(url)}: by its import name`,
+              transpiled.get('content-type'),
+              'text/javascript',
+              `${label}: ${nameOf(url)} is the transpiled module`,
+            );
+            assert.strictEqual(
+              textOf(transpiled),
+              textOf(await get(url, accept, AS.reader())),
+              `${label}: ${nameOf(url)} is the module a reader imports`,
+            );
+            assert.true(
+              /^private\b/.test(transpiled.get('cache-control') ?? ''),
+              `${label}: ${nameOf(url)} is private`,
             );
           }
-          assert.deepEqual(
-            gateStats(),
+        }
+        assert.deepEqual(
+          headersOf(await head(MODULE_SOURCE, '*/*', AS.teacher())),
+          headersOf(await head(MODULE_SOURCE, '*/*', AS.reader())),
+          "a HEAD answers as a reader's does",
+        );
+        // A name the card+source read would redirect a reader from is read
+        // exactly as named, so it redirects nobody else.
+        await assertRefusedAsMissing(assert, IMPORT_NAMES, [CODE_ROUTES[0]]);
+        await served(assert, MODULE_SOURCE, 'a .gts over the envelope');
+        await served(assert, TS_MODULE, 'a .ts over the envelope');
+      });
+
+      test('a code grant reaches neither the file tree nor a data file', async function (assert) {
+        await policy('anyCode');
+        await assertRefusedAsMissing(
+          assert,
+          [[PUBLIC_DIR, GONE_DIR]],
+          [
             {
-              policyLoads: 0,
-              predicateEvaluations: 0,
-              pendingDischarges: 0,
-              definitionLookups: 0,
-              snapshotReads: 0,
-              ancestorDefinitionReads: 0,
-              lockedTypeReads: 0,
+              label: 'the directory listing',
+              accept: SupportedMimeType.DirectoryListing,
             },
-            'none of it reaches the gate',
-          );
+          ],
+        );
+        await assertRefusedAsMissing(
+          assert,
+          [[HANDBOOK, GONE_HANDBOOK]],
+          CODE_ROUTES,
+        );
+      });
+
+      test('a module compiled for a granted caller shares no cache with a reader', async function (assert) {
+        await policy('anyCode');
+        // A reader's compile fills the module cache, and answers nobody the
+        // gate admitted.
+        await get(MODULE_SOURCE, '*/*', AS.reader());
+        let warmed = await get(MODULE_SOURCE, '*/*', AS.reader());
+        assert.strictEqual(
+          warmed.get('x-boxel-cache'),
+          'hit',
+          "a reader's second read is answered from the cache",
+        );
+        let granted = await get(MODULE_SOURCE, '*/*', AS.teacher());
+        assert.strictEqual(granted.status, 200, 'the granted caller reads it');
+        assert.strictEqual(
+          granted.get('x-boxel-cache'),
+          'miss',
+          'compiled for them rather than answered from the cache',
+        );
+        // A granted caller's compile is left nowhere a reader reads.
+        education.__testOnlyClearCaches();
+        let compiles = education.__testOnlyGetTranspileCallCount();
+        await get(TS_MODULE, '*/*', AS.teacher());
+        await get(TS_MODULE, '*/*', AS.teacher());
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount() - compiles,
+          2,
+          'each of their reads compiles the module',
+        );
+        compiles = education.__testOnlyGetTranspileCallCount();
+        await get(TS_MODULE, '*/*', AS.reader());
+        assert.strictEqual(
+          education.__testOnlyGetTranspileCallCount() - compiles,
+          1,
+          "and a reader's next read finds nothing they left, and compiles it",
+        );
+      });
+
+      test("a granted caller's validator is honored once the gate admits them", async function (assert) {
+        await policy('codeForTeacher');
+        let first = await get(MODULE_SOURCE, '*/*', AS.teacher());
+        let etag = first.get('etag');
+        assert.ok(etag, 'the module carries a validator');
+        let revalidated = await get(MODULE_SOURCE, '*/*', AS.teacher(), {
+          'If-None-Match': etag!,
         });
-      },
-    );
+        assert.strictEqual(revalidated.status, 304, 'which they revalidate');
+        assert.true(
+          /^private\b/.test(revalidated.get('cache-control') ?? ''),
+          'privately',
+        );
+        let colleague = await get(MODULE_SOURCE, '*/*', AS.colleague(), {
+          'If-None-Match': etag!,
+        });
+        assert.strictEqual(
+          colleague.status,
+          404,
+          'a caller the predicate does not name gets no 304 for it',
+        );
+        assertSameAnswer(
+          assert,
+          colleague,
+          await get(GONE_MODULE_SOURCE, '*/*', AS.colleague(), {
+            'If-None-Match': etag!,
+          }),
+          {
+            actual: nameOf(MODULE_SOURCE),
+            expected: nameOf(GONE_MODULE_SOURCE),
+          },
+          'and is refused as a missing module is',
+        );
+      });
+
+      test('an explain says which rule serves a module, and why one is refused', async function (assert) {
+        await policy('codeForTeacher');
+        let explain = async (
+          name: keyof typeof POLICIES,
+          actor: string,
+          target: string,
+        ) => {
+          let response = await request
+            .post(`${new URL(ORG).pathname}_operations`)
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Accept', SupportedMimeType.BoxelOperations)
+            .set('Content-Type', SupportedMimeType.BoxelOperations)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(org, IT_ADMIN, ['read'])}`,
+            )
+            .send(
+              JSON.stringify({
+                'boxel:operations': [
+                  {
+                    op: 'invoke',
+                    'boxel:name': 'explain',
+                    href: `${ORG}policies/${name}`,
+                    data: { actor, target, operation: 'readSource' },
+                  },
+                ],
+              }),
+            );
+          assert.strictEqual(response.status, 200, response.text);
+          return response.body['atomic:results'][0];
+        };
+        let teacher = await explain('codeForTeacher', TEACHER, MODULE_SOURCE);
+        assert.strictEqual(teacher.decision, 'allowed', 'the teacher');
+        assert.strictEqual(teacher.reason, 'granted');
+        assert.deepEqual(
+          teacher.rules.map(({ path }: { path: string }) => path),
+          ['rules[0]'],
+          'governed by the rule on code alone',
+        );
+        assert.deepEqual(teacher.admittedBy, { rule: 0, grant: 0 });
+        let colleague = await explain(
+          'codeForTeacher',
+          '@colleague:localhost',
+          MODULE_SOURCE,
+        );
+        assert.strictEqual(colleague.decision, 'denied', 'a colleague');
+        assert.strictEqual(colleague.reason, 'predicate-false');
+        await policy('anyFile');
+        let dataFiles = await explain('anyFile', TEACHER, MODULE_SOURCE);
+        assert.strictEqual(dataFiles.decision, 'denied', 'a FileDef grant');
+        assert.strictEqual(dataFiles.reason, 'no-grant');
+        assert.deepEqual(
+          dataFiles.rules,
+          [],
+          'governs no module, so no rule is reported',
+        );
+      });
+
+      test('a reader reads code as before', async function (assert) {
+        let listing = await get(
+          PUBLIC_DIR,
+          SupportedMimeType.DirectoryListing,
+          AS.reader(),
+        );
+        assert.strictEqual(listing.status, 200, 'a directory listing');
+        assert.true(
+          'handbook.pdf' in
+            (JSON.parse(textOf(listing)).data.relationships ?? {}),
+          'which lists the directory',
+        );
+        assert.strictEqual(
+          (
+            await get(
+              EDUCATION,
+              SupportedMimeType.DirectoryListing,
+              AS.reader(),
+            )
+          ).status,
+          200,
+          "the realm's root listing",
+        );
+        for (let [url] of MODULES) {
+          let source = await get(
+            url,
+            SupportedMimeType.CardSource,
+            AS.reader(),
+          );
+          assert.strictEqual(source.status, 200, `${nameOf(url)}: its source`);
+          let transpiled = await get(url, '*/*', AS.reader());
+          assert.strictEqual(
+            transpiled.status,
+            200,
+            `${nameOf(url)}: the transpiled module`,
+          );
+          assert.notStrictEqual(
+            textOf(transpiled),
+            textOf(source),
+            `${nameOf(url)}: which is not its source`,
+          );
+        }
+        for (let [url] of IMPORT_NAMES) {
+          assert.strictEqual(
+            (await get(url, '*/*', AS.reader())).status,
+            200,
+            `${nameOf(url)}: by its import name`,
+          );
+        }
+        assert.deepEqual(
+          gateStats(),
+          {
+            policyLoads: 0,
+            predicateEvaluations: 0,
+            pendingDischarges: 0,
+            definitionLookups: 0,
+            snapshotReads: 0,
+            ancestorDefinitionReads: 0,
+            lockedTypeReads: 0,
+          },
+          'none of it reaches the gate',
+        );
+      });
+    });
   });
 });

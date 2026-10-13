@@ -1954,7 +1954,6 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Accept', SupportedMimeType.DirectoryListing)
         .set('Authorization', AUTH.teacher());
       assert.strictEqual(listing.status, 404, 'a directory listing');
-      assert.strictEqual(gateStats().policyLoads, 0, 'none of it is gated');
 
       assert.strictEqual(
         (await getSource(`${EDUCATION}classroom.gts`, AUTH.reader())).status,
@@ -1971,13 +1970,18 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         'and lists the directory',
       );
+      // Module source is read through the gate like any file, so a caller who
+      // presents no credentials is asked to sign in the way the gate asks.
       let anonymous = await getSource(`${EDUCATION}classroom.gts`);
       assert.strictEqual(
         anonymous.status,
         401,
         'and nobody is asked to sign in',
       );
-      assert.strictEqual(anonymous.text, MISSING_AUTH);
+      assert.strictEqual(
+        JSON.parse(anonymous.text).errors?.[0]?.code,
+        'actor-required',
+      );
     });
   });
 

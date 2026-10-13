@@ -36,4 +36,4 @@ Review several frames before, during, and after the join. Confirm the outgoing s
 
 **FilmVocabulary**: `f.Join`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts), [`joins.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/joins.gts), [`host.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/host.gts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/types.ts), [`nodes.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/nodes.gts), [`joins.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/joins.gts), [`host.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/host.gts).

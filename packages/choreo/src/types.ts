@@ -1,6 +1,6 @@
 /**
  * The vocabulary of a choreography — boxel-motion's Sprite / Changeset /
- * AnimationDefinition, as this binding keeps them. See docs/choreography.md.
+ * AnimationDefinition, as this binding keeps them. See packages/choreo-gallery/realm/docs/choreography.md.
  */
 import type { MotionParticipant } from 'glimmer-motion';
 
@@ -419,7 +419,7 @@ export interface Camera3DWaypoint {
    * and nothing interpolates across. Time is not redistributed, so cues
    * anchored to waypoint moments keep their clock. A cut on the FIRST
    * waypoint drops the pose-in-force seed: the score opens already inside
-   * its first shot. See docs/choreo-splices.md.
+   * its first shot. See packages/choreo-gallery/realm/docs/choreo-splices.md.
    */
   cut?: boolean;
   dolly?: number;
@@ -490,7 +490,7 @@ export interface TetherStep extends SubjectlessBase {
  * One source of a derived value: the boxes the PASS measured, in region
  * space, named for which box each one is — because the distinction
  * between resting and live geometry is the whole correctness argument
- * (docs/postmortem-follow.md). `from` and `to` are resting layout, where
+ * (packages/choreo-gallery/realm/docs/postmortem-follow.md). `from` and `to` are resting layout, where
  * the stylesheet put the sprite on either side of this change; `now` is
  * `to` composed with the transform the run is driving this frame. None
  * of the three is read from the page while the run plays.
@@ -552,7 +552,7 @@ export interface FollowStep extends StepBase {
 
 /**
  * ATTACH — drive another region's run over a window of this one's clock
- * (docs/film-graph/CONSTRUCTS.md, construct 1). The child is named by its
+ * (packages/choreo-gallery/realm/design/film-graph/CONSTRUCTS.md, construct 1). The child is named by its
  * `@id`; while the window is open its run is paused and told the time,
  * `in + (now − start) × rate`, on every evaluate — so the child is a pure
  * function of the parent's clock and a seek into the window lands it

@@ -37,4 +37,4 @@ Keep debugging metadata out of the public viewing shell. Runtime build identifie
 
 **@cardstack/choreo/film**: `Burst`, `Menu`, `MenuEntry`, `PlaybarSegment`, `Player`, `Rail`, `RailMark`, `EndCard`, `Gate`.
 
-Read the implementation: [`player.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/player.gts), [`rail.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/rail.gts), [`titles.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/titles.gts).
+Read the implementation: [`player.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/player.gts), [`rail.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/rail.gts), [`titles.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/titles.gts).

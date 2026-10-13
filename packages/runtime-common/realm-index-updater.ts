@@ -140,6 +140,7 @@ export class RealmIndexUpdater {
   // alongside an in-flight from-scratch (no gate a write waits on covers
   // from-scratch jobs).
   #ignoreDataVersion = 0;
+  #ignoreRulesLoad: Promise<void> | undefined;
   #stats: Stats = {
     instancesIndexed: 0,
     filesIndexed: 0,
@@ -222,6 +223,31 @@ export class RealmIndexUpdater {
     return ignoreMap;
   }
 
+  // Applies the realm-root ignore rules read from disk. The rules otherwise
+  // arrive only with a from-scratch result, so a realm that boots on an
+  // existing index would ignore nothing, and a replica that didn't run the pass
+  // after an ignore file changed would keep applying the old rules. `read`
+  // returns undefined when the files are unchanged since the last load. The
+  // load is registered before `read` starts, so a pass enqueued meanwhile
+  // waits for it before it snapshots the rules.
+  loadIgnoreRules(read: () => Promise<string[] | undefined>): Promise<void> {
+    let load = (async () => {
+      let rules = await read();
+      if (rules === undefined) {
+        return;
+      }
+      this.#ignoreData =
+        rules.length > 0 ? { [this.realmURL.href]: rules.join('\n') } : {};
+    })();
+    this.#ignoreRulesLoad = load.catch(() => {});
+    return load;
+  }
+
+  // Settles once any in-flight `loadIgnoreRules` has applied its rules.
+  async ignoreRulesLoaded(): Promise<void> {
+    await this.#ignoreRulesLoad;
+  }
+
   async isNewIndex(): Promise<boolean> {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
@@ -232,17 +258,23 @@ export class RealmIndexUpdater {
   // wide: blocking one on from-scratch is unsafe under reindex storms, where
   // a queued from-scratch can sit behind hundreds of jobs and stall every
   // PATCH for hours.
+  // A pass can start another while it settles (a changed ignore file starts a
+  // from-scratch pass), so the wait repeats until nothing is pending.
   indexing() {
-    let pending = [
+    let pendingPasses = () => [
       ...this.#incrementalIndexingDeferreds.keys(),
       ...this.#fullIndexingDeferreds.keys(),
     ];
-    if (pending.length === 0) {
+    if (pendingPasses().length === 0) {
       return undefined;
     }
-    return Promise.all(pending.map((deferred) => deferred.promise)).then(
-      () => undefined,
-    );
+    return (async () => {
+      let pending = pendingPasses();
+      while (pending.length > 0) {
+        await Promise.all(pending.map((deferred) => deferred.promise));
+        pending = pendingPasses();
+      }
+    })();
   }
 
   // Names each pass `indexing()` is waiting on: its queue job, job type, the
@@ -405,6 +437,30 @@ export class RealmIndexUpdater {
     return url.href === realmConfigHrefFor(this.realmURL);
   }
 
+  #isRealmIgnoreFile(url: URL): boolean {
+    return REALM_IGNORE_FILES.some(
+      (name) => url.href === `${this.realmURL.href}${name}`,
+    );
+  }
+
+  // Set by the realm, which runs the pass through its own reindex so the
+  // pass's invalidations reach its subscribers and its peer replicas.
+  onIgnoreRulesChanged: (() => void) | undefined;
+
+  // Not awaited by the write that changed the rules: the gates a request
+  // waits on never cover a from-scratch pass (see `indexing`).
+  #rereadIgnoreRules() {
+    if (this.onIgnoreRulesChanged) {
+      this.onIgnoreRulesChanged();
+      return;
+    }
+    this.publishFullIndex().completed.catch((e: any) => {
+      this.#log.warn(
+        `Rereading the ignore rules of ${this.realmURL.href} failed: ${e?.message}`,
+      );
+    });
+  }
+
   publishFullIndex(
     priority = systemInitiatedPriority,
     opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
@@ -527,6 +583,7 @@ export class RealmIndexUpdater {
       ),
     };
     this.#incrementalIndexingDeferreds.set(indexingDeferred, pendingPass);
+    await this.#ignoreRulesLoad;
     let snapshotVersion = this.#ignoreDataVersion;
     let job: Job<IncrementalDoneResult>;
     try {
@@ -598,6 +655,12 @@ export class RealmIndexUpdater {
         // the fresher full-index data.
         if (snapshotVersion === this.#ignoreDataVersion) {
           this.#ignoreData = ignoreData;
+        }
+        // A pass carries the ignore rules forward unchanged, so an edit to the
+        // root ignore files takes a from-scratch pass: it rereads the rules,
+        // tombstones what they now hide and indexes what they now reveal.
+        if (changes.some(({ url }) => this.#isRealmIgnoreFile(url))) {
+          this.#rereadIgnoreRules();
         }
         if (opts?.onInvalidation) {
           await opts.onInvalidation(

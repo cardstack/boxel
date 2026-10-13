@@ -1586,7 +1586,7 @@ export class ChoreoRun implements Run {
 
   /**
    * Rebuild the camera fold from the score prefix before a seek's still
-   * (notes/external-clock-camera-seek-handoff.md). Forward playback folds
+   * (packages/choreo-gallery/realm/design/external-clock-camera-seek-handoff.md). Forward playback folds
    * each camera cue's landing into the run's cumulative camera as the
    * clock crosses it — but a random-access seek can jump clean over a
    * window, and a cue that never starts never folds: the clock reads `t`
@@ -1809,7 +1809,7 @@ export class ChoreoRun implements Run {
    * comes back.
    *
    * Nothing here touches the DOM — that is the design, not an
-   * optimisation (docs/postmortem-follow.md). The resting boxes were
+   * optimisation (packages/choreo-gallery/realm/docs/postmortem-follow.md). The resting boxes were
    * measured by the pass with every moved value released, and a source's
    * `now` is its resting box composed with the motion values driving it
    * this frame: JS-side numbers, not a measurement. So a follower is pure

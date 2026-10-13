@@ -1,5 +1,5 @@
 /**
- * Wires — c.Tether (docs/choreo-constructs.md §6.1, §8.1).
+ * Wires — c.Tether (packages/choreo-gallery/realm/docs/choreo-constructs.md §6.1, §8.1).
  * A morning note in three drafts: marks in the prose, comments in the
  * margin, cubics derived every frame. Versions reflow the copy; the
  * selected pair shows its thread (first comment on by default).

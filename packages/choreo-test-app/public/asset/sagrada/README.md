@@ -7,8 +7,8 @@ This renderer requires WebGL2. Directional, hemisphere and ambient light
 intensities retain the old legacy-light PI factor explicitly. Film shots
 and score timing are not part of this renderer migration.
 
-The façade pass is documented in `docs/sagrada-web-model.md` at the repo
-root. `facade-craft.js` builds merged sculptural surface detail;
+The façade pass is documented in
+`packages/choreo-gallery/realm/design/sagrada-web-model.md`. `facade-craft.js` builds merged sculptural surface detail;
 `relief-atlas.js` is an optional, on-demand height-field recipe. The
 `textures/` files replace the old inline base64 table. This is still
 a procedural interpretation, not a surveyed reconstruction.

@@ -1,6 +1,6 @@
 /**
  * `<c.Perform>` — the semantic command fold, promoted into core
- * (docs/choreo-composition.md §C4; the compositor host's cue fold is the
+ * (packages/choreo-gallery/realm/design/choreo-composition.md §C4; the compositor host's cue fold is the
  * proof that opened this gate).
  *
  * The law under every case: the set of commands at or before the clock IS

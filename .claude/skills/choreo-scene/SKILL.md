@@ -102,7 +102,7 @@ document-global on purpose (chrome and outlet are separate regions).
 An inner `<Choreo>` is a separate scene — the outer region does not see its
 participants. Regions, far matching (an id leaving one region and appearing
 in another), and cross-region measurement: `choreo-regions`, and
-`packages/choreo-gallery/docs/nested-choreo.md`.
+`packages/choreo-gallery/realm/docs/nested-choreo.md`.
 
 ## When NOT
 
@@ -113,4 +113,4 @@ One element, no ordering, no cross-element measurement → `motion-element` /
 Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
 `inbox.gts` (beacons), `sequence.gts`, `interrupt.gts`,
 `slides.gts`, `far-match.gts`, `split-view.gts` (function values),
-`lists.gts`. Design doc: `packages/choreo-gallery/docs/choreography.md`.
+`lists.gts`. Design doc: `packages/choreo-gallery/realm/docs/choreography.md`.

@@ -1,5 +1,5 @@
 /**
- * Delivery — @by / @order / @stagger (docs/choreo-constructs.md §4.3).
+ * Delivery — @by / @order / @stagger (packages/choreo-gallery/realm/docs/choreo-constructs.md §4.3).
  * The split is a costume: the sprite's own text nodes come back exactly,
  * and the sprite lands on the delivery's end values.
  */

@@ -96,4 +96,4 @@ Keep SVG drawing properties on the same modifier so the engine can observe their
 
 **glimmer-motion**: `MotionProps`, `motion`.
 
-Read the implementation: [`motion.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/motion.ts).
+Read the implementation: [`motion.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/motion.ts).

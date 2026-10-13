@@ -68,10 +68,10 @@ Dives — the
 _reasoning_ behind each pattern choice (why the inbox uses beacons, how the
 interruption model holds, what the playhead samples). Read the note when
 modifying its demo.
-Docs: `packages/choreo-gallery/docs/guide.md` (tutorial), the package READMEs
+Docs: `packages/choreo-gallery/realm/docs/guide.md` (tutorial), the package READMEs
 `packages/glimmer-motion/README.md` and `packages/choreo/README.md` (API
-reference), `packages/choreo-gallery/docs/choreography.md` +
-`packages/choreo-gallery/docs/nested-choreo.md` (Choreo design).
+reference), `packages/choreo-gallery/realm/docs/choreography.md` +
+`packages/choreo-gallery/realm/docs/nested-choreo.md` (Choreo design).
 
 A card in a realm imports the same libraries through host's realm shims, under
 different rules (no direct motion-dom imports, state shared with host). For

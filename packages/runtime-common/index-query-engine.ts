@@ -2136,13 +2136,12 @@ export class IndexQueryEngine {
   //   SELECT url, pristine_doc
   //   FROM
   //     boxel_index,
-  //   CROSS JOIN LATERAL jsonb_array_elements_text(types) as types0_array_element
   //     -- This json_tree was derived by this handler:
   //   CROSS JOIN LATERAL jsonb_tree(search_doc, '$.friends') as friends1_tree
   //   WHERE
   //     ( ( is_deleted = FALSE OR is_deleted IS NULL ) )
   //     AND (
-  //       ( types0_array_element = $1 )
+  //       ( COALESCE(types, '[]'::jsonb) @> $1::jsonb )
   //       AND (
   //         ( friends1_tree.text_value = $2 )
   //         AND

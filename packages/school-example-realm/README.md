@@ -93,11 +93,18 @@ could rewrite `teacherIds` in the same request. `appendActivity` cannot reach
 ## Where the code lives, and why
 
 The card definitions are in `school-code`, which everyone reads. A teacher's
-browser has to load `Classroom` to render a classroom, and module source is
-never reachable through a policy grant: a realm serves its modules and its file
-tree only to callers who may read it. So the definitions live apart from the
-data they describe. Code mode on `school-education` shows a teacher nothing,
-and the host does not offer it to them.
+browser has to load `Classroom` to render a classroom, so whoever reads a
+classroom must be able to load its module too.
+
+That is one way to arrange it, not the only one. A policy can grant module
+source as it grants any file: a rule on `TsFileDef` (or `GtsFileDef` for the
+modules with templates) with a `readSource` grant serves the modules it covers,
+both their source and the module a browser imports, to the callers its `where`
+admits. A rule on `FileDef` does not reach code. With such a rule, the
+definitions could live beside the data in `school-education`. Either way, code
+mode and the realm's file tree need the realm's own read, so code mode on
+`school-education` shows a teacher nothing, and the host does not offer it to
+them.
 
 ## Setting it up in an environment
 

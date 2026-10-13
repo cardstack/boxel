@@ -2,7 +2,11 @@ import type Owner from '@ember/owner';
 import { waitUntil } from '@ember/test-helpers';
 
 import type { RealmAction } from '@cardstack/runtime-common';
-import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_REALM_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -54,6 +58,28 @@ export class MockUtils {
       );
     }
     return messages();
+  };
+  // Wait until the mock homeserver holds the result event for a tool call,
+  // then return it. Applying a tool call can keep running after the click's
+  // settled(): executing the tool awaits work no test waiter tracks, and the
+  // run's later steps (such as re-uploading the room's skills) happen only
+  // once it finishes, before the result event is sent. The event's
+  // `m.relates_to.key` is the call's status, and `failureReason` says why a
+  // call that did not apply failed.
+  waitForToolResult = async (roomId: string, toolCallId: string) => {
+    let findResult = () =>
+      this.getRoomEvents(roomId).find(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.rel_type ===
+            APP_BOXEL_TOOL_RESULT_REL_TYPE &&
+          event.content.commandRequestId === toolCallId,
+      );
+    await waitUntil(() => findResult(), {
+      timeout: 10_000,
+      timeoutMessage: `no result event for tool call ${toolCallId} in ${roomId}`,
+    });
+    return findResult()!;
   };
   getRoomIds = () => {
     // A realm can fire a deferred `broadcastRealmEvent` (the trailing `index`
