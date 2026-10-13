@@ -297,17 +297,30 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
     let { demoTuning, tuneNumber } =
       await gallery.import<typeof TuningModule>('lib/tuning');
     let { DemoLab } = await gallery.import<typeof LabModule>('lib/lab');
-    tuneNumber('test-shared-lab', 1, 'Size (px)');
-    let page = new DemoLab('test-shared-lab', 'Shared');
-    let guide = new DemoLab('test-shared-lab', 'Shared');
+    const SIZE = 'Size (px)';
+    let tuned = (value: number) =>
+      waitUntil(() => demoTuning('test-shared-lab').values[SIZE] === value);
+    tuneNumber('test-shared-lab', 1, SIZE);
 
-    guide.dial.set('Size (px)', 2);
-    await waitUntil(
-      () => demoTuning('test-shared-lab').values['Size (px)'] === 2,
-    );
+    let page = new DemoLab('test-shared-lab', 'Shared');
+    page.dial.set(SIZE, 2);
+    await tuned(2);
+
+    let guide = new DemoLab('test-shared-lab', 'Shared');
+    await Promise.resolve();
+    await Promise.resolve();
     assert.strictEqual(
-      page.dial.raw['Size (px)'],
+      demoTuning('test-shared-lab').values[SIZE],
       2,
+      'a second lab opening on the demo keeps the tuning the first one made',
+    );
+    assert.strictEqual(guide.dial.raw[SIZE], 2, 'and shows it');
+
+    guide.dial.set(SIZE, 3);
+    await tuned(3);
+    assert.strictEqual(
+      page.dial.raw[SIZE],
+      3,
       'both labs show the edit one of them made',
     );
 
@@ -315,8 +328,15 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
     await Promise.resolve();
     assert.deepEqual(
       demoTuning('test-shared-lab').values,
-      { 'Size (px)': 2 },
+      { [SIZE]: 3 },
       'closing one lab leaves the demo tuned while another is open',
+    );
+    page.dial.set(SIZE, 4);
+    await tuned(4);
+    assert.strictEqual(
+      demoTuning('test-shared-lab').values[SIZE],
+      4,
+      'and the lab still open still tunes it',
     );
 
     page.teardown();
