@@ -705,6 +705,39 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
     });
 
+    test('a header credential with whitespace around it is scrubbed in the trimmed form Node quotes', async function (assert) {
+      // A key pasted with a line break inside it and one at the end. fetch
+      // strips the trailing whitespace before quoting the value it refuses.
+      let error = await refusal(
+        outboundFetch({
+          url: `${vendor.url}/echo`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: {
+            name: 'stub-vendor-key',
+            value: `\t${key}\nabcdef\r\n`,
+            placement: {
+              in: 'header',
+              header: 'Authorization',
+              scheme: 'Bearer',
+            },
+          },
+        }),
+      );
+      assert.true(error instanceof OutboundSendError, 'a send error');
+      assert.true(
+        inspect((error as OutboundSendError).cause).includes(
+          'invalid header value',
+        ),
+        "the cause is Node's own error",
+      );
+      assert.false(
+        leaksCredential(inspect(error, { depth: 10 }), key),
+        'nothing a logger prints carries the credential',
+      );
+    });
+
     test("a refusal after the credential is attached keeps its message and carries the key's name and the URL as given", async function (assert) {
       configureOutbound({ maxRedirects: 1 });
       let url = `${vendor.url}/redirect?to=${encodeURIComponent('/redirect?to=/echo')}`;
