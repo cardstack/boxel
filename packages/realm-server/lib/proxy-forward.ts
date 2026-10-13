@@ -252,6 +252,13 @@ export async function forwardJsonResponse(
   ctxt.status = externalResponse.status;
   ctxt.message = externalResponse.statusText;
   ctxt.set('Content-Type', SupportedMimeType.JSON);
+  if (ctxt.req.httpVersionMajor < 2) {
+    // Koa's null body removes Transfer-Encoding, which turns Node's HTTP/1.1
+    // response into one delimited by the connection closing, where a cut
+    // looks like a normal end. Chunked framing keeps a cut detectable.
+    // HTTP/2 frames the body itself and forbids the header.
+    ctxt.set('Transfer-Encoding', 'chunked');
+  }
   let res = ctxt.res;
   let clientGone = () => signal.aborted || res.destroyed;
   // An uncharged body has no reason to be read once its client is gone, so
