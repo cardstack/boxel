@@ -414,6 +414,22 @@ return { saved, exists: await realm.fs.exists('images/dot.png') };`,
       /is a binary file/,
       'readText names a binary file instead of failing on its status',
     );
+    // A vendor binary type, such as a spreadsheet, is binary too, so replace
+    // cannot write a text-decoded copy over it.
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('report.xlsx', ${JSON.stringify(PNG_BASE64)});`,
+    });
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.replace('report.xlsx', 'a', 'b');`,
+      }),
+      /is a binary file/,
+      'replace refuses a vendor binary type',
+    );
   });
 
   test('realm.fs.writeBytes refuses a file over the size limit', async function (assert) {

@@ -2,6 +2,7 @@ import { service } from '@ember/service';
 
 import {
   coerceErrorMessage,
+  isBinaryContentType,
   isCardInstance,
   logger,
   rri,
@@ -56,16 +57,13 @@ const MAX_FILES = 20;
 const MAX_FILE_SIZE = 500_000;
 // A script that loops by mistake must not fill the user's workspace list.
 const MAX_WORKSPACES = 5;
-// realm.fs.writeBytes limits, in decoded bytes. The 8 MB sandbox memory holds
-// the base64 string and its JSON-encoded copy, so one file cannot get much
-// larger than this anyway.
+// realm.fs.writeBytes limits, in decoded bytes. These are the limits that
+// apply: the 8 MB sandbox memory alone lets a script pass about twice the
+// per-file size.
 const MAX_BINARY_FILE_SIZE = 2_000_000;
 const MAX_BINARY_BYTES_PER_RUN = 5_000_000;
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 const DATA_URL_PREFIX_RE = /^data:[^,]*;base64,/i;
-// Content types the realm serves for files whose content is not text.
-const BINARY_CONTENT_TYPE_RE =
-  /^(?:(?:image|audio|video|font)\/(?!svg\+xml)|application\/(?:octet-stream|pdf|zip|gzip|wasm)\b)/i;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -74,6 +72,13 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
+// A file as the realm serves it. The body is read only for a text file, so
+// `content` is empty for a binary file.
+type ReadSource = (url: string) => Promise<{
+  status: number;
+  content: string;
+  binary: boolean;
+}>;
 // Saves one file and returns the content that was saved (lint may reformat
 // it). `expected` is the content the script last saw, undefined for a file
 // that did not exist; the save refuses if the realm no longer matches it.
@@ -167,11 +172,7 @@ class RealmFsSession {
 
   constructor(
     private realmURL: string,
-    private readSource: (url: string) => Promise<{
-      status: number;
-      content: string;
-      contentType: string | null;
-    }>,
+    private readSource: ReadSource,
     private writeFile: WriteFile,
     private writeBinaryFile: WriteBinaryFile,
     private listDirectory: ListDirectory,
@@ -309,13 +310,16 @@ class RealmFsSession {
       }
       case 'fs.writeBytes': {
         let url = this.resolve(method, args[0]);
-        let bytes = decodeBase64(args[1]);
-        if (bytes.byteLength > MAX_BINARY_FILE_SIZE) {
+        // The limits are checked on the size the base64 decodes to, before
+        // the decode allocates it.
+        let base64 = cleanBase64(args[1]);
+        let size = decodedSize(base64);
+        if (size > MAX_BINARY_FILE_SIZE) {
           throw new Error(
-            `realm.fs.writeBytes accepts at most ${MAX_BINARY_FILE_SIZE} bytes per file: ${url} is ${bytes.byteLength} bytes`,
+            `realm.fs.writeBytes accepts at most ${MAX_BINARY_FILE_SIZE} bytes per file: ${url} is ${size} bytes`,
           );
         }
-        if (this.binaryBytes + bytes.byteLength > MAX_BINARY_BYTES_PER_RUN) {
+        if (this.binaryBytes + size > MAX_BINARY_BYTES_PER_RUN) {
           throw new Error(
             `realm.fs.writeBytes accepts at most ${MAX_BINARY_BYTES_PER_RUN} bytes per run`,
           );
@@ -328,6 +332,7 @@ class RealmFsSession {
           this.refused += 1;
           throw new Error(`The run has ended; ${url} was not saved`);
         }
+        let bytes = decodeBase64(base64);
         await this.writeBinaryFile(url, bytes);
         this.binaryBytes += bytes.byteLength;
         // The lookup above recorded the file as missing.
@@ -518,10 +523,7 @@ class RealmFsSession {
       throw new Error(`Realm code may touch at most ${MAX_FILES} files`);
     }
     let source = await this.readSource(url);
-    if (
-      source.status === 200 &&
-      BINARY_CONTENT_TYPE_RE.test(source.contentType ?? '')
-    ) {
+    if (source.binary) {
       this.binary.add(url);
       return BINARY;
     }
@@ -555,7 +557,9 @@ class RealmFsSession {
 }
 
 // Accepts plain base64, with or without line breaks, or a base64 data URL.
-function decodeBase64(value: unknown): Uint8Array {
+// The base64 content of a writeBytes call, without a `data:` URL prefix or
+// whitespace.
+function cleanBase64(value: unknown): string {
   if (typeof value !== 'string') {
     throw new TypeError(
       'realm.fs.writeBytes expects a path and a base64 string',
@@ -568,6 +572,16 @@ function decodeBase64(value: unknown): Uint8Array {
   if (base64.length % 4 === 1 || !BASE64_RE.test(base64)) {
     throw new Error('realm.fs.writeBytes content is not valid base64');
   }
+  return base64;
+}
+
+// How many bytes clean base64 decodes to, without decoding it.
+function decodedSize(base64: string): number {
+  let padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  return Math.floor((base64.length * 3) / 4) - padding;
+}
+
+function decodeBase64(base64: string): Uint8Array {
   let binary = atob(base64);
   let bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -652,7 +666,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
 
     let session = new RealmFsSession(
       this.realmRootURL(realmURL),
-      (url) => this.cardService.getSource(new URL(url)),
+      (url) => this.readSource(url),
       (url, content, expected) =>
         this.writeFile(roomId, url, content, expected),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
@@ -985,7 +999,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }
       content = lint.output;
     }
-    let current = await this.cardService.getSource(new URL(url));
+    let current = await this.readSource(url);
     if (expected === undefined) {
       if (current.status !== 404) {
         throw new Error(`File appeared while the script ran: ${url}`);
@@ -1005,13 +1019,32 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return content;
   }
 
+  // Reads a file's body only when it is text. A binary file can be large, and
+  // decoding it as text costs about three times its size, so for one the body
+  // is cancelled unread; the content type alone says what it is.
+  private async readSource(url: string): ReturnType<ReadSource> {
+    let response = await this.network.authedFetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    let contentType = response.headers.get('content-type');
+    let binary =
+      response.status === 200 &&
+      !!contentType &&
+      isBinaryContentType(contentType);
+    if (binary || !response.ok) {
+      await response.body?.cancel();
+      return { status: response.status, content: '', binary };
+    }
+    return { status: response.status, content: await response.text(), binary };
+  }
+
   // Checks the file still does not exist, and saves the bytes as they are.
   private async writeBinaryFile(
     roomId: string,
     url: string,
     bytes: Uint8Array,
   ): Promise<void> {
-    let current = await this.cardService.getSource(new URL(url));
+    let current = await this.readSource(url);
     if (current.status !== 404) {
       throw new Error(`File appeared while the script ran: ${url}`);
     }
