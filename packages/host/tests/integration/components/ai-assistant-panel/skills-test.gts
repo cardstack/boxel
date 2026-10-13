@@ -28,8 +28,6 @@ import {
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
-  APP_BOXEL_TOOL_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -94,45 +92,14 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     })(),
   });
 
-  let { getRoomState, getRoomEvents, simulateRemoteMessage } = mockMatrixUtils;
+  let {
+    getRoomState,
+    getRoomEvents,
+    simulateRemoteMessage,
+    waitForToolResult,
+  } = mockMatrixUtils;
 
   let noop = () => {};
-
-  // Applying a tool call can keep running after the click's settled():
-  // executing the tool awaits work no test waiter tracks, and the room's
-  // skills are re-uploaded only once it finishes. A run that completes sends
-  // its result event after that re-upload, so waiting for the event on the
-  // mock homeserver is what makes the room state safe to read. A result other
-  // than "applied" fails with the reason the tool gave. A re-upload that
-  // throws still sends "applied" (the tool's effects landed), so that case
-  // surfaces in the room-state assertions and in the tool service's error
-  // log instead.
-  async function waitForToolResult(
-    assert: Assert,
-    roomId: string,
-    toolCallId: string,
-  ) {
-    let findResult = () =>
-      getRoomEvents(roomId).find(
-        (event) =>
-          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
-          event.content['m.relates_to']?.rel_type ===
-            APP_BOXEL_TOOL_RESULT_REL_TYPE &&
-          event.content.commandRequestId === toolCallId,
-      );
-    await waitUntil(() => findResult(), {
-      timeout: 10_000,
-      timeoutMessage: `no result event for tool call ${toolCallId} in ${roomId}`,
-    });
-    let result = findResult()!;
-    assert.strictEqual(
-      result.content['m.relates_to']?.key,
-      'applied',
-      `tool call ${toolCallId} applied (failure reason: ${
-        result.content.failureReason ?? 'none'
-      })`,
-    );
-  }
 
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
@@ -1050,7 +1017,19 @@ Instructions live in the markdown body.
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await waitForToolResult(assert, roomId, toolCallId);
+    // The room's skills are re-uploaded before the tool's result event is
+    // sent, so the room state is safe to read once the event lands. A
+    // re-upload that throws still sends "applied" (the tool's effects
+    // landed); that case surfaces in the room-state assertions below and in
+    // the tool service's error log.
+    let toolResult = await waitForToolResult(roomId, toolCallId);
+    assert.strictEqual(
+      toolResult.content['m.relates_to']?.key,
+      'applied',
+      `tool call applied (failure reason: ${
+        toolResult.content.failureReason ?? 'none'
+      })`,
+    );
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
