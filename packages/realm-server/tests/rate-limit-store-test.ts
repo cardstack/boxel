@@ -96,18 +96,31 @@ module(basename(import.meta.filename), function () {
         });
       });
 
-      test('a clock behind the bucket refills nothing', async function (assert) {
-        await store.take(KEY, BUCKET, 3);
-        nowMs -= 60_000;
-        assert.false(
-          (await store.take(KEY, BUCKET)).admitted,
-          'a process whose clock lags is not handed tokens',
+      test('a clock behind the bucket refills nothing and moves nothing back', async function (assert) {
+        await store.take(KEY, BUCKET, 2);
+        let [{ expires_at: expiresAt }] = await dbAdapter.execute(
+          `SELECT expires_at FROM rate_limit_buckets WHERE bucket_key = '${KEY}'`,
+        );
+        nowMs = START_MS - 60_000;
+        assert.deepEqual(
+          await store.take(KEY, BUCKET),
+          { admitted: true, remaining: 0 },
+          'a process whose clock lags can take what is there, and is handed nothing more',
+        );
+        assert.deepEqual(
+          await dbAdapter.execute(
+            `SELECT expires_at FROM rate_limit_buckets WHERE bucket_key = '${KEY}'`,
+          ),
+          [{ expires_at: expiresAt }],
+          'nor does it bring forward when the row can be swept',
         );
         nowMs = START_MS + 10_000;
-        assert.deepEqual(await store.take(KEY, BUCKET), {
-          admitted: true,
-          remaining: 0,
-        });
+        assert.deepEqual(
+          await store.take(KEY, BUCKET),
+          { admitted: true, remaining: 0 },
+          'refill is counted from the later refill time',
+        );
+        assert.false((await store.take(KEY, BUCKET)).admitted);
       });
 
       test('takes from two stores on the database never exceed the burst', async function (assert) {
@@ -285,6 +298,28 @@ module(basename(import.meta.filename), function () {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
       assert.strictEqual(left.length, 0, "the key's rows are gone");
+      assert.deepEqual(
+        (
+          await dbAdapter.execute(
+            `SELECT count FROM rate_limit_budgets WHERE budget_key = '${OTHER_KEY}'`,
+          )
+        ).map((row) => Number(row.count)),
+        [DBRateLimitStore.SWEEP_EVERY],
+        'a budget in its current period is kept with its count',
+      );
+      assert.deepEqual(
+        await store.take(OTHER_KEY, BUCKET, 3),
+        { admitted: true, remaining: 0 },
+        'and so is a bucket still refilling',
+      );
+      for (let i = 0; i < DBRateLimitStore.SWEEP_EVERY; i++) {
+        await store.spend(OTHER_KEY, { period: 'day', limit: 1_000 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      assert.false(
+        (await store.take(OTHER_KEY, BUCKET)).admitted,
+        'a sweep leaves a bucket that is not yet full',
+      );
     });
   });
 });

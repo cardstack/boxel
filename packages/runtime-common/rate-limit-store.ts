@@ -156,8 +156,14 @@ export class DBRateLimitStore implements RateLimitStore {
         param(nowMs),
         '> rate_limit_buckets.refilled_at THEN',
         param(nowMs),
-        'ELSE rate_limit_buckets.refilled_at END, expires_at =',
+        'ELSE rate_limit_buckets.refilled_at END,',
+        // A clock behind the row's would move the expiry earlier, and a sweep
+        // would then delete a bucket that isn't full yet.
+        'expires_at = CASE WHEN',
         param(expiresAt),
+        '> rate_limit_buckets.expires_at THEN',
+        param(expiresAt),
+        'ELSE rate_limit_buckets.expires_at END',
         'WHERE',
         ...bucketLevel(nowMs, limit),
         '>=',

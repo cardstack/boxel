@@ -20,7 +20,7 @@ A key is a string the caller composes. Build it with `counterKey(...parts)`, for
 - A take is all or nothing: one upsert takes `cost` tokens only when that many are there. Concurrent takes from any number of processes never admit more than the bucket holds.
 - An admission returns `{ admitted: true, remaining }`, where `remaining` is the whole tokens left. A refusal returns `{ admitted: false, retryAfterSeconds }`, the time until `cost` tokens will have refilled. A refusal spends nothing, so a caller who keeps retrying gets in as soon as the tokens are back. The retry time comes from a second read and can be slightly stale.
 - A `cost` larger than `burst` is never admitted. The refusal gives the time to refill a full bucket.
-- The row stores the level at `refilled_at`, in epoch milliseconds from the store's clock. A process whose clock is behind the row gets no refill and does not move `refilled_at` backwards.
+- The row stores the level at `refilled_at`, in epoch milliseconds from the store's clock. A process whose clock is behind the row gets no refill and does not move `refilled_at` or `expires_at` backwards, so a sweep never deletes a bucket that is still refilling.
 
 ## Budgets
 
