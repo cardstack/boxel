@@ -10,7 +10,10 @@ function label(rate: number) {
   return rate === 1 ? 'Full' : `÷${rate}`;
 }
 
-/** which picker set the clock, and to what */
+/**
+ * The clock's rate, and which picker set it. Only a speed picker sets
+ * glimmer-motion's speed, so the rate here is the clock's.
+ */
 class Clock {
   @tracked owner: SpeedPicker | null = null;
   @tracked rate = 1;
@@ -25,6 +28,25 @@ function release() {
 }
 
 /**
+ * A demo page is opening: the clock goes back to full speed, so a demo never
+ * starts slowed by a speed picked on another page — including a demo with no
+ * speed picker to put it back. Every demo page calls this as it constructs.
+ */
+export function startPage(): void {
+  if (!clock.owner) {
+    return;
+  }
+  setMotionSpeed(1);
+  // the render that mounts the page may already have read the picker's
+  // state, so that state changes once the render is done
+  queueMicrotask(() => {
+    if (clock.owner) {
+      release();
+    }
+  });
+}
+
+/**
  * Slow motion for the stage. Every transition started from here on is scaled,
  * so a sequence's phases separate out — the fade, then the move, then the
  * fade — instead of going by in four frames.
@@ -32,25 +54,11 @@ function release() {
  * The clock is glimmer-motion's, and global to everything the host animates,
  * so a speed belongs to the demo page it was picked on: another demo page
  * opening starts the clock at full speed again, and so does the page that
- * picked it closing.
+ * picked it closing. Every picker on screen shows the clock as it runs.
  */
 export class SpeedPicker extends Component {
-  constructor(owner: unknown, args: object) {
-    super(owner as never, args);
-    if (clock.owner) {
-      setMotionSpeed(1);
-      // the render that mounts this picker may already have read the other
-      // picker's state, so that state changes once the render is done
-      queueMicrotask(() => {
-        if (clock.owner && clock.owner !== this) {
-          release();
-        }
-      });
-    }
-  }
-
   get rate() {
-    return clock.owner === this ? clock.rate : 1;
+    return clock.rate;
   }
 
   isOn = (rate: number) => rate === this.rate;

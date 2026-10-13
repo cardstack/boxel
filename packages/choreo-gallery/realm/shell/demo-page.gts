@@ -13,7 +13,7 @@ import { DemoStage } from './demo-stage';
 import { GuideLink } from './guide-link';
 import { LabPanel } from './lab-panel';
 import { LabToggle } from './lab-toggle';
-import { SpeedPicker } from './speed-picker';
+import { SpeedPicker, startPage } from './speed-picker';
 
 interface Signature {
   Args: {
@@ -34,6 +34,11 @@ export class DemoPage extends Component<Signature> {
   /** the stage's film, when it has one, for the notes' join triggers */
   readonly filmLink = new FilmLink();
   readonly lab = new LabState();
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner as never, args);
+    startPage();
+  }
 
   get labSlug(): string | undefined {
     return labSlug(this.args.demo);

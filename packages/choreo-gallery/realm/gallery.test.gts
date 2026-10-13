@@ -136,6 +136,7 @@ module('Choreo gallery | site', function (hooks) {
 });
 
 class TwoPages {
+  @tracked first = true;
   @tracked second = false;
 }
 
@@ -212,14 +213,17 @@ module('Choreo gallery | demo page', function (hooks) {
 
   test('a speed picked on one demo page ends when another opens over it', async function (assert) {
     const [, bravo] = catalog();
-    const other = demo('echo', 'Animate', { slowmo: true });
+    // a demo with no speed picker of its own to put the clock back
+    const other = demo('echo', 'Animate');
     const theater = new Theater();
     const state = new TwoPages();
     await render(
       <template>
-        <div class='first'>
-          <DemoPage @demo={{bravo}} @theater={{theater}} />
-        </div>
+        {{#if state.first}}
+          <div class='first'>
+            <DemoPage @demo={{bravo}} @theater={{theater}} />
+          </div>
+        {{/if}}
         {{#if state.second}}
           <div class='second'>
             <DemoPage @demo={{other}} @theater={{theater}} />
@@ -234,19 +238,16 @@ module('Choreo gallery | demo page', function (hooks) {
     state.second = true;
     await animationsSettled();
     assert.strictEqual(motionSpeed(), 1, 'the next demo starts at full speed');
-    assert.deepEqual(
-      Array.from(
-        root().querySelectorAll<HTMLButtonElement>('.speeds button.is-on'),
-      ).map((button) => button.textContent?.trim()),
-      ['Full', 'Full'],
-      'and both pickers say so',
+    assert.notOk(one('.second .speeds'), 'though it has no speed picker');
+    assert.strictEqual(
+      speed('Full').getAttribute('aria-pressed'),
+      'true',
+      'and the picker on the page underneath says so',
     );
 
-    await click(
-      root().querySelectorAll<HTMLButtonElement>('.second .speeds button')[2]!,
-    );
+    await click(speed('÷5'));
     assert.strictEqual(motionSpeed(), 5);
-    state.second = false;
+    state.first = false;
     await animationsSettled();
     assert.strictEqual(
       motionSpeed(),
