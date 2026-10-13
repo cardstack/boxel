@@ -39,11 +39,31 @@ const INHERITED_PROPERTIES = [
   '-webkit-font-smoothing',
 ];
 
+// The nearest container `element` scrolls in, when it has more to show than
+// fits. The browser draws such a container's content as a layer of its own,
+// which changes how both the page's text and the frame's line up.
+function scroller(element: HTMLElement): HTMLElement | undefined {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    let { overflowX, overflowY } = getComputedStyle(node);
+    if (
+      /auto|scroll/.test(`${overflowX} ${overflowY}`) &&
+      (node.scrollHeight > node.clientHeight ||
+        node.scrollWidth > node.clientWidth)
+    ) {
+      return node;
+    }
+  }
+  return undefined;
+}
+
 // The solid colour painted behind `element`, if what shows through there is
 // one. The frame paints it too: text on an opaque background is drawn the
 // way the page draws its own, where on a transparent one the browser falls
-// back to coarser antialiasing.
+// back to coarser antialiasing. Text in a scrolling layer with no colour of
+// its own gets the coarser antialiasing in the page too, so the frame keeps
+// a transparent background there.
 function backdropColor(element: HTMLElement): string | undefined {
+  let scrolling = scroller(element);
   for (
     let node: HTMLElement | null = element;
     node;
@@ -58,23 +78,44 @@ function backdropColor(element: HTMLElement): string | undefined {
     if (alpha === undefined) {
       return color;
     }
-    if (Number(alpha) !== 0) {
+    if (Number(alpha) !== 0 || node === scrolling) {
       return undefined;
     }
   }
   return undefined;
 }
 
-// Where `frame` falls on the device's pixels. The browser starts a frame's
-// content on a whole device pixel and cuts its width down to one, so the
-// frame moves its content by the part of a pixel it lost and lays it out at
-// the exact width, which puts each edge and glyph where the page would have.
-function framePlacement(frame: HTMLIFrameElement) {
-  let { left, top, width } = frame.getBoundingClientRect();
-  let scale = window.devicePixelRatio || 1;
+// The browser draws a frame's content from a whole pixel, where the fields
+// it stands in for may start part of the way into one. So the frame box is
+// put on the whole pixel at or before where the fields start, and made wide
+// and tall enough to cover them, and the frame moves its content forward by
+// the part of a pixel the box moved, at the width the fields have here. Each
+// edge and glyph then lands where the page would have drawn it. In the page
+// itself that pixel is a CSS pixel: a frame on a whole device pixel part of
+// the way into a CSS pixel still draws its content off by one. In a
+// scrolling layer it is a device pixel, counted from where the layer's
+// content starts.
+function placeFrame(element: HTMLElement, frame: HTMLIFrameElement) {
+  let { left, top, width, height } = element.getBoundingClientRect();
+  let origin = { x: 0, y: 0 };
+  let pixel = 1;
+  let scrolling = scroller(element);
+  if (scrolling) {
+    let box = scrolling.getBoundingClientRect();
+    origin = {
+      x: box.left + scrolling.clientLeft - scrolling.scrollLeft,
+      y: box.top + scrolling.clientTop - scrolling.scrollTop,
+    };
+    pixel = 1 / (window.devicePixelRatio || 1);
+  }
   let part = (position: number) =>
-    (position * scale - Math.floor(position * scale)) / scale;
-  return { offset: { x: part(left), y: part(top) }, width };
+    position - Math.floor(position / pixel) * pixel;
+  let offset = { x: part(left - origin.x), y: part(top - origin.y) };
+  frame.style.left = `${-offset.x}px`;
+  frame.style.top = `${-offset.y}px`;
+  frame.style.width = `${Math.ceil(width + offset.x)}px`;
+  frame.style.height = `${Math.ceil(height + offset.y)}px`;
+  return { offset, width };
 }
 
 // A frame that never answers still lets a test settle, and fails on what it
@@ -114,8 +155,10 @@ export default class CredentialFieldsFrame extends Component<Signature> {
           var(--boxel-sp) + var(--_label) + var(--boxel-sp-4xs) +
             var(--_control)
         );
+        position: relative;
         display: block;
         width: 100%;
+        height: var(--credential-fields-height, var(--_reserved, 0));
       }
       .credential-fields--login,
       .credential-fields--cli-login,
@@ -132,9 +175,11 @@ export default class CredentialFieldsFrame extends Component<Signature> {
         --_reserved: calc(var(--boxel-sp-4xs) + var(--_control));
       }
       .credential-fields-frame {
-        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
-        height: var(--credential-fields-height, var(--_reserved, 0));
+        height: 100%;
         border: 0;
         background: transparent;
       }
@@ -186,7 +231,7 @@ export default class CredentialFieldsFrame extends Component<Signature> {
           ]),
         ),
         backdrop: backdropColor(element),
-        ...framePlacement(frame),
+        ...placeFrame(element, frame),
       });
     };
 
@@ -213,7 +258,8 @@ export default class CredentialFieldsFrame extends Component<Signature> {
           fields.connect({ post });
           break;
         case 'size':
-          frame.style.height = `${Math.max(0, Number(message.height) || 0)}px`;
+          element.style.height = `${Math.max(0, Number(message.height) || 0)}px`;
+          sendStyle();
           if (requested) {
             endLoadWait();
           }

@@ -408,11 +408,11 @@ function start(form) {
     } else {
       root.style.removeProperty('background-color');
     }
-    // The browser starts a frame on a whole device pixel and cuts its width
-    // down to one, where the fields it stands in for may start, and end, part
-    // of the way into one. Moving the content by the part it lost, at the
-    // width the page gives the frame, puts every edge and glyph on the pixel
-    // the page would have drawn it on.
+    // The page puts the frame on the whole pixel at or before where the
+    // fields it stands in for start, which may be part of the way into one.
+    // Moving the content forward by that part, at the width the fields have
+    // in the page, puts every edge and glyph on the pixel the page would have
+    // drawn it on.
     let exactWidth = Number(width);
     if (Number.isFinite(exactWidth) && exactWidth > 0) {
       document.body.style.width = `${exactWidth}px`;

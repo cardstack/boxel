@@ -200,8 +200,8 @@ export default class ProfileSettingsModal extends Component<Signature> {
           --credential-layout: narrow;
           --credential-fields-height: calc(
             (
-                var(--boxel-body-font-size) * 1.1 + var(--boxel-sp-xs) +
-                  var(--boxel-outline-width) * 2 +
+                var(--boxel-sp-sm) + var(--boxel-body-font-size) * 1.1 +
+                  var(--boxel-sp-xs) + var(--boxel-outline-width) * 2 +
                   var(--boxel-form-control-height)
               ) *
               3 + var(--settings-modal-gap) * 2

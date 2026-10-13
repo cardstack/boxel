@@ -154,7 +154,9 @@ module('Integration | credential fields', function (hooks) {
     );
     assert.ok(frame, `the ${form} fields' frame is rendered`);
     assert.ok(
-      frame!.style.height,
+      document.querySelector<HTMLElement>(
+        `[data-test-credential-fields="${form}"]`,
+      )!.style.height,
       `the ${form} fields loaded from the secure origin and reported their height`,
     );
   }
