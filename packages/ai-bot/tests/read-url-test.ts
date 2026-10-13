@@ -16,6 +16,7 @@ import {
   type ReadUrlRequestInit,
 } from '../lib/bot-tools/read-url/read.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import { addressPolicyCases } from '@cardstack/runtime-common/address-policy-cases';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -54,66 +55,13 @@ const BOXEL_HOST_SHELL = `<!DOCTYPE html><html><head><title>Boxel</title>
   </head><body><script src="/assets/app.js"></script></body></html>`;
 
 module('readUrl address policy', () => {
-  test('isPublicAddress refuses private, loopback, link-local and reserved addresses', () => {
-    for (let address of [
-      '127.0.0.1',
-      '10.1.2.3',
-      '172.16.0.1',
-      '192.168.1.1',
-      '169.254.169.254',
-      '100.64.0.1',
-      '0.0.0.0',
-      '224.0.0.1',
-      '::1',
-      '::',
-      'fd00::1',
-      'fe80::1',
-      '::ffff:127.0.0.1',
-      '::ffff:169.254.169.254',
-      '::ffff:7f00:1',
-      '::127.0.0.1',
-      '::7f00:1',
-      '::ffff:0:7f00:1',
-      '64:ff9b::7f00:1',
-      '64:ff9b:1::a00:1',
-      '2002:7f00:1::1',
-      '2001:0:4136:e378:8000:63bf:3fff:fdd2',
-      'not-an-address',
-    ]) {
-      assert.false(isPublicAddress(address), `${address} is not public`);
-    }
-  });
-
-  test('isPublicAddress refuses IPv6 addresses outside global unicast and its special-purpose blocks', () => {
-    for (let address of [
-      '5f00::1',
-      '100:0:0:1::1',
-      '4000::1',
-      'fec0::1',
-      'ff02::1',
-      '2001:2::1',
-      '2001:10::1',
-      '2001:db8::1',
-      '3fff::1',
-      '3fff:fff::1',
-      '2002:808:808::1',
-    ]) {
-      assert.false(isPublicAddress(address), `${address} is not public`);
-    }
-  });
-
-  test('isPublicAddress accepts public addresses', () => {
-    for (let address of [
-      '93.184.215.14',
-      '8.8.8.8',
-      '::ffff:8.8.8.8',
-      '::ffff:808:808',
-      '2606:4700::1111',
-      '[2606:4700::1111]',
-      '2001:4860:4860::8888',
-      '3fff:1000::1',
-    ]) {
-      assert.true(isPublicAddress(address), `${address} is public`);
+  test('isPublicAddress agrees with every shared address-policy case', () => {
+    for (let { address, public: isPublic, label } of addressPolicyCases) {
+      assert.strictEqual(
+        isPublicAddress(address),
+        isPublic,
+        `${label} (${address}) is ${isPublic ? '' : 'not '}public`,
+      );
     }
   });
 
