@@ -1,6 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 import {
   PgAdapter,
@@ -62,7 +66,7 @@ module(basename(import.meta.filename), function () {
     hooks.afterEach(async function () {
       await runner.destroy();
       await publisher.destroy();
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     async function publishFromScratchIndexJob(args: {
@@ -2362,7 +2366,7 @@ module(basename(import.meta.filename), function () {
     hooks.afterEach(async function () {
       await runner.destroy();
       await publisher.destroy();
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('worker can be set to only process jobs greater or equal to a particular priority', async function (assert) {
@@ -2494,6 +2498,7 @@ module(basename(import.meta.filename), function () {
       for (let adapter of adapters) {
         await adapter.close();
       }
+      await closeTestPgAdapter(adapters[0]);
     });
 
     // Enqueues a gated job, and resolves once the publish has committed.
@@ -3313,8 +3318,8 @@ module(basename(import.meta.filename), function () {
         await allPriorityRunner.destroy();
         await highPriorityRunner.destroy();
         await publisher.destroy();
-        await adapter.close();
         await adapter2.close();
+        await closeTestPgAdapter(adapter);
       });
 
       test('concurrency group enforces concurrency against running jobs', async function (assert) {

@@ -58,4 +58,4 @@ The [sequence demo](/sequence) makes that ordering visible. Continue with [Writi
 
 **@cardstack/choreo**: `ChoreoContext`, `Choreo`.
 
-Read the implementation: [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

@@ -6,6 +6,7 @@ import {
   dbAdapterQuerier,
   param,
   query,
+  type Expression,
   type Querier,
   upsert,
 } from '../expression.ts';
@@ -170,14 +171,24 @@ export async function fetchUserPermissions(
     // fetchRealmPermissions / fetchArchivedRealmsForOwner instead, so
     // they bypass this filter and don't need the opt-in.
     includeArchived?: boolean;
+    // Realms readable by everyone (a `'*'` read row) are reachable by every
+    // user, so they aren't part of a user's own set: by default only realms
+    // the user has a row of their own for are returned. Set true to add the
+    // world-readable realms too, as anything that authorizes or renders on
+    // the user's behalf needs. Ignored with `onlyOwnRealms`.
+    includePublicRealms?: boolean;
   },
 ): Promise<{
   [realm: string]: RealmAction[];
 }> {
-  const { userId, onlyOwnRealms = false, includeArchived = false } = args;
-  // Render the archive predicate inline rather than appending a fragment:
-  // the `false` branch's UNION applies the filter to both arms, so a
-  // single composable expression keeps the two arms in sync.
+  const {
+    userId,
+    onlyOwnRealms = false,
+    includeArchived = false,
+    includePublicRealms = false,
+  } = args;
+  // Rendered inline into each arm below rather than appended once, so the
+  // own-rows arm and the public arm filter archived realms the same way.
   const excludeArchivedSql = includeArchived
     ? ''
     : `AND realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)`;
@@ -188,42 +199,36 @@ export async function fetchUserPermissions(
     realm_owner: boolean;
   }[];
 
-  if (onlyOwnRealms) {
-    // Only get realms where user is owner
-    permissions = (await query(dbAdapter, [
-      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `AND realm_owner = true
-       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}`,
-    ])) as {
-      realm_url: string;
-      read: boolean;
-      write: boolean;
-      realm_owner: boolean;
-    }[];
-  } else {
-    // Get all user permissions (owned + read access) and public realms in one query
-    // Use UNION to deduplicate, prioritizing user permissions over public permissions
-    permissions = (await query(dbAdapter, [
-      `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}
-       UNION
-       SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
-       AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
-      param(userId),
-      `)
-       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
-       ${excludeArchivedSql}`,
-    ])) as {
-      realm_url: string;
-      read: boolean;
-      write: boolean;
-      realm_owner: boolean;
-    }[];
-  }
+  // The user's own permission rows — only the ones they own when
+  // `onlyOwnRealms` — leaving out published snapshots and, unless asked for,
+  // archived realms.
+  let ownRows: Expression = [
+    `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
+    param(userId),
+    `${onlyOwnRealms ? 'AND realm_owner = true' : ''}
+     AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+     ${excludeArchivedSql}`,
+  ];
+  // The world-readable realms the user has no row of their own for. UNION
+  // deduplicates, and the NOT IN keeps a user's own row the one that counts.
+  let publicRows: Expression =
+    includePublicRealms && !onlyOwnRealms
+      ? [
+          `UNION
+           SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
+           AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
+          param(userId),
+          `)
+           AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
+           ${excludeArchivedSql}`,
+        ]
+      : [];
+  permissions = (await query(dbAdapter, [...ownRows, ...publicRows])) as {
+    realm_url: string;
+    read: boolean;
+    write: boolean;
+    realm_owner: boolean;
+  }[];
 
   return permissions.reduce(
     (permissionsAcc, { realm_url, read, write, realm_owner }) => {
@@ -276,12 +281,17 @@ export async function fetchRealmsNamingPolicy(
 }
 
 export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
-  // Catalog realms are publicly-readable realms that aren't themselves
-  // published snapshots — published rows live in realm_registry with
-  // kind='published'.
+  // Catalog realms are the publicly-readable realms an operator has opted
+  // into the catalog (`realm_metadata.show_as_catalog`), leaving out archived
+  // realms and published snapshots — published rows live in realm_registry
+  // with kind='published'.
   let results = (await query(dbAdapter, [
     `SELECT rup.realm_url
      FROM realm_user_permissions rup
+     JOIN realm_metadata rm
+       ON rm.url = rup.realm_url
+      AND rm.show_as_catalog = true
+      AND rm.archived_at IS NULL
      LEFT JOIN realm_registry rr
        ON rup.realm_url = rr.url AND rr.kind = 'published'
      WHERE rup.username = '*' AND rup.read = true AND rr.url IS NULL`,
@@ -290,6 +300,49 @@ export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
   }[];
 
   return results;
+}
+
+export interface PublicRealmSummary {
+  url: string;
+  name: string | null;
+  iconURL: string | null;
+  backgroundURL: string | null;
+}
+
+// Every active source realm anyone may read, named and pictured from its
+// indexed `realm.json` so listing them mounts none of them. A realm whose
+// `realm.json` isn't indexed yet comes back with null display fields.
+export async function fetchPublicRealmSummaries(
+  dbAdapter: DBAdapter,
+): Promise<PublicRealmSummary[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT rup.realm_url,
+            config.pristine_doc->'attributes'->'cardInfo'->>'name' AS name,
+            config.pristine_doc->'attributes'->>'iconURL' AS icon_url,
+            config.pristine_doc->'attributes'->>'backgroundURL' AS background_url
+     FROM realm_user_permissions rup
+     JOIN realm_registry rr
+       ON rr.url = rup.realm_url AND rr.kind <> 'published'
+     LEFT JOIN boxel_index config
+       ON config.url = rup.realm_url || 'realm.json'
+      AND config.realm_url = rup.realm_url
+      AND config.type = 'instance'
+      AND (config.is_deleted = FALSE OR config.is_deleted IS NULL)
+     WHERE rup.username = '*' AND rup.read = true
+       AND rup.realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
+     ORDER BY rup.realm_url`,
+  ])) as {
+    realm_url: string;
+    name: string | null;
+    icon_url: string | null;
+    background_url: string | null;
+  }[];
+  return rows.map(({ realm_url, name, icon_url, background_url }) => ({
+    url: realm_url,
+    name,
+    iconURL: icon_url,
+    backgroundURL: background_url,
+  }));
 }
 
 export async function fetchAllRealmsWithOwners(

@@ -19,7 +19,7 @@ A film's default block yields its composition vocabulary. A spine contains chapt
 
 Here, `f` is yielded by `Film`. The shot defines a starting camera pose, `f.To` supplies its destination, and `f.Type` adds a title. The camera units belong to the picture's camera model; they are not CSS pixels.
 
-This excerpt is a score, not a standalone renderer. A complete host must also provide the picture and its assets. The [Film reference](https://github.com/cardstack/choreo/blob/main/docs/film.md) documents those host arguments and the picture contract.
+This excerpt is a score, not a standalone renderer. A complete host must also provide the picture and its assets. The [Film reference](https://choreo.boxel.site/docs/film.md) documents those host arguments and the picture contract.
 
 ## Planning the Edit
 

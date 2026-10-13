@@ -1,4 +1,4 @@
-import type { Realm } from '@cardstack/runtime-common';
+import type { Realm, RealmAction } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -7,6 +7,11 @@ import type { TestRealmAdapter } from './adapter';
 type TestRealmRecord = {
   realm: Realm;
   adapter: TestRealmAdapter;
+  // Set for a realm that judges requests by its ACL (`enforcePermissions`):
+  // the permissions a session it accepts for `user` carries, which is what
+  // the realm computes for them from the permissions it stores. A session
+  // carrying anything else is refused.
+  sessionPermissionsFor?: (user: string) => Promise<RealmAction[]>;
 };
 
 const TEST_REALM_REGISTRY = '__cardstack_testRealmRegistry';

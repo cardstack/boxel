@@ -16,7 +16,7 @@ Two questions, two tools:
 **"Where is the scroll?"** — `scrollProgress()` returns motion values for
 position/progress (`scrollX`, `scrollY`, `scrollXProgress`,
 `scrollYProgress`) plus three modifiers that say what to track; bind the
-values through an object passed to `style=` (`motion-element`):
+values with `style=(styles …)` (`motion-element`):
 
 ```gts
 import { scrollProgress } from 'glimmer-motion';

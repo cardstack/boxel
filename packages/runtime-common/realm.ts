@@ -7196,9 +7196,9 @@ export class Realm {
   }
 
   // The realm this server serves `href` from, and whether a caller may read
-  // it, for a validate. Found the way an explain finds a target's realm, and
-  // judged from the database, so no realm is mounted to answer. Undefined
-  // where no realm here holds `href`.
+  // it, for what compiling a policy reports. Found the way an explain finds a
+  // target's realm, and judged from the database, so no realm is mounted to
+  // answer. Undefined where no realm here holds `href`.
   async #readsRealmOf(
     href: string,
     caller: ScopeCaller,

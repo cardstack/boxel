@@ -4,7 +4,7 @@
  * Both reference films exist twice on this branch: as the beat tables the
  * engine has always run (`lib/films/*.ts`) and as graphs written in the
  * film vocabulary (`components/films/*-score.gts`, generated from those
- * tables by `docs/film-graph/tograph.mjs`). These render each graph
+ * tables by `tools/tograph.mjs`). These render each graph
  * inside a bare `<FilmGraph>` and assert that what it compiles to is the
  * table — every row, every key — and the same measured reads. That is
  * the whole of Phase 2's first claim, and it is what lets the films
