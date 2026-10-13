@@ -70,16 +70,29 @@ export class SaveCardInput extends CardDef {
   });
 }
 
+// The copy is created like any new card, so the realm picks its path: a
+// directory named after the card's type, beneath `localDir`, holding a file
+// with a generated name. The descriptions below spell that out because models
+// otherwise pass the path they want the new file to have as `localDir`.
 export class CopyCardToRealmInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
-  @field targetRealm = contains(StringField);
-  @field localDir = contains(StringField);
+  @field targetRealm = contains(StringField, {
+    description:
+      'URL of the realm to copy the card into, ending in a slash, e.g. "https://example.com/my-realm/". The copy is written to <targetRealm><localDir>/<CardTypeName>/<generated-id>.json — see localDir.',
+  });
+  @field localDir = contains(StringField, {
+    description:
+      'Optional folder inside targetRealm to put the copy under, relative to the realm root; it must stay inside the realm, so .. segments are refused. It is not the path of the new file: the realm always adds a folder named after the card\'s type (the name its class is exported under, e.g. Incident for export class Incident; for a default export, the module file name in PascalCase, e.g. IncidentRecord for export default from incident-record.gts) and generates the file name, and neither can be chosen. Copying an Incident card with localDir "projects/acme" writes projects/acme/Incident/<generated-id>.json; leaving localDir unset writes Incident/<generated-id>.json; localDir "Incident" writes Incident/Incident/<generated-id>.json. The result\'s newCardId is the URL of the copy.',
+  });
 }
 
 export class CopyCardToStackInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
   @field targetStackIndex = contains(NumberField);
-  @field localDir = contains(StringField);
+  @field localDir = contains(StringField, {
+    description:
+      'Optional folder to put the copy under, in the realm of the card on top of the target stack, relative to the realm root; it must stay inside the realm, so .. segments are refused. It is not the path of the new file: the realm always adds a folder named after the card\'s type (the name its class is exported under, e.g. Incident for export class Incident; for a default export, the module file name in PascalCase, e.g. IncidentRecord for export default from incident-record.gts) and generates the file name, and neither can be chosen. Copying an Incident card with localDir "projects/acme" writes projects/acme/Incident/<generated-id>.json; leaving localDir unset writes Incident/<generated-id>.json. The result\'s newCardId is the URL of the copy.',
+  });
 }
 
 export class CopyCardResult extends CardDef {
