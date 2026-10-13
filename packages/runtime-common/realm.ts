@@ -279,8 +279,10 @@ import {
   runOperation,
   scopeCallerFor,
 } from './card-operations/dispatch.ts';
-import type { ReadPlan } from './card-operations/dispatch.ts';
-import type { AnonymousRequest } from './card-operations/anonymous-request.ts';
+import type {
+  ReadPlan,
+  RunOperationOptions,
+} from './card-operations/dispatch.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import {
@@ -6193,7 +6195,10 @@ export class Realm {
               ...(asker ? { principal: asker } : {}),
               route: ENVELOPE_ROUTE,
             },
-            { gated: { definition, decision } },
+            {
+              gated: { definition, decision },
+              ...this.#anonymousReadOptions(requestContext),
+            },
           );
         } catch (err: unknown) {
           throw atEntry(err, entry.position);
@@ -7400,6 +7405,17 @@ export class Realm {
       readDeclined: this.#coarseDeclined(requestContext) === 'all',
       signedIn: !requestContext.anonymousCaller,
     });
+  }
+
+  // What a read run for `requestContext` carries of its anonymous admission:
+  // the request's own, so the gate admits the read only through the grants
+  // the caller's address may use and records the one that did. Nothing for a
+  // caller the realm didn't admit without a session.
+  #anonymousReadOptions(
+    requestContext: RequestContext,
+  ): Pick<RunOperationOptions, 'anonymousRequest'> {
+    let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
+    return anonymousRequest ? { anonymousRequest } : {};
   }
 
   // Who an operation dispatched from an HTTP request is running for. The actor
@@ -10474,10 +10490,7 @@ export class Realm {
       skipStoredFileMeta?: true;
       coarseDeclined?: true;
       route?: PolicyRoute;
-      // The request of a caller who isn't signed in, which the read is judged
-      // and counted in (see `RunOperationOptions.anonymousRequest`).
-      anonymousRequest?: AnonymousRequest;
-    } = {},
+    } & Pick<RunOperationOptions, 'anonymousRequest'> = {},
   ): Promise<OperationSourceResult | undefined> {
     let result: OperationResult;
     try {
@@ -10538,14 +10551,12 @@ export class Realm {
   // How a byte route reads for a caller the realm ACL declined: through the
   // gate, and for a caller who isn't signed in, within their request, so the
   // grant that admits the read is the one it is counted against.
-  #gatedRead(requestContext: RequestContext): {
-    coarseDeclined: true;
-    anonymousRequest?: AnonymousRequest;
-  } {
-    let anonymousRequest = this.#anonymous.anonymousRequestFor(requestContext);
+  #gatedRead(
+    requestContext: RequestContext,
+  ): { coarseDeclined: true } & Pick<RunOperationOptions, 'anonymousRequest'> {
     return {
       coarseDeclined: true,
-      ...(anonymousRequest ? { anonymousRequest } : {}),
+      ...this.#anonymousReadOptions(requestContext),
     };
   }
 
@@ -13618,7 +13629,12 @@ export class Realm {
           },
           // No budget flag: a headers-only read assembles no closure, so there
           // is nothing for it to bound.
-          { headersOnly: true, skipQueryBackedExpansion, resolveLinksOnly },
+          {
+            headersOnly: true,
+            skipQueryBackedExpansion,
+            resolveLinksOnly,
+            ...this.#anonymousReadOptions(requestContext),
+          },
         );
       } catch (e) {
         if (!isOperationFailure(e)) {
@@ -13959,7 +13975,11 @@ export class Realm {
           resolveLinksOnly,
           skipLinkAssemblyBudget,
           peekEtag,
-          { ...this.#callerOf(request, requestContext), ...coarseDeclined },
+          {
+            ...this.#callerOf(request, requestContext),
+            ...coarseDeclined,
+            ...this.#anonymousReadOptions(requestContext),
+          },
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -14044,7 +14064,7 @@ export class Realm {
       clientRequestId: string;
       coarseDeclined?: true;
       seal?: ArchivedRealmError;
-    },
+    } & Pick<RunOperationOptions, 'anonymousRequest'>,
   ): Promise<CardJsonAssembly> {
     // The document itself is the `read` operation's — link expansion, the
     // `links.self` and prefix-form ids, the freshly joined `meta.generation`
@@ -14075,7 +14095,14 @@ export class Realm {
           ...(caller.seal ? { seal: caller.seal } : {}),
           route: cardJsonRoute('GET'),
         },
-        { skipQueryBackedExpansion, resolveLinksOnly, skipLinkAssemblyBudget },
+        {
+          skipQueryBackedExpansion,
+          resolveLinksOnly,
+          skipLinkAssemblyBudget,
+          ...(caller.anonymousRequest
+            ? { anonymousRequest: caller.anonymousRequest }
+            : {}),
+        },
       );
     } catch (e) {
       if (!isOperationFailure(e)) {
