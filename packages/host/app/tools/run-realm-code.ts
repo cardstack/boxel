@@ -6,7 +6,10 @@ import {
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_FALLBACK_MODELS,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
@@ -730,7 +733,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let models = configs
       ? configs.flatMap((config) => (config.modelId ? [config.modelId] : []))
       : DEFAULT_FALLBACK_MODELS.map((model) => model.modelId);
-    let usedLLMs = this.matrixService.roomResources.get(roomId)?.usedLLMs ?? [];
+    // The same models the room resource's `usedLLMs` lists, read from the
+    // room's events, which exist whether or not the room is rendered.
+    let usedLLMs = (this.matrixService.getRoomData(roomId)?.events ?? [])
+      .filter((event) => event.type === APP_BOXEL_ACTIVE_LLM)
+      .map((event) => (event.content as { model?: string }).model)
+      .filter((model): model is string => !!model);
     return [...new Set([...models, ...usedLLMs])];
   }
 
