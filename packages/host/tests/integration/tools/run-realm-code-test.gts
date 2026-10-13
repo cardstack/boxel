@@ -174,6 +174,20 @@ boxel:
               });
             }
           `,
+          'person.gts': `
+            import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+
+            export class Person extends CardDef {
+              @field firstName = contains(StringField);
+              @field friend = linksTo(() => Person);
+              @field cardTitle = contains(StringField, {
+                computeVia: function (this: Person) {
+                  return this.firstName;
+                },
+              });
+            }
+          `,
           'Chef/ana.json': recipeJSON('Chef', { name: 'Ana' }),
           'Recipe/pancakes.json': recipeJSON(
             'Recipe',
@@ -193,6 +207,25 @@ boxel:
             undefined,
             '../../recipe',
           ),
+          'people/hassan.json': {
+            data: {
+              attributes: { firstName: 'Hassan' },
+              relationships: {
+                friend: { links: { self: './mango' } },
+              },
+              meta: {
+                adoptsFrom: { module: '../person', name: 'Person' },
+              },
+            },
+          },
+          'people/mango.json': {
+            data: {
+              attributes: { firstName: 'Mango' },
+              meta: {
+                adoptsFrom: { module: '../person', name: 'Person' },
+              },
+            },
+          },
         },
       }),
     );
@@ -391,6 +424,73 @@ return { show: 'Pet/missing' };`,
       /Path is outside this realm/,
     );
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('realm.cards.get returns a card as data, with computed fields and absolute URLs', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return {
+  bare: await realm.cards.get('people/hassan'),
+  withExtension: await realm.cards.get('people/hassan.json'),
+  byURL: await realm.cards.get(${JSON.stringify(`${testRealmURL}people/hassan`)}),
+};`,
+    });
+
+    assert.deepEqual(result.files, [], 'reading a card saves nothing');
+    let { bare, withExtension, byURL } = JSON.parse(result.scriptResult!);
+    assert.strictEqual(bare.path, 'people/hassan.json');
+    assert.strictEqual(bare.id, `${testRealmURL}people/hassan`);
+    assert.deepEqual(bare.type, {
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.strictEqual(bare.attributes.firstName, 'Hassan');
+    assert.strictEqual(
+      bare.attributes.cardTitle,
+      'Hassan',
+      'computed fields are included',
+    );
+    assert.deepEqual(
+      bare.relationships,
+      { friend: `${testRealmURL}people/mango` },
+      'links are keyed by field path, as realm.cards.search returns them',
+    );
+    assert.deepEqual(withExtension, bare, 'a .json path reads the same card');
+    assert.deepEqual(byURL, bare, 'a URL reads the same card');
+
+    let afterEdit = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.cards.get('people/hassan');
+await realm.fs.replace('people/hassan.json', '"Hassan"', '"Hassan Abdel"');
+return await realm.cards.get('people/hassan');`,
+    });
+    assert.strictEqual(
+      JSON.parse(afterEdit.scriptResult!).attributes.firstName,
+      'Hassan Abdel',
+      'a card read after an edit in the same run shows the edit',
+    );
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.cards.get('people/missing');`,
+      }),
+      /Card not found/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.cards.get('https://example.com/card');`,
+      }),
+      /Path is outside this realm/,
+    );
   });
 
   test('replays a replacement against the source that was read', async function (assert) {

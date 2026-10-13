@@ -15,6 +15,7 @@ import {
   type CardResource,
   type EntryCollectionDocument,
   type Format,
+  type LooseSingleCardDocument,
   type Query,
   type Relationship,
   type Saved,
@@ -66,6 +67,7 @@ import type RealmServerService from '../services/realm-server';
 import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type Base64ImageFieldType from '@cardstack/base/base64-image';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const log = logger('tools:run-realm-code');
@@ -145,6 +147,10 @@ type UiAction =
     }
   | { action: 'openWorkspace' };
 
+// Reads one card instance as JSON data, computed fields included, with every
+// URL in it absolute.
+type ReadCard = (id: string) => Promise<LooseSingleCardDocument>;
+
 // Lists one directory. `entries` is empty unless `status` is 200.
 type ListDirectory = (
   url: string,
@@ -178,6 +184,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.writeText': true,
   'fs.writeBytes': true,
   'cards.search': false,
+  'cards.get': false,
   capture: false,
   'workspaces.create': false,
   'workspaces.delete': false,
@@ -260,6 +267,7 @@ class RealmFsSession {
     private listDirectory: ListDirectory,
     private search: SearchCards,
     private resolveURL: ResolveURL,
+    private readCard: ReadCard,
     captureURL: CaptureURL,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
@@ -433,6 +441,33 @@ class RealmFsSession {
       // MAX_FILES.
       case 'cards.search':
         return await this.searchCards(args[0]);
+      // A card is read as the indexed instance, not as its file, so it does
+      // not count toward MAX_FILES and does not see this run's unsaved
+      // state. Values cross into the sandbox only as JSON, so the script gets
+      // the card serialized, as read-card-for-ai-assistant sends it to the
+      // model, and not an instance.
+      case 'cards.get': {
+        let id = this.resolve(method, args[0]).replace(/\.json$/, '');
+        let { data } = await this.readCard(id);
+        // The same shape as a card `realm.cards.search` finds: the type, and
+        // each link keyed by its field path (`field.0`, `field.1`, … for a
+        // `linksToMany` field). Every URL is already absolute.
+        let adoptsFrom = data.meta.adoptsFrom;
+        let relationships: Record<string, string | null> = {};
+        for (let [field, value] of Object.entries(data.relationships ?? {})) {
+          relationships[field] =
+            (value as Relationship | null)?.links?.self ?? null;
+        }
+        return {
+          id,
+          path: `${this.relative(id)}.json`,
+          ...(isResolvedCodeRef(adoptsFrom)
+            ? { type: { module: adoptsFrom.module, name: adoptsFrom.name } }
+            : {}),
+          attributes: data.attributes ?? {},
+          relationships,
+        };
+      }
       case 'capture': {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
@@ -877,12 +912,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
 
   description =
     'Run safe Realm code that reads and edits realm source files, finds ' +
-    'cards with realm.cards.search, can look at what it made with ' +
-    'realm.capture, can create workspaces with realm.workspaces.create, ' +
-    'and can change the skills and model of this room with room.*. In a ' +
-    'workspace the user can only read, reads work and each write is ' +
-    'refused. Return { show: "<card path>" } to open a card in the realm ' +
-    'when the run ends.';
+    'cards with realm.cards.search, reads cards as JSON data with ' +
+    'realm.cards.get, can look at what it made with realm.capture, can ' +
+    'create workspaces with realm.workspaces.create, and can change the ' +
+    'skills and model of this room with room.*. In a workspace the user ' +
+    'can only read, reads work and each write is refused. Return ' +
+    '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
   // `roomId` to that room, so a model cannot point the changes at another
@@ -949,6 +984,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         this.store.searchEntries(query, [realmURL], { linksOnly: true }),
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
+      (id) => this.readCard(id),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
       (workspaceInput) =>
@@ -1438,6 +1474,32 @@ export default class RunRealmCodeTool extends HostBaseTool<
           .join(' | '),
       );
     }
+  }
+
+  private async readCard(id: string): Promise<LooseSingleCardDocument> {
+    // The store's cached instance can lag a write this run just made, or hold
+    // edits not saved yet, so the card is read from the realm.
+    let card = await this.store.getWithoutCache(id);
+    if (!isCardInstance(card)) {
+      if (card.awaitingIndex) {
+        throw new Error(
+          `Card is not indexed yet: ${id}; read it again in a moment`,
+        );
+      }
+      throw new Error(
+        card.status === 404
+          ? `Card not found: ${id}`
+          : `Unable to read card ${id}: ${card.message}`,
+      );
+    }
+    let { default: Base64ImageField } = await this.loaderService.loader.import<{
+      default: typeof Base64ImageFieldType;
+    }>('@cardstack/base/base64-image');
+    return await this.cardService.serializeCard(card, {
+      omitFields: [Base64ImageField],
+      useAbsoluteURL: true,
+      includeComputeds: true,
+    });
   }
 
   private async listDirectory(
