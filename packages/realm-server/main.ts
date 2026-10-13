@@ -52,7 +52,14 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
-import { startOutboundGuard } from './lib/outbound/client.ts';
+import {
+  isDeployedServerURL,
+  startOutboundGuard,
+} from './lib/outbound/client.ts';
+import {
+  reportPlaintextCensus,
+  startSecretsAtRest,
+} from './lib/secrets-at-rest/index.ts';
 import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
@@ -561,6 +568,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
 };
 
 (async () => {
+  // Refuse to boot a deployed server without its KMS-wrapped data key, and
+  // report which provider and data keys are in effect.
+  try {
+    await startSecretsAtRest({
+      deployed: isDeployedServerURL(String(serverURL)),
+    });
+  } catch (e: any) {
+    console.error(`Secrets-at-rest self-check failed: ${e.message}`);
+    process.exit(-1);
+  }
   try {
     await smokeTestHostApp();
   } catch (e: any) {
@@ -575,6 +592,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  await reportPlaintextCensus(dbAdapter);
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a

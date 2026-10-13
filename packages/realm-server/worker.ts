@@ -50,6 +50,8 @@ import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
+import { isDeployedServerURL } from './lib/outbound/client.ts';
+import { startSecretsAtRest } from './lib/secrets-at-rest/index.ts';
 
 let log = logger('worker');
 
@@ -177,6 +179,17 @@ let createPrerenderAuth = buildCreatePrerenderAuth(
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
+  // A worker is deployed when any realm it serves is mapped to a deployed
+  // origin. Refuse to start one without its KMS-wrapped data key.
+  try {
+    await startSecretsAtRest({
+      deployed: toUrls.some((url) => isDeployedServerURL(String(url))),
+    });
+  } catch (e: any) {
+    log.error(`Secrets-at-rest self-check failed: ${e.message}`);
+    process.exit(-1);
+  }
+
   function reportStatus({ jobId, status, realm, url, deps }: StatusArgs) {
     if (process.send) {
       process.send(

@@ -1,0 +1,185 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
+
+// Seals a secret with AES-256-GCM under a data key the process holds in
+// memory, so sealing and opening never leave the process. Each sealed value is
+// bound to the row that owns it: the owner, the row id and, once it has one,
+// the destination the secret is sent to go into the additional authenticated
+// data. A database writer who moves a ciphertext to another row, or re-pairs it
+// with another destination, gets a value that no longer opens.
+
+const ALGORITHM = 'aes-256-gcm';
+const KEY_BYTES = 32;
+const NONCE_BYTES = 12;
+const TAG_BYTES = 16;
+
+// Changing what goes into the additional authenticated data changes this
+// label, so a value sealed under one layout can never open under another.
+const AAD_LABEL = 'boxel-secret/v1';
+
+export interface DataKey {
+  keyId: string;
+  key: Buffer;
+}
+
+// What a sealed value is bound to. `destination` is the place the secret is
+// sent (for example an endpoint's URL); a secret that has no destination yet,
+// such as a key added before its first approval, is bound to owner and id only
+// and is re-sealed with its destination later.
+export interface SecretBinding {
+  owner: string;
+  id: string;
+  destination?: string;
+}
+
+// What a table stores for one secret.
+export interface SealedSecret {
+  keyId: string;
+  nonce: Buffer;
+  ciphertext: Buffer;
+  tag: Buffer;
+}
+
+// The context a sealed value is bound to. The destination appears only as its
+// SHA-256, so the context is safe to log or to hand to a service that records
+// it, such as CloudTrail.
+export interface SecretEncryptionContext {
+  owner: string;
+  id: string;
+  destination_sha256?: string;
+}
+
+export function secretEncryptionContext(
+  binding: SecretBinding,
+): SecretEncryptionContext {
+  let context: SecretEncryptionContext = {
+    owner: binding.owner,
+    id: binding.id,
+  };
+  if (binding.destination !== undefined) {
+    context.destination_sha256 = createHash('sha256')
+      .update(binding.destination, 'utf8')
+      .digest('hex');
+  }
+  return context;
+}
+
+// Thrown whenever a value can't be opened: an unknown data key, a value moved
+// to another binding, or tampered bytes. GCM can't tell those apart, and the
+// message names none of the inputs.
+export class SecretDecryptionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecretDecryptionError';
+  }
+}
+
+export class SecretsKeyring {
+  #keys = new Map<string, Buffer>();
+  #currentKeyId: string;
+
+  constructor(keys: DataKey[], currentKeyId: string) {
+    for (let { keyId, key } of keys) {
+      if (key.length !== KEY_BYTES) {
+        throw new Error(
+          `Data key ${keyId} is ${key.length} bytes; AES-256-GCM needs ${KEY_BYTES}`,
+        );
+      }
+      if (this.#keys.has(keyId)) {
+        throw new Error(`Data key ${keyId} is listed more than once`);
+      }
+      this.#keys.set(keyId, Buffer.from(key));
+    }
+    if (!this.#keys.has(currentKeyId)) {
+      throw new Error(
+        `The current data key ${currentKeyId} is not among the loaded keys`,
+      );
+    }
+    this.#currentKeyId = currentKeyId;
+  }
+
+  get currentKeyId(): string {
+    return this.#currentKeyId;
+  }
+
+  get keyIds(): string[] {
+    return [...this.#keys.keys()];
+  }
+
+  // Seals under the current data key with a fresh random nonce.
+  seal(plaintext: string, binding: SecretBinding): SealedSecret {
+    let keyId = this.#currentKeyId;
+    let nonce = randomBytes(NONCE_BYTES);
+    let cipher = createCipheriv(ALGORITHM, this.#keys.get(keyId)!, nonce, {
+      authTagLength: TAG_BYTES,
+    });
+    cipher.setAAD(additionalData(keyId, binding));
+    let ciphertext = Buffer.concat([
+      cipher.update(plaintext, 'utf8'),
+      cipher.final(),
+    ]);
+    return { keyId, nonce, ciphertext, tag: cipher.getAuthTag() };
+  }
+
+  // Opens a value only under the binding it was sealed with.
+  open(sealed: SealedSecret, binding: SecretBinding): string {
+    let key = this.#keys.get(sealed.keyId);
+    if (!key) {
+      throw new SecretDecryptionError(
+        `The secret was sealed under data key ${sealed.keyId}, which this process has not loaded`,
+      );
+    }
+    if (
+      sealed.nonce.length !== NONCE_BYTES ||
+      sealed.tag.length !== TAG_BYTES
+    ) {
+      throw new SecretDecryptionError(
+        'The secret could not be decrypted: its nonce or tag has the wrong length',
+      );
+    }
+    try {
+      let decipher = createDecipheriv(ALGORITHM, key, sealed.nonce, {
+        authTagLength: TAG_BYTES,
+      });
+      decipher.setAAD(additionalData(sealed.keyId, binding));
+      decipher.setAuthTag(sealed.tag);
+      return Buffer.concat([
+        decipher.update(sealed.ciphertext),
+        decipher.final(),
+      ]).toString('utf8');
+    } catch {
+      throw new SecretDecryptionError(
+        'The secret could not be decrypted: it was altered, or it is bound to a different owner, row or destination',
+      );
+    }
+  }
+
+  // Opens a value under the binding it was sealed with and seals it again
+  // under `to` with the current data key. Used to bind a secret to its
+  // destination once it has one, and to move it onto a new data key.
+  reseal(
+    sealed: SealedSecret,
+    from: SecretBinding,
+    to: SecretBinding,
+  ): SealedSecret {
+    return this.seal(this.open(sealed, from), to);
+  }
+}
+
+function additionalData(keyId: string, binding: SecretBinding): Buffer {
+  let context = secretEncryptionContext(binding);
+  return Buffer.from(
+    JSON.stringify([
+      AAD_LABEL,
+      keyId,
+      context.owner,
+      context.id,
+      context.destination_sha256 ?? null,
+    ]),
+    'utf8',
+  );
+}

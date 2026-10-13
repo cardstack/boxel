@@ -1,0 +1,98 @@
+---
+name: secrets-at-rest
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and every worker run and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, and the plaintext census. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, or when a table starts sealing its secrets with the helper.
+---
+
+# Secrets at rest (operators)
+
+Stored secrets are sealed by the application before they reach the database,
+with AES-256-GCM from Node's `crypto`, by `SecretsKeyring` in
+`packages/realm-server/lib/secrets-at-rest/envelope.ts`. Each sealed value is
+four things a table stores: `keyId` (which data key sealed it), `nonce`
+(12 bytes), `ciphertext` and `tag` (16 bytes).
+
+## Envelope
+
+- A 32-byte **data key** seals every secret. KMS wraps it; the wrapped blob
+  lives in SSM as `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY` and reaches the task
+  as `SECRETS_WRAPPED_DATA_KEY`, with the key's ARN as `SECRETS_KMS_KEY_ARN`.
+- The realm server and each worker call `kms:Decrypt` **once, at startup**,
+  then seal and open locally. A KMS outage stops new tasks from starting but
+  never a running one, and no request makes a KMS call.
+- The unwrap uses the encryption context `{"purpose": "boxel-secrets-data-key"}`.
+  The key policy lets only the realm-server and worker task roles decrypt, and
+  only under that context. CloudTrail records each unwrap.
+
+## Binding
+
+Each value is bound, as GCM additional authenticated data, to the owner, the
+row id and the destination the secret is sent to. A value moved to another
+row, owner or destination by a database writer doesn't open: the caller gets
+`SecretDecryptionError`, whose message names none of the inputs.
+
+- A secret with no destination yet (a key added before its first approval) is
+  sealed under owner and id only. `keyring.reseal(sealed, from, to)` binds it
+  to its destination; after that it opens only with that destination.
+- `secretEncryptionContext(binding)` is the context a value is bound to:
+  `owner`, `id` and `destination_sha256`. The destination appears only as its
+  SHA-256, so the context is safe to log or to hand to a service that records
+  it.
+- Destinations are compared exactly as given. A caller passes the same
+  normalized form when sealing and opening.
+
+Open a secret only where it is used, and never log what it opens to.
+
+## Providers
+
+| Provider | Chosen when                                                  | Key id                                               |
+| -------- | ------------------------------------------------------------ | ---------------------------------------------------- |
+| `kms`    | `SECRETS_KMS_KEY_ARN` and `SECRETS_WRAPPED_DATA_KEY` are set | `kms-` + first 16 hex of SHA-256 of the wrapped blob |
+| `local`  | neither is set                                               | `local-development`                                  |
+
+Exactly one of the two set is a misconfiguration and fails startup. The local
+data key is fixed and public: development and CI run the same envelope, and
+nothing sealed under it is secret.
+
+The KMS key id names the wrapped blob, so it stays the same across restarts
+and differs for every data key. Rows sealed under a data key the process
+hasn't loaded fail with `sealed under data key <id>, which this process has
+not loaded`.
+
+## The startup self-check
+
+`startSecretsAtRest` runs first in `main.ts` and in every worker. It logs one
+line on the `secrets-at-rest` channel:
+
+```
+secrets at rest: provider=kms deployed=true keyIds=kms-3f9c0a1b2c4d5e6f currentKeyId=kms-3f9c0a1b2c4d5e6f
+```
+
+"Deployed" means the realm server's `--serverURL`, or any worker `--toUrl`,
+names a host that isn't `localhost`, `*.localhost` or a non-public IP literal
+— the same rule as the outbound guard's.
+
+### When it refuses to start
+
+The process exits with `Secrets-at-rest self-check failed: <reason>`:
+
+| Reason                                                                   | Fix                                                                                                                                                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `a deployed server must unwrap its data key with KMS, but … are not set` | The task definition lacks the two secrets. Apply `boxel-secrets-kms`, then boxel-realm-server and boxel-worker, in the infra repo. Never point a deployed server at the local provider.     |
+| `… must be set together, but only … is set`                              | One SSM parameter is missing or wasn't wired into the task definition. Check both `/<env>/boxel/SECRETS_*` parameters exist.                                                                |
+| `AccessDeniedException` / `InvalidCiphertextException` from KMS          | The task role isn't in the key policy, the wrapped blob was made under another key or context, or the parameter was edited. Compare the parameter's key-ARN tag with `SECRETS_KMS_KEY_ARN`. |
+| a network error from KMS                                                 | The task can't reach KMS (it goes through the NAT gateway). Running tasks are unaffected; new ones fail until it is reachable.                                                              |
+
+## Plaintext census
+
+Once tables seal their secrets with the helper, each adds a
+`PlaintextCensusEntry` (table, column, a `count` query of rows still in plain
+text) to `PLAINTEXT_CENSUS` in `lib/secrets-at-rest/index.ts`, and removes it
+when no plain-text value can remain. The realm server logs one line per entry
+at startup:
+
+```
+plaintext census: proxy_endpoints.api_key plaintextRows=0
+```
+
+With no entries it logs `plaintext census: no table seals its secrets with
+this helper`. A count that fails logs a warning and doesn't stop startup.
