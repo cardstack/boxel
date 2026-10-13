@@ -5,6 +5,7 @@ import {
   DURING_PRERENDER_HEADER,
   emptySearchEntryDocument,
   ifNoneMatchMatches,
+  isCodeRef,
   isItemLegSearch,
   logger,
   markPolicyScoped,
@@ -217,6 +218,8 @@ export default function handleSearch(opts: {
     // named query whose resolution refused a caller who may not read its
     // type's module admits nothing, wherever it would have searched.
     let admittingNothing = false;
+    // What a hidden refusal is cached under, set alongside it.
+    let refusal: RefusalCacheIdentity | undefined;
     // How much of each result's link graph a named query's declaration lets
     // its results carry, and which formats it serves them data-only for. An
     // ad-hoc search declares neither.
@@ -290,6 +293,7 @@ export default function handleSearch(opts: {
             // them: every realm the request names answers with no rows, the
             // ones the caller reads included, so the request is searched as
             // one no realm can answer a row to.
+            refusal = refusalCacheIdentity(request);
             payload = { ...namedQueryRendering(payload), realms: named };
             consultPolicies = false;
             admittingNothing = true;
@@ -361,9 +365,28 @@ export default function handleSearch(opts: {
         resolvedByServer,
         mountRealms,
         unshareableFormats,
+        refusal,
       }),
     );
   };
+
+  // The live-search cache key a hidden refusal is answered under. Every hidden
+  // refusal searches the same rendering, which names no operation and no type,
+  // so keyed by that alone they would all share one entry, and a refused probe
+  // would hit where a declared query misses, telling the two apart by the
+  // cache rather than by the body. So it is keyed by what the request asked
+  // for, as a declared query is keyed by what that resolves to, and it reads
+  // generations through the type the request names, as a declared query reads
+  // them through the type its filter anchors to.
+  function refusalCacheIdentity(
+    request: Record<string, unknown>,
+  ): RefusalCacheIdentity {
+    let { operation, on, params } = request;
+    return {
+      key: { operation, on, ...(params === undefined ? {} : { params }) },
+      typeAnchors: isCodeRef(on) ? [on] : undefined,
+    };
+  }
 
   // What each realm reached only through its policy contributes to this
   // search: the grant filters for one whose policy admits the query, and
@@ -557,6 +580,7 @@ export default function handleSearch(opts: {
       resolvedByServer,
       mountRealms,
       unshareableFormats,
+      refusal,
     }: {
       requested: string[];
       resolvedByServer: boolean;
@@ -564,6 +588,9 @@ export default function handleSearch(opts: {
       // The formats a named query's declaration serves its rows data-only
       // for, none for an ad-hoc search.
       unshareableFormats: PrerenderedHtmlFormat[];
+      // Set for a named query whose refusal is hidden from the caller, which
+      // is answered with no rows (see `refusalCacheIdentity`).
+      refusal?: RefusalCacheIdentity;
     },
   ) {
     let handlerStart = Date.now();
@@ -741,6 +768,9 @@ export default function handleSearch(opts: {
     // too. Folded only when some realm carries it, like the policy scope.
     if (scopedRealms.length > 0) {
       cacheKeyOpts.policyScopedRealms = scopedRealms;
+    }
+    if (refusal) {
+      cacheKeyOpts.refusedNamedQuery = refusal.key;
     }
     // What each realm the caller does not read contributed: the grant filters
     // composed into its query, or that it contributed no rows, or that its
@@ -920,7 +950,7 @@ export default function handleSearch(opts: {
           cache: liveSearchCache,
           dbAdapter,
           virtualNetwork,
-          typeAnchors: parsed.typeAnchors,
+          typeAnchors: refusal ? refusal.typeAnchors : parsed.typeAnchors,
           // Only realms this process already holds. Resolving an anchor's
           // canonical spelling must never be the thing that forces a mount —
           // this request may well be a cache hit, which skips mounting
@@ -954,6 +984,14 @@ export default function handleSearch(opts: {
       throw e;
     }
   }
+}
+
+// What a named query whose refusal is hidden from the caller is cached under:
+// the members the request named it by, and the types its generations are read
+// through.
+interface RefusalCacheIdentity {
+  key: Record<string, unknown>;
+  typeAnchors: CodeRef[] | undefined;
 }
 
 // Mounts each realm, or finds it already mounted, positional with `urls`; a

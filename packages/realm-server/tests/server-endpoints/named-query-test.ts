@@ -21,6 +21,7 @@ import {
 } from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
+import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
 import {
   closeServer,
@@ -952,6 +953,54 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
           `${name}: byte-identical to the declared query that admits nothing`,
         );
       }
+    });
+
+    test('a refusal reads the live-search cache as a declared query does', async function (assert) {
+      // Names used by no other test, so no earlier entry is still live.
+      await federatedSearch(
+        { operation: 'cacheProbeFirst', on: SECRET, realms: [SCHOOL] },
+        PROVIDER_B,
+      );
+      let probe = await federatedSearch(
+        { operation: 'cacheProbeSecond', on: SECRET, realms: [SCHOOL] },
+        PROVIDER_B,
+      );
+      let declared = await federatedSearch(
+        {
+          ...ADMITS_NOTHING,
+          params: { status: 'cache-probe' },
+          realms: [SCHOOL],
+        },
+        PROVIDER_B,
+      );
+      assert.strictEqual(
+        declared.headers[LIVE_SEARCH_CACHE_HEADER],
+        'miss',
+        'a declared query sent for the first time misses',
+      );
+      assert.strictEqual(
+        probe.headers[LIVE_SEARCH_CACHE_HEADER],
+        declared.headers[LIVE_SEARCH_CACHE_HEADER],
+        'and so does a refusal sent for the first time, though another refusal was just answered',
+      );
+
+      let probeAgain = await federatedSearch(
+        { operation: 'cacheProbeSecond', on: SECRET, realms: [SCHOOL] },
+        PROVIDER_B,
+      );
+      let declaredAgain = await federatedSearch(
+        {
+          ...ADMITS_NOTHING,
+          params: { status: 'cache-probe' },
+          realms: [SCHOOL],
+        },
+        PROVIDER_B,
+      );
+      assert.strictEqual(
+        probeAgain.headers[LIVE_SEARCH_CACHE_HEADER],
+        declaredAgain.headers[LIVE_SEARCH_CACHE_HEADER],
+        'each, sent again, reads the cache alike',
+      );
     });
 
     test('a member the search grammar refuses is refused alike whether the operation is declared or not', async function (assert) {
