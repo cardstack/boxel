@@ -96,6 +96,12 @@ export class Pet extends CardDef {
             0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00, 0xff, 0xfe, 0x9c,
           ]),
           'docs/README': 'Plain text with no extension\n',
+          'docs/replacement.txt': 'A replacement character: \uFFFD\n',
+          // "café" in Latin-1, which is not UTF-8.
+          'docs/latin1.txt': Uint8Array.from([0x63, 0x61, 0x66, 0xe9, 0x0a]),
+          'unformatted.gts': `import { CardDef } from "@cardstack/base/card-api"
+export class Unformatted extends CardDef {}
+`,
         },
       }),
     );
@@ -321,7 +327,7 @@ await realm.fs.replace('Pet/mango-copy.json', '"Mango"', '"Mango Two"');`,
     );
   });
 
-  test('realm.fs.copy refuses binary files, whatever their content type', async function (assert) {
+  test('realm.fs.copy refuses files that are not UTF-8 text', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
@@ -329,6 +335,7 @@ await realm.fs.replace('Pet/mango-copy.json', '"Mango"', '"Mango Two"');`,
     for (let [from, to] of [
       ['images/dot.png', 'images/dot-copy.png'],
       ['docs/report.docx', 'docs/report-copy.docx'],
+      ['docs/latin1.txt', 'docs/latin1-copy.txt'],
     ]) {
       await assert.rejects(
         command.execute({
@@ -344,21 +351,59 @@ await realm.fs.replace('Pet/mango-copy.json', '"Mango"', '"Mango Two"');`,
     }
   });
 
-  test('realm.fs.copy copies a text file that has no extension', async function (assert) {
+  test('realm.fs.copy copies UTF-8 text byte for byte, whatever its content type', async function (assert) {
     let toolService = getService('tool-service');
-    let cardService = getService('card-service');
+    let network = getService('network');
     let command = new RunRealmCodeTool(toolService.toolContext);
+    let bytesOf = async (path: string) => {
+      let response = await network.authedFetch(`${testRealmURL}${path}`, {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      return Array.from(new Uint8Array(await response.arrayBuffer()));
+    };
 
     await command.execute({
       realm: testRealmURL,
       roomId: '!room:example.com',
-      code: `await realm.fs.copy('docs/README', 'docs/README-copy');`,
+      code: `await realm.fs.copy('docs/README', 'docs/README-copy');
+await realm.fs.copy('docs/replacement.txt', 'docs/replacement-copy.txt');
+await realm.fs.copy('unformatted.gts', 'unformatted-copy.gts');`,
     });
 
-    let copy = await cardService.getSource(
-      new URL(`${testRealmURL}docs/README-copy`),
+    for (let path of [
+      'docs/README',
+      'docs/replacement.txt',
+      'unformatted.gts',
+    ]) {
+      let copyPath = path.replace(/(\.[^./]+)?$/, '-copy$1');
+      assert.deepEqual(
+        await bytesOf(copyPath),
+        await bytesOf(path),
+        `${copyPath} has the same bytes as ${path}`,
+      );
+    }
+  });
+
+  test('a binary file exists, and is not overwritten', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let run = (code: string) =>
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+
+    let result = await run(`return await realm.fs.exists('images/dot.png');`);
+    assert.true(JSON.parse(result.scriptResult!), 'exists returns true');
+    await assert.rejects(
+      run(`await realm.fs.copy('notes/first.md', 'images/dot.png');`),
+      /File already exists: .*dot\.png/,
     );
-    assert.strictEqual(copy.content, 'Plain text with no extension\n');
+    await assert.rejects(
+      run(`await realm.fs.writeText('images/dot.png', 'text');`),
+      /File already exists; use realm\.fs\.replace/,
+    );
   });
 
   test('resolves paths against the realm root', async function (assert) {

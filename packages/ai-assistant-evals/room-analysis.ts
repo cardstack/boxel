@@ -33,8 +33,9 @@ export interface RoomAnalysis {
 const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
 // Every write call counts; the path is recorded only when it is a literal.
+// A copy writes the path in its second argument.
 const REALM_CODE_WRITE =
-  /realm\.fs\.(?:writeText|replace)\(\s*(?:(['"`])([^'"`]+)\1)?/g;
+  /realm\.fs\.(?:(?:writeText|replace)\(\s*|copy\(\s*(?:(['"`])[^'"`]*\1|[^,()]+)\s*,\s*)(?:(['"`])([^'"`]+)\2)?/g;
 
 function parseData(content: Record<string, any>): Record<string, any> {
   let data = content.data;
@@ -170,8 +171,8 @@ export function analyzeRoom(
         if (typeof code === 'string') {
           for (let match of code.matchAll(REALM_CODE_WRITE)) {
             result.realmCodeWrites++;
-            if (match[2]) {
-              result.filesWritten.push(match[2]);
+            if (match[3]) {
+              result.filesWritten.push(match[3]);
             }
           }
         }
