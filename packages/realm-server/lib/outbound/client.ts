@@ -517,6 +517,10 @@ function withoutHeaders(
   );
 }
 
+// fetch strips HTTP whitespace from both ends of a header value before it
+// validates it, and an invalid value is quoted in that stripped form.
+const HTTP_WHITESPACE_EDGES = /^[\t\n\r ]+|[\t\n\r ]+$/g;
+
 // Attaches `credential` to the request, registering each form it is attached
 // in with `scrubber`. Returns the URL to send to, and the headers that carry
 // the credential, which a redirect to another origin drops.
@@ -540,6 +544,8 @@ function attachCredential(
     ? `${placement.scheme} ${credential.value}`
     : credential.value;
   scrubber.register(value);
+  scrubber.register(value.replace(HTTP_WHITESPACE_EDGES, ''));
+  scrubber.register(credential.value.replace(HTTP_WHITESPACE_EDGES, ''));
   for (let name of Object.keys(headers)) {
     if (name.toLowerCase() === placement.header.toLowerCase()) {
       delete headers[name];
