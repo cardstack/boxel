@@ -6,6 +6,7 @@ import { motion } from 'glimmer-motion';
 
 import type { GalleryDemo } from '../demo';
 import { FilmLink } from '../lib/film-link';
+import { labSlug } from '../lib/lab';
 import type { GalleryNavigation } from '../lib/navigation';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
@@ -38,17 +39,16 @@ export class DemoPage extends Component<Signature> {
   /** counts replays: each one mounts the stage afresh */
   @tracked private replays = 0;
 
-  /** the films play in documents of their own, which the lab can't reach */
-  get hasLab(): boolean {
-    return this.args.demo.theater !== true;
+  get labSlug(): string | undefined {
+    return labSlug(this.args.demo);
   }
 
   get labOpen(): boolean {
-    return this.hasLab && this.labFor === this.args.demo.slug;
+    return this.labSlug !== undefined && this.labFor === this.labSlug;
   }
 
   toggleLab = () => {
-    this.labFor = this.labOpen ? null : (this.args.demo.slug ?? null);
+    this.labFor = this.labOpen ? null : (this.labSlug ?? null);
   };
 
   replay = () => {
@@ -148,7 +148,7 @@ export class DemoPage extends Component<Signature> {
           <SpeedPicker @slug={{slug}} />
         {{/if}}
         <p class='demo-links'>
-          {{#if this.hasLab}}
+          {{#if this.labSlug}}
             <button
               type='button'
               class='lab-toggle'
@@ -199,7 +199,13 @@ export class DemoPage extends Component<Signature> {
             {{/if}}
           </div>
           {{#if this.labOpen}}
-            <LabPanel @demo={{@demo}} @onReplay={{this.replay}} />
+            {{#if this.labSlug}}
+              <LabPanel
+                @slug={{this.labSlug}}
+                @title={{@demo.title}}
+                @onReplay={{this.replay}}
+              />
+            {{/if}}
           {{/if}}
         </div>
         {{! role='late': the code can wait for the move to land — the crossing

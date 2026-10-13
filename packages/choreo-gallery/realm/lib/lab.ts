@@ -6,6 +6,18 @@ import { Dial, type DialTune } from './dial';
 import { demoPresets } from './presets';
 import { demoTuning } from './tuning';
 
+/**
+ * The key a demo's lab tunes it under: its slug. A demo without one has no
+ * lab, and neither do the films, which play in documents of their own the
+ * lab can't reach.
+ */
+export function labSlug(demo: {
+  slug?: string | null;
+  theater?: boolean | null;
+}): string | undefined {
+  return demo.theater !== true && demo.slug ? demo.slug : undefined;
+}
+
 /** how many labs are open on each demo, by its slug */
 const openLabs = new Map<string, number>();
 

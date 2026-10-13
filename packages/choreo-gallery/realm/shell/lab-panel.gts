@@ -1,15 +1,17 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import type { GalleryDemo } from '../demo';
 import { DemoLab } from '../lib/lab';
 import { DialPanel } from './dial-panel';
 
 interface Signature {
   Args: {
-    demo: GalleryDemo;
     /** runs the demo's stage again from the start */
     onReplay: () => void;
+    /** the demo's lab key, from `labSlug` */
+    slug: string;
+    /** the demo's title, which names the panel; the slug when it has none */
+    title?: string;
   };
   Element: HTMLElement;
 }
@@ -22,7 +24,11 @@ interface Signature {
  * replay runs it from the start with the new values.
  */
 export class LabPanel extends Component<Signature> {
-  readonly lab = new DemoLab(this.args.demo.slug ?? '', this.args.demo.title);
+  readonly lab = new DemoLab(this.args.slug, this.title);
+
+  get title(): string {
+    return this.args.title || this.args.slug;
+  }
 
   willDestroy() {
     super.willDestroy();
@@ -32,8 +38,8 @@ export class LabPanel extends Component<Signature> {
   <template>
     <section
       class='lab'
-      aria-label='Tune {{@demo.title}} with DialKit'
-      data-demo-lab={{@demo.slug}}
+      aria-label='Tune {{this.title}} with DialKit'
+      data-demo-lab={{@slug}}
       ...attributes
     >
       <DialPanel @dial={{this.lab.dial}} @characters={{this.lab.presets}} />

@@ -16,6 +16,7 @@ import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 
 import type { FilmLink } from './lib/film-link';
+import { labSlug } from './lib/lab';
 import { ownClicks } from './lib/pointer';
 import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
@@ -140,9 +141,8 @@ class Embedded extends Component<typeof GalleryDemo> {
     return this.args.model as GalleryDemo;
   }
 
-  /** the films play in documents of their own, which the lab can't reach */
-  get hasLab(): boolean {
-    return this.demo.theater !== true;
+  get labSlug(): string | undefined {
+    return labSlug(this.demo);
   }
 
   toggleLab = () => {
@@ -165,7 +165,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         <span class='tile-title'>{{@model.title}}</span>
         <span class='tile-lede'>{{@model.lede}}</span>
         <span class='tile-links' {{ownClicks}}>
-          {{#if this.hasLab}}
+          {{#if this.labSlug}}
             <button
               type='button'
               class='tile-lab-toggle'
@@ -177,9 +177,15 @@ class Embedded extends Component<typeof GalleryDemo> {
         </span>
       </div>
       {{#if this.labOpen}}
-        <div class='tile-lab' {{ownClicks}}>
-          <LabPanel @demo={{this.demo}} @onReplay={{this.replay}} />
-        </div>
+        {{#if this.labSlug}}
+          <div class='tile-lab' {{ownClicks}}>
+            <LabPanel
+              @slug={{this.labSlug}}
+              @title={{@model.title}}
+              @onReplay={{this.replay}}
+            />
+          </div>
+        {{/if}}
       {{/if}}
     </ChoreoRoot>
     <style scoped>
