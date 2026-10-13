@@ -10,6 +10,7 @@ import {
   type Querier,
   upsert,
 } from '../expression.ts';
+import { aiBotUsername, submissionBotUsername } from '../constants.ts';
 import { fetchMatrixProfile, getMatrixUsername } from '../matrix-client.ts';
 import { effectiveRealmPermissions } from '../realm-permission-checker.ts';
 
@@ -157,6 +158,69 @@ export async function fetchEffectiveRealmPermissions(
     username,
     async () => !!(await fetchMatrixProfile(new URL(matrixURL), username)),
   );
+}
+
+// The permission rows that grant to many accounts at once: `*` (everyone,
+// matrix account or not) and `users` (any registered matrix user).
+const wildcardUsernames = new Set(['*', 'users']);
+
+// The platform's service accounts, by matrix localpart. A realm's own matrix
+// user (`@realm/…`) is a bot too.
+const botLocalparts = new Set([aiBotUsername, submissionBotUsername]);
+
+export function isBotAccount(userId: string): boolean {
+  return (
+    userId.startsWith('@realm/') || botLocalparts.has(getMatrixUsername(userId))
+  );
+}
+
+function isDirectWriterRow(username: string, write: boolean): boolean {
+  return write && !wildcardUsernames.has(username) && !isBotAccount(username);
+}
+
+/**
+ * Whether `userId` is a direct writer of the realm: a person whose own
+ * permission row grants `write`. It is the narrower question asked before a
+ * realm takes something on in a person's name, such as a shared key or a
+ * scheduled pipeline they pay for, so it answers for that person alone. A
+ * `*` or `users` row grants write to everyone it matches without naming
+ * anyone, a bot account acts for the platform rather than a person, and a
+ * policy grant admits a write without making its caller a writer of the
+ * realm, so none of them counts.
+ *
+ * Read fresh on each call, like every permission check, so a removed row
+ * stops counting at once.
+ */
+export async function isDirectWriter(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+  userId: string,
+): Promise<boolean> {
+  let [row] = (await query(dbAdapter, [
+    `SELECT write FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL.href),
+    `AND username =`,
+    param(userId),
+  ])) as { write: boolean }[];
+  return !!row && isDirectWriterRow(userId, row.write);
+}
+
+/**
+ * The realm's direct writers, as `isDirectWriter` answers it, in username
+ * order.
+ */
+export async function fetchDirectWriters(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+): Promise<string[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT username, write FROM realm_user_permissions WHERE write = true AND realm_url =`,
+    param(realmURL.href),
+    `ORDER BY username`,
+  ])) as { username: string; write: boolean }[];
+  return rows
+    .filter(({ username, write }) => isDirectWriterRow(username, write))
+    .map(({ username }) => username);
 }
 
 export async function fetchUserPermissions(

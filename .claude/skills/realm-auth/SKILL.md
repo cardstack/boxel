@@ -90,6 +90,16 @@ minter. `fetchUserPermissions` is _not_ a substitute — its wildcard arm drops 
 entirely — so the realms it enumerates for a multi-realm bundle still carry
 row-only claims.
 
+**Direct writers** are the opposite question: not "may this request write?" but
+"is this person a writer of the realm in their own name?", asked before a realm
+takes something on that a person answers for (sharing a key into it, scheduling
+a pipeline they pay for). `isDirectWriter` / `fetchDirectWriters` in
+`db-queries/realm-permission-queries.ts` answer it from the user's own row
+alone. Wildcard rows (`*`, `users`) are excluded because they grant write to
+everyone they match without naming anyone, so no one is accountable through
+them; bot accounts (`isBotAccount`) and policy grants are excluded for the
+same reason. Never answer this question with the effective set.
+
 **Realm-server session**: `retrieveTokenClaim` (signature + `exp`) plus the same
 revocation check, at each of `jwtMiddleware`, `multiRealmAuthorization`, and
 `handle-download-realm`. There is **no** permission claim on this token, so the
