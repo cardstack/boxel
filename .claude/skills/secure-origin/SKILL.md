@@ -56,4 +56,4 @@ The secure origin must never share a host with the realm-server, the host app or
 ## Checks
 
 - `packages/realm-server/tests/secure-origin-test.ts`: the shell and its headers, 404s for realm, module, asset and server paths, the dedicated listener, and the telemetry scrub.
-- `packages/host/tests/unit/secure-origin-isolation-test.ts`: a page on the app origin opens the shell in a window, then can neither read it nor keep a handle to it. The handle closing is also what shows the shell loaded: a window that failed to load is just as unreadable, but stays attached. `mise-tasks/test-services/host` doesn't report the stack ready until the shell answers.
+- `packages/host/tests/unit/secure-origin-isolation-test.ts`: the secure origin is neither the app's origin nor the realm-server's, and a page on the app origin can't read a document loaded from it. It loads the shell in a frame, not a window. Once the opener policy cuts a window's handle, nothing can close that window, and it would keep focus for every test after it. `mise-tasks/test-services/host` doesn't report the stack ready until the shell answers.

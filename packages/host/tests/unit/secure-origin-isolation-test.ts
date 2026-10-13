@@ -3,42 +3,40 @@ import { module, test } from 'qunit';
 import ENV from '@cardstack/host/config/environment';
 
 // The secure origin's page is where credentials are typed. What keeps card
-// code — which runs in the app page — away from it is the browser: the
-// same-origin policy stops the app page reading a window on another origin,
-// and the shell's Cross-Origin-Opener-Policy cuts the handle the app page
-// keeps to the window it opened, so it can't navigate the window either.
+// code — which runs in the app page — away from it is the browser's
+// same-origin policy, so the secure origin must be an origin of its own, and
+// the app page must not be able to reach into a document loaded from it.
+//
+// The page is loaded in a frame here rather than the window the app opens:
+// once the shell's Cross-Origin-Opener-Policy cuts a window's handle, nothing
+// can close that window, and it would keep focus for every test after this
+// one. The shell refuses to be framed, so the frame may show the browser's
+// own error page instead; either way the app page can't read it. The headers
+// that refuse framing and cut the opener's handle are asserted on the wire by
+// the realm-server's secure-origin tests.
 
-const NAVIGATION_TIMEOUT_MS = 20000;
-const POLL_INTERVAL_MS = 50;
+const LOAD_TIMEOUT_MS = 20000;
 
-// A window opened on another origin starts out on an `about:blank` document
-// that shares the opener's origin. Resolves once that is no longer so: the
-// handle was cut, or reading the document throws.
-async function waitForNavigation(win: Window): Promise<void> {
-  let deadline = Date.now() + NAVIGATION_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (win.closed) {
-      return;
-    }
-    try {
-      void win.document.body;
-    } catch {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-}
-
-function readShellRoot(win: Window): Element | null | undefined {
-  try {
-    return win.document.getElementById('secure-shell');
-  } catch {
-    return undefined;
-  }
+async function loadFrame(src: string): Promise<HTMLIFrameElement> {
+  let frame = document.createElement('iframe');
+  let loaded = new Promise<void>((resolve, reject) => {
+    let timer = setTimeout(
+      () => reject(new Error(`frame did not load ${src}`)),
+      LOAD_TIMEOUT_MS,
+    );
+    frame.addEventListener('load', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+  frame.src = src;
+  document.body.appendChild(frame);
+  await loaded;
+  return frame;
 }
 
 module('Unit | secure origin isolation', function () {
-  test('a page on the app origin can neither read nor steer the secure origin window', async function (assert) {
+  test('a page on the app origin cannot read a document from the secure origin', async function (assert) {
     let secureOrigin = new URL(ENV.secureOriginURL).origin;
     assert.notStrictEqual(
       secureOrigin,
@@ -51,22 +49,30 @@ module('Unit | secure origin isolation', function () {
       'the secure origin is not the realm server origin',
     );
 
-    let win = window.open(ENV.secureOriginURL, '_blank');
-    assert.ok(win, 'the secure origin page opened in a window');
+    let frame = await loadFrame(ENV.secureOriginURL);
     try {
-      await waitForNavigation(win!);
-      // Only a response carrying the shell's opener policy cuts the handle; a
-      // window that failed to load would stay attached.
-      assert.true(
-        win!.closed,
-        'the shell loaded and cut the handle the app page held to it',
+      assert.strictEqual(
+        frame.contentDocument,
+        null,
+        "the frame's document is not exposed to this page",
       );
-      assert.notOk(
-        readShellRoot(win!),
-        "the shell's document can't be reached through the handle",
+      let error: unknown;
+      try {
+        void frame.contentWindow!.document;
+      } catch (e) {
+        error = e;
+      }
+      assert.ok(
+        error instanceof DOMException,
+        `reading the frame's document throws a DOMException (got ${String(error)})`,
+      );
+      assert.strictEqual(
+        (error as DOMException | undefined)?.name,
+        'SecurityError',
+        'the browser refuses cross-origin access',
       );
     } finally {
-      win?.close();
+      frame.remove();
     }
   });
 });
