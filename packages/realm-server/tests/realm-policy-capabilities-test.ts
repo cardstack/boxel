@@ -780,6 +780,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         'and does not teach room 205, so its delete is refused as the gate refuses it',
       );
+      let chainAnswers = education.__testOnlyNonGrantableAnswerSources();
       assert.deepEqual(
         gateStats(),
         {
@@ -788,10 +789,19 @@ module(basename(import.meta.filename), function (hooks) {
           pendingDischarges: 0,
           definitionLookups: 0,
           snapshotReads: 0,
-          ancestorDefinitionReads: 4,
+          ancestorDefinitionReads: 2,
           lockedTypeReads: 4,
         },
-        'each predicate was evaluated once, and neither by the path that holds the write lock',
+        `each predicate was evaluated once, and neither by the path that holds the write lock (chain answers: ${JSON.stringify(chainAnswers)})`,
+      );
+      // Both rooms are classrooms, so the two deletes ask after one chain.
+      // Whether the second is served the first's answer or waits on its
+      // reading depends on how the two decisions interleave; either way the
+      // chain is read once.
+      assert.strictEqual(
+        chainAnswers.read,
+        1,
+        `the classroom chain was read once for both deletes (chain answers: ${JSON.stringify(chainAnswers)})`,
       );
     });
 
