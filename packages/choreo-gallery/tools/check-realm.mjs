@@ -271,12 +271,19 @@ assert.deepEqual(
 
 // ---- the lessons ---------------------------------------------------------
 
-/** the cards a document embeds, `::card[…]`, outside its code */
+/**
+ * The cards a document embeds, `::card[…]`, outside its code: a fenced block
+ * closes on a fence of its own kind and at least its length, and an inline
+ * span on a run of backticks as long as the one that opened it.
+ */
 function cardEmbeds(markdown) {
   return [
     ...markdown
-      .replace(/```[\s\S]*?```/g, '')
-      .replace(/`[^`\n]*`/g, '')
+      .replace(
+        /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$/gm,
+        '',
+      )
+      .replace(/(`+)[^\n]*?\1/g, '')
       .matchAll(/::?card\[([^\]|]+?)\s*(?:\|[^\]]*)?\]/g),
   ].map((match) => match[1]);
 }
