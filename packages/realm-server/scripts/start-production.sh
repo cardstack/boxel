@@ -93,6 +93,7 @@ NODE_NO_WARNINGS=1 \
   --username='choreo_gallery_realm' \
   --fromUrl='https://app.boxel.ai/choreo-gallery/' \
   --toUrl='https://app.boxel.ai/choreo-gallery/' \
+  --publishable='https://app.boxel.ai/choreo-gallery/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

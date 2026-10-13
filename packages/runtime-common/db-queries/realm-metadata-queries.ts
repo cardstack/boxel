@@ -1,6 +1,7 @@
-// Read/write helpers for the owner-controlled realm archive flag stored
-// on realm_metadata.archived_at (NULL = active, non-null = archived at
-// that timestamp).
+// Read/write helpers for realm_metadata flags: the owner-controlled archive
+// flag stored on realm_metadata.archived_at (NULL = active, non-null =
+// archived at that timestamp), and the publishable flag for realms the
+// server mounts.
 import type { DBAdapter } from '../db.ts';
 import {
   dbExpression,
@@ -39,6 +40,22 @@ export async function unarchiveRealm(dbAdapter: DBAdapter, realmURL: URL) {
     `INSERT INTO realm_metadata (url, archived_at) VALUES (`,
     param(realmURL.href),
     `, NULL) ON CONFLICT (url) DO UPDATE SET archived_at = NULL, updated_at =`,
+    now,
+  ]);
+}
+
+// Mark a realm publishable, leaving its other flags alone. The realm server
+// calls this at startup for each mount it's told is publishable, since a
+// realm it mounts never goes through create-realm, which is what seeds the
+// flag for realms made in the app.
+export async function markRealmPublishable(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+) {
+  await query(dbAdapter, [
+    `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+    param(realmURL.href),
+    `, true) ON CONFLICT (url) DO UPDATE SET publishable = true, updated_at =`,
     now,
   ]);
 }
