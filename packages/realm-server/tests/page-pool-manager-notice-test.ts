@@ -46,6 +46,13 @@ function makeBrowserStub() {
   };
 }
 
+const POOL_SIZING_ENV_KEYS = [
+  'PRERENDER_PAGE_POOL_MIN',
+  'PRERENDER_PAGE_POOL_MAX',
+  'PRERENDER_PAGE_POOL_INITIAL',
+  'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
+];
+
 module(basename(import.meta.filename), function (hooks) {
   let manager: Server;
   // Every request the stand-in manager receives, with the server it names.
@@ -87,18 +94,31 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   function makePool(serverURL: string, registerWithManager?: boolean) {
-    let pool = new PagePool({
-      maxPages: 1,
-      serverURL,
-      browserManager: makeBrowserStub() as any,
-      boxelHostURL: 'http://localhost:4200',
-      standbyTimeoutMs: 500,
-      disableFileAdmission: true,
-      disableStandbyRefill: true,
-      ...(registerWithManager === undefined ? {} : { registerWithManager }),
-    });
-    pools.push(pool);
-    return pool;
+    // A pool sized by the environment would hold more than its one tab.
+    let sizing = POOL_SIZING_ENV_KEYS.map((key) => [key, process.env[key]]);
+    for (let key of POOL_SIZING_ENV_KEYS) {
+      delete process.env[key];
+    }
+    try {
+      let pool = new PagePool({
+        maxPages: 1,
+        serverURL,
+        browserManager: makeBrowserStub() as any,
+        boxelHostURL: 'http://localhost:4200',
+        standbyTimeoutMs: 500,
+        disableFileAdmission: true,
+        disableStandbyRefill: true,
+        ...(registerWithManager === undefined ? {} : { registerWithManager }),
+      });
+      pools.push(pool);
+      return pool;
+    } finally {
+      for (let [key, value] of sizing) {
+        if (value !== undefined) {
+          process.env[key!] = value;
+        }
+      }
+    }
   }
 
   test('only a pool whose server registers reports an evicted affinity', async function (assert) {
