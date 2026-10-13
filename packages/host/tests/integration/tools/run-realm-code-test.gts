@@ -86,6 +86,13 @@ boxel:
 ---
 # Test Skill
 `,
+          'pet.gts': `
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            export class Pet extends CardDef {
+              @field name = contains(StringField);
+            }
+          `,
         },
       }),
     );
@@ -152,6 +159,93 @@ return await realm.capture('seen.json');`,
       attachments[1].url,
       result.captures[0].url,
       'the capture rides as the media already uploaded',
+    );
+  });
+
+  test('opens the card the script returns to show', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('Pet/mango.json', JSON.stringify({
+  data: {
+    attributes: { name: 'Mango' },
+    meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+  },
+}));
+return { show: 'Pet/mango' };`,
+    });
+
+    assert.strictEqual(result.files[0]?.status, 'saved');
+    assert.strictEqual(result.shownCard, `${testRealmURL}Pet/mango`);
+    assert.notOk(result.showError);
+    let shownIds = operatorModeStateService.state.stacks
+      .flat()
+      .map((item) => item.id);
+    assert.true(
+      shownIds.includes(`${testRealmURL}Pet/mango`),
+      'the card is open on a stack',
+    );
+  });
+
+  test('show opens a file that is not a card in code mode', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return { show: 'notes/first.md' };`,
+    });
+
+    assert.strictEqual(result.shownCard, `${testRealmURL}notes/first.md`);
+    assert.notOk(result.showError);
+    assert.strictEqual(operatorModeStateService.state.submode, 'code');
+    assert.strictEqual(
+      operatorModeStateService.state.codePath?.href,
+      `${testRealmURL}notes/first.md`,
+    );
+  });
+
+  test('a card it cannot show does not fail the run', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({ stacks: [[]], submode: 'interact' });
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('seen.json', '{}');
+return { show: 'Pet/missing' };`,
+    });
+
+    assert.strictEqual(result.files[0]?.status, 'saved', 'files still report');
+    assert.notOk(result.shownCard);
+    assert.true(
+      /Not found: .*Pet\/missing/.test(result.showError ?? ''),
+      `says why: ${result.showError}`,
+    );
+
+    let outside = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return { show: 'https://example.com/card' };`,
+    });
+    assert.true(
+      /Path is outside this realm/.test(outside.showError ?? ''),
+      `refuses another realm: ${outside.showError}`,
+    );
+    assert.deepEqual(
+      operatorModeStateService.state.stacks.flat(),
+      [],
+      'nothing is opened',
     );
   });
 

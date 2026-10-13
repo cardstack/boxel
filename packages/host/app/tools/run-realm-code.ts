@@ -2,6 +2,7 @@ import { service } from '@ember/service';
 
 import {
   coerceErrorMessage,
+  isCardInstance,
   logger,
   rri,
   SupportedMimeType,
@@ -31,6 +32,8 @@ import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
 
 import LintAndFixTool from './lint-and-fix';
 import SetActiveLLMTool from './set-active-llm';
+import ShowCardTool from './show-card';
+import ShowFileTool from './show-file';
 import UpdateRoomSkillsTool from './update-room-skills';
 
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
@@ -423,6 +426,15 @@ class RealmFsSession {
     return url.endsWith('/') ? url : `${url}/`;
   }
 
+  // The card or file a script names to show, as a URL; a card's `.json` is
+  // dropped, so it is the instance URL. Takes the same path forms as a file.
+  cardURL(path: unknown): string {
+    if (typeof path !== 'string') {
+      throw new TypeError('`show` must be a card or file path string');
+    }
+    return this.resolve('show', path).replace(/\.json$/, '');
+  }
+
   private relative(url: string): string {
     return url.slice(this.realmURL.length);
   }
@@ -483,7 +495,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'look at what it made with realm.capture, can create workspaces with ' +
     'realm.workspaces.create, and can change the skills and model of this ' +
     'room with room.*. In a workspace the user can only read, reads work ' +
-    'and each write is refused.';
+    'and each write is refused. Return { show: "<card path>" } to open a ' +
+    'card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
   // `roomId` to that room, so a model cannot point the changes at another
@@ -638,8 +651,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let roomChanges = session.room.requested
       ? await this.changeRoom(roomId, session.room.requested)
       : [];
+    let shown = await this.showCard(session, runnerResult.scriptResult);
     let commandModule = await this.loadToolModule();
     return new commandModule.RunRealmCodeResult({
+      ...shown,
       files: [...session.saved].map(
         (fileUrl) =>
           new commandModule.RealmCodeFileResult({
@@ -772,6 +787,60 @@ export default class RunRealmCodeTool extends HostBaseTool<
     } catch (error) {
       log.warn(`Could not open new workspace ${url}`, error);
     }
+  }
+
+  // A script returns `{ show: 'Path/to-card' }` to open that card when the
+  // run ends, or `{ show: 'path/to/file.png' }` to open another file in code
+  // mode. The sandbox has no access to the UI: the host opens it, and only
+  // after it checks that the path is in this run's realm and exists. A path
+  // that cannot be shown does not fail the run; the result says why, next to
+  // the files it saved.
+  private async showCard(
+    session: RealmFsSession,
+    scriptResult: string,
+  ): Promise<{ shownCard?: string; showError?: string }> {
+    let value: unknown;
+    try {
+      value = JSON.parse(scriptResult);
+    } catch {
+      return {};
+    }
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !('show' in value)
+    ) {
+      return {};
+    }
+    let cardId: string;
+    try {
+      cardId = session.cardURL((value as { show: unknown }).show);
+      let source = await this.cardService.getSource(new URL(`${cardId}.json`));
+      if (source.status !== 200) {
+        // A path that names another file, such as an image or a module,
+        // opens that file in code mode.
+        let file = await this.cardService.getSource(new URL(cardId));
+        if (file.status !== 200) {
+          throw new Error(`Not found: ${cardId}`);
+        }
+        await new ShowFileTool(this.toolContext).execute({
+          fileIdentifier: cardId,
+        });
+        return { shownCard: cardId };
+      }
+      // The store's cached copy can predate a write this run just made, so
+      // the card is read from the realm.
+      let card = await this.store.getWithoutCache(cardId);
+      if (!isCardInstance(card)) {
+        throw new Error(`${cardId} is not a card instance: ${card.message}`);
+      }
+      await new ShowCardTool(this.toolContext).execute({ cardId });
+    } catch (error) {
+      let message = error instanceof Error ? error.message : String(error);
+      return { showError: `The card was not shown. ${message}` };
+    }
+    return { shownCard: cardId };
   }
 
   private async captureURL(
