@@ -60,10 +60,12 @@ export function renderSessionOf(auth: string): RenderSession {
   return { kind: 'unreadable' };
 }
 
-// The tabs of one affinity share a BrowserContext, and with it the
-// localStorage each render hands its sessions through, so an affinity must
-// never hold two sessions. A realm affinity is therefore split by the
-// sessions its render carries: the realm's own renders keep the bare
+// A render hands its tab its sessions through localStorage, which belongs
+// to the tab's BrowserContext, and an affinity's contexts serve render after
+// render: a tab is reused, a released affinity's context is kept for its next
+// visit, and a context can hold more than one of the affinity's tabs. So an
+// affinity must never hold two sessions. A realm affinity is therefore split
+// by the sessions its render carries: the realm's own renders keep the bare
 // `realm:<url>` key, and a render under anyone else's sessions gets a key of
 // its own, `realm:<url>#<session>`. Auth that cannot be read gets a key no
 // other auth shares. A user affinity already names one user.
