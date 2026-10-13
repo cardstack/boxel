@@ -5,10 +5,15 @@ import {
   isCardErrorJSONAPI,
   rri,
   type CardErrorJSONAPI,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
+import {
+  collectCardInstanceWarnings,
+  type LinkTargetStatus,
+} from '../lib/card-instance-warnings';
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
@@ -16,6 +21,7 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
@@ -75,6 +81,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     let commandModule = await this.loadToolModule();
     const { CorrectnessResultCard } = commandModule;
     let errors: string[] = [];
+    let warnings: string[] = [];
     let lintIssues: string[] = input.lintIssues ?? [];
 
     let sizeLimitError = this.cardService.getSizeLimitError(input.targetRef);
@@ -105,7 +112,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (!cardId) {
         throw new Error('Card correctness checks require a targetRef.');
       }
-      errors = await this.collectCardErrors(cardId, roomId);
+      ({ errors, warnings } = await this.collectCardErrors(cardId, roomId));
     }
 
     if (lintIssues.length) {
@@ -115,41 +122,100 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return new CorrectnessResultCard({
       correct: errors.length === 0,
       errors,
-      warnings: [],
+      warnings,
     });
   }
 
   private async collectCardErrors(
     cardId: string,
     roomId: string,
-  ): Promise<string[]> {
+  ): Promise<{ errors: string[]; warnings: string[] }> {
     await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
       cardId,
       cardIndexingTimeout,
     );
 
-    let error = await this.refreshCard(cardId);
+    let { error, instance } = await this.refreshCard(cardId);
 
     if (!error) {
       error = this.store.peekError(cardId);
     }
 
-    if (!error) {
+    if (error) {
+      return { errors: [this.describeCardError(cardId, error)], warnings: [] };
+    }
+    // The instance loaded cleanly, so the document can still carry mistakes
+    // that indexing accepts silently — undeclared fields, out-of-range enum
+    // values, dangling links. Report those as warnings: they never fail the
+    // check or trigger the automated fix loop.
+    let warnings = instance
+      ? await this.collectCardWarnings(cardId, instance)
+      : [];
+    return { errors: [], warnings };
+  }
+
+  private async collectCardWarnings(
+    cardId: string,
+    instance: CardDef,
+  ): Promise<string[]> {
+    try {
+      let { status, content } = await this.cardService.getSource(
+        rri(`${cardId}.json`),
+      );
+      if (status !== 200 || !isCardDocumentString(content)) {
+        return [];
+      }
+      let rawDoc = JSON.parse(content) as LooseSingleCardDocument;
+      let warnings = await collectCardInstanceWarnings({
+        cardId,
+        rawDoc,
+        instance,
+        loader: this.loaderService.loader,
+        checkLinkTarget: (targetId) => this.checkLinkTarget(targetId),
+      });
+      return warnings.map((warning) => `${cardId}: ${warning}`);
+    } catch (error) {
+      console.warn(
+        `CheckCorrectnessTool: unable to collect warnings for ${cardId}`,
+        error,
+      );
       return [];
     }
-    return [this.describeCardError(cardId, error)];
+  }
+
+  private async checkLinkTarget(targetId: string): Promise<LinkTargetStatus> {
+    try {
+      let error = this.store.peekError(targetId);
+      if (!error) {
+        let result = await this.store.getWithoutCache(targetId);
+        if (!isCardErrorJSONAPI(result)) {
+          return 'found';
+        }
+        error = result;
+      }
+      // A 404 that is only awaiting the index means the realm holds the
+      // source already — not a dangling link.
+      if (error.status === 404 && !error.awaitingIndex) {
+        return 'not-found';
+      }
+      return error.status === 404 ? 'found' : 'error';
+    } catch {
+      // infrastructure trouble, not evidence of a dangling link
+      return 'found';
+    }
   }
 
   private async refreshCard(
     cardId: string,
-  ): Promise<CardErrorJSONAPI | undefined> {
+  ): Promise<{ error?: CardErrorJSONAPI; instance?: CardDef }> {
     await this.store.waitForCardLoad(cardId);
     try {
       let result = await this.store.getWithoutCache(cardId);
       if (isCardErrorJSONAPI(result)) {
-        return result;
+        return { error: result };
       }
+      return { instance: result };
     } catch (error) {
       console.warn(
         `CheckCorrectnessTool: failed to refresh card ${cardId}`,
@@ -158,7 +224,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     } finally {
       await this.store.waitForCardLoad(cardId);
     }
-    return undefined;
+    return {};
   }
 
   private async collectModuleErrors(

@@ -1279,7 +1279,7 @@ const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing 
 2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
-  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist. Do not mention correctness or automated checks or tool calls.';
+  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist, and if a warning points at a mistake in what you just wrote — a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist — fix it now in the same reply. Do not mention correctness or automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
