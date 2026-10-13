@@ -7,9 +7,12 @@
  * - Every demo instance in realm/demos is well formed, the index card links
  *   exactly that set, and each demo carries a complete teaching lesson that
  *   names a known guide.
- * - Every guide meets the prose floor and has a preamble, the `-start`
- *   guides state their motivation and goals, and internal guide links
- *   resolve.
+ * - Every guide in realm/docs/guides meets the prose floor and has a
+ *   preamble, the `-start` guides state their motivation and goals, the
+ *   guides' index lists each guide once, and each guide's pager names its
+ *   neighbours in that order.
+ * - Every card a realm doc embeds (`::card[…]`) is a card instance in the
+ *   realm, and every demo has a guide that embeds it.
  * - The docs and design records in the realm link only to files and
  *   headings that exist; every import written in the docs, the guides and
  *   the package READMEs names an export its package has (the design
@@ -34,19 +37,7 @@ const root = path.resolve(
   '../../..',
 );
 const realm = path.join(root, 'packages/choreo-gallery/realm');
-/**
- * The guides and the guide pages that embed demos are still test-app
- * sources; the realm takes them over when the guides are ported.
- */
-const guidesDir = path.join(
-  root,
-  'packages/choreo-test-app/app/content/guides',
-);
-const guideEmbedSources = [
-  'packages/choreo-test-app/app/lib/guides.ts',
-  'packages/choreo-test-app/app/lib/guide-reference.ts',
-  'packages/choreo-test-app/app/lib/demo-guides.ts',
-];
+const guidesDir = path.join(realm, 'docs/guides');
 
 const readJSON = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 function source(file) {
@@ -132,7 +123,7 @@ assert.deepEqual(
 const pages = new Map(
   fs
     .readdirSync(guidesDir)
-    .filter((file) => file.endsWith('.md'))
+    .filter((file) => file.endsWith('.md') && file !== 'README.md')
     .map((file) => [
       file.slice(0, -3),
       fs.readFileSync(path.join(guidesDir, file), 'utf8'),
@@ -162,9 +153,6 @@ for (const [slug, markdown] of pages) {
       `${slug} needs section motivation and goals`,
     );
   }
-  for (const link of markdown.matchAll(/\]\(\/docs\/([^)#]+)(?:#[^)]*)?\)/g)) {
-    assert.ok(pages.has(link[1]), `${slug}: missing guide ${link[1]}`);
-  }
 }
 for (const item of inventory.entries) {
   assert.ok(
@@ -181,8 +169,40 @@ if (gaps.length) {
     `Expand these guides to ${inventory.minimumProseWords} prose words (code and tables excluded):\n${gaps.join('\n')}`,
   );
 }
+
+/*
+ * The guides' index gives them their order, and each guide ends on a pager
+ * naming its neighbours in it, so a reader can go through them in sequence.
+ */
+const order = [
+  ...fs
+    .readFileSync(path.join(guidesDir, 'README.md'), 'utf8')
+    .matchAll(/^- \[[^\]]+\]\(([\w-]+)\.md\)/gm),
+].map((match) => match[1]);
+assert.equal(new Set(order).size, order.length, 'A guide is indexed twice');
+assert.deepEqual(
+  [...order].sort(),
+  [...pages.keys()].sort(),
+  'realm/docs/guides/README.md must list every guide, and nothing else',
+);
+const titleOf = (slug) => pages.get(slug).match(/^# (.+)$/m)[1];
+order.forEach((slug, i) => {
+  const [prev, next] = [order[i - 1], order[i + 1]];
+  const pager = [
+    prev && `[← ${titleOf(prev)}](${prev}.md)`,
+    '[All guides](README.md)',
+    next && `[${titleOf(next)} →](${next}.md)`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  assert.equal(
+    pages.get(slug).trimEnd().split('\n').at(-1),
+    pager,
+    `${slug}: its pager must name its neighbours in the index`,
+  );
+});
 console.log(
-  `${actual.size} API/vocabulary entries mapped; ${pages.size} guides meet ${inventory.minimumProseWords} prose words; all preambles, section goals, and internal guide links pass.`,
+  `${actual.size} API/vocabulary entries mapped; ${pages.size} guides meet ${inventory.minimumProseWords} prose words; all preambles, section goals, the index and the pagers pass.`,
 );
 
 // ---- the catalog ---------------------------------------------------------
@@ -251,23 +271,20 @@ assert.deepEqual(
 
 // ---- the lessons ---------------------------------------------------------
 
-function literalIds(tree) {
-  const ids = new Set();
-  function visit(node) {
-    if (
-      ts.isPropertyAssignment(node) &&
-      node.name.getText(tree) === 'id' &&
-      ts.isStringLiteral(node.initializer)
-    ) {
-      ids.add(node.initializer.text);
-    }
-    ts.forEachChild(node, visit);
-  }
-  visit(tree);
-  return ids;
+/** the cards a document embeds, `::card[…]`, outside its code */
+function cardEmbeds(markdown) {
+  return [
+    ...markdown
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`\n]*`/g, '')
+      .matchAll(/::?card\[([^\]|]+?)\s*(?:\|[^\]]*)?\]/g),
+  ].map((match) => match[1]);
 }
 const embedded = new Set(
-  guideEmbedSources.flatMap((file) => [...literalIds(source(file))]),
+  [...pages.values()]
+    .flatMap(cardEmbeds)
+    .map((target) => target.match(/^\.\.\/\.\.\/demos\/([\w-]+)$/)?.[1])
+    .filter(Boolean),
 );
 for (const { file, slug, doc } of demos) {
   const where = `realm/demos/${file}`;
@@ -284,47 +301,6 @@ for (const { file, slug, doc } of demos) {
 }
 console.log(
   `${demos.length} demos are well formed, linked from the index, and have guide embeds and complete teaching lessons.`,
-);
-
-// ---- the test app's copy of the catalog and lessons ----------------------
-
-/*
- * The test app still renders its own gallery from catalog.ts and its guide
- * links from demo-lessons.json. Until it is retired, it must keep one lesson
- * per demo in its catalog, and every lesson the realm also has must read the
- * same in both places.
- */
-const testAppLessons = readJSON(
-  path.join(root, 'packages/choreo-test-app/app/content/demo-lessons.json'),
-);
-const testAppDemoIds = new Set([
-  ...literalIds(source('packages/choreo-test-app/app/lib/catalog.ts')),
-  ...literalIds(source('packages/choreo-test-app/app/lib/docs-demos.ts')),
-]);
-assert.equal(
-  new Set(testAppLessons.map((lesson) => lesson.id)).size,
-  testAppLessons.length,
-  'Duplicate lesson in choreo-test-app demo-lessons.json',
-);
-assert.deepEqual(
-  testAppLessons.map((lesson) => lesson.id).sort(),
-  [...testAppDemoIds].sort(),
-  'choreo-test-app demo-lessons.json needs one lesson per demo in its catalog',
-);
-const realmLessons = new Map(
-  demos.map(({ slug, doc }) => [slug, doc.attributes.lesson]),
-);
-for (const { id, ...lesson } of testAppLessons) {
-  if (realmLessons.has(id)) {
-    assert.deepEqual(
-      realmLessons.get(id),
-      lesson,
-      `The ${id} lesson differs between realm/demos/${id}.json and choreo-test-app demo-lessons.json`,
-    );
-  }
-}
-console.log(
-  `${testAppLessons.length} test-app lessons cover its catalog and match the realm's.`,
 );
 
 // ---- the docs ------------------------------------------------------------
@@ -446,6 +422,21 @@ for (const file of [...realmDocs, ...packageReadmes]) {
 }
 assert.deepEqual(brokenLinks, [], 'Broken links in the docs');
 
+/** an embed renders a card, so it names a card instance in the realm */
+const brokenEmbeds = [];
+for (const file of realmDocs) {
+  for (const target of cardEmbeds(read(file))) {
+    const resolved = path.resolve(path.dirname(file), decode(target) ?? '');
+    if (
+      !resolved.startsWith(realm + path.sep) ||
+      !fs.existsSync(`${resolved}.json`)
+    ) {
+      brokenEmbeds.push(`${relative(file)}: ::card[${target}]`);
+    }
+  }
+}
+assert.deepEqual(brokenEmbeds, [], 'Embeds that name no card in the realm');
+
 /*
  * Imports, wherever the docs show one. Choreo and Film moved out of
  * glimmer-motion into @cardstack/choreo, so a name imported from a package
@@ -556,11 +547,7 @@ function exportsOf(file) {
   return { names };
 }
 const moduleExports = memoized(exportsOf);
-const importedDocs = [
-  ...realmDocs,
-  ...markdownFiles(guidesDir),
-  ...packageReadmes,
-];
+const importedDocs = [...realmDocs, ...packageReadmes];
 const designDir = path.join(realm, 'design') + path.sep;
 const badImports = [];
 // the design records sketch APIs that were never built
