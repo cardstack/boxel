@@ -1357,10 +1357,6 @@ export async function setupAcceptanceTestRealm({
     audioSizeLimitBytes,
     videoSizeLimitBytes,
   });
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
-  });
   return result;
 }
 
@@ -1455,10 +1451,6 @@ export async function setupIntegrationTestRealm({
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
-  });
-  getTestRealmRegistry().set(result.realm.url, {
-    realm: result.realm,
-    adapter: result.adapter,
   });
   return result;
 }
@@ -1615,11 +1607,12 @@ async function setupTestRealm({
   await dbAdapter.execute(
     `CREATE TABLE IF NOT EXISTS users (matrix_user_id TEXT PRIMARY KEY, sessions_revoked_at INTEGER)`,
   );
+  let sessionFor: ((user: string) => Promise<RealmAction[]>) | undefined;
   if (enforcePermissions) {
     // The sessions the signed-in user is handed for this realm carry what the
     // realm will compute for them, read back from where the realm reads it,
     // since it refuses a session whose permissions differ from its own.
-    let sessionFor = async (user: string) =>
+    sessionFor = async (user: string) =>
       await fetchEffectiveRealmPermissions(
         dbAdapter,
         new URL(realmURL),
@@ -1697,6 +1690,7 @@ async function setupTestRealm({
   getTestRealmRegistry().set(realm.url, {
     realm,
     adapter,
+    ...(sessionFor ? { sessionPermissionsFor: sessionFor } : {}),
   });
 
   // we use this to run cards that were added to the test filesystem
