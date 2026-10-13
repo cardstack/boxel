@@ -2,6 +2,7 @@ import './setup-logger.ts'; // This should be first
 import * as Sentry from '@sentry/node';
 import { setErrorReporter } from '@cardstack/runtime-common/realm';
 import { scrubSecureOriginEvent } from './lib/secure-origin-telemetry.ts';
+import { guardedFetchIntegration } from './lib/outbound/sentry.ts';
 
 if (process.env.REALM_SENTRY_DSN) {
   Sentry.init({
@@ -12,6 +13,7 @@ if (process.env.REALM_SENTRY_DSN) {
     // must not carry what was sent to it.
     beforeSend: (event) => scrubSecureOriginEvent(event),
     beforeSendTransaction: (event) => scrubSecureOriginEvent(event),
+    integrations: [guardedFetchIntegration()],
   });
 
   setErrorReporter(Sentry.captureException);

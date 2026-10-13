@@ -15,6 +15,9 @@ import zlib from 'node:zlib';
 //                           a redirect to <url> (default 302)
 //   /slow?ms=N              200 after N milliseconds
 //   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE]
+//   /reflect-credential     200 whose body is the credential it received, bare
+//                           and not JSON: the `key` query parameter, else the
+//                           Authorization header without its scheme
 
 export interface StubVendorRequest {
   method: string;
@@ -97,6 +100,12 @@ export async function startStubVendor(): Promise<StubVendor> {
           numberParam(url, 'ms', 1000),
         );
         res.on('close', () => clearTimeout(timer));
+      } else if (url.pathname === '/reflect-credential') {
+        let credential =
+          url.searchParams.get('key') ??
+          String(req.headers.authorization ?? '').replace(/^Bearer /, '');
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(credential);
       } else if (url.pathname === '/sse') {
         let cost = numberParam(url, 'cost', 0.002);
         res.writeHead(200, { 'content-type': 'text/event-stream' });

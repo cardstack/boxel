@@ -15,12 +15,17 @@ import {
   handleStreamingRequest,
   isClientDisconnectError,
   outboundFailureResponse,
+  outboundLogContext,
+  systemKeyCredential,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
 import {
   forbiddenOutboundHeaders,
   outboundFetch,
+  type OutboundErrorContext,
 } from '../lib/outbound/client.ts';
+import { scrubError } from '../lib/outbound/scrub-error.ts';
+import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
 import * as Sentry from '@sentry/node';
 
@@ -138,6 +143,12 @@ export default function handleRequestForward({
     // ends, so an upstream request nobody is reading any more keeps that slot
     // for as long as it runs — on a slow model call, over a minute.
     let clientGone = clientDisconnectSignal(ctxt);
+    // Holds every form of the credential the outbound client attaches. No
+    // error from this call is logged, reported or answered with until it has
+    // been scrubbed with it.
+    let scrubber = new CredentialScrubber();
+    // The key and the URL as the caller sent it, once the call has a key.
+    let call: OutboundErrorContext | undefined;
 
     try {
       // 1. Validate JWT token and extract user
@@ -223,31 +234,14 @@ export default function handleRequestForward({
         }
       }
 
-      // Build headers and URL based on authentication method
-      let finalUrl = json.url;
+      // The outbound client attaches the system key where the endpoint's
+      // configuration puts it. The URL and headers built here never carry it,
+      // so what is recorded about this call is the URL the caller sent.
       const headers: Record<string, string> = {
         ...(json.headers ?? {}),
       };
-
-      // Add authentication based on the configured method
-      let credentialHeaders: string[] = [];
-      if (destinationConfig.authMethod === 'url-parameter') {
-        const paramName = destinationConfig.authParameterName || 'key';
-        const url = new URL(json.url);
-        url.searchParams.set(paramName, destinationConfig.apiKey);
-        finalUrl = url.toString();
-      } else if (
-        destinationConfig.authMethod === 'header' &&
-        destinationConfig.authParameterName
-      ) {
-        headers[destinationConfig.authParameterName] =
-          `Bearer ${destinationConfig.apiKey}`;
-        credentialHeaders = [destinationConfig.authParameterName];
-      } else {
-        // Default to header authentication
-        headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
-        credentialHeaders = ['Authorization'];
-      }
+      const credential = systemKeyCredential(destinationConfig);
+      call = { keyName: credential.name, url: json.url };
 
       let finalBody: BodyInit | undefined;
       if (json.multipart) {
@@ -321,13 +315,13 @@ export default function handleRequestForward({
           if (json.stream) {
             return await handleStreamingRequest(
               ctxt,
-              finalUrl,
+              json.url,
               json.method,
               headers,
               finalBody,
               matrixUserId,
               clientGone,
-              credentialHeaders,
+              { credential, scrubber },
             );
           }
 
@@ -339,14 +333,15 @@ export default function handleRequestForward({
           // for the tokens, and abandoning the read only loses the charge.
           const upstreamCall = upstreamCallSignal(clientGone);
           const externalResponse = await outboundFetch({
-            url: finalUrl,
+            url: json.url,
             method: json.method,
             headers,
             // Only non-GET requests carry a body
             body: json.method !== 'GET' ? finalBody : undefined,
             signal: upstreamCall.signal,
             sizePath: 'system-key',
-            credentialHeaders,
+            credential,
+            scrubber,
           });
           upstreamCall.release();
 
@@ -365,6 +360,7 @@ export default function handleRequestForward({
         },
       );
     } catch (error) {
+      scrubError(error, scrubber);
       if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to
         // answer and nothing an on-call engineer could act on, so this stays
@@ -377,7 +373,7 @@ export default function handleRequestForward({
       let failure = outboundFailureResponse(error);
       if (failure) {
         log.warn(
-          `Request forward stopped by the outbound guard: ${failure.message}`,
+          `Request forward stopped by the outbound guard: ${failure.message}${outboundLogContext(error, call)}`,
         );
         await sendResponseForError(
           ctxt,
@@ -387,7 +383,10 @@ export default function handleRequestForward({
         );
         return;
       }
-      log.error('Error in request forward handler:', error);
+      log.error(
+        `Error in request forward handler${outboundLogContext(error, call)}:`,
+        error,
+      );
       Sentry.captureException(error);
       await sendResponseForSystemError(
         ctxt,
