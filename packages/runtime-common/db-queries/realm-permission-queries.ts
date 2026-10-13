@@ -164,13 +164,23 @@ export async function fetchEffectiveRealmPermissions(
 // matrix account or not) and `users` (any registered matrix user).
 const wildcardUsernames = new Set(['*', 'users']);
 
-// The platform's service accounts, by matrix localpart. A realm's own matrix
-// user (`@realm/…`) is a bot too.
+// The platform's service accounts, by matrix localpart.
 const botLocalparts = new Set([aiBotUsername, submissionBotUsername]);
 
+// A realm's own matrix user is `@realm/…` for a published realm and
+// `@<name>_realm` for a bootstrap realm; the shared accounts that sync content
+// into bootstrap realms are `@<name>_writer`. Matching the naming convention,
+// rather than listing the accounts, keeps a newly added bootstrap realm from
+// counting as a person. Registration doesn't reserve the suffixes, so a person
+// who picks one is treated as a bot, which only ever withholds something.
+const botLocalpartSuffixes = ['_realm', '_writer'];
+
 export function isBotAccount(userId: string): boolean {
+  let localpart = getMatrixUsername(userId);
   return (
-    userId.startsWith('@realm/') || botLocalparts.has(getMatrixUsername(userId))
+    localpart.startsWith('realm/') ||
+    botLocalparts.has(localpart) ||
+    botLocalpartSuffixes.some((suffix) => localpart.endsWith(suffix))
   );
 }
 

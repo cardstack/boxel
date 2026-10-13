@@ -97,12 +97,16 @@ module(basename(import.meta.filename), function () {
         '@realm/test:localhost': ['read', 'write', 'realm-owner'],
         '@aibot:localhost': ['read', 'write'],
         '@submissionbot:localhost': ['read', 'write'],
+        '@skills_realm:localhost': ['read', 'write', 'realm-owner'],
+        '@skills_writer:localhost': ['read', 'write'],
       });
 
       for (let bot of [
         '@realm/test:localhost',
         '@aibot:localhost',
         '@submissionbot:localhost',
+        '@skills_realm:localhost',
+        '@skills_writer:localhost',
       ]) {
         assert.false(
           await isDirectWriter(dbAdapter, realmURL, bot),

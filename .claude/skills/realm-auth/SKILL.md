@@ -97,8 +97,11 @@ a pipeline they pay for). `isDirectWriter` / `fetchDirectWriters` in
 `db-queries/realm-permission-queries.ts` answer it from the user's own row
 alone. Wildcard rows (`*`, `users`) are excluded because they grant write to
 everyone they match without naming anyone, so no one is accountable through
-them; bot accounts (`isBotAccount`) and policy grants are excluded for the
-same reason. Never answer this question with the effective set.
+them. A bot account (`isBotAccount`, which matches the realm-user and
+service-writer naming conventions) acts for the platform rather than a person,
+and a policy grant admits a write without making its caller a writer of the
+realm, so neither counts either. Never answer this question with the effective
+set.
 
 **Realm-server session**: `retrieveTokenClaim` (signature + `exp`) plus the same
 revocation check, at each of `jwtMiddleware`, `multiRealmAuthorization`, and
