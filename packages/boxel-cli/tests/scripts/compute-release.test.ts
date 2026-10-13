@@ -324,7 +324,6 @@ describe('computeRelease', () => {
 describe('BUNDLED_SOURCE_DIRS', () => {
   const repoRoot = resolve(import.meta.dirname, '../../../..');
   const workflowsDir = resolve(repoRoot, '.github/workflows');
-  const packageOf = (dir: string) => dir.split('/')[1];
 
   function triggerPaths(workflowFile: string, event: string): string[] {
     const workflow = parseYaml(
@@ -343,26 +342,26 @@ describe('BUNDLED_SOURCE_DIRS', () => {
     );
   });
 
-  it('lists only sources build-types.ts bundles', () => {
+  // The bump comes from the PR title, so a directory whose PRs may carry a
+  // plain title would publish nothing even when listed.
+  it('lists exactly the bundled sources whose PRs need a conventional-commit title', () => {
+    const titleChecked = new Set(
+      readdirSync(workflowsDir)
+        .filter((file) => file.endsWith('-pr-title.yml'))
+        .flatMap((file) => triggerPaths(file, 'pull_request')),
+    );
     const buildTypes = readFileSync(
       resolve(import.meta.dirname, '../../scripts/build-types.ts'),
       'utf8',
     );
-    for (const dir of BUNDLED_SOURCE_DIRS) {
-      expect(buildTypes, dir).toContain(
-        `join(MONOREPO_PACKAGES, '${packageOf(dir)}', 'src')`,
-      );
-    }
-  });
-
-  // The bump comes from the PR title, so a directory whose PRs may carry a
-  // plain title would publish nothing even when listed.
-  it('lists only packages whose PRs need a conventional-commit title', () => {
-    const titleChecked = readdirSync(workflowsDir)
-      .filter((file) => file.endsWith('-pr-title.yml'))
-      .flatMap((file) => triggerPaths(file, 'pull_request'));
-    for (const dir of BUNDLED_SOURCE_DIRS) {
-      expect(titleChecked, dir).toContain(`packages/${packageOf(dir)}/**`);
-    }
+    const bundledSrc = [
+      ...buildTypes.matchAll(/join\(MONOREPO_PACKAGES, '([^']+)', 'src'\)/g),
+    ].map(([, pkg]) => pkg);
+    expect(
+      bundledSrc
+        .filter((pkg) => titleChecked.has(`packages/${pkg}/**`))
+        .map((pkg) => `packages/${pkg}/src/`)
+        .sort(),
+    ).toEqual([...BUNDLED_SOURCE_DIRS].sort());
   });
 });
