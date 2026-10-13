@@ -618,6 +618,31 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('exactly the search routes admit a verified user the ACL refuses in a realm with no policy', async function (assert) {
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter((route) => route.admitsVerifiedNonReaders)
+          .map((route) => `${route.method} ${route.mimeType} ${route.path}`)
+          .sort(),
+        [
+          `GET ${SupportedMimeType.CardJson} /_search`,
+          `QUERY ${SupportedMimeType.CardJson} /_search`,
+        ].sort(),
+        'the search, which answers such a user with no rows as a federated search does',
+      );
+      assert.deepEqual(
+        testRealm
+          .routeDescriptions()
+          .filter(
+            (route) =>
+              route.admitsVerifiedNonReaders && !route.consumesCoarseOutcome,
+          ),
+        [],
+        'each of them consumes the ACL’s outcome',
+      );
+    });
+
     test('exactly the routes that serve code and the file tree are coarse-read-only', async function (assert) {
       assert.deepEqual(
         testRealm

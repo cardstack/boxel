@@ -20,6 +20,7 @@
     ],
     "realmServer": [
       "catalog-test-subset-test",
+      "realm-endpoints/search-test",
       "realm-policy-activation-test",
       "realm-policy-anonymous-explain-test",
       "realm-policy-anonymous-named-operation-test",

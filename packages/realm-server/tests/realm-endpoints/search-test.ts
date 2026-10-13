@@ -11,11 +11,18 @@ import {
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   connectionTenantsDuring,
+  createJWT,
   definitionCacheReads,
   indexReads,
+  realmConfigCardJSON,
   setupPermissionedRealmCached,
   testRealmURLFor,
 } from '../helpers/index.ts';
+import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
+import {
+  setPolicySearchScopeSink,
+  type PolicySearchScopeEvent,
+} from '@cardstack/runtime-common/card-operations';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
@@ -396,4 +403,256 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
   });
+
+  // A realm's own search answers a verified user it doesn't let read it the
+  // way a federated search does: with the rows their grants admit, and so
+  // with none from a realm that names no policy, whose answer is the one a
+  // realm gives when its policy grants them nothing.
+  module(
+    'Realm-specific Endpoints | _search by a caller who may not read the realm',
+    function (hooks) {
+      const OWNER = '@owner:localhost';
+      const READER = '@reader:localhost';
+      const STRANGER = '@stranger:localhost';
+
+      let testRealm: Realm;
+      let request: SuperTest<Test>;
+      let realmHref: string;
+      let realmPath: string;
+
+      setupCatalogTestSubset(hooks);
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL: testRealmURLFor('private-search/'),
+        permissions: {
+          [OWNER]: ['read', 'write', 'realm-owner'],
+          [READER]: ['read'],
+        },
+        fileSystem: {
+          'person.gts': `
+            import { contains, field, CardDef } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
+            import { operation } from "@cardstack/base/operations";
+
+            export class Person extends CardDef {
+              @field firstName = contains(StringField);
+
+              @operation static listPeople = {
+                base: 'query',
+                query: { filter: { type: () => Person } },
+              };
+            }
+          `,
+          'john.json': {
+            data: {
+              attributes: { firstName: 'John' },
+              meta: {
+                adoptsFrom: { module: rri('./person'), name: 'Person' },
+              },
+            },
+          },
+        },
+        onRealmSetup(args) {
+          testRealm = args.testRealm;
+          request = args.request;
+          realmHref = new URL(testRealm.url).href;
+          realmPath = new URL(testRealm.url).pathname;
+        },
+      });
+
+      // The token carries the permissions the realm's ACL grants `user`, as
+      // a session the realm issued would.
+      function search(
+        user?: string,
+        permissions: ('read' | 'write')[] = [],
+        body: Record<string, unknown> = {
+          filter: {
+            'item.on': { module: `${realmHref}person`, name: 'Person' },
+          },
+        },
+      ) {
+        let req = request
+          .post(`${realmPath}_search`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('X-HTTP-Method-Override', 'QUERY');
+        if (user) {
+          req = req.set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, user, permissions)}`,
+          );
+        }
+        return req.send(body);
+      }
+
+      function namedSearch(
+        user: string,
+        query: { operation: string; on: { module: string; name: string } },
+        permissions: ('read' | 'write')[] = [],
+      ) {
+        return search(user, permissions, query);
+      }
+
+      // Points the realm at a policy that lets anyone read a person they were
+      // handed and grants no search at all.
+      async function nameAPolicyGrantingNoSearch() {
+        await testRealm.write(
+          'policies/policy.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                rules: [
+                  {
+                    targetType: { module: '../person', name: 'Person' },
+                    grants: [{ operation: 'read' }],
+                  },
+                ],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+                  name: 'RealmPolicy',
+                },
+              },
+            },
+          }),
+        );
+        await testRealm.write(
+          'realm.json',
+          realmConfigCardJSON({ policy: `${realmHref}policies/policy` }),
+        );
+        await testRealm.indexing();
+      }
+
+      test('a realm with no policy answers a verified non-reader with no rows, as a realm whose policy grants them nothing does', async function (assert) {
+        let noPolicy = await search(STRANGER);
+        assert.strictEqual(noPolicy.status, 200, 'HTTP 200 status');
+        assert.deepEqual(noPolicy.body.data, [], 'no rows');
+        assert.strictEqual(noPolicy.body.meta.page.total, 0);
+        assert.deepEqual(
+          noPolicy.body.meta.policyScopedRealms,
+          [realmHref],
+          'marked policy-scoped',
+        );
+
+        await nameAPolicyGrantingNoSearch();
+        assert.deepEqual(
+          await testRealm.getRealmPolicy(),
+          { card: `${realmHref}policies/policy` },
+          'the realm now names a policy',
+        );
+        let grantsNothing = await search(STRANGER);
+        assert.strictEqual(grantsNothing.status, 200);
+        assert.strictEqual(
+          noPolicy.text,
+          grantsNothing.text,
+          'the two answers are byte for byte alike',
+        );
+      });
+
+      test('a named query from a verified non-reader is answered with no rows without its declaration being read', async function (assert) {
+        let person = { module: `${realmHref}person`, name: 'Person' };
+        let declared = await namedSearch(STRANGER, {
+          operation: 'listPeople',
+          on: person,
+        });
+        assert.strictEqual(declared.status, 200, 'HTTP 200 status');
+        assert.deepEqual(declared.body.data, [], 'no rows');
+        assert.deepEqual(
+          declared.body.meta.policyScopedRealms,
+          [realmHref],
+          'marked policy-scoped',
+        );
+
+        let undeclared = await namedSearch(STRANGER, {
+          operation: 'everything',
+          on: person,
+        });
+        assert.strictEqual(
+          undeclared.text,
+          declared.text,
+          'an operation the type does not declare is answered byte for byte as the declared one is',
+        );
+
+        let missingType = await namedSearch(STRANGER, {
+          operation: 'listPeople',
+          on: { module: `${realmHref}no-such-module`, name: 'Nothing' },
+        });
+        assert.strictEqual(
+          missingType.text,
+          declared.text,
+          'and so is a type the realm does not hold',
+        );
+
+        let reader = await namedSearch(
+          READER,
+          { operation: 'listPeople', on: person },
+          ['read'],
+        );
+        assert.deepEqual(
+          reader.body.data.map((entry: { id: string }) => entry.id),
+          [`${realmHref}john`],
+          'a reader is answered with the rows the declaration resolves to',
+        );
+      });
+
+      test('a search of a realm with no policy records no policy consultation', async function (assert) {
+        let person = { module: `${realmHref}person`, name: 'Person' };
+        let recorded: PolicySearchScopeEvent[] = [];
+        setPolicySearchScopeSink((event) => recorded.push(event));
+        try {
+          let adHoc = await search(STRANGER);
+          let named = await namedSearch(STRANGER, {
+            operation: 'listPeople',
+            on: person,
+          });
+          assert.strictEqual(adHoc.status, 200);
+          assert.strictEqual(named.status, 200);
+          assert.deepEqual(
+            recorded,
+            [],
+            'neither search records a policy-search-scope event',
+          );
+
+          await nameAPolicyGrantingNoSearch();
+          let consulted = await search(STRANGER);
+          assert.strictEqual(consulted.status, 200);
+          assert.deepEqual(
+            recorded.map((event) => event.realmURL),
+            [realmHref],
+            'the same search records one once the realm names a policy',
+          );
+        } finally {
+          setPolicySearchScopeSink(undefined);
+        }
+      });
+
+      test('a request that authenticated nobody is told to authenticate', async function (assert) {
+        let response = await search();
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('a reader gets the rows the realm holds', async function (assert) {
+        let response = await search(READER, ['read']);
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body.data.map((entry: { id: string }) => entry.id),
+          [`${realmHref}john`],
+        );
+        assert.strictEqual(
+          response.body.meta.policyScopedRealms,
+          undefined,
+          'not marked policy-scoped',
+        );
+      });
+
+      test('the card+json read still refuses a verified non-reader', async function (assert) {
+        let response = await request
+          .get(`${realmPath}john`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Authorization', `Bearer ${createJWT(testRealm, STRANGER)}`);
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      });
+    },
+  );
 });

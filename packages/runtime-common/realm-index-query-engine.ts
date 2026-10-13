@@ -1437,7 +1437,9 @@ export class RealmIndexQueryEngine {
       // a count, each withhold precisely the quantity needed to make the sum a
       // count — so what is left is a floor, and publishing it would hand a
       // rollup a confident figure over an incomplete set. That is the failure
-      // this total exists to report rather than a smaller version of it.
+      // this total exists to report rather than a smaller version of it. A
+      // realm the caller may search but not read is neither: it answers with
+      // a count of 0, which is its share of the sum.
       // Unknown is the honest answer, and a consumer tells it from a real count
       // because it is absent rather than zero.
       //
@@ -1634,6 +1636,11 @@ export class RealmIndexQueryEngine {
         },
         body: JSON.stringify({ ...wireQuery, realms: realmList }),
       });
+      // A peer realm that lets the caller search it but not read it is not a
+      // failure: it answers with no rows and a count of 0, as a realm holding
+      // nothing for the caller does, so it contributes 0 to the total. What
+      // still refuses the search outright is a 401, for a request the peer
+      // could not authenticate, and a 403 from an archived realm's seal.
       if (!response.ok) {
         let type: QueryFieldErrorType =
           response.status === 401 || response.status === 403
