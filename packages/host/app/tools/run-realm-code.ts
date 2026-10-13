@@ -443,7 +443,9 @@ class RealmFsSession {
         return await this.searchCards(args[0]);
       // A card is read as the indexed instance, not as its file, so it does
       // not count toward MAX_FILES and does not see this run's unsaved
-      // state.
+      // state. Values cross into the sandbox only as JSON, so the script gets
+      // the card serialized, as read-card-for-ai-assistant sends it to the
+      // model, and not an instance.
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
         let { data } = await this.readCard(id);
