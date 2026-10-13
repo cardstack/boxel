@@ -3,7 +3,7 @@
  *
  * A card cannot run a film: the grid mounts forty-odd demos at once and
  * these two are the most expensive things in the building, so the tile
- * wears a poster instead (see packages/choreo-test-app/app/components/film-tile.gts).
+ * wears a poster instead (see packages/choreo-gallery/realm/shell/film-tile.gts).
  * The poster is not drawn — it is the film, one frame of it, read back
  * through the picture port's own `snapshot()`. That is the same call
  * every still join makes, so the still is graded exactly as the film
@@ -11,15 +11,14 @@
  *
  * Headless and muted, which matters: this boots a narrated film.
  *
- *   pnpm --filter test-app start          # in another shell
- *   node packages/choreo-gallery/tools/film-poster.mjs towers gate 18 13
- *   cwebp -q 78 out/towers-gate.jpg -o packages/choreo-test-app/public/towers-poster.webp
+ *   pnpm --filter choreo-film-app start   # in another shell
+ *   node packages/choreo-gallery/tools/film-poster.mjs towers 18 13
+ *   cwebp -q 78 out/towers-18.jpg -o packages/choreo-gallery/realm/asset/towers-poster.webp
  *
- * A shot is a beat index (`?from=N`), or the word `gate`, which captures
- * the film's own door — the evening the construct dresses the poster
- * circuit in, art-directed for exactly this purpose. Both shipped
- * posters are `gate` and the Sagrada one is beat 24, its centenary
- * night; capture several and look at them before choosing.
+ * A shot is a beat index, opened as `?film=<name>&from=N` on the film
+ * app's dev server (FILM_ORIGIN, Vite's port by default). The Sagrada
+ * poster is beat 24, its centenary night; capture several and look at
+ * them before choosing.
  */
 /* An authoring tool, not shipped code: it needs Node 22 for the built-in
    WebSocket it drives Chrome's debugging protocol over, and it is a CLI,
@@ -30,8 +29,8 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const PORT = 9333;
-const ORIGIN = process.env['FILM_ORIGIN'] ?? 'http://localhost:4200';
+const PORT = Number(process.env['FILM_PORT'] ?? 9333);
+const ORIGIN = process.env['FILM_ORIGIN'] ?? 'http://localhost:5173';
 const OUT = process.env['FILM_OUT'] ?? 'out';
 const FILM = process.argv[2];
 const SHOTS = process.argv.slice(3);
@@ -99,10 +98,7 @@ async function main() {
   await send('Runtime.enable');
 
   for (const shot of SHOTS) {
-    const url =
-      shot === 'gate'
-        ? `${ORIGIN}/${FILM}`
-        : `${ORIGIN}/${FILM}?embed&from=${shot}`;
+    const url = `${ORIGIN}/?film=${FILM}&from=${shot}`;
     await send('Page.navigate', { url });
     await sleep(SETTLE);
     /* the picture is a same-origin iframe; __film is its port */
