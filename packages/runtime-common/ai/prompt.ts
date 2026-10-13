@@ -76,7 +76,7 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
-import { stopInForce } from './stop.ts';
+import { readStopState } from './stop.ts';
 import {
   compactionSummaryMessage,
   getLatestCompaction,
@@ -240,13 +240,22 @@ export async function getPromptParts(
     client,
   );
   // A stop holds the whole loop, including the correctness check a code
-  // patch would otherwise kick off. constructHistory keeps only messages and
-  // tool results, so the stop is read from the raw event list.
-  let stopped = stopInForce(eventList, aiBotUserId) !== undefined;
-  let shouldRespond = !stopped && getShouldRespond(history);
-  let pendingCodePatchCorrectnessChecks = stopped
+  // patch would otherwise kick off; and the edits of a stopped answer are
+  // never checked, not even once the user writes again. constructHistory
+  // keeps only messages and tool results, so the stop is read from the raw
+  // event list.
+  let { inForce: stop, stoppedMessageIds } = readStopState(
+    eventList,
+    aiBotUserId,
+  );
+  let shouldRespond = !stop && getShouldRespond(history);
+  let pendingCodePatchCorrectnessChecks = stop
     ? undefined
-    : collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
+    : collectPendingCodePatchCorrectnessCheck(
+        history,
+        aiBotUserId,
+        stoppedMessageIds,
+      );
   if (!shouldRespond) {
     return {
       shouldRespond: false,
@@ -1757,13 +1766,19 @@ function addHistoryCacheBreakpoint(
 function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  // The answers the user stopped (see readStopState); their edits are never
+  // checked. Edits that landed before the stop are ones the user walked
+  // away from, and checking them later would only delay the answer to
+  // whatever they write next.
+  stoppedMessageIds: ReadonlySet<string> = new Set(),
 ): PendingCodePatchCorrectnessCheck | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
       event.type !== 'm.room.message' ||
       event.sender !== aiBotUserId ||
-      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE ||
+      stoppedMessageIds.has(event.event_id)
     ) {
       continue;
     }

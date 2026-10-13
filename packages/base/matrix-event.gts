@@ -394,6 +394,11 @@ export interface ToolResultWithOutputContent {
   // some of its files, or a skill read whose declared tools lack usable
   // indexed definitions and so cannot be offered).
   failureReason?: string;
+  // Present on a result of a call the user asked to go ahead (Run, Retry,
+  // Accept All, Approve). It lifts a stop the user pressed, as a message from
+  // them would (see runtime-common/ai/stop.ts). A decline or a result the
+  // host sent on its own never carries it.
+  resumesAssistant?: true;
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
@@ -418,6 +423,8 @@ export interface ToolResultWithNoOutputContent {
   msgtype: ToolResultWithNoOutputMsgtype;
   commandRequestId: string;
   failureReason?: string; // only present if status is 'failed' or 'invalid'
+  // See ToolResultWithOutputContent.resumesAssistant.
+  resumesAssistant?: true;
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];

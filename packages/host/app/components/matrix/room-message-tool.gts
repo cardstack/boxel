@@ -138,12 +138,13 @@ export default class RoomMessageTool extends Component<Signature> {
     // event and the button transitions to its invalid state — no risk of
     // the spinner sticking.
     if ((status === 'ready' || status === undefined) && this.willAutoExecute) {
-      // A stop keeps a tool that has not started from ever starting.
+      // A stop keeps a tool that has not started from ever starting; one
+      // already running finishes, and reads as applying until its result
+      // lands.
       let { roomResource, messageTool } = this.args;
       if (
-        roomResource.stoppedMessageEventId &&
-        roomResource.stoppedMessageEventId ===
-          roomResource.messageForEventId(messageTool.eventId)?.eventId
+        roomResource.wasEverStopped(messageTool.eventId) &&
+        !this.toolService.currentlyExecutingToolRequestIds.has(messageTool.id!)
       ) {
         return 'canceled';
       }

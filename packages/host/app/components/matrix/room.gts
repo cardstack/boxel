@@ -2147,7 +2147,9 @@ export default class Room extends Component<Signature> {
   // result yet, after which ai-bot starts the next turn on its own. Stop is
   // offered for all of it, and a stop ends the loop. A host tool runs only in
   // the client that sent the request, so only that client counts it as
-  // running; elsewhere the tool shows as an ordinary call.
+  // running; elsewhere the tool shows as an ordinary call. A tool that can
+  // never get a result (its result failed to send, or its answer ended in an
+  // error) is not running either.
   @cached
   private get assistantLoopActive() {
     let lastMessage = this.messages[this.messages.length - 1];
@@ -2155,7 +2157,8 @@ export default class Room extends Component<Signature> {
       !lastMessage ||
       lastMessage.author.userId !== this.matrixService.aiBotUserId ||
       lastMessage.isCanceled ||
-      this.args.roomResource.stoppedMessageEventId === lastMessage.eventId
+      lastMessage.errorMessage ||
+      this.args.roomResource.isStopped(lastMessage.eventId)
     ) {
       return false;
     }
@@ -2173,6 +2176,7 @@ export default class Room extends Component<Signature> {
           tool.status === 'applying' ||
           tool.status === undefined) &&
         !tool.awaitsApproval &&
+        !this.matrixService.failedToolState.has(tool.id!) &&
         (tool.executedBy === AI_BOT_EXECUTOR ||
           isAutoExecutableTool(tool, activeMode, isOwnedByCurrentAgent)),
     );

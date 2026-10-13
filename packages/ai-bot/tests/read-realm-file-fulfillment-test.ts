@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadRealmFileCalls } from '../lib/bot-tools/read-realm-file/fulfillment.ts';
+import {
+  fulfillReadRealmFileCall,
+  type ReadRealmFileFulfillmentDeps,
+  type ReadRealmFileFulfillmentOutcome,
+} from '../lib/bot-tools/read-realm-file/fulfillment.ts';
 import {
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
@@ -11,7 +15,6 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 
 const ON_BEHALF_OF = '@user:localhost';
 const AGENT_ID = 'agent-1';
@@ -72,6 +75,19 @@ function baseDeps(client: any, extra: object = {}) {
     delegatedUserRealmSessions: sessions(),
     ...extra,
   };
+}
+
+// The calls of one response, fulfilled one at a time as the bot's call loop
+// does.
+async function fulfillReadRealmFileCalls(
+  calls: any[],
+  deps: ReadRealmFileFulfillmentDeps,
+): Promise<ReadRealmFileFulfillmentOutcome[]> {
+  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
+  for (let call of calls) {
+    outcomes.push(await fulfillReadRealmFileCall(call, deps));
+  }
+  return outcomes;
 }
 
 // Reads the (stringified) data payload back off a recorded event.
@@ -559,44 +575,5 @@ module('fulfillReadRealmFileCalls', () => {
       dataOf(sent[0]).attachedFiles[0].url,
       dataOf(sent[1]).attachedFiles[0].url,
     );
-  });
-
-  test('a stop during a read cancels the calls after it, not the one running', async () => {
-    let { client, sent } = fakeClient();
-    let stopped = false;
-    let fetches = 0;
-    let fetchFile = fileMetaFetch([]);
-
-    let outcomes = await fulfillReadRealmFileCalls(
-      [
-        readRealmFileCall('c1', { urls: [FILE_URL] }),
-        readRealmFileCall('c2', { urls: [FILE_URL] }),
-      ],
-      baseDeps(client, {
-        fetch: (async (...args: Parameters<typeof globalThis.fetch>) => {
-          fetches++;
-          // The user presses Stop while this read is running.
-          stopped = true;
-          return await fetchFile(...args);
-        }) as typeof globalThis.fetch,
-        uploadText: async () => 'https://localhost/media/trip-planner',
-        stopped: () => stopped,
-      }),
-    );
-
-    assert.strictEqual(fetches, 1, 'the second call is never read');
-    assert.deepEqual(outcomes, [
-      { commandRequestId: 'c1', ok: true, published: true },
-      {
-        commandRequestId: 'c2',
-        ok: false,
-        error: STOPPED_TOOL_CALL_REASON,
-        published: true,
-      },
-    ]);
-    assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
-    assert.strictEqual(sent[1].content.commandRequestId, 'c2');
-    assert.strictEqual(sent[1].content['m.relates_to'].key, 'canceled');
-    assert.strictEqual(sent[1].content.failureReason, STOPPED_TOOL_CALL_REASON);
   });
 });

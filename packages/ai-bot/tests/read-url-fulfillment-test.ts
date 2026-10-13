@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadUrlCalls } from '../lib/bot-tools/read-url/fulfillment.ts';
+import {
+  fulfillReadUrlCall,
+  type ReadUrlFulfillmentDeps,
+  type ReadUrlFulfillmentOutcome,
+} from '../lib/bot-tools/read-url/fulfillment.ts';
 import {
   READ_URL_MAX_CALLS_PER_RESPONSE,
   READ_URL_TOOL_NAME,
@@ -12,7 +16,6 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 
 const ROOM_ID = '!room:localhost';
 const REQUEST_EVENT_ID = '$request:localhost';
@@ -53,6 +56,20 @@ function deps(
       return `https://localhost/_matrix/media/v3/download/upload-${uploads.length}`;
     },
   };
+}
+
+// The calls of one response, fulfilled one at a time as the bot's call loop
+// does, sharing the response's read count.
+async function fulfillReadUrlCalls(
+  calls: any[],
+  deps: Omit<ReadUrlFulfillmentDeps, 'reads'>,
+): Promise<ReadUrlFulfillmentOutcome[]> {
+  let reads = { count: 0 };
+  let outcomes: ReadUrlFulfillmentOutcome[] = [];
+  for (let call of calls) {
+    outcomes.push(await fulfillReadUrlCall(call, { ...deps, reads }));
+  }
+  return outcomes;
 }
 
 function dataOf(content: any) {
@@ -289,49 +306,5 @@ module('fulfillReadUrlCalls', () => {
       sent.map((event) => event.content.commandRequestId),
       ['call-1', 'call-2'],
     );
-  });
-
-  test('a stop during a read cancels the calls after it, not the one running', async () => {
-    let { client, sent } = fakeClient();
-    let stopped = false;
-    let reads: string[] = [];
-
-    let outcomes = await fulfillReadUrlCalls(
-      [
-        readUrlCall('call-1', 'https://example.com/a'),
-        readUrlCall('call-2', 'https://example.com/b'),
-      ],
-      {
-        ...deps(client, async (url) => {
-          reads.push(url);
-          // The user presses Stop while this read is running.
-          stopped = true;
-          return {
-            ok: true,
-            kind: 'text',
-            url,
-            finalUrl: url,
-            name: 'a',
-            content: 'hi',
-          };
-        }),
-        stopped: () => stopped,
-      },
-    );
-
-    assert.deepEqual(reads, ['https://example.com/a']);
-    assert.deepEqual(outcomes, [
-      { commandRequestId: 'call-1', ok: true, published: true },
-      {
-        commandRequestId: 'call-2',
-        ok: false,
-        error: STOPPED_TOOL_CALL_REASON,
-        published: true,
-      },
-    ]);
-    assert.strictEqual(sent[0].content['m.relates_to'].key, 'applied');
-    assert.strictEqual(sent[1].content.commandRequestId, 'call-2');
-    assert.strictEqual(sent[1].content['m.relates_to'].key, 'canceled');
-    assert.strictEqual(sent[1].content.failureReason, STOPPED_TOOL_CALL_REASON);
   });
 });

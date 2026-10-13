@@ -1992,6 +1992,9 @@ export default class MatrixService extends Service {
     attachedCards?: CardDef[];
     attachedFiles?: FileDef[];
     context?: BoxelContext;
+    // The result answers a call the user asked to go ahead, which lifts a
+    // stop they pressed (see runtime-common/ai/stop.ts).
+    resumesAssistant?: boolean;
   }) {
     let resultCardFileDef: FileDef | undefined;
     if (params.resultCard) {
@@ -2021,11 +2024,15 @@ export default class MatrixService extends Service {
       resultCardFileDef = undefined; // don't send the card as a result if the card is attached
     }
     let content: ToolResultWithNoOutputContent | ToolResultWithOutputContent;
+    let resumesAssistant = params.resumesAssistant
+      ? { resumesAssistant: true as const }
+      : {};
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
+        ...resumesAssistant,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
@@ -2043,6 +2050,7 @@ export default class MatrixService extends Service {
         },
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
+        ...resumesAssistant,
         data: {
           ...contentData,
           card: resultCardFileDef.serialize(),
@@ -3242,7 +3250,7 @@ export default class MatrixService extends Service {
     // optimistic event with event_id `local-${cgi}`, hand that id to addEvent
     // as oldEventId so Room.addEvent replaces the synthetic in-place. Without
     // this bridge the synthetic and the real echo would both live in
-    // roomData.events and every consumer iterating `this.events` (sortedEvents,
+    // roomData.events and every consumer iterating `roomResource.events` (the stop rule,
     // usedLLMs, llmModeEvents, command/code-patch result lookups, MessageBuilder's
     // `events` argument) would double-count.
     let cgi = event.content?.clientGeneratedId as string | undefined;

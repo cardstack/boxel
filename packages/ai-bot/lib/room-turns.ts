@@ -6,17 +6,52 @@
 // calls waiting to run.
 export interface RoomTurn {
   readonly stopped: boolean;
+  // Runs `cb` once the run is stopped: now, if it already is, otherwise when
+  // the stop lands. For the things a stop must abort that may not exist yet
+  // when it lands (the LLM runner, a compaction request). Each callback runs
+  // at most once, and none runs after the run has ended.
+  whenStopped(cb: () => void): void;
 }
 
-interface MutableRoomTurn extends RoomTurn {
-  stopped: boolean;
+class Turn implements RoomTurn {
+  stopped = false;
+  #ended = false;
+  #callbacks = new Set<() => void>();
+
+  whenStopped(cb: () => void) {
+    if (this.#ended) {
+      return;
+    }
+    if (this.stopped) {
+      cb();
+      return;
+    }
+    this.#callbacks.add(cb);
+  }
+
+  stop() {
+    if (this.stopped) {
+      return;
+    }
+    this.stopped = true;
+    let callbacks = [...this.#callbacks];
+    this.#callbacks.clear();
+    for (let cb of callbacks) {
+      cb();
+    }
+  }
+
+  end() {
+    this.#ended = true;
+    this.#callbacks.clear();
+  }
 }
 
 export class RoomTurns {
-  #turns = new Map<string, Set<MutableRoomTurn>>();
+  #turns = new Map<string, Set<Turn>>();
 
   begin(roomId: string): RoomTurn {
-    let turn: MutableRoomTurn = { stopped: false };
+    let turn = new Turn();
     let turns = this.#turns.get(roomId);
     if (!turns) {
       turns = new Set();
@@ -28,10 +63,11 @@ export class RoomTurns {
 
   end(roomId: string, turn: RoomTurn) {
     let turns = this.#turns.get(roomId);
-    if (!turns) {
+    if (!turns || !(turn instanceof Turn)) {
       return;
     }
-    turns.delete(turn as MutableRoomTurn);
+    turn.end();
+    turns.delete(turn);
     if (turns.size === 0) {
       this.#turns.delete(roomId);
     }
@@ -42,7 +78,7 @@ export class RoomTurns {
   // in flight alongside it; both belong to the loop the user stopped.
   stop(roomId: string) {
     for (let turn of this.#turns.get(roomId) ?? []) {
-      turn.stopped = true;
+      turn.stop();
     }
   }
 }

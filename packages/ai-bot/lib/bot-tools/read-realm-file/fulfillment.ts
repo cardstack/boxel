@@ -5,7 +5,6 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixClient } from 'matrix-js-sdk';
-import type { ChatCompletionMessageToolCall } from 'openai/resources';
 import {
   executeReadRealmFile,
   fileLabelFromUrl,
@@ -13,12 +12,8 @@ import {
   selectReadRealmFileUrls,
   type ReadRealmFileTool,
 } from './read.ts';
-import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
-import {
-  publishCanceledResult,
-  publishToolResult,
-  uploadToMatrix,
-} from '../results.ts';
+import { publishToolResult, uploadToMatrix } from '../results.ts';
+import type { BotToolCall } from '../types.ts';
 import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from '../../user-delegated-realm-server-session.ts';
 
@@ -37,8 +32,6 @@ export interface ReadRealmFileFulfillmentDeps {
   // this only needs to be the anchoring bot message.
   requestEventId: string;
   agentId: string | undefined;
-  // Whether the user has stopped the assistant; checked before each call.
-  stopped?: () => boolean;
   onBehalfOf: string;
   delegatedUserRealmSessions: Pick<
     DelegatedUserRealmSessionManager,
@@ -61,54 +54,30 @@ export interface ReadRealmFileFulfillmentOutcome {
   published: boolean;
 }
 
-// Runs each readRealmFile tool call ai-bot owns and publishes its outcome as a
+// Runs one readRealmFile tool call ai-bot owns and publishes its outcome as a
 // command-result event — the same shape a host command result takes, so the
 // existing prompt reconstruction pairs it with the request and feeds it back on
 // the next turn. A call names any number of files; they are fetched
-// concurrently (as are the calls themselves) and every file that was read is
-// uploaded to Matrix and attached to the call's single result event
-// (data.attachedFiles); the model receives their content via the same
-// attachment-download path host-read files use. Files that could not be read
-// are named in the result's failureReason: the result stays `applied` while at
-// least one file came back (so the successful content isn't thrown away), and
-// resolves as invalid only when nothing did — either way a partial or failed
-// read never reads as a clean one. failureReason also names any skill tools
-// that were declared but couldn't be offered (no usable indexed definition),
-// so a degraded skill read never looks like a tool-less one. Returns one
-// outcome per call; never throws (a publish failure is logged so the turn
+// concurrently and every file that was read is uploaded to Matrix and attached
+// to the call's single result event (data.attachedFiles); the model receives
+// their content via the same attachment-download path host-read files use.
+// Files that could not be read are named in the result's failureReason: the
+// result stays `applied` while at least one file came back (so the successful
+// content isn't thrown away), and resolves as invalid only when nothing did —
+// either way a partial or failed read never reads as a clean one.
+// failureReason also names any skill tools that were declared but couldn't be
+// offered (no usable indexed definition), so a degraded skill read never looks
+// like a tool-less one. Never throws (a publish failure is logged so the turn
 // still settles).
-export async function fulfillReadRealmFileCalls(
-  botToolCalls: ChatCompletionMessageToolCall[],
+export async function fulfillReadRealmFileCall(
+  call: BotToolCall,
   deps: ReadRealmFileFulfillmentDeps,
-): Promise<ReadRealmFileFulfillmentOutcome[]> {
+): Promise<ReadRealmFileFulfillmentOutcome> {
   let upload =
     deps.uploadText ??
     ((content: string, contentType: string) =>
       uploadToMatrix(deps.client, content, contentType));
-  // One call at a time, on purpose. Every published result re-triggers the
-  // bot, and that handler decides whether the turn is complete by fetching
-  // the room history from the server and splicing in the one result it was
-  // triggered by. When several results are published at once, a handler can
-  // run while a sibling's send is still in flight: the sibling is missing
-  // from the fetch, the turn looks unfinished, and no handler ever starts
-  // the next turn. Publishing in sequence means that by the time result N
-  // triggers its handler, results 1..N-1 are on the server.
-  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
-  for (let call of botToolCalls) {
-    if (call.type !== 'function') {
-      continue;
-    }
-    if (deps.stopped?.()) {
-      outcomes.push({
-        ...(await publishCanceledResult(call, deps)),
-        ok: false,
-        error: STOPPED_TOOL_CALL_REASON,
-      });
-      continue;
-    }
-    outcomes.push(await fulfillOne(call, deps, upload));
-  }
-  return outcomes;
+  return await fulfillOne(call, deps, upload);
 }
 
 type FileRead =
@@ -199,7 +168,7 @@ async function readAndUpload(
 }
 
 async function fulfillOne(
-  call: ChatCompletionMessageToolCall & { type: 'function' },
+  call: BotToolCall,
   deps: ReadRealmFileFulfillmentDeps,
   upload: (content: string, contentType: string) => Promise<string>,
 ): Promise<ReadRealmFileFulfillmentOutcome> {

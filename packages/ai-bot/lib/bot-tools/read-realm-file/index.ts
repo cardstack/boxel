@@ -1,5 +1,5 @@
 import type { BotTool } from '../types.ts';
-import { fulfillReadRealmFileCalls } from './fulfillment.ts';
+import { fulfillReadRealmFileCall } from './fulfillment.ts';
 import {
   READ_REALM_FILE_TOOL_NAME,
   readFilesLabel,
@@ -28,20 +28,16 @@ export const readRealmFileBotTool: BotTool = {
       needsApproval() {
         return false;
       },
-      async fulfill(calls, target) {
-        let outcomes = await fulfillReadRealmFileCalls(calls, {
-          client: target.client,
-          roomId: target.roomId,
-          requestEventId: target.requestEventId,
-          agentId: target.agentId,
-          stopped: target.stopped,
-          onBehalfOf: room.onBehalfOf,
-          delegatedUserRealmSessions: room.delegatedUserRealmSessions,
-        });
-        return outcomes.map(({ commandRequestId, published }) => ({
-          commandRequestId,
-          published,
-        }));
+      async fulfill(call, target) {
+        let { commandRequestId, published } = await fulfillReadRealmFileCall(
+          call,
+          {
+            ...target,
+            onBehalfOf: room.onBehalfOf,
+            delegatedUserRealmSessions: room.delegatedUserRealmSessions,
+          },
+        );
+        return { commandRequestId, published };
       },
     };
   },

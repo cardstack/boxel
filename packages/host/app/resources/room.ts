@@ -18,7 +18,10 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import { stopInForce } from '@cardstack/runtime-common/ai/stop';
+import {
+  readStopState,
+  type StopState,
+} from '@cardstack/runtime-common/ai/stop';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -247,7 +250,7 @@ export class RoomResource extends Resource<Args> {
       let index = this._messageCache.size;
       // This is brought up to this level so if the
       // load task is rerun we can stop processing
-      for (let event of this.sortedEvents) {
+      for (let event of this.events) {
         // Not a member of the matrix-event union, so handled before the
         // switch narrows on it.
         if ((event.type as string) === APP_BOXEL_COMPACTION_EVENT_TYPE) {
@@ -334,30 +337,34 @@ export class RoomResource extends Resource<Args> {
   }
 
   /**
-   * The assistant message whose loop the user stopped, while that stop is in
-   * force (see `stopInForce`): its tools that have not started never run, and
-   * Stop is no longer offered for it. Read from the room's events rather than
-   * kept per tab, so every client and every reload agrees.
-   *
-   * While a stop is in force no person has written since it, and ai-bot
-   * starts no new answer, so the stopped message is the latest one from the
-   * bot. Timestamps aren't compared: a stop's local echo carries this
-   * client's clock, which can disagree with the server's. For the same
-   * reason the stop rule reads `sortedEvents`, which puts a stop still being
-   * sent after every confirmed event.
+   * Whether the user has stopped the assistant's loop, and which answers that
+   * stop hit (see `readStopState`). Read from the room's events rather than
+   * kept per tab, so every client and every reload agrees. The rule reads
+   * `events`, which puts a stop still being sent after every confirmed event:
+   * a stop's local echo carries this client's clock, which can disagree with
+   * the server's.
    */
   @cached
-  get stoppedMessageEventId(): string | undefined {
-    if (!stopInForce(this.sortedEvents, this.matrixService.aiBotUserId)) {
-      return undefined;
-    }
-    for (let i = this.messages.length - 1; i >= 0; i--) {
-      let message = this.messages[i];
-      if (message.author.userId === this.matrixService.aiBotUserId) {
-        return message.eventId;
-      }
-    }
-    return undefined;
+  get stopState(): StopState<DiscreteMatrixEvent> {
+    return readStopState(this.events, this.matrixService.aiBotUserId);
+  }
+
+  /**
+   * Whether the answer carrying this event is stopped now: Stop is not
+   * offered for it, and its results start no new turn. A click that asks for
+   * one of its calls to go ahead lifts this.
+   */
+  isStopped(eventId: string): boolean {
+    return this.stopState.stoppedMessageIds.has(eventId);
+  }
+
+  /**
+   * Whether a stop ever hit the answer carrying this event. Its tools that
+   * never got a result must not start on their own, however the loop was
+   * resumed since.
+   */
+  wasEverStopped(eventId: string): boolean {
+    return this.stopState.everStoppedMessageIds.has(eventId);
   }
 
   @cached
@@ -402,23 +409,21 @@ export class RoomResource extends Resource<Args> {
     return -1;
   }
 
-  get events() {
+  // The room's events as the Matrix room holds them: the order they arrived
+  // in, which puts events loaded from history after newer ones.
+  private get rawEvents() {
     return this.matrixRoom?.events ?? [];
-  }
-
-  async waitForNextEvent() {
-    return this.matrixRoom?.waitForNextEvent();
   }
 
   // The room's events in timeline order: by origin_server_ts, except that an
   // event this client is still sending comes after every event the server has
   // confirmed. It is newer than all of them, whatever this client's clock
-  // says. Sorts a copy, so the room's own list keeps its order.
+  // says. A copy, so the room's own list keeps its order.
   @cached
-  private get sortedEvents() {
+  get events(): DiscreteMatrixEvent[] {
     let inFlight = (event: DiscreteMatrixEvent) =>
       event.status != null && IN_FLIGHT_EVENT_STATUSES.has(event.status);
-    return [...this.events].sort((a, b) => {
+    return [...this.rawEvents].sort((a, b) => {
       let aInFlight = inFlight(a);
       let bInFlight = inFlight(b);
       if (aInFlight !== bInFlight) {
@@ -430,6 +435,10 @@ export class RoomResource extends Resource<Args> {
       }
       return a.origin_server_ts - b.origin_server_ts;
     });
+  }
+
+  async waitForNextEvent() {
+    return this.matrixRoom?.waitForNextEvent();
   }
 
   private get allSkillFileDefs(): SerializedFile[] {
@@ -652,7 +661,7 @@ export class RoomResource extends Resource<Args> {
    * Matrix `origin_server_ts` has millisecond resolution, so a message and a
    * mode transition can share a timestamp; a bare timestamp comparison cannot
    * tell whether such a transition happened just before or just after the
-   * message. `sortedEvents` is a stable sort on `origin_server_ts`, so for
+   * message. `events` is a stable sort on `origin_server_ts`, so for
    * equal timestamps it preserves room (insertion) order. Walking it up to the
    * message and tracking the last mode transition seen yields the mode in
    * effect when the message arrived, regardless of same-millisecond ties.
@@ -660,7 +669,7 @@ export class RoomResource extends Resource<Args> {
   getActiveLLMModeForMessage(messageEventId: string): LLMMode {
     let activeMode: LLMMode = 'ask';
     let foundMessage = false;
-    for (let event of this.sortedEvents) {
+    for (let event of this.events) {
       if (event.event_id === messageEventId) {
         foundMessage = true;
         break;

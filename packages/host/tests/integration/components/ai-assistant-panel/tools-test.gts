@@ -3054,7 +3054,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   function stubToolValidation({
     held = false,
     heldToolIds,
-  }: { held?: boolean; heldToolIds?: string[] } = {}) {
+    rejectSend,
+  }: {
+    held?: boolean;
+    heldToolIds?: string[];
+    // Makes the send of a matching result fail, as a lost connection would.
+    rejectSend?: (params: { status: string }) => boolean;
+  } = {}) {
     let toolService = getService('tool-service');
     let matrixService = getService('matrix-service');
     let release!: () => void;
@@ -3077,6 +3083,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       toolCallId: string;
       status: string;
       failureReason?: string;
+      resumesAssistant?: boolean;
     }> = [];
     let originalSend = matrixService.sendToolResultEvent;
     matrixService.sendToolResultEvent = async function (
@@ -3087,7 +3094,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         toolCallId: params.toolCallId,
         status: params.status,
         failureReason: params.failureReason,
+        resumesAssistant: params.resumesAssistant,
       });
+      if (rejectSend?.(params)) {
+        throw new Error('the result could not be sent');
+      }
       return originalSend.call(this, params);
     };
     return {
@@ -3121,6 +3132,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     roomId: string,
     toolCallId: string,
     stop: () => Promise<void>,
+    toolRequests: object = checkCorrectnessCall(toolCallId),
   ) {
     let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -3143,9 +3155,34 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       body: 'Checking correctness',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      ...checkCorrectnessCall(toolCallId),
+      ...toolRequests,
       'm.relates_to': { rel_type: 'm.replace', event_id: streamingEventId },
     });
+    return streamingEventId;
+  }
+
+  // A patch of the test realm's Person card, which the user must apply by
+  // hand in the room's default mode.
+  function patchPersonCall(toolCallId: string) {
+    return {
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: toolCallId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Dave' } },
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    };
   }
 
   test('Stop is offered while a tool of the answer runs', async function (assert) {
@@ -3385,7 +3422,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
       let roomResource =
         getService('matrix-service').roomResources.get(roomId)!;
-      await waitUntil(() => roomResource.stoppedMessageEventId !== undefined);
+      await waitUntil(() => roomResource.stopState.inForce !== undefined);
       stub.release();
 
       await waitUntil(() => stub.results.length === 2, { timeout: 10000 });
@@ -3398,8 +3435,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
           })),
         ),
         JSON.stringify([
-          { toolCallId: 'validated-last', status: 'canceled' },
           { toolCallId: 'validated-first', status: 'canceled' },
+          { toolCallId: 'validated-last', status: 'canceled' },
         ]),
         'neither tool had started when the user stopped, so neither runs',
       );
@@ -3463,6 +3500,370 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     } finally {
       stub.restore();
     }
+  });
+
+  test('running a tool of the stopped answer by hand resumes the assistant', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let stub = stubToolValidation();
+    try {
+      await stopWhileStreaming(
+        roomId,
+        'run-after-stop',
+        () => click('[data-test-stop-generating]'),
+        patchPersonCall('run-after-stop'),
+      );
+      await waitFor('[data-test-tool-call-apply="ready"]');
+      let roomResource =
+        getService('matrix-service').roomResources.get(roomId)!;
+      assert.ok(roomResource.stopState.inForce, 'the stop is in force');
+
+      await click('[data-test-tool-call-apply]');
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(stub.results),
+        JSON.stringify([
+          {
+            toolCallId: 'run-after-stop',
+            status: 'applied',
+            resumesAssistant: true,
+          },
+        ]),
+        'the result says the user asked for the call to go ahead',
+      );
+      assert.notOk(roomResource.stopState.inForce, 'the result lifts the stop');
+
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Applied, now',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        data: {
+          context: { agentId: getService('matrix-service').agentId },
+        },
+      });
+      await waitFor('[data-test-stop-generating]');
+      assert
+        .dom('[data-test-stop-generating]')
+        .exists('Stop is offered again for the answer that follows');
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('approving a held call asks the assistant to go on; declining one does not', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'may I read these?',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: ['approved-read', 'declined-read'].map(
+          (id) => ({
+            id,
+            name: 'readUrl',
+            arguments: JSON.stringify({ url: `https://example.com/${id}` }),
+            executedBy: AI_BOT_EXECUTOR,
+            approvalRequired: true,
+          }),
+        ),
+      });
+      let roomResource =
+        getService('matrix-service').roomResources.get(roomId)!;
+      await waitUntil(() => roomResource.messages[0]?.tools.length === 2, {
+        timeout: 10000,
+      });
+      let [approved, declined] = roomResource.messages[0]!.tools;
+      let toolService = getService('tool-service');
+      await toolService.answerApproval.unlinked().perform(approved, 'approve');
+      await toolService.answerApproval.unlinked().perform(declined, 'decline');
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status, resumesAssistant }) => ({
+            toolCallId,
+            status,
+            resumesAssistant,
+          })),
+        ),
+        JSON.stringify([
+          {
+            toolCallId: 'approved-read',
+            status: 'approved',
+            resumesAssistant: true,
+          },
+          { toolCallId: 'declined-read', status: 'invalid' },
+        ]),
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('a canceled result that cannot be sent shows the tool as failed, not spinning', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation({
+      rejectSend: ({ status }) => status === 'canceled',
+    });
+    try {
+      await stopWhileStreaming(roomId, 'canceled-send-fails', () =>
+        click('[data-test-stop-generating]'),
+      );
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(stub.results[0]?.status, 'canceled');
+      assert
+        .dom('[data-test-tool-call-apply="failed"]')
+        .exists('the tool offers Retry instead of a spinner');
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('a tool already running when the user stops keeps its spinner until its result lands', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let toolService = getService('tool-service');
+    // The tool is running: the drain leaves it alone, and so must the stop.
+    toolService.currentlyExecutingToolRequestIds.add('already-running');
+    try {
+      let eventId = await stopWhileStreaming(roomId, 'already-running', () =>
+        click('[data-test-stop-generating]'),
+      );
+      await waitFor('[data-test-tool-call-apply="applying"]');
+      assert
+        .dom('[data-test-tool-call-apply="canceled"]')
+        .doesNotExist('a running tool is not shown as canceled');
+      // The drain's pass over the answer leaves the running tool alone; let
+      // it finish before the tool does, as it would in practice.
+      await settled();
+
+      toolService.currentlyExecutingToolRequestIds.delete('already-running');
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'already-running',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: eventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+      await waitFor('[data-test-tool-call-apply="applied"]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-tool-call-apply="applied"]')
+        .exists('its result still lands');
+    } finally {
+      toolService.currentlyExecutingToolRequestIds.delete('already-running');
+    }
+  });
+
+  test('Stop is not offered for an answer that ended in an error', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'reading',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      errorMessage: 'The model stopped answering',
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'read-that-never-ran',
+          name: 'readUrl',
+          arguments: JSON.stringify({ url: 'https://example.com' }),
+          executedBy: AI_BOT_EXECUTOR,
+        },
+      ],
+    });
+    await waitFor('[data-test-message-idx="0"]');
+    await settled();
+    assert
+      .dom('[data-test-stop-generating]')
+      .doesNotExist('the bot never reached its call, so nothing is running');
+  });
+
+  test('Stop is not offered for a tool whose result could not be sent', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation({ held: true });
+    try {
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'checking correctness',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        ...checkCorrectnessCall('result-never-sent'),
+      });
+      await waitFor('[data-test-stop-generating]');
+      getService('matrix-service').failedToolState.set(
+        'result-never-sent',
+        new Error('the result could not be sent'),
+      );
+      await settled();
+      assert
+        .dom('[data-test-stop-generating]')
+        .doesNotExist('no result will ever come, so nothing is running');
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("a stopped answer's tool stays stopped after the user writes again", async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation({ held: true });
+    try {
+      // As a replay after a reload: the answer, the stop, and the user's next
+      // message are all in the room before the tool is validated.
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'checking correctness',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        ...checkCorrectnessCall('stopped-then-written'),
+      });
+      await waitUntil(() => stub.validating.has('stopped-then-written'), {
+        timeout: 10000,
+      });
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {},
+        { type: APP_BOXEL_STOP_GENERATING_EVENT_TYPE },
+      );
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
+        body: 'never mind',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+      });
+      let roomResource =
+        getService('matrix-service').roomResources.get(roomId)!;
+      await waitUntil(() => roomResource.messages.length === 2);
+      assert.notOk(roomResource.stopState.inForce, 'the stop is lifted');
+      stub.release();
+
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        stub.results[0]?.status,
+        'canceled',
+        'the tool the user stopped never runs, lifted stop or not',
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test('running one tool of a stopped answer by hand does not start its others', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation({ heldToolIds: ['left-over'] });
+    try {
+      let eventId = await stopWhileStreaming(
+        roomId,
+        'left-over',
+        () => click('[data-test-stop-generating]'),
+        {
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            ...patchPersonCall('run-by-hand')[APP_BOXEL_TOOL_REQUESTS_KEY],
+            { id: 'left-over', name: 'checkCorrectness', arguments: '{}' },
+          ],
+          data: {
+            context: { agentId: getService('matrix-service').agentId },
+          },
+        },
+      );
+      await waitUntil(() => stub.validating.has('left-over'), {
+        timeout: 10000,
+      });
+      // The user runs the patch by hand, in another of their clients.
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'run-by-hand',
+          resumesAssistant: true,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: 'applied',
+            event_id: eventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+      );
+      let roomResource =
+        getService('matrix-service').roomResources.get(roomId)!;
+      await waitUntil(() => !roomResource.stopState.inForce);
+      stub.release();
+
+      await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
+      await settled();
+      assert.strictEqual(
+        JSON.stringify(
+          stub.results.map(({ toolCallId, status }) => ({
+            toolCallId,
+            status,
+          })),
+        ),
+        JSON.stringify([{ toolCallId: 'left-over', status: 'canceled' }]),
+        'the user asked for one call, not the rest',
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("a call's latest result and the room's last activity follow the timeline, not the order events arrived in", async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let now = Date.now();
+    let eventId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'patching',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        ...patchPersonCall('retried-patch'),
+      },
+      { origin_server_ts: now },
+    );
+    let result = (key: 'failed' | 'applied', origin_server_ts: number) =>
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'retried-patch',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key,
+            event_id: eventId,
+          },
+        },
+        { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE, origin_server_ts },
+      );
+    // The retry's success arrives first; the earlier failure is loaded from
+    // history after it.
+    result('applied', now + 2000);
+    await waitFor('[data-test-tool-call-apply="applied"]');
+    result('failed', now + 1000);
+    await settled();
+
+    assert
+      .dom('[data-test-tool-call-apply="applied"]')
+      .exists('the later result is the outcome, whenever it arrived');
+    let roomResource = getService('matrix-service').roomResources.get(roomId)!;
+    assert.strictEqual(
+      roomResource.lastActiveTimestamp,
+      now + 2000,
+      'the room was last active at its newest event',
+    );
   });
 
   // A tool that returns the target card itself (show-card, get-card, ...)

@@ -637,27 +637,20 @@ export default class ToolService extends Service {
           if (
             isAutoExecutableTool(messageTool, activeModeAtMessageTime, true)
           ) {
-            // Read after validation, which can take a while: the user may
-            // have stopped the loop meanwhile, and a tool that has not
-            // started must not start after a stop.
-            if (roomResource.stoppedMessageEventId === message.eventId) {
-              await this.sendCanceledToolResult(roomId!, messageTool);
-              continue;
-            }
             readyTools.push(messageTool);
           }
         }
 
-        // Each tool above was checked for a stop when it was validated, but
-        // the ones validated earlier waited for the rest: a stop that landed
-        // meanwhile must keep them from starting too.
+        // Nothing has started yet, so this is the one place a stop is read,
+        // after validation, which can take a while. A tool of an answer the
+        // user ever stopped must not start on its own: not now, not on a
+        // replay after a reload, and not because the user asked for one of
+        // the answer's other calls to go ahead.
         if (
           readyTools.length > 0 &&
-          roomResource.stoppedMessageEventId === message.eventId
+          roomResource.wasEverStopped(message.eventId)
         ) {
-          for (let messageTool of readyTools) {
-            await this.sendCanceledToolResult(roomId!, messageTool);
-          }
+          await this.sendCanceledToolResults(roomId!, readyTools);
           readyTools = [];
         }
 
@@ -667,7 +660,7 @@ export default class ToolService extends Service {
           this.acceptingAllRoomIds.add(roomId!);
           try {
             for (let command of readyTools) {
-              this.run.perform(command);
+              this.run.perform(command, { auto: true });
             }
           } finally {
             this.acceptingAllRoomIds.delete(roomId!);
@@ -685,26 +678,40 @@ export default class ToolService extends Service {
     }
   }
 
-  // Answers a tool the user's stop kept from running, so the call still has
-  // an outcome in the room and the model reads on the next turn why it
-  // never ran.
-  private async sendCanceledToolResult(
+  // Answers tools the user's stop kept from running, so each call still has
+  // an outcome in the room and the model reads on the next turn why it never
+  // ran. A result that never reaches the room would leave the tool claimed
+  // with a spinner nothing clears, so that tool gets the local failed state
+  // instead, which offers Retry.
+  private async sendCanceledToolResults(
     roomId: string,
-    messageTool: MessageTool,
+    messageTools: MessageTool[],
   ) {
-    try {
-      await this.matrixService.sendToolResultEvent({
-        roomId,
-        invokedToolFromEventId:
-          this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
-          messageTool.eventId,
-        toolCallId: messageTool.id!,
-        status: 'canceled',
-        failureReason: STOPPED_TOOL_CALL_REASON,
-        context: await this.operatorModeStateService.getSummaryForAIBot(),
-      });
-    } catch (e) {
-      console.error('could not send canceled tool result event to the room', e);
+    let context = await this.operatorModeStateService.getSummaryForAIBot();
+    for (let messageTool of messageTools) {
+      try {
+        await this.matrixService.sendToolResultEvent({
+          roomId,
+          invokedToolFromEventId:
+            this.getCurrentEventIdForCommandRequest(roomId, messageTool.id) ??
+            messageTool.eventId,
+          toolCallId: messageTool.id!,
+          status: 'canceled',
+          failureReason: STOPPED_TOOL_CALL_REASON,
+          context,
+        });
+      } catch (e) {
+        console.error(
+          'could not send canceled tool result event to the room',
+          e,
+        );
+        if (messageTool.id) {
+          this.matrixService.failedToolState.set(
+            messageTool.id,
+            e instanceof Error ? e : new Error(String(e)),
+          );
+        }
+      }
     }
   }
 
@@ -880,8 +887,10 @@ export default class ToolService extends Service {
       roomId: command.message.roomId,
       invokedToolFromEventId,
       toolCallId: callId,
+      // Approving asks for the call to go ahead, which lifts a stop; declining
+      // settles it quietly.
       ...(answer === 'approve'
-        ? { status: 'approved' as const }
+        ? { status: 'approved' as const, resumesAssistant: true }
         : {
             status: 'invalid' as const,
             failureReason: `The user declined this call (${
@@ -892,212 +901,225 @@ export default class ToolService extends Service {
     });
   }
 
+  // Runs a host tool and posts its result. `auto` says the tool drain started
+  // it because the room's mode lets the call run without a click; otherwise
+  // the user asked for it (Run, Retry, Try Anyway, Accept All), and the result
+  // says so, which lifts a stop they pressed.
   //TODO: Convert to non-EC async method after fixing CS-6987
-  run = task(async (command: MessageTool) => {
-    // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
-    // run. Guards the manual "Try Anyway" path as well as any auto-execution.
-    if (command.executedBy === AI_BOT_EXECUTOR) {
-      return;
-    }
-    let { arguments: payload, id: commandRequestId } = command;
-    // CS-11045: Source the bot-message event_id from current room state at
-    // execute time rather than the snapshot taken when the MessageTool was
-    // constructed. The snapshot is the streaming/original event_id; once a
-    // later m.replace event in room.events owns the toolRequest, that
-    // event's id is the canonical link the rest of the system (including
-    // ai-bot's view of /messages) will agree on. Fall back to the snapshot if
-    // no matching event is found in current room state.
-    let eventId =
-      this.getCurrentEventIdForCommandRequest(
-        command.message.roomId,
-        commandRequestId,
-      ) ?? command.eventId;
-    let resultCard: CardDef | undefined;
-    let toolToRun: Command<any, any> | undefined;
-    // Distinguishes "the tool never ran" from "the tool ran, the aftermath
-    // failed" — the catch below must not tell the room a committed write
-    // failed.
-    let didExecute = false;
-    // There may be some race conditions where the command is already being executed when this task starts
-    if (
-      this.currentlyExecutingToolRequestIds.has(commandRequestId!) ||
-      this.executedToolRequestIds.has(commandRequestId!)
-    ) {
-      return; // already executing this command
-    }
-    try {
-      this.matrixService.failedToolState.delete(commandRequestId!);
-      this.currentlyExecutingToolRequestIds.add(commandRequestId!);
-
-      // The timeout brackets everything between claiming the request and
-      // having a result in hand: module resolution and input construction
-      // hang the same way a slow execute does (e.g. a loader or store.add
-      // blocked on a card that never becomes loadable), and the result event
-      // that un-sticks the UI and the waiting ai-bot is only sent once this
-      // settles.
-      let performTool = async (): Promise<CardDef | undefined> => {
-        // A manual run can start before the tool's command is resolved, or
-        // after it resolved to no command while its declaring skill was still
-        // loading.
-        await command.resolve({ retryUnresolved: true });
-        // If we don't find it in the one-offs, start searching for
-        // one in the skills we can construct
-        let toolCodeRef = command.codeRef;
-        if (toolCodeRef) {
-          let ToolConstructor = (await getClass(
-            toolCodeRef,
-            this.loaderService.loader,
-          )) as { new (context: ToolContext): Command<any, any> };
-          toolToRun = new ToolConstructor(this.toolContext);
-        }
-
-        if (!toolToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
-          toolToRun = new CheckCorrectnessTool(this.toolContext);
-        }
-
-        if (toolToRun) {
-          let typedInput = await this.instantiateToolInput(
-            toolToRun,
-            payload?.attributes,
-            payload?.relationships,
-          );
-          return (await toolToRun.execute(typedInput as any)) as
-            | CardDef
-            | undefined;
-        } else if (command.name === 'patchCardInstance') {
-          if (!hasPatchData(payload)) {
-            throw new Error(
-              "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
-            );
-          }
-          let cardId = payload.attributes.cardId;
-
-          let clientRequestId = this.trackAiAssistantCardRequest({
-            action: 'patch-instance',
-            roomId: command.message.roomId,
-            fileUrl: `${cardId}.json`,
-          });
-
-          await this.store.patch(
-            cardId,
-            {
-              attributes: payload?.attributes?.patch?.attributes,
-              relationships: payload?.attributes?.patch?.relationships,
-            },
-            { doNotWaitForPersist: true, clientRequestId },
-          );
-          return undefined;
-        } else {
-          // Unrecognized tool. This can happen if a programmatically-provided
-          // tool is no longer available due to a browser refresh.
-          throw new Error(
-            `Unrecognized tool: ${command.name}. This tool may have been associated with a previous browser session.`,
-          );
-        }
-      };
-
-      // checkCorrectness legitimately waits out one index-invalidation
-      // window and then does prerender/refresh work that can take
-      // comparably long, so it gets that much headroom on top of the
-      // standard bound.
-      let executeTimeoutMs =
-        command.name === CHECK_CORRECTNESS_COMMAND_NAME
-          ? TOOL_EXECUTE_TIMEOUT_MS + 2 * ENV.cardRenderTimeout
-          : TOOL_EXECUTE_TIMEOUT_MS;
-
-      [resultCard] = await all([
-        withTimeout(performTool(), executeTimeoutMs, `Tool "${command.name}"`),
-        timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
-      ]);
-      didExecute = true;
-      this.executedToolRequestIds.add(commandRequestId!);
-      await this.matrixService.updateSkillsAndToolsIfNeeded(
-        command.message.roomId,
-      );
-      let userContextForAiBot =
-        await this.operatorModeStateService.getSummaryForAIBot();
-
-      await this.matrixService.sendToolResultEvent({
-        roomId: command.message.roomId,
-        invokedToolFromEventId: eventId,
-        toolCallId: commandRequestId!,
-        status: 'applied',
-        resultCard,
-        attachedFiles: this.attachedFilesForToolResult(
-          command.codeRef,
-          toolToRun,
-          resultCard,
-        ),
-        context: userContextForAiBot,
-      });
-    } catch (e) {
-      // The timeout's raw setTimeout can reject after the owner is torn down
-      // (e.g. a test that ends with a tool in flight); the services this
-      // branch touches are gone by then.
-      if (this.isDestroying || this.isDestroyed) {
+  run = task(
+    async (command: MessageTool, { auto = false }: { auto?: boolean } = {}) => {
+      // ai-bot ran this one itself (e.g. readRealmFile): nothing for the host to
+      // run. Guards the manual "Try Anyway" path as well as any auto-execution.
+      if (command.executedBy === AI_BOT_EXECUTOR) {
         return;
       }
-      let error =
-        typeof e === 'string'
-          ? new Error(e)
-          : e instanceof Error
-            ? e
-            : new Error('Tool call failed.');
-      console.error(error);
-      await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
-      if (didExecute) {
-        // The tool's side effects landed; only post-execution bookkeeping
-        // (skill refresh, context collection, or sending the result event)
-        // failed. Publishing 'failed' would tell the model to re-issue a
-        // call whose effect already exists — and the Retry it offers would
-        // be inert, since the request is recorded as executed. Best-effort
-        // send the truthful terminal result instead.
+      let { arguments: payload, id: commandRequestId } = command;
+      // CS-11045: Source the bot-message event_id from current room state at
+      // execute time rather than the snapshot taken when the MessageTool was
+      // constructed. The snapshot is the streaming/original event_id; once a
+      // later m.replace event in room.events owns the toolRequest, that
+      // event's id is the canonical link the rest of the system (including
+      // ai-bot's view of /messages) will agree on. Fall back to the snapshot if
+      // no matching event is found in current room state.
+      let eventId =
+        this.getCurrentEventIdForCommandRequest(
+          command.message.roomId,
+          commandRequestId,
+        ) ?? command.eventId;
+      let resultCard: CardDef | undefined;
+      let toolToRun: Command<any, any> | undefined;
+      // Distinguishes "the tool never ran" from "the tool ran, the aftermath
+      // failed" — the catch below must not tell the room a committed write
+      // failed.
+      let didExecute = false;
+      // There may be some race conditions where the command is already being executed when this task starts
+      if (
+        this.currentlyExecutingToolRequestIds.has(commandRequestId!) ||
+        this.executedToolRequestIds.has(commandRequestId!)
+      ) {
+        return; // already executing this command
+      }
+      try {
+        this.matrixService.failedToolState.delete(commandRequestId!);
+        this.currentlyExecutingToolRequestIds.add(commandRequestId!);
+
+        // The timeout brackets everything between claiming the request and
+        // having a result in hand: module resolution and input construction
+        // hang the same way a slow execute does (e.g. a loader or store.add
+        // blocked on a card that never becomes loadable), and the result event
+        // that un-sticks the UI and the waiting ai-bot is only sent once this
+        // settles.
+        let performTool = async (): Promise<CardDef | undefined> => {
+          // A manual run can start before the tool's command is resolved, or
+          // after it resolved to no command while its declaring skill was still
+          // loading.
+          await command.resolve({ retryUnresolved: true });
+          // If we don't find it in the one-offs, start searching for
+          // one in the skills we can construct
+          let toolCodeRef = command.codeRef;
+          if (toolCodeRef) {
+            let ToolConstructor = (await getClass(
+              toolCodeRef,
+              this.loaderService.loader,
+            )) as { new (context: ToolContext): Command<any, any> };
+            toolToRun = new ToolConstructor(this.toolContext);
+          }
+
+          if (!toolToRun && command.name === CHECK_CORRECTNESS_COMMAND_NAME) {
+            toolToRun = new CheckCorrectnessTool(this.toolContext);
+          }
+
+          if (toolToRun) {
+            let typedInput = await this.instantiateToolInput(
+              toolToRun,
+              payload?.attributes,
+              payload?.relationships,
+            );
+            return (await toolToRun.execute(typedInput as any)) as
+              | CardDef
+              | undefined;
+          } else if (command.name === 'patchCardInstance') {
+            if (!hasPatchData(payload)) {
+              throw new Error(
+                "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
+              );
+            }
+            let cardId = payload.attributes.cardId;
+
+            let clientRequestId = this.trackAiAssistantCardRequest({
+              action: 'patch-instance',
+              roomId: command.message.roomId,
+              fileUrl: `${cardId}.json`,
+            });
+
+            await this.store.patch(
+              cardId,
+              {
+                attributes: payload?.attributes?.patch?.attributes,
+                relationships: payload?.attributes?.patch?.relationships,
+              },
+              { doNotWaitForPersist: true, clientRequestId },
+            );
+            return undefined;
+          } else {
+            // Unrecognized tool. This can happen if a programmatically-provided
+            // tool is no longer available due to a browser refresh.
+            throw new Error(
+              `Unrecognized tool: ${command.name}. This tool may have been associated with a previous browser session.`,
+            );
+          }
+        };
+
+        // checkCorrectness legitimately waits out one index-invalidation
+        // window and then does prerender/refresh work that can take
+        // comparably long, so it gets that much headroom on top of the
+        // standard bound.
+        let executeTimeoutMs =
+          command.name === CHECK_CORRECTNESS_COMMAND_NAME
+            ? TOOL_EXECUTE_TIMEOUT_MS + 2 * ENV.cardRenderTimeout
+            : TOOL_EXECUTE_TIMEOUT_MS;
+
+        [resultCard] = await all([
+          withTimeout(
+            performTool(),
+            executeTimeoutMs,
+            `Tool "${command.name}"`,
+          ),
+          timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
+        ]);
+        didExecute = true;
+        this.executedToolRequestIds.add(commandRequestId!);
+        await this.matrixService.updateSkillsAndToolsIfNeeded(
+          command.message.roomId,
+        );
+        let userContextForAiBot =
+          await this.operatorModeStateService.getSummaryForAIBot();
+
+        await this.matrixService.sendToolResultEvent({
+          roomId: command.message.roomId,
+          invokedToolFromEventId: eventId,
+          toolCallId: commandRequestId!,
+          status: 'applied',
+          resultCard,
+          attachedFiles: this.attachedFilesForToolResult(
+            command.codeRef,
+            toolToRun,
+            resultCard,
+          ),
+          context: userContextForAiBot,
+          resumesAssistant: !auto,
+        });
+      } catch (e) {
+        // The timeout's raw setTimeout can reject after the owner is torn down
+        // (e.g. a test that ends with a tool in flight); the services this
+        // branch touches are gone by then.
+        if (this.isDestroying || this.isDestroyed) {
+          return;
+        }
+        let error =
+          typeof e === 'string'
+            ? new Error(e)
+            : e instanceof Error
+              ? e
+              : new Error('Tool call failed.');
+        console.error(error);
+        await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
+        if (didExecute) {
+          // The tool's side effects landed; only post-execution bookkeeping
+          // (skill refresh, context collection, or sending the result event)
+          // failed. Publishing 'failed' would tell the model to re-issue a
+          // call whose effect already exists — and the Retry it offers would
+          // be inert, since the request is recorded as executed. Best-effort
+          // send the truthful terminal result instead.
+          try {
+            await this.matrixService.sendToolResultEvent({
+              roomId: command.message.roomId,
+              invokedToolFromEventId: eventId,
+              toolCallId: commandRequestId!,
+              status: 'applied',
+              resultCard,
+              attachedFiles: this.attachedFilesForToolResult(
+                command.codeRef,
+                toolToRun,
+                resultCard,
+              ),
+              resumesAssistant: !auto,
+            });
+          } catch (sendError) {
+            console.error(
+              'could not send applied tool result event after a post-execution failure',
+              sendError,
+            );
+            this.matrixService.failedToolState.set(commandRequestId!, error);
+          }
+          return;
+        }
+        this.matrixService.failedToolState.set(commandRequestId!, error);
+        // Report the failure to the room: the result event is what clears the
+        // UI spinner in other sessions and lets ai-bot react to the failure
+        // instead of waiting forever. The local failedToolState above still
+        // drives this tab's immediate Retry affordance.
         try {
           await this.matrixService.sendToolResultEvent({
             roomId: command.message.roomId,
             invokedToolFromEventId: eventId,
             toolCallId: commandRequestId!,
-            status: 'applied',
-            resultCard,
-            attachedFiles: this.attachedFilesForToolResult(
-              command.codeRef,
-              toolToRun,
-              resultCard,
-            ),
+            status: 'failed',
+            failureReason: error.message,
+            context: await this.operatorModeStateService.getSummaryForAIBot(),
+            resumesAssistant: !auto,
           });
         } catch (sendError) {
           console.error(
-            'could not send applied tool result event after a post-execution failure',
+            'could not send failed tool result event to the room',
             sendError,
           );
-          this.matrixService.failedToolState.set(commandRequestId!, error);
         }
-        return;
+      } finally {
+        this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
       }
-      this.matrixService.failedToolState.set(commandRequestId!, error);
-      // Report the failure to the room: the result event is what clears the
-      // UI spinner in other sessions and lets ai-bot react to the failure
-      // instead of waiting forever. The local failedToolState above still
-      // drives this tab's immediate Retry affordance.
-      try {
-        await this.matrixService.sendToolResultEvent({
-          roomId: command.message.roomId,
-          invokedToolFromEventId: eventId,
-          toolCallId: commandRequestId!,
-          status: 'failed',
-          failureReason: error.message,
-          context: await this.operatorModeStateService.getSummaryForAIBot(),
-        });
-      } catch (sendError) {
-        console.error(
-          'could not send failed tool result event to the room',
-          sendError,
-        );
-      }
-    } finally {
-      this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
-    }
-  });
+    },
+  );
 
   // The files a tool result attaches for the model, as the tool that ran
   // declares them. Only a tool the host itself provides is asked, so a command

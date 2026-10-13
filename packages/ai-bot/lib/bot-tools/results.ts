@@ -8,8 +8,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import type { MatrixClient } from 'matrix-js-sdk';
-import type { ChatCompletionMessageToolCall } from 'openai/resources';
-import type { BotToolOutcome, BotToolTarget } from './types.ts';
+import type { BotToolCall, BotToolOutcome, BotToolTarget } from './types.ts';
 
 // What every tool ai-bot runs itself does with what it read: store it in the
 // Matrix media repo and publish the call's tool-result event.
@@ -93,24 +92,11 @@ export async function publishToolResult(
   }
 }
 
-// Answers calls the user's stop kept from running with a 'canceled' result,
+// Answers a call the user's stop kept from running with a 'canceled' result,
 // so every call the model made still has an outcome in the room.
-export async function publishCanceledResults(
-  calls: ChatCompletionMessageToolCall[],
-  target: BotToolTarget,
-): Promise<BotToolOutcome[]> {
-  let outcomes: BotToolOutcome[] = [];
-  for (let call of calls) {
-    outcomes.push(await publishCanceledResult(call, target));
-  }
-  return outcomes;
-}
-
-// Answers one call the user's stop kept from running (see
-// publishCanceledResults).
 export async function publishCanceledResult(
-  call: ChatCompletionMessageToolCall,
-  target: Omit<BotToolTarget, 'stopped'>,
+  call: BotToolCall,
+  target: BotToolTarget,
 ): Promise<BotToolOutcome> {
   let published = await publishToolResult(
     target.client,
@@ -126,7 +112,7 @@ export async function publishCanceledResult(
       },
       data: { context: { agentId: target.agentId } },
     },
-    call.type === 'function' ? call.function.name : 'unknown',
+    call.function.name,
   );
   return { commandRequestId: call.id, published };
 }
