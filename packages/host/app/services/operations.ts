@@ -153,26 +153,48 @@ export default class OperationsService
   // against, and what an operation's `actor()` resolves to when its program is
   // run locally.
   //
-  // Nobody, inside the dedicated prerender app: that app authenticates as
-  // itself so it can render any card, and its identity is not the identity of
-  // whoever is later served the HTML it produces. A search that resolved the
-  // actor there would put one user's rows into a rendering everyone reads, and
-  // the store's own rule for that app — render as a pure function of the
-  // document you were handed — is the same rule. The saved search answers no
-  // rows there and the live render that follows fills them in.
+  // A render tab answers with the actor its render server pinned on it (see
+  // `renderTabActor`), since no one signs in to matrix there.
   //
-  // Nobody, too, before the matrix client is up or after a sign-out, where
-  // reading the id throws rather than answering. A query that does not read
-  // the actor is unaffected in all three cases.
+  // Nobody before the matrix client is up or after a sign-out, where reading
+  // the id throws rather than answering. A query that does not read the actor
+  // is unaffected either way.
   private sessionActor(): string | undefined {
-    if ((globalThis as any).__boxelPrerenderApp) {
-      return undefined;
+    if (
+      (globalThis as any).__boxelPrerenderApp ||
+      (globalThis as any).__boxelHeadlessCommand
+    ) {
+      return this.renderTabActor();
     }
     try {
       return this.matrixService.userId ?? undefined;
     } catch {
       return undefined;
     }
+  }
+
+  // Who a render tab renders as: the actor the render server pinned on this
+  // tab when it handed the tab its auth.
+  //
+  // A render a user asks for — a capture, a command — is handed that user's
+  // ordinary sessions, so the actor is the user who asked for it. The pinned
+  // value names who the render is for; it does not track which sessions the
+  // tab's requests end up carrying, which this tab's shared storage can still
+  // change.
+  //
+  // A render a realm makes of its own cards — indexing, the HTML render, a
+  // module's definition render — runs on realm-authority sessions, and what it
+  // draws is kept and served to every viewer. So there is nobody, the saved
+  // search answers no rows, and the live render that follows fills them in.
+  //
+  // The tab's own sessions can't answer this. They live in localStorage, which
+  // every tab of one affinity shares, so a sibling tab's capture can replace
+  // them partway through a realm's own render. So a tab the server pinned no
+  // actor on — including one served by a render server that predates the
+  // global — has nobody.
+  private renderTabActor(): string | undefined {
+    let actor = (globalThis as any).__boxelRenderActor;
+    return typeof actor === 'string' && actor ? actor : undefined;
   }
 
   async send(

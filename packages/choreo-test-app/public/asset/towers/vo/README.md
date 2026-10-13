@@ -8,7 +8,7 @@ One audio file per beat, named for the beat's id:
     ...
 
 The full list — every beat's window, word count and line — is in
-[`notes/towers-vo.md`](../../../../../notes/towers-vo.md), together with the voice direction. That file is
+[`towers-vo.md`](../../../../../choreo-gallery/realm/design/towers-vo.md), together with the voice direction. That file is
 GENERATED from the beats in the film score and `test-app/app/lib/films/towers.ts`;
 regenerate it rather than editing it, or the narration and the shot list
 drift apart.

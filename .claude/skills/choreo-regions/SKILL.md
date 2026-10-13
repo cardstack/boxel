@@ -108,4 +108,4 @@ barrier between tests — required, or passes leak across tests.
 Ground truth: `packages/choreo-test-app/app/components/examples/far-match.gts`
 (three bays, the on/off switch is just id scoping) and its Deep Dive note
 `packages/choreo-test-app/app/components/notes/far.gts`; design in
-`packages/choreo-gallery/docs/nested-choreo.md`.
+`packages/choreo-gallery/realm/docs/nested-choreo.md`.

@@ -39,4 +39,4 @@ The key invariant is that state changes remain responsive while the visual expla
 
 **ChoreoContext**: `c.run`.
 
-Read the implementation: [`run.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/run.ts), [`choreo.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo.gts).
+Read the implementation: [`run.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/run.ts), [`choreo.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/choreo.gts).

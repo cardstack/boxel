@@ -36,4 +36,4 @@ Listen at ordinary device volume and confirm the guide remains intelligible over
 
 **FilmVocabulary**: `f.Voice`, `f.sound`.
 
-Read the implementation: [`adjust.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/adjust.gts), [`nodes.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/nodes.gts), [`host.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/host.gts).
+Read the implementation: [`adjust.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/adjust.gts), [`nodes.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/nodes.gts), [`host.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/host.gts).

@@ -6,6 +6,7 @@ import {
   POLICY_FILE_DEF_CODE_REF_BY_EXTENSION,
   baseFileRef,
   baseRRI,
+  isModuleSource,
   policyFileDefCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -100,7 +101,23 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('resolves module source to nothing, which is not FileDef', function (assert) {
+    test('resolves module source to the code type its language is', function (assert) {
+      const TS = baseRef('ts-file-def', 'TsFileDef');
+      const GTS = baseRef('gts-file-def', 'GtsFileDef');
+      for (let [filename, ref] of [
+        ['util.ts', TS],
+        ['legacy.js', TS],
+        ['person.gts', GTS],
+        ['component.gjs', GTS],
+        ['Person.GTS', GTS],
+      ] as const) {
+        assert.deepEqual(policyFileDefCodeRef(filename), ref, filename);
+      }
+    });
+  });
+
+  module('isModuleSource', function () {
+    test('is every executable extension, and nothing else', function (assert) {
       for (let filename of [
         'person.gts',
         'util.ts',
@@ -108,21 +125,21 @@ module(basename(import.meta.filename), function () {
         'component.gjs',
         'Person.GTS',
       ]) {
-        assert.strictEqual(policyFileDefCodeRef(filename), undefined, filename);
+        assert.true(isModuleSource(filename), filename);
+      }
+      for (let filename of [
+        'report.pdf',
+        'room.json',
+        'LICENSE',
+        '.gts',
+        'v1.ts/LICENSE',
+      ]) {
+        assert.false(isModuleSource(filename), filename);
       }
     });
   });
 
   module('POLICY_FILE_DEF_CODE_REF_BY_EXTENSION', function () {
-    test('carries no module-source extension', function (assert) {
-      for (let extension of ['.js', '.gjs', '.ts', '.gts']) {
-        assert.false(
-          extension in POLICY_FILE_DEF_CODE_REF_BY_EXTENSION,
-          extension,
-        );
-      }
-    });
-
     test('every mapping names a FileDef subclass base exports from that module', function (assert) {
       let subclasses = baseFileDefSubclasses();
       for (let [extension, ref] of Object.entries(
@@ -139,9 +156,6 @@ module(basename(import.meta.filename), function () {
 
     test('every FileDef subclass base exports is reachable from an extension', function (assert) {
       let subclasses = baseFileDefSubclasses();
-      // Module source is never grantable, so its defs are deliberately
-      // unreachable from this table.
-      let moduleSourceDefs = new Set(['TsFileDef', 'GtsFileDef']);
       let reachable = new Set<string>();
       for (let { name } of Object.values(
         POLICY_FILE_DEF_CODE_REF_BY_EXTENSION,
@@ -162,16 +176,10 @@ module(basename(import.meta.filename), function () {
         'ImageDef, declared in card-api, is part of the scan',
       );
       assert.deepEqual(
-        [...subclasses.keys()]
-          .filter((name) => !moduleSourceDefs.has(name) && !reachable.has(name))
-          .sort(),
+        [...subclasses.keys()].filter((name) => !reachable.has(name)).sort(),
         [],
         'no FileDef subclass is left without an extension',
       );
-      for (let name of moduleSourceDefs) {
-        assert.true(subclasses.has(name), `${name} exists in base`);
-        assert.false(reachable.has(name), `${name} is not reachable`);
-      }
     });
   });
 });

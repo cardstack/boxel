@@ -1,6 +1,6 @@
 /**
  * A sprite between planes when the planes disagree about zoom
- * (docs/planes-and-cameras.md, build-order step 2).
+ * (packages/choreo-gallery/realm/docs/planes-and-cameras.md, build-order step 2).
  *
  * Far matching hands the receiver the sender's PAGE box — the only space
  * two regions share — but the receiver's flight is written in ITS plane's

@@ -42,4 +42,4 @@ For recorded output, a timed keyframe path is particularly useful because its st
 
 **glimmer-motion**: `TweenArgs`, `ease`, `tween`.
 
-Read the implementation: [`easings.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/easings.ts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts), [`helpers.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/helpers.ts).
+Read the implementation: [`easings.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/easings.ts), [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/types.ts), [`helpers.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/helpers.ts).

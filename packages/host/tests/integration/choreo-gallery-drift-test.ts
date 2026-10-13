@@ -1,7 +1,7 @@
 /**
  * The car, before there is a car to look at.
  *
- * The Drift design note argues that the driving loop is not a Choreo score and has to
+ * `packages/choreo-gallery/realm/design/drift.md` argues that the driving loop is not a Choreo score and has to
  * be written by hand. The corollary is that nothing else in the repo is
  * checking it: no region compiles it, no changeset covers it, and a bug in it
  * looks exactly like a car that needs tuning. So the model gets its own tests,

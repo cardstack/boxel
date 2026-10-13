@@ -4193,6 +4193,12 @@ ${patchedFileSource}
                 name: 'button.gts',
                 contentType: 'text/plain',
               },
+              {
+                sourceUrl: 'http://localhost:4201/test/images/logo.png',
+                url: 'mxc://mock-server/logo',
+                name: 'logo.png',
+                contentType: 'image/png',
+              },
             ],
           },
         },
@@ -4266,7 +4272,7 @@ ${patchedFileSource}
           displayName: 'files/src/components/button.gts',
         },
       ],
-      'Patched files should be surfaced',
+      'Patched source files are surfaced, and a saved image is not',
     );
     assert.deepEqual(
       pendingCodePatchCorrectnessChecks?.cards,

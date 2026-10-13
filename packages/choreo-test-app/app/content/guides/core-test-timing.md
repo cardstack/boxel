@@ -46,4 +46,4 @@ For an interruption test, trigger the second action before calling animationsSet
 
 **@cardstack/choreo/test-support**: `setupChoreo`, `advanceGate`, `seekTo`.
 
-Read the implementation: [`activity.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/activity.ts), [`test-support/index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/test-support/index.ts), [`choreo/test-support/index.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/test-support/index.ts).
+Read the implementation: [`activity.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/activity.ts), [`test-support/index.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/test-support/index.ts), [`choreo/test-support/index.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/test-support/index.ts).

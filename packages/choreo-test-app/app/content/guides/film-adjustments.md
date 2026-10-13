@@ -36,4 +36,4 @@ Review atmosphere changes with a fixed camera as well as in the full edit. That 
 
 **FilmVocabulary**: `f.clip`, `f.picture`.
 
-Read the implementation: [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/types.ts), [`clips.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/clips.ts), [`adjust.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/adjust.gts), [`host.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/film/graph/host.gts).
+Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/types.ts), [`clips.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/clips.ts), [`adjust.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/adjust.gts), [`host.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/film/graph/host.gts).
