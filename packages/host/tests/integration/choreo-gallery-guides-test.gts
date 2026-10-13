@@ -1,0 +1,214 @@
+/**
+ * The guides, their links and the lab: a guide renders from the realm with
+ * its live demo embedded, every tile and demo page links its demo's guide,
+ * and the lab tunes a demo through `demoTuning`.
+ */
+import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
+
+import { live, liveAll } from '@cardstack/choreo/test-support';
+import { module, test } from 'qunit';
+
+import { choreoGalleryGuides } from '../helpers/choreo-gallery';
+import {
+  GALLERY_DEMOS,
+  galleryInstance,
+  setupChoreoGalleryTest,
+} from '../helpers/choreo-gallery-stage';
+import { testRealmURL } from '../helpers/index';
+
+import type * as DemoModule from '../../../choreo-gallery/realm/demo';
+import type * as PresetsModule from '../../../choreo-gallery/realm/lib/presets';
+import type * as TempoModule from '../../../choreo-gallery/realm/lib/tempo';
+import type * as TuningModule from '../../../choreo-gallery/realm/lib/tuning';
+import type { ComponentLike } from '@glint/template';
+
+const GUIDES = choreoGalleryGuides();
+
+const guideURL = (slug: string) => `${testRealmURL}docs/guides/${slug}.md`;
+
+/** the guide a demo's lesson names */
+const guideOf = (slug: string) =>
+  galleryInstance(`demos/${slug}.json`).data.attributes.lesson?.[
+    'guide'
+  ] as string;
+
+type MarkdownSignature = {
+  Args: {
+    cardReferenceBaseUrl: string;
+    content: string;
+    linkedCards: DemoModule.GalleryDemo[];
+  };
+};
+
+module('Integration | Choreo gallery | guides and the lab', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+
+  hooks.beforeEach(async function () {
+    let { setTempo } = await gallery.import<typeof TempoModule>('lib/tempo');
+    setTempo('instant');
+  });
+
+  hooks.afterEach(async function () {
+    let { setTempo } = await gallery.import<typeof TempoModule>('lib/tempo');
+    setTempo('smooth');
+  });
+
+  /** one demo the index links, as a card instance at its realm id */
+  async function demoCard(slug: string) {
+    let { DemoLesson, WalkthroughStep } =
+      await gallery.import<typeof DemoModule>('demo');
+    let { data } = galleryInstance(`demos/${slug}.json`);
+    let { module: path, name } = data.meta.adoptsFrom;
+    let classes = await gallery.import<
+      Record<string, new (attrs: object) => DemoModule.GalleryDemo>
+    >(path.replace(/^\.\.\//, ''));
+    let { lesson, walkthrough, ...attributes } = data.attributes;
+    return new classes[name]!({
+      id: `${testRealmURL}demos/${slug}`,
+      ...attributes,
+      lesson: lesson ? new DemoLesson(lesson) : undefined,
+      walkthrough: (walkthrough ?? []).map((step) => new WalkthroughStep(step)),
+    });
+  }
+
+  test('a guide renders from the realm with its live demo embedded', async function (assert) {
+    let content = GUIDES['core-start']!;
+    assert.true(
+      content.includes('::card[../../demos/enter]'),
+      'the guide embeds the enter demo',
+    );
+    let enter = await demoCard('enter');
+    let MarkdownTemplate = (
+      (await gallery.loader.import(
+        '@cardstack/base/default-templates/markdown',
+      )) as { default: ComponentLike<MarkdownSignature> }
+    ).default;
+    let linkedCards = [enter];
+    let base = guideURL('core-start');
+
+    await render(
+      <template>
+        <MarkdownTemplate
+          @content={{content}}
+          @linkedCards={{linkedCards}}
+          @cardReferenceBaseUrl={{base}}
+        />
+      </template>,
+    );
+    await waitFor('.markdown-bfm-card-slot--block .tile', { timeout: 10_000 });
+
+    assert
+      .dom('h2#user-content-installing-the-library')
+      .exists('the guide’s own prose renders');
+    let embed = live('.markdown-bfm-card-slot--block .tile')!;
+    assert
+      .dom(embed.querySelector('.tile-title'))
+      .hasText('Enter', 'the embed is the enter demo');
+    assert.ok(
+      embed.querySelector('.tile-stage .banner'),
+      'its live stage renders its notices',
+    );
+    assert
+      .dom(embed.querySelector('.guide-link'))
+      .hasAttribute(
+        'href',
+        guideURL(guideOf('enter')),
+        'and links the guide its lesson names',
+      );
+
+    await click(embed.querySelector('.tile-lab-toggle')!);
+    await waitFor('.markdown-bfm-card-slot--block [data-demo-lab="enter"]');
+    assert
+      .dom('.markdown-bfm-card-slot--block [data-demo-lab="enter"]')
+      .exists('the embedded demo opens its lab');
+  });
+
+  test('every tile and the demo page link the guide their lesson names', async function (assert) {
+    await gallery.renderGallery();
+
+    let links = liveAll<HTMLAnchorElement>('[data-gallery-tile] .guide-link');
+    assert.strictEqual(links.length, GALLERY_DEMOS.length, 'one per tile');
+    for (let slug of GALLERY_DEMOS) {
+      let guide = guideOf(slug);
+      assert.ok(GUIDES[guide], `${slug}'s guide, ${guide}, is in the realm`);
+      assert
+        .dom(`[data-gallery-tile='${slug}'] .guide-link`)
+        .hasAttribute('href', guideURL(guide), `${slug} links ${guide}`);
+    }
+
+    await click(live("[data-gallery-tile='keyframes'] .card-meta")!);
+    await waitFor('[data-demo="keyframes"]');
+    assert
+      .dom('.demo-links .guide-link')
+      .hasAttribute(
+        'href',
+        guideURL(guideOf('keyframes')),
+        'the demo page links its guide',
+      );
+  });
+
+  test('the lab tunes the demo through demoTuning', async function (assert) {
+    let { demoTuning } =
+      await gallery.import<typeof TuningModule>('lib/tuning');
+    let { demoPresets } =
+      await gallery.import<typeof PresetsModule>('lib/presets');
+    await gallery.renderGallery();
+    await click(live("[data-gallery-tile='enter'] .card-meta")!);
+    await waitFor('[data-demo="enter"]');
+
+    assert.dom('.lab-toggle').hasAttribute('aria-expanded', 'false');
+    await click('.lab-toggle');
+    await waitFor('[data-demo-lab="enter"]');
+    assert.dom('.lab-toggle').hasAttribute('aria-expanded', 'true');
+
+    let lab = live('[data-demo-lab="enter"]')!;
+    let tuneNamed = (name: string) =>
+      [...lab.querySelectorAll<HTMLButtonElement>('.dial-tune')].find(
+        (button) => button.textContent?.trim() === name,
+      );
+    let preset = demoPresets['enter']![0]!;
+    await waitUntil(() => tuneNamed(preset.name), { timeout: 5_000 });
+    assert.true(
+      Object.keys(demoTuning('enter').definitions).length > 0,
+      'the stage registered its values',
+    );
+    assert.deepEqual(
+      demoTuning('enter').values,
+      {},
+      'the demo runs as written until the lab changes something',
+    );
+
+    await click(tuneNamed(preset.name)!);
+    await waitUntil(() => Object.keys(demoTuning('enter').values).length > 0);
+    assert.deepEqual(
+      demoTuning('enter').values,
+      preset.values,
+      `wearing ${preset.name} writes its values into demoTuning`,
+    );
+
+    let notice = live('[data-demo-stage] .banner');
+    await click('[data-demo-lab="enter"] .lab-replay');
+    await waitFor('[data-demo-stage] .banner');
+    assert.notStrictEqual(
+      live('[data-demo-stage] .banner'),
+      notice,
+      'replay mounts the stage afresh',
+    );
+
+    await click('.lab-toggle');
+    assert.dom('[data-demo-lab]').doesNotExist('the lab closes');
+    assert.deepEqual(
+      demoTuning('enter').values,
+      {},
+      'and the demo is back as it was written',
+    );
+  });
+
+  test('a film has no lab: it plays in a document the lab cannot reach', async function (assert) {
+    await gallery.renderGallery();
+    await click(live("[data-gallery-tile='towers'] .card-meta")!);
+    await waitFor('[data-demo="towers"]');
+    assert.dom('.lab-toggle').doesNotExist();
+    assert.dom('.demo-links .guide-link').exists('the guide link still is');
+  });
+});

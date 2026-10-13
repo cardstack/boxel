@@ -28,3 +28,24 @@ export function choreoGalleryContents(): RealmContents {
   }
   return contents;
 }
+
+// @ts-expect-error TS1470, as above
+const GUIDES = import.meta.glob<string>(
+  '../../../choreo-gallery/realm/docs/guides/*.md',
+  { query: '?raw', import: 'default', eager: true },
+);
+
+/**
+ * The gallery's guides, Markdown, keyed by slug: `core-start`. The index,
+ * `README.md`, is not a guide.
+ */
+export function choreoGalleryGuides(): Record<string, string> {
+  let guides: Record<string, string> = {};
+  for (let [path, source] of Object.entries(GUIDES)) {
+    let slug = path.replace(/^.*\//, '').replace(/\.md$/, '');
+    if (slug !== 'README') {
+      guides[slug] = source;
+    }
+  }
+  return guides;
+}
