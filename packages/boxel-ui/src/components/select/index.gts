@@ -275,7 +275,6 @@ export default class BoxelSelect<ItemT = any> extends Component<
       @onBlur={{@onBlur}}
       @onClose={{@onClose}}
       @renderInPlace={{@renderInPlace}}
-      @destinationElement={{@destinationElement}}
       @verticalPosition={{@verticalPosition}}
       @dropdownClass={{cn 'boxel-select__dropdown' @dropdownClass}}
       @loadingMessage={{@loadingMessage}}

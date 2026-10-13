@@ -2,10 +2,12 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 import { on } from '@ember/modifier';
 import SearchIcon from '@cardstack/boxel-icons/search';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
+import { POPUPS_IN_PLACE } from '../internal/overlay';
 import type { ControlNotifyArgs } from '../pretui-primitives';
 
 export interface SelectOption {
@@ -69,7 +71,7 @@ interface PoweredSelectSignature {
     beforeOptionsComponent?: unknown;
     matchTriggerWidth?: boolean;
     dropdownClass?: string;
-    destinationElement?: HTMLElement;
+    renderInPlace?: boolean;
     ariaLabel?: string;
     ariaLabelledBy?: string;
   };
@@ -227,20 +229,11 @@ class SelectSearch extends Component<SelectSearchSignature> {
 
 export class Select extends Component<SelectSignature> {
   @tracked internal = this.args.defaultValue;
-  // The list renders inside the Select where the wormhole would break it: a
-  // modal <dialog> makes everything outside it inert, and a focus scope (an
-  // EditInPlace editor) reads focus moving into the search box as leaving.
-  // A destination, not @renderInPlace: ember-basic-dropdown reads
-  // @renderInPlace once at creation, before this can know where it sits,
-  // and reads the destination each time the list opens.
-  @tracked anchor: HTMLElement | undefined;
-  registerAnchor = modifier((el: HTMLElement) => {
-    this.anchor = el.closest('dialog, [data-pretui-focus-scope]')
-      ? el
-      : undefined;
-  });
+  // True under a Dialog, Drawer, CommandPalette or EditInPlace editor; see
+  // POPUPS_IN_PLACE for why the list renders in place there.
+  @consume(POPUPS_IN_PLACE) popupsInPlace?: boolean;
   // Options are not focusable, so pressing one would move focus to the page
-  // and a focus scope would read that as leaving. Keep focus where it is;
+  // and an editor around the Select would read that as leaving. Keep focus where it is;
   // the option is still chosen on click. The search input still takes focus.
   keepFocusInList = modifier((wrap: HTMLElement) => {
     let onPress = (e: MouseEvent) => {
@@ -305,7 +298,7 @@ export class Select extends Component<SelectSignature> {
         @beforeOptionsComponent={{SelectSearch}}
         @matchTriggerWidth={{true}}
         @dropdownClass='pretui-select-dropdown'
-        @destinationElement={{this.anchor}}
+        @renderInPlace={{this.popupsInPlace}}
         @ariaLabel={{@label}}
         @ariaLabelledBy={{@labelledBy}}
         data-pretui-select-trigger
@@ -314,7 +307,6 @@ export class Select extends Component<SelectSignature> {
       >
         <span data-test-pretui-select-option>{{option.label}}</span>
       </PoweredSelect>
-      <div {{this.registerAnchor}}></div>
     </div>
     <style scoped>
       @layer PretComponent {
@@ -322,9 +314,6 @@ export class Select extends Component<SelectSignature> {
           /* per-instance knob: the trigger's height */
           --pretui-select-h: 1.75rem;
 
-          /* the containing block for a list rendered inside the Select,
-             which ember-basic-dropdown positions against it */
-          position: relative;
           min-width: 0;
           /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
              ones and the radius travel to the wormhole, values resolved. */

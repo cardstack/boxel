@@ -42,10 +42,29 @@ module('Pretui | components/select', function (hooks) {
     );
     await click(trigger());
     let listbox = document.querySelector("[role='listbox']") as HTMLElement;
-    assert.ok(wrapper().contains(listbox), 'the list is inside the dialog, not in the inert wormhole');
+    assert.ok(wrapper().contains(listbox), 'the list renders in place, not in the inert wormhole');
     let oolong = Array.from(listbox.querySelectorAll('[data-test-pretui-select-option]')).find((o) => o.textContent?.trim() === 'Oolong') as HTMLElement;
     await click(oolong);
     assert.strictEqual(chosen, 'oolong', 'the option takes the click');
+  });
+
+  test('in a scrolled Dialog the list opens at its trigger', async function (assert) {
+    await render(
+      <template>
+        <Dialog @open={{true}} @label='Pick a tea'>
+          <div data-test-spacer></div>
+          <Select @options={{OPTIONS}} />
+        </Dialog>
+      </template>,
+    );
+    (document.querySelector('[data-test-spacer]') as HTMLElement).style.height = '150vh';
+    let dialog = document.querySelector('[data-test-pretui-dialog]') as HTMLElement;
+    dialog.scrollTop = dialog.scrollHeight;
+    await click(trigger());
+    let listbox = document.querySelector("[role='listbox']") as HTMLElement;
+    let gap = listbox.getBoundingClientRect().top - trigger().getBoundingClientRect().bottom;
+    assert.true(dialog.scrollTop > 0, 'the dialog is scrolled');
+    assert.true(Math.abs(gap) < 16, `the list sits under its trigger (gap ${gap}px)`);
   });
 
   test('inside a blur-commit EditInPlace the search box keeps the edit open', async function (assert) {
@@ -78,7 +97,7 @@ module('Pretui | components/select', function (hooks) {
     assert.strictEqual(committed, 'oolong', 'the filtered option is chosen, then Enter commits it');
   });
 
-  test('pressing an option in place keeps focus, so a blur-commit EditInPlace stays open', async function (assert) {
+  test('pressing an option in place does not move focus off the trigger', async function (assert) {
     let committed: string | undefined;
     let onCommit = (next: string) => {
       committed = next;
@@ -101,10 +120,8 @@ module('Pretui | components/select', function (hooks) {
     let oolong = Array.from(document.querySelectorAll("[role='listbox'] [data-test-pretui-select-option]")).find((o) => o.textContent?.trim() === 'Oolong') as HTMLElement;
     let press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
     oolong.dispatchEvent(press);
-    assert.true(press.defaultPrevented, 'the press does not move focus off the trigger');
-    await click(oolong);
-    assert.strictEqual(committed, undefined, 'choosing does not commit the edit');
-    assert.ok(trigger().textContent?.includes('Oolong'), 'the option is chosen');
+    assert.true(press.defaultPrevented, 'the press keeps focus where it was');
+    assert.strictEqual(committed, undefined, 'the press does not commit the edit');
   });
 
   test('@searchEnabled adds a search box that takes focus on open and filters by label', async function (assert) {
