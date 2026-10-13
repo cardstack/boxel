@@ -16295,8 +16295,14 @@ export class Realm {
     return { ...policyGateStats(this.operationCore) };
   }
 
-  __testOnlyNonGrantableAnswerSources(): NonGrantableAnswerSources {
-    return { ...nonGrantableAnswerSources(this.operationCore) };
+  __testOnlyNonGrantableAnswerSources(): NonGrantableAnswerSources & {
+    definitionGeneration: number | undefined;
+  } {
+    return {
+      ...nonGrantableAnswerSources(this.operationCore),
+      definitionGeneration:
+        this.operationCore.definitionLookup.definitionGeneration?.(),
+    };
   }
 
   __testOnlyPolicyPredicatePreparations(): number {

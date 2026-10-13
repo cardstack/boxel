@@ -761,6 +761,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a write whose grant rests on a predicate is judged against the card as stored', async function (assert) {
+      let generationBefore =
+        education.__testOnlyNonGrantableAnswerSources().definitionGeneration;
       let [taught, untaught] = await answers(AUTH.reader(), [
         { target: ROOM_207, operation: 'delete' },
         { target: ROOM_205, operation: 'delete' },
@@ -780,7 +782,13 @@ module(basename(import.meta.filename), function (hooks) {
         },
         'and does not teach room 205, so its delete is refused as the gate refuses it',
       );
-      let chainAnswers = education.__testOnlyNonGrantableAnswerSources();
+      // The definition generation before the check is reported beside the
+      // one after it: a module invalidation landing between the two deletes
+      // would have them read the chain under different generations.
+      let chainAnswers = {
+        ...education.__testOnlyNonGrantableAnswerSources(),
+        generationBefore,
+      };
       assert.deepEqual(
         gateStats(),
         {
