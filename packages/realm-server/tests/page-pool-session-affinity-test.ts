@@ -315,6 +315,8 @@ module(basename(import.meta.filename), function (hooks) {
       realmKeyFor(realmAuthorityAuth),
       'module',
     );
+    // Long enough for a capture with a free admission slot to get its tab.
+    await new Promise((resolve) => setTimeout(resolve, 200));
     assert.false(
       user2Admitted,
       "another reader's capture of the realm waits for the first",
