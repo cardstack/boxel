@@ -667,7 +667,7 @@ export class WidgetRoom extends Component {
     if (
       room?.querySelector('[data-live-demo="inline-edit"] [data-mode="edit"]')
     ) {
-      reset('inline-edit', '[data-test-toggle]');
+      reset('inline-edit', '.ie-toggle');
     }
     reset('lightbox', '[aria-label="Close"]');
     reset('sequence', '.study-card.is-open');

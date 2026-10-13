@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
 import type { Crossing } from '../lib/crossing';
+import { realmFile } from '../lib/realm-url';
 import { factor } from '../lib/tempo';
 import type { Theater } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
@@ -53,6 +54,9 @@ interface Signature {
 }
 
 export class SiteFrame extends Component<Signature> {
+  /** the gallery's demos, hung in a walkable 3D room */
+  roomHref = realmFile('widget-room');
+
   wire = modifier((element: Element, [c]: [ChoreoContext]) => {
     this.args.crossing.wire(c, element);
   });
@@ -78,6 +82,7 @@ export class SiteFrame extends Component<Signature> {
         <nav class='top-links' aria-label='Gallery'>
           <TempoPicker />
           <ThemePicker />
+          <a href={{this.roomHref}} data-gallery-room>3D Gallery</a>
           <a
             href='https://github.com/cardstack/boxel/tree/main/packages/choreo'
             target='_blank'
