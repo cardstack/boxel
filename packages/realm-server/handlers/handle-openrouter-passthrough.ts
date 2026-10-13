@@ -8,12 +8,15 @@ import {
   clientDisconnectSignal,
   handleStreamingRequest,
   isClientDisconnectError,
+  outboundFailureResponse,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
+import { outboundFetch } from '../lib/outbound/client.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
+  sendResponseForError,
   sendResponseForForbiddenRequest,
   sendResponseForSystemError,
   setContextResponse,
@@ -139,6 +142,7 @@ export default function handleOpenRouterPassthrough({
               finalBody,
               matrixUserId,
               clientGone,
+              ['Authorization'],
             );
           }
 
@@ -146,11 +150,14 @@ export default function handleOpenRouterPassthrough({
           // discard the charge for tokens the provider has already generated
           // and billed us for, rather than saving anything.
           const upstreamCall = upstreamCallSignal(clientGone);
-          const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
+          const externalResponse = await outboundFetch({
+            url: OPENROUTER_CHAT_URL,
             method: 'POST',
             headers,
             body: finalBody,
             signal: upstreamCall.signal,
+            sizePath: 'system-key',
+            credentialHeaders: ['Authorization'],
           });
           upstreamCall.release();
           const responseData = await externalResponse.json();
@@ -170,6 +177,19 @@ export default function handleOpenRouterPassthrough({
         // answer and nothing to page anyone about.
         log.info(
           'Client disconnected during openrouter passthrough; upstream call cancelled',
+        );
+        return;
+      }
+      let failure = outboundFailureResponse(error);
+      if (failure) {
+        log.warn(
+          `OpenRouter passthrough stopped by the outbound guard: ${failure.message}`,
+        );
+        await sendResponseForError(
+          ctxt,
+          failure.status,
+          failure.statusText,
+          failure.message,
         );
         return;
       }

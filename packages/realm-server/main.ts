@@ -51,6 +51,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { startOutboundGuard } from './lib/outbound/client.ts';
 import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
@@ -375,6 +376,15 @@ log.info(
   )} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
+
+// Refuse to boot with an outbound guard a deployed server must not run with,
+// and report the guard's effective settings.
+try {
+  startOutboundGuard({ serverURL: String(serverURL) });
+} catch (e: any) {
+  console.error(`Outbound guard self-check failed: ${e.message}`);
+  process.exit(-1);
+}
 
 // Start beating before anything else, so the shared buffer reflects a turning
 // event loop for the whole of boot rather than only from the point the server is
@@ -1010,7 +1020,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     `Unexpected error encountered starting realm, stopping server`,
     e,
   );
-  process.exit(-3);
+  process.exit(-1);
 });
 
 async function waitForWorkerManager(url: string) {
