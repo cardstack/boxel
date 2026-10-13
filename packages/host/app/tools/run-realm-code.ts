@@ -477,6 +477,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'room with room.*. In a workspace the user can only read, reads work ' +
     'and each write is refused.';
   static actionVerb = 'Run';
+  // `room.*` changes the room the call came from. The tool service sets
+  // `roomId` to that room, so a model cannot point the changes at another
+  // room it has joined.
+  static bindsToInvokingRoom = true;
 
   static neverAutoExecutesFor(
     attributes: Record<string, unknown> | undefined,
@@ -553,7 +557,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       this.realm.canWrite(realmURL),
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
-        knownModels: () => this.knownModels(),
+        knownModels: () => this.knownModels(roomId),
       }),
     );
     let runnerResult;
@@ -708,15 +712,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
   }
 
-  // The models the room's model picker offers.
-  private knownModels(): string[] {
+  // The models the room's model picker offers: the configured ones, and any
+  // model the room has used before.
+  private knownModels(roomId: string): string[] {
     let configs = this.matrixService.systemCard?.modelConfigurations;
-    if (configs) {
-      return configs.flatMap((config) =>
-        config.modelId ? [config.modelId] : [],
-      );
-    }
-    return DEFAULT_FALLBACK_MODELS.map((model) => model.modelId);
+    let models = configs
+      ? configs.flatMap((config) => (config.modelId ? [config.modelId] : []))
+      : DEFAULT_FALLBACK_MODELS.map((model) => model.modelId);
+    let usedLLMs = this.matrixService.roomResources.get(roomId)?.usedLLMs ?? [];
+    return [...new Set([...models, ...usedLLMs])];
   }
 
   // The files it saved, then the captures it took.

@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -834,6 +834,33 @@ throw new Error('stop');`,
         }),
         /Unknown model: no-such\/model/,
       );
+    });
+
+    test('room.setModel accepts a model the room used before', async function (assert) {
+      let matrixService = getService('matrix-service');
+      await matrixService.sendActiveLLMEvent(roomId, 'uncurated/model-x', {
+        toolsSupported: true,
+        inputModalities: ['text'],
+      });
+      await waitUntil(() =>
+        matrixService.roomResources
+          .get(roomId)
+          ?.usedLLMs.includes('uncurated/model-x'),
+      );
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `return await room.setModel('uncurated/model-x');`,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        model: 'uncurated/model-x',
+        appliedAfterRun: true,
+      });
     });
   });
 });
