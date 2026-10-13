@@ -237,10 +237,14 @@ for (const [route, file, name] of [
     .replace("import { GuideStudy } from '../study';\n\n", '')
     .replace(studyCard, '')
     .replaceAll('<style scoped>', '<style>');
-  if (/GuideStudy|<style scoped>/.test(component)) {
+  // A study that imports from the realm or Boxel's base can't run in the
+  // starter, so the generator stops here rather than at the reader's build.
+  if (
+    /GuideStudy|<style scoped>|from '\.|from '@cardstack\/base/.test(component)
+  ) {
     rmSync(target, { recursive: true, force: true });
     throw new Error(
-      `realm/studies/${file}.gts no longer has the shape this generator unwraps`,
+      `realm/studies/${file}.gts no longer has the shape this generator unwraps, or imports from the realm`,
     );
   }
   write(`app/components/${file}.gts`, component);
