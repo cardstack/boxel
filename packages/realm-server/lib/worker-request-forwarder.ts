@@ -55,9 +55,16 @@ export interface WorkerRealmEventTarget {
 
 // Resolve the reachable realm-server origin and the canonical realm url for a
 // worker-originated event from the manager's realm→server (`--fromUrl/--toUrl`)
-// mappings. Matching against the configured mappings is an allow-list: the
-// manager only forwards for realms it manages, and only to the exact server
-// origin it was configured with — never to an origin derived from worker input.
+// mappings. The configured `--toUrl` origins are an allow-list: the manager
+// only ever POSTs to a realm-server origin it was configured with — never to
+// an origin derived from worker input.
+//
+// A realm named by a mapping resolves to that mapping's canonical url. Any
+// other realm hosted on a configured realm-server origin — the realms users
+// create at runtime, which no mapping names — is its own canonical url, since
+// the realm server registers it under the url it was created at. The endpoint
+// resolves it through the realm registry, so a url that names no realm on
+// that server is refused there rather than here.
 export function resolveWorkerRealmEventTarget(
   urlMappings: [URL | string, URL][],
   realmURL: string,
@@ -65,11 +72,18 @@ export function resolveWorkerRealmEventTarget(
   // Registry keys are canonicalized (one trailing slash, no search/hash), so
   // canonicalize the incoming url before comparing to avoid a silent drop on a
   // trivially-different spelling.
-  let normalized = normalizeRealmURL(realmURL)?.href ?? realmURL;
+  let normalizedURL = normalizeRealmURL(realmURL);
+  let normalized = normalizedURL?.href ?? realmURL;
   for (let [from, to] of urlMappings) {
     let canonicalHref = from instanceof URL ? from.href : to.href;
     if (normalized === canonicalHref || normalized === to.href) {
       return { origin: to.origin, realmURL: canonicalHref };
+    }
+  }
+  if (normalizedURL) {
+    let origin = normalizedURL.origin;
+    if (urlMappings.some(([, to]) => to.origin === origin)) {
+      return { origin, realmURL: normalizedURL.href };
     }
   }
   return undefined;
@@ -141,6 +155,13 @@ export async function forwardWorkerRealmEvent({
         // Drain the body so undici returns the socket to the keep-alive pool
         // rather than pinning it until the Response is GC'd.
         await response.text().catch(() => {});
+        log.info(
+          `forwarded worker realm event for ${target.realmURL} (eventName=${event.eventName}${
+            'generation' in event && event.generation !== undefined
+              ? ` generation=${event.generation}`
+              : ''
+          }) after ${attempts} attempt(s)`,
+        );
         return true;
       }
       let detail = await response.text().catch(() => '');

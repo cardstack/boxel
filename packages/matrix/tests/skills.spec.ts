@@ -428,14 +428,20 @@ test.describe('Skills', () => {
     // id, rather than the CardsGrid-only "Skill" type filter.
     await showAllCards(page);
     await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
-    await page.locator('[data-test-edit-button]').click();
-    await page
+    // Scope the edit toggle to the skill's own stack item: the workspace card
+    // beneath it has an edit button too, and an unscoped click can land on
+    // that one before the skill's stack item has opened.
+    const skillStackItem = page.locator(
+      `[data-test-stack-card="${skillCard}"]`,
+    );
+    await skillStackItem.locator('[data-test-edit-button]').click();
+    await skillStackItem
       .locator('[data-test-field="instructions"] textarea')
       .fill(
         'Here is an updated command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
       );
-    await page.waitForSelector('[data-test-last-saved]');
-    await page.locator('[data-test-edit-button]').click();
+    await skillStackItem.locator('[data-test-last-saved]').waitFor();
+    await skillStackItem.locator('[data-test-edit-button]').click();
     await page.locator('[data-test-close-ai-assistant]').click();
 
     // after reloading the page, the skill card will be instantiated from boxel index

@@ -125,11 +125,33 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('returns undefined for an unmanaged realm', function (assert) {
+    test('a realm no mapping names, on a configured realm-server origin, is its own canonical url', function (assert) {
+      let t = resolveWorkerRealmEventTarget(
+        urlMappings,
+        'https://app.example/a-user/a-workspace',
+      );
+      assert.strictEqual(t?.origin, 'https://app.example');
+      assert.strictEqual(
+        t?.realmURL,
+        'https://app.example/a-user/a-workspace/',
+      );
+    });
+
+    test('returns undefined for a realm on an origin no mapping serves', function (assert) {
       assert.strictEqual(
         resolveWorkerRealmEventTarget(
           urlMappings,
           'https://unmanaged.example/foo/',
+        ),
+        undefined,
+      );
+    });
+
+    test('a `--fromUrl` origin that serves no realm is not a realm-server origin', function (assert) {
+      assert.strictEqual(
+        resolveWorkerRealmEventTarget(
+          urlMappings,
+          'https://cardstack.com/a-user/a-workspace/',
         ),
         undefined,
       );
@@ -202,7 +224,42 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('drops an event for an unmanaged realm without any HTTP call', async function (assert) {
+    test('forwards an event for a realm created at runtime on a configured realm-server origin', async function (assert) {
+      let { fetch, calls } = recordingFetch(() => ({ status: 200 }));
+
+      let delivered = await forwardWorkerRealmEvent({
+        event: {
+          eventName: 'prerender_html',
+          realmURL: 'https://app.example/a-user/a-workspace/',
+          generation: 4,
+          invalidations: [
+            'https://app.example/a-user/a-workspace/Skill/1.json',
+          ],
+        },
+        urlMappings,
+        secret,
+        fetch,
+        now: fixedNow,
+        sleep: noSleep,
+      });
+
+      assert.true(delivered, 'reports delivery');
+      assert.strictEqual(calls.length, 1, 'one HTTP call');
+      assert.strictEqual(
+        calls[0].url,
+        'https://app.example/_worker-request',
+        'posts to the configured realm-server origin',
+      );
+      let body = bodyOf(calls[0]);
+      assert.strictEqual(body.payload.eventName, 'prerender_html');
+      assert.strictEqual(
+        body.payload.realmURL,
+        'https://app.example/a-user/a-workspace/',
+        'realmURL is the url the realm was created at',
+      );
+    });
+
+    test('drops an event for a realm on an origin no mapping serves, without any HTTP call', async function (assert) {
       let { fetch, calls } = recordingFetch(() => ({ status: 200 }));
 
       let delivered = await forwardWorkerRealmEvent({
