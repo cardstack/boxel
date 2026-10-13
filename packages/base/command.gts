@@ -508,12 +508,17 @@ export class RunRealmCodeResult extends CardDef {
   @field createdWorkspaces = containsMany(StringField);
   // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
   @field deletedWorkspaces = containsMany(StringField);
+  // What the run changed in the room with `room.*`, one line per change, made
+  // after the script finished.
+  @field roomChanges = containsMany(StringField);
 
-  // A run that saved no files and took no captures, such as one that only
-  // read, has nothing for the chat to show. Its script result goes to the
-  // model only.
+  // A run that saved no files, took no captures and changed nothing in the
+  // room, such as one that only read, has nothing for the chat to show. Its
+  // script result goes to the model only.
   get [hasNothingToShow](): boolean {
-    return !this.files?.length && !this.captures?.length;
+    return (
+      !this.files?.length && !this.captures?.length && !this.roomChanges?.length
+    );
   }
 
   // What the run changed and what it looked at. The script's own result is
@@ -534,6 +539,13 @@ export class RunRealmCodeResult extends CardDef {
           </ul>
         {{else}}
           <p class='no-files'>No files were changed.</p>
+        {{/if}}
+        {{#if @model.roomChanges.length}}
+          <ul class='room-changes'>
+            {{#each @model.roomChanges as |change|}}
+              <li data-test-realm-code-room-change>{{change}}</li>
+            {{/each}}
+          </ul>
         {{/if}}
         {{#if @model.captures.length}}
           <div class='captures'>
@@ -557,7 +569,8 @@ export class RunRealmCodeResult extends CardDef {
           padding: var(--boxel-sp-sm);
           font: var(--boxel-font-sm);
         }
-        .files {
+        .files,
+        .room-changes {
           margin: 0;
           padding: 0;
           list-style: none;
