@@ -924,6 +924,46 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
+  test('Back and Forward move the stack with the URL', async function (assert) {
+    let primary = `${testHostModeRealmURL}ViewCardDemo/index`;
+    let second = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let third = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let stackItem = (id: string) => `[data-test-host-mode-stack-item="${id}"]`;
+    let stackParam = () =>
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      );
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor(
+      `[data-test-host-mode-card="${primary}"] [data-test-view-card-demo-button]`,
+    );
+    await click(
+      `[data-test-host-mode-card="${primary}"] [data-test-view-card-demo-button]`,
+    );
+    await waitFor(`${stackItem(second)} [data-test-view-card-demo-button]`);
+    await click(`${stackItem(second)} [data-test-view-card-demo-button]`);
+    await waitFor(stackItem(third));
+    assert.strictEqual(stackParam(), JSON.stringify([second, third]));
+    let twoDeep = currentURL()!;
+
+    // Back and Forward are transitions to the URLs either side of this one,
+    // and the stack follows each of them
+    let oneDeep = `/test/ViewCardDemo/index.json?hostModeStack=${encodeURIComponent(
+      JSON.stringify([second]),
+    )}`;
+    await visit(oneDeep);
+    await waitFor(stackItem(third), { count: 0 });
+    assert.dom(stackItem(second)).exists('Back leaves the card below');
+    assert.dom(stackItem(third)).doesNotExist('and takes the top one away');
+
+    await visit(twoDeep);
+    await waitFor(stackItem(third));
+    assert.dom(stackItem(second)).exists('Forward keeps the card below');
+    assert.dom(stackItem(third)).exists('and brings the top one back');
+    assert.strictEqual(stackParam(), JSON.stringify([second, third]));
+  });
+
   test('clicking on a stack card does not close it', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),
