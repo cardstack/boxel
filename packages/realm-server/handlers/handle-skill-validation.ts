@@ -396,7 +396,10 @@ async function validateToolModules({
   // permissions table has no row for it (e.g. bootstrap realms).
   let owner = await realm.getRealmOwnerUserId();
   let permissions = ensureRealmOwnerPermissions(
-    await fetchUserPermissions(dbAdapter, { userId: owner }),
+    await fetchUserPermissions(dbAdapter, {
+      userId: owner,
+      includePublicRealms: true,
+    }),
     realm.url,
   );
   let auth = createPrerenderAuth(owner, permissions, { realmAuthority: true });

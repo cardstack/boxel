@@ -26,7 +26,7 @@ import { tuneSeconds, tuneSpring } from 'test-app/lib/demo-tuning';
  * holds the card THAT frame — so it is right on frames nobody planned.
  * And it never reads the page to find out: the resting boxes come from
  * the pass's own measurements, the card's position from the values the
- * run is already driving (docs/postmortem-follow.md).
+ * run is already driving (packages/choreo-gallery/realm/docs/postmortem-follow.md).
  */
 
 /* ── the score's words ───────────────────────────────────────────────── */

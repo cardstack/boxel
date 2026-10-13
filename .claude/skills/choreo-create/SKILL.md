@@ -42,11 +42,11 @@ composition idea) in `packages/choreo-gallery/realm/demos/<id>.json`. The test
 app keeps a copy in `packages/choreo-test-app/app/content/demo-lessons.json` for
 its guide pages; change both, since the realm check fails when they differ. The
 concept guides are `packages/choreo-test-app/app/content/guides/*.md`.
-`packages/choreo-gallery/docs/api-inventory.json` maps public APIs to concept
+`packages/choreo-gallery/tools/api-inventory.json` maps public APIs to concept
 guides; look up the relevant entries rather than loading it whole. For a
 tutorial, isolate one observable relationship and predict the result of a
 parameter change. The docs-only spatial/film studies in
-`packages/choreo-gallery/docs/docs-studies-plan.md` are planned, not shipped.
+`packages/choreo-gallery/realm/design/docs-studies-plan.md` are planned, not shipped.
 
 Every control must supply a named variable consumed by that example. Show units,
 use meaningful ranges, and retain source defaults. The test app's

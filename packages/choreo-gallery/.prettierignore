@@ -1,9 +1,8 @@
 node_modules/
 tmp/
 out/
-# the film-graph sketches: proposals in a syntax that does not exist yet
-docs/film-graph/*.gts
-docs/film-graph/*.mjs
+# the film-graph sketches, kept as written: proposals in a syntax that does not exist yet
+realm/design/film-graph/*.gts.md
 # the film app's build (choreo-film-app), and the films' vendored and generated media
 realm/film-app/
 realm/asset/

@@ -123,7 +123,7 @@ export async function getRealmTokens(
   serverToken: string,
 ): Promise<Record<string, string>> {
   let response = await fetch(
-    `${realmServerUrl.replace(/\/$/, '')}/_realm-auth`,
+    `${realmServerUrl.replace(/\/$/, '')}/_realm-auth?include-public=true`,
     {
       method: 'POST',
       headers: {

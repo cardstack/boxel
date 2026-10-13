@@ -1,5 +1,5 @@
 /**
- * Presentation — gates as presenter mode (docs/choreo-constructs.md §8.1).
+ * Presentation — gates as presenter mode (packages/choreo-gallery/realm/docs/choreo-constructs.md §8.1).
  * A three-build slide: auto kicker, click-through mid-path, then the pulse.
  */
 import { click, focus, triggerKeyEvent, waitUntil } from '@ember/test-helpers';

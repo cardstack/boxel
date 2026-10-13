@@ -39,4 +39,4 @@ A successful navigation is more than a smooth camera-like move. The departing vi
 
 **glimmer-motion**: `ViewTransitionBuilder`, `ViewTransitionOptions`, `ViewTransitionUpdate`, `animateView`, `viewTransition`.
 
-Read the implementation: [`view-transition.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/view-transition.ts).
+Read the implementation: [`view-transition.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/view-transition.ts).

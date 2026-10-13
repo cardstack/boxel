@@ -149,6 +149,7 @@ export default function handleDownloadRealm({
         let permissions = await fetchUserPermissions(dbAdapter, {
           userId: token.user,
           onlyOwnRealms: false,
+          includePublicRealms: true,
         });
         readableRealms = buildReadableRealms(permissions, publishedRealmURLs);
         if (!readableRealms.has(realmURL)) {

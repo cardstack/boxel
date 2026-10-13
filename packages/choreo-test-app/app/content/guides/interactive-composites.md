@@ -43,4 +43,4 @@ Test the composite from outside the library: render two instances, anchor a late
 
 **@cardstack/choreo**: `StepArgs`, `StepArgsBase`, `StepComponent`, `toMs`, `Step`, `TimelineNode`.
 
-Read the implementation: [`steps.gts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/steps.gts), [`types.ts`](https://github.com/cardstack/choreo/blob/main/packages/glimmer-motion/src/choreo/types.ts).
+Read the implementation: [`steps.gts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/steps.gts), [`types.ts`](https://github.com/cardstack/boxel/blob/main/packages/choreo/src/types.ts).

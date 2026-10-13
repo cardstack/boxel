@@ -593,7 +593,7 @@ export class Camera3D extends StepComponent<
   }
 }
 
-/* ---- the direction vocabulary (notes/choreo-composition.md C5) ----
+/* ---- the direction vocabulary (packages/choreo-gallery/realm/design/choreo-composition.md C5) ----
    Presets expand into the SAME seekable camera cue — sugar, never a new
    runtime primitive. Frame and Aim are absolute (computed from measured
    geometry at compile); Pan and SlowZoom are RELATIVE, resolved against
@@ -880,7 +880,7 @@ export class Crossing extends StepComponent<
  * by the pass or composed from the run's own values, so it cannot read
  * back what it wrote last frame and it cannot force a style recalculation
  * mid-move — pure by construction, and correct under interruption because
- * a replacement pass re-measures (docs/postmortem-follow.md).
+ * a replacement pass re-measures (packages/choreo-gallery/realm/docs/postmortem-follow.md).
  *
  * Three things it is not: it is not accelerated (a derived value is
  * computed on the main thread, every frame — the price, and the same one

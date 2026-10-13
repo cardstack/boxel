@@ -1,5 +1,5 @@
 /**
- * c.Camera and c.Tether (docs/choreo-constructs.md §6.1, §6.3, §6.4).
+ * c.Camera and c.Tether (packages/choreo-gallery/realm/docs/choreo-constructs.md §6.1, §6.3, §6.4).
  */
 import { Choreo, type ChoreoContext, type Rect } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';

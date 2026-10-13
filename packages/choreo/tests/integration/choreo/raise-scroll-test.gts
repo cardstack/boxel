@@ -1,5 +1,5 @@
 /**
- * c.Raise and c.Scroll (docs/choreo-constructs.md §6.1, §6.3).
+ * c.Raise and c.Scroll (packages/choreo-gallery/realm/docs/choreo-constructs.md §6.1, §6.3).
  * A raise escapes stacking contexts and clips on a real layer, with the
  * slot held by a placeholder; a scroll occupies the sequence and yields
  * to the user's own wheel.

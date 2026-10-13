@@ -268,7 +268,7 @@ const TowersNotes: TOC<NotesSignature> = <template>
           still-based join possible. The full design note lives at
           <code>docs/choreo-splices.md</code>; the quality pass and its numbers
           in
-          <code>notes/towers-quality.md</code>.
+          <code>design/towers-quality.md</code>.
         </p>
       </div>
     </section>

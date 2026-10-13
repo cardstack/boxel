@@ -641,11 +641,26 @@ async function dropDatabase(databaseName: string): Promise<void> {
        WHERE datname = $1 AND pid <> pg_backend_pid()`,
       [databaseName],
     );
+    // FORCE terminates any connection that opens after the terminate above,
+    // such as a pool reconnecting, which would otherwise fail the drop.
     await client.query(
-      `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+      `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)} WITH (FORCE)`,
     );
   } finally {
     await client.end();
+  }
+}
+
+// A test database is a full copy of its template, often an indexed realm.
+// Dropping it when its test ends keeps a shard's disk use at one test
+// database plus its templates, instead of one database per test it has run.
+// The drop is best-effort, but a failure is reported: a drop that keeps
+// failing brings that growth back.
+async function dropTestDatabase(databaseName: string): Promise<void> {
+  try {
+    await dropDatabase(databaseName);
+  } catch (e) {
+    console.warn(`could not drop test database ${databaseName}: ${String(e)}`);
   }
 }
 
@@ -723,6 +738,9 @@ export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
   await cloneTestDBFromTemplate(migratedTestDatabaseTemplate);
 }
 
+// The database each adapter from createTestPgAdapter was given.
+const testDatabaseNames = new WeakMap<PgAdapter, string>();
+
 export async function createTestPgAdapter(options?: {
   templateDatabase?: string;
   databaseName?: string;
@@ -737,7 +755,25 @@ export async function createTestPgAdapter(options?: {
     options?.templateDatabase ?? migratedTestDatabaseTemplate,
     databaseName,
   );
-  return await withPgDatabaseEnv(databaseName, async () => new PgAdapter());
+  let adapter = await withPgDatabaseEnv(
+    databaseName,
+    async () => new PgAdapter(),
+  );
+  testDatabaseNames.set(adapter, databaseName);
+  return adapter;
+}
+
+// Closes an adapter from createTestPgAdapter and drops the database it was
+// given (see dropTestDatabase). Any other adapter opened on that database is
+// disconnected, so close those first.
+export async function closeTestPgAdapter(adapter: PgAdapter): Promise<void> {
+  if (!adapter.isClosed) {
+    await adapter.close();
+  }
+  let databaseName = testDatabaseNames.get(adapter);
+  if (databaseName) {
+    await dropTestDatabase(databaseName);
+  }
 }
 
 // Wait for a freshly bound listener and surface a bind failure (EADDRINUSE
@@ -1231,9 +1267,11 @@ export function setupDB(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
+  let databaseName: string | undefined;
 
   const runBeforeHook = async () => {
     prepareTestDB();
+    databaseName = process.env.PGDATABASE;
     let templateDatabase =
       typeof args.templateDatabase === 'function'
         ? args.templateDatabase()
@@ -1258,9 +1296,11 @@ export function setupDB(
     let p = publisher;
     let r = runner;
     let a = dbAdapter;
+    let d = databaseName;
     publisher = undefined;
     runner = undefined;
     dbAdapter = undefined;
+    databaseName = undefined;
 
     // Each resource's cleanup is independent — a failure in one must
     // not skip the others. Matches the best-effort pattern used by
@@ -1290,6 +1330,9 @@ export function setupDB(
           // best-effort cleanup
         }
       }
+    }
+    if (d) {
+      await dropTestDatabase(d);
     }
   };
 
