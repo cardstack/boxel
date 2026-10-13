@@ -8,7 +8,6 @@ import type {
 import {
   archivedRealmURLs,
   ensureTrailingSlash,
-  fetchRealmPermissions,
   fetchUserPermissions,
   isSessionRevoked,
   logger,
@@ -32,7 +31,6 @@ import {
   type SearchPrincipal,
 } from '@cardstack/runtime-common/card-operations';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
@@ -280,34 +278,35 @@ export function multiRealmAuthorization(
         publishedRealmURLs,
       );
 
+      // A realm reads to its `users` grant any caller with a Matrix account,
+      // and the readability above, built from the caller's own rows and the
+      // `*` grant, leaves that grant out. Each realm still unreadable is judged
+      // here as the realm judges it, so that a caller the realm lets read is
+      // searched as a reader rather than reached only through a policy.
       let unauthorizedRealms = realmList.filter(
+        (realmURL) => !readableRealms.has(realmURL),
+      );
+      for (let realmURL of await realmsReadableToUsers(
+        dbAdapter,
+        matrixClient,
+        unauthorizedRealms,
+        token.user,
+      )) {
+        readableRealms.add(realmURL);
+      }
+      unauthorizedRealms = unauthorizedRealms.filter(
         (realmURL) => !readableRealms.has(realmURL),
       );
       // A delegated session is never a policy's to admit. Its user reads the
       // realm it is bound to outright, or the session is refused, as the realm
       // refuses a delegated session whose user no longer reads it, so no realm
-      // is ever carried as a grant candidate for it. Whether the user reads it
-      // is the realm's own judgment, the one `/_delegate-session` made when it
-      // minted the session: it counts the realm's `users` grant, which the
-      // readability above leaves out.
+      // is ever carried as a grant candidate for it.
       if (token.delegated && unauthorizedRealms.length > 0) {
-        let [boundRealm] = unauthorizedRealms;
-        if (
-          !(await realmReadsFor(
-            dbAdapter,
-            matrixClient,
-            boundRealm,
-            token.user,
-          ))
-        ) {
-          await sendResponseForUnauthorizedRequest(
-            ctxt,
-            AuthenticationErrorMessages.PermissionMismatch,
-          );
-          return;
-        }
-        readableRealms.add(boundRealm);
-        unauthorizedRealms = [];
+        await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.PermissionMismatch,
+        );
+        return;
       }
       if (unreadableRealms === 'refuse' && unauthorizedRealms.length > 0) {
         await sendResponseForForbiddenRequest(
@@ -432,23 +431,35 @@ async function admitAnonymousSearch(
   return admitted;
 }
 
-// Whether a realm lets a user read it, judged as the realm judges a session
-// that carries only `read`. An archived realm is sealed, and lets no one read
-// it.
-async function realmReadsFor(
+// The realms among `urls` whose `users` grant lets `user` read them: those
+// that grant `read` to every caller with a Matrix account, when the homeserver
+// has a profile for `user`, as `effectiveRealmPermissions` judges the grant.
+// The profile is asked for only when one of them carries such a grant, and
+// once however many do, so a search naming none costs no homeserver round
+// trip. An archived realm is sealed, and lets no one read it.
+async function realmsReadableToUsers(
   dbAdapter: DBAdapter,
   matrixClient: MatrixClient,
-  realmURL: string,
+  urls: string[],
   user: string,
-): Promise<boolean> {
-  if ((await archivedRealmURLs(dbAdapter, [realmURL])).has(realmURL)) {
-    return false;
+): Promise<string[]> {
+  if (urls.length === 0) {
+    return [];
   }
-  let checker = new RealmPermissionChecker(
-    await fetchRealmPermissions(dbAdapter, new URL(realmURL)),
-    matrixClient,
-  );
-  return await checker.can(user, 'read');
+  let rows = (await query(dbAdapter, [
+    `SELECT realm_url FROM realm_user_permissions WHERE username = 'users' AND read = true
+     AND realm_url NOT IN (SELECT url FROM realm_metadata WHERE archived_at IS NOT NULL)
+     AND realm_url IN (`,
+    ...separatedByCommas(urls.map((url) => [param(url)])),
+    ')',
+  ] as Expression)) as { realm_url: string }[];
+  if (rows.length === 0) {
+    return [];
+  }
+  if (!(await matrixClient.getProfile(user))) {
+    return [];
+  }
+  return rows.map(({ realm_url }) => ensureTrailingSlash(realm_url));
 }
 
 export function getMultiRealmAuthorization(
