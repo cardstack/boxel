@@ -1276,7 +1276,10 @@ export type ExplainedGrantOutcome =
   // The gate decided without evaluating it: an earlier grant admitted the
   // invocation, or a refusal came first. On the search lane every predicate is
   // this: a search runs a grant's filter over the index rather than evaluating
-  // its predicate per card.
+  // its predicate per card. It is also a predicate the realm failed to
+  // evaluate, by failing to load the evaluator or to read the settings or
+  // index row the predicate reads, where another grant admitted the
+  // invocation. Where none did, the explain fails as the gate did.
   | 'not-evaluated';
 
 // A validate's answer: what the policy card it was invoked on compiles to, or,

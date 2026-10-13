@@ -289,6 +289,7 @@ import {
   storedWriteRefusal,
   type PendingWrite,
   policyGateStats,
+  policyPredicatePreparations,
   policyUnavailable,
   type PolicyGateStats,
 } from './card-operations/gate.ts';
@@ -513,6 +514,7 @@ import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
 import {
+  REALM_IGNORE_FILES,
   RealmIndexUpdater,
   type IncrementalIndexMeta,
   type IndexChange,
@@ -2540,6 +2542,8 @@ export class Realm {
   #published = false;
   #linkShapePolicy: LinkShapePolicy;
   #fullIndexOnStartup = false;
+  // The root ignore files' mtimes when their rules were last read.
+  #ignoreFilesSignature: string | undefined;
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
@@ -2945,6 +2949,8 @@ export class Realm {
       dbAdapter,
       queue,
     });
+    this.#realmIndexUpdater.onIgnoreRulesChanged = () =>
+      this.#reindexForIgnoreRules();
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
@@ -4219,6 +4225,11 @@ export class Realm {
   // private state.
   clearRealmIndexCaches(): void {
     this.invalidateCachedRealmInfo();
+    void this.#loadIgnoreRules().catch((err: unknown) => {
+      this.#log.warn(
+        `reloading the ignore rules of ${this.url} failed: ${String(err)}`,
+      );
+    });
     this.#cachedHostRoutingMap = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
@@ -7496,6 +7507,7 @@ export class Realm {
     if (this.#skipBootIndex) {
       // Mount-and-serve only: no from-scratch index, even on a new index.
       // Definitions resolve lazily via the prerenderer on first lookup.
+      await this.#loadIgnoreRules();
     } else if (isNewIndex || this.#fullIndexOnStartup) {
       if (this.#fullIndexOnStartup) {
         // CS-11245: bootstrap realms (kind='bootstrap': base,
@@ -7534,11 +7546,50 @@ export class Realm {
         indexType: 'full',
         realmURL: this.url,
       });
+    } else {
+      await this.#loadIgnoreRules();
     }
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
+  }
+
+  // A changed root ignore file: the from-scratch pass rereads the rules and
+  // broadcasts what it hid or revealed, and the cache wipe after it tells the
+  // peer replicas to reread the rules too.
+  #reindexForIgnoreRules() {
+    let { completed } = this.startReindex();
+    completed
+      .then(() => this.clearRealmIndexCachesAndBroadcast())
+      .catch(() => {
+        // startReindex logs its own failure
+      });
+  }
+
+  // Applies the realm's ignore rules read from disk: on a boot with no
+  // from-scratch pass, and on a replica told another one changed the index.
+  // Rereads only when a root ignore file's mtime moved since the last load,
+  // since this runs on every index swap.
+  async #loadIgnoreRules() {
+    await this.#realmIndexUpdater.loadIgnoreRules(async () => {
+      let mtimes = await Promise.all(
+        REALM_IGNORE_FILES.map((name) => this.#adapter.lastModified(name)),
+      );
+      let signature = mtimes.map((mtime) => mtime ?? '-').join(',');
+      if (signature === this.#ignoreFilesSignature) {
+        return undefined;
+      }
+      let rules: string[] = [];
+      for (let name of REALM_IGNORE_FILES) {
+        let content = (await this.readFileAsText(name))?.content;
+        if (content) {
+          rules.push(content);
+        }
+      }
+      this.#ignoreFilesSignature = signature;
+      return rules;
+    });
   }
 
   // TODO get rid of this
@@ -10605,16 +10656,19 @@ export class Realm {
       }
       // The validators were built from the same stat, so when the opened
       // content has a different modification time they describe another
-      // version of the file. Sending them would let a client store these bytes
-      // under that version's validator; the response carries none instead,
-      // and the next request is answered from whatever the file is then.
+      // version of the file. Sending that ETag would let a client store these
+      // bytes under that version's validator, so the response carries none,
+      // and the next request is answered from whatever the file is then. The
+      // modification time is still sent, taken from the opened content: it
+      // describes the bytes this response delivers, and readers such as the
+      // indexer record it as the file's last-modified time.
       if (
         openedContent.lastModifiedMs != null &&
         ref.lastModifiedMs != null &&
         openedContent.lastModifiedMs !== ref.lastModifiedMs
       ) {
         delete headers['etag'];
-        delete headers['last-modified'];
+        headers['last-modified'] = formatRFC7231(openedContent.lastModifiedMs);
       }
     }
     let content = openedContent?.content ?? ref.content;
@@ -14428,6 +14482,7 @@ export class Realm {
   }
 
   private async isIgnored(url: URL): Promise<boolean> {
+    await this.#realmIndexUpdater.ignoreRulesLoaded();
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
@@ -16116,6 +16171,10 @@ export class Realm {
 
   __testOnlyPolicyGateStats(): PolicyGateStats {
     return { ...policyGateStats(this.operationCore) };
+  }
+
+  __testOnlyPolicyPredicatePreparations(): number {
+    return policyPredicatePreparations(this.operationCore);
   }
 
   // The cache reads the policy card straight from the index, not through a
