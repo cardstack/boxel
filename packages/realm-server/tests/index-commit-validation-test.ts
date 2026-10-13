@@ -26,6 +26,7 @@ import { validationRoundAnnouncement } from '@cardstack/runtime-common/index-run
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  closeTestPgAdapter,
   createTestPgAdapter,
   prepareTestDB,
   testRealm,
@@ -50,7 +51,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   hooks.afterEach(async function () {
-    await adapter.close();
+    await closeTestPgAdapter(adapter);
   });
 
   const url = (name: string) => `${testRealm}${name}.json`;
