@@ -151,6 +151,9 @@ export async function fetchGenerationCostWithBackoff(
         error,
       );
       if (!isRetryable(error)) {
+        log.error(
+          `Fetching generation cost failed in a way retrying cannot fix (generationId: ${generationId})`,
+        );
         return null;
       }
     }
@@ -186,11 +189,15 @@ async function fetchGenerationCost(
     },
   );
 
+  // The body of an answer that isn't read is cancelled, so the connection is
+  // released at once.
   if (response.status === 404) {
+    await response.body?.cancel().catch(() => undefined);
     return null;
   }
 
   if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
     throw new Error(
       `OpenRouter API returned ${response.status}: ${response.statusText}`,
     );
