@@ -19,6 +19,10 @@ import {
   testRealmURLFor,
 } from '../helpers/index.ts';
 import { setupCatalogTestSubset } from '../helpers/catalog-test-subset.ts';
+import {
+  setPolicySearchScopeSink,
+  type PolicySearchScopeEvent,
+} from '@cardstack/runtime-common/card-operations';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
@@ -590,6 +594,37 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           [`${realmHref}john`],
           'a reader is answered with the rows the declaration resolves to',
         );
+      });
+
+      test('a search of a realm with no policy records no policy consultation', async function (assert) {
+        let person = { module: `${realmHref}person`, name: 'Person' };
+        let recorded: PolicySearchScopeEvent[] = [];
+        setPolicySearchScopeSink((event) => recorded.push(event));
+        try {
+          let adHoc = await search(STRANGER);
+          let named = await namedSearch(STRANGER, {
+            operation: 'listPeople',
+            on: person,
+          });
+          assert.strictEqual(adHoc.status, 200);
+          assert.strictEqual(named.status, 200);
+          assert.deepEqual(
+            recorded,
+            [],
+            'neither search records a policy-search-scope event',
+          );
+
+          await nameAPolicyGrantingNoSearch();
+          let consulted = await search(STRANGER);
+          assert.strictEqual(consulted.status, 200);
+          assert.deepEqual(
+            recorded.map((event) => event.realmURL),
+            [realmHref],
+            'the same search records one once the realm names a policy',
+          );
+        } finally {
+          setPolicySearchScopeSink(undefined);
+        }
       });
 
       test('a request that authenticated nobody is told to authenticate', async function (assert) {
