@@ -177,15 +177,13 @@ export interface ReadUrlRequestInit {
 
 // Addresses a public-web read must never reach: loopback, private and
 // link-local networks (cloud metadata services live at 169.254.169.254),
-// carrier-grade NAT, multicast, reserved and documentation ranges, and the
-// IPv6 equivalents. IPv4-mapped addresses (::ffff:a.b.c.d, in dotted or hex
-// form) are checked against the IPv4 ranges — BlockList treats the two forms
-// as one address — so ::ffff:7f00:1 is refused like 127.0.0.1. Every other
-// IPv6 range that embeds an IPv4 address (IPv4-compatible, IPv4-translated,
-// NAT64 well-known and local-use, 6to4, Teredo) is blocked whole: the
-// embedded address could be any of the IPv4 ranges above, and public sites
-// are reached over plain IPv4 or native IPv6 anyway.
-const blockedAddresses = (() => {
+// carrier-grade NAT, multicast, reserved and documentation ranges.
+//
+// IPv4-mapped addresses (::ffff:a.b.c.d, dotted or hex) are checked against
+// these IPv4 ranges: BlockList treats the two forms as one address, so
+// ::ffff:7f00:1 is refused like 127.0.0.1 and ::ffff:808:808 is allowed like
+// 8.8.8.8.
+const blockedIPv4Addresses = (() => {
   let list = new BlockList();
   for (let [network, prefix] of [
     ['0.0.0.0', 8],
@@ -206,39 +204,65 @@ const blockedAddresses = (() => {
   ] as const) {
     list.addSubnet(network, prefix, 'ipv4');
   }
+  return list;
+})();
+
+// The IPv4-mapped range. BlockList matches every IPv4 address against an IPv6
+// rule for this range, so it is consulted only for addresses that parse as
+// IPv6 — and it must never be added to an IPv6 list that IPv4 addresses are
+// checked against, or every IPv4 address would match it.
+const ipv4MappedAddresses = (() => {
+  let list = new BlockList();
+  list.addSubnet('::ffff:0:0', 96, 'ipv6');
+  return list;
+})();
+
+// A native IPv6 address is public only inside global unicast, 2000::/3. That
+// leaves out loopback, unspecified, unique-local, link-local, site-local,
+// multicast, discard-only and every range that embeds an IPv4 address outside
+// it (IPv4-compatible, IPv4-translated, NAT64 well-known and local-use), and
+// any range assigned outside global unicast in future is refused as well.
+const globalUnicastIPv6Addresses = (() => {
+  let list = new BlockList();
+  list.addSubnet('2000::', 3, 'ipv6');
+  return list;
+})();
+
+// The special-purpose blocks inside global unicast: IETF protocol assignments
+// (Teredo, benchmarking, ORCHID and the rest of 2001::/23), documentation
+// (2001:db8::/32 and 3fff::/20) and 6to4 (2002::/16), whose embedded IPv4
+// address could be any of the IPv4 ranges above.
+const specialPurposeIPv6Addresses = (() => {
+  let list = new BlockList();
   for (let [network, prefix] of [
-    ['::', 96],
-    ['::ffff:0:0:0', 96],
-    ['64:ff9b::', 96],
-    ['64:ff9b:1::', 48],
-    ['100::', 64],
-    ['2001::', 32],
-    ['2002::', 16],
+    ['2001::', 23],
     ['2001:db8::', 32],
-    ['fc00::', 7],
-    ['fe80::', 10],
-    ['fec0::', 10],
-    ['ff00::', 8],
+    ['2002::', 16],
+    ['3fff::', 20],
   ] as const) {
     list.addSubnet(network, prefix, 'ipv6');
   }
   return list;
 })();
 
-const IPV4_MAPPED_RE = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i;
-
-// True when `address` (an IP literal) is on the public internet.
+// True when `address` (an IP literal, optionally bracketed) is on the public
+// internet.
 export function isPublicAddress(address: string): boolean {
   let normalized = address.replace(/^\[|\]$/g, '');
-  let mapped = IPV4_MAPPED_RE.exec(normalized);
-  if (mapped) {
-    normalized = mapped[1];
-  }
   let family = isIP(normalized);
-  if (family === 0) {
-    return false;
+  if (family === 4) {
+    return !blockedIPv4Addresses.check(normalized, 'ipv4');
   }
-  return !blockedAddresses.check(normalized, family === 4 ? 'ipv4' : 'ipv6');
+  if (family === 6) {
+    if (ipv4MappedAddresses.check(normalized, 'ipv6')) {
+      return !blockedIPv4Addresses.check(normalized, 'ipv6');
+    }
+    return (
+      globalUnicastIPv6Addresses.check(normalized, 'ipv6') &&
+      !specialPurposeIPv6Addresses.check(normalized, 'ipv6')
+    );
+  }
+  return false;
 }
 
 class BlockedAddressError extends Error {}
