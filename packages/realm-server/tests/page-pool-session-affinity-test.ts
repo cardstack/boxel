@@ -186,22 +186,20 @@ module(basename(import.meta.filename), function (hooks) {
   test('renders of one realm by its own indexing, two users and an anonymous reader each get a BrowserContext of their own', async function (assert) {
     let pool = makePool({ maxPages: 4, browserManager: makeBrowserStub() });
     await pool.warmStandbys();
-    let leases = [];
+    // Each render releases its tab before the next one asks, so renders that
+    // shared an affinity would share the tab.
+    let contexts = new Set();
     for (let auth of [
       realmAuthorityAuth,
       user1Auth,
       user2Auth,
       anonymousAuth,
     ]) {
-      leases.push(await pool.getPage(realmKeyFor(auth)));
-    }
-    let contexts = new Set(
-      leases.map((lease) => (lease.page as any).browserContext()),
-    );
-    assert.strictEqual(contexts.size, 4, 'four BrowserContexts');
-    for (let lease of leases) {
+      let lease = await pool.getPage(realmKeyFor(auth));
+      contexts.add((lease.page as any).browserContext());
       lease.release();
     }
+    assert.strictEqual(contexts.size, 4, 'four BrowserContexts');
   });
 
   test('a cross-affinity steal does not take a tab whose BrowserContext has another tab in it', async function (assert) {
@@ -223,11 +221,16 @@ module(basename(import.meta.filename), function (hooks) {
     );
     aIdle.release();
 
-    await assert.rejects(
-      pool.getPage('B'),
-      /No standby page available/,
-      'B finds no tab it may take',
-    );
+    try {
+      let b = await pool.getPage('B');
+      b.release();
+      assert.ok(false, `B took tab ${b.pageId}`);
+    } catch (e: any) {
+      assert.true(
+        /No standby page available/.test(e.message),
+        `B finds no tab it may take: ${e.message}`,
+      );
+    }
     assert.deepEqual(
       pool.getWarmAffinities(),
       ['A'],
