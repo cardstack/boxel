@@ -140,6 +140,10 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
+  'ui.switchSubmode': false,
+  'ui.openFile': false,
+  'ui.previewFormat': false,
+  'ui.openWorkspace': false,
 };
 
 // The host half of `realm.fs`: every call the script makes lands here, inside
