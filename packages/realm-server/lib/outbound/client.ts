@@ -543,8 +543,9 @@ function attachCredential(
   let value = placement.scheme
     ? `${placement.scheme} ${credential.value}`
     : credential.value;
-  scrubber.register(value);
-  scrubber.register(value.replace(HTTP_WHITESPACE_EDGES, ''));
+  // Only the credential, never the `<scheme> <value>` header value around it:
+  // the scrubber matches partial runs, and a run of the scheme and the key's
+  // public prefix would redact text that holds no credential.
   scrubber.register(credential.value.replace(HTTP_WHITESPACE_EDGES, ''));
   for (let name of Object.keys(headers)) {
     if (name.toLowerCase() === placement.header.toLowerCase()) {

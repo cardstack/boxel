@@ -141,9 +141,30 @@ module(basename(import.meta.filename), function () {
     }
 
     test('removes a partial echo at the minimum length, in any case', function (assert) {
-      let partial = KEY.slice(7, 7 + MIN_PARTIAL_LENGTH).toUpperCase();
+      // From the part after the key's public `sk-test-` prefix.
+      let partial = KEY.slice(8, 8 + MIN_PARTIAL_LENGTH).toUpperCase();
       let output = scrubberFor(KEY).scrubText(`invalid key ending ${partial}.`);
       assert.strictEqual(output, `invalid key ending ${REDACTED}.`);
+    });
+
+    test('removes a value too short for partial matching wherever it appears whole', function (assert) {
+      let output = scrubberFor('k7Q2x').scrubText(
+        'key=k7Q2x, echoed K7Q2X and %6b%37%51%32%78',
+      );
+      assert.strictEqual(
+        output,
+        `key=${REDACTED}, echoed ${REDACTED} and ${REDACTED}`,
+      );
+    });
+
+    test("leaves text about a vendor's key format alone", function (assert) {
+      let text =
+        'curl -H "Authorization: Bearer sk-test-proj" … keys look like sk-test-0xxxxxxxx';
+      assert.strictEqual(
+        scrubberFor(KEY).scrubText(text),
+        text,
+        'neither the public prefix nor a scheme in front of it is a credential',
+      );
     });
 
     test('leaves a run shorter than the minimum alone', function (assert) {
@@ -438,6 +459,41 @@ module(basename(import.meta.filename), function () {
       });
       assert.ok(result.error, 'the caller sees the failure');
       assertClean(assert, result, KEY.slice(0, 20));
+    });
+
+    test('an attached header credential is removed, and text about the key format is not', async function (assert) {
+      let mention =
+        'data: {"choices":[{"delta":{"content":"curl -H \\"Authorization: Bearer sk-test-abc\\" (keys start sk-test-0)"}}]}\n\n';
+      let response = await outboundFetch({
+        url: `${vendor.url}/respond`,
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          headers: { 'content-type': 'text/event-stream' },
+          chunks: [mention, `data: {"echo":"Bearer ${KEY}"}\n\n`],
+        }),
+        sizePath: 'system-key',
+        credential: {
+          name: 'stub',
+          value: KEY,
+          placement: {
+            in: 'header',
+            header: 'Authorization',
+            scheme: 'Bearer',
+          },
+        },
+      });
+      let body = await response.text();
+      assert.strictEqual(
+        vendor.requests.at(-1)?.headers.authorization,
+        `Bearer ${KEY}`,
+        'the vendor received the key',
+      );
+      assert.true(
+        body.startsWith(mention),
+        'the mention passes through unchanged',
+      );
+      assert.false(leaked(body, KEY), body);
     });
 
     test('a response with no credential passes through byte for byte', async function (assert) {

@@ -217,18 +217,23 @@ await outboundFetch({ ..., credential, scrubber });
 ```
 
 - Register **every value that goes into the request and every transform of
-  one**. Wrapping text such as `Bearer ` doesn't need its own registration,
-  because the value inside it is matched anyway.
-- A value shorter than `MIN_VALUE_LENGTH` (6) is ignored. Redacting every
-  occurrence of a few characters would mangle ordinary text.
+  one**, and nothing around it. Never register a `Bearer <value>` header
+  value: partial runs of the scheme and the key's public prefix
+  (`Bearer sk-`) would redact text that holds no credential, and the value
+  inside it is matched anyway.
 - A scrubber with nothing registered is a no-op: the response comes back
   untouched.
 
 ### What it matches
 
-- the value in full, or any run of it at least `MIN_PARTIAL_LENGTH` (10)
-  bytes long, ignoring ASCII case. A vendor's `sk-****<last 12>` hint is
-  removed; a shorter run is left alone;
+- any run at least `MIN_PARTIAL_LENGTH` (10) bytes long of the value after
+  its public prefix, ignoring ASCII case. A vendor's `sk-****<last 12>` hint
+  is removed; a shorter run is left alone. The public prefix is the leading
+  run of short letter-led segments a vendor puts on every key (`sk-or-v1-`,
+  `sk-ant-api03-`, `ghp_`): it identifies no one, so text about the key format
+  passes through, and a redacted key may read `sk-or-v1-[REDACTED]`;
+- a value whose remainder after that prefix is shorter than 10 bytes, matched
+  whole, at any length (base64 forms only from 8 characters up);
 - percent-encoding in either hex case (mixed with literal characters), JSON
   `\uXXXX` and short escapes, HTML numeric and named entities. These are
   decoded into a second view of the text, and that view is searched too;

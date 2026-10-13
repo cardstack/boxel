@@ -259,7 +259,7 @@ module(basename(import.meta.filename), function () {
           assert.deepEqual(response.body, {
             error: {
               code: 401,
-              message: 'No auth credentials found for [REDACTED]',
+              message: 'No auth credentials found for Bearer [REDACTED]',
             },
           });
         } finally {

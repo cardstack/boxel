@@ -1986,8 +1986,7 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(
           response.body.headers.authorization,
-          '[REDACTED]',
-          'the attached header value is removed whole',
+          'Bearer [REDACTED]',
         );
         assert.strictEqual(
           response.body.body,

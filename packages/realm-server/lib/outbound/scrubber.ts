@@ -6,8 +6,9 @@
 // the response's headers and body through the scrubber. A registered value is
 // found:
 //
-// - in full, or as any partial echo at least `MIN_PARTIAL_LENGTH` bytes long,
-//   ignoring ASCII case;
+// - as any run at least `MIN_PARTIAL_LENGTH` bytes long of the part after its
+//   public prefix (see `publicPrefix`), ignoring ASCII case; a value whose
+//   remainder is shorter than that is matched whole instead, at any length;
 // - percent-encoded (either hex case, mixed with literal characters), as JSON
 //   `\uXXXX` and short escapes, and as HTML numeric and named entities: these
 //   are decoded into a second view of the text and searched there too;
@@ -35,10 +36,19 @@ export const REDACTED = '[REDACTED]';
 // likely to occur by chance in ordinary text.
 export const MIN_PARTIAL_LENGTH = 10;
 
-// A registered value shorter than this is ignored: redacting every
-// occurrence of a few characters would mangle ordinary text, and a value that
-// short is not a credential worth the name.
-export const MIN_VALUE_LENGTH = 6;
+// A base64 run shorter than this is too likely to occur by chance in an
+// unrelated encoded payload to be worth removing.
+const MIN_BASE64_RUN_LENGTH = 8;
+
+// A vendor's key format often opens with a fixed, public prefix made of short
+// letter-led segments, such as `sk-or-v1-`, `sk-ant-api03-` or `ghp_`. Every
+// key of that vendor shares it, and text about the vendor quotes it, so it
+// identifies no one: partial echoes are matched only in what follows it.
+const PUBLIC_PREFIX = /^(?:[A-Za-z][A-Za-z0-9]{0,5}[-_]){1,4}/;
+
+export function publicPrefix(value: string): string {
+  return PUBLIC_PREFIX.exec(value)?.[0] ?? '';
+}
 
 // The longest escape sequence the decoded view understands, in bytes:
 // `&#x` plus eight hex digits and `;`, or a `\uXXXX\uXXXX` surrogate pair.
@@ -324,9 +334,16 @@ interface Grams {
 class NeedleSet {
   private byLength = new Map<number, Grams>();
 
-  add(needle: string): void {
+  // A partial needle matches any run of it `MIN_PARTIAL_LENGTH` long; a whole
+  // one only in full.
+  add(needle: string, partial: boolean): void {
     let bytes = folded(Buffer.from(needle, 'latin1'));
-    let length = Math.min(MIN_PARTIAL_LENGTH, bytes.length);
+    let length = partial
+      ? Math.min(MIN_PARTIAL_LENGTH, bytes.length)
+      : bytes.length;
+    if (length === 0) {
+      return;
+    }
     let grams = this.byLength.get(length);
     if (!grams) {
       let leadingPower = 1;
@@ -423,23 +440,40 @@ export class CredentialScrubber {
 
   // Registers a credential value, or a transform of one, that went into the
   // request. Everything scrubbed afterwards has it removed in every form.
+  //
+  // Register the credential itself, not text wrapped around it such as
+  // `Bearer <value>`: partial runs of the wrapper would match that text where
+  // no credential is present.
   register(value: string): void {
-    if (value.length < MIN_VALUE_LENGTH || this.registered.has(value)) {
+    if (!value || this.registered.has(value)) {
       return;
     }
     this.registered.add(value);
+    let secret = value.slice(publicPrefix(value).length);
+    if (secret.length >= MIN_PARTIAL_LENGTH) {
+      // Every run of the secret part long enough to identify it, which covers
+      // the whole value too; its public prefix may be left showing.
+      this.addForms(secret, true);
+    } else {
+      // Too short for partial runs to mean anything: matched only whole, at
+      // any length.
+      this.addForms(value, false);
+    }
+  }
+
+  private addForms(value: string, partial: boolean) {
     let bytes = Buffer.from(value, 'utf8');
     let text = bytes.toString('latin1');
-    this.addNeedle(text);
+    this.addNeedle(text, partial);
     if (text.includes(' ')) {
       // Form encoding writes a space as `+`.
-      this.addNeedle(text.replace(/ /g, '+'));
+      this.addNeedle(text.replace(/ /g, '+'), partial);
     }
     for (let offset = 0; offset < 3; offset++) {
       let core = base64Core(bytes, offset);
-      if (core.length < MIN_VALUE_LENGTH) continue;
-      this.addNeedle(core);
-      this.addNeedle(core.replace(/\+/g, '-').replace(/\//g, '_'));
+      if (core.length < MIN_BASE64_RUN_LENGTH) continue;
+      this.addNeedle(core, partial);
+      this.addNeedle(core.replace(/\+/g, '-').replace(/\//g, '_'), partial);
     }
   }
 
@@ -452,8 +486,8 @@ export class CredentialScrubber {
     return (this.needles.maxGramLength + 1) * MAX_ESCAPE_LENGTH;
   }
 
-  private addNeedle(text: string) {
-    this.needles.add(text);
+  private addNeedle(text: string, partial: boolean) {
+    this.needles.add(text, partial);
     for (let byte of Buffer.from(text, 'latin1')) {
       this.heldBytes.add(byte);
       this.heldBytes.add(fold(byte));
