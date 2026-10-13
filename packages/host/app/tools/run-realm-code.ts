@@ -126,6 +126,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.list': false,
   'fs.replace': true,
   'fs.writeText': true,
+  'fs.writeBytes': true,
   capture: false,
   'workspaces.create': false,
   'workspaces.delete': false,
