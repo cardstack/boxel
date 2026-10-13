@@ -17,6 +17,7 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   parseRateLimitSpec,
+  markRealmPublishable,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -222,6 +223,7 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   username: usernames,
+  publishable: publishableRealmURLs = [],
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
@@ -273,6 +275,11 @@ let {
     username: {
       description: 'The matrix username for the realm user',
       demandOption: true,
+      type: 'array',
+    },
+    publishable: {
+      description:
+        'The URL of a mounted realm to mark publishable at startup, matching one of the --fromUrl values. Repeat for each realm.',
       type: 'array',
     },
     migrateDB: {
@@ -366,6 +373,15 @@ for (let i = 0; i < fromUrls.length; i++) {
   }
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
+let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
+for (let realmURL of publishableRealms) {
+  if (!hrefs.some(([from]) => from === realmURL.href)) {
+    console.error(
+      `--publishable=${realmURL.href} doesn't match the --fromUrl of any mounted realm`,
+    );
+    process.exit(-1);
+  }
+}
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
@@ -610,6 +626,19 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       url: hrefs[i][0],
     })),
   });
+
+  // A realm the server mounts never goes through create-realm, which is what
+  // seeds realm_metadata.publishable for a realm made in the app. Without the
+  // flag the host doesn't offer the Host submode and _publish-realm refuses
+  // the realm, so set it for each mount the start script names.
+  for (let realmURL of publishableRealms) {
+    await markRealmPublishable(dbAdapter, realmURL);
+  }
+  if (publishableRealms.length > 0) {
+    log.info(
+      `Marked publishable: ${publishableRealms.map((url) => url.href).join(', ')}`,
+    );
+  }
 
   // Validate per-CLI-path username invariant. Phase 3 no longer constructs
   // realms here — the reconciler does it via mountFromRow once registry

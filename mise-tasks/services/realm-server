@@ -180,6 +180,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CHOREO_GALLERY:+--username='choreo_gallery_realm'} \
   ${START_CHOREO_GALLERY:+--fromUrl="${REALM_BASE_URL}/choreo-gallery/"} \
   ${START_CHOREO_GALLERY:+--toUrl="${REALM_BASE_URL}/choreo-gallery/"} \
+  ${START_CHOREO_GALLERY:+--publishable="${REALM_BASE_URL}/choreo-gallery/"} \
   \
   --path='../pretui' \
   --username='pretui_realm' \
