@@ -1,5 +1,6 @@
 import { param, query, type DBAdapter, type Expression } from './index.ts';
 import type { AnonymousRateLimit } from './anonymous-access.ts';
+import type { RateLimited } from './rate-limit-store.ts';
 
 // One anonymous invocation's charge against the budget of the grant that
 // admitted it.
@@ -21,10 +22,7 @@ export type AnonymousRateOutcome =
       // The window's count once this charge is included.
       count: number;
     }
-  | {
-      admitted: false;
-      retryAfterSeconds: number;
-    };
+  | RateLimited;
 
 // Counts anonymous invocations per realm, grant and client address, in fixed
 // windows. Neither realms nor grants share a count: a visitor's calls through
