@@ -73,7 +73,18 @@ const MAX_TOOL_FINALIZATION_RETRIES = isTesting() ? 10 : 100;
 // becomes loadable would otherwise hang forever, and the result event —
 // which is what un-sticks both the UI spinner and the waiting ai-bot — is
 // only sent once execute settles.
-const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 3_000 : 120_000;
+//
+// In tests the bound sits under the 10s budget of the tests' tool-chain waits
+// (such as the `waitForToolResult` mock-matrix helper). That window also holds
+// the steps before execution (waiting out in-flight room processing and
+// validating the request), which take well under a second in a typical run,
+// and the result event's delivery after it. So a tool slowed by a contended CI
+// runner gets most of the window to finish rather than failing partway, and a
+// tool that genuinely hangs typically still reaches its failed result inside a
+// test's wait. When the earlier steps run long, a hang can surface as the
+// test's wait timing out instead; the timeout is then in the tool service's
+// error log.
+const TOOL_EXECUTE_TIMEOUT_MS = isTesting() ? 8_000 : 120_000;
 // Upper bound on validating one tool request in the drain. Validation loads
 // the tool's module and input schema; a load that never settles would hold
 // the drain pass, and with it every later drain pass in the tab.
