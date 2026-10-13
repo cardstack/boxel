@@ -18,6 +18,9 @@ import zlib from 'node:zlib';
 //   /reflect-credential     200 whose body is the credential it received, bare
 //                           and not JSON: the `key` query parameter, else the
 //                           Authorization header without its scheme
+//   /respond                answers exactly as the POSTed `StubVendorResponse`
+//                           says: status, headers, and the body as separate
+//                           writes, optionally gzipped, optionally cut off
 
 export interface StubVendorRequest {
   method: string;
@@ -32,6 +35,58 @@ export interface StubVendor {
   alternateUrl: string;
   requests: StubVendorRequest[];
   close(): Promise<void>;
+}
+
+export interface StubVendorResponse {
+  status?: number;
+  headers?: Record<string, string>;
+  // Each written on its own, a short pause apart, so each reaches the
+  // client as a separate read. Strings are written as UTF-8; arrays of
+  // numbers as raw bytes.
+  chunks: (string | number[])[];
+  // Gzip the whole body and send the compressed bytes split at the same
+  // proportions as `chunks`.
+  gzip?: boolean;
+  // Destroy the connection after the last chunk instead of ending the body,
+  // as a stream stopped partway would.
+  cutOff?: boolean;
+}
+
+const CHUNK_PAUSE_MS = 20;
+
+async function respondAsSpecified(
+  res: http.ServerResponse,
+  spec: StubVendorResponse,
+) {
+  let parts = spec.chunks.map((chunk) =>
+    typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : Buffer.from(chunk),
+  );
+  let headers = { ...(spec.headers ?? {}) };
+  if (spec.gzip) {
+    let whole = zlib.gzipSync(Buffer.concat(parts));
+    let total = parts.reduce((sum, part) => sum + part.length, 0) || 1;
+    let offset = 0;
+    parts = parts.map((part, index) => {
+      let end =
+        index === parts.length - 1
+          ? whole.length
+          : offset + Math.round((part.length / total) * whole.length);
+      let slice = whole.subarray(offset, end);
+      offset = end;
+      return slice;
+    });
+    headers['content-encoding'] = 'gzip';
+  }
+  res.writeHead(spec.status ?? 200, headers);
+  for (let part of parts) {
+    res.write(part);
+    await new Promise((resolve) => setTimeout(resolve, CHUNK_PAUSE_MS));
+  }
+  if (spec.cutOff) {
+    res.destroy();
+  } else {
+    res.end();
+  }
 }
 
 function numberParam(url: URL, name: string, fallback: number): number {
@@ -59,7 +114,9 @@ export async function startStubVendor(): Promise<StubVendor> {
       requests.push(received);
 
       let statusMatch = /^\/status\/(\d{3})$/.exec(url.pathname);
-      if (url.pathname === '/echo') {
+      if (url.pathname === '/respond') {
+        void respondAsSpecified(res, JSON.parse(received.body));
+      } else if (url.pathname === '/echo') {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(received));
       } else if (statusMatch) {

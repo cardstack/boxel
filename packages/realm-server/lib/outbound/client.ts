@@ -31,7 +31,10 @@ import { CredentialScrubber } from './scrubber.ts';
 //   fetch instrumentation off its requests (see `guarded-call-context.ts`);
 // - streams the response body through, counting its decompressed bytes against
 //   a response size cap. The cap is in observe mode: what an enforced cap
-//   would have refused is logged and nothing is refused.
+//   would have refused is logged and nothing is refused;
+// - removes every credential registered with the request's scrubber from the
+//   response's status text, headers and decompressed body, as a stream, before
+//   the caller reads any of it.
 //
 // Requests go out through `globalThis.fetch` with a guarded dispatcher, so the
 // body is decompressed as a stream by fetch itself and never buffered here.
@@ -452,9 +455,11 @@ export interface OutboundRequest {
   sizePath: ResponseSizePath;
   // The credential to attach. A redirect to another origin drops it.
   credential?: OutboundCredential;
-  // Every form of the attached credential is registered here. A caller that
-  // keeps handling the call after `outboundFetch` returns — reading the body,
-  // logging what it got back — passes its own and scrubs with it.
+  // Every form of the attached credential is registered here, and the
+  // response comes back with each registered value removed. A caller that
+  // sends a credential some other way (substituted into the body, or a
+  // transform of one) registers it here itself. A caller that keeps handling
+  // the call after `outboundFetch` returns passes its own and scrubs with it.
   scrubber?: CredentialScrubber;
 }
 
@@ -611,7 +616,7 @@ async function send(
 
     let location = response.headers.get('location');
     if (!REDIRECT_STATUSES.has(response.status) || !location) {
-      return observeResponseSize(response, {
+      let observed = observeResponseSize(response, {
         destination: recordedDestination(request.url),
         sizePath: request.sizePath,
         timeout,
@@ -620,6 +625,7 @@ async function send(
         scrubber,
         context,
       });
+      return scrubResponse(observed, scrubber);
     }
 
     await response.body?.cancel().catch(() => undefined);
@@ -770,4 +776,30 @@ function observeResponseSize(
     statusText: response.statusText,
     headers: response.headers,
   });
+}
+
+// --- Scrubbing ---------------------------------------------------------------
+
+// Hands back `response` with every registered credential removed. The body
+// is scrubbed after the size count, so it is the decompressed bytes that are
+// searched, and a stream that fails partway delivers nothing the scrubber was
+// still holding back.
+function scrubResponse(
+  response: Response,
+  scrubber: CredentialScrubber,
+): Response {
+  if (scrubber.isEmpty) {
+    return response;
+  }
+  let headers = scrubber.scrubHeaders(response.headers);
+  // Removing a credential changes the body's length.
+  headers.delete('content-length');
+  return new Response(
+    response.body ? scrubber.scrubStream(response.body) : null,
+    {
+      status: response.status,
+      statusText: scrubber.scrubText(response.statusText),
+      headers,
+    },
+  );
 }

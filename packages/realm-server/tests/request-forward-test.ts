@@ -29,6 +29,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
+import { logger } from '@cardstack/runtime-common';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import * as Sentry from '@sentry/node';
@@ -128,7 +129,7 @@ module(basename(import.meta.filename), function () {
         await dbAdapter.execute(
           `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at) 
            VALUES 
-             (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'sk-or-v1-test-5c1d8e2f9a73b046', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
              (gen_random_uuid(), 'https://api.example.com', 'example-api-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
              (gen_random_uuid(), 'https://www.googleapis.com/customsearch/v1', 'google-api-key', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
              (gen_random_uuid(), 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/', 'cloudflare-api-key', 'no-credit', true, 'header', 'cf-aig-authorization', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -1826,7 +1827,7 @@ module(basename(import.meta.filename), function () {
       });
       hooks.beforeEach(async function () {
         vendor.requests.length = 0;
-        configureOutbound({ devAllowlist: ['127.0.0.1'] });
+        configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
         await dbAdapter.execute(
           `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
            VALUES
@@ -1959,6 +1960,132 @@ module(basename(import.meta.filename), function () {
 
         assert.strictEqual(response.status, 429);
         assert.deepEqual(response.body, { status: 429 });
+      });
+
+      test('a vendor echoing the header system key returns nothing of it to the caller', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0]?.headers.authorization,
+          'Bearer stub-vendor-key',
+          'the vendor received the key',
+        );
+        assert.false(
+          response.text.includes('stub-vendor-key'),
+          `the key is not in the response: ${response.text}`,
+        );
+        assert.strictEqual(
+          response.body.headers.authorization,
+          '[REDACTED]',
+          'the attached header value is removed whole',
+        );
+        assert.strictEqual(
+          response.body.body,
+          '{"hello":"vendor"}',
+          'the rest of the echo is unchanged',
+        );
+      });
+
+      test('a vendor echoing the url-parameter system key returns nothing of it to the caller', async function (assert) {
+        await dbAdapter.execute(
+          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+           VALUES (gen_random_uuid(), '${vendor.alternateUrl}/echo', 'stub-param-key-7f3e9a', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        );
+        AllowedProxyDestinations.reset();
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.alternateUrl}/echo?q=boxel`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0]?.path,
+          '/echo?q=boxel&key=stub-param-key-7f3e9a',
+          'the vendor received the key in its query string',
+        );
+        assert.false(
+          response.text.includes('stub-param-key-7f3e9a'),
+          `the key is not in the response: ${response.text}`,
+        );
+        assert.strictEqual(response.body.path, '/echo?q=boxel&key=[REDACTED]');
+      });
+
+      test('a streamed error echoing the system key reaches neither the caller nor the log', async function (assert) {
+        let log = logger('proxy-forward');
+        let logged: string[] = [];
+        let originalFactory = log.methodFactory;
+        let originalLevel = log.getLevel();
+        log.methodFactory = (methodName, level, loggerName) => {
+          let raw = originalFactory(methodName, level, loggerName);
+          return (...args: unknown[]) => {
+            logged.push(args.map(String).join(' '));
+            raw(...args);
+          };
+        };
+        log.setLevel('trace');
+        let response;
+        try {
+          response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/respond`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+                chunks: [
+                  '{"error":"Invalid key ',
+                  Buffer.from('Bearer stub-vendor-key').toString('base64'),
+                  ' (stub-vendor-key)"}',
+                ],
+              }),
+              stream: true,
+            });
+        } finally {
+          log.methodFactory = originalFactory;
+          log.setLevel(originalLevel);
+        }
+
+        assert.strictEqual(response.status, 401);
+        assert.true(response.text.includes('Invalid key'));
+        assert.false(
+          response.text.includes('stub-vendor-key'),
+          `the key is not in the response: ${response.text}`,
+        );
+        assert.false(
+          response.text.includes(
+            // The part of the encoding made only of the key's own bytes.
+            Buffer.from('Bearer stub-vendor-key').toString('base64').slice(12),
+          ),
+          'nor is its base64 form',
+        );
+        assert.true(
+          logged.some((line) => line.includes('Invalid key')),
+          'the vendor error is logged',
+        );
+        assert.false(
+          logged.some((line) => line.includes('stub-vendor-key')),
+          'without the key',
+        );
       });
 
       test('an OpenRouter-shaped stream is forwarded and charged', async function (assert) {
@@ -2141,6 +2268,64 @@ module(basename(import.meta.filename), function () {
             leaksCredential(response!.text, key),
             'the response does not',
           );
+        });
+
+        test('no run of a full-length key a vendor quotes back reaches a log line, Sentry event or response', async function (assert) {
+          let key = 'sk-or-v1-8d2f61c04b9e3a75f0c1d6e28b4a9f3c7e05d1b6';
+          let destination = `${vendor.alternateUrl}/respond`;
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${destination}', '${key}', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          // A body that isn't JSON and starts with a truncated copy of the
+          // key, the way a vendor's plain-text error might. JSON.parse quotes
+          // the start of what it fails on.
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({
+                url: destination,
+                method: 'POST',
+                requestBody: JSON.stringify({
+                  status: 401,
+                  headers: { 'content-type': 'text/plain' },
+                  chunks: [`${key.slice(0, 31)}… is not a valid key`],
+                }),
+              });
+          });
+          Sentry.captureException(new Error('probe for breadcrumbs'));
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(
+            vendor.requests[0]?.headers.authorization,
+            `Bearer ${key}`,
+            'the vendor received the key',
+          );
+          assert.strictEqual(response!.status, 500);
+          assert.true(
+            lines.some((line) => line.message.includes('SyntaxError')),
+            'the parse failure is logged',
+          );
+          // Every run of the key long enough to identify it.
+          let runs: string[] = [];
+          for (let start = 0; start + 10 <= key.length; start++) {
+            runs.push(key.slice(start, start + 10).toLowerCase());
+          }
+          let carries = (text: string) =>
+            runs.some((run) => text.toLowerCase().includes(run));
+          assert.false(
+            lines.some((line) => carries(line.message)),
+            'no log line carries any of it',
+          );
+          assert.false(carries(sent), 'no Sentry event or breadcrumb does');
+          assert.false(carries(response!.text), 'the response does not');
         });
       });
     });

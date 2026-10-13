@@ -1,6 +1,6 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the one the caller sent, never the one with the credential attached), and finding a send-path error by the key's name in logs and Sentry. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the one the caller sent, never the one with the credential attached), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
 ---
 
 # Outbound guard (operators)
@@ -63,9 +63,9 @@ What enforces it:
   every other property a logger or Sentry prints — before it is logged,
   reported or answered with. Node quotes its input in `new Headers`, `new URL`
   (on `.input`) and `JSON.parse` errors; those are the usual carriers. The
-  scrub matches the value raw, percent-encoded in both hex cases,
-  form-encoded, base64/base64url at every alignment, and JSON-escaped; a
-  removed value reads `[REDACTED]`.
+  scrub is the same one every response goes through, matching every form
+  listed under [Response scrubbing](#response-scrubbing-developers); a removed
+  value reads `[REDACTED]`.
 - **Sentry's fetch instrumentation skips guarded requests.** With tracing on
   it would record each outgoing URL and its query string as a breadcrumb; with
   tracing off it adds `sentry-trace` / `baggage` headers to the request. A
@@ -192,3 +192,76 @@ switching to enforcement.
    are refused by design.
 4. `504` — the vendor did not connect in 10 s or finish in 10 min. Compare
    with the vendor's status page before touching the timeouts.
+
+## Response scrubbing (developers)
+
+Any vendor may echo a credential back: in a body, a header, an error or a
+redirect. `outboundFetch` registers each form of the `credential` it attaches
+with the request's `CredentialScrubber`
+(`packages/realm-server/lib/outbound/scrubber.ts`), and returns a `Response`
+whose status text, headers and body have already had every registered value
+replaced with `[REDACTED]`. The body is scrubbed after decompression and after the size
+count. Nothing upstream of the scrubber sees the response.
+
+### Registering a value
+
+An attached `credential` is registered for you. Anything else that carries a
+credential into the request (a value substituted into a body template, the
+output of a transform) is registered by the caller, on the scrubber it passes:
+
+```ts
+let scrubber = new CredentialScrubber();
+// A transform's output is a credential too:
+scrubber.register(Buffer.from(`${user}:${password}`).toString('base64'));
+await outboundFetch({ ..., credential, scrubber });
+```
+
+- Register **every value that goes into the request and every transform of
+  one**. Wrapping text such as `Bearer ` doesn't need its own registration,
+  because the value inside it is matched anyway.
+- A value shorter than `MIN_VALUE_LENGTH` (6) is ignored. Redacting every
+  occurrence of a few characters would mangle ordinary text.
+- A scrubber with nothing registered is a no-op: the response comes back
+  untouched.
+
+### What it matches
+
+- the value in full, or any run of it at least `MIN_PARTIAL_LENGTH` (10)
+  bytes long, ignoring ASCII case. A vendor's `sk-****<last 12>` hint is
+  removed; a shorter run is left alone;
+- percent-encoding in either hex case (mixed with literal characters), JSON
+  `\uXXXX` and short escapes, HTML numeric and named entities. These are
+  decoded into a second view of the text, and that view is searched too;
+- base64 and base64url at each of the three byte alignments the value can sit
+  at inside a longer encoded run, in full or as a partial run of at least 10
+  characters.
+
+A response with no match passes through byte for byte, binary included. The
+scrubber works on bytes and never decodes the body as a string. A match is
+replaced as a whole with `[REDACTED]`, so the body's length changes, and the
+returned headers drop `content-length`.
+
+### The window
+
+At a chunk boundary the stream holds back only the tail that could still be
+the start of a match. That is the trailing run of bytes that can appear in a
+registered value (in any of its forms) or in an escape sequence, and it is
+never longer than `holdbackBytes` (about 130 bytes). A byte that can't belong
+to a match releases everything before it. An SSE event ends in `\n\n`, so a
+streamed generation is delivered event by event without waiting for the next
+one. The stream also keeps the last `holdbackBytes` it delivered as lookbehind,
+so a match split across any number of chunks is still recognized. Memory stays
+bounded by the chunk in hand plus the window.
+
+When the source stream fails partway (a dropped connection, or a size cap that
+ends the stream), the held tail is **discarded, never flushed**. Everything the
+caller received had already cleared the window, so no partial credential
+leaks.
+
+### Diagnosing `[REDACTED]` in a response
+
+The vendor echoed something that matches a registered value. If the vendor
+wasn't echoing a credential, the likeliest cause is that a short or
+low-entropy value was registered and is matching ordinary text: check what the
+path registers. Never raise `MIN_PARTIAL_LENGTH` or skip registration to make
+it go away.
