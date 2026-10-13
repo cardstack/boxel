@@ -25,10 +25,22 @@ const LONE_SURROGATE = /\p{Cs}/u;
 // formatting characters.
 const INVISIBLE = /[\s\p{Cf}]/gu;
 
+// The part of `Intl.Segmenter` counting a label needs, described here because
+// several packages compile this module against a `lib` that predates it.
+interface GraphemeSegmenter {
+  segment(input: string): Iterable<unknown>;
+}
+const { Segmenter } = Intl as unknown as {
+  Segmenter: new (
+    locales: undefined,
+    options: { granularity: 'grapheme' },
+  ) => GraphemeSegmenter;
+};
+
 // A label's length as a person counts it: one per character they see, so a
 // flag or an emoji sequence counts once.
 function visibleLength(value: string): number {
-  let segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  let segmenter = new Segmenter(undefined, { granularity: 'grapheme' });
   return [...segmenter.segment(value)].length;
 }
 
