@@ -5305,6 +5305,196 @@ ${patchedFileSource}
     }
   });
 
+  // A user message, a bot message asking for one check per result, and the
+  // results in order. Each result is a card's attributes, `'no-output'` for a
+  // result with no card, or `'unreadable'` for a card whose download failed.
+  function correctnessBatchHistory(
+    results: (
+      | 'no-output'
+      | 'unreadable'
+      | { correct: boolean; errors: string[] }
+    )[],
+  ): DiscreteMatrixEvent[] {
+    const roomId = '!room:localhost';
+    const aiMessageId = 'ai-message-1';
+    return [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Build the card, then tell me how to use it.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+        },
+        unsigned: { age: 0, transaction_id: 'user-message' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the card.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: results.map((_result, index) => ({
+            id: `check-${index}`,
+            name: 'checkCorrectness',
+            arguments: JSON.stringify({
+              description: `Check file ${index}`,
+              attributes: {
+                targetType: 'file',
+                targetRef: `http://localhost/file-${index}.gts`,
+                roomId,
+                correctnessCheckAttempt: 1,
+              },
+            }),
+          })),
+        },
+        unsigned: { age: 0, transaction_id: aiMessageId },
+        status: EventStatus.SENT,
+      },
+      ...results.map(
+        (result, index) =>
+          ({
+            type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+            event_id: `command-result-${index}`,
+            room_id: roomId,
+            sender: '@user:localhost',
+            origin_server_ts: 3 + index,
+            content: {
+              msgtype:
+                result === 'no-output'
+                  ? APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE
+                  : APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+              commandRequestId: `check-${index}`,
+              'm.relates_to': {
+                event_id: aiMessageId,
+                key: 'applied',
+                rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+              },
+              data: {
+                ...(result === 'no-output'
+                  ? {}
+                  : {
+                      card: {
+                        sourceUrl: `http://localhost/correctness/${index}.json`,
+                        url: `http://localhost/correctness/${index}.json`,
+                        name: `correctness-${index}.json`,
+                        contentType: 'application/json',
+                        ...(result === 'unreadable'
+                          ? { error: 'Error loading attached card: 404' }
+                          : {
+                              content: JSON.stringify({
+                                data: {
+                                  attributes: { ...result, warnings: [] },
+                                },
+                              }),
+                            }),
+                      },
+                    }),
+                context: { tools: [], functions: [] },
+                attachedFiles: [],
+              },
+            },
+            unsigned: { age: 0, transaction_id: `command-result-${index}` },
+            status: EventStatus.SENT,
+          }) as DiscreteMatrixEvent,
+      ),
+    ];
+  }
+
+  const SUCCESS_NOTE_START = 'The write above passed its checks.';
+  const TRAILING_SUMMARY_START =
+    'The automated correctness checks have finished.';
+
+  function userMessagesWith(
+    messages: Parameters<typeof messageText>[0][] | undefined,
+    text: string,
+  ) {
+    return (messages ?? []).filter(
+      (message) =>
+        (message as { role?: string } | undefined)?.role === 'user' &&
+        messageText(message).includes(text),
+    );
+  }
+
+  test('a passing batch with no result cards still gets the success note, and no trailing summary', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['no-output', 'no-output']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      1,
+      'An applied check with no result card passed, so the batch gets the note once',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'The trailing one-sentence summary is left out',
+    );
+  });
+
+  test('a batch with a failed check gets only the fix instruction and the trailing summary', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: true, errors: [] },
+        { correct: false, errors: ['file-1.gts: unknown field type'] },
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'The success note would claim the write passed, so it is left out',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      1,
+      'The failing check asks for a fix',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      1,
+      'The trailing summary fires as it does for any failed batch',
+    );
+  });
+
+  test('a check whose result card could not be read is not reported as passed', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['unreadable']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    let toolMessage = messages?.find((message) => message.role === 'tool');
+    assert.true(
+      messageText(toolMessage).includes('could not be read'),
+      'The tool message says the result could not be read',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'Nobody knows whether the write passed, so there is no success note',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      1,
+      'The trailing summary fires',
+    );
+  });
+
   test('system message parts include cache_control directive on last part', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
