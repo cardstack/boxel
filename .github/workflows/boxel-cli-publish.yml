@@ -210,50 +210,6 @@ jobs:
             done
           fi
 
-      - name: Generate release notes
-        id: notes
-        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NEW_TAG: boxel-cli-v${{ steps.release.outputs.nextNpm }}
-          NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
-          NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
-          NPM_DIST_TAG: unstable
-          REPO: ${{ github.repository }}
-          RUNNER_TEMP_DIR: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          # PREV_TAG is the prior boxel-cli-v* tag reachable from HEAD. Tags
-          # from earlier publishes point at the previous bot commit, which is
-          # HEAD's parent at this point in the run (we haven't committed yet).
-          # Use HEAD as the starting ref; git describe walks back to the
-          # nearest matching tag automatically.
-          if PREV_TAG=$(git describe --tags --abbrev=0 --match 'boxel-cli-v*' HEAD 2>/dev/null); then
-            echo "Previous tag: $PREV_TAG"
-          else
-            echo "No prior boxel-cli-v* tag found (bootstrap). Falling back to one-line release body."
-            echo "has=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          BODY_FILE="$RUNNER_TEMP_DIR/release-body.md"
-          # The script writes both a body file and a changelog fragment file.
-          # We only consume the body here — CHANGELOG.md is intentionally NOT
-          # updated on unstable publishes (it's reserved for stable cuts; the
-          # per-bump unstable detail is on the GitHub Releases page).
-          FRAGMENT_FILE="$RUNNER_TEMP_DIR/changelog-fragment.md"
-          PREV_TAG="$PREV_TAG" \
-          NEW_TAG="$NEW_TAG" \
-          NEXT_NPM="$NEXT_NPM" \
-          NEXT_PLUGIN="$NEXT_PLUGIN" \
-          NPM_DIST_TAG="$NPM_DIST_TAG" \
-          REPO="$REPO" \
-          RELEASE_BODY_FILE="$BODY_FILE" \
-          CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
-          NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
-            node scripts/generate-release-notes.ts
-          echo "has=true" >> "$GITHUB_OUTPUT"
-          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
-
       - name: Commit, tag, and push
         id: commit
         if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
@@ -303,7 +259,7 @@ jobs:
             fi
             echo "main moved; replaying the release commit onto it and retrying."
             git fetch origin main
-            git rebase --autostash origin/main
+            git rebase origin/main
           done
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
@@ -313,6 +269,50 @@ jobs:
             git push origin "$TAG"
             echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Generate release notes
+        id: notes
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TAG: boxel-cli-v${{ steps.release.outputs.nextNpm }}
+          NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
+          NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
+          NPM_DIST_TAG: unstable
+          REPO: ${{ github.repository }}
+          RUNNER_TEMP_DIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          # Runs after the push so the notes cover the same commits as the tag:
+          # a replay onto a moved main brings in merges this release ships, and
+          # those belong in these notes, not in no release's. PREV_TAG is the
+          # nearest boxel-cli-v* tag reachable from HEAD other than the one this
+          # run just created on HEAD itself.
+          if PREV_TAG=$(git describe --tags --abbrev=0 --match 'boxel-cli-v*' --exclude "$NEW_TAG" HEAD 2>/dev/null); then
+            echo "Previous tag: $PREV_TAG"
+          else
+            echo "No prior boxel-cli-v* tag found (bootstrap). Falling back to one-line release body."
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BODY_FILE="$RUNNER_TEMP_DIR/release-body.md"
+          # The script writes both a body file and a changelog fragment file.
+          # We only consume the body here — CHANGELOG.md is intentionally NOT
+          # updated on unstable publishes (it's reserved for stable cuts; the
+          # per-bump unstable detail is on the GitHub Releases page).
+          FRAGMENT_FILE="$RUNNER_TEMP_DIR/changelog-fragment.md"
+          PREV_TAG="$PREV_TAG" \
+          NEW_TAG="$NEW_TAG" \
+          NEXT_NPM="$NEXT_NPM" \
+          NEXT_PLUGIN="$NEXT_PLUGIN" \
+          NPM_DIST_TAG="$NPM_DIST_TAG" \
+          REPO="$REPO" \
+          RELEASE_BODY_FILE="$BODY_FILE" \
+          CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
+          NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
+            node scripts/generate-release-notes.ts
+          echo "has=true" >> "$GITHUB_OUTPUT"
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Bump to next unstable version
         # Manual (`workflow_dispatch`, blank confirm) path only. The push path
@@ -565,20 +565,15 @@ jobs:
           fi
           git add packages/boxel-cli/package.json packages/boxel-cli/CHANGELOG.md
           git commit -m "Release @cardstack/boxel-cli v${VERSION} [skip ci]"
-          # Push the commit before the tag, replaying it if main moved — see
-          # the unstable job's "Commit, tag, and push" for why.
-          for attempt in 1 2 3; do
-            if git push origin HEAD:main; then
-              break
-            fi
-            if [ "$attempt" = 3 ]; then
-              echo "::error::main moved under this run three times; nothing was published."
-              exit 1
-            fi
-            echo "main moved; replaying the release commit onto it and retrying."
-            git fetch origin main
-            git rebase --autostash origin/main
-          done
+          # Push the commit before the tag, so a rejected push can't leave a tag
+          # naming a commit main never received. No replay here: the build and
+          # the CHANGELOG fragment above were made from this checkout, and a
+          # replay would publish them under a tag on a different tree. Nothing
+          # is pushed or tagged yet, so a re-dispatch starts clean.
+          if ! git push origin HEAD:main; then
+            echo "::error::main moved while this promotion ran; nothing was pushed, tagged or published. Re-run the workflow."
+            exit 1
+          fi
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
 
