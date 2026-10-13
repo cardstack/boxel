@@ -543,16 +543,16 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('is still told to sign in where a declaration compares against the caller', async function (assert) {
+    test('is not told to sign in where a declaration compares against the caller', async function (assert) {
       let { core } = stubCore({ reads: false });
-      let noActor = await refusal(
-        resolveNamedQuery(
+      assert.deepEqual(
+        await resolveNamedQuery(
           core,
           { operation: 'mine', on: REPORT },
           { ...CONTEXT, principal: undefined },
         ),
+        { admitsNothing: true },
       );
-      assert.strictEqual(noActor.code, 'actor-required');
     });
 
     test('a member the search grammar refuses is refused whether the operation is declared or not', async function (assert) {

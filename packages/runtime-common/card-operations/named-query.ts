@@ -272,14 +272,12 @@ export async function resolveNamedQuery(
 }
 
 // Whether a refusal resolving gives says something of the type's declaration.
-// Two refusals do not. A 500 is the server failing to read the declaration at
-// all. `actor-required` tells a caller who isn't signed in to sign in, which
-// lowering refuses rather than answer with no rows, since a saved search that
-// silently finds nothing is worse than one that asks for credentials.
+// Every one does but a 500, which is the server failing to read the
+// declaration at all. That includes `actor-required`: it is given only where
+// the declaration compares against the caller, so a caller who isn't signed in
+// would otherwise tell such an operation from one the type doesn't declare.
 function describesDeclaration(failure: OperationFailure): boolean {
-  return (
-    failure.error.status !== 500 && failure.error.code !== 'actor-required'
-  );
+  return failure.error.status !== 500;
 }
 
 // The caller a search principal is judged as by a realm's permissions. A

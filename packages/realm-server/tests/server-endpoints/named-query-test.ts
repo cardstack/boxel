@@ -126,10 +126,16 @@ const SECRET = { module: `${PRIVATE}secret`, name: 'Secret' };
 const SECRET_MODULE = `
   import { contains, field, CardDef } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
-  import { operation, params } from "@cardstack/base/operations";
+  import { operation, actor, params } from "@cardstack/base/operations";
 
   export class Secret extends CardDef {
     @field status = contains(StringField);
+    @field keeper = contains(StringField);
+
+    @operation static mySecrets = {
+      base: 'query',
+      query: { filter: { on: () => Secret, eq: { keeper: actor() } } },
+    };
 
     @operation static openSecrets = {
       base: 'query',
@@ -955,6 +961,31 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       }
     });
 
+    test('a caller who isn’t signed in is not told to sign in by a declaration that compares against the caller', async function (assert) {
+      let nothing = await federatedSearch({
+        ...ADMITS_NOTHING,
+        realms: [SCHOOL],
+      });
+      assert.strictEqual(nothing.status, 200, 'HTTP 200 status');
+      assert.deepEqual(ids(nothing), [], 'the declared query admits nothing');
+
+      for (let [name, payload] of Object.entries({
+        ...REFUSED,
+        'a declaration that compares against the caller': {
+          operation: 'mySecrets',
+          on: SECRET,
+        },
+      })) {
+        let response = await federatedSearch({ ...payload, realms: [SCHOOL] });
+        assert.strictEqual(response.status, 200, `${name}: HTTP 200 status`);
+        assert.strictEqual(
+          response.text,
+          nothing.text,
+          `${name}: byte-identical to the declared query that admits nothing`,
+        );
+      }
+    });
+
     test('a refusal reads the live-search cache as a declared query does', async function (assert) {
       // Names used by no other test, so no earlier entry is still live.
       await federatedSearch(
@@ -1104,6 +1135,29 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
             `${name}: byte-identical to the declared query that admits nothing`,
           );
         }
+      });
+
+      test('a caller who isn’t signed in is not told to sign in by a declaration that compares against the caller', async function (assert) {
+        // School is readable by anyone, so a request that authenticates
+        // nobody reaches the query.
+        let signedOut = (body: Record<string, unknown>) =>
+          request
+            .post(`${new URL(school.url).pathname}_search`)
+            .set('Accept', 'application/vnd.card+json')
+            .set('Content-Type', 'application/json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(body);
+        let nothing = await signedOut(ADMITS_NOTHING);
+        assert.strictEqual(nothing.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(nothing), [], 'the declared query admits nothing');
+
+        let mine = await signedOut({ operation: 'mySecrets', on: SECRET });
+        assert.strictEqual(mine.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          mine.text,
+          nothing.text,
+          'byte-identical to the declared query that admits nothing',
+        );
       });
 
       test('a declared query still returns its rows', async function (assert) {
