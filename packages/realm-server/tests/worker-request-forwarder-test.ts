@@ -24,6 +24,7 @@ const secret = "shhh! it's a secret";
 //   base        — URL-form, from != to (Realm.url is the `from`)
 //   skills      — realm-prefix form, from is a bare string (Realm.url is the `to`)
 //   experiments — URL-form, from == to
+//   catalog     — realm-prefix form on a second realm-server origin
 const urlMappings: [URL | string, URL][] = [
   [
     new URL('https://cardstack.com/base/'),
@@ -34,6 +35,16 @@ const urlMappings: [URL | string, URL][] = [
     new URL('https://app.example/experiments/'),
     new URL('https://app.example/experiments/'),
   ],
+  ['@cardstack/catalog/', new URL('https://other.example/catalog/')],
+];
+
+// The shape a deployment has: every mapping on one realm-server origin.
+const singleOriginMappings: [URL | string, URL][] = [
+  [
+    new URL('https://cardstack.com/base/'),
+    new URL('https://app.example/base/'),
+  ],
+  ['@cardstack/skills/', new URL('https://app.example/skills/')],
 ];
 
 function incrementalEvent(realmURL: string): RealmEventContent {
@@ -137,7 +148,36 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('returns undefined for a realm on an origin no mapping serves', function (assert) {
+    test('a realm on the second configured origin goes to that origin', function (assert) {
+      let t = resolveWorkerRealmEventTarget(
+        urlMappings,
+        'https://other.example/a-user/a-workspace/',
+      );
+      assert.strictEqual(t?.origin, 'https://other.example');
+      assert.strictEqual(
+        t?.realmURL,
+        'https://other.example/a-user/a-workspace/',
+      );
+    });
+
+    test('a published-domain realm goes to the one configured realm-server origin', function (assert) {
+      let t = resolveWorkerRealmEventTarget(
+        singleOriginMappings,
+        'https://a-user.published.example/a-site/',
+      );
+      assert.strictEqual(
+        t?.origin,
+        'https://app.example',
+        'posts to the configured origin, not the published host',
+      );
+      assert.strictEqual(
+        t?.realmURL,
+        'https://a-user.published.example/a-site/',
+        'realmURL is the url the realm was published at',
+      );
+    });
+
+    test('returns undefined for a realm on no configured origin when several are configured', function (assert) {
       assert.strictEqual(
         resolveWorkerRealmEventTarget(
           urlMappings,
@@ -259,7 +299,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('drops an event for a realm on an origin no mapping serves, without any HTTP call', async function (assert) {
+    test('drops an event for a realm on no configured origin when several are configured, without any HTTP call', async function (assert) {
       let { fetch, calls } = recordingFetch(() => ({ status: 200 }));
 
       let delivered = await forwardWorkerRealmEvent({

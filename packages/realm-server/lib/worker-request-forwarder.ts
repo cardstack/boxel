@@ -60,10 +60,15 @@ export interface WorkerRealmEventTarget {
 // an origin derived from worker input.
 //
 // A realm named by a mapping resolves to that mapping's canonical url. Any
-// other realm hosted on a configured realm-server origin — the realms users
-// create at runtime, which no mapping names — is its own canonical url, since
-// the realm server registers it under the url it was created at. The endpoint
-// resolves it through the realm registry, so a url that names no realm on
+// other realm is its own canonical url, since the realm server registers it
+// under the url it was created or published at: the realms users create at
+// runtime, and the realms they publish to the published-realm domains, which
+// no mapping names. Such a realm goes to the configured realm-server origin it
+// is hosted on, or — for a published-domain realm, whose host is no configured
+// origin — to the one realm-server origin the mappings configure. When the
+// mappings configure several origins and none is the realm's own, there is no
+// way to tell which server hosts it, so the event is dropped. The endpoint
+// resolves the url through the realm registry, so a url that names no realm on
 // that server is refused there rather than here.
 export function resolveWorkerRealmEventTarget(
   urlMappings: [URL | string, URL][],
@@ -80,13 +85,28 @@ export function resolveWorkerRealmEventTarget(
       return { origin: to.origin, realmURL: canonicalHref };
     }
   }
-  if (normalizedURL) {
-    let origin = normalizedURL.origin;
-    if (urlMappings.some(([, to]) => to.origin === origin)) {
-      return { origin, realmURL: normalizedURL.href };
-    }
+  if (!normalizedURL) {
+    return undefined;
+  }
+  let origins = new Set(urlMappings.map(([, to]) => to.origin));
+  if (origins.has(normalizedURL.origin)) {
+    return { origin: normalizedURL.origin, realmURL: normalizedURL.href };
+  }
+  if (origins.size === 1) {
+    let [origin] = origins;
+    return { origin, realmURL: normalizedURL.href };
   }
   return undefined;
+}
+
+// The keys every forwarder log line carries, so a delivery, a drop and a
+// failure for one event can be matched up.
+function describeEvent(realmURL: string, event: RealmEventContent): string {
+  let generation =
+    'generation' in event && event.generation !== undefined
+      ? ` generation=${event.generation}`
+      : '';
+  return `${realmURL} (eventName=${event.eventName}${generation})`;
 }
 
 const MAX_ATTEMPTS = 3;
@@ -125,7 +145,7 @@ export async function forwardWorkerRealmEvent({
   let target = resolveWorkerRealmEventTarget(urlMappings, event.realmURL);
   if (!target) {
     log.warn(
-      `dropping worker realm event for unmanaged realm ${event.realmURL} (eventName=${event.eventName})`,
+      `dropping worker realm event for unmanaged realm ${describeEvent(event.realmURL, event)}`,
     );
     return false;
   }
@@ -156,11 +176,7 @@ export async function forwardWorkerRealmEvent({
         // rather than pinning it until the Response is GC'd.
         await response.text().catch(() => {});
         log.info(
-          `forwarded worker realm event for ${target.realmURL} (eventName=${event.eventName}${
-            'generation' in event && event.generation !== undefined
-              ? ` generation=${event.generation}`
-              : ''
-          }) after ${attempts} attempt(s)`,
+          `forwarded worker realm event for ${describeEvent(target.realmURL, event)} after ${attempts} attempt(s)`,
         );
         return true;
       }
@@ -180,7 +196,7 @@ export async function forwardWorkerRealmEvent({
     }
   }
   log.error(
-    `failed to forward worker realm event for ${event.realmURL} after ${attempts} attempt(s): ${
+    `failed to forward worker realm event for ${describeEvent(target.realmURL, event)} after ${attempts} attempt(s): ${
       lastErr instanceof Error ? lastErr.message : String(lastErr)
     }`,
   );
