@@ -28,7 +28,11 @@ BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PA
 EXPERIMENTS_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/experiments/${READY_PATH}"
 NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
-WAIT_ON_TIMEOUT=7200000 SKIP_BOXEL_HOMEPAGE=true NODE_NO_WARNINGS=1 start-server-and-test \
+# START_SERVER_AND_TEST_INSECURE=1 relaxes wait-on's cert check for the mkcert
+# leaf: on a first run the cert is created after this coordinator starts,
+# so it can't inherit NODE_EXTRA_CA_CERTS. It doesn't affect the services.
+WAIT_ON_TIMEOUT=7200000 SKIP_BOXEL_HOMEPAGE=true NODE_NO_WARNINGS=1 \
+  START_SERVER_AND_TEST_INSECURE=1 start-server-and-test \
   'run-p start:pg start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "${BASE_REALM_READY}|${EXPERIMENTS_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
   'run-p start:worker-test start:test-realms' \
