@@ -1866,8 +1866,16 @@ module(basename(import.meta.filename), function () {
                 forward.abort();
                 resolve();
               });
-              res.on('end', () => callback(null, null));
-              res.on('error', () => callback(null, null));
+              // Answered once, whichever way the abandoned response ends.
+              let answered = false;
+              let answer = () => {
+                if (!answered) {
+                  answered = true;
+                  callback(null, null);
+                }
+              };
+              res.on('end', answer);
+              res.on('error', answer);
             });
           forward.then(
             () => reject(new Error('the forward completed before it was left')),
@@ -2076,6 +2084,8 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a JSON response cut off after it started resets the caller and charges nothing', async function (assert) {
+        // The vendor drops the connection only once the caller has the
+        // start of the body, so the cut lands after the response began.
         let outcome = await new Promise<string>((resolve) => {
           request
             .post('/_request-forward')
@@ -2083,12 +2093,13 @@ module(basename(import.meta.filename), function () {
             .set('Content-Type', 'application/json')
             .set('Authorization', `Bearer ${jwt()}`)
             .send({
-              url: `${vendor.url}/completion?bytes=${256 * 1024}&truncate=1`,
+              url: `${vendor.url}/completion?bytes=${256 * 1024}&hold=1&truncate=1`,
               method: 'POST',
               requestBody: JSON.stringify({}),
             })
             .buffer(true)
             .parse((res, callback) => {
+              res.once('data', () => vendor.releaseHeld());
               res.on('data', () => undefined);
               res.on('end', () => {
                 resolve('complete');
@@ -2096,6 +2107,7 @@ module(basename(import.meta.filename), function () {
               });
               res.on('aborted', () => resolve('reset'));
               res.on('error', () => resolve('reset'));
+              res.on('close', () => resolve('reset'));
             })
             .then(
               () => undefined,

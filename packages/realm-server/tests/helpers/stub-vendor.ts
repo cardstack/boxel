@@ -132,11 +132,17 @@ export async function startStubVendor(): Promise<StubVendor> {
           }
         });
         res.write('{"id":"gen-completion","choices":[{"message":{"content":"');
-        res.write(Buffer.alloc(bytes, 'A'));
+        // Truncation waits until the body so far has left, so the receiving
+        // side gets the response started before the connection drops.
+        let flushed = new Promise<void>((resolve) =>
+          res.write(Buffer.alloc(bytes, 'A'), () => resolve()),
+        );
         let finish = () => {
           if (url.searchParams.has('truncate')) {
-            truncated = true;
-            res.destroy();
+            void flushed.then(() => {
+              truncated = true;
+              res.destroy();
+            });
           } else {
             res.end(`"}}],"usage":{"cost":${JSON.stringify(cost)}}}`);
           }
