@@ -174,6 +174,16 @@ export class Dial<T extends DialConfig> {
     return DialStore.getPanel(this.id)?.name ?? this.id;
   }
 
+  /**
+   * Replace the panel's config, for a panel whose controls are discovered as
+   * its subject renders rather than declared up front. The store keeps the
+   * value of every control the new config still has.
+   */
+  configure(config: T) {
+    this.config = config;
+    DialStore.updatePanel(this.id, this.name, config);
+  }
+
   set = (path: string, value: DialValue) => {
     DialStore.updateValue(this.id, path, value);
   };

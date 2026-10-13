@@ -1,16 +1,20 @@
-import { concat, fn } from '@ember/helper';
+import { array, concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { motion } from 'glimmer-motion';
 
 import type { GalleryDemo } from '../demo';
 import { FilmLink } from '../lib/film-link';
+import { labSlug, LabState } from '../lib/lab';
 import type { GalleryNavigation } from '../lib/navigation';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { CodeBox } from './code-box';
 import { DemoStage } from './demo-stage';
 import { GalleryLink } from './gallery-link';
+import { GuideLink } from './guide-link';
+import { LabPanel } from './lab-panel';
+import { LabToggle } from './lab-toggle';
 import { SpeedPicker } from './speed-picker';
 
 interface Signature {
@@ -30,6 +34,17 @@ interface Signature {
 export class DemoPage extends Component<Signature> {
   /** the stage's film, when it has one, for the notes' join triggers */
   readonly filmLink = new FilmLink();
+  readonly lab = new LabState();
+
+  get labSlug(): string | undefined {
+    return labSlug(this.args.demo);
+  }
+
+  get labOpen(): boolean {
+    return this.lab.isOpen(this.labSlug);
+  }
+
+  toggleLab = () => this.lab.toggle(this.labSlug);
 
   get Notes() {
     return (this.args.demo.constructor as typeof GalleryDemo).notes;
@@ -123,7 +138,17 @@ export class DemoPage extends Component<Signature> {
         {{#if @demo.slowmo}}
           <SpeedPicker @slug={{slug}} />
         {{/if}}
-        <div class='stage-row' data-test-stage-row {{theaterView}}>
+        <p class='demo-links'>
+          {{#if this.labSlug}}
+            <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
+          {{/if}}
+          <GuideLink @demo={{@demo}} />
+        </p>
+        <div
+          class='stage-row {{if this.labOpen "with-lab"}}'
+          data-test-stage-row
+          {{theaterView}}
+        >
           <div
             class='stage-wrap'
             data-demo-stage
@@ -132,12 +157,14 @@ export class DemoPage extends Component<Signature> {
             {{motion id=(concat 'stage-' slug) role='stage'}}
             {{@theater.stage}}
           >
-            <DemoStage
-              @demo={{@demo}}
-              @face='stage'
-              @filmLink={{this.filmLink}}
-              @theater={{@theater}}
-            />
+            {{#each (array this.lab.replays) key='@identity'}}
+              <DemoStage
+                @demo={{@demo}}
+                @face='stage'
+                @filmLink={{this.filmLink}}
+                @theater={{@theater}}
+              />
+            {{/each}}
             {{! THE MARK, in theater only, where the site's bar has stepped out.
             It is also the way out, because the thing a viewer wants after
             the film is how it was made. }}
@@ -153,6 +180,15 @@ export class DemoPage extends Component<Signature> {
               </div>
             {{/if}}
           </div>
+          {{#if this.labOpen}}
+            {{#if this.labSlug}}
+              <LabPanel
+                @slug={{this.labSlug}}
+                @title={{@demo.title}}
+                @onReplay={{this.lab.replay}}
+              />
+            {{/if}}
+          {{/if}}
         </div>
         {{! role='late': the code can wait for the move to land — the crossing
         fades it in after the flight, and only if a viewport can see it }}
@@ -356,8 +392,31 @@ export class DemoPage extends Component<Signature> {
         padding: 3px 7px;
       }
 
+      .demo-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 12px 24px;
+        margin: 0 0 16px;
+      }
+
       .stage-row {
         position: relative;
+      }
+
+      /* the lab sits beside the stage, and under it where the page is too
+         narrow for both */
+      .stage-row.with-lab {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 16px;
+      }
+
+      @media (max-width: 760px) {
+        .stage-row.with-lab {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       .stage-wrap {

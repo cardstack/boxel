@@ -10,13 +10,19 @@ import {
 import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
 import type { Join } from '@cardstack/choreo/film';
+import { array } from '@ember/helper';
 import type { ComponentLike } from '@glint/template';
 
 import type { FilmLink } from './lib/film-link';
+import { labSlug, LabState } from './lib/lab';
+import { ownClicks } from './lib/pointer';
 import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
 import { DemoStage } from './shell/demo-stage';
+import { GuideLink } from './shell/guide-link';
+import { LabPanel } from './shell/lab-panel';
+import { LabToggle } from './shell/lab-toggle';
 
 /** the gallery's sections, in the order its filters list them */
 export const GROUPS = [
@@ -121,21 +127,56 @@ class Isolated extends Component<typeof GalleryDemo> {
   </template>
 }
 
+/**
+ * The demo where a document embeds it, as a guide does: the live stage, what
+ * it is, its guide, and the lab, opened under the stage.
+ */
 class Embedded extends Component<typeof GalleryDemo> {
+  readonly lab = new LabState();
+
   get demo() {
     return this.args.model as GalleryDemo;
   }
 
+  get labSlug(): string | undefined {
+    return labSlug(this.demo);
+  }
+
+  get labOpen(): boolean {
+    return this.lab.isOpen(this.labSlug);
+  }
+
+  toggleLab = () => this.lab.toggle(this.labSlug);
+
   <template>
     <ChoreoRoot class='tile'>
-      <div class='tile-stage'>
-        <DemoStage @demo={{this.demo}} @face='tile' />
+      <div class='tile-stage' {{ownClicks}}>
+        {{#each (array this.lab.replays) key='@identity'}}
+          <DemoStage @demo={{this.demo}} @face='tile' />
+        {{/each}}
       </div>
       <div class='tile-meta'>
         <span class='tile-group'>{{@model.group}}</span>
         <span class='tile-title'>{{@model.title}}</span>
         <span class='tile-lede'>{{@model.lede}}</span>
+        <span class='tile-links' {{ownClicks}}>
+          {{#if this.labSlug}}
+            <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
+          {{/if}}
+          <GuideLink @demo={{this.demo}} />
+        </span>
       </div>
+      {{#if this.labOpen}}
+        {{#if this.labSlug}}
+          <div class='tile-lab' {{ownClicks}}>
+            <LabPanel
+              @slug={{this.labSlug}}
+              @title={{@model.title}}
+              @onReplay={{this.lab.replay}}
+            />
+          </div>
+        {{/if}}
+      {{/if}}
     </ChoreoRoot>
     <style scoped>
       .tile {
@@ -179,6 +220,19 @@ class Embedded extends Component<typeof GalleryDemo> {
       .tile-lede {
         color: var(--ink-dim);
         font-size: 0.92rem;
+      }
+
+      .tile-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px 20px;
+        margin-top: 4px;
+      }
+
+      .tile-lab {
+        padding: 16px 18px 18px;
+        border-top: 1px solid var(--line);
       }
     </style>
   </template>
