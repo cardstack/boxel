@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/boxel-cli",
-  "version": "0.9.0-unstable.0",
+  "version": "0.9.0-unstable.1",
   "license": "MIT",
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
@@ -41,6 +41,7 @@
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
     "@cardstack/view-transitions": "catalog:",
+    "@chenglou/pretext": "^0.0.8",
     "@ember/test-helpers": "catalog:",
     "@floating-ui/dom": "catalog:",
     "@glimmer/component": "catalog:",
@@ -59,6 +60,7 @@
     "commander": "^13.1.0",
     "content-tag": "catalog:",
     "date-fns": "catalog:",
+    "dialkit": "2.0.2",
     "dotenv": "^16.4.7",
     "ember-animated": "catalog:",
     "ember-concurrency": "catalog:",

@@ -2,7 +2,8 @@
 import Component from '@glimmer/component';
 import { emit, resolveSize } from '../pretui-primitives';
 import type { PretuiSizeArg } from '../pretui-primitives';
-import { resolveOpen, modalBehavior } from '../internal/overlay';
+import { provide } from 'ember-provide-consume-context';
+import { POPUPS_IN_PLACE, resolveOpen, modalBehavior } from '../internal/overlay';
 import type { OpenArgs } from '../internal/overlay';
 
 /** The three width steps a Dialog paints, and every spelling of them. */
@@ -34,6 +35,10 @@ export interface DialogSignature {
 }
 
 export class Dialog extends Component<DialogSignature> {
+  @provide(POPUPS_IN_PLACE)
+  get popupsInPlace() {
+    return true;
+  }
   get dismissible() {
     return this.args.dismissible ?? true;
   }

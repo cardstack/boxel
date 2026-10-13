@@ -146,12 +146,14 @@ export class Field extends Component<FieldSignature> {
         }
         .pretui-fieldctl > :deep(.pretui-input),
         .pretui-fieldctl > :deep(.pretui-inputwrap),
-        .pretui-fieldctl > :deep(.pretui-boxelwrap) {
+        .pretui-fieldctl > :deep(.pretui-boxelwrap),
+        .pretui-fieldctl > :deep(.pretui-selectwrap) {
           width: 100%;
         }
         .pretui-fieldw > :deep(.pretui-input),
         .pretui-fieldw > :deep(.pretui-inputwrap),
-        .pretui-fieldw > :deep(.pretui-boxelwrap) {
+        .pretui-fieldw > :deep(.pretui-boxelwrap),
+        .pretui-fieldw > :deep(.pretui-selectwrap) {
           justify-self: stretch;
         }
         .pretui-fieldmsg {

@@ -1072,6 +1072,16 @@ const APPLIES_ARCHIVED_SEAL = {
   consumesCoarseOutcome: true,
   appliesArchivedSeal: true,
 } as const;
+// The realm's search routes. A verified user the ACL refuses is admitted to
+// them whether or not the realm names a policy, and a realm with none has no
+// grant to admit them to a row, so it answers them with the no-rows document a
+// policy realm whose grants admit nothing gives (see
+// `RouteOptions.admitsVerifiedNonReaders`).
+const SEARCH_ROUTE = {
+  ...APPLIES_ARCHIVED_SEAL,
+  admitsVerifiedNonReaders: true,
+  anonymous: ANONYMOUS_SEARCH,
+} as const;
 // The capability check's path, named here because two places read it: the
 // route below, and the permission the realm derives from the request's method,
 // which this path is the one `POST` exception to.
@@ -1104,6 +1114,17 @@ const GRANTABLE_BYTES = { coarseReadOnly: true, grantableBytes: true } as const;
 // card+source read reads the name exactly as named, so it reaches no redirect.
 function namesGrantableBytes(localPath: LocalPath): boolean {
   return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
+}
+// Whether the realm ACL's `refusal` was of a verified user's permission,
+// rather than of a request that authenticated nobody.
+function refusesVerifiedUser(
+  refusal: unknown,
+  requestContext: RequestContext,
+): boolean {
+  return (
+    refusal instanceof CoarsePermissionInsufficient &&
+    Boolean(requestContext.authenticatedUser)
+  );
 }
 const ROUTER_METHODS: Method[] = [
   'GET',
@@ -2408,6 +2429,9 @@ interface RequestDispatch {
   consumesCoarseOutcome: boolean;
   coarseReadOnly?: boolean;
   appliesArchivedSeal?: boolean;
+  // The dispatch admits a verified user the ACL refused in a realm with no
+  // policy too (see `RouteOptions.admitsVerifiedNonReaders`).
+  admitsVerifiedNonReaders?: boolean;
   // The answer is one of the realm's operational endpoints, which an archived
   // realm's seal lets through (see `OPERATIONAL_ENDPOINT`). The seal reads it
   // off the dispatch that will answer, so nothing else a request for an
@@ -2441,6 +2465,7 @@ export type DispatchDescription =
       consumesCoarseOutcome: boolean;
       coarseReadOnly: boolean;
       appliesArchivedSeal: boolean;
+      admitsVerifiedNonReaders: boolean;
       grantableBytes: boolean;
       operationalEndpoint: boolean;
       aclOnly: boolean;
@@ -2993,23 +3018,18 @@ export class Realm {
         this.realmMtimes.bind(this),
         ACL_ONLY,
       )
+      // Admits every verified user the ACL refuses (see `SEARCH_ROUTE`).
       .get(
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        {
-          ...APPLIES_ARCHIVED_SEAL,
-          anonymous: ANONYMOUS_SEARCH,
-        },
+        SEARCH_ROUTE,
       )
       .query(
         '/_search',
         SupportedMimeType.CardJson,
         this.searchEntriesResponse.bind(this),
-        {
-          ...APPLIES_ARCHIVED_SEAL,
-          anonymous: ANONYMOUS_SEARCH,
-        },
+        SEARCH_ROUTE,
       )
       // Answered on the realm ACL alone, as `_lint` and `_mtimes` are.
       .get(
@@ -7316,11 +7336,15 @@ export class Realm {
   // grants it and nothing more: the ACL's refusal is its answer, and the
   // policy is never asked — as a federated search never asks one about it
   // either. A capability check asks the same of a query it is asked about.
+  //
+  // A realm that names no policy contributes nothing, and is not asked: the
+  // search it answers is no policy's decision, so no policy decision is
+  // recorded for it.
   async #policyQueryScope(
     invocation: SearchInvocation | undefined,
     requestContext: RequestContext,
   ): Promise<PolicyQueryScope> {
-    if (!invocation) {
+    if (!invocation || (await this.getRealmPolicy()) === undefined) {
       return { kind: 'denied' };
     }
     return await principalQueryScope(
@@ -7840,7 +7864,7 @@ export class Realm {
           !(await this.#admitsDespiteCoarseRefusal(
             request,
             requestContext,
-            dispatch.anonymous,
+            dispatch,
           ))
         ) {
           let answer = await this.#refusalUnderPolicy(
@@ -8056,6 +8080,7 @@ export class Realm {
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         appliesArchivedSeal: matched.appliesArchivedSeal,
+        admitsVerifiedNonReaders: matched.admitsVerifiedNonReaders,
         operationalEndpoint: matched.operationalEndpoint,
         answersWithoutCredentials: matched.operationalEndpoint,
         ...(matched.anonymous ? { anonymous: matched.anonymous } : {}),
@@ -8140,7 +8165,7 @@ export class Realm {
               !(await this.#admitsDespiteCoarseRefusal(
                 request,
                 requestContext,
-                ANONYMOUS_BYTES_READ,
+                { anonymous: ANONYMOUS_BYTES_READ },
               ))
             ) {
               return this.realmIdentityResponse(requestContext);
@@ -8224,7 +8249,9 @@ export class Realm {
   // judge:
   //
   // - The realm names a policy. A realm with none answers every refusal
-  //   exactly as the ACL gave it.
+  //   exactly as the ACL gave it, but on a route that admits every verified
+  //   user the ACL refuses (see `RouteOptions.admitsVerifiedNonReaders`),
+  //   where it has no grant to admit them to anything.
   // - The caller is someone, or the route runs an operation the policy opens
   //   to callers who aren't signed in and the realm doesn't refuse the
   //   caller's address (see `#admitsAnonymous`). Any other request that
@@ -8233,18 +8260,24 @@ export class Realm {
   async #admitsDespiteCoarseRefusal(
     request: Request,
     requestContext: RequestContext,
-    anonymous?: AnonymousDispatch,
+    dispatch: Pick<RequestDispatch, 'anonymous' | 'admitsVerifiedNonReaders'>,
   ): Promise<boolean> {
     if (this.#testOnlyCoarseAdmission) {
       return await this.#testOnlyCoarseAdmission(request, requestContext);
+    }
+    if (
+      dispatch.admitsVerifiedNonReaders &&
+      refusesVerifiedUser(requestContext.coarseRefusal, requestContext)
+    ) {
+      return true;
     }
     if (
       await this.#policyJudges(requestContext.coarseRefusal, requestContext)
     ) {
       return true;
     }
-    return anonymous
-      ? await this.#admitsAnonymous(request, requestContext, anonymous)
+    return dispatch.anonymous
+      ? await this.#admitsAnonymous(request, requestContext, dispatch.anonymous)
       : false;
   }
 
@@ -8306,10 +8339,7 @@ export class Realm {
     refusal: unknown,
     requestContext: RequestContext,
   ): Promise<boolean> {
-    if (
-      !(refusal instanceof CoarsePermissionInsufficient) ||
-      !requestContext.authenticatedUser
-    ) {
+    if (!refusesVerifiedUser(refusal, requestContext)) {
       return false;
     }
     return (await this.getRealmPolicy()) !== undefined;
@@ -8472,6 +8502,7 @@ export class Realm {
         consumesCoarseOutcome: true,
         coarseReadOnly: false,
         appliesArchivedSeal: true,
+        admitsVerifiedNonReaders: false,
         grantableBytes: false,
         operationalEndpoint: false,
         aclOnly: false,
@@ -8483,6 +8514,7 @@ export class Realm {
         consumesCoarseOutcome: false,
         coarseReadOnly: method === 'GET' || method === 'HEAD',
         appliesArchivedSeal: false,
+        admitsVerifiedNonReaders: false,
         grantableBytes: method === 'GET' || method === 'HEAD',
         operationalEndpoint: false,
         aclOnly: false,
@@ -14748,35 +14780,49 @@ export class Realm {
       if (requestContext.anonymousCaller) {
         return this.#authenticationRequired(requestContext);
       }
-      // A named query searches this realm and no other, so this realm is the
-      // whole of the scope it may resolve to.
-      try {
-        let resolved = await resolveNamedQuery(this.operationCore, payload, {
-          principal: this.#searchPrincipal(requestContext),
-          realms: [this.url],
-        });
-        if (admitsNothing(resolved)) {
-          // The rendering alone carries no filter, and is never searched: it
-          // only shapes the empty document answered below.
-          payload = namedQueryRendering(payload);
-          admittingNothing = true;
-        } else {
-          payload = resolved.query;
-          declaredLinks = resolved.links;
-          unshareableFormats = resolved.unshareableFormats;
+      if (
+        this.#coarseDeclined(requestContext) === 'all' &&
+        (await this.getRealmPolicy()) === undefined
+      ) {
+        // A realm with no policy answers a user it doesn't let read it with
+        // no rows whatever the declaration says, so the declaration is not
+        // read: the request is answered as a search asking for the same
+        // rendering, as a federated search answers it from such a realm. An
+        // operation the type doesn't declare, or a type the realm doesn't
+        // hold, is answered the same way, so the answer says nothing about
+        // what the realm holds.
+        payload = namedQueryRendering(payload);
+      } else {
+        // A named query searches this realm and no other, so this realm is
+        // the whole of the scope it may resolve to.
+        try {
+          let resolved = await resolveNamedQuery(this.operationCore, payload, {
+            principal: this.#searchPrincipal(requestContext),
+            realms: [this.url],
+          });
+          if (admitsNothing(resolved)) {
+            // The rendering alone carries no filter, and is never searched:
+            // it only shapes the empty document answered below.
+            payload = namedQueryRendering(payload);
+            admittingNothing = true;
+          } else {
+            payload = resolved.query;
+            declaredLinks = resolved.links;
+            unshareableFormats = resolved.unshareableFormats;
+          }
+        } catch (err: unknown) {
+          if (!isOperationFailure(err)) {
+            throw err;
+          }
+          return createResponse({
+            body: JSON.stringify(errorsDocument(err.error), null, 2),
+            init: {
+              status: err.error.status,
+              headers: { 'content-type': SupportedMimeType.CardJson },
+            },
+            requestContext,
+          });
         }
-      } catch (err: unknown) {
-        if (!isOperationFailure(err)) {
-          throw err;
-        }
-        return createResponse({
-          body: JSON.stringify(errorsDocument(err.error), null, 2),
-          init: {
-            status: err.error.status,
-            headers: { 'content-type': SupportedMimeType.CardJson },
-          },
-          requestContext,
-        });
       }
     }
 
@@ -14792,8 +14838,10 @@ export class Realm {
       // the rows their grants admit, and with none where no grant admits the
       // query. A realm holding nothing for them and a realm granting them
       // nothing are the same answer, as they are for a card they may not read.
-      // A policy that did not compile is neither: the search is refused with
-      // the 500 the gate gives every operation it would judge.
+      // A realm that names no policy grants nothing, so a user it admits here
+      // without letting them read it (see `SEARCH_ROUTE`) gets the same
+      // answer. A policy that did not compile is neither: the search is
+      // refused with the 500 the gate gives every operation it would judge.
       let policyScope: PolicyQueryScope | undefined;
       if (!admittingNothing && this.#coarseDeclined(requestContext) === 'all') {
         try {

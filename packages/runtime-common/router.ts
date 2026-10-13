@@ -289,6 +289,17 @@ export interface RouteOptions {
   // ACL's outcome can take this. Every other route that does meets such a
   // caller with the seal as soon as it admits them.
   appliesArchivedSeal?: true;
+  // The route admits every verified user the realm ACL refused, whether or
+  // not the realm names a policy, and answers one the policy has nothing for
+  // as a realm whose grants admit nothing would. A realm's search is the one:
+  // a federated search answers such a user with no rows from a realm with no
+  // policy, so the realm's own search does too, and it doesn't tell a caller
+  // who may not read the realm whether the realm names a policy. Only a route
+  // that consumes the ACL's outcome can take this. Every other consuming route
+  // admits a refused user only in a realm that names a policy, and a realm
+  // with none answers them with the ACL's refusal. A request that
+  // authenticated nobody is told to authenticate either way.
+  admitsVerifiedNonReaders?: true;
   // The route serves a path's stored bytes, and for a path that names a file
   // or a card's document those bytes are a `readSource` a policy grant can
   // reach. A request for one consumes the ACL's outcome and is resolved
@@ -331,6 +342,7 @@ export interface Route {
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
   appliesArchivedSeal: boolean;
+  admitsVerifiedNonReaders: boolean;
   grantableBytes: boolean;
   operationalEndpoint: boolean;
   aclOnly: boolean;
@@ -344,6 +356,7 @@ export interface RouteDescription {
   consumesCoarseOutcome: boolean;
   coarseReadOnly: boolean;
   appliesArchivedSeal: boolean;
+  admitsVerifiedNonReaders: boolean;
   grantableBytes: boolean;
   operationalEndpoint: boolean;
   aclOnly: boolean;
@@ -437,6 +450,7 @@ export class Router {
       consumesCoarseOutcome: opts.consumesCoarseOutcome === true,
       coarseReadOnly: opts.coarseReadOnly === true,
       appliesArchivedSeal: opts.appliesArchivedSeal === true,
+      admitsVerifiedNonReaders: opts.admitsVerifiedNonReaders === true,
       grantableBytes: opts.grantableBytes === true,
       operationalEndpoint: opts.operationalEndpoint === true,
       aclOnly: opts.aclOnly === true,
@@ -459,6 +473,7 @@ export class Router {
             consumesCoarseOutcome: route.consumesCoarseOutcome,
             coarseReadOnly: route.coarseReadOnly,
             appliesArchivedSeal: route.appliesArchivedSeal,
+            admitsVerifiedNonReaders: route.admitsVerifiedNonReaders,
             grantableBytes: route.grantableBytes,
             operationalEndpoint: route.operationalEndpoint,
             aclOnly: route.aclOnly,

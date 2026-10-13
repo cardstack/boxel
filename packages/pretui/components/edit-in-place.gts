@@ -3,6 +3,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import { provide } from 'ember-provide-consume-context';
+import { POPUPS_IN_PLACE } from '../internal/overlay';
 import { Button } from './button';
 import { Input } from './input';
 import { listen } from '../focus';
@@ -138,6 +140,10 @@ const INTERACTIVE_IN_DISPLAY =
   'a, button, input, select, textarea, summary, [role="button"], [role="link"]';
 
 export class EditInPlace extends Component<EditInPlaceSignature> {
+  @provide(POPUPS_IN_PLACE)
+  get popupsInPlace() {
+    return true;
+  }
   private guid = guidFor(this);
 
   @tracked private internalEditing = this.args.defaultEditing ?? false;

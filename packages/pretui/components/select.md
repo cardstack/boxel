@@ -7,6 +7,8 @@ Choose one value from a known list. Use it when the options are enumerable and t
 ```
 @options: { value, label }[]   (required)
 @value?, @defaultValue?, @placeholder? (default 'Select…'), @disabled?, @controlId?
+@searchEnabled?   (a search box above the list, focused on open)
+@label?, @labelledBy?   (the trigger's accessible name)
 @onValueChange?(value: string)
 ```
 
@@ -14,17 +16,21 @@ Choose one value from a known list. Use it when the options are enumerable and t
 
 **Hybrid controlled/uncontrolled.** `@value ?? @internal`, and `@internal` is only written when `@value === undefined`. Pass `@value` and you own it; pass `@defaultValue` and the component does. This exact idiom is repeated across Switch, Checkbox, RadioGroup, SegmentedControl, Tabs, Slider and Pagination — learn it once.
 
-**Search appears automatically past seven options.** Not an arg. Seven is the point where scanning stops being faster than typing, and making it a prop guarantees inconsistency across a product.
+**Search is opt-in.** `@searchEnabled` adds a search box above the list, with a search icon, that takes focus when the list opens and filters by label. Off by default: typeahead on the trigger covers most lists, as in Radix and React Aria. BoxelSelect's own search box never takes focus, so from the trigger it is reachable by pointer only; Select supplies its own. A list the user types into to find a value that may not exist is a **Combobox**.
 
 ## Prior art
 
 **Radix `Select`** composes `Root/Trigger/Value/Portal/Content/Item/ItemText/ItemIndicator` and is famously strict about `value`/`onValueChange` being strings. **Web Awesome `wa-select`** takes `<wa-option>` children, supports `multiple`, `clearable`, `with-label`/`hint`, and participates in native form validation. **React Spectrum `Picker`** uses a collection API (`items` + render function) and `selectedKey`/`onSelectionChange`.
 
-Pretui's most consequential departure is under the hood: **it rides boxel-ui's `BoxelSelect` (ember-power-select) rather than reimplementing listbox behaviour**, which buys real keyboard navigation, scroll-into-view, trigger typeahead and the search box — behaviour a hand-rolled select in this kit would have got wrong.
+Pretui's most consequential departure is under the hood: **it rides boxel-ui's `BoxelSelect` (ember-power-select) rather than reimplementing listbox behavior**, which buys real keyboard navigation, scroll-into-view, and trigger typeahead — behavior a hand-rolled select in this kit would have got wrong.
 
-And then it makes a decision the underlying library does not default to: **`@renderInPlace={{true}}`**. BoxelSelect's normal path portals the dropdown into `#ember-basic-dropdown-wormhole` and syncs a _fixed list_ of boxel variables (`--background`, `--foreground`, `--border`, …) onto the portal via a MutationObserver. Pretui tokens — `--popover`, `--hover`, `--field`, everything `--pretui-*` — are not on that list, so a portalled dropdown could not be re-dressed and a season recompile would leave it stale. Rendering in place means the dropdown inherits every token naturally and scoped `:deep()` reaches it, with no `:global` cached-HTML classes. The accepted cost is stated plainly in the source: **an `overflow: hidden` ancestor can clip the dropdown**, which the old fixed-position `Popup` path did not. That is the trade — correct theming over guaranteed escape.
+**The dropdown renders in BoxelSelect's wormhole**, so no `overflow: hidden` ancestor clips it. BoxelSelect copies its `--boxel-dropdown-*` knobs from the trigger onto the wormhole each time it opens, and a custom property's computed value has its `var()` references resolved. Select sets those knobs to theme tokens (`--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`, `--ring`), so the dropdown carries the trigger's theme, dark mode included, with no `:deep()` rule reaching into it.
 
-Two smaller improvements: the selected row is bold `--pretui-primary-ink` rather than a checkmark-only affordance, and power-select opens with the highlight already on it, echoing the traveling-highlight language used by SegmentedControl and Tabs. The trigger's hairline rides `box-shadow`, not `border`, so its box metrics are byte-identical to `Input` — put a Select and an Input side by side and they align exactly.
+**Inside a Dialog, Drawer, CommandPalette or EditInPlace editor the list renders in place.** A modal `<dialog>` makes everything outside it inert, the wormhole included, and an editor that commits on blur reads focus moving into the wormhole as leaving. Each of those provides the `pretui-popups-in-place` context, and Select reads it when it is created and passes `@renderInPlace`: ember-basic-dropdown reads that argument only once, at creation, so it cannot come from where the Select later finds itself in the DOM. In place the list takes the theme through the cascade and scrolls with its trigger; a long list scrolls its container instead of floating over its edge. Pressing inside the list keeps focus where it was, and choosing leaves focus on the trigger, so an editor around the Select never reads a pick as leaving.
+
+The selected row is a `--primary` fill; its text and checkmark are `--primary-foreground`. The trigger's hairline rides `box-shadow`, not `border`; on hover it pulls toward `--foreground`, strengthening in both schemes like a Button's edge. Its corners are the theme radius less 2px, the same as Button; Input's field style differs until it adopts the same one.
+
+**Against boxel-ui and the field.** `BoxelSelect` speaks in option objects and leaves naming to the caller; Radix and React Aria both require an explicit label and Radix's trigger, like this one, is a `role="combobox"` element no `<label for>` can name. Pretui is ahead on three counts: the string value API, a trigger that takes its name from a plain `<label for>` or a wrapping `<label>` with the chosen value read after it, and a portaled dropdown that still carries the field's theme. Behind: no `@invalid`, `@required` or `@describedBy` pass-through (React Aria and Web Awesome have all three, and `BoxelSelect` accepts `@ariaInvalid`, `@required` and `@ariaDescribedBy`), no disabled options, and no custom option block.
 
 ## Accessibility
 
@@ -32,34 +38,32 @@ Governing pattern: APG **Combobox with listbox popup** (which is what ember-powe
 
 Gaps and cautions:
 
-- **No accessible name of its own.** `@controlId` lands on the trigger so `Field`/`FormField` can wire `<label for>`. Outside those wrappers, pass `aria-label` yourself. Note this id deliberately overrides BoxelSelect's own guid; the source records that this is safe _only because_ `renderInPlace` skips the wormhole theme observer that consumed it.
+- **Name it.** A `<label for={{@controlId}}>` or a wrapping `<label>` names the trigger through `aria-labelledby`, label first and then the trigger, so the chosen value is still read. Without a label, pass `@label` (or `@labelledBy`). The trigger keeps BoxelSelect's own id, which BoxelSelect needs to theme the wormhole, so `@controlId` is never an element id: nothing can find the trigger by it, and FormField focuses a failing Select through its first focusable element instead.
+- With `@searchEnabled`, the search input is the combobox: it carries `aria-activedescendant` and `aria-controls`, and the trigger gives them up while the list is open.
 - **No invalid state.** There is no `@invalid`, no `aria-invalid`, no error row — unlike `Input`. Inside `Field` the invalid dress arrives through the `--border`/`--background` token channel, so it _looks_ invalid, but nothing is announced. For validated selects, use **FormField**, which supplies the ARIA.
-- `@disabled` renders as `aria-disabled="true"` on the trigger (power-select's model), so the control stays focusable — arguably better than `Input`'s native `disabled`, but inconsistent with it.
-- **The clipping caveat is an accessibility issue too**, not only a visual one: a dropdown clipped by an ancestor may be unreachable by pointer even though it is reachable by keyboard.
+- `@disabled` renders as `aria-disabled="true"` on the trigger (power-select's model) and drops its `tabindex`, so the control leaves the tab order, the same as `Input`'s native `disabled`.
 - No `multiple` and no clear affordance — deliberate; those are MultiSelect's job.
 
 ## Theming
 
-Pretui tokens: `--field`, `--input`, `--primary`, `--pretui-primary-ink`, `--popover`, `--hover`, `--foreground`, `--ink-3`, `--border`, `--control-h`, `--radius`, `--text-ui-md`, `--track-ui`, `--pretui-shadow-overlay`, `--pretui-shadow-inset`.
+Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--ring`, `--radius`, `--popover`, `--popover-foreground`, `--hover`, `--border`, `--primary`, `--primary-foreground`.
 
-Forwarded through the boxel-ui knob channel: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-wrap`, `--boxel-select-background-color`, `--boxel-select-text-color`, `--boxel-dropdown-background-color`, `--boxel-dropdown-text-color`, `--boxel-dropdown-hover-color`, `--boxel-dropdown-highlight-color`, `--boxel-dropdown-selected-text-color`.
+Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-display`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. Hovered or keyboard-highlighted, the selected row darkens a shade in both schemes, the same as an accent Button's hover.
 
-A season must define `--popover` distinctly from `--card`, and `--pretui-primary-ink` as a _readable-on-popover_ variant of `--primary` — a saturated brand colour used directly as selected-row ink often fails contrast on a white dropdown.
+Per-instance knob: `--pretui-select-h` (the trigger's height, 1.75rem by default), set on your class.
 
-The wrapper's rules sit in `@layer PretComponent`, so a caller's unlayered CSS on Select overrides them without a more specific selector. The `:deep()` rules that restyle BoxelSelect's trigger and dropdown stay unlayered, because BoxelSelect's own rules are unlayered and would beat them from inside a layer.
+The dropdown's own geometry (padding, option height, search box) is BoxelSelect's. Select adds two rules there: the search box's icon inset, and the options and search box at the trigger's font size, through an unscoped rule on its dropdown class, since the wormhole is outside Select's subtree and BoxelSelect has no font-size knob. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so the `:deep()` rules that set them stay unlayered: BoxelSelect's own rules are unlayered and would beat them from inside a layer.
 
 ## React ecosystem
 
-| React                     | Pretui                          |
-| ------------------------- | ------------------------------- |
-| Select / Dropdown         | this tile                       |
-| Native `<select>`         | **NativeSelect** stub           |
-| Combobox / free text      | **Combobox** / **Autocomplete** |
-| multi                     | **MultiSelect**                 |
-| tags mode                 | **TagsInput**                   |
-| tree / cascader           | **TreeSelect** / **Cascader**   |
-| `onValueChange`           | @onChange — accept alias        |
-| `placeholder`             | same                            |
-| `disabled` / `isDisabled` | @disabled                       |
-
-- [ ] Accept `onValueChange` and `isDisabled`.
+| React                     | Pretui                           |
+| ------------------------- | -------------------------------- |
+| Select / Dropdown         | this tile                        |
+| Native `<select>`         | **NativeSelect** stub            |
+| Combobox / free text      | **Combobox** / **Autocomplete**  |
+| multi                     | **MultiSelect**                  |
+| tags mode                 | **TagsInput**                    |
+| tree / cascader           | **TreeSelect** / **Cascader**    |
+| `onValueChange`           | same; `@onChange` is an alias    |
+| `placeholder`             | same                             |
+| `disabled` / `isDisabled` | `@disabled`; `@isDisabled` alias |

@@ -434,14 +434,16 @@ export class Button extends Component<ButtonSignature> {
         }
         .pretui-btn[data-appearance='outlined'] {
           --pretui-btn-surface: var(--pretui-button-secondary-bg, transparent);
-          --pretui-btn-surface-hover: color-mix(
-            in oklch,
-            var(--pretui-btn-tint) 18%,
-            var(--pretui-button-secondary-bg, transparent)
-          );
           --pretui-btn-edge: var(
             --pretui-btn-hairline,
             color-mix(in oklch, var(--pretui-tone) 45%, var(--border))
+          );
+          /* hover answers on the edge, not the fill: the hairline pulls
+             toward --foreground, so it strengthens in both schemes */
+          --pretui-btn-edge-hover: color-mix(
+            in oklch,
+            var(--foreground) 30%,
+            var(--pretui-btn-edge)
           );
           --pretui-btn-text: var(
             --pretui-btn-ink,
