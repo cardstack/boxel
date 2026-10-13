@@ -4,9 +4,14 @@
  * and the lab tunes a demo through `demoTuning`.
  */
 import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
+import { modifier } from 'ember-modifier';
+import { provide } from 'ember-provide-consume-context';
 import { module, test } from 'qunit';
+
+import { CardContextName } from '@cardstack/runtime-common';
 
 import { choreoGalleryGuides } from '../helpers/choreo-gallery';
 import {
@@ -40,6 +45,37 @@ type MarkdownSignature = {
     linkedCards: DemoModule.GalleryDemo[];
   };
 };
+
+/**
+ * The card context the host's overlay gives a document: an embedded card opens
+ * on a click anywhere inside it, and the innermost card a click reaches is the
+ * one it opens. Each open is recorded.
+ */
+class OpensOnClick extends GlimmerComponent<{
+  Args: { opened: string[] };
+  Blocks: { default: [] };
+}> {
+  opensOnClick = modifier(
+    (element: HTMLElement, _: unknown[], named: { cardId?: string }) => {
+      let open = (event: Event) => {
+        event.stopPropagation();
+        this.args.opened.push(named.cardId ?? 'card');
+      };
+      element.addEventListener('click', open);
+      return () => element.removeEventListener('click', open);
+    },
+  );
+
+  @provide(CardContextName)
+  get cardContext() {
+    return { cardComponentModifier: this.opensOnClick };
+  }
+
+  <template>
+    {{! template-lint-disable no-yield-only }}
+    {{yield}}
+  </template>
+}
 
 module('Integration | Choreo gallery | guides and the lab', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
@@ -122,6 +158,58 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
     assert
       .dom('.markdown-bfm-card-slot--block [data-demo-lab="enter"]')
       .exists('the embedded demo opens its lab');
+  });
+
+  test('an embedded demo keeps its own clicks, and opens its card from what it is', async function (assert) {
+    let enter = await demoCard('enter');
+    let MarkdownTemplate = (
+      (await gallery.loader.import(
+        '@cardstack/base/default-templates/markdown',
+      )) as { default: ComponentLike<MarkdownSignature> }
+    ).default;
+    let content = GUIDES['core-start']!;
+    let linkedCards = [enter];
+    let base = guideURL('core-start');
+    let opened: string[] = [];
+
+    await render(
+      <template>
+        <OpensOnClick @opened={{opened}}>
+          <MarkdownTemplate
+            @content={{content}}
+            @linkedCards={{linkedCards}}
+            @cardReferenceBaseUrl={{base}}
+          />
+        </OpensOnClick>
+      </template>,
+    );
+    await waitFor('.markdown-bfm-card-slot--block .tile', { timeout: 10_000 });
+    let embed = live('.markdown-bfm-card-slot--block .tile')!;
+
+    let stageButton =
+      embed.querySelector<HTMLButtonElement>('.tile-stage button');
+    assert.ok(stageButton, 'the stage has a control of its own');
+    await click(stageButton!);
+    await click(embed.querySelector('.tile-lab-toggle')!);
+    await waitFor('.markdown-bfm-card-slot--block [data-demo-lab] .lab-replay');
+    await click(
+      live('.markdown-bfm-card-slot--block [data-demo-lab] .lab-replay')!,
+    );
+    let guide = embed.querySelector<HTMLAnchorElement>('.guide-link')!;
+    guide.addEventListener('click', (event) => event.preventDefault());
+    await click(guide);
+    assert.deepEqual(
+      opened,
+      [],
+      'the stage, the lab and the guide link keep their clicks',
+    );
+
+    await click(embed.querySelector('.tile-title')!);
+    assert.strictEqual(
+      opened.length,
+      1,
+      'a click on what the demo is opens its card',
+    );
   });
 
   test('every tile and the demo page link the guide their lesson names', async function (assert) {
