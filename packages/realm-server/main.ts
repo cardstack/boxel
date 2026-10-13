@@ -1020,7 +1020,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     `Unexpected error encountered starting realm, stopping server`,
     e,
   );
-  process.exit(-1);
+  process.exit(-3);
 });
 
 async function waitForWorkerManager(url: string) {

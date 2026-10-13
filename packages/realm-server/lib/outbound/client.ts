@@ -216,7 +216,9 @@ export function checkOutboundSettings(
   let allowlist = candidate.devAllowlist ?? [];
   for (let entry of allowlist) {
     let host = normalizeHost(entry);
-    if (!host || /[*/\s@?#]/.test(host)) {
+    // A colon is a port unless the entry is an IPv6 literal.
+    let hasPort = host.includes(':') && isIP(host) !== 6;
+    if (!host || hasPort || /[*/\s@?#]/.test(host)) {
       throw new OutboundSettingsError(
         `OUTBOUND_DEV_ALLOWLIST entry "${entry}" is not a single host name; wildcards, paths and ports are refused`,
       );

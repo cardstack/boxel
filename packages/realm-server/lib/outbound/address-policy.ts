@@ -2,21 +2,16 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 import type { LookupFunction } from 'node:net';
 
-// Addresses an outbound call must never reach: loopback, private and
+// IPv4 addresses an outbound call must never reach: loopback, private and
 // link-local networks (cloud metadata services live at 169.254.169.254),
-// carrier-grade NAT, multicast, reserved and documentation ranges, and the
-// IPv6 equivalents.
+// carrier-grade NAT, multicast, and reserved and documentation ranges.
 //
-// IPv4-mapped addresses (::ffff:a.b.c.d, dotted or hex) are checked against
-// the IPv4 ranges: BlockList treats the two forms as one address, so
-// ::ffff:7f00:1 is refused like 127.0.0.1. That same equivalence is why there
-// is no rule for ::ffff:0:0/96 itself — BlockList would apply it to every IPv4
-// address and refuse the whole public internet. Every other IPv6 range that
-// embeds an IPv4 address (IPv4-compatible, IPv4-translated, NAT64 well-known
-// and local-use, 6to4, Teredo) is blocked whole, since the embedded address
-// could be any of the IPv4 ranges above, and public vendors are reached over
-// plain IPv4 or native IPv6 anyway.
-const blockedAddresses = (() => {
+// IPv4-mapped IPv6 addresses (::ffff:a.b.c.d, dotted or hex) are checked
+// against these same rules: BlockList treats the two forms as one address, so
+// ::ffff:7f00:1 is refused like 127.0.0.1. That equivalence is also why no
+// IPv6 rule here may cover ::ffff:0:0/96 — BlockList would apply it to every
+// IPv4 address and refuse the whole public internet.
+const blockedIPv4 = (() => {
   let list = new BlockList();
   for (let [network, prefix] of [
     ['0.0.0.0', 8],
@@ -37,19 +32,38 @@ const blockedAddresses = (() => {
   ] as const) {
     list.addSubnet(network, prefix, 'ipv4');
   }
+  return list;
+})();
+
+const ipv4Mapped = (() => {
+  let list = new BlockList();
+  list.addSubnet('::ffff:0:0', 96, 'ipv6');
+  return list;
+})();
+
+// A native IPv6 address is public only inside global unicast, 2000::/3.
+// Everything outside it — loopback, unique local, link-local, multicast, the
+// IPv4-compatible and IPv4-translated forms, NAT64, segment-routing SIDs, and
+// whatever is assigned there later — is refused by default rather than
+// listed. These ranges never contain ::ffff:0:0/96, so checking an IPv6
+// address against them can't catch the IPv4 trap above.
+const globalUnicastIPv6 = (() => {
+  let list = new BlockList();
+  list.addSubnet('2000::', 3, 'ipv6');
+  return list;
+})();
+
+// The special-purpose blocks inside global unicast: IETF protocol assignments
+// (Teredo, benchmarking, ORCHID, among others), documentation (2001:db8::/32
+// and 3fff::/20), and 6to4, whose embedded IPv4 address could be any of the
+// private ranges above.
+const blockedGlobalUnicastIPv6 = (() => {
+  let list = new BlockList();
   for (let [network, prefix] of [
-    ['::', 96],
-    ['::ffff:0:0:0', 96],
-    ['64:ff9b::', 96],
-    ['64:ff9b:1::', 48],
-    ['100::', 64],
-    ['2001::', 32],
-    ['2002::', 16],
+    ['2001::', 23],
     ['2001:db8::', 32],
-    ['fc00::', 7],
-    ['fe80::', 10],
-    ['fec0::', 10],
-    ['ff00::', 8],
+    ['2002::', 16],
+    ['3fff::', 20],
   ] as const) {
     list.addSubnet(network, prefix, 'ipv6');
   }
@@ -90,7 +104,17 @@ export function isPublicAddress(address: string): boolean {
   if (!normalized) {
     return false;
   }
-  return !blockedAddresses.check(normalized.address, normalized.family);
+  if (normalized.family === 'ipv4') {
+    return !blockedIPv4.check(normalized.address, 'ipv4');
+  }
+  if (ipv4Mapped.check(normalized.address, 'ipv6')) {
+    // Hex-form IPv4-mapped: BlockList applies the IPv4 rules to it.
+    return !blockedIPv4.check(normalized.address, 'ipv6');
+  }
+  return (
+    globalUnicastIPv6.check(normalized.address, 'ipv6') &&
+    !blockedGlobalUnicastIPv6.check(normalized.address, 'ipv6')
+  );
 }
 
 // True when `address` is a cloud metadata service address, in either family

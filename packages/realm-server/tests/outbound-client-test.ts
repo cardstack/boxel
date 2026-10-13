@@ -97,6 +97,10 @@ module(basename(import.meta.filename), function () {
       ['IPv4-mapped private', '::ffff:10.0.0.1'],
       ['NAT64 embedding a private address', '64:ff9b::a00:1'],
       ['6to4', '2002:a00:1::1'],
+      ['segment-routing SID', '5f00::1'],
+      ['benchmarking', '2001:2::1'],
+      ['documentation 3fff::/20', '3fff::1'],
+      ['dummy prefix', '100:0:0:1::1'],
     ];
 
     for (let [label, address] of refusedV4) {
@@ -544,7 +548,14 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a wildcard or non-host allowlist entry is refused everywhere', function (assert) {
-      for (let entry of ['*', '*.example.com', 'localhost:4201/x', 'a b']) {
+      for (let entry of [
+        '*',
+        '*.example.com',
+        'localhost:4201',
+        '127.0.0.1:8080',
+        'localhost:4201/x',
+        'a b',
+      ]) {
         assert.throws(
           () =>
             checkOutboundSettings(
@@ -555,6 +566,13 @@ module(basename(import.meta.filename), function () {
           `"${entry}" is refused`,
         );
       }
+    });
+
+    test('an IPv6 literal allowlist entry is a host, not a port', function (assert) {
+      for (let entry of ['::1', '[::1]']) {
+        checkOutboundSettings({ devAllowlist: [entry] }, { deployed: false });
+      }
+      assert.ok(true, 'accepted');
     });
 
     test('a local server takes its allowlist and limits from the environment', function (assert) {

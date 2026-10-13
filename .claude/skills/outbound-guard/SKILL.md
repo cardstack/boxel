@@ -34,8 +34,9 @@ Incoming request headers are never forwarded: the vendor receives exactly the
 body's `headers` field plus the credential (and fetch's own `accept`,
 `user-agent`, `accept-encoding`, …).
 
-Refusals log on the `request-forward` / `openrouter-passthrough` channels as
-`… stopped by the outbound guard: <message>`. The message names the host, never
+Refusals and timeouts log at `warn` as `… stopped by the outbound guard: <message>`:
+on `request-forward` or `openrouter-passthrough` for a non-streamed call, and on
+`proxy-forward` for a streamed one (`stream: true`). The message names the host, never
 the full URL (a `url-parameter` credential sits in the query string).
 
 ## Settings
