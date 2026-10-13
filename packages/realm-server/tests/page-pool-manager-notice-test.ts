@@ -46,6 +46,13 @@ function makeBrowserStub() {
   };
 }
 
+const POOL_SIZING_ENV_KEYS = [
+  'PRERENDER_PAGE_POOL_MIN',
+  'PRERENDER_PAGE_POOL_MAX',
+  'PRERENDER_PAGE_POOL_INITIAL',
+  'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
+];
+
 module(basename(import.meta.filename), function (hooks) {
   let manager: Server;
   // Every request the stand-in manager receives, with the server it names.
@@ -87,18 +94,31 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   function makePool(serverURL: string, registerWithManager?: boolean) {
-    let pool = new PagePool({
-      maxPages: 1,
-      serverURL,
-      browserManager: makeBrowserStub() as any,
-      boxelHostURL: 'http://localhost:4200',
-      standbyTimeoutMs: 500,
-      disableFileAdmission: true,
-      disableStandbyRefill: true,
-      ...(registerWithManager === undefined ? {} : { registerWithManager }),
-    });
-    pools.push(pool);
-    return pool;
+    // A pool sized by the environment would hold more than its one tab.
+    let sizing = POOL_SIZING_ENV_KEYS.map((key) => [key, process.env[key]]);
+    for (let key of POOL_SIZING_ENV_KEYS) {
+      delete process.env[key];
+    }
+    try {
+      let pool = new PagePool({
+        maxPages: 1,
+        serverURL,
+        browserManager: makeBrowserStub() as any,
+        boxelHostURL: 'http://localhost:4200',
+        standbyTimeoutMs: 500,
+        disableFileAdmission: true,
+        disableStandbyRefill: true,
+        ...(registerWithManager === undefined ? {} : { registerWithManager }),
+      });
+      pools.push(pool);
+      return pool;
+    } finally {
+      for (let [key, value] of sizing) {
+        if (value !== undefined) {
+          process.env[key!] = value;
+        }
+      }
+    }
   }
 
   test('only a pool whose server registers reports an evicted affinity', async function (assert) {
@@ -129,6 +149,47 @@ module(basename(import.meta.filename), function (hooks) {
       requests.filter((r) => r.serverURL === unregisteredURL),
       [],
       'the manager never hears from the unregistered pool',
+    );
+  });
+
+  // A pool of one tab with no standby left, so a render of a new affinity
+  // can only take the tab another affinity holds.
+  async function stealOnlyTab(from: string, to: string) {
+    let serverURL = 'http://127.0.0.1:59003';
+    let pool = makePool(serverURL);
+    await pool.warmStandbys();
+    let held = await pool.getPage(from);
+    held.release();
+    let stolen = await pool.getPage(to);
+    stolen.release();
+    assert_(stolen.pageId === held.pageId, `${to} took ${from}'s tab`);
+    // The notice is sent without being awaited.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return requests.filter((r) => r.serverURL === serverURL);
+  }
+  let assert_: (ok: boolean, message: string) => void;
+
+  test("a tab moving between two sessions of one realm doesn't report the realm evicted", async function (assert) {
+    assert_ = (ok, message) => assert.true(ok, message);
+    let sent = await stealOnlyTab(
+      'realm:http://example.com/#@user-1:localhost',
+      'realm:http://example.com/#@user-2:localhost',
+    );
+    assert.deepEqual(sent, [], 'the manager hears nothing');
+  });
+
+  test('a tab moving to another realm reports its realm evicted', async function (assert) {
+    assert_ = (ok, message) => assert.true(ok, message);
+    let sent = await stealOnlyTab(
+      'realm:http://example.com/#@user-1:localhost',
+      'realm:http://other.example.com/#@user-1:localhost',
+    );
+    assert.deepEqual(
+      sent.map((r) => `${r.method} ${r.path}`),
+      [
+        `DELETE /prerender-servers/affinities/${encodeURIComponent('realm:http://example.com/')}`,
+      ],
+      "the manager hears that the first realm's affinity is gone",
     );
   });
 });

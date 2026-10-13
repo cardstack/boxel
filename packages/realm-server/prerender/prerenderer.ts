@@ -19,7 +19,12 @@ import {
 } from './page-pool.ts';
 import { RenderRunner, type Timings } from './render-runner.ts';
 import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
-import { toAffinityKey } from './affinity.ts';
+import {
+  isAffinityOfRealm,
+  isRealmAuthorityAffinityKey,
+  realmAffinityKeyOf,
+  toAffinityKey,
+} from './affinity.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
@@ -135,6 +140,9 @@ export class Prerenderer {
         // until another job for the same realm replaced it. A still-running
         // job just re-renders each type's icon once as the memo re-warms.
         this.#renderRunner.clearIconMemo(affinityKey);
+        // And the auth its tabs last ran with, which only decides whether
+        // those tabs can serve the next render.
+        this.#renderRunner.clearAuthCache(affinityKey);
       },
     });
     this.#renderRunner = new RenderRunner({
@@ -164,15 +172,51 @@ export class Prerenderer {
     this.#pagePool.serverURL = url;
   }
 
+  // The manager routes by realm, so a realm's session affinities are
+  // reported to it as the realm's own key.
   getWarmAffinities(): string[] {
-    return this.#pagePool.getWarmAffinities();
+    return [
+      ...new Set(this.#pagePool.getWarmAffinities().map(realmAffinityKeyOf)),
+    ];
   }
 
+  // A realm's row under the realm's key, built from its realm-authority
+  // affinities: idle only when every one of them is, with their tabs summed
+  // and the highest priority any of them has waiting. A tab of a reader's or
+  // an anonymous session serves only that session, so it is no warmth another
+  // request routed to the realm can use, and its queue doesn't hold up the
+  // realm's own renders.
   getVacancySnapshot(): Record<
     string,
     { idle: boolean; tabCount: number; maxPendingPriority?: number }
   > {
-    return this.#pagePool.getVacancySnapshot();
+    let snapshot: Record<
+      string,
+      { idle: boolean; tabCount: number; maxPendingPriority?: number }
+    > = {};
+    for (let [affinityKey, vacancy] of Object.entries(
+      this.#pagePool.getVacancySnapshot(),
+    )) {
+      if (!isRealmAuthorityAffinityKey(affinityKey)) {
+        continue;
+      }
+      let realmKey = realmAffinityKeyOf(affinityKey);
+      let row = snapshot[realmKey];
+      if (!row) {
+        snapshot[realmKey] = { ...vacancy };
+        continue;
+      }
+      row.idle = row.idle && vacancy.idle;
+      row.tabCount += vacancy.tabCount;
+      if (
+        vacancy.maxPendingPriority !== undefined &&
+        (row.maxPendingPriority === undefined ||
+          vacancy.maxPendingPriority > row.maxPendingPriority)
+      ) {
+        row.maxPendingPriority = vacancy.maxPendingPriority;
+      }
+    }
+    return snapshot;
   }
 
   // CS-10872: richer-than-vacancy snapshot used by prerender-app's
@@ -225,9 +269,17 @@ export class Prerenderer {
     affinityType: AffinityType;
     affinityValue: string;
   }): Promise<void> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    this.#renderRunner.clearAuthCache(affinityKey);
-    await this.#pagePool.disposeAffinity(affinityKey);
+    // A realm's affinity goes with every session affinity it was split into.
+    let realmKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKeys = new Set([
+      realmKey,
+      ...this.#pagePool
+        .getAffinityKeys()
+        .filter((key) => isAffinityOfRealm(key, realmKey)),
+    ]);
+    for (let affinityKey of affinityKeys) {
+      await this.#pagePool.disposeAffinity(affinityKey);
+    }
   }
 
   // Block until the standby pool has reached its desired count. The
@@ -289,7 +341,6 @@ export class Prerenderer {
         await this.#pagePool.disposeAffinity(affinityKey, {
           retainSharedContext: true,
         });
-        this.#renderRunner.clearAuthCache(affinityKey);
       } catch (disposeErr: any) {
         log.warn(
           `failed to dispose affinity ${affinityKey} after cancel: ${
@@ -303,24 +354,35 @@ export class Prerenderer {
   // Release this batch's hold on an affinity's warm loader. Called from
   // `IndexRunner`'s `finally` blocks and via the `/release-batch` HTTP
   // endpoint. Removes only the releasing batch's entry, so a concurrent batch
-  // on the same affinity keeps its protection.
+  // on the same affinity keeps its protection. The release names the realm,
+  // and the batch's renders ran on one of the realm's session affinities, so
+  // it is released from each of them; a batch id names one batch, so no other
+  // batch's hold goes with it.
   async releaseBatch({
     batchId,
     affinityType,
     affinityValue,
   }: ReleaseBatchArgs): Promise<void> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    let owners = this.#batchOwnership.get(affinityKey);
-    if (owners?.delete(batchId)) {
-      if (owners.size === 0) {
-        this.#batchOwnership.delete(affinityKey);
+    let realmKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKeys = new Set(
+      [
+        ...this.#batchOwnership.keys(),
+        ...this.#renderRunner.iconMemoAffinityKeys,
+      ].filter((key) => isAffinityOfRealm(key, realmKey)),
+    );
+    for (let affinityKey of affinityKeys) {
+      let owners = this.#batchOwnership.get(affinityKey);
+      if (owners?.delete(batchId)) {
+        if (owners.size === 0) {
+          this.#batchOwnership.delete(affinityKey);
+        }
+        log.debug(`batch ${batchId} released its hold on ${affinityKey}`);
       }
-      log.debug(`batch ${batchId} released its hold on ${affinityKey}`);
+      // The batch's icon memo has no readers once it releases (a later job
+      // carries a different job key), so drop it rather than letting it
+      // idle. Only this batch's: a concurrent job's memo is still being read.
+      this.#renderRunner.releaseIconMemo(affinityKey, batchId);
     }
-    // The batch's icon memo has no readers once it releases (a later job
-    // carries a different job key), so drop it rather than letting it idle.
-    // Only this batch's: a concurrent job's memo is still being read.
-    this.#renderRunner.releaseIconMemo(affinityKey, batchId);
   }
 
   // Read-only observability accessor used by tests. Callers outside of
@@ -359,6 +421,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: args.affinityType,
       affinityValue: args.affinityValue,
+      auth: args.auth,
     });
     let owners = this.#batchOwnership.get(affinityKey);
     let decision = computeBatchClearCacheGate(args, owners, Date.now(), {
@@ -417,7 +480,7 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     let activity = this.#affinityActivity.record(
       affinityKey,
       url,
@@ -628,6 +691,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: 'user',
       affinityValue: userId,
+      auth,
     });
     try {
       let result = await this.#renderRunner.runCommandAttempt({
@@ -694,6 +758,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: 'realm',
       affinityValue: realm,
+      auth,
     });
     try {
       let result = await this.#renderRunner.runCaptureAttempt({
@@ -777,7 +842,7 @@ export class Prerenderer {
     let testOnTabAcquired = (
       rawArgs as { onTabAcquired?: (info: { pageId: string }) => void }
     ).onTabAcquired;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     let activity = this.#affinityActivity.record(
       affinityKey,
       url,
@@ -1070,10 +1135,10 @@ export class Prerenderer {
       void this.#browserManager.cleanupUserDataDirs();
       void this.#pagePool
         .evictIdleAffinities(this.#affinityIdleEvictMs)
-        .then((evictedAffinities) => {
-          for (let affinityKey of evictedAffinities) {
-            this.#renderRunner.clearAuthCache(affinityKey);
-          }
+        .then(() => {
+          this.#renderRunner.pruneAuthCache(
+            new Set(this.#pagePool.getAffinityKeys()),
+          );
         })
         .catch((e) => {
           log.warn('Error evicting idle prerender affinities:', e);

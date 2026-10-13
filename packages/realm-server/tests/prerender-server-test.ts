@@ -995,7 +995,11 @@ module(basename(import.meta.filename), function () {
       let permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> = {
         [realmURL.href]: ['read', 'write', 'realm-owner'],
       };
-      let auth = testCreatePrerenderAuth(testUserId, permissions);
+      // A realm's vacancy is that of the renders it makes of its own cards,
+      // which run under realm authority.
+      let auth = testCreatePrerenderAuth(testUserId, permissions, {
+        realmAuthority: true,
+      });
       // Warm the affinity with a visit.
       await request
         .post('/prerender-visit')
