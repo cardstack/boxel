@@ -231,7 +231,7 @@ export class RuleRow extends Component<RuleRowSignature> {
         />
         <Token @value={{@rule.ruleId}} @hue={{this.severityHue}} />
         {{#if @statusDetail}}
-          <span class='rr-detail'>{{@statusDetail}}</span>
+          <span class='rr-detail' data-test-pretui-rule-detail>{{@statusDetail}}</span>
         {{/if}}
         <span class='rr-spacer'></span>
         {{#if @onRemove}}
@@ -334,7 +334,7 @@ export class RuleRow extends Component<RuleRowSignature> {
           </:value>
         </ExpressionBuilder>
       {{else}}
-        <p class='rr-nomodel'>
+        <p class='rr-nomodel' data-test-pretui-rule-no-model>
           This rule's expression was authored as BXL source. Pass
           <code>@model</code>
           to edit it visually — the source is never parsed back into a model,
