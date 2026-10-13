@@ -177,7 +177,7 @@ const MAX_BILLING_FIELD_BYTES = 64 * 1024;
  * the `SyntaxError` the handler answers with a 500, as it does for any
  * unreadable upstream answer. A body that opens like JSON is committed to the
  * client from its first chunk, so a fault found later — a malformed or
- * truncated document, or the upstream failing mid-body — can no longer change
+ * truncated document, or the upstream failing mid-body — cannot change
  * the status: the connection is cut instead, so the client cannot mistake a
  * partial body for a whole one.
  *
@@ -243,7 +243,7 @@ export async function forwardJsonResponse(
   // Koa there is nothing more to send, so once the handler returns — after
   // the call's cost is recorded — Koa only ends the response. A client that
   // sees its response complete can therefore rely on the charge and the
-  // in-flight slot having been settled, as when the body was sent whole.
+  // in-flight slot having been settled.
   ctxt.body = null;
   ctxt.status = externalResponse.status;
   ctxt.message = externalResponse.statusText;
