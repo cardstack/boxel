@@ -8,7 +8,11 @@ import type {
   PgAdapter,
 } from '@cardstack/postgres';
 import { finalizeChildReservationAsFailure } from '../lib/finalize-child-fatal-failure.ts';
-import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 async function insertJob(
   adapter: PgAdapter,
@@ -58,7 +62,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('closes the worker\'s open reservation with completion_reason="completed"', async function (assert) {
