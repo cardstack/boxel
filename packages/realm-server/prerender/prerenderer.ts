@@ -359,6 +359,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: args.affinityType,
       affinityValue: args.affinityValue,
+      auth: args.auth,
     });
     let owners = this.#batchOwnership.get(affinityKey);
     let decision = computeBatchClearCacheGate(args, owners, Date.now(), {
@@ -417,7 +418,7 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     let activity = this.#affinityActivity.record(
       affinityKey,
       url,
@@ -628,6 +629,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: 'user',
       affinityValue: userId,
+      auth,
     });
     try {
       let result = await this.#renderRunner.runCommandAttempt({
@@ -694,6 +696,7 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({
       affinityType: 'realm',
       affinityValue: realm,
+      auth,
     });
     try {
       let result = await this.#renderRunner.runCaptureAttempt({
@@ -777,7 +780,7 @@ export class Prerenderer {
     let testOnTabAcquired = (
       rawArgs as { onTabAcquired?: (info: { pageId: string }) => void }
     ).onTabAcquired;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     let activity = this.#affinityActivity.record(
       affinityKey,
       url,

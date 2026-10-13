@@ -467,7 +467,7 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
       `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} affinity=${affinityKey}`,
     );
@@ -707,7 +707,7 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
       `capture prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
     );
@@ -1041,7 +1041,7 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
       `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
@@ -1261,7 +1261,7 @@ export class RenderRunner {
     timings: Timings;
     pool: PoolInfo;
   }> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     // Which halves of the bifurcated visit run. The fused visit (no
     // visitType) runs both.
     let runIndexSteps = visitType !== 'prerender-html';
