@@ -140,8 +140,9 @@ A run also prints the table at the end.
 4. Looks for a rendered card in the stack that is not the workspace index and
    has no error state; screenshots the page.
 5. Reads the room's Matrix events: turns, tokens, cost, tool calls and their
-   outcomes, run-realm-code writes, files written.
-6. Classifies: `pass` (card rendered), `model` failure (never wrote, wrong
+   outcomes, run-realm-code writes and other writing tool calls, files written.
+6. Classifies: `pass` (card rendered, and at least one applied run-realm-code
+   or other writing tool call), `model` failure (never wrote, wrong
    tool, gave up), or `host` failure (a pill stuck applying, a
    tool with no result, the tab left the workspace). Keeps the room id so the
    room can be inspected afterwards.

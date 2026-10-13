@@ -105,6 +105,16 @@ const MODELS = (process.env.EVAL_MODELS ?? 'Claude Sonnet 4.6')
   .map((m) => m.trim())
   .filter(Boolean);
 
+// Skill sections behind a feature flag (`<!-- feature:<name> -->`) are left
+// out of the prompt unless the room enabled them. Each name here is enabled
+// in the room with `boxel-debug:feature:enable:<name>` before the first
+// prompt, in addition to the evaluation's own `skillFeatures`, so a run can
+// measure the assistant with a feature on that the evaluation leaves off.
+const SKILL_FEATURES = (process.env.EVAL_SKILL_FEATURES ?? '')
+  .split(',')
+  .map((f) => f.trim())
+  .filter(Boolean);
+
 function slugify(s: string) {
   return s
     .toLowerCase()
@@ -463,12 +473,16 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     }
     // A loop: the same tool call, with the same arguments, three times. The
     // bot's own checkCorrectness is left out: it repeats with the same
-    // arguments on every repair round by design.
+    // arguments on every repair round by design. So is a call rejected as
+    // invalid: it never ran, its pill shows no arguments, so several of them
+    // in one turn look identical, and the failed-turn count above already
+    // covers them.
     let toolElements = Array.from(
       document.querySelectorAll<HTMLElement>('[data-tool-name]'),
     );
     let calls = toolElements
       .filter((el) => el.dataset.toolName !== 'checkCorrectness')
+      .filter((el) => !el.querySelector('[data-test-apply-state="invalid"]'))
       .map(
         (el) =>
           `${el.dataset.toolName}|${el.dataset.toolArgumentsLength}|${(
@@ -529,11 +543,47 @@ async function stopGeneration(page: Page) {
 // expensive runs are not stopped; they are graded afterwards.
 // `botMessagesBefore` is how many finished bot turns the room already had
 // when the prompt went out; a follow-up prompt waits for a new one.
+// Some tools open a room of their own and move the assistant panel to it:
+// `listing-remix`, for one, starts a "Remixing …" session. The evaluation's
+// conversation carries on in its own room, but the panel no longer shows it,
+// so everything read from the page would describe the wrong room. When the
+// panel is on another room, reopen the evaluation's room from past sessions.
+// Returns true when it switched back. It runs on every poll, so reading the
+// current room never waits, and a switch that fails (the past-sessions button
+// disabled, the host reloading) returns false for the next poll to retry
+// rather than failing the run.
+async function returnToRoom(page: Page, roomId: string): Promise<boolean> {
+  let current = await page
+    .evaluate(
+      () =>
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room') ?? null,
+    )
+    .catch(() => null);
+  if (!current || current === roomId) {
+    return false;
+  }
+  try {
+    await page.locator('[data-test-past-sessions-button]').click();
+    await page.locator(`[data-test-enter-room="${roomId}"]`).click();
+    await page
+      .locator(`[data-test-room="${roomId}"]`)
+      .waitFor({ timeout: 60_000 });
+    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForIdle(
   page: Page,
   deadline: number,
   botMessagesBefore = 0,
   onActivity?: (activity: Activity) => void,
+  roomId?: string,
+  roomReturns: { count: number } = { count: 0 },
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
@@ -541,6 +591,9 @@ async function waitForIdle(
   let lastTextLength = -1;
   let startedAt = Date.now();
   for (;;) {
+    if (roomId && (await returnToRoom(page, roomId))) {
+      roomReturns.count++;
+    }
     let now = Date.now();
     let activity = await readActivity(page);
     onActivity?.(activity);
@@ -745,8 +798,11 @@ function classify(
     );
     return { verdict: 'host-failure', reasons };
   }
-  if (analysis.realmCodeWrites === 0) {
-    reasons.push('no file was written (no applied run-realm-code write)');
+  let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  if (writes === 0) {
+    reasons.push(
+      'no file was written (no applied run-realm-code or other writing tool call)',
+    );
   }
   if (!cardId) {
     reasons.push(...cardReasons);
@@ -761,7 +817,7 @@ function classify(
   if (
     cardId &&
     cardReasons.length === 0 &&
-    analysis.realmCodeWrites > 0 &&
+    writes > 0 &&
     promptsSent === promptsTotal
   ) {
     return { verdict: 'pass', reasons };
@@ -813,6 +869,8 @@ async function runModel(
     initialCards: [],
     initialFiles: [],
     skillsUsed: [],
+    skillFeatures: [],
+    roomReturns: 0,
     username,
     stoppedBy: 'error',
     irregularities: [],
@@ -871,14 +929,46 @@ async function runModel(
     await ensureActMode(page, requestedModel);
     setStep('confirm the tab is inside the new workspace');
     await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
+    // The evaluation's own features, plus any EVAL_SKILL_FEATURES adds.
+    let skillFeatures = [
+      ...new Set([...(evaluation?.skillFeatures ?? []), ...SKILL_FEATURES]),
+    ];
+    for (let [index, feature] of skillFeatures.entries()) {
+      setStep(`enable skill feature ${feature}`);
+      await sendPrompt(
+        page,
+        result.roomId,
+        `boxel-debug:feature:enable:${feature}`,
+        index + 1,
+      );
+      // The bot answers the command itself, without the model; its reply
+      // carries no usage, so it is not counted as a turn. A name the bot
+      // does not know gets "There is no feature named …" instead, which ends
+      // the run straight away rather than at the timeout.
+      let enabled = page.getByText(`${feature} is now enabled`).first();
+      let unknown = page.getByText('There is no feature named').first();
+      await expect(enabled.or(unknown)).toBeVisible({ timeout: NO_REPLY_MS });
+      if (await unknown.isVisible()) {
+        throw new Error(
+          `The ai-bot has no skill feature named "${feature}"; check the evaluation's skillFeatures and EVAL_SKILL_FEATURES.`,
+        );
+      }
+    }
+    result.skillFeatures = skillFeatures;
     // One safety clock for the whole run, follow-ups included.
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;
+    let roomReturns = { count: 0 };
     for (let [index, prompt] of prompts.entries()) {
       setStep(
         index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`,
       );
-      await sendPrompt(page, result.roomId, prompt, index + 1);
+      await sendPrompt(
+        page,
+        result.roomId,
+        prompt,
+        skillFeatures.length + index + 1,
+      );
       result.promptsSent = index + 1;
       setStep(
         index === 0
@@ -904,6 +994,8 @@ async function runModel(
             });
           }
         },
+        result.roomId,
+        roomReturns,
       );
       result.stoppedBy = waited.stoppedBy;
       result.irregularities = waited.irregularities;
@@ -912,6 +1004,10 @@ async function runModel(
       }
       botMessagesBefore = (await readActivity(page)).botMessages;
     }
+    if (result.roomId && (await returnToRoom(page, result.roomId))) {
+      roomReturns.count++;
+    }
+    result.roomReturns = roomReturns.count;
     setStep('check render');
 
     let rendered = await findRenderedCard(
@@ -941,6 +1037,19 @@ async function runModel(
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
+    // An enabled feature whose skill the model never opened means the run
+    // did not exercise it, whatever the verdict says. This assumes each
+    // feature's skill lives in a skills/<feature name>/SKILL.md directory.
+    for (let feature of result.skillFeatures) {
+      let read = result.analysis.filesRead.some((url) =>
+        url.endsWith(`/skills/${feature}/SKILL.md`),
+      );
+      if (!read) {
+        result.reasons.push(
+          `skill feature "${feature}" was enabled but skills/${feature}/SKILL.md was never read`,
+        );
+      }
+    }
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.reasons.push(
@@ -1110,7 +1219,7 @@ test.afterAll(async () => {
             )
             .join(', ')
         : '';
-      let writes = a ? `${a.realmCodeWrites}` : '';
+      let writes = a ? `${a.realmCodeWrites + a.toolWrites}` : '';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
       } | ${tools} | ${writes} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${

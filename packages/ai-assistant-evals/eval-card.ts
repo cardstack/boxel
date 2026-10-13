@@ -20,6 +20,8 @@ export interface Evaluation {
   // Absolute URLs, as the realm serializes them.
   initialCards: string[];
   initialFiles: string[];
+  // Skill features to enable in the room before the first prompt.
+  skillFeatures: string[];
   adoptsFrom: { module: string; name: string };
 }
 
@@ -87,6 +89,11 @@ export async function loadEvaluation(
     successCriteria: attributes.successCriteria ?? '',
     initialCards: linkedIds(doc, 'initialCards', id),
     initialFiles: linkedIds(doc, 'initialFiles', id),
+    skillFeatures: Array.isArray(attributes.skillFeatures)
+      ? attributes.skillFeatures.filter(
+          (f: unknown): f is string => typeof f === 'string' && f.trim() !== '',
+        )
+      : [],
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
 }
