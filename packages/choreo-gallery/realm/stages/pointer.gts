@@ -1,6 +1,6 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { animate, motion, motionValue } from 'glimmer-motion';
+import { animate, motion, motionValue, styles } from 'glimmer-motion';
 
 import { GalleryDemo } from '../demo';
 import { preventSelect } from '../lib/pointer';
@@ -28,18 +28,6 @@ export class FollowPointer extends Component {
   ry = motionValue(0);
   hx = motionValue(0);
   hy = motionValue(0);
-
-  get cursor() {
-    return { x: this.x, y: this.y };
-  }
-
-  get ring() {
-    return { x: this.rx, y: this.ry };
-  }
-
-  get halo() {
-    return { x: this.hx, y: this.hy };
-  }
 
   aim = (event: PointerEvent, stage: HTMLElement) => {
     const box = stage.getBoundingClientRect();
@@ -145,21 +133,21 @@ export class FollowPointer extends Component {
       <div
         class='follow-halo'
         {{motion
-          style=this.halo
+          style=(styles x=this.hx y=this.hy)
           transition=(tuneMotion 'pointer' loose 'Halo spring')
         }}
       ></div>
       <div
         class='follow-ring'
         {{motion
-          style=this.ring
+          style=(styles x=this.rx y=this.ry)
           transition=(tuneMotion 'pointer' mid 'Ring spring')
         }}
       ></div>
       <div
         class='follow-orb'
         {{motion
-          style=this.cursor
+          style=(styles x=this.x y=this.y)
           transition=(tuneMotion 'pointer' tight 'Pointer spring')
         }}
       ></div>
