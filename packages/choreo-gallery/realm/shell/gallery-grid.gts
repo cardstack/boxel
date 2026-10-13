@@ -1,17 +1,12 @@
-import { concat, fn } from '@ember/helper';
+import type { BoxComponent } from '@cardstack/base/card-api';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 
 import { type GalleryDemo, GROUPS } from '../demo';
-import type { Crossing } from '../lib/crossing';
 import { highlightSample } from '../lib/highlight';
-import type { GalleryNavigation } from '../lib/navigation';
-import { restWhenOff } from '../lib/onstage';
-import { DemoStage } from './demo-stage';
-import { GalleryLink } from './gallery-link';
-import { GuideLink } from './guide-link';
 
 const ALL = 'All';
 const DEEP_DIVE = 'Deep Dive';
@@ -22,9 +17,19 @@ const NO_PANEL: { id: string }[] = [];
 const reducedMotion = () =>
   typeof matchMedia === 'function' &&
   matchMedia('(prefers-reduced-motion: reduce)').matches;
-const demoKey = (demo: GalleryDemo) => demo.slug;
+const tileKey = (tile: GalleryTile) => tile.demo.slug;
 const hasNotes = (demo: GalleryDemo) =>
   Boolean((demo.constructor as typeof GalleryDemo).notes);
+
+/**
+ * One tile of the grid: the demo, and the gallery's field component for it,
+ * which renders the demo card in a format of its own. The host owns that
+ * component, so a click on the tile opens the demo card through the host.
+ */
+export interface GalleryTile {
+  Card: BoxComponent;
+  demo: GalleryDemo;
+}
 
 /** a tile that was not in the old list arrives; one that survives just moves */
 const cardIn = { opacity: 0, scale: 0.96 };
@@ -67,8 +72,8 @@ const SAMPLE = `{{! Filtering this list is a layout animation, not a page transi
     tiles fly to new seats. }}
 <LayoutGroup>
   <div class='grid'>
-    <Presence @items={{this.demos}} @key={{demoKey}} @mode='popLayout'
-      as |demo h|>
+    <Presence @items={{this.tiles}} @key={{tileKey}} @mode='popLayout'
+      as |tile h|>
       <article
         class='card'
         {{motion
@@ -79,7 +84,7 @@ const SAMPLE = `{{! Filtering this list is a layout animation, not a page transi
           exit=cardOut
           transition=cardSpring
         }}
-      >…</article>
+      ><tile.Card @format='fitted' /></article>
     </Presence>
   </div>
 </LayoutGroup>
@@ -91,9 +96,9 @@ select = (filter) => {
 
 interface Signature {
   Args: {
-    crossing: Crossing;
-    demos: GalleryDemo[];
-    nav: GalleryNavigation;
+    /** opens a demo card through the host */
+    onOpen: (demo: GalleryDemo) => void;
+    tiles: GalleryTile[];
   };
 }
 
@@ -115,40 +120,21 @@ export class GalleryGrid extends Component<Signature> {
   private static readonly SLOW_MS = 34;
   @tracked code = false;
 
-  /**
-   * Mounted mid-crossing — the return trip — the stages wait for the
-   * landing: booting every live demo is the heaviest render in the gallery,
-   * and paying it inside the pass stutters the very flight the eye is
-   * following. Released ONCE, permanently: a later opening crossing must fly
-   * real pixels out of the tile.
-   */
-  @tracked private stagesReleased: boolean;
-
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner as never, args);
-    this.stagesReleased = !args.crossing.isCrossing;
-    if (!this.stagesReleased) {
-      void args.crossing.settled().then(() => {
-        if (!this.isDestroying) {
-          this.stagesReleased = true;
-        }
-      });
-    }
-  }
-
   get filters(): string[] {
     let filters = [ALL, ...GROUPS];
-    return this.args.demos.some(hasNotes) ? [...filters, DEEP_DIVE] : filters;
+    return this.args.tiles.some(({ demo }) => hasNotes(demo))
+      ? [...filters, DEEP_DIVE]
+      : filters;
   }
 
-  get demos(): GalleryDemo[] {
+  get tiles(): GalleryTile[] {
     if (this.filter === ALL) {
-      return this.args.demos;
+      return this.args.tiles;
     }
     if (this.filter === DEEP_DIVE) {
-      return this.args.demos.filter(hasNotes);
+      return this.args.tiles.filter(({ demo }) => hasNotes(demo));
     }
-    return this.args.demos.filter((demo) => demo.group === this.filter);
+    return this.args.tiles.filter(({ demo }) => demo.group === this.filter);
   }
 
   get sample() {
@@ -158,32 +144,6 @@ export class GalleryGrid extends Component<Signature> {
   get panel() {
     return this.code ? [{ id: 'filter-code' }] : NO_PANEL;
   }
-
-  /**
-   * …with ONE exception: the counterpart's own stage boards DURING the
-   * crossing. The old skin dissolves over the receiving tile, and a dissolve
-   * needs something real underneath.
-   */
-  stageLive = (slug: string) =>
-    this.stagesReleased || slug === this.args.crossing.counterpart;
-
-  /**
-   * The unmatched tiles are not the crossing's to fade. During the trip home
-   * only ONE tile is part of the Magic Move — the one the flight lands on; it
-   * stands ready from the first frame. Every other tile holds dark for the
-   * span and springs in once the crossing settles.
-   */
-  cardInitial = (slug: string) =>
-    this.args.crossing.isCrossing && slug === this.args.crossing.counterpart
-      ? this.herePose
-      : this.enterPose;
-
-  cardAnimate = (slug: string) =>
-    this.stageLive(slug) ? this.herePose : this.enterPose;
-
-  /** the counterpart's shell hides while its contents are the flight */
-  veiled = (slug: string) =>
-    this.args.crossing.active && slug === this.args.crossing.counterpart;
 
   isOn = (filter: string) => filter === this.filter;
 
@@ -248,10 +208,19 @@ export class GalleryGrid extends Component<Signature> {
     this.code = !this.code;
   };
 
+  /** a click the tile's card did not keep for itself, or Enter on the tile */
+  open = (demo: GalleryDemo, event: Event) => {
+    if (
+      event instanceof KeyboardEvent &&
+      (event.key !== 'Enter' || event.target !== event.currentTarget)
+    ) {
+      return;
+    }
+    this.args.onOpen(demo);
+  };
+
   <template>
-    {{! role='scene': the crossing gives the hero its own exit — it rises
-      out — and fades it back in on the way home }}
-    <section class='hero' {{motion role='scene'}}>
+    <section class='hero'>
       {{! the repo is Choreo; the thing you install is still glimmer-motion,
         so the eyebrow credits the package by name }}
       <p class='kicker'>Includes glimmer-motion</p>
@@ -309,78 +278,39 @@ export class GalleryGrid extends Component<Signature> {
     <LayoutGroup>
       <div class='grid'>
         <Presence
-          @items={{this.demos}}
-          @key={{demoKey}}
+          @items={{this.tiles}}
+          @key={{tileKey}}
           {{! popLayout, so the grid closes up WHILE the leavers fade rather
             than after them }}
           @mode='popLayout'
           {{! no initial=false: the presence context is INHERITED, so blocking
             the first entrance would block it for every motion node inside
             every demo as well }}
-          as |demo h|
+          as |tile h|
         >
-          {{! The tile and its pieces are the crossing's participants. The ids
-            pair with the demo page's own stage and type lines; on a filter
-            pass the timeline is not rendered, so <Presence> keeps owning
-            these same elements' exits. }}
+          {{! The tile is the demo card itself, in its fitted format: the host
+            renders it, so a click anywhere on it opens the demo card. }}
           <article
-            class={{if (this.veiled demo.slug) 'card is-veiled' 'card'}}
-            {{! the crossing finds the tile it lands on by this attribute }}
-            data-gallery-tile={{demo.slug}}
+            class='card'
+            role='link'
+            tabindex='0'
+            aria-label={{tile.demo.title}}
+            data-gallery-tile={{tile.demo.slug}}
+            {{on 'click' (fn this.open tile.demo)}}
+            {{on 'keydown' (fn this.open tile.demo)}}
             {{! a leaving tile is on its way out: it takes no pointer, focus or
               screen reader, so nothing reaches a tile that is fading away }}
             inert={{unless h.isPresent true}}
             {{motion
-              role='card'
               presence=h
               layout=this.cardMoves
-              initial=(this.cardInitial demo.slug)
-              animate=(this.cardAnimate demo.slug)
+              initial=this.enterPose
+              animate=this.herePose
               exit=this.exitPose
               transition=this.cardTransition
             }}
           >
-            {{! Scrolled away, a tile stops animating — see restWhenOff }}
-            <div
-              class='card-stage'
-              {{restWhenOff}}
-              {{motion id=(concat 'stage-' demo.slug) role='stage'}}
-            >
-              {{#if (this.stageLive demo.slug)}}
-                <DemoStage
-                  @demo={{demo}}
-                  @face='tile'
-                  @open={{fn @nav.openInTheater demo.slug}}
-                />
-              {{/if}}
-            </div>
-            <GalleryLink
-              @href={{@nav.hrefFor demo.slug}}
-              @onFollow={{fn @nav.go demo.slug}}
-              class='card-meta'
-              data-test-gallery-tile-link={{demo.slug}}
-            >
-              <span
-                class='card-group'
-                {{motion id=(concat 'group-' demo.slug) role='type'}}
-              >
-                {{demo.group}}
-                {{#if (hasNotes demo)}}
-                  <span class='card-badge'>Deep Dive</span>
-                {{/if}}
-              </span>
-              <span
-                class='card-title'
-                {{motion id=(concat 'title-' demo.slug) role='type'}}
-              >{{demo.title}}</span>
-              <span
-                class='card-lede'
-                {{motion id=(concat 'lede-' demo.slug) role='type'}}
-              >{{demo.lede}}</span>
-            </GalleryLink>
-            <div class='card-guide'>
-              <GuideLink @demo={{demo}} />
-            </div>
+            <tile.Card @format='fitted' @displayContainer={{false}} />
           </article>
         </Presence>
       </div>
@@ -633,23 +563,16 @@ export class GalleryGrid extends Component<Signature> {
         gap: 16px;
       }
 
-      /* NOT content-visibility: auto — a skipped tile is not painted, so the
-         tile the crossing travels to would have nothing in it to fly */
+      /* the tile's box: the demo card's fitted format fills it */
       .card {
-        display: flex;
-        flex-direction: column;
+        position: relative;
         min-width: 0;
-        min-height: 100%;
+        height: 540px;
         border: 1px solid var(--line);
-        background:
-          linear-gradient(
-            180deg,
-            rgba(var(--surface-tint-rgb), 0.02),
-            transparent 40%
-          ),
-          var(--bg-elev);
         border-radius: 18px;
         overflow: hidden;
+        background: var(--bg-elev);
+        cursor: pointer;
         transition: border-color 180ms var(--ease);
       }
 
@@ -659,92 +582,9 @@ export class GalleryGrid extends Component<Signature> {
         }
       }
 
-      /* the counterpart tile of a return crossing: its contents ARE the
-         flight, so its own ground hides for exactly that long */
-      .card.is-veiled {
-        background: transparent;
-        border-color: transparent;
-        transition: none;
-      }
-
-      .card-stage {
-        position: relative;
-        height: 400px;
-        /* a NAMED size container, so a stage can ask about the platter
-           specifically rather than whichever container is nearest */
-        container-name: platter;
-        container-type: size;
-        background:
-          radial-gradient(
-            80% 70% at 50% 40%,
-            rgba(255, 59, 31, 0.08),
-            transparent 62%
-          ),
-          var(--bg);
-      }
-
-      /* A tile nobody can see holds its animations where they stand —
-         paused, so coming back does not restart every loop */
-      .card-stage.is-resting,
-      .card-stage.is-resting :deep(*) {
-        animation-play-state: paused !important;
-      }
-
-      .card-meta {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding: 16px 18px 18px;
-        border-top: 1px solid var(--line);
-        background: rgba(var(--surface-tint-rgb), 0.015);
-      }
-
-      /* the tile's second link, under the one that opens its page: the two
-         share the tile's chin */
-      .card-guide {
-        padding: 0 18px 16px;
-        background: rgba(var(--surface-tint-rgb), 0.015);
-      }
-
-      @media (hover: hover) {
-        .card-meta:hover .card-title {
-          color: var(--ember-hot);
-        }
-      }
-
-      .card-group {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--ember-hot);
-      }
-
-      .card-badge {
-        display: inline-block;
-        margin-left: 6px;
-        padding: 1px 6px;
-        font-size: 9px;
-        font-family: var(--font-mono);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--ember);
-        border: 1px solid var(--ember);
-        border-radius: 3px;
-        opacity: 0.7;
-        vertical-align: middle;
-      }
-
-      .card-title {
-        font-family: var(--font-display);
-        font-weight: 700;
-        font-size: 1.2rem;
-        letter-spacing: -0.03em;
-      }
-
-      .card-lede {
-        color: var(--ink-dim);
-        font-size: 0.92rem;
+      .card:focus-visible {
+        outline: 2px solid var(--ember-hot);
+        outline-offset: 2px;
       }
 
       @media (max-width: 720px) {
@@ -766,8 +606,8 @@ export class GalleryGrid extends Component<Signature> {
           font-size: 11px;
         }
 
-        .card-stage {
-          height: min(380px, 68vh);
+        .card {
+          height: min(520px, 82vh);
         }
       }
     </style>
