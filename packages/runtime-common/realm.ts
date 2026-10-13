@@ -13942,8 +13942,11 @@ export class Realm {
           resolveLinksOnly,
           skipLinkAssemblyBudget,
           peekEtag,
-          { ...this.#callerOf(request, requestContext), ...coarseDeclined },
-          this.#anonymousReadOptions(requestContext),
+          {
+            ...this.#callerOf(request, requestContext),
+            ...coarseDeclined,
+            ...this.#anonymousReadOptions(requestContext),
+          },
         );
       let assembly: CardJsonAssembly;
       let cacheOutcome: CardDocumentCacheOutcome | undefined;
@@ -14028,8 +14031,7 @@ export class Realm {
       clientRequestId: string;
       coarseDeclined?: true;
       seal?: ArchivedRealmError;
-    },
-    anonymous: Pick<RunOperationOptions, 'anonymousRequest'> = {},
+    } & Pick<RunOperationOptions, 'anonymousRequest'>,
   ): Promise<CardJsonAssembly> {
     // The document itself is the `read` operation's — link expansion, the
     // `links.self` and prefix-form ids, the freshly joined `meta.generation`
@@ -14064,7 +14066,9 @@ export class Realm {
           skipQueryBackedExpansion,
           resolveLinksOnly,
           skipLinkAssemblyBudget,
-          ...anonymous,
+          ...(caller.anonymousRequest
+            ? { anonymousRequest: caller.anonymousRequest }
+            : {}),
         },
       );
     } catch (e) {
