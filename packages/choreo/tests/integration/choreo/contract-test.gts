@@ -1,8 +1,8 @@
 /**
  * The <Choreo> contract.
  *
- * The interruption suite (choreo-test-app's
- * `tests/integration/choreo/interruption-test.gts`) is a soak: it hammers the
+ * The interruption suite (the host's
+ * `tests/integration/choreo-gallery-interruption-test.gts`) is a soak: it hammers the
  * real gallery and asserts that nothing was left behind. It catches "the gallery leaked". It
  * cannot tell you *which rule* broke, because it does not state any.
  *
