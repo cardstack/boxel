@@ -288,6 +288,7 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
   dischargePendingDecision,
+  nonGrantableAnswerSources,
   notPermitted,
   pendingWriteFor,
   pendingWriteHolds,
@@ -298,6 +299,7 @@ import {
   policyPredicatePreparations,
   policyUnavailable,
   type PolicyGateStats,
+  type NonGrantableAnswerSources,
 } from './card-operations/gate.ts';
 import {
   namesForeignRealm,
@@ -16367,6 +16369,16 @@ export class Realm {
 
   __testOnlyPolicyGateStats(): PolicyGateStats {
     return { ...policyGateStats(this.operationCore) };
+  }
+
+  __testOnlyNonGrantableAnswerSources(): NonGrantableAnswerSources & {
+    definitionGeneration: number | undefined;
+  } {
+    return {
+      ...nonGrantableAnswerSources(this.operationCore),
+      definitionGeneration:
+        this.operationCore.definitionLookup.definitionGeneration?.(),
+    };
   }
 
   __testOnlyPolicyPredicatePreparations(): number {

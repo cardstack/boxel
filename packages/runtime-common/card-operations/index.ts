@@ -33,6 +33,7 @@ export type { LoweringContext } from './lowering.ts';
 export {
   actingUserResolver,
   dischargePendingDecision,
+  nonGrantableAnswerSources,
   notPermitted,
   pendingWriteFor,
   pendingWriteHolds,
@@ -56,6 +57,7 @@ export type {
   GrantedDecision,
   LockedGrant,
   MatchedGrant,
+  NonGrantableAnswerSources,
   OperationPolicyAccess,
   PendingDecision,
   PendingWrite,
