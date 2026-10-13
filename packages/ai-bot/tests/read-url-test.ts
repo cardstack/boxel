@@ -84,10 +84,49 @@ module('readUrl address policy', () => {
     }
   });
 
+  test('isPublicAddress refuses IPv6 addresses outside global unicast and its special-purpose blocks', () => {
+    for (let address of [
+      '5f00::1',
+      '100:0:0:1::1',
+      '4000::1',
+      'fec0::1',
+      'ff02::1',
+      '2001:2::1',
+      '2001:10::1',
+      '2001:db8::1',
+      '3fff::1',
+      '3fff:fff::1',
+      '2002:808:808::1',
+    ]) {
+      assert.false(isPublicAddress(address), `${address} is not public`);
+    }
+  });
+
   test('isPublicAddress accepts public addresses', () => {
-    for (let address of ['93.184.215.14', '8.8.8.8', '2606:4700::1111']) {
+    for (let address of [
+      '93.184.215.14',
+      '8.8.8.8',
+      '::ffff:8.8.8.8',
+      '::ffff:808:808',
+      '2606:4700::1111',
+      '[2606:4700::1111]',
+      '2001:4860:4860::8888',
+      '3fff:1000::1',
+    ]) {
       assert.true(isPublicAddress(address), `${address} is public`);
     }
+  });
+
+  test('guardedLookup refuses a hostname with an IPv6 address outside global unicast', async () => {
+    let lookup = guardedLookup(async () => ['2606:4700::1111', '5f00::1']);
+    let error = await new Promise<Error | null>((resolve) =>
+      lookup('example.com', { all: true }, (err) => resolve(err)),
+    );
+    assert.ok(error, 'the lookup fails');
+    assert.ok(
+      /private or reserved address/.test(String(error?.message)),
+      error?.message,
+    );
   });
 
   test('guardedLookup refuses a hostname with any private address', async () => {
