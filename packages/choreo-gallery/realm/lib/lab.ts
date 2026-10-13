@@ -6,6 +6,9 @@ import { Dial, type DialTune } from './dial';
 import { demoPresets } from './presets';
 import { demoTuning } from './tuning';
 
+/** how many labs are open on each demo, by its slug */
+const openLabs = new Map<string, number>();
+
 /**
  * A demo's tuning on a dialkit panel: the lab.
  *
@@ -16,8 +19,9 @@ import { demoTuning } from './tuning';
  * so an untouched spring comes back from `tuneMotion` as the same object and
  * never replays a scene.
  *
- * The panel is neither persisted nor retained: closing the lab puts the demo
- * back as it was written.
+ * Every lab open on one demo drives the same panel, so they show the same
+ * values. The panel is neither persisted nor retained: closing the demo's
+ * last lab puts the demo back as it was written.
  */
 export class DemoLab {
   readonly dial: Dial<DialConfig>;
@@ -31,6 +35,7 @@ export class DemoLab {
 
   constructor(slug: string, name: string) {
     this.slug = slug;
+    openLabs.set(slug, (openLabs.get(slug) ?? 0) + 1);
     this.dial = new Dial(`lab:${slug}`, name, this.config(), {
       persist: false,
       retain: false,
@@ -100,7 +105,13 @@ export class DemoLab {
     this.stop();
     this.dial.teardown();
     DialStore.unregisterPanel(this.dial.panelId);
-    this.state.values = {};
+    let open = (openLabs.get(this.slug) ?? 1) - 1;
+    if (open > 0) {
+      openLabs.set(this.slug, open);
+    } else {
+      openLabs.delete(this.slug);
+      this.state.values = {};
+    }
   }
 }
 

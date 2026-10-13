@@ -17,6 +17,7 @@ import {
 import { testRealmURL } from '../helpers/index';
 
 import type * as DemoModule from '../../../choreo-gallery/realm/demo';
+import type * as LabModule from '../../../choreo-gallery/realm/lib/lab';
 import type * as PresetsModule from '../../../choreo-gallery/realm/lib/presets';
 import type * as TempoModule from '../../../choreo-gallery/realm/lib/tempo';
 import type * as TuningModule from '../../../choreo-gallery/realm/lib/tuning';
@@ -201,6 +202,40 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
       demoTuning('enter').values,
       {},
       'and the demo is back as it was written',
+    );
+  });
+
+  test('labs open on one demo share its tuning, and the last to close resets it', async function (assert) {
+    let { demoTuning, tuneNumber } =
+      await gallery.import<typeof TuningModule>('lib/tuning');
+    let { DemoLab } = await gallery.import<typeof LabModule>('lib/lab');
+    tuneNumber('test-shared-lab', 1, 'Size (px)');
+    let page = new DemoLab('test-shared-lab', 'Shared');
+    let guide = new DemoLab('test-shared-lab', 'Shared');
+
+    guide.dial.set('Size (px)', 2);
+    await waitUntil(
+      () => demoTuning('test-shared-lab').values['Size (px)'] === 2,
+    );
+    assert.strictEqual(
+      page.dial.raw['Size (px)'],
+      2,
+      'both labs show the edit one of them made',
+    );
+
+    guide.teardown();
+    await Promise.resolve();
+    assert.deepEqual(
+      demoTuning('test-shared-lab').values,
+      { 'Size (px)': 2 },
+      'closing one lab leaves the demo tuned while another is open',
+    );
+
+    page.teardown();
+    assert.deepEqual(
+      demoTuning('test-shared-lab').values,
+      {},
+      'closing the last lab puts the demo back as it was written',
     );
   });
 
