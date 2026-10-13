@@ -493,10 +493,6 @@ export type PolicyIssueCode =
   // among them: that type might declare the operation `nonGrantable`, so the
   // gate refuses it whatever a compiled policy holds.
   | 'unresolved-type'
-  // A rule whose `targetType` is module source, or descends from it. Module
-  // source is readable only with the realm's own read permission, so there is
-  // nothing a rule on it could grant.
-  | 'grants-module-source'
   // A grant with no operation name, or a `where` that is neither BXL source
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
@@ -1167,7 +1163,7 @@ export type PolicyExplanationReason =
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,
   // for anything but a read of its stored bytes; or stored bytes with no type
-  // to match, which is what module source and an empty path are.
+  // to match, which is what an empty path is.
   | 'unmatchable-target'
   // The operation is not one the target carries: resolving it refused before
   // the policy could be consulted. `refusal` says how.

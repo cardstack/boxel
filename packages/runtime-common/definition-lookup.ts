@@ -1636,7 +1636,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
     priority?: number,
   ): Promise<ModuleRenderResponse> {
-    let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
+    let permissions = await fetchUserPermissions(this.#dbAdapter, {
+      userId,
+      includePublicRealms: true,
+    });
     // A definition is cached and read by every realm that uses the module, so
     // the render that produces one runs under realm authority.
     let auth = this.#createPrerenderAuth(userId, permissions, {

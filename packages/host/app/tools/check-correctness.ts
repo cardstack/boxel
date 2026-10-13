@@ -292,7 +292,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
   // A .json that was meant to be a card instance but is not a card document
   // used to pass this check clean: the indexer stores it as a plain file, and
-  // the model only learns two turns later, from show-card's "Could not find".
+  // the model only learns two turns later, when the card cannot be shown.
   // Models get this wrong in a handful of ways (no "data" wrapper, "type" set
   // to the card's name instead of "card", no meta.adoptsFrom, a made-up
   // "cardDef" link), so name what a card document needs. Only inspect files
@@ -359,7 +359,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     if (problems.length === 0) {
       return undefined;
     }
-    return `${fileUrl} is not a card document, so it will not be indexed as a card and show-card cannot find it: ${problems.join('; ')}.`;
+    return `${fileUrl} is not a card document, so it will not be indexed as a card and cannot be shown: ${problems.join('; ')}.`;
   }
 
   private async checkIfFileIsACardInstance(

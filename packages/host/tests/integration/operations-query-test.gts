@@ -501,10 +501,13 @@ module('Integration | operations query', function (hooks) {
     );
   });
 
-  test('a render has no viewer, so a search that compares against one answers none', async function (assert) {
-    // The prerender app authenticates as itself so it can render any card, and
-    // what it produces is served to everyone. A saved search that resolved the
-    // caller there would put one identity's rows into shared HTML.
+  test('a render its server pinned no actor on has no viewer, whatever sessions the tab holds', async function (assert) {
+    // A realm renders its own cards with no actor, and what it produces is
+    // served to everyone. The tab's sessions here are the signed-in user's
+    // ordinary ones, which is what a realm's own render holds once a sibling
+    // tab's capture has replaced its sessions in the storage they share. A
+    // saved search that resolved the caller from them would put that user's
+    // rows into shared HTML.
     (globalThis as any).__boxelPrerenderApp = true;
     try {
       assert.strictEqual(
@@ -524,6 +527,26 @@ module('Integration | operations query', function (hooks) {
       saved('myReports').query(),
       'outside a render the same search resolves against the signed-in user',
     );
+  });
+
+  test('a render a user asks for has that user as its viewer', async function (assert) {
+    // A capture or a command renders as the user who asked for it, and its
+    // render server pins that user on the tab.
+    (globalThis as any).__boxelPrerenderApp = true;
+    (globalThis as any).__boxelRenderActor = '@requester:localhost';
+    try {
+      assert.deepEqual(
+        saved('myReports').query()?.filter,
+        {
+          'item.on': reportRef(),
+          eq: { 'item.postedBy': '@requester:localhost' },
+        },
+        'the actor-scoped search compares against the user the server pinned',
+      );
+    } finally {
+      delete (globalThis as any).__boxelRenderActor;
+      delete (globalThis as any).__boxelPrerenderApp;
+    }
   });
 
   module('a query declaring `none`', function () {

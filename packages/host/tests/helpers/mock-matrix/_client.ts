@@ -25,6 +25,7 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+  APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
@@ -107,6 +108,10 @@ export class MockClient implements ExtendedClient {
     } else if (_eventType === APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE) {
       return {
         favorites: this.sdkOpts.workspaceFavorites ?? [],
+      } as unknown as K;
+    } else if (_eventType === APP_BOXEL_CATALOG_REALMS_EVENT_TYPE) {
+      return {
+        realms: this.sdkOpts.catalogRealms ?? [],
       } as unknown as K;
     }
     return null;
@@ -258,6 +263,8 @@ export class MockClient implements ExtendedClient {
       this.sdkOpts.systemCardAccountData = data as any;
     } else if (type === APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE) {
       this.sdkOpts.workspaceFavorites = (data as any).favorites;
+    } else if (type === APP_BOXEL_CATALOG_REALMS_EVENT_TYPE) {
+      this.sdkOpts.catalogRealms = (data as any).realms;
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
@@ -688,6 +695,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_REALM_SERVERS_EVENT_TYPE:
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
+      case APP_BOXEL_CATALOG_REALMS_EVENT_TYPE:
       case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:

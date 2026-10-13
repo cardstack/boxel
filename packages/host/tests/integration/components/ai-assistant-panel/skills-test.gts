@@ -92,7 +92,12 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     })(),
   });
 
-  let { getRoomState, getRoomEvents, simulateRemoteMessage } = mockMatrixUtils;
+  let {
+    getRoomState,
+    getRoomEvents,
+    simulateRemoteMessage,
+    waitForToolResult,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -986,6 +991,7 @@ Instructions live in the markdown body.
     await click('[data-test-edit-button]');
     await click('[data-test-close-button]');
 
+    let toolCallId = '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -993,7 +999,7 @@ Instructions live in the markdown body.
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          id: toolCallId,
           name: exampleSkillToolName,
           arguments: JSON.stringify({
             attributes: {
@@ -1011,6 +1017,19 @@ Instructions live in the markdown body.
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    // The room's skills are re-uploaded before the tool's result event is
+    // sent, so the room state is safe to read once the event lands. A
+    // re-upload that throws still sends "applied" (the tool's effects
+    // landed); that case surfaces in the room-state assertions below and in
+    // the tool service's error log.
+    let toolResult = await waitForToolResult(roomId, toolCallId);
+    assert.strictEqual(
+      toolResult.content['m.relates_to']?.key,
+      'applied',
+      `tool call applied (failure reason: ${
+        toolResult.content.failureReason ?? 'none'
+      })`,
+    );
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,

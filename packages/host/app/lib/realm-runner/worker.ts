@@ -41,7 +41,7 @@ async function loadQuickJS(wasmURL: string): Promise<QuickJSWASMModule> {
   }
 }
 
-// The guest sees only `realm`. Each method is a thin wrapper that hands its
+// The guest sees only `realm` and `room`. Each method is a thin wrapper that hands its
 // arguments to the host and parses the host's JSON answer; the host does the
 // work and the checks, so nothing here is trusted.
 const BOOTSTRAP = `
@@ -59,12 +59,29 @@ const BOOTSTRAP = `
         replace: (path, search, replacement) =>
           call('fs.replace', [path, search, replacement]),
         writeText: (path, content) => call('fs.writeText', [path, content]),
+        writeBytes: (path, base64) => call('fs.writeBytes', [path, base64]),
+      }),
+      cards: Object.freeze({
+        search: (query) => call('cards.search', [query]),
+        get: (path) => call('cards.get', [path]),
       }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
       workspaces: Object.freeze({
         create: (options) => call('workspaces.create', [options ?? {}]),
         delete: (url) => call('workspaces.delete', [url]),
       }),
+      ui: Object.freeze({
+        switchSubmode: (submode) => call('ui.switchSubmode', [submode]),
+        openFile: (path) => call('ui.openFile', [path]),
+        previewFormat: (path, format) =>
+          call('ui.previewFormat', [path, format]),
+        openWorkspace: () => call('ui.openWorkspace', []),
+      }),
+    });
+    globalThis.room = Object.freeze({
+      enableSkills: (ids) => call('room.enableSkills', [ids]),
+      disableSkills: (ids) => call('room.disableSkills', [ids]),
+      setModel: (model) => call('room.setModel', [model]),
     });
     delete globalThis.__realmURL;
   })();
@@ -125,9 +142,19 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.list',
   'fs.replace',
   'fs.writeText',
+  'fs.writeBytes',
+  'cards.search',
+  'cards.get',
   'capture',
   'workspaces.create',
   'workspaces.delete',
+  'room.enableSkills',
+  'room.disableSkills',
+  'room.setModel',
+  'ui.switchSubmode',
+  'ui.openFile',
+  'ui.previewFormat',
+  'ui.openWorkspace',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a
