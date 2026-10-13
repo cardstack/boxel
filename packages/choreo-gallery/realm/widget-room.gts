@@ -1,4 +1,10 @@
-import { CardDef, Component, field, linksTo } from '@cardstack/base/card-api';
+import {
+  CardDef,
+  Component,
+  field,
+  getRelationshipMembershipState,
+  linksTo,
+} from '@cardstack/base/card-api';
 
 import { ChoreoGallery } from './gallery';
 import { roomDemos, WidgetRoom } from './shell/widget-room';
@@ -9,11 +15,26 @@ class Isolated extends Component<typeof ChoreoWidgetRoom> {
   }
 
   /**
-   * The demos to hang, keyed by which they are. Linked demos load lazily, and
-   * the room lays out its walls once, so a new set of demos is a new room.
+   * The demos to hang, keyed by which they are. Linked demos load lazily, so
+   * the room waits until every link has settled and mounts once for the set.
+   * The room lays out its walls once, so a later change to the gallery's
+   * links is a new room.
    */
   get hanging() {
-    const demos = roomDemos((this.gallery?.demos ?? []).filter(Boolean));
+    const gallery = this.gallery;
+    if (!gallery) {
+      return [];
+    }
+    // Reading the demos starts the loads of any links not yet loading.
+    const linked = gallery.demos ?? [];
+    const { isLoading, membership } = getRelationshipMembershipState(
+      gallery,
+      'demos',
+    );
+    if (isLoading || membership?.some((slot) => slot.kind === 'not-loaded')) {
+      return [];
+    }
+    const demos = roomDemos(linked.filter(Boolean));
     return demos.length
       ? [{ demos, key: demos.map((demo) => demo.id).join(' ') }]
       : [];
