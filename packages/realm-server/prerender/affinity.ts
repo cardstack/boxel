@@ -65,7 +65,7 @@ export function renderSessionOf(auth: string): RenderSession {
 // never hold two sessions. A realm affinity is therefore split by the
 // sessions its render carries: the realm's own renders keep the bare
 // `realm:<url>` key, and a render under anyone else's sessions gets a key of
-// its own, `realm:<url>|<session>`. Auth that cannot be read gets a key no
+// its own, `realm:<url>#<session>`. Auth that cannot be read gets a key no
 // other auth shares. A user affinity already names one user.
 //
 // Callers that build a key for a render pass its `auth`. Callers that act on
@@ -96,9 +96,9 @@ export function toAffinityKey({
   }
 }
 
-// A URL carries `|` only percent-encoded, so the first one in a realm key
-// starts its session.
-const SESSION_SEPARATOR = '|';
+// A realm URL has no fragment, and neither a user id nor the other session
+// names contain `#`, so the first `#` in a realm key starts its session.
+const SESSION_SEPARATOR = '#';
 
 export function fromAffinityKey(
   affinityKey: string,
@@ -125,14 +125,23 @@ export function fromAffinityKey(
   return { affinityType, affinityValue };
 }
 
+// The realm affinity a session affinity belongs to: its key without the
+// session. Every other key is returned as it is. The prerender manager routes
+// by realm, so this is the key a render server reports to it, and the key a
+// render's realm-wide settings (profiling targets) are matched against.
+export function realmAffinityKeyOf(affinityKey: string): string {
+  if (!affinityKey.startsWith('realm:')) {
+    return affinityKey;
+  }
+  let sessionStart = affinityKey.indexOf(SESSION_SEPARATOR);
+  return sessionStart >= 0 ? affinityKey.slice(0, sessionStart) : affinityKey;
+}
+
 // Whether `affinityKey` is the realm affinity `realmKey` (a bare
 // `realm:<url>` key) or one of its sessions' affinities.
 export function isAffinityOfRealm(
   affinityKey: string,
   realmKey: string,
 ): boolean {
-  return (
-    affinityKey === realmKey ||
-    affinityKey.startsWith(`${realmKey}${SESSION_SEPARATOR}`)
-  );
+  return realmAffinityKeyOf(affinityKey) === realmKey;
 }

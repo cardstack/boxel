@@ -25,7 +25,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
-import { toAffinityKey } from './affinity.ts';
+import { renderSessionOf, toAffinityKey } from './affinity.ts';
 import { batchStaleAfterMs } from './prerender-constants.ts';
 import {
   abortable,
@@ -132,43 +132,10 @@ const HOST_CHUNK_IMPORT_FAILURE_RE =
 //
 // It is answered here and pinned on the tab, rather than read back in the tab
 // from the sessions it holds, because those sessions live in localStorage,
-// which every tab of one affinity shares: a sibling tab's capture can replace
-// them partway through a realm's own render, and that render's HTML is served
-// to every viewer.
+// which the tab shares with every other tab of its BrowserContext.
 export function renderActorFor(auth: string): string | null {
-  let tokens: Record<string, unknown>;
-  try {
-    tokens = JSON.parse(auth);
-  } catch (_e) {
-    return null;
-  }
-  if (!tokens || typeof tokens !== 'object') {
-    return null;
-  }
-  let users = new Set<string>();
-  for (let token of Object.values(tokens)) {
-    if (typeof token !== 'string') {
-      return null;
-    }
-    let claims: { user?: unknown; realmAuthority?: unknown } | null;
-    try {
-      claims = JSON.parse(
-        Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
-      );
-    } catch (_e) {
-      return null;
-    }
-    if (
-      !claims ||
-      typeof claims !== 'object' ||
-      claims.realmAuthority ||
-      typeof claims.user !== 'string'
-    ) {
-      return null;
-    }
-    users.add(claims.user);
-  }
-  return users.size === 1 ? [...users][0] : null;
+  let session = renderSessionOf(auth);
+  return session.kind === 'user' ? session.user : null;
 }
 
 // Searches the error, and the errors nested in it, since the failed import is

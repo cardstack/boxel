@@ -40,6 +40,8 @@
 import type { CDPSession, Page } from 'puppeteer';
 import { logger } from '@cardstack/runtime-common';
 
+import { realmAffinityKeyOf } from './affinity.ts';
+
 const log = logger('prerenderer');
 
 // Default number of hottest self-time frames to report. Enough to name
@@ -358,8 +360,8 @@ export function getAffinityProfileTargets(): string[] {
 }
 
 // The airtight gate for the affinity-scoped trigger. A render is
-// profiled ONLY when its affinity key exactly matches one of the
-// configured targets. An empty target list, or any affinity not in the
+// profiled ONLY when its affinity key, or the key of the realm affinity
+// it was split from, exactly matches one of the configured targets. An empty target list, or any affinity not in the
 // list, profiles nothing — so every realm other than those deliberately
 // targeted incurs zero profiling and zero CDP overhead. Kept as a small
 // pure function so the gate can be unit-tested without any Chrome / CDP
@@ -371,5 +373,8 @@ export function shouldProfileAffinity(
   if (affinityKey === undefined || affinityKey === '') {
     return false;
   }
-  return targets.includes(affinityKey);
+  return (
+    targets.includes(affinityKey) ||
+    targets.includes(realmAffinityKeyOf(affinityKey))
+  );
 }

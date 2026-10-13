@@ -19,7 +19,11 @@ import {
 } from './page-pool.ts';
 import { RenderRunner, type Timings } from './render-runner.ts';
 import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
-import { toAffinityKey } from './affinity.ts';
+import {
+  isAffinityOfRealm,
+  realmAffinityKeyOf,
+  toAffinityKey,
+} from './affinity.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
@@ -164,15 +168,45 @@ export class Prerenderer {
     this.#pagePool.serverURL = url;
   }
 
+  // The manager routes by realm, so a realm's session affinities are
+  // reported to it as the realm's own key.
   getWarmAffinities(): string[] {
-    return this.#pagePool.getWarmAffinities();
+    return [
+      ...new Set(this.#pagePool.getWarmAffinities().map(realmAffinityKeyOf)),
+    ];
   }
 
+  // Folds a realm's session affinities into one row under the realm's key:
+  // idle only when every one of them is, with their tabs summed and the
+  // highest priority any of them has waiting.
   getVacancySnapshot(): Record<
     string,
     { idle: boolean; tabCount: number; maxPendingPriority?: number }
   > {
-    return this.#pagePool.getVacancySnapshot();
+    let snapshot: Record<
+      string,
+      { idle: boolean; tabCount: number; maxPendingPriority?: number }
+    > = {};
+    for (let [affinityKey, vacancy] of Object.entries(
+      this.#pagePool.getVacancySnapshot(),
+    )) {
+      let realmKey = realmAffinityKeyOf(affinityKey);
+      let row = snapshot[realmKey];
+      if (!row) {
+        snapshot[realmKey] = { ...vacancy };
+        continue;
+      }
+      row.idle = row.idle && vacancy.idle;
+      row.tabCount += vacancy.tabCount;
+      if (
+        vacancy.maxPendingPriority !== undefined &&
+        (row.maxPendingPriority === undefined ||
+          vacancy.maxPendingPriority > row.maxPendingPriority)
+      ) {
+        row.maxPendingPriority = vacancy.maxPendingPriority;
+      }
+    }
+    return snapshot;
   }
 
   // CS-10872: richer-than-vacancy snapshot used by prerender-app's
@@ -225,9 +259,18 @@ export class Prerenderer {
     affinityType: AffinityType;
     affinityValue: string;
   }): Promise<void> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
-    this.#renderRunner.clearAuthCache(affinityKey);
-    await this.#pagePool.disposeAffinity(affinityKey);
+    // A realm's affinity goes with every session affinity it was split into.
+    let realmKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKeys = new Set([
+      realmKey,
+      ...this.#pagePool
+        .getAffinityKeys()
+        .filter((key) => isAffinityOfRealm(key, realmKey)),
+    ]);
+    for (let affinityKey of affinityKeys) {
+      this.#renderRunner.clearAuthCache(affinityKey);
+      await this.#pagePool.disposeAffinity(affinityKey);
+    }
   }
 
   // Block until the standby pool has reached its desired count. The

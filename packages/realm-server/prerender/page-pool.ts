@@ -6,6 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
+import { realmAffinityKeyOf } from './affinity.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import type { BrowserManager } from './browser-manager.ts';
@@ -764,6 +765,17 @@ export class PagePool {
 
   getWarmAffinities(): string[] {
     return [...this.#affinityPages.keys()];
+  }
+
+  // Every affinity the pool holds anything for: tabs, or a shared context
+  // kept as an orphan for the affinity's next visit.
+  getAffinityKeys(): string[] {
+    return [
+      ...new Set([
+        ...this.#affinityPages.keys(),
+        ...this.#sharedContexts.keys(),
+      ]),
+    ];
   }
 
   // Observability into the shared-context cache — one row per
@@ -2700,6 +2712,7 @@ export class PagePool {
         for (let entry of entries) {
           if (entry.closing || entry.transitioning) continue;
           if (entry.queue.pendingCount > 1) continue;
+          if (this.#contextHostsAnotherTab(entry)) continue;
           crossAffinityEntries.push(entry);
         }
       }
@@ -2716,6 +2729,30 @@ export class PagePool {
       }
     }
     throw new Error('No standby page available for prerender');
+  }
+
+  // A stolen tab takes its BrowserContext, and the localStorage its renders
+  // hand their sessions through, to the affinity that steals it. While
+  // another tab still lives in that context, the two affinities would share
+  // that storage, and one's sessions could replace the other's mid-render.
+  #contextHostsAnotherTab(entry: PoolEntry): boolean {
+    for (let entries of this.#affinityPages.values()) {
+      for (let other of entries) {
+        if (
+          other !== entry &&
+          !other.closed &&
+          other.context === entry.context
+        ) {
+          return true;
+        }
+      }
+    }
+    for (let standby of this.#standbys) {
+      if (!standby.closed && standby.context === entry.context) {
+        return true;
+      }
+    }
+    return false;
   }
 
   #selectLRUTab<T extends Entry>(entries: T[]): T {
@@ -2842,6 +2879,7 @@ export class PagePool {
       if (assignedAffinity === affinityKey) continue;
       for (let entry of entries) {
         if (entry.closing) continue;
+        if (this.#contextHostsAnotherTab(entry)) continue;
         if (entry.queue.pendingCount === 0) {
           idleCandidates.push(entry);
         }
@@ -3031,12 +3069,24 @@ export class PagePool {
     }
   }
 
+  // The manager knows a realm's session affinities only as the realm, so the
+  // realm is reported gone once no other affinity of it has a live tab here.
   async #notifyManagerAffinityEvicted(affinityKey: string): Promise<void> {
     if (!this.#registerWithManager) return;
+    let realmKey = realmAffinityKeyOf(affinityKey);
+    for (let [key, entries] of this.#affinityPages) {
+      if (
+        key !== affinityKey &&
+        realmAffinityKeyOf(key) === realmKey &&
+        [...entries].some((entry) => !entry.closing)
+      ) {
+        return;
+      }
+    }
     try {
       const managerURL = resolvePrerenderManagerURL();
       let target = new URL(
-        `${managerURL}/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
+        `${managerURL}/prerender-servers/affinities/${encodeURIComponent(realmKey)}`,
       );
       target.searchParams.set('url', this.#serverURL);
       await fetchFromManager(target, { method: 'DELETE' }).catch((e) => {
