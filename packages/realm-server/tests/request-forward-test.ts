@@ -1839,6 +1839,43 @@ module(basename(import.meta.filename), function () {
         );
       }
 
+      async function extraCredits(): Promise<number> {
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        return await sumUpCreditsLedger(dbAdapter, {
+          creditType: ['extra_credit', 'extra_credit_used'],
+          userId: user!.id,
+        });
+      }
+
+      // Forwards a POST to `url` and walks away once the first of the body
+      // has arrived.
+      async function abandonMidBody(url: string): Promise<void> {
+        await new Promise<void>((resolve, reject) => {
+          let forward = request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({ url, method: 'POST', requestBody: JSON.stringify({}) })
+            .buffer(true)
+            .parse((res, callback) => {
+              res.once('data', () => {
+                forward.abort();
+                resolve();
+              });
+              res.on('end', () => callback(null, null));
+              res.on('error', () => callback(null, null));
+            });
+          forward.then(
+            () => reject(new Error('the forward completed before it was left')),
+            () => resolve(),
+          );
+        });
+      }
+
       test("the incoming request's own headers never reach the vendor", async function (assert) {
         let token = jwt();
         let response = await request
@@ -2023,24 +2060,111 @@ module(basename(import.meta.filename), function () {
         );
         assert.deepEqual(body.usage, { cost: 0.004 });
 
+        // The response completes only once the call is settled, so the
+        // charge and the slot are read straight away, without waiting.
         // 0.004 USD × 1000 = 4 credits.
-        let user = await getUserByMatrixUserId(
-          dbAdapter,
-          '@testuser:localhost',
-        );
-        await waitUntil(
-          async () =>
-            (await sumUpCreditsLedger(dbAdapter, {
-              creditType: ['extra_credit', 'extra_credit_used'],
-              userId: user!.id,
-            })) === 46,
-          { timeoutMessage: 'the call should be charged (50 - 4 = 46)' },
+        assert.strictEqual(
+          await extraCredits(),
+          46,
+          'the call is charged (50 - 4 = 46) by the time its response completes',
         );
         assert.strictEqual(
           await inFlightReservations(),
           0,
-          'the slot is given back',
+          'the slot is given back by the time the response completes',
         );
+      });
+
+      test('a JSON response cut off after it started resets the caller and charges nothing', async function (assert) {
+        let outcome = await new Promise<string>((resolve) => {
+          request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/completion?bytes=${256 * 1024}&truncate=1`,
+              method: 'POST',
+              requestBody: JSON.stringify({}),
+            })
+            .buffer(true)
+            .parse((res, callback) => {
+              res.on('data', () => undefined);
+              res.on('end', () => {
+                resolve('complete');
+                callback(null, null);
+              });
+              res.on('aborted', () => resolve('reset'));
+              res.on('error', () => resolve('reset'));
+            })
+            .then(
+              () => undefined,
+              () => resolve('reset'),
+            );
+        });
+
+        assert.strictEqual(
+          outcome,
+          'reset',
+          'the caller cannot take the partial body for a whole one',
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the call should settle and give back its slot',
+        });
+        assert.strictEqual(await extraCredits(), 50, 'nothing is charged');
+      });
+
+      test('a charged call whose caller leaves mid-body is still read to its end and charged', async function (assert) {
+        let abandonedBefore = vendor.abandonedResponses();
+        await abandonMidBody(
+          `${vendor.url}/completion?bytes=${512 * 1024}&cost=0.004&hold=1`,
+        );
+        // The caller is gone; the vendor now sends the usage that prices the
+        // call.
+        vendor.releaseHeld();
+
+        await waitUntil(async () => (await extraCredits()) === 46, {
+          timeoutMessage:
+            'the call should be charged from the usage at the end (50 - 4 = 46)',
+        });
+        assert.strictEqual(
+          vendor.abandonedResponses(),
+          abandonedBefore,
+          "the vendor's response was read to its end",
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the slot should be given back',
+        });
+      });
+
+      test('an uncharged call whose caller leaves mid-body cancels the upstream body', async function (assert) {
+        // The same vendor under its other name, as a destination that is not
+        // charged for.
+        configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        await dbAdapter.execute(
+          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+           VALUES (gen_random_uuid(), '${vendor.alternateUrl}/', 'stub-vendor-free-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        );
+        AllowedProxyDestinations.reset();
+
+        // The vendor holds the rest of the body back and never sends it, so
+        // only the caller leaving can end the read.
+        let abandonedBefore = vendor.abandonedResponses();
+        await abandonMidBody(
+          `${vendor.alternateUrl}/completion?bytes=${512 * 1024}&hold=1`,
+        );
+
+        await waitUntil(
+          async () => vendor.abandonedResponses() === abandonedBefore + 1,
+          {
+            timeoutMessage:
+              "the caller leaving should cancel the vendor's held response",
+          },
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the slot should be given back',
+        });
+        assert.strictEqual(await extraCredits(), 50, 'nothing is charged');
       });
 
       test('a vendor answer that is not JSON is answered with a 500 and charges nothing', async function (assert) {

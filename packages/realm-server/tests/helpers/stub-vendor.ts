@@ -15,12 +15,13 @@ import zlib from 'node:zlib';
 //                           a redirect to <url> (default 302)
 //   /slow?ms=N              200 after N milliseconds
 //   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE]
-//   /completion?bytes=N&cost=<usd>&hold=1
+//   /completion?bytes=N&cost=<usd>&hold=1&truncate=1
 //                           an OpenRouter-shaped JSON completion whose message
 //                           carries N bytes of base64, with the generation id
 //                           first and the usage last. With `hold`, everything
 //                           up to the usage is sent and the rest waits for
-//                           `releaseHeld()`
+//                           `releaseHeld()`. With `truncate`, the connection
+//                           is dropped where the usage would start
 //   /not-json               502 with an HTML body
 
 export interface StubVendorRequest {
@@ -37,6 +38,8 @@ export interface StubVendor {
   requests: StubVendorRequest[];
   // Sends the rest of every response `hold` is keeping back.
   releaseHeld(): void;
+  // How many responses the receiving side closed before they were finished.
+  abandonedResponses(): number;
   close(): Promise<void>;
 }
 
@@ -52,6 +55,7 @@ function numberParam(url: URL, name: string, fallback: number): number {
 export async function startStubVendor(): Promise<StubVendor> {
   let requests: StubVendorRequest[] = [];
   let held: (() => void)[] = [];
+  let abandoned = 0;
   let server = http.createServer((req, res) => {
     let chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -121,10 +125,22 @@ export async function startStubVendor(): Promise<StubVendor> {
         let bytes = numberParam(url, 'bytes', 1024);
         let cost = numberParam(url, 'cost', 0.002);
         res.writeHead(200, { 'content-type': 'application/json' });
+        let truncated = false;
+        res.on('close', () => {
+          if (!res.writableEnded && !truncated) {
+            abandoned++;
+          }
+        });
         res.write('{"id":"gen-completion","choices":[{"message":{"content":"');
         res.write(Buffer.alloc(bytes, 'A'));
-        let finish = () =>
-          res.end(`"}}],"usage":{"cost":${JSON.stringify(cost)}}}`);
+        let finish = () => {
+          if (url.searchParams.has('truncate')) {
+            truncated = true;
+            res.destroy();
+          } else {
+            res.end(`"}}],"usage":{"cost":${JSON.stringify(cost)}}}`);
+          }
+        };
         if (url.searchParams.has('hold')) {
           held.push(finish);
         } else {
@@ -147,6 +163,7 @@ export async function startStubVendor(): Promise<StubVendor> {
     url: `http://127.0.0.1:${port}`,
     alternateUrl: `http://localhost:${port}`,
     requests,
+    abandonedResponses: () => abandoned,
     releaseHeld: () => {
       for (let finish of held.splice(0)) {
         finish();

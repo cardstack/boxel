@@ -176,15 +176,19 @@ const MAX_BILLING_FIELD_BYTES = 64 * 1024;
  * A body that is plainly not JSON is refused before anything is sent, with
  * the `SyntaxError` the handler answers with a 500, as it does for any
  * unreadable upstream answer. A body that opens like JSON is committed to the
- * client from its first chunk, so a fault found later — a malformed or
- * truncated document, or the upstream failing mid-body — cannot change
- * the status: the connection is cut instead, so the client cannot mistake a
- * partial body for a whole one.
+ * client from its first chunk, so a fault found later — a document that
+ * ends early or whose brackets or strings do not close, or the upstream
+ * failing mid-body — cannot change the status: the response is reset
+ * instead, so the client cannot mistake a partial body for a whole one. The
+ * scan checks structure, not grammar, so a balanced body with an invalid
+ * token in it is passed on whole, as the upstream sent it; the billing fields
+ * are parsed strictly on their own either way.
  *
  * `signal` fires when the client goes away. When the call is charged for,
  * the rest of the body is still read, and dropped, because the cost it
  * reports comes at the end and the provider has already billed for it. When
- * it is not, the upstream body is cancelled.
+ * it is not, the upstream body is cancelled, including a read waiting on an
+ * upstream that has paused mid-body.
  */
 export async function forwardJsonResponse(
   ctxt: Koa.Context,
@@ -194,7 +198,7 @@ export async function forwardJsonResponse(
     signal,
   }: { chargesForUsage: boolean; signal: AbortSignal },
 ): Promise<StreamUsage | undefined> {
-  let reader = externalResponse.body?.getReader();
+  const reader = externalResponse.body?.getReader();
   if (!reader) {
     throw new SyntaxError('The upstream response has no body');
   }
@@ -250,6 +254,15 @@ export async function forwardJsonResponse(
   ctxt.set('Content-Type', SupportedMimeType.JSON);
   let res = ctxt.res;
   let clientGone = () => signal.aborted || res.destroyed;
+  // An uncharged body has no reason to be read once its client is gone, so
+  // the client leaving cancels it, even while a read is waiting on the
+  // upstream.
+  let cancelUncharged = () => {
+    reader.cancel().catch(() => undefined);
+  };
+  if (!chargesForUsage) {
+    signal.addEventListener('abort', cancelUncharged, { once: true });
+  }
 
   try {
     for (let chunk of held) {
@@ -258,7 +271,7 @@ export async function forwardJsonResponse(
     held = [];
     for (;;) {
       if (clientGone() && !chargesForUsage) {
-        await reader.cancel().catch(() => undefined);
+        cancelUncharged();
         return undefined;
       }
       const { done, value } = await reader.read();
@@ -271,16 +284,33 @@ export async function forwardJsonResponse(
       }
     }
   } catch (error) {
-    res.destroy();
+    if (clientGone() && !chargesForUsage) {
+      return undefined;
+    }
+    // Reset with an error: over HTTP/2, a reset without one ends the stream
+    // as a normal close, and the client would take the partial body as whole.
+    res.destroy(
+      error instanceof Error ? error : new Error('The upstream body failed'),
+    );
     throw error;
+  } finally {
+    signal.removeEventListener('abort', cancelUncharged);
   }
 
+  if (clientGone() && !chargesForUsage) {
+    // The read ended because the client's leaving cancelled it.
+    return undefined;
+  }
   scanner.finish();
   if (scanner.error) {
     log.warn(
       `Forwarded upstream response was not a complete JSON document (${scanner.error}); nothing is charged for it`,
     );
-    res.destroy();
+    res.destroy(
+      new Error(
+        `The upstream body was not a complete document: ${scanner.error}`,
+      ),
+    );
     return undefined;
   }
   if (!chargesForUsage) {
