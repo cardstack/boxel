@@ -31,6 +31,14 @@ name: boxel-cli publish
 #   - `group: boxel-cli-release, cancel-in-progress: false` serializes back-to-back
 #     merges and any concurrent manual promotion so prerelease counters and stable
 #     tags can't race.
+#   - `queue: max` keeps the queued ones. A group holds a single pending run by
+#     default and cancels it when a newer one arrives, so back-to-back merges
+#     would silently discard a release that nothing ever retries.
+#   - The group is deliberately *not* shared with the other packages' publish
+#     workflows, even though a change under a bundled package's `src` starts
+#     both this workflow and that package's. Two workflows pushing a release
+#     commit to main at once is handled where it happens, by replaying the
+#     commit onto the moved main (see "Commit, tag, and push").
 
 on:
   push:
@@ -65,6 +73,7 @@ permissions:
 concurrency:
   group: boxel-cli-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   unstable:
@@ -146,6 +155,14 @@ jobs:
         env:
           PR_TITLE: ${{ steps.pr.outputs.title }}
           PR_BODY: ${{ steps.pr.outputs.body }}
+          # The commits this push introduced. The checkout above is of `main`,
+          # whose tip may already have moved past this push — a run that waited
+          # its turn in the concurrency group, or one that started while another
+          # merge was landing, sees the newer commits. Without these, the
+          # changed-file check would describe someone else's commit and skip this
+          # release.
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           RESULT=$(NODE_NO_WARNINGS=1 pnpm exec node scripts/compute-release.ts)
@@ -258,17 +275,44 @@ jobs:
           [ -n "$NEXT_NPM" ] && MSG="$MSG npm=$NEXT_NPM"
           [ -n "$NEXT_PLUGIN" ] && MSG="$MSG plugin=$NEXT_PLUGIN"
           MSG="$MSG [skip ci]"
-          git commit -m "$MSG"
           if [ -n "$NEXT_NPM" ]; then
             TAG="boxel-cli-v${NEXT_NPM}"
-            # Annotated tag so `git push --follow-tags` actually pushes it.
-            # Lightweight tags are silently skipped by --follow-tags, which
-            # would leave the tag on the runner only and fail `gh release create`.
+            # An existing tag means an earlier run pushed it and then failed
+            # before publishing. The orphan needs deleting
+            # (`git push origin :refs/tags/<tag>`) and npm state checking before
+            # this can be re-run.
+            if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+              echo "::error::Tag $TAG already exists. A prior publish likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
+              exit 1
+            fi
+          fi
+          git commit -m "$MSG"
+
+          # Push the commit before creating the tag. Another merge, or another
+          # package's release commit, can land on main while this run works, and
+          # pushing the tag alongside a rejected branch update would leave a tag
+          # naming a commit main never received. Replaying is safe: the commit
+          # touches only version strings and the regenerated plugin synopses.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::main moved under this run three times; nothing was published."
+              exit 1
+            fi
+            echo "main moved; replaying the release commit onto it and retrying."
+            git fetch origin main
+            git rebase --autostash origin/main
+          done
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$NEXT_NPM" ]; then
+            # Annotated, so it carries a message like the other release tags.
             git tag -a "$TAG" -m "$TAG"
+            git push origin "$TAG"
             echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           fi
-          git push origin main --follow-tags
-          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       - name: Bump to next unstable version
         # Manual (`workflow_dispatch`, blank confirm) path only. The push path
@@ -521,9 +565,22 @@ jobs:
           fi
           git add packages/boxel-cli/package.json packages/boxel-cli/CHANGELOG.md
           git commit -m "Release @cardstack/boxel-cli v${VERSION} [skip ci]"
-          # Annotated tag so `git push --follow-tags` actually pushes it.
+          # Push the commit before the tag, replaying it if main moved — see
+          # the unstable job's "Commit, tag, and push" for why.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::main moved under this run three times; nothing was published."
+              exit 1
+            fi
+            echo "main moved; replaying the release commit onto it and retrying."
+            git fetch origin main
+            git rebase --autostash origin/main
+          done
           git tag -a "$TAG" -m "$TAG"
-          git push origin main --follow-tags
+          git push origin "$TAG"
 
       - name: Publish to npm under latest
         working-directory: packages/boxel-cli
