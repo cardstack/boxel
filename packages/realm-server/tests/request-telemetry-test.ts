@@ -160,6 +160,58 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('a proxy route is recognised whatever its case', function (assert) {
+      let event = scrubRequestTelemetry({
+        request: {
+          method: 'POST',
+          url: 'https://app.telemetry.test/_Request-Forward?a=b',
+          headers: { authorization: 'Bearer a', accept: '*/*' },
+        },
+      });
+      assert.deepEqual(event.request as unknown, {
+        method: 'POST',
+        url: 'https://app.telemetry.test/_Request-Forward',
+      });
+    });
+
+    test('a token query parameter is masked on an ordinary route', function (assert) {
+      let event = scrubRequestTelemetry({
+        request: {
+          method: 'GET',
+          url: 'https://app.telemetry.test/_download-realm?realm=r&token=session-jwt',
+          query_string: 'realm=r&token=session-jwt',
+        },
+      });
+      assert.deepEqual(event.request as unknown, {
+        method: 'GET',
+        url: 'https://app.telemetry.test/_download-realm?realm=r&token=REDACTED',
+        query_string: 'realm=r&token=REDACTED',
+      });
+    });
+
+    test("a breadcrumb loses a proxy route's query string", function (assert) {
+      let line =
+        '<-- POST */* https://app.telemetry.test/_request-forward/?caller=marker [job: 1]';
+      let event = scrubRequestTelemetry({
+        breadcrumbs: [
+          {
+            message: line,
+            data: { arguments: [line], logger: 'console' },
+          },
+          { message: 'GET https://app.telemetry.test/test/card?filter=kept' },
+        ],
+      });
+      let scrubbed =
+        '<-- POST */* https://app.telemetry.test/_request-forward/ [job: 1]';
+      assert.deepEqual(event.breadcrumbs, [
+        {
+          message: scrubbed,
+          data: { arguments: [scrubbed], logger: 'console' },
+        },
+        { message: 'GET https://app.telemetry.test/test/card?filter=kept' },
+      ]);
+    });
+
     test('an event with no request is left alone', function (assert) {
       let event: { message: string; request?: undefined } = {
         message: 'no request',

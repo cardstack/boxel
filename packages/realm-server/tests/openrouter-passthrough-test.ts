@@ -28,6 +28,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { startSentryCapture } from './helpers/sentry-capture.ts';
+import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 
 module(basename(import.meta.filename), function () {
   module(
@@ -294,20 +295,32 @@ module(basename(import.meta.filename), function () {
             cookie: 'cookie-marker-90ad3f',
             query: 'incoming-query-marker-6b2e18',
           };
-          const response = await request
-            .post(`/_openrouter/chat/completions?caller=${planted.query}`)
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json')
-            .set('Authorization', `Bearer ${planted.token}`)
-            .set('Cookie', `session=${planted.cookie}`)
-            .send({
-              model: 'anthropic/claude-opus-4-7',
-              messages: [{ role: 'user', content: planted.prompt }],
-            });
+          // With the request log on, Sentry keeps its line, which names the
+          // incoming URL, as a breadcrumb.
+          let status: number | undefined;
+          let lines = await withLogDefinition('realm:requests', 'info', () =>
+            logLinesDuring(['realm:requests'], async () => {
+              let response = await request
+                .post(`/_openrouter/chat/completions?caller=${planted.query}`)
+                .set('Accept', 'application/json')
+                .set('Content-Type', 'application/json')
+                .set('Authorization', `Bearer ${planted.token}`)
+                .set('Cookie', `session=${planted.cookie}`)
+                .send({
+                  model: 'anthropic/claude-opus-4-7',
+                  messages: [{ role: 'user', content: planted.prompt }],
+                });
+              status = response.status;
+            }),
+          );
           let sent = await sentry.flushed();
           let events = await sentry.flushedEvents();
 
-          assert.strictEqual(response.status, 500, 'the call failed');
+          assert.true(
+            lines.some((line) => line.message.includes(planted.query)),
+            'precondition: the request log line names the incoming query',
+          );
+          assert.strictEqual(status, 500, 'the call failed');
           assert.strictEqual(events.length, 1, 'the failure reached Sentry');
           let recorded = events[0].request as
             | { method?: string; url?: string }

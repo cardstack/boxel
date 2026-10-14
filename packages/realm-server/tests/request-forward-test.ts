@@ -45,7 +45,7 @@ import {
   startSentryCapture,
   type SentryCapture,
 } from './helpers/sentry-capture.ts';
-import { logLinesDuring } from './helpers/log-capture.ts';
+import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 import { leaksCredential } from './helpers/credential-leaks.ts';
 
 module(basename(import.meta.filename), function () {
@@ -2866,11 +2866,22 @@ module(basename(import.meta.filename), function () {
             incomingRequests: true,
           });
           let planted = markers();
-          let response = await failingForward(planted);
+          // With the request log on, Sentry keeps its line, which names the
+          // incoming URL, as a breadcrumb.
+          let response: Awaited<ReturnType<typeof failingForward>> | undefined;
+          let lines = await withLogDefinition('realm:requests', 'info', () =>
+            logLinesDuring(['realm:requests'], async () => {
+              response = await failingForward(planted);
+            }),
+          );
           let sent = await sentry.flushed();
           let events = await sentry.flushedEvents();
 
-          assert.strictEqual(response.status, 500, 'the forward failed');
+          assert.true(
+            lines.some((line) => line.message.includes(planted.query)),
+            'precondition: the request log line names the incoming query',
+          );
+          assert.strictEqual(response!.status, 500, 'the forward failed');
           assert.strictEqual(events.length, 1, 'the failure reached Sentry');
           let recorded = events[0].request as
             | { method?: string; url?: string }

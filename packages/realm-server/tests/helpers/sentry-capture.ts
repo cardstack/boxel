@@ -14,7 +14,8 @@ import { scrubRequestTelemetry } from '../../lib/request-telemetry.ts';
 //
 // `incomingRequests` also installs Sentry's HTTP instrumentation, which
 // attaches the incoming request (body, headers, cookies, query string) to an
-// event raised while the request is in flight. That needs an async context
+// event raised while the request is in flight, and its console integration,
+// which keeps each log line written during the request as a breadcrumb. That needs an async context
 // manager, so the request's scope survives into the handler's awaits, and the
 // `http` module patched, which happens on the first `require` after `init`.
 // Set `scrub: false` to see what the instrumentation records before the
@@ -70,6 +71,7 @@ export function startSentryCapture({
         ? [
             Sentry.httpIntegration({ spans: false }),
             Sentry.requestDataIntegration(),
+            Sentry.consoleIntegration(),
           ]
         : []),
     ],
