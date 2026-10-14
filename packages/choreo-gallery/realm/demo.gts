@@ -237,7 +237,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .tile-title {
@@ -407,7 +407,7 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-size: 9px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .tile.is-roomy .tile-group {
@@ -422,10 +422,9 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-family: var(--font-mono);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ember);
-        border: 1px solid var(--ember);
+        color: var(--ember-ink);
+        border: 1px solid color-mix(in srgb, var(--ember-ink) 55%, transparent);
         border-radius: 3px;
-        opacity: 0.7;
         vertical-align: middle;
       }
 
@@ -447,7 +446,7 @@ class Fitted extends Component<typeof GalleryDemo> {
 
       @media (hover: hover) {
         .tile:hover .tile-title {
-          color: var(--ember-hot);
+          color: var(--ember-ink);
         }
       }
 
@@ -458,7 +457,7 @@ class Fitted extends Component<typeof GalleryDemo> {
       }
 
       .tile:has(.tile-title:focus-visible) {
-        outline: 2px solid var(--ember-hot);
+        outline: 2px solid var(--focus-ring);
         outline-offset: -2px;
       }
 

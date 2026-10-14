@@ -306,7 +306,8 @@ export class FilmStage extends Component<Signature> {
         height: var(--film-h);
         transform: translate(-50%, -50%);
         border-radius: 14px;
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 18px 48px
+          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
       }
 
       /* the still fills the frame the way the film does, cropped to the

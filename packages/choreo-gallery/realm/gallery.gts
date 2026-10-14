@@ -86,7 +86,7 @@ class Summary extends Component<typeof ChoreoGallery> {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .summary-count {
@@ -104,7 +104,7 @@ class Summary extends Component<typeof ChoreoGallery> {
 
       .summary-title em {
         font-style: normal;
-        color: var(--copper);
+        color: var(--copper-ink);
       }
 
       .summary-groups {

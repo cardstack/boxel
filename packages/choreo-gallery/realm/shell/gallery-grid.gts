@@ -331,11 +331,7 @@ export class GalleryGrid extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--copper-ink);
-      }
-
-      .choreo-site[data-theme='light'] .kicker {
-        color: var(--ember);
+        color: var(--eyebrow);
       }
 
       .kicker::before {
@@ -410,8 +406,8 @@ export class GalleryGrid extends Component<Signature> {
 
       @media (hover: hover) {
         .lede a:hover {
-          color: var(--ember-hot);
-          text-decoration-color: var(--ember-hot);
+          color: var(--ember-ink);
+          text-decoration-color: var(--ember-ink);
         }
       }
 
@@ -452,7 +448,9 @@ export class GalleryGrid extends Component<Signature> {
         border-color: var(--line-strong);
         background: var(--bg-spot);
         box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
-        color: var(--ember-hot);
+        /* full ink: the raised ground and the ember ring say selected, and
+           no accent ink holds 4.5:1 on --bg-spot in the dark palette */
+        color: var(--ink);
       }
 
       /* the tell waits until the row is under the pointer, then says what
@@ -514,7 +512,7 @@ export class GalleryGrid extends Component<Signature> {
       .filter-tell-mark {
         font-size: 11px;
         letter-spacing: 0;
-        color: var(--ember-hot);
+        color: var(--ember-ink);
       }
 
       .filter-code {
@@ -531,7 +529,7 @@ export class GalleryGrid extends Component<Signature> {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--copper-ink);
+        color: var(--eyebrow);
       }
 
       .filter-code pre {
