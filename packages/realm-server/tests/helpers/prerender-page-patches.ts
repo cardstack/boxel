@@ -231,119 +231,183 @@ export function installSearchRequestObserverPatch(): {
 
 /**
  * Inject transient 5xx responses for a chosen subset of fetches inside the
- * prerender chrome page. The patch enables Puppeteer request interception
- * once per page; matched URLs return the configured status until the
- * `failuresBeforeSuccess` budget is exhausted, after which they pass
- * through. Used to assert that the loader's transient-retry path actually
- * fires during prerender — without the native-sleep wiring in
- * loader-service the retry hangs at `await sleep(delay)` and the render
- * times out instead of recovering on the next attempt.
+ * prerender chrome page. Used to assert that the loader's transient-retry
+ * path actually fires during prerender — without the native-sleep wiring in
+ * loader-service the retry hangs at `await sleep(delay)` and the render times
+ * out instead of recovering on the next attempt.
+ *
+ * Only requests whose URL matches `urlPattern` (CDP `Fetch` pattern syntax:
+ * `*` and `?` wildcards) are paused, through a CDP session of the patch's own.
+ * Every other request the render makes goes to the network untouched.
+ * Interception that pauses every request also sits in the path of the
+ * card-document fetch, a cross-origin, preflighted GET that the realm answers
+ * with a redirect, and that fetch is not what the test is about.
+ * `matcher` then picks, among the paused requests, the ones to fail; the rest
+ * continue as they were.
  */
 export function installFlakyDepFetchPatch(opts: {
+  urlPattern: string;
   matcher: (url: string) => boolean;
   failuresBeforeSuccess: number;
   status?: number;
 }): {
   failuresInjected: () => number;
+  trace: () => string;
   restore: () => Promise<void>;
 } {
   let originalGetPage = PagePool.prototype.getPage;
   let patchedPages = new WeakSet<object>();
-  let listeners = new Map<any, (request: any) => void>();
-  let interceptingPages = new Set<any>();
+  let sessions: any[] = [];
+  let pageListeners: { page: any; event: string; listener: any }[] = [];
   let remainingFailures = opts.failuresBeforeSuccess;
   let failuresInjected = 0;
   let status = opts.status ?? 502;
+  // What the render's tab did while the patch was installed, in order: the
+  // requests it paused and what it did with each, every realm response's
+  // status and whether it carried a CORS allow-origin header, every request
+  // Chrome reports as failed, and the tab's console errors. A test prints this
+  // when it fails. A fetch the page sees as "Failed to fetch" has two very
+  // different causes, a socket that failed and a response the browser refused
+  // for want of CORS headers, and only this trace tells them apart.
+  let traceStart = Date.now();
+  let traceLines: string[] = [];
+  let record = (line: string) => {
+    traceLines.push(`+${Date.now() - traceStart}ms ${line}`);
+  };
+  // Host assets and the favicon say nothing about the realm.
+  let isNoise = (url: string) =>
+    url.includes('/assets/') || url.includes('favicon');
+  let observe = (page: any, event: string, listener: any) => {
+    page.on(event, listener);
+    pageListeners.push({ page, event, listener });
+  };
 
   PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
     let pageInfo = await originalGetPage.call(this, realm);
     let page = pageInfo.page as any;
     if (page && !patchedPages.has(page)) {
       patchedPages.add(page);
-      // Fail fast: request.respond()/request.continue() require interception
-      // to be enabled, so attaching the listener without interception would
-      // turn into a confusing error mid-render. Let the puppeteer error
-      // propagate so the test crashes at setup with a clear stack instead.
-      await page.setRequestInterception(true);
-      interceptingPages.add(page);
-      let listener = (request: any) => {
-        let url: string;
-        let method: string;
+      observe(page, 'response', (response: any) => {
         try {
-          url = request.url();
-          method = request.method();
-        } catch {
-          // The request lifecycle ended before we could inspect it.
-          try {
-            request.continue();
-          } catch {
-            // ignore — request already fulfilled or aborted
+          let url: string = response.url();
+          if (isNoise(url)) {
+            return;
           }
-          return;
+          let allowOrigin =
+            response.headers()['access-control-allow-origin'] ?? 'absent';
+          record(
+            `RESPONSE ${response.request().method()} ${url}: ${response.status()} (access-control-allow-origin: ${allowOrigin})`,
+          );
+        } catch {
+          record('RESPONSE (response could not be inspected)');
         }
+      });
+      observe(page, 'requestfailed', (request: any) => {
+        try {
+          if (isNoise(request.url())) {
+            return;
+          }
+          record(
+            `FAILED ${request.method()} ${request.url()}: ${
+              request.failure()?.errorText ?? 'no error text'
+            }`,
+          );
+        } catch {
+          record('FAILED (request could not be inspected)');
+        }
+      });
+      observe(page, 'console', (message: any) => {
+        try {
+          if (message.type() === 'error' || message.type() === 'warn') {
+            record(`CONSOLE ${message.type()}: ${message.text()}`);
+          }
+        } catch {
+          // ignore — the message outlived its page
+        }
+      });
+
+      // Fail fast: a session that can't enable interception would leave the
+      // test asserting on a fetch it never touched, so let the error
+      // propagate and crash the test at setup with a clear stack instead.
+      let session = await page.createCDPSession();
+      sessions.push(session);
+      session.on('Fetch.requestPaused', (event: any) => {
+        let { requestId, request } = event;
+        let { url, method } = request;
+        let pass = (why: string) => {
+          record(`${method} ${url} -> continue (${why})`);
+          session
+            .send('Fetch.continueRequest', { requestId })
+            .catch((err: Error) => {
+              record(`${method} ${url} continue rejected: ${err?.message}`);
+            });
+        };
         // Let preflight pass through to the real realm-server so its CORS
         // middleware responds with the standard headers. We only want to
         // inject 5xx on the actual request, mirroring the real-world
         // transient-failure shape.
         if (method === 'OPTIONS') {
-          request.continue().catch(() => {
-            // best-effort
+          pass('preflight');
+          return;
+        }
+        if (remainingFailures <= 0 || !opts.matcher(url)) {
+          pass(remainingFailures <= 0 ? 'budget spent' : 'not matched');
+          return;
+        }
+        remainingFailures--;
+        failuresInjected++;
+        record(`${method} ${url} -> respond ${status}`);
+        session
+          .send('Fetch.fulfillRequest', {
+            requestId,
+            responseCode: status,
+            // Mirror the realm-server's `cors({ origin: '*' })` so the
+            // browser surfaces this 5xx to the host loader instead of
+            // blocking it as a CORS-policy violation upstream of the retry
+            // path. Without this header the browser would treat the response
+            // as opaque and the loader would see a network error (synthetic
+            // 500) rather than the retryable 502.
+            responseHeaders: [
+              { name: 'content-type', value: 'text/plain' },
+              { name: 'access-control-allow-origin', value: '*' },
+            ],
+            body: Buffer.from('Bad Gateway (test injection)').toString(
+              'base64',
+            ),
+          })
+          .catch((err: Error) => {
+            record(`${method} ${url} respond rejected: ${err?.message}`);
           });
-          return;
-        }
-        if (remainingFailures > 0 && opts.matcher(url)) {
-          remainingFailures--;
-          failuresInjected++;
-          request
-            .respond({
-              status,
-              contentType: 'text/plain',
-              // Mirror the realm-server's `cors({ origin: '*' })` so the
-              // browser surfaces this 5xx to the host loader instead of
-              // blocking it as a CORS-policy violation upstream of the
-              // retry path. Without this header the browser would treat
-              // the response as opaque and the loader would see a network
-              // error (synthetic 500) rather than the retryable 502.
-              headers: {
-                'access-control-allow-origin': '*',
-              },
-              body: 'Bad Gateway (test injection)',
-            })
-            .catch(() => {
-              // best-effort: page may have moved on
-            });
-          return;
-        }
-        request.continue().catch(() => {
-          // best-effort: another handler may have already responded
-        });
-      };
-      listeners.set(page, listener);
-      page.on('request', listener);
+      });
+      await session.send('Fetch.enable', {
+        patterns: [{ urlPattern: opts.urlPattern, requestStage: 'Request' }],
+      });
+      record(`intercepting ${opts.urlPattern}`);
     }
     return { ...pageInfo, page };
   };
 
   return {
     failuresInjected: () => failuresInjected,
+    trace: () => traceLines.join('\n'),
     restore: async () => {
       PagePool.prototype.getPage = originalGetPage;
-      for (let [page, listener] of listeners) {
+      for (let { page, event, listener } of pageListeners) {
         try {
-          page.off('request', listener);
+          page.off(event, listener);
         } catch {
           // best-effort
         }
       }
-      for (let page of interceptingPages) {
+      pageListeners = [];
+      for (let session of sessions) {
         try {
-          await page.setRequestInterception(false);
+          await session.detach();
         } catch {
           // best-effort: page may already be closed
         }
       }
-      listeners.clear();
-      interceptingPages.clear();
+      sessions = [];
     },
   };
 }
