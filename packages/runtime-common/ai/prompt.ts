@@ -1430,6 +1430,7 @@ function extractCheckCorrectnessTargetParts(
 
 function getCheckCorrectnessTargetKey(
   request?: ToolRequest,
+  { withEvent = true }: { withEvent?: boolean } = {},
 ): string | undefined {
   let { targetRef, targetType, targetEventId } =
     extractCheckCorrectnessTargetParts(request);
@@ -1439,7 +1440,7 @@ function getCheckCorrectnessTargetKey(
   return formatCorrectnessTargetKeyWithEvent(
     targetType,
     targetRef,
-    targetEventId,
+    withEvent ? targetEventId : undefined,
   );
 }
 
@@ -1463,9 +1464,18 @@ type CorrectnessCheckAttemptInfo = { attempt: number; succeeded: boolean };
 function getLatestCorrectnessCheckAttemptInfo(
   history: DiscreteMatrixEvent[],
   targetKey: string,
+  opts: {
+    // match on the target alone, across the patch events that wrote it
+    ignoreEvent?: boolean;
+    // stop looking back at (and don't look past) an event matching this
+    stopAt?: (event: DiscreteMatrixEvent) => boolean;
+  } = {},
 ): CorrectnessCheckAttemptInfo | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
+    if (opts.stopAt?.(event)) {
+      return undefined;
+    }
     if (!isToolResultEventType(event.type)) {
       continue;
     }
@@ -1480,7 +1490,11 @@ function getLatestCorrectnessCheckAttemptInfo(
     if (!sourceRequest) {
       continue;
     }
-    if (getCheckCorrectnessTargetKey(sourceRequest) !== targetKey) {
+    if (
+      getCheckCorrectnessTargetKey(sourceRequest, {
+        withEvent: !opts.ignoreEvent,
+      }) !== targetKey
+    ) {
       continue;
     }
     let attempt = Math.max(
@@ -1503,11 +1517,24 @@ function getLatestCorrectnessCheckAttemptInfo(
   return undefined;
 }
 
+// Attempts count consecutive automated rounds on one target. Each fix the AI
+// sends arrives in a new message, so a target with no check yet under this
+// patch event continues the count from its last check under an earlier
+// event — unless the user has spoken since, which starts a fresh run.
 function getNextCorrectnessCheckAttempt(
   history: DiscreteMatrixEvent[],
   targetKey: string,
+  targetKeyWithoutEvent: string | undefined,
+  aiBotUserId: string,
 ): number {
-  let latest = getLatestCorrectnessCheckAttemptInfo(history, targetKey);
+  let latest =
+    getLatestCorrectnessCheckAttemptInfo(history, targetKey) ??
+    (targetKeyWithoutEvent
+      ? getLatestCorrectnessCheckAttemptInfo(history, targetKeyWithoutEvent, {
+          ignoreEvent: true,
+          stopAt: (event) => isUserChatMessage(event, aiBotUserId),
+        })
+      : undefined);
   if (!latest) {
     return 1;
   }
@@ -1795,6 +1822,7 @@ function collectPendingCodePatchCorrectnessCheck(
       event as CardMessageEvent,
       edits,
       history,
+      aiBotUserId,
     );
     if (correctnessCheck) {
       return correctnessCheck;
@@ -1847,6 +1875,7 @@ function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
   { content, relevantTools, toolResults }: ResolvedCodeEdits,
   history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
   if (
     history.some((event) =>
@@ -1867,6 +1896,7 @@ function buildCodePatchCorrectnessMessage(
     history,
     files,
     cards,
+    aiBotUserId,
     messageEvent.event_id,
   );
 
@@ -1970,32 +2000,42 @@ function buildCorrectnessCheckAttemptMap(
   history: DiscreteMatrixEvent[],
   files: CodePatchCorrectnessFile[],
   cards: CodePatchCorrectnessCard[],
+  aiBotUserId: string,
   targetEventId?: string,
 ): Record<string, number> {
   let attempts: Record<string, number> = {};
-  for (let file of files) {
+  let targets = [
+    ...files.map((file) => ({
+      type: 'file',
+      ref: file.sourceUrl || file.displayName,
+    })),
+    ...cards.map((card) => ({ type: 'card', ref: card.cardId })),
+  ];
+  for (let { type, ref } of targets) {
     let targetKey = formatCorrectnessTargetKeyWithEvent(
-      'file',
-      file.sourceUrl || file.displayName,
+      type,
+      ref,
       targetEventId,
     );
     if (!targetKey) {
       continue;
     }
-    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
-  }
-  for (let card of cards) {
-    let targetKey = formatCorrectnessTargetKeyWithEvent(
-      'card',
-      card.cardId,
-      targetEventId,
+    attempts[targetKey] = getNextCorrectnessCheckAttempt(
+      history,
+      targetKey,
+      formatCorrectnessTargetKeyWithEvent(type, ref),
+      aiBotUserId,
     );
-    if (!targetKey) {
-      continue;
-    }
-    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
   }
   return attempts;
+}
+
+function isUserChatMessage(event: DiscreteMatrixEvent, aiBotUserId: string) {
+  return (
+    event.type === 'm.room.message' &&
+    event.sender !== aiBotUserId &&
+    event.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  );
 }
 
 function extractCardIdFromCommandRequest(

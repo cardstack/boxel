@@ -5,7 +5,6 @@ import {
   isCardErrorJSONAPI,
   rri,
   type CardErrorJSONAPI,
-  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -17,6 +16,7 @@ import {
 import HostBaseTool from '../lib/host-base-tool';
 
 import type CardService from '../services/card-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -35,6 +35,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   @service declare private toolService: ToolService;
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
+  @service declare private network: NetworkService;
 
   description =
     'Run post-change correctness checks for a specific file or card instance.';
@@ -66,13 +67,13 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // whether the file is actually a card instance
 
     let nonCardJsonError: string | undefined;
+    let cardSource: string | undefined;
     if (targetType !== 'card' && input.targetRef.endsWith('.json')) {
-      let inferredCardId = await this.checkIfFileIsACardInstance(
-        input.targetRef,
-      );
-      if (inferredCardId) {
+      let inferred = await this.checkIfFileIsACardInstance(input.targetRef);
+      if (inferred) {
         targetType = 'card';
-        cardId = inferredCardId;
+        cardId = inferred.cardId;
+        cardSource = inferred.content;
       } else {
         nonCardJsonError = await this.describeNonCardJson(input.targetRef);
       }
@@ -112,7 +113,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (!cardId) {
         throw new Error('Card correctness checks require a targetRef.');
       }
-      ({ errors, warnings } = await this.collectCardErrors(cardId, roomId));
+      ({ errors, warnings } = await this.collectCardErrors(
+        cardId,
+        roomId,
+        cardSource,
+      ));
     }
 
     if (lintIssues.length) {
@@ -129,6 +134,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   private async collectCardErrors(
     cardId: string,
     roomId: string,
+    cardSource?: string,
   ): Promise<{ errors: string[]; warnings: string[] }> {
     await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
@@ -150,7 +156,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     // values, dangling links. Report those as warnings: they never fail the
     // check or trigger the automated fix loop.
     let warnings = instance
-      ? await this.collectCardWarnings(cardId, instance)
+      ? await this.collectCardWarnings(cardId, instance, cardSource)
       : [];
     return { errors: [], warnings };
   }
@@ -158,54 +164,47 @@ export default class CheckCorrectnessTool extends HostBaseTool<
   private async collectCardWarnings(
     cardId: string,
     instance: CardDef,
+    cardSource?: string,
   ): Promise<string[]> {
-    try {
-      let { status, content } = await this.cardService.getSource(
-        rri(`${cardId}.json`),
-      );
-      if (status !== 200 || !isCardDocumentString(content)) {
-        return [];
-      }
-      let rawDoc = JSON.parse(content) as LooseSingleCardDocument;
-      let warnings = await collectCardInstanceWarnings({
-        cardId,
-        rawDoc,
-        instance,
-        loader: this.loaderService.loader,
-        checkLinkTarget: (targetId) => this.checkLinkTarget(targetId),
-      });
-      return warnings.map((warning) => `${cardId}: ${warning}`);
-    } catch (error) {
-      console.warn(
-        `CheckCorrectnessTool: unable to collect warnings for ${cardId}`,
-        error,
-      );
+    // A `.json` write already had its source fetched to recognize it as a
+    // card; a card-targeted write (patchCardInstance) fetches it here.
+    let rawSource =
+      cardSource ??
+      (await this.cardService
+        .getSource(rri(`${cardId}.json`))
+        .then(({ status, content }) => (status === 200 ? content : undefined))
+        .catch(() => undefined));
+    if (rawSource === undefined) {
       return [];
     }
+    let warnings = await collectCardInstanceWarnings({
+      cardId,
+      rawSource,
+      instance,
+      loader: this.loaderService.loader,
+      checkLinkTarget: (targetId, opts) => this.checkLinkTarget(targetId, opts),
+    });
+    return warnings.map((warning) => `${cardId}: ${warning}`);
   }
 
-  private async checkLinkTarget(targetId: string): Promise<LinkTargetStatus> {
+  // Asks the realm only whether the target's source exists — it doesn't load
+  // the target, and so leaves the store untouched. Only a 404 counts as a
+  // dangling link; auth, server and network failures say nothing about the
+  // target and are treated as found.
+  private async checkLinkTarget(
+    targetId: string,
+    { isFile }: { isFile: boolean },
+  ): Promise<LinkTargetStatus> {
     try {
-      let cached = this.store.peek(targetId);
-      if (cached && !isCardErrorJSONAPI(cached)) {
-        return 'found';
-      }
-      let error = this.store.peekError(targetId);
-      if (!error) {
-        let result = await this.store.getWithoutCache(targetId);
-        if (!isCardErrorJSONAPI(result)) {
-          return 'found';
-        }
-        error = result;
-      }
-      // A 404 that is only awaiting the index means the realm holds the
-      // source already — not a dangling link.
-      if (error.status === 404 && !error.awaitingIndex) {
-        return 'not-found';
-      }
-      return error.status === 404 ? 'found' : 'error';
+      let sourceId =
+        isFile || targetId.endsWith('.json') ? targetId : `${targetId}.json`;
+      let response = await this.network.authedFetch(rri(sourceId), {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      // the status is all we need; don't download the body
+      await response.body?.cancel().catch(() => undefined);
+      return response.status === 404 ? 'not-found' : 'found';
     } catch {
-      // infrastructure trouble, not evidence of a dangling link
       return 'found';
     }
   }
@@ -434,7 +433,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
   private async checkIfFileIsACardInstance(
     fileUrl: string,
-  ): Promise<string | undefined> {
+  ): Promise<{ cardId: string; content: string } | undefined> {
     try {
       let { status, content } = await this.cardService.getSource(rri(fileUrl));
       if (status !== 200) {
@@ -443,7 +442,7 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       if (!isCardDocumentString(content)) {
         return undefined;
       }
-      return fileUrl.replace(/\.json$/, '');
+      return { cardId: fileUrl.replace(/\.json$/, ''), content };
     } catch (error) {
       console.warn(
         `CheckCorrectnessTool: unable to inspect file ${fileUrl} for card content`,

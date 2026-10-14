@@ -3,7 +3,7 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { CommandContext, Realm } from '@cardstack/runtime-common';
 
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
@@ -39,6 +39,7 @@ function ticketDocument(
   overrides: {
     attributes?: Record<string, any>;
     relationships?: Record<string, any>;
+    metaFields?: Record<string, any>;
   } = {},
 ) {
   return JSON.stringify(
@@ -52,7 +53,10 @@ function ticketDocument(
         relationships: overrides.relationships ?? {
           customer: { links: { self: '../Pet/billy' } },
         },
-        meta: { adoptsFrom: { module: '../ticket', name: 'Ticket' } },
+        meta: {
+          adoptsFrom: { module: '../ticket', name: 'Ticket' },
+          ...(overrides.metaFields ? { fields: overrides.metaFields } : {}),
+        },
       },
     },
     null,
@@ -87,9 +91,11 @@ module('Integration | tools | check-correctness', function (hooks) {
 
   setupRealmCacheTeardown(hooks);
 
+  let testRealm: Realm;
+
   hooks.beforeEach(async function () {
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
+    await withCachedRealmSetup(async () => {
+      ({ realm: testRealm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
           'pet.gts': `
@@ -111,7 +117,8 @@ module('Integration | tools | check-correctness', function (hooks) {
           }
         `,
           'ticket.gts': `
-          import { contains, containsMany, field, linksTo, CardDef, FieldDef } from "@cardstack/base/card-api";
+          import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
           import StringField from "@cardstack/base/string";
           import NumberField from "@cardstack/base/number";
           import enumField from "@cardstack/base/enum";
@@ -124,12 +131,23 @@ module('Integration | tools | check-correctness', function (hooks) {
             @field label = contains(StringField);
             @field hours = contains(NumberField);
           }
+          export class TicketItemField extends FieldDef {
+            static displayName = 'TicketItem';
+            @field label = contains(StringField);
+          }
+          export class AssignedItemField extends TicketItemField {
+            static displayName = 'AssignedItem';
+            @field assignee = linksTo(Pet);
+          }
           export class Ticket extends CardDef {
             static displayName = 'Ticket';
             @field status = contains(StatusField);
             @field customer = linksTo(Pet);
             @field reference = linksTo(CardDef);
+            @field attachment = linksTo(FileDef);
+            @field watchers = linksToMany(Pet);
             @field timers = containsMany(SlaTimerField);
+            @field items = containsMany(TicketItemField);
           }
         `,
           'Ticket/t1.json': {
@@ -148,6 +166,14 @@ module('Integration | tools | check-correctness', function (hooks) {
                   name: 'Ticket',
                 },
               },
+            },
+          },
+          'ticket-notes.txt': 'Ticket notes',
+          'Pet/gone.json': {
+            data: {
+              type: 'card',
+              attributes: { name: 'Gone', hasError: false },
+              meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
             },
           },
           'settings.json': {
@@ -171,8 +197,8 @@ module('Integration | tools | check-correctness', function (hooks) {
             },
           },
         },
-      }),
-    );
+      }));
+    });
     let realmService = getService('realm');
     let messageService = getService('message-service');
     messageService.register();
@@ -576,6 +602,7 @@ module('Integration | tools | check-correctness', function (hooks) {
     let result = await checkTicket({
       attributes: {
         customer: { links: { self: '../Pet/billy' } },
+        watchers: [{ links: { self: '../Pet/billy' } }],
       },
       relationships: {
         status: { links: { self: null } },
@@ -599,6 +626,15 @@ module('Integration | tools | check-correctness', function (hooks) {
         ),
       ),
       'warns about the attribute written under relationships',
+    );
+    assert.ok(
+      result.warnings.some(
+        (w: string) =>
+          w.includes(
+            '"watchers" is a linksToMany relationship of Ticket but was written under "attributes"',
+          ) && w.includes('"watchers.0": { "links"'),
+      ),
+      'tells the AI to move a linksToMany as indexed keys',
     );
   });
 
@@ -636,6 +672,106 @@ module('Integration | tools | check-correctness', function (hooks) {
       result.warnings,
       [],
       'the prefix-form link resolves to an existing card',
+    );
+  });
+
+  test('checks a link to a file as a file', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        attachment: { links: { self: '../ticket-notes.txt' } },
+      },
+    });
+    assert.true(result.correct, 'the instance is correct');
+    assert.deepEqual(
+      result.warnings,
+      [],
+      'an existing file target is not reported as missing',
+    );
+
+    result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        attachment: { links: { self: '../missing.txt' } },
+      },
+    });
+    assert.deepEqual(
+      result.warnings.map((w: string) => w.replace(/^.*?: /, '')),
+      [
+        `"attachment" links to ${testRealmURL}missing.txt, which does not exist; create it or correct the link`,
+      ],
+      'a missing file target is reported',
+    );
+  });
+
+  test('warns about a link to a card deleted after it was loaded', async function (assert) {
+    let goneId = `${testRealmURL}Pet/gone`;
+    await getService('store').get(goneId);
+    await testRealm.delete('Pet/gone.json');
+
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/gone' } },
+      },
+    });
+
+    assert.true(result.correct, 'a dangling link does not fail the check');
+    assert.strictEqual(result.warnings.length, 1, 'one warning');
+    assert.ok(
+      result.warnings[0].includes(
+        `"customer" links to ${goneId}, which does not exist`,
+      ),
+      'the deleted target is reported even though the store loaded it',
+    );
+  });
+
+  test('follows links given as relationship data', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { data: { type: 'card', id: '../Pet/missing' } },
+        watchers: {
+          data: [
+            { type: 'card', id: '../Pet/billy' },
+            { type: 'card', id: '../Pet/nobody' },
+          ],
+        },
+      },
+    });
+
+    assert.true(result.correct, 'dangling links do not fail the check');
+    assert.deepEqual(
+      result.warnings.map((w: string) => w.replace(/^.*?: /, '')),
+      [
+        `"customer" links to ${testRealmURL}Pet/missing, which does not exist; create it or correct the link`,
+        `"watchers.1" links to ${testRealmURL}Pet/nobody, which does not exist; create it or correct the link`,
+      ],
+      'targets named by data.id and by a data array are checked',
+    );
+  });
+
+  test('does not judge a relationship inside a polymorphic element', async function (assert) {
+    let result = await checkTicket({
+      attributes: {
+        status: 'New',
+        items: [{ label: 'Escalation' }],
+      },
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        'items.0.assignee': { links: { self: '../Pet/billy' } },
+      },
+      metaFields: {
+        items: [
+          { adoptsFrom: { module: '../ticket', name: 'AssignedItemField' } },
+        ],
+      },
+    });
+
+    assert.true(result.correct, 'the instance is correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.deepEqual(
+      result.warnings,
+      [],
+      'a field declared only on the element subtype is not reported',
     );
   });
 

@@ -1,7 +1,9 @@
-import { isEqual } from 'lodash-es';
+import { isEqual, isPlainObject } from 'lodash-es';
 
 import {
   getField,
+  isCardDocumentString,
+  isFileDef,
   primitive,
   relationshipEntries,
   resolveRRIReference,
@@ -11,6 +13,7 @@ import {
   type LooseSingleCardDocument,
   type Meta,
 } from '@cardstack/runtime-common';
+import { friendlyCardType } from '@cardstack/runtime-common/helpers/card-type-display-name';
 
 import type {
   BaseDef,
@@ -19,14 +22,23 @@ import type {
   BaseDefConstructor,
 } from '@cardstack/base/card-api';
 import type * as EnumModule from '@cardstack/base/enum';
+import type * as FieldSupportModule from '@cardstack/base/field-support';
 
-export type LinkTargetStatus = 'found' | 'not-found' | 'error';
+export type LinkTargetStatus = 'found' | 'not-found';
+export type CheckLinkTarget = (
+  targetId: string,
+  opts: { isFile: boolean },
+) => Promise<LinkTargetStatus>;
 
 // Keep the correctness result's prompt footprint bounded: a document with a
 // systematically wrong shape would otherwise warn once per key.
 const MAX_WARNINGS = 20;
 
-type EnumHelpers = Pick<typeof EnumModule, 'enumValues' | 'enumAllowedValues'>;
+// How many link targets are probed at once.
+const LINK_PROBE_CONCURRENCY = 6;
+
+type EnumHelpers = Pick<typeof EnumModule, 'enumValues' | 'enumAllowedValues'> &
+  Pick<typeof FieldSupportModule, 'mergeConfigurations'>;
 
 // Compares a raw card-instance document against the adopted type's declared
 // fields and reports, as warnings, the mistakes that indexing accepts but
@@ -41,20 +53,28 @@ type EnumHelpers = Pick<typeof EnumModule, 'enumValues' | 'enumAllowedValues'>;
 // shape or thrown helper yields no warning rather than a false positive.
 export async function collectCardInstanceWarnings(args: {
   cardId: string; // instance id, without the .json extension
-  rawDoc: LooseSingleCardDocument;
+  rawSource: string; // the instance's .json source as stored in the realm
   instance: CardDef;
   loader: Loader;
-  checkLinkTarget: (targetId: string) => Promise<LinkTargetStatus>;
+  checkLinkTarget: CheckLinkTarget;
 }): Promise<string[]> {
-  let { cardId, rawDoc, instance, loader, checkLinkTarget } = args;
+  let { cardId, rawSource, instance, loader, checkLinkTarget } = args;
   try {
-    let enumModule = await loader.import<typeof EnumModule>(
-      '@cardstack/base/enum',
-    );
+    if (!isCardDocumentString(rawSource)) {
+      return [];
+    }
+    let rawDoc = JSON.parse(rawSource) as LooseSingleCardDocument;
+    let [{ enumValues, enumAllowedValues }, { mergeConfigurations }] =
+      await Promise.all([
+        loader.import<typeof EnumModule>('@cardstack/base/enum'),
+        loader.import<typeof FieldSupportModule>(
+          '@cardstack/base/field-support',
+        ),
+      ]);
     let sink = new WarningSink();
     validateAttributes({
       sink,
-      enumModule,
+      enumModule: { enumValues, enumAllowedValues, mergeConfigurations },
       instance,
       subject: instance,
       pathPrefix: '',
@@ -66,6 +86,7 @@ export async function collectCardInstanceWarnings(args: {
       instance,
       cardId,
       relationships: rawDoc.data.relationships,
+      metaFields: rawDoc.data.meta?.fields,
       checkLinkTarget,
     });
     return sink.list();
@@ -78,6 +99,10 @@ export async function collectCardInstanceWarnings(args: {
 class WarningSink {
   private warnings: string[] = [];
   private overflow = 0;
+
+  get remaining() {
+    return Math.max(0, MAX_WARNINGS - this.warnings.length);
+  }
 
   add(warning: string) {
     if (this.warnings.length < MAX_WARNINGS) {
@@ -124,9 +149,15 @@ function validateAttributes(opts: {
       );
       continue;
     }
-    if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+    if (field.fieldType === 'linksTo') {
       sink.add(
-        `"${path}" is a ${field.fieldType} relationship of ${typeName} but was written under "attributes"; write it under "relationships" with { "links": { "self": "<card url>" } }`,
+        `"${path}" is a linksTo relationship of ${typeName} but was written under "attributes"; write it under "relationships" as "${path}": { "links": { "self": "<card url>" } }`,
+      );
+      continue;
+    }
+    if (field.fieldType === 'linksToMany') {
+      sink.add(
+        `"${path}" is a linksToMany relationship of ${typeName} but was written under "attributes"; write it under "relationships" as indexed keys, "${path}.0": { "links": { "self": "<card url>" } }, "${path}.1": …`,
       );
       continue;
     }
@@ -135,7 +166,10 @@ function validateAttributes(opts: {
       pathPrefix === ''
         ? instanceEnumAllowedValues(enumModule, instance, key)
         : staticEnumAllowedValues(enumModule, field);
-    if (allowed) {
+    // Raw values are in serialized form; only options that are plain JSON
+    // values compare like-for-like with them (a BigInteger option is a
+    // bigint at runtime but a string on disk), so other options aren't judged.
+    if (allowed && allowed.every(isJSONPrimitive)) {
       let candidates =
         field.fieldType === 'containsMany'
           ? Array.isArray(value)
@@ -199,17 +233,23 @@ async function validateRelationships(opts: {
   instance: CardDef;
   cardId: string;
   relationships: LooseSingleCardDocument['data']['relationships'];
-  checkLinkTarget: (targetId: string) => Promise<LinkTargetStatus>;
+  metaFields: CardFields | undefined;
+  checkLinkTarget: CheckLinkTarget;
 }) {
-  let { sink, instance, cardId, relationships, checkLinkTarget } = opts;
+  let { sink, instance, cardId, relationships, metaFields, checkLinkTarget } =
+    opts;
   // Links resolve against the instance's own id, exactly as deserialization
   // resolves them, so prefix-form (`@scope/realm/...`) and `$REALM/` links
   // land on the same target the card itself loads.
   let relativeTo = (instance.id as string | undefined) ?? cardId;
-  let targetStatuses = new Map<string, Promise<LinkTargetStatus>>();
+  let targets = new Map<string, { isFile: boolean }>();
   let linkChecks: { key: string; target: string }[] = [];
   for (let entry of relationshipEntries(relationships)) {
-    let resolved = resolveRelationshipField(instance, entry.fieldName);
+    let resolved = resolveRelationshipField(
+      instance,
+      entry.fieldName,
+      metaFields,
+    );
     if (resolved.kind === 'ambiguous') {
       continue;
     }
@@ -238,6 +278,9 @@ async function validateRelationships(opts: {
       continue;
     }
     let self = entry.relationship?.links?.self;
+    let data = entry.relationship?.data;
+    let dataId = (member: unknown) =>
+      isPlainObject(member) ? (member as { id?: unknown }).id : undefined;
     if (field.fieldType === 'linksTo' && entry.isPlural) {
       sink.add(
         `"${entry.fieldName}" is a linksTo (single) relationship of ${typeName} but was written as an indexed list`,
@@ -245,39 +288,78 @@ async function validateRelationships(opts: {
     } else if (
       field.fieldType === 'linksToMany' &&
       !entry.isPlural &&
-      typeof self === 'string'
+      !Array.isArray(data) &&
+      typeof (self ?? dataId(data)) === 'string'
     ) {
       sink.add(
         `"${entry.fieldName}" is a linksToMany relationship of ${typeName}; write it as indexed keys ("${entry.fieldName}.0", "${entry.fieldName}.1", …)`,
       );
     }
-    if (typeof self === 'string' && self.length > 0) {
-      let target = resolveLinkTarget(self, relativeTo);
+    // Deserialization follows `links.self`, falling back to `data.id`; a
+    // linksToMany may also list its members as a `data` array.
+    let references: { key: string; reference: unknown }[] = Array.isArray(data)
+      ? data.map((member, index) => ({
+          key: `${entry.key}.${index}`,
+          reference: dataId(member),
+        }))
+      : [{ key: entry.key, reference: self ?? dataId(data) }];
+    for (let { key, reference } of references) {
+      if (typeof reference !== 'string' || reference.length === 0) {
+        continue;
+      }
+      let target = resolveLinkTarget(reference, relativeTo);
       if (!target) {
         continue;
       }
-      if (!targetStatuses.has(target)) {
-        targetStatuses.set(target, checkLinkTarget(target));
+      if (!targets.has(target)) {
+        targets.set(target, { isFile: isFileDef(field.card) });
       }
-      linkChecks.push({ key: entry.key, target });
+      linkChecks.push({ key, target });
     }
   }
 
-  // probe distinct targets concurrently, then report in document order
-  let results = await Promise.all(
-    linkChecks.map(({ target }) => targetStatuses.get(target)!),
+  let statuses = await probeLinkTargets(
+    targets,
+    checkLinkTarget,
+    sink.remaining,
   );
-  linkChecks.forEach(({ key, target }, index) => {
-    if (results[index] === 'not-found') {
+  for (let { key, target } of linkChecks) {
+    if (statuses.get(target) === 'not-found') {
       sink.add(
-        `"${key}" links to ${target}, which does not exist; create that card or correct the link`,
-      );
-    } else if (results[index] === 'error') {
-      sink.add(
-        `"${key}" links to ${target}, which is currently in an error state`,
+        `"${key}" links to ${target}, which does not exist; create it or correct the link`,
       );
     }
-  });
+  }
+}
+
+// Probes distinct targets a few at a time, and stops scheduling new probes
+// once enough missing targets are known to fill the remaining warnings.
+// Unprobed targets are simply not judged.
+async function probeLinkTargets(
+  targets: Map<string, { isFile: boolean }>,
+  checkLinkTarget: CheckLinkTarget,
+  remainingWarnings: number,
+): Promise<Map<string, LinkTargetStatus>> {
+  let statuses = new Map<string, LinkTargetStatus>();
+  let queue = [...targets];
+  let missing = 0;
+  let worker = async () => {
+    while (queue.length > 0 && missing < remainingWarnings) {
+      let [target, opts] = queue.shift()!;
+      let status = await checkLinkTarget(target, opts);
+      statuses.set(target, status);
+      if (status === 'not-found') {
+        missing++;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(LINK_PROBE_CONCURRENCY, queue.length) },
+      worker,
+    ),
+  );
+  return statuses;
 }
 
 // Returns the absolute target a link names, or undefined when it can't be
@@ -307,16 +389,22 @@ type ResolvedRelationshipField =
 // Resolves a relationship key's (possibly dotted) field name — e.g.
 // "address.country" or "timers.0.assignee" — to the declared field it names.
 // Numeric segments are containsMany indices and carry no field of their own.
+// A path that passes through a polymorphic override (`meta.fields` naming an
+// `adoptsFrom`) is judged against a narrower type we haven't loaded, so it is
+// reported as ambiguous rather than checked against the declared type.
 function resolveRelationshipField(
   instance: CardDef,
   dottedName: string,
+  metaFields: CardFields | undefined,
 ): ResolvedRelationshipField {
   let segments = dottedName.split('.');
   let subject: BaseDef | typeof BaseDef = instance;
   let field: Field<BaseDefConstructor> | undefined;
+  let fieldMeta: Partial<Meta> | Partial<Meta>[] | undefined;
   let ownerName = displayNameOf(subject);
   for (let segment of segments) {
     if (/^\d+$/.test(segment)) {
+      fieldMeta = elementMeta(fieldMeta, Number(segment));
       continue;
     }
     if (field) {
@@ -324,6 +412,11 @@ function resolveRelationshipField(
       if (primitive in field.card) {
         return { kind: 'ambiguous' };
       }
+      let metas = Array.isArray(fieldMeta) ? fieldMeta : [fieldMeta];
+      if (metas.some((meta) => meta?.adoptsFrom)) {
+        return { kind: 'ambiguous' };
+      }
+      metaFields = Array.isArray(fieldMeta) ? undefined : fieldMeta?.fields;
       subject = field.card;
     }
     ownerName = displayNameOf(subject);
@@ -331,6 +424,7 @@ function resolveRelationshipField(
     if (!field) {
       return { kind: 'missing', segment, typeName: ownerName };
     }
+    fieldMeta = metaFields?.[segment];
   }
   if (!field) {
     return { kind: 'ambiguous' };
@@ -358,9 +452,14 @@ function staticEnumAllowedValues(
   field: Field<BaseDefConstructor>,
 ): any[] | undefined {
   try {
-    let fromDef = asPlainConfiguration((field.card as any).configuration);
-    let fromUsage = asPlainConfiguration(field.configuration);
-    let options = fromUsage?.enum?.options ?? fromDef?.enum?.options;
+    let fromDef = (field.card as any).configuration;
+    let fromUsage = field.configuration;
+    if (typeof fromDef === 'function' || typeof fromUsage === 'function') {
+      return undefined;
+    }
+    let options = enumModule.mergeConfigurations<{
+      enum?: { options?: any[] };
+    }>(fromDef, fromUsage as any)?.enum?.options;
     if (!Array.isArray(options) || options.length === 0) {
       return undefined;
     }
@@ -369,14 +468,6 @@ function staticEnumAllowedValues(
   } catch {
     return undefined;
   }
-}
-
-function asPlainConfiguration(
-  configuration: unknown,
-): { enum?: { options?: any[] } } | undefined {
-  return isPlainObject(configuration)
-    ? (configuration as { enum?: { options?: any[] } })
-    : undefined;
 }
 
 function elementMeta(
@@ -394,9 +485,14 @@ function displayNameOf(subject: BaseDef | typeof BaseDef): string {
     typeof subject === 'function'
       ? (subject as typeof BaseDef)
       : (subject.constructor as typeof BaseDef);
-  return (klass as any).displayName ?? klass.name;
+  return friendlyCardType(klass);
 }
 
-function isPlainObject(value: unknown): value is Record<string, any> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function isJSONPrimitive(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
 }

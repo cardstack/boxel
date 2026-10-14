@@ -4984,6 +4984,198 @@ ${patchedFileSource}
     );
   });
 
+  test('attempt counts carry across fix messages until the user speaks', async function () {
+    const roomId = '!room:localhost';
+    const cardId = 'http://localhost/cards/Ticket/1';
+    let ts = 0;
+    let events: DiscreteMatrixEvent[] = [];
+
+    function addPatch(index: number) {
+      let eventId = `ai-patch-${index}`;
+      events.push(
+        {
+          type: 'm.room.message',
+          event_id: eventId,
+          room_id: roomId,
+          sender: '@aibot:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            body: `Patch ${index}`,
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            data: { context: { tools: [], functions: [] } },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              {
+                id: `patch-${index}`,
+                name: 'patchCardInstance',
+                arguments: JSON.stringify({
+                  description: 'Update the ticket',
+                  attributes: {
+                    cardId,
+                    patch: { attributes: { status: 'Open' } },
+                  },
+                }),
+              },
+            ],
+          },
+          unsigned: { age: 0, transaction_id: eventId },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+        {
+          type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+          event_id: `patch-result-${index}`,
+          room_id: roomId,
+          sender: '@user:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+            commandRequestId: `patch-${index}`,
+            'm.relates_to': {
+              event_id: eventId,
+              key: 'applied',
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            },
+            data: { context: { tools: [], functions: [] } },
+          },
+          unsigned: { age: 0, transaction_id: `patch-result-${index}` },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+      );
+      return eventId;
+    }
+
+    // records the check the ai-bot would publish for the patch, answered by
+    // a pass that still carries a warning
+    function addWarningCheck(
+      index: number,
+      patchEventId: string,
+      attempt: number,
+    ) {
+      let correctnessEventId = `correctness-${index}`;
+      events.push(
+        {
+          type: 'm.room.message',
+          event_id: correctnessEventId,
+          room_id: roomId,
+          sender: '@aibot:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+            body: '',
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            'm.relates_to': {
+              rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+              event_id: patchEventId,
+            },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              {
+                id: `check-${index}`,
+                name: 'checkCorrectness',
+                arguments: JSON.stringify({
+                  description: `Check correctness of ${cardId}`,
+                  attributes: {
+                    targetType: 'card',
+                    targetRef: cardId,
+                    roomId,
+                    targetEventId: patchEventId,
+                    correctnessCheckAttempt: attempt,
+                  },
+                }),
+              },
+            ],
+          },
+          unsigned: { age: 0, transaction_id: correctnessEventId },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+        {
+          type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+          event_id: `check-result-${index}`,
+          room_id: roomId,
+          sender: '@user:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+            commandRequestId: `check-${index}`,
+            'm.relates_to': {
+              event_id: correctnessEventId,
+              key: 'applied',
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            },
+            data: {
+              card: {
+                sourceUrl: `${cardId}-check-${index}.json`,
+                url: `${cardId}-check-${index}.json`,
+                name: `correctness-${index}.json`,
+                contentType: 'application/json',
+                content: JSON.stringify({
+                  data: {
+                    attributes: {
+                      correct: true,
+                      errors: [],
+                      warnings: [
+                        `${cardId}: "requester" is not a field of Ticket`,
+                      ],
+                    },
+                  },
+                }),
+              },
+            },
+          },
+          unsigned: { age: 0, transaction_id: `check-result-${index}` },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+      );
+    }
+
+    async function nextAttempt(patchEventId: string) {
+      let { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+        events,
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      return pendingCodePatchCorrectnessChecks?.attemptsByTargetKey?.[
+        `card:${cardId}|event:${patchEventId}`
+      ];
+    }
+
+    let attempts: (number | undefined)[] = [];
+    for (let index = 1; index <= 4; index++) {
+      let patchEventId = addPatch(index);
+      let attempt = await nextAttempt(patchEventId);
+      attempts.push(attempt);
+      addWarningCheck(index, patchEventId, attempt ?? 1);
+    }
+    assert.deepEqual(
+      attempts,
+      [1, 2, 3, 4],
+      'each fix message continues the count, so the fourth round is past the cap',
+    );
+
+    events.push({
+      type: 'm.room.message',
+      event_id: 'user-message',
+      room_id: roomId,
+      sender: '@user:localhost',
+      origin_server_ts: ++ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Try a different approach',
+        format: 'org.matrix.custom.html',
+        data: { context: { tools: [], functions: [] } },
+      },
+      unsigned: { age: 0, transaction_id: 'user-message' },
+      status: EventStatus.SENT,
+    } as DiscreteMatrixEvent);
+    let afterUser = addPatch(5);
+    assert.strictEqual(
+      await nextAttempt(afterUser),
+      1,
+      'a user message starts a fresh run of attempts',
+    );
+  });
+
   test('correctness attempts reset when a new patch event starts for the same target', async function () {
     const roomId = '!room:localhost';
     const targetRef = 'http://localhost/files/example.gts';
