@@ -16,6 +16,17 @@
 // - On every event, a breadcrumb that names a proxy route's URL (the request
 //   log line, kept by Sentry's console integration) loses that URL's query
 //   string.
+// - A transaction carries the incoming URL again in its spans' data: the
+//   server span's `http.url`, `http.target` and `http.query`, which the trace
+//   context holds as the transaction's own data, and the like on each child
+//   span. A breadcrumb for an outgoing request records its URL under the same
+//   names. These URL attributes follow the request's rules: on a transaction
+//   or event for a request to the secure origin or a proxy route, each keeps
+//   only its origin and path, with no query string or fragment; on any other,
+//   each keeps its query with any `token` parameter masked. A URL attribute
+//   that itself names the secure origin or a proxy route keeps only its origin
+//   and path either way. A transaction's name and its spans' descriptions are
+//   the method and path alone already.
 //
 // Kept free of imports so `instrument.ts`, which runs before anything else,
 // can install it.
@@ -138,18 +149,6 @@ interface Breadcrumb {
   data?: unknown;
 }
 
-function scrubBreadcrumbs(breadcrumbs: Breadcrumb[]): Breadcrumb[] {
-  return breadcrumbs.map((breadcrumb) => ({
-    ...breadcrumb,
-    ...(breadcrumb.message !== undefined
-      ? { message: withoutProxyRouteQueries(breadcrumb.message) as string }
-      : {}),
-    ...(breadcrumb.data !== undefined
-      ? { data: withoutProxyRouteQueries(breadcrumb.data) }
-      : {}),
-  }));
-}
-
 // The query parameter that carries a bearer credential on ordinary routes: a
 // capture-URL token, or a session JWT on a `_download-realm` link. Masked the
 // same way the request log masks it.
@@ -206,23 +205,179 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
   return { ...kept, headers: keptHeaders };
 }
 
+function isMethodAndPathOnly(request: SentryRequestData): boolean {
+  let parsed = parseURL(request.url);
+  return (
+    isSecureOriginRequestData(request) ||
+    (parsed !== undefined && isProxyRoutePath(parsed.pathname))
+  );
+}
+
+type SpanData = Record<string, unknown>;
+
+interface SpanJSON {
+  data?: SpanData;
+}
+
+interface TraceContexts {
+  trace?: { data?: SpanData };
+}
+
+// The span attributes that record a URL, by which part of it they hold. Sentry
+// copies the OpenTelemetry HTTP instrumentation's attributes into a span's
+// data and adds `url` and `http.query` (and `http.fragment`) of its own.
+const fullURLAttributes = ['url', 'http.url', 'url.full'];
+const pathAndQueryAttributes = ['http.target'];
+const queryAttributes = ['http.query', 'url.query'];
+const fragmentAttributes = ['http.fragment', 'url.fragment'];
+
+// The request a span's attributes describe, as `event.request` would.
+function spanRequest(data: SpanData): SentryRequestData {
+  let url = fullURLAttributes
+    .map((name) => data[name])
+    .find((value): value is string => typeof value === 'string');
+  let host = data['http.host'] ?? data['server.address'];
+  return {
+    ...(url !== undefined ? { url } : {}),
+    ...(typeof host === 'string' ? { headers: { host } } : {}),
+  };
+}
+
+function withPathOnly(pathAndQuery: string): string {
+  return pathAndQuery.replace(/[?#].*$/s, '');
+}
+
+function pathAndQueryWithTokenMasked(pathAndQuery: string): string {
+  let queryStart = pathAndQuery.indexOf('?');
+  if (queryStart === -1) {
+    return pathAndQuery;
+  }
+  let fragmentStart = pathAndQuery.indexOf('#', queryStart);
+  let queryEnd = fragmentStart === -1 ? pathAndQuery.length : fragmentStart;
+  let query = pathAndQuery.slice(queryStart + 1, queryEnd);
+  let masked = queryWithTokenMasked(query);
+  return masked === query
+    ? pathAndQuery
+    : `${pathAndQuery.slice(0, queryStart + 1)}${masked}${pathAndQuery.slice(queryEnd)}`;
+}
+
+// A query attribute may or may not keep the URL's leading `?`.
+function queryAttributeWithTokenMasked(query: unknown): unknown {
+  if (typeof query !== 'string' || !query.startsWith('?')) {
+    return queryWithTokenMasked(query);
+  }
+  return `?${queryWithTokenMasked(query.slice(1)) as string}`;
+}
+
+// The URL attributes of a span or breadcrumb follow the incoming request's
+// rules. A URL attribute that names the secure origin or a proxy route itself
+// keeps only its origin and path whatever the request.
+function scrubURLAttributes(
+  data: SpanData,
+  methodAndPathOnly: boolean,
+): SpanData {
+  let pathOnly = methodAndPathOnly || isMethodAndPathOnly(spanRequest(data));
+  let scrubbed: SpanData = {};
+  for (let [name, value] of Object.entries(data)) {
+    if (typeof value !== 'string') {
+      scrubbed[name] = withoutProxyRouteQueries(value);
+    } else if (fullURLAttributes.includes(name)) {
+      let parsed = parseURL(value);
+      scrubbed[name] = pathOnly
+        ? parsed
+          ? `${parsed.origin}${parsed.pathname}`
+          : withPathOnly(value)
+        : withTokenMasked(value);
+    } else if (pathAndQueryAttributes.includes(name)) {
+      scrubbed[name] = pathOnly
+        ? withPathOnly(value)
+        : pathAndQueryWithTokenMasked(value);
+    } else if (queryAttributes.includes(name)) {
+      if (!pathOnly) {
+        scrubbed[name] = queryAttributeWithTokenMasked(value);
+      }
+    } else if (fragmentAttributes.includes(name)) {
+      if (!pathOnly) {
+        scrubbed[name] = value;
+      }
+    } else {
+      scrubbed[name] = withoutProxyRouteQueries(value);
+    }
+  }
+  return scrubbed;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// An outgoing request's breadcrumb records its URL under the same attribute
+// names a span does.
+function scrubBreadcrumbs(
+  breadcrumbs: Breadcrumb[],
+  methodAndPathOnly: boolean,
+): Breadcrumb[] {
+  return breadcrumbs.map((breadcrumb) => ({
+    ...breadcrumb,
+    ...(breadcrumb.message !== undefined
+      ? { message: withoutProxyRouteQueries(breadcrumb.message) as string }
+      : {}),
+    ...(breadcrumb.data !== undefined
+      ? {
+          data: isPlainObject(breadcrumb.data)
+            ? scrubURLAttributes(breadcrumb.data, methodAndPathOnly)
+            : withoutProxyRouteQueries(breadcrumb.data),
+        }
+      : {}),
+  }));
+}
+
+// A transaction's spans: the trace context holds the root span's data, and
+// `spans` each child's.
+function scrubSpans(
+  event: { contexts?: TraceContexts; spans?: SpanJSON[] },
+  methodAndPathOnly: boolean,
+): void {
+  let trace = event.contexts?.trace;
+  if (trace?.data) {
+    trace.data = scrubURLAttributes(trace.data, methodAndPathOnly);
+  }
+  if (Array.isArray(event.spans)) {
+    event.spans = event.spans.map((span) =>
+      span.data
+        ? { ...span, data: scrubURLAttributes(span.data, methodAndPathOnly) }
+        : span,
+    );
+  }
+}
+
 // Sentry `beforeSend` / `beforeSendTransaction` hook.
 export function scrubRequestTelemetry<
-  E extends { request?: SentryRequestData; breadcrumbs?: Breadcrumb[] },
+  E extends {
+    request?: SentryRequestData;
+    breadcrumbs?: Breadcrumb[];
+    contexts?: TraceContexts;
+    spans?: SpanJSON[];
+  },
 >(event: E): E {
+  let request = event.request;
+  // A transaction need not carry the request: its root span records it.
+  let rootSpanData = event.contexts?.trace?.data;
+  let methodAndPathOnly = request
+    ? isMethodAndPathOnly(request)
+    : rootSpanData !== undefined &&
+      isMethodAndPathOnly(spanRequest(rootSpanData));
   if (Array.isArray(event.breadcrumbs)) {
     (event as { breadcrumbs?: Breadcrumb[] }).breadcrumbs = scrubBreadcrumbs(
       event.breadcrumbs,
+      methodAndPathOnly,
     );
   }
-  let request = event.request;
+  scrubSpans(event, methodAndPathOnly);
   if (!request) {
     return event;
   }
   let parsed = parseURL(request.url);
-  let methodAndPathOnly =
-    isSecureOriginRequestData(request) ||
-    (parsed !== undefined && isProxyRoutePath(parsed.pathname));
   (event as { request?: SentryRequestData }).request = methodAndPathOnly
     ? {
         ...(request.method ? { method: request.method } : {}),

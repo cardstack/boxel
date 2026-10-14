@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { context } from '@opentelemetry/api';
+import { context, propagation, trace } from '@opentelemetry/api';
 import { createRequire } from 'module';
 import { guardedFetchIntegration } from '../../lib/outbound/sentry.ts';
 import { scrubRequestTelemetry } from '../../lib/request-telemetry.ts';
@@ -21,10 +21,15 @@ import { scrubRequestTelemetry } from '../../lib/request-telemetry.ts';
 // Set `scrub: false` to see what the instrumentation records before the
 // realm server's hook runs.
 //
-// OpenTelemetry's tracer provider and propagator are never registered, and the
-// context manager is removed again by `stop`. The HTTP instrumentation stays
-// patched into `http` for the life of the process, as in a deployed server,
-// and does nothing once `stop` has removed the client.
+// With `tracing` as well, each incoming request is also recorded as a
+// transaction whose server span carries the request's URL, as a deployed
+// server records it once tracing is on. That needs OpenTelemetry's tracer
+// provider and propagator, which are registered for that case only.
+//
+// Everything registered with OpenTelemetry's global API is removed again by
+// `stop`. The HTTP instrumentation stays patched into `http` for the life of
+// the process, as in a deployed server, and does nothing once `stop` has
+// removed the client and the tracer provider.
 
 export interface SentryCapture {
   envelopes: string[];
@@ -32,6 +37,8 @@ export interface SentryCapture {
   flushed(): Promise<string>;
   // The error events among them, parsed.
   flushedEvents(): Promise<SentryEvent[]>;
+  // The transactions among them, parsed.
+  flushedTransactions(): Promise<SentryEvent[]>;
   stop(): Promise<void>;
 }
 
@@ -50,10 +57,13 @@ export function startSentryCapture({
   scrub?: boolean;
 }): SentryCapture {
   let envelopes: string[] = [];
-  if (incomingRequests) {
+  let incomingTransactions = tracing && incomingRequests;
+  // `initOpenTelemetry` registers its own context manager along with the
+  // tracer provider.
+  if (incomingRequests && !incomingTransactions) {
     context.setGlobalContextManager(new Sentry.SentryContextManager().enable());
   }
-  Sentry.init({
+  let client = Sentry.init({
     dsn: 'https://public@sentry.example.invalid/1',
     defaultIntegrations: false,
     skipOpenTelemetrySetup: true,
@@ -69,7 +79,12 @@ export function startSentryCapture({
       guardedFetchIntegration(),
       ...(incomingRequests
         ? [
-            Sentry.httpIntegration({ spans: false }),
+            // The span instrumentation is installed even without `tracing`:
+            // `http` is patched once per process, on the first `require` after
+            // the first capture that asks for incoming requests, so a later
+            // capture can't add it. Until a tracer provider is registered its
+            // spans are no-ops.
+            Sentry.httpIntegration({ spans: true }),
             Sentry.requestDataIntegration(),
             Sentry.consoleIntegration(),
           ]
@@ -83,6 +98,25 @@ export function startSentryCapture({
       flush: async () => true,
     }),
   });
+  async function flushedItems(type: string): Promise<SentryEvent[]> {
+    await Sentry.flush(2000);
+    let items: SentryEvent[] = [];
+    for (let envelope of envelopes) {
+      let [, envelopeItems] = JSON.parse(envelope) as [
+        unknown,
+        [{ type: string }, SentryEvent][],
+      ];
+      for (let [header, payload] of envelopeItems) {
+        if (header.type === type) {
+          items.push(payload);
+        }
+      }
+    }
+    return items;
+  }
+  if (incomingTransactions && client) {
+    Sentry.initOpenTelemetry(client);
+  }
   if (incomingRequests) {
     createRequire(import.meta.url)('http');
   }
@@ -93,20 +127,10 @@ export function startSentryCapture({
       return envelopes.join('\n');
     },
     async flushedEvents() {
-      await Sentry.flush(2000);
-      let events: SentryEvent[] = [];
-      for (let envelope of envelopes) {
-        let [, items] = JSON.parse(envelope) as [
-          unknown,
-          [{ type: string }, SentryEvent][],
-        ];
-        for (let [header, payload] of items) {
-          if (header.type === 'event') {
-            events.push(payload);
-          }
-        }
-      }
-      return events;
+      return await flushedItems('event');
+    },
+    async flushedTransactions() {
+      return await flushedItems('transaction');
     },
     async stop() {
       await Sentry.close(2000);
@@ -115,6 +139,10 @@ export function startSentryCapture({
       Sentry.getGlobalScope().setClient(undefined);
       Sentry.getIsolationScope().clearBreadcrumbs();
       Sentry.getCurrentScope().clearBreadcrumbs();
+      if (incomingTransactions) {
+        trace.disable();
+        propagation.disable();
+      }
       if (incomingRequests) {
         context.disable();
       }
