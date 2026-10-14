@@ -129,6 +129,9 @@ catalogs:
     '@openfga/syntax-transformer':
       specifier: 0.2.0
       version: 0.2.0
+    '@opentelemetry/api':
+      specifier: ^1.9.0
+      version: 1.9.1
     '@percy/cli':
       specifier: ^1.32.11
       version: 1.32.11
@@ -3656,6 +3659,9 @@ importers:
       '@octokit/rest':
         specifier: 'catalog:'
         version: 22.0.1
+      '@opentelemetry/api':
+        specifier: 'catalog:'
+        version: 1.9.1
       '@sentry/node':
         specifier: 'catalog:'
         version: 8.55.2(supports-color@8.1.1)

@@ -27,6 +27,7 @@ import {
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { startSentryCapture } from './helpers/sentry-capture.ts';
 
 module(basename(import.meta.filename), function () {
   module(
@@ -265,6 +266,76 @@ module(basename(import.meta.filename), function () {
         } finally {
           mockFetch.restore();
           global.fetch = originalFetch;
+        }
+      });
+
+      test('a Sentry event raised during a failed call keeps only the method and path of the incoming request', async function (assert) {
+        // OpenRouter answers with a body that is not JSON, so the handler
+        // fails and reports the error to Sentry.
+        const mockFetch = sinon.stub(global, 'fetch');
+        mockFetch.callsFake(
+          async () =>
+            new Response('not a JSON document', {
+              status: 200,
+              headers: { 'content-type': 'text/plain' },
+            }),
+        );
+        let sentry = startSentryCapture({
+          tracing: false,
+          incomingRequests: true,
+        });
+        try {
+          let planted = {
+            token: createRealmServerJWT(
+              { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+              realmSecretSeed,
+            ),
+            prompt: 'prompt-marker-41c7e2',
+            cookie: 'cookie-marker-90ad3f',
+            query: 'incoming-query-marker-6b2e18',
+          };
+          const response = await request
+            .post(`/_openrouter/chat/completions?caller=${planted.query}`)
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${planted.token}`)
+            .set('Cookie', `session=${planted.cookie}`)
+            .send({
+              model: 'anthropic/claude-opus-4-7',
+              messages: [{ role: 'user', content: planted.prompt }],
+            });
+          let sent = await sentry.flushed();
+          let events = await sentry.flushedEvents();
+
+          assert.strictEqual(response.status, 500, 'the call failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { method?: string; url?: string }
+            | undefined;
+          assert.deepEqual(
+            Object.keys(recorded ?? {}).sort(),
+            ['method', 'url'],
+            'the event has the request, and only its method and URL',
+          );
+          assert.strictEqual(recorded?.method, 'POST');
+          assert.strictEqual(
+            new URL(recorded!.url!).pathname,
+            '/_openrouter/chat/completions',
+          );
+          assert.strictEqual(
+            new URL(recorded!.url!).search,
+            '',
+            'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        } finally {
+          await sentry.stop();
+          mockFetch.restore();
         }
       });
 

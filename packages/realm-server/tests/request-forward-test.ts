@@ -2802,6 +2802,126 @@ module(basename(import.meta.filename), function () {
           assert.false(carries(response!.text), 'the response does not');
         });
       });
+
+      // What a Sentry event raised during a forward carries of the incoming
+      // request: the caller's URL, headers and body are theirs, and the
+      // Authorization header is their session token.
+      module('the incoming request in a Sentry event', function (hooks) {
+        let sentry: SentryCapture | undefined;
+        const destinationPath = '/respond';
+
+        hooks.beforeEach(async function () {
+          configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${vendor.alternateUrl}${destinationPath}', 'telemetry-vendor-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+        });
+        hooks.afterEach(async function () {
+          await sentry?.stop();
+          sentry = undefined;
+        });
+
+        // A forward whose vendor answers with a body that is not JSON, so
+        // the handler fails and reports the error to Sentry.
+        async function failingForward(markers: {
+          token: string;
+          urlToken: string;
+          bodyMarker: string;
+          cookie: string;
+          query: string;
+        }) {
+          return await request
+            .post(`/_request-forward?caller=${markers.query}`)
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${markers.token}`)
+            .set('Cookie', `session=${markers.cookie}`)
+            .send({
+              url: `${vendor.alternateUrl}${destinationPath}?token=${markers.urlToken}`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 401,
+                headers: { 'content-type': 'text/plain' },
+                chunks: ['not a JSON document'],
+                marker: markers.bodyMarker,
+              }),
+            });
+        }
+
+        function markers() {
+          return {
+            token: jwt(),
+            urlToken: 'url-query-token-5c1e09',
+            bodyMarker: 'request-body-marker-7f3a2d',
+            cookie: 'cookie-marker-b84e61',
+            query: 'incoming-query-marker-2d9c40',
+          };
+        }
+
+        test('keeps only the method and path of a failed forward', async function (assert) {
+          sentry = startSentryCapture({
+            tracing: false,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let sent = await sentry.flushed();
+          let events = await sentry.flushedEvents();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { method?: string; url?: string }
+            | undefined;
+          assert.deepEqual(
+            Object.keys(recorded ?? {}).sort(),
+            ['method', 'url'],
+            'the event has the request, and only its method and URL',
+          );
+          assert.strictEqual(recorded?.method, 'POST');
+          assert.strictEqual(
+            new URL(recorded!.url!).pathname,
+            '/_request-forward',
+          );
+          assert.strictEqual(
+            new URL(recorded!.url!).search,
+            '',
+            'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        test("the forward's body is not buffered for Sentry", async function (assert) {
+          // Without the hook, to see what the instrumentation itself recorded.
+          sentry = startSentryCapture({
+            tracing: false,
+            incomingRequests: true,
+            scrub: false,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let events = await sentry.flushedEvents();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { headers?: Record<string, string>; data?: unknown }
+            | undefined;
+          assert.strictEqual(
+            recorded?.headers?.authorization,
+            `Bearer ${planted.token}`,
+            'precondition: the instrumentation recorded the incoming request',
+          );
+          assert.false('data' in (recorded ?? {}), 'it recorded no body');
+        });
+      });
     });
   });
 });
