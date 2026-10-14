@@ -72,6 +72,9 @@ const BOOTSTRAP = `
           call('entries.search', [query, options ?? {}]),
       }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
+      images: Object.freeze({
+        generate: (options) => call('images.generate', [options ?? {}]),
+      }),
       workspaces: Object.freeze({
         create: (options) => call('workspaces.create', [options ?? {}]),
         delete: (url) => call('workspaces.delete', [url]),
@@ -155,6 +158,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'entries.search',
   'fs.delete',
   'capture',
+  'images.generate',
   'workspaces.create',
   'workspaces.delete',
   'room.enableSkills',

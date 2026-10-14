@@ -15,6 +15,7 @@ export type RealmRunnerCallMethod =
   | 'entries.search'
   | 'fs.delete'
   | 'capture'
+  | 'images.generate'
   | 'workspaces.create'
   | 'workspaces.delete'
   | 'room.enableSkills'

@@ -62,7 +62,10 @@ function recipeJSON(
 module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  // A signed-in user: `realm.images.generate` sends its request through the
+  // realm server's proxy, which needs a realm server session.
   let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, otherRealmURL],
     autostart: true,
   });
@@ -72,7 +75,39 @@ module('Integration | tools | run-realm-code', function (hooks) {
   let captureRequests: any[] = [];
   const PNG_BASE64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  // `realm.images.generate` asks the image model through the realm server's
+  // proxy; this answers every request with the same PNG and records the
+  // request it forwarded.
+  let imageRequests: any[] = [];
   setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        let body = await req.clone().json();
+        imageRequests.push({
+          url: body.url,
+          request: JSON.parse(body.requestBody),
+        });
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: '',
+                  images: [
+                    {
+                      type: 'image_url',
+                      image_url: { url: `data:image/png;base64,${PNG_BASE64}` },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    },
     {
       route: '_capture',
       getResponse: async (req: Request) => {
@@ -103,6 +138,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
 
   hooks.beforeEach(function () {
     captureRequests = [];
+    imageRequests = [];
   });
 
   hooks.beforeEach(async function () {
@@ -1023,6 +1059,130 @@ await realm.fs.copy('unformatted.gts', 'unformatted-copy.gts');`,
       run(`await realm.fs.writeText('images/existing.png', 'text');`),
       /File already exists; use realm\.fs\.replace/,
     );
+  });
+
+  test('a script that generates images always waits for the user, and gets more time', function (assert) {
+    let code = `await realm.images.generate({ prompt: 'a cat', path: 'cat.png' });`;
+    assert.true(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'a run that names realm.images.generate waits for a click',
+    );
+    assert.true(
+      RunRealmCodeTool.extraExecuteTimeMsFor({ code }) > 0,
+      'the tool service gives the run more time',
+    );
+    assert.strictEqual(
+      RunRealmCodeTool.extraExecuteTimeMsFor({
+        code: `await realm.fs.writeText('a.json', '{}');`,
+      }),
+      0,
+      'other runs keep the usual execute timeout',
+    );
+  });
+
+  test('realm.images.generate saves the image and returns its path', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    // The source image the request names is in the realm.
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('source.png', ${JSON.stringify(PNG_BASE64)});`,
+    });
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.images.generate({
+  prompt: 'A small dot',
+  path: 'images/dot',
+  sourceImageUrl: 'source.png',
+  llmModel: 'test/image-model',
+});`,
+    });
+
+    let expected = Uint8Array.from(atob(PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      path: 'images/dot.png',
+      contentType: 'image/png',
+      size: expected.byteLength,
+      saved: true,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [[`${testRealmURL}images/dot.png`, 'saved']],
+    );
+    assert.strictEqual(imageRequests.length, 1, 'one image was requested');
+    let [{ request }] = imageRequests;
+    assert.strictEqual(request.model, 'test/image-model');
+    assert.deepEqual(request.messages[0].content, [
+      { type: 'text', text: 'A small dot' },
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${PNG_BASE64}` },
+      },
+    ]);
+    let response = await network.authedFetch(
+      new URL('images/dot.png', testRealmURL),
+    );
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(expected),
+      'the realm holds the image bytes',
+    );
+  });
+
+  test('realm.images.generate refuses a fifth image in one run', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `for (let i = 1; i <= 5; i++) {
+  await realm.images.generate({ prompt: 'dot ' + i, path: 'dots/' + i + '.png' });
+}`,
+      }),
+      /at most 4 images.*Files already saved by this run: .*dots\/4\.png/,
+    );
+    assert.strictEqual(imageRequests.length, 4, 'four images were requested');
+  });
+
+  test('realm.images.generate refuses an existing file before it asks the model', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.images.generate({ prompt: 'a task', path: 'task.json' });`,
+      }),
+      /File already exists/,
+    );
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('a script that reaches realm.images.generate another way is refused', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `let images = realm['ima' + 'ges'];
+await images.generate({ prompt: 'a dot', path: 'dot.png' });`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'this run would not wait for a click',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      }),
+      /realm\.images\.generate must be called by that name/,
+    );
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
   });
 
   test('resolves paths against the realm root', async function (assert) {

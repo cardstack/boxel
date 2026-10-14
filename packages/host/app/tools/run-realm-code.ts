@@ -26,6 +26,13 @@ import {
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  generateImage,
+  IMAGE_EXTENSION_RE,
+  imageExtension,
+  sourceImageDataUrl,
+  type GeneratedImage,
+} from '../lib/generate-image';
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import {
@@ -116,6 +123,13 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
+// realm.images.generate limits. Each image spends the user's credit, so a
+// loop must not make many. One image takes 10-30 s, so image requests get
+// their own time budget: a run that names the call gets it on top of the
+// run's own limit, the call deadline and the tool service's execute timeout.
+const MAX_IMAGES = 4;
+const IMAGE_TIMEOUT_MS = 60_000;
+const IMAGE_TIME_BUDGET_MS = 120_000;
 // A file as the realm serves it. `content` is empty unless the file is UTF-8
 // text; `tooLarge` marks a text file whose body was not read.
 type ReadSource = (url: string) => Promise<{
@@ -145,6 +159,15 @@ type DeleteFile = (
   url: string,
   expected: { content: string } | { sha256: string },
 ) => Promise<void>;
+
+// Asks the image model for one image. `sourceImageUrl` is a data URL or a
+// full URL, never a realm-relative path.
+type GenerateImage = (input: {
+  prompt: string;
+  sourceImageUrl?: string;
+  llmModel?: string;
+  timeoutMs: number;
+}) => Promise<GeneratedImage>;
 
 // What `lookup` finds for a file that is not UTF-8 text.
 const BINARY = Symbol('binary');
@@ -192,12 +215,30 @@ type CreateWorkspace = (input: {
 // Deletes a workspace the current user owns and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
-// A script that may delete a workspace names the call in its code. Such a
-// run always waits for the user's click (`neverAutoExecutesFor`), the same as
-// the delete-workspace tool, and only such a run may delete: a script that
-// reaches the call another way is refused, so no delete runs without a click.
-export function scriptDeletesWorkspaces(code: unknown): boolean {
-  return typeof code === 'string' && code.includes('realm.workspaces.delete');
+// Calls that cannot be undone or that spend the user's credit. A script that
+// may make one names the call in its code. Such a run always waits for the
+// user's click (`neverAutoExecutesFor`), and only such a run may make the
+// call: a script that reaches it another way is refused, so none of them runs
+// without a click.
+const CLICK_REQUIRED_CALLS = [
+  'realm.workspaces.delete',
+  'realm.images.generate',
+] as const;
+type ClickRequiredCall = (typeof CLICK_REQUIRED_CALLS)[number];
+
+// The click-required calls a script names in its code.
+export function clickRequiredCallsIn(code: unknown): Set<ClickRequiredCall> {
+  return new Set(
+    typeof code === 'string'
+      ? CLICK_REQUIRED_CALLS.filter((name) => code.includes(name))
+      : [],
+  );
+}
+
+function notNamedError(name: ClickRequiredCall) {
+  return new Error(
+    `${name} must be called by that name in the script, so the user confirms the run before it starts`,
+  );
 }
 
 // Calls that need write access to the run's workspace. A Record over every
@@ -216,6 +257,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'entries.search': false,
   'fs.delete': true,
   capture: false,
+  'images.generate': true,
   'workspaces.create': false,
   'workspaces.delete': false,
   'room.enableSkills': false,
@@ -284,6 +326,11 @@ class RealmFsSession {
   // this run created, so a delete can tell the file is still the run's.
   private binaryDigests = new Map<string, string>();
   private binaryBytes = 0;
+  // Images this run asked the model for, including ones that failed: each
+  // request spends credit.
+  private imagesRequested = 0;
+  // Image request time this run has used, in ms, of IMAGE_TIME_BUDGET_MS.
+  private imageTimeUsed = 0;
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // What `realm.ui` asked for, in the order the script asked.
@@ -313,7 +360,8 @@ class RealmFsSession {
     captureURL: CaptureURL,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
-    private mayDeleteWorkspaces: boolean,
+    private generateImage: GenerateImage,
+    private namedCalls: Set<ClickRequiredCall>,
     private mayWrite: boolean,
     readonly room: RoomActions,
   ) {
@@ -563,6 +611,8 @@ class RealmFsSession {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
       }
+      case 'images.generate':
+        return await this.generateAndSaveImage(args[0]);
       // A new workspace is its own realm: this run cannot write to it. The
       // script gets its URL, to run more realm code in it.
       case 'workspaces.create': {
@@ -627,10 +677,8 @@ class RealmFsSession {
         return created;
       }
       case 'workspaces.delete': {
-        if (!this.mayDeleteWorkspaces) {
-          throw new Error(
-            'realm.workspaces.delete must be called by that name in the script, so the user confirms the run before it starts',
-          );
+        if (!this.namedCalls.has('realm.workspaces.delete')) {
+          throw notNamedError('realm.workspaces.delete');
         }
         let realmIdentifier = args[0];
         if (typeof realmIdentifier !== 'string' || !realmIdentifier) {
@@ -849,6 +897,90 @@ class RealmFsSession {
     }
     this.uiActions.push(action);
     return { action: action.action, runs: 'after the script finishes' };
+  }
+
+  // Asks the model for one image and saves it as a new file. The image bytes
+  // never enter the sandbox: the script gets the saved path, to link it from
+  // a card.
+  private async generateAndSaveImage(options: unknown) {
+    if (!this.namedCalls.has('realm.images.generate')) {
+      throw notNamedError('realm.images.generate');
+    }
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError(
+        'realm.images.generate expects an options object: { prompt, path, sourceImageUrl, llmModel }',
+      );
+    }
+    let { prompt, path, sourceImageUrl, llmModel } = options as Record<
+      string,
+      unknown
+    >;
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      throw new TypeError('realm.images.generate requires a prompt string');
+    }
+    for (let [key, value] of Object.entries({ sourceImageUrl, llmModel })) {
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        throw new TypeError(
+          `realm.images.generate expects ${key} to be a string`,
+        );
+      }
+    }
+    let url = this.resolve('images.generate', path);
+    // A source image in this realm can be named by its path.
+    let source =
+      typeof sourceImageUrl === 'string' && sourceImageUrl
+        ? /^(data|https?):/i.test(sourceImageUrl)
+          ? sourceImageUrl
+          : this.resolve('images.generate', sourceImageUrl)
+        : undefined;
+    if (this.imagesRequested >= MAX_IMAGES) {
+      throw new Error(`Realm code may generate at most ${MAX_IMAGES} images`);
+    }
+    let timeLeft = IMAGE_TIME_BUDGET_MS - this.imageTimeUsed;
+    if (timeLeft <= 0) {
+      throw new Error(
+        `Realm code may spend at most ${IMAGE_TIME_BUDGET_MS / 1000} s generating images`,
+      );
+    }
+    // Checked before the request, so no credit is spent on an image that
+    // cannot be saved.
+    if ((await this.lookup(url)) !== undefined) {
+      throw new Error(`File already exists: ${url}`);
+    }
+    this.imagesRequested += 1;
+    let started = Date.now();
+    let image: GeneratedImage;
+    try {
+      image = await this.generateImage({
+        prompt: prompt.trim(),
+        sourceImageUrl: source,
+        llmModel: (llmModel as string | null) ?? undefined,
+        timeoutMs: Math.min(IMAGE_TIMEOUT_MS, timeLeft),
+      });
+    } finally {
+      this.imageTimeUsed += Date.now() - started;
+    }
+    // The file extension follows the type of image the model made.
+    let savedURL = `${url.replace(IMAGE_EXTENSION_RE, '')}.${imageExtension(image.mimeType)}`;
+    if (savedURL !== url && (await this.lookup(savedURL)) !== undefined) {
+      throw new Error(`File already exists: ${savedURL}`);
+    }
+    if (this.closed) {
+      this.refused += 1;
+      throw new Error(`The run has ended; ${savedURL} was not saved`);
+    }
+    let bytes = decodeBase64(image.base64.replace(/\s+/g, ''));
+    await this.writeBinaryFile(savedURL, bytes);
+    // The lookups above recorded the file as missing.
+    this.known.delete(savedURL);
+    this.binary.add(savedURL);
+    this.saved.add(savedURL);
+    return {
+      path: this.relative(savedURL),
+      contentType: image.mimeType,
+      size: bytes.byteLength,
+      saved: true,
+    };
   }
 
   // Unlike `load`, this reads no content into the run, so it neither counts
@@ -1112,6 +1244,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'cards with realm.cards.search, reads cards as JSON data with ' +
     'realm.cards.get, finds cards, specs and files across realms with ' +
     'realm.entries.search, can look at what it made with realm.capture, can ' +
+    'generate images into the realm with realm.images.generate, can ' +
     'create workspaces with realm.workspaces.create, and can change the ' +
     'skills and model of this room with room.*. In a workspace the user ' +
     'can only read, reads work and each write is refused. Return ' +
@@ -1125,7 +1258,17 @@ export default class RunRealmCodeTool extends HostBaseTool<
   static neverAutoExecutesFor(
     attributes: Record<string, unknown> | undefined,
   ): boolean {
-    return scriptDeletesWorkspaces(attributes?.code);
+    return clickRequiredCallsIn(attributes?.code).size > 0;
+  }
+
+  // A run that may generate images gets the image time budget on top of the
+  // tool service's execute timeout, as it does on its own limits.
+  static extraExecuteTimeMsFor(
+    attributes: Record<string, unknown> | undefined,
+  ): number {
+    return clickRequiredCallsIn(attributes?.code).has('realm.images.generate')
+      ? IMAGE_TIME_BUDGET_MS
+      : 0;
   }
 
   async getInputType() {
@@ -1169,6 +1312,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       throw new Error(`The current user cannot read or write ${realmInput}`);
     }
 
+    let namedCalls = clickRequiredCallsIn(input.code);
+    let imageTime = namedCalls.has('realm.images.generate')
+      ? IMAGE_TIME_BUDGET_MS
+      : 0;
+    let runTimeoutMs = RUN_TIMEOUT_MS + imageTime;
+    let callDeadlineMs = CALL_DEADLINE_MS + imageTime;
     let session = new RealmFsSession(
       this.realmRootURL(realmURL),
       (url) => this.readSource(url),
@@ -1203,7 +1352,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
           },
           realmIdentifier,
         ),
-      scriptDeletesWorkspaces(input.code),
+      (imageInput) => this.generateImage(imageInput),
+      namedCalls,
       this.realm.canWrite(realmURL),
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
@@ -1216,21 +1366,21 @@ export default class RunRealmCodeTool extends HostBaseTool<
       () =>
         deadline.abort(
           new Error(
-            `Realm code did not finish within ${CALL_DEADLINE_MS / 1000} s`,
+            `Realm code did not finish within ${callDeadlineMs / 1000} s`,
           ),
         ),
-      CALL_DEADLINE_MS,
+      callDeadlineMs,
     );
-    // The worker allows the script `RUN_TIMEOUT_MS` once QuickJS is ready;
+    // The worker allows the script `runTimeoutMs` once QuickJS is ready;
     // measured from here it is a conservative end, since sandbox start only
     // pushes the real one later.
-    session.captures.runEndsAt = Date.now() + RUN_TIMEOUT_MS;
+    session.captures.runEndsAt = Date.now() + runTimeoutMs;
     try {
       runnerResult = await runRealmCode(
         {
           code: input.code,
           realmURL: this.realmRootURL(realmURL),
-          timeoutMs: RUN_TIMEOUT_MS,
+          timeoutMs: runTimeoutMs,
         },
         (method, args) => session.call(method, args),
         deadline.signal,
@@ -1764,6 +1914,32 @@ export default class RunRealmCodeTool extends HostBaseTool<
       return undefined;
     }
     return await sha256(new Uint8Array(await response.arrayBuffer()));
+  }
+
+  private async generateImage({
+    prompt,
+    sourceImageUrl,
+    llmModel,
+    timeoutMs,
+  }: Parameters<GenerateImage>[0]): Promise<GeneratedImage> {
+    return await generateImage(
+      {
+        prompt,
+        sourceImageDataUrl: sourceImageUrl
+          ? await sourceImageDataUrl(sourceImageUrl, (url) =>
+              this.network.authedFetch(url),
+            )
+          : undefined,
+        model: llmModel,
+      },
+      ({ url, requestBody }) =>
+        this.realmServer.requestForward({
+          url,
+          method: 'POST',
+          requestBody,
+          timeoutMs,
+        }),
+    );
   }
 
   private async listDirectory(
