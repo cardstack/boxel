@@ -1,6 +1,6 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the one the caller sent, never the one with the credential attached), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
 ---
 
 # Outbound guard (operators)
@@ -35,7 +35,7 @@ body's `headers` field plus the credential (and fetch's own `accept`,
 `user-agent`, `accept-encoding`, …).
 
 Refusals and timeouts log at `warn` as
-`… stopped by the outbound guard: <message> (key=<name> url=<pre-substitution URL>)`:
+`… stopped by the outbound guard: <message> (key=<name> url=<origin and path>)`:
 on `request-forward` or `openrouter-passthrough` for a non-streamed call, and on
 `proxy-forward` for a streamed one (`stream: true`). The message callers see
 names the host, never the full URL.
@@ -49,10 +49,12 @@ parameter). The URL with the key in it exists only inside the client, between
 attaching it and sending.
 
 **The pre-substitution invariant.** Every URL that is recorded — log lines,
-errors, Sentry, Grafana — is the URL the caller sent, before the credential
-was attached. A `url-parameter` system key is never in a recorded URL. If you
-ever find a recorded URL with a key in it, that is a leak to report, not a
-format to parse.
+errors, Sentry, Grafana — is the origin and path of the URL the caller sent,
+before the credential was attached (`recordedURL` in `lib/outbound/client.ts`).
+A `url-parameter` system key is never in a recorded URL, and neither is the
+caller's own query string or userinfo, which can carry a token or user
+content. If you ever find a recorded URL with a key or a query string in it,
+that is a leak to report, not a format to parse.
 
 What enforces it:
 
@@ -77,8 +79,8 @@ What enforces it:
 
 ## Finding a send-path error by key name
 
-Every error from a send carries the key's name and the pre-substitution URL,
-never the value:
+Every error from a send carries the key's name and the origin and path of the
+URL the caller sent, never the value:
 
 - A refusal or timeout keeps the message callers see, and the log line gains
   `(key=<name> url=<url>)`.
@@ -100,7 +102,7 @@ not the request URL. To find every failure on one key:
 A failure after the vendor answered — a body that isn't JSON — is logged the
 same way, with the same `(key=<name> url=<url>)`, though the error itself is
 Node's (`SyntaxError`, scrubbed). In Sentry, search for `OutboundSendError`
-or for the pre-substitution URL; the log line is the faster way in by key
+or for the URL's origin and path; the log line is the faster way in by key
 name.
 
 A `Headers.append: "[REDACTED]" is an invalid header value` reason means the

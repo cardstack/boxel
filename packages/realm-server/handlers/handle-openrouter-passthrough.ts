@@ -15,6 +15,7 @@ import {
 } from '../lib/proxy-forward.ts';
 import {
   outboundFetch,
+  sendContext,
   type OutboundCredential,
   type OutboundErrorContext,
 } from '../lib/outbound/client.ts';
@@ -156,7 +157,7 @@ export default function handleOpenRouterPassthrough({
             },
           };
           const finalBody = JSON.stringify(openAIBody);
-          call = { keyName: credential.name, url: OPENROUTER_CHAT_URL };
+          call = sendContext(credential.name, OPENROUTER_CHAT_URL);
 
           if (isStreaming) {
             return await handleStreamingRequest(

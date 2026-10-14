@@ -741,7 +741,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("a refusal after the credential is attached keeps its message and carries the key's name and the URL as given", async function (assert) {
+    test("a refusal after the credential is attached keeps its message and carries the key's name and the origin and path of the URL", async function (assert) {
       configureOutbound({ maxRedirects: 1 });
       let url = `${vendor.url}/redirect?to=${encodeURIComponent('/redirect?to=/echo')}`;
       let error = await refusal(
@@ -762,10 +762,11 @@ module(basename(import.meta.filename), function () {
         '127.0.0.1 redirected more than 1 times',
         'the message callers see is unchanged',
       );
-      assert.deepEqual((error as OutboundRefusedError).context, {
-        keyName: 'stub-vendor-key',
-        url,
-      });
+      assert.deepEqual(
+        (error as OutboundRefusedError).context,
+        { keyName: 'stub-vendor-key', url: `${vendor.url}/redirect` },
+        "the caller's query string is not recorded",
+      );
       assert.false(leaksCredential(inspect(error, { depth: 10 }), key));
     });
 

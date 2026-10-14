@@ -274,11 +274,33 @@ export function startOutboundGuard({
 
 // --- Errors ---------------------------------------------------------------
 
-// What an error from a send identifies the call by: the key's name and the URL
-// as the caller gave it, before the credential was attached. Never a value.
+// What an error from a send identifies the call by: the key's name and the
+// origin and path of the URL the caller gave, before the credential was
+// attached. Never a value, and never the caller's query string or userinfo.
 export interface OutboundErrorContext {
   keyName?: string;
   url: string;
+}
+
+// The part of a URL a send records: its origin and path. The query string and
+// any userinfo are the caller's, and may carry a token or user content, so
+// they are not ours to record.
+export function recordedURL(url: string): string {
+  try {
+    let parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '(invalid URL)';
+  }
+}
+
+// The context a send's errors and log lines carry. Build every one through
+// this, so the URL is always the recorded form.
+export function sendContext(
+  keyName: string | undefined,
+  url: string,
+): OutboundErrorContext {
+  return { keyName, url: recordedURL(url) };
 }
 
 export type OutboundRefusal =
@@ -317,7 +339,7 @@ export class OutboundTimeoutError extends Error {
 
 // Any other failure of a send: the request could not be built, the connection
 // failed, the body stream broke. The message names the key and the
-// pre-substitution URL; `cause` is the original error, already scrubbed.
+// recorded URL (see `recordedURL`); `cause` is the original error, scrubbed.
 export class OutboundSendError extends Error {
   readonly context: OutboundErrorContext;
   constructor(context: OutboundErrorContext, cause: unknown) {
@@ -347,7 +369,7 @@ export function outboundErrorContext(
   return undefined;
 }
 
-// `key=<name> url=<pre-substitution URL>` for a log line: the error's own
+// `key=<name> url=<recorded URL>` for a log line: the error's own
 // context when the outbound client threw it, else `fallback` — what the caller
 // knows of the call it was making — else ''.
 export function describeOutboundError(
@@ -400,7 +422,7 @@ function translateError(
 }
 
 // Every error leaving the client: scrubbed of the attached credential and
-// identified by the key's name and the pre-substitution URL. A caller's own
+// identified by the key's name and the recorded URL. A caller's own
 // abort keeps its identity.
 function finalizeError(
   error: unknown,
@@ -560,10 +582,7 @@ export async function outboundFetch(
   request: OutboundRequest,
 ): Promise<Response> {
   let scrubber = request.scrubber ?? new CredentialScrubber();
-  let context: OutboundErrorContext = {
-    keyName: request.credential?.name,
-    url: request.url,
-  };
+  let context = sendContext(request.credential?.name, request.url);
   try {
     return await send(request, scrubber, context);
   } catch (error) {
@@ -624,7 +643,7 @@ async function send(
     let location = response.headers.get('location');
     if (!REDIRECT_STATUSES.has(response.status) || !location) {
       let observed = observeResponseSize(response, {
-        destination: recordedDestination(request.url),
+        destination: recordedURL(request.url),
         sizePath: request.sizePath,
         timeout,
         hostname,
@@ -670,14 +689,6 @@ async function send(
     }
     url = next.href;
   }
-}
-
-// The origin and path of the URL the caller gave, which is all a size log
-// line needs. The query string is left out: it is the caller's, not ours to
-// record.
-function recordedDestination(url: string): string {
-  let parsed = new URL(url);
-  return `${parsed.origin}${parsed.pathname}`;
 }
 
 // --- Response size, observe mode --------------------------------------------

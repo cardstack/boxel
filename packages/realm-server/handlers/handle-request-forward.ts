@@ -22,6 +22,7 @@ import {
 import {
   forbiddenOutboundHeaders,
   outboundFetch,
+  sendContext,
   type OutboundErrorContext,
 } from '../lib/outbound/client.ts';
 import { scrubError } from '../lib/outbound/scrub-error.ts';
@@ -147,7 +148,8 @@ export default function handleRequestForward({
     // error from this call is logged, reported or answered with until it has
     // been scrubbed with it.
     let scrubber = new CredentialScrubber();
-    // The key and the URL as the caller sent it, once the call has a key.
+    // The key and the recorded form of the caller's URL, once the call has a
+    // key.
     let call: OutboundErrorContext | undefined;
 
     try {
@@ -241,7 +243,7 @@ export default function handleRequestForward({
         ...(json.headers ?? {}),
       };
       const credential = systemKeyCredential(destinationConfig);
-      call = { keyName: credential.name, url: json.url };
+      call = sendContext(credential.name, json.url);
 
       let finalBody: BodyInit | undefined;
       if (json.multipart) {
