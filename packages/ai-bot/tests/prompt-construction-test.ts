@@ -4357,6 +4357,8 @@ ${patchedFileSource}
                 name: 'dune (isolated).png',
                 contentType: 'image/png',
               },
+              // A capture that names no content type, which the content-type
+              // filter alone would take for a checkable file.
               {
                 sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}b27e44/dune%20(embedded).png`,
                 url: 'mxc://mock-server/dune-embedded',
