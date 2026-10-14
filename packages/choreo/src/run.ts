@@ -25,7 +25,13 @@ import {
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
 
-import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
+import {
+  cssEasing,
+  deliver,
+  type Delivery,
+  keyframesOf,
+  withoutMovement,
+} from './deliver.ts';
 import { sampleThrough, settleThrough } from './path.ts';
 import { choreoHostById } from './registry.ts';
 import type {
@@ -181,6 +187,15 @@ interface RunOptions {
   onSpriteDone(sprite: Sprite): void;
   /** the region's elevated layer, where c.Raise promotes the living */
   raisedLayer?: HTMLElement;
+  /**
+   * Motion is reduced for this run (`prefers-reduced-motion`, through the
+   * region's MotionConfig). The score keeps its timing, but nothing it drives
+   * travels: a positional value lands at its step's start — through the
+   * engine, a loop, a text delivery, a path flight or the camera — while
+   * opacity and colour still animate. It is the policy glimmer-motion applies
+   * to a `{{motion}}` node, held to on the paths Choreo drives itself.
+   */
+  reduced?: boolean;
   removed: Sprite[];
   /** the svg the tethers draw into */
   tetherLayer?: SVGSVGElement;
@@ -374,6 +389,7 @@ export class ChoreoRun implements Run {
   private rate = 1;
 
   private readonly scale = motionSpeed();
+  private readonly reduced: boolean;
   readonly standing: boolean;
   private readonly total: number;
   private readonly gates: (GateMark & { opened: boolean })[];
@@ -421,6 +437,7 @@ export class ChoreoRun implements Run {
 
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
+    this.reduced = options.reduced ?? false;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
     this.camera3d = options.camera3d ?? {
       dolly: 1,
@@ -1622,6 +1639,10 @@ export class ChoreoRun implements Run {
   }
 
   private cameraProgress(t: Track, ms: number): number {
+    if (this.reduced) {
+      // the shot cuts at the step's start rather than travelling
+      return ms > 0 ? 1 : 0;
+    }
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     const transition = t.cue.transition as
@@ -2226,7 +2247,7 @@ export class ChoreoRun implements Run {
         }
       }
       ve.render();
-      t.delivery = deliver(cue, this.scale);
+      t.delivery = deliver(cue, this.scale, this.reduced);
       if (!this.playing) {
         t.delivery.pause();
       }
@@ -2235,7 +2256,10 @@ export class ChoreoRun implements Run {
     if (cue.loop) {
       // an ambient loop rides the platform: the engine's probes stay quiet,
       // and its phase is the run clock's remainder (§4.5), carried on from
-      // where the prior run's same loop stood
+      // where the prior run's same loop stood. Reduced, it keeps only what
+      // does not travel — possibly nothing: an empty effect that still holds
+      // the loop's place on the clock
+      const target = this.reduced ? withoutMovement(cue.target) : cue.target;
       const el = cue.sprite.element;
       const cycle = t.end - t.start;
       const phase = this.options.loops?.get(cue.sprite.node)?.get(loopKey(cue));
@@ -2246,7 +2270,11 @@ export class ChoreoRun implements Run {
         cycle,
       );
       t.loopAnimation = el.animate(
-        keyframesOf(cue.target ?? {}, times, segmentEase),
+        keyframesOf(
+          target ?? {},
+          Object.keys(target ?? {}).length ? times : undefined,
+          segmentEase,
+        ),
         {
           duration: Math.max(1, cycle),
           easing: times ? 'linear' : segmentEase,
@@ -2279,10 +2307,12 @@ export class ChoreoRun implements Run {
       return;
     }
     const transition = carryVelocity(
-      scaleTransition({ ...cue.transition } as never, this.scale) as Record<
-        string,
-        unknown
-      >,
+      scaleTransition(
+        // the run's decision, not each node's: a sprite mounted before the
+        // preference changed would otherwise still travel
+        { ...cue.transition, reduceMotion: this.reduced || undefined } as never,
+        this.scale,
+      ) as Record<string, unknown>,
       cue,
       this.options.inherit,
     );
@@ -2333,6 +2363,10 @@ export class ChoreoRun implements Run {
 
   /** the eased progress a flight sits at, `ms` into its window */
   private flightProgress(t: Track, ms: number): number {
+    if (this.reduced) {
+      // the sprite lands at the path's end as its window opens
+      return ms > 0 ? 1 : 0;
+    }
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     const transition = t.cue.transition as
