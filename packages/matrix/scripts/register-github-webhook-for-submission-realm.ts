@@ -10,9 +10,12 @@ import { realmPassword } from '../helpers/realm-credentials.ts';
 //   SUBMISSION_REALM_URL    - realm URL where GithubEventCards are saved
 //   REALM_SECRET_SEED       - seed used to derive submission_realm password (required)
 //   ROTATE_SIGNING_SECRET   - "true" to issue a new signing secret for an existing
-//                             webhook. The realm server returns a signing secret
-//                             only when it issues one, so without this a re-run
-//                             reuses the webhook and its secret is not shown.
+//                             webhook. The old secret stops verifying at once, so
+//                             GitHub's deliveries fail with 401 until the new one
+//                             is set in the repository's webhook settings. The
+//                             realm server returns a signing secret only when it
+//                             issues one, so without this a re-run reuses the
+//                             webhook and its secret is not shown.
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
@@ -192,7 +195,9 @@ async function ensureIncomingWebhook(
   if (existing) {
     console.log(`Found existing webhook: ${existing.id}`);
     if (process.env.ROTATE_SIGNING_SECRET === 'true') {
-      console.log('Rotating its signing secret...');
+      console.log(
+        'Rotating its signing secret. The old secret stops verifying now: set the new one in the GitHub webhook settings, or deliveries fail with 401.',
+      );
       return await rotateSigningSecret(jwt, existing.id);
     }
     return existing;

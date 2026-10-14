@@ -10,6 +10,7 @@ import {
 } from '../helpers/index.ts';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers.ts';
+import { logLinesDuring } from '../helpers/log-capture.ts';
 import { sealIncomingWebhookSecrets } from '../../lib/incoming-webhook-secrets.ts';
 import {
   extractRealmFromPrBody,
@@ -211,6 +212,69 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await deliver('whk_unsealed_second'),
         200,
         'verifies after the backfill',
+      );
+    });
+
+    test('the receiver opens the sealed secret, and verifies with the plain-text one when they disagree', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      let signingSecret = 'b'.repeat(64);
+      await query(context.dbAdapter, [
+        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
+        param(uuidv4()),
+        `,`,
+        param(matrixUserId),
+        `,`,
+        param('whk_tampered'),
+        `,`,
+        param('HMAC_SHA256_HEADER'),
+        `,`,
+        `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
+        `,`,
+        param(signingSecret),
+        `, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      ]);
+      await sealIncomingWebhookSecrets(context.dbAdapter);
+      // A sealed value that no longer opens.
+      await context.dbAdapter.execute(
+        `UPDATE incoming_webhooks SET signing_secret_tag = decode(repeat('00', 16), 'hex')
+         WHERE webhook_path = 'whk_tampered'`,
+      );
+      let payload = JSON.stringify({ event: 'push' });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let status: number | undefined;
+      let lines = await logLinesDuring(
+        ['incoming-webhook-secrets'],
+        async () => {
+          let response = await context.request
+            .post('/_webhooks/whk_tampered')
+            .set('Content-Type', 'application/json')
+            .set('X-Hub-Signature-256', signature)
+            .send(payload);
+          status = response.status;
+        },
+      );
+
+      assert.strictEqual(status, 200, 'verifies with the plain-text secret');
+      let warnings = lines.filter(({ level }) => level === 'warn');
+      assert.strictEqual(
+        warnings.length,
+        1,
+        'the receiver opened the sealed secret and reported the disagreement',
+      );
+      assert.false(
+        warnings[0].message.includes(signingSecret),
+        'the report never carries the secret',
       );
     });
 
