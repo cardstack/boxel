@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { dropTask, restartableTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
@@ -492,7 +492,9 @@ export default class CliAuth extends Component {
     window.location.assign(url.href);
   });
 
-  private doPasswordLogin = restartableTask(async () => {
+  // A second Enter or click while signing in is ignored: each sign-in mints
+  // the CLI a device of its own.
+  private doPasswordLogin = dropTask(async () => {
     let redirect = this.redirect;
     if (
       !redirect ||
@@ -500,6 +502,9 @@ export default class CliAuth extends Component {
       !this.credentials.filled.password
     ) {
       this.error = 'Enter your username and password.';
+      return;
+    }
+    if (!(await this.credentials.validate())) {
       return;
     }
 

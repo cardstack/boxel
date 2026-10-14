@@ -282,10 +282,6 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
   get credentials(): { userId: string | null } {
     return { userId: this.loggedInAs ?? null };
   }
@@ -319,13 +315,6 @@ export class MockClient implements ExtendedClient {
   }
 
   leave(_roomId: string): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
-  registerRequest(
-    _data: MatrixSDK.RegisterRequest,
-    _kind?: string | undefined,
-  ): Promise<MatrixSDK.RegisterResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -368,14 +357,6 @@ export class MockClient implements ExtendedClient {
     );
 
     return Promise.resolve({});
-  }
-
-  setPassword(
-    _authDict: MatrixSDK.AuthDict,
-    _newPassword: string,
-    _logoutDevices?: boolean | undefined,
-  ): Promise<{}> {
-    throw new Error('Method not implemented.');
   }
 
   setRoomName(

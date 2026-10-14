@@ -492,8 +492,11 @@ export default class RegisterUser extends Component<Signature> {
   });
 
   @action
-  private register(ev: Event) {
+  private async register(ev: Event) {
     ev.preventDefault();
+    if (!(await this.credentials.validate())) {
+      return;
+    }
     if (this.state.type !== 'initial') {
       throw new Error(
         `invalid state: cannot register() in state ${this.state.type}`,

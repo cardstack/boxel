@@ -48,6 +48,7 @@ NODE_NO_WARNINGS=1 \
   --serverURL='https://app.boxel.ai' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
   --secureOriginURL='https://secure.boxel.ai/' \
+  --secureOriginAppOrigin='https://*.boxel-host-preview.boxel.ai' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

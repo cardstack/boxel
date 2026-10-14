@@ -10,7 +10,11 @@ import {
   matrixURL,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
-import { secureOriginHeaders } from '../lib/secure-origin.ts';
+import {
+  createSecureOrigin,
+  secureOriginHeaders,
+} from '../lib/secure-origin.ts';
+import { isListedOrigin } from '../secure-origin/app-origins.js';
 import {
   registerSecureOriginHost,
   scrubSecureOriginEvent,
@@ -123,6 +127,85 @@ module(basename(import.meta.filename), function () {
         headers['X-Frame-Options'],
         undefined,
         'X-Frame-Options, which cannot name an origin, is left out',
+      );
+    });
+  });
+
+  module('credential fields app origins', function () {
+    const listed = [
+      'https://app.example.test',
+      'https://*.preview.example.test',
+      'http://*.dev.example.test:4200',
+    ];
+
+    test('an origin the realm server lists is talked to', function (assert) {
+      assert.true(isListedOrigin('https://app.example.test', listed));
+    });
+
+    test('a subdomain of a wildcard origin is talked to', function (assert) {
+      assert.true(
+        isListedOrigin('https://my-branch.preview.example.test', listed),
+      );
+      assert.true(
+        isListedOrigin('https://a.b.preview.example.test', listed),
+        'at any depth, as frame-ancestors allows',
+      );
+      assert.true(
+        isListedOrigin('http://branch.dev.example.test:4200', listed),
+        'with the port it names',
+      );
+    });
+
+    test('anything else is not', function (assert) {
+      for (let origin of [
+        'https://preview.example.test',
+        'https://evilpreview.example.test',
+        'https://preview.example.test.evil.test',
+        'http://my-branch.preview.example.test',
+        'https://my-branch.preview.example.test:8443',
+        'http://branch.dev.example.test',
+        'https://app.example.test.evil.test',
+        'https://app.example.test/',
+        'null',
+        '',
+      ]) {
+        assert.false(isListedOrigin(origin, listed), origin || '(empty)');
+      }
+    });
+
+    test('a wildcard origin is named in frame-ancestors and in the page', async function (assert) {
+      let origin = createSecureOrigin(
+        new URL('https://secure-wildcard.example.test/secure'),
+        {
+          matrixURL: new URL(matrixURL),
+          appOrigins: [
+            'https://app.example.test',
+            'https://*.preview.example.test',
+          ],
+        },
+      );
+      let headers: Record<string, string> = {};
+      let ctx = {
+        path: '/secure/credentials',
+        method: 'GET',
+        host: 'secure-wildcard.example.test',
+        set(values: Record<string, string>) {
+          Object.assign(headers, values);
+        },
+      } as any;
+      await origin.handle(ctx);
+      assert.strictEqual(ctx.status, 200, 'status');
+      assert.ok(
+        headers['Content-Security-Policy'].includes(
+          'frame-ancestors https://app.example.test https://*.preview.example.test',
+        ),
+        headers['Content-Security-Policy'],
+      );
+      assert.ok(
+        String(ctx.body).includes(
+          '<meta name="boxel-app-origins" content="https://app.example.test https://*.preview.example.test" />',
+        ),
+        'the page lists both',
       );
     });
   });
@@ -381,6 +464,7 @@ module(basename(import.meta.filename), function () {
     test("serves the credential fields' script, stylesheet and font, framable by no one", async function (assert) {
       for (let [path, type] of [
         ['/secure/credentials.js', 'text/javascript'],
+        ['/secure/app-origins.js', 'text/javascript'],
         ['/secure/credentials.css', 'text/css'],
         ['/secure/IBMPlexSansVar-Roman.woff2', 'font/woff2'],
       ]) {

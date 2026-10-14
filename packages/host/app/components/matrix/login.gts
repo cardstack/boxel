@@ -337,6 +337,9 @@ export default class Login extends Component<Signature> {
   });
 
   private doLogin = restartableTask(async () => {
+    if (!(await this.credentials.validate())) {
+      return;
+    }
     if (!this.credentials.complete) {
       throw new Error(
         `bug: should never get here: login button disabled when the username or password is missing`,

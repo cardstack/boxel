@@ -34,7 +34,6 @@ export type CredentialOperation =
       operation: 'set-password';
       args: {
         auth: Record<string, unknown>;
-        logoutDevices?: boolean;
         accessToken?: string;
       };
     }
@@ -71,6 +70,10 @@ export class CredentialFields {
   private port: CredentialFieldsPort | undefined;
   private context: Record<string, unknown> = {};
   private fieldErrors = new Map<string, string | undefined>();
+  private validations = new Map<
+    number,
+    { resolve: (complete: boolean) => void; waiterToken: unknown }
+  >();
   private pending = new Map<
     number,
     {
@@ -99,6 +102,11 @@ export class CredentialFields {
       waiter.endAsync(waiterToken);
       this.pending.delete(id);
     }
+    for (let [id, { resolve, waiterToken }] of this.validations) {
+      resolve(false);
+      waiter.endAsync(waiterToken);
+      this.validations.delete(id);
+    }
   }
 
   // Not secret: the account a new password belongs to, which lets a password
@@ -113,6 +121,23 @@ export class CredentialFields {
   setFieldError(field: string, message: string | undefined) {
     this.fieldErrors.set(field, message);
     this.port?.post({ type: 'field-error', field, message });
+  }
+
+  // Has the frame check its fields, as it does when one loses focus, and
+  // answers whether they are ready to submit. A form asks before it acts:
+  // `complete` may not yet include a check the frame made a moment ago, such
+  // as on the field the user left by clicking the form's button.
+  validate(): Promise<boolean> {
+    let port = this.port;
+    if (!port) {
+      return Promise.resolve(false);
+    }
+    let id = ++nextRequestId;
+    let waiterToken = waiter.beginAsync();
+    return new Promise((resolve) => {
+      this.validations.set(id, { resolve, waiterToken });
+      port.post({ type: 'validate', id });
+    });
   }
 
   // Has the frame make a request with the passwords typed into it.
@@ -155,6 +180,17 @@ export class CredentialFields {
       case 'submit-request':
         this.onSubmitRequest?.();
         break;
+      case 'validated': {
+        let id = Number(message.id);
+        let entry = this.validations.get(id);
+        if (!entry) {
+          return;
+        }
+        this.validations.delete(id);
+        entry.resolve(Boolean(message.complete));
+        waiter.endAsync(entry.waiterToken);
+        break;
+      }
       case 'result': {
         let id = Number(message.id);
         let entry = this.pending.get(id);

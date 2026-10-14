@@ -1,53 +1,25 @@
-import { click, settled } from '@ember/test-helpers';
+import { settled } from '@ember/test-helpers';
 
-import ENV from '@cardstack/host/config/environment';
-import {
-  CredentialFields,
-  type CredentialFieldsResult,
-} from '@cardstack/host/lib/credential-fields';
+import { getService } from '@universal-ember/test-support';
 
 // The sign-in fields are a frame on the secure origin, which a test page can
-// no more type into than card code can. A test that only needs to get past
-// the sign-in form, against the mock Matrix server, signs in here instead: it
-// has the form believe the fields are filled in and the mock homeserver's
-// session come back, as the frame would report after a real sign-in.
+// no more type into, or speak for, than card code can. A test that only needs
+// to get past the sign-in form, against the mock Matrix server, signs in
+// here instead: it starts the Matrix service with the session a sign-in
+// through the frame hands the sign-in form.
 export async function signInThroughCredentialFields(
   userId = '@testuser:localhost',
 ) {
-  let frame = document.querySelector<HTMLIFrameElement>(
-    '[data-test-credential-fields-frame="login"]',
-  );
-  if (!frame?.contentWindow) {
+  if (!document.querySelector('[data-test-credential-fields-frame="login"]')) {
     throw new Error('the sign-in fields are not on the page');
   }
-  window.dispatchEvent(
-    new MessageEvent('message', {
-      origin: new URL(ENV.secureOriginURL).origin,
-      source: frame.contentWindow,
-      data: {
-        type: 'state',
-        complete: true,
-        filled: { username: true, password: true },
-      },
-    }),
-  );
+  await getService('matrix-service').start({
+    auth: {
+      access_token: 'mock-access-token',
+      device_id: 'mock-device-id',
+      user_id: userId,
+    },
+    refreshRoutes: true,
+  });
   await settled();
-
-  let submit = CredentialFields.prototype.submit;
-  CredentialFields.prototype.submit = async function () {
-    return {
-      ok: true,
-      status: 200,
-      body: {
-        access_token: 'mock-access-token',
-        device_id: 'mock-device-id',
-        user_id: userId,
-      },
-    } satisfies CredentialFieldsResult;
-  };
-  try {
-    await click('[data-test-login-btn]');
-  } finally {
-    CredentialFields.prototype.submit = submit;
-  }
 }

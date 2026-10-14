@@ -381,6 +381,9 @@ export default class ProfileSettingsModal extends Component<Signature> {
   });
 
   private async onSavePassword() {
+    if (!(await this.passwordFields.validate())) {
+      return;
+    }
     if (!this.passwordFields.complete) {
       throw new Error(
         'bug: should never get here: the current and new passwords are required',

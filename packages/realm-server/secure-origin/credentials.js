@@ -20,6 +20,8 @@
 // The form shown, and the requests it may make, are named by the `form` query
 // parameter; the app page's origin by `origin`.
 
+import { isListedOrigin } from './app-origins.js';
+
 const MATRIX_CLIENT_PREFIX = '_matrix/client/v3/';
 const MIN_PASSWORD_LENGTH = 8;
 // A response is checked for the passwords typed here before it goes to the
@@ -211,7 +213,7 @@ let appOrigin = params.get('origin');
 if (
   form &&
   appOrigin &&
-  config.appOrigins.includes(appOrigin) &&
+  isListedOrigin(appOrigin, config.appOrigins) &&
   window.parent !== window
 ) {
   start(form);
@@ -257,14 +259,28 @@ function start(form) {
     return true;
   }
 
+  // Sent only when it changes, so the app page, and any card in it, can't
+  // count keystrokes by it.
+  let lastState;
   function sendState() {
     let filled = {};
     for (let [name, entry] of fields) {
       filled[name] = Boolean(entry.input.value);
     }
-    send({ type: 'state', filled, complete: isComplete() });
+    let state = { type: 'state', filled, complete: isComplete() };
+    let serialized = JSON.stringify(state);
+    if (serialized !== lastState) {
+      lastState = serialized;
+      send(state);
+    }
     refreshHints();
   }
+
+  // The app clears an error it shows about the fields when one is typed
+  // into. It hears of the first keystroke after the fields were last
+  // submitted or marked invalid, and of none after that, for the same reason
+  // `state` is only sent on a change.
+  let inputReported = new Set();
 
   // Shown the way a BoxelInput shows `@state='invalid'` with an
   // `@errorMessage`: the input marked invalid, the icon and the message added
@@ -351,7 +367,10 @@ function start(form) {
   for (let [name, entry] of fields) {
     entry.input.addEventListener('input', () => {
       setError(name, undefined);
-      send({ type: 'input', field: name });
+      if (!inputReported.has(name)) {
+        inputReported.add(name);
+        send({ type: 'input', field: name });
+      }
       sendState();
     });
     entry.input.addEventListener('blur', () => {
@@ -449,9 +468,16 @@ function start(form) {
   }
   new ResizeObserver(sendSize).observe(formElement);
 
-  let busy = false;
-  async function perform(id, operation, args) {
-    if (busy || !form.operations.includes(operation) || !isComplete()) {
+  // Requests are made one at a time, in the order they were asked for, so a
+  // form that asks again while one is in flight gets an answer to both.
+  let queue = Promise.resolve();
+  function perform(id, operation, args) {
+    queue = queue.then(() => performNow(id, operation, args));
+  }
+
+  async function performNow(id, operation, args) {
+    inputReported.clear();
+    if (!form.operations.includes(operation) || !isComplete()) {
       send({
         type: 'result',
         id,
@@ -461,7 +487,6 @@ function start(form) {
       });
       return;
     }
-    busy = true;
     // Lets a password manager see the form go, as it would for the app's own
     // form; the submit event itself is cancelled above.
     formElement.requestSubmit();
@@ -470,14 +495,12 @@ function start(form) {
       result = await OPERATIONS[operation](args ?? {});
     } catch (e) {
       result = { ok: false, status: 0, body: { error: String(e?.message) } };
-    } finally {
-      busy = false;
     }
     send({ type: 'result', id, ...redact(result) });
   }
 
-  // Each operation makes the request the app made before the fields moved
-  // here, unchanged, with the passwords filled in from the fields.
+  // Each operation makes one Matrix request, with the passwords filled in
+  // from the fields and the parts that aren't secret taken from the app.
   const OPERATIONS = {
     // Tries the name as a Matrix username, then as an email address.
     async login() {
@@ -523,15 +546,15 @@ function start(form) {
       });
     },
 
-    async 'set-password'({ auth, logoutDevices, accessToken }) {
+    // Always signs out the account's other sessions, which is not the app's
+    // to turn off: a session stolen before the change must not outlive it.
+    async 'set-password'({ auth, accessToken }) {
       return await matrixRequest('account/password', {
         accessToken,
         body: {
           auth: withPassword(plainObject(auth)),
           new_password: value('password'),
-          ...(logoutDevices === undefined
-            ? {}
-            : { logout_devices: Boolean(logoutDevices) }),
+          logout_devices: true,
         },
       });
     },
@@ -639,8 +662,21 @@ function start(form) {
         break;
       }
       case 'field-error':
+        inputReported.delete(String(message.field));
         setError(String(message.field), message.message);
         sendState();
+        break;
+      // Checks every field as leaving it does, and answers once the app's
+      // `state` is up to date. A field the user just left may not have been
+      // reported yet when the app goes to act on its last `state`.
+      case 'validate':
+        for (let [name, entry] of fields) {
+          if (entry.input.value && !entry.error) {
+            validate(name);
+          }
+        }
+        sendState();
+        send({ type: 'validated', id: message.id, complete: isComplete() });
         break;
       case 'submit':
         perform(message.id, String(message.operation), message.args);

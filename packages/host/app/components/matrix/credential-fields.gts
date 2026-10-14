@@ -235,8 +235,11 @@ export default class CredentialFieldsFrame extends Component<Signature> {
       });
     };
 
+    // Script in this page can dispatch a MessageEvent of its own that names
+    // any origin and source; only one the browser delivered is the frame's.
     let onMessage = (event: MessageEvent) => {
       if (
+        !event.isTrusted ||
         event.source !== frame.contentWindow ||
         !isTrustedMessageOrigin(event.origin, ENV.secureOriginURL)
       ) {

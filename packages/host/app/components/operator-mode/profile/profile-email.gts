@@ -76,7 +76,7 @@ const PasswordModal: TemplateOnlyComponent<PasswordModalSignature> = <template>
         <BoxelButton
           @kind='primary'
           @size='tall'
-          @disabled={{not @passwordFields.filled.current}}
+          @disabled={{not @passwordFields.complete}}
           class='confirm-button'
           {{on 'click' @confirmPassword}}
           data-test-confirm-password-button
@@ -529,7 +529,10 @@ export default class ProfileEmail extends Component<Signature> {
     this.args.changeEmailComplete();
   }
 
-  @action private confirmPasswordForEmailChange() {
+  @action private async confirmPasswordForEmailChange() {
+    if (!(await this.passwordFields?.validate())) {
+      return;
+    }
     if (this.emailState.type !== 'askForPassword') {
       throw new Error(
         `invalid state: cannot perform confirmPasswordForEmailChange in state ${this.emailState.type}`,

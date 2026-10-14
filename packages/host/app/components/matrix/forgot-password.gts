@@ -304,6 +304,9 @@ export default class ForgotPassword extends Component<Signature> {
   });
 
   private resetPassword = restartableTask(async () => {
+    if (!(await this.credentials.validate())) {
+      return;
+    }
     if (this.state.type !== 'resetPassword') {
       throw new Error(
         `invalid state: cannot resetPassword() in state ${this.state.type}`,
@@ -329,7 +332,6 @@ export default class ForgotPassword extends Component<Signature> {
             },
             type: 'm.login.email.identity',
           },
-          logoutDevices: true,
         },
       });
       if (!result.ok) {

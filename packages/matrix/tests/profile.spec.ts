@@ -119,7 +119,7 @@ test.describe('Profile', () => {
     await page.locator('[data-test-confirm-password-button]').click();
 
     // pending email state
-    await expect(page.locator('[data-test-password-modal]')).toHaveCount(0);
+    await expect(page.locator('[data-test-password-modal]')).toBeHidden();
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings');
@@ -186,14 +186,25 @@ test.describe('Profile', () => {
       .fill('bad pass');
     await page.locator('[data-test-confirm-password-button]').click();
     await expect(
-      page.locator('[data-test-boxel-input-error-message]'),
+      credentialFields(page, 'confirm-password').locator(
+        '[data-test-boxel-input-error-message]',
+      ),
     ).toContainText('Invalid password');
+    await expect(
+      page.locator('[data-test-confirm-password-button]'),
+      'confirming waits for a different password',
+    ).toBeDisabled();
     await credentialFields(page, 'confirm-password')
       .locator('[data-test-password-field]')
       .fill(user.password);
     await expect(
-      page.locator('[data-test-boxel-input-error-message]'),
+      credentialFields(page, 'confirm-password').locator(
+        '[data-test-boxel-input-error-message]',
+      ),
     ).toHaveCount(0);
+    await expect(
+      page.locator('[data-test-confirm-password-button]'),
+    ).toBeEnabled();
   });
 
   test('it can handle setting email to an already existing email when changing email', async ({

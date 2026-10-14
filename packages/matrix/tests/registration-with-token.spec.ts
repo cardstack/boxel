@@ -105,7 +105,7 @@ test.describe('User Registration w/ Token', () => {
     await expect(
       page.locator('[data-test-username-field]'),
       'username field is not displayed',
-    ).toHaveCount(0);
+    ).toBeHidden();
     await expect(page.locator('[data-test-next-btn]')).toBeDisabled();
     await page.locator('[data-test-token-field]').fill(REGISTRATION_TOKEN);
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
