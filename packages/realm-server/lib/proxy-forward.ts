@@ -49,7 +49,18 @@ export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
 
 // How long a forward waits on a client that has stopped reading its response
 // before giving up on it.
-const CLIENT_STALL_MS = 30_000;
+const DEFAULT_CLIENT_STALL_MS = 30_000;
+let clientStallMs = DEFAULT_CLIENT_STALL_MS;
+
+// Overrides how long a forward waits on a client that has stopped reading.
+// Tests only, to reach the give-up path without waiting the full default.
+export function configureClientStall(ms: number): void {
+  clientStallMs = ms;
+}
+
+export function resetClientStall(): void {
+  clientStallMs = DEFAULT_CLIENT_STALL_MS;
+}
 
 // The `ctxt.state` key `resetResponse` sets.
 const SERVER_RESET = 'serverResetResponse';
@@ -213,7 +224,7 @@ const MAX_BILLING_FIELD_BYTES = 64 * 1024;
  * it is not, the upstream body is cancelled, including a read waiting on an
  * upstream that has paused mid-body. A client that keeps its connection open
  * but stops reading is treated the same way once it has taken nothing for
- * `CLIENT_STALL_MS` (or the outbound timeout, if shorter): its response is
+ * 30 seconds (or the outbound timeout, if shorter): its response is
  * reset and it counts as gone.
  */
 export async function forwardJsonResponse(
@@ -301,11 +312,12 @@ export async function forwardJsonResponse(
   }
 
   // A client that keeps its connection open but stops reading is given up on
-  // after this long. Waiting on it would hold up the upstream read, which
-  // the outbound timeout then fails, so a charged call would lose the usage
-  // that prices it; giving up lets the rest of the body be read for the
-  // charge, or an uncharged body be cancelled.
-  let stallMs = Math.min(CLIENT_STALL_MS, outboundSettings().totalTimeoutMs);
+  // after this long. Waiting on it would hold up the upstream read until the
+  // outbound timeout fails it. Giving up lets the rest of the body be read
+  // for the charge while the outbound timeout still has time to run, or an
+  // uncharged body be cancelled. If the outbound timeout ends the read
+  // first, a charged call is priced from its generation id instead.
+  let stallMs = Math.min(clientStallMs, outboundSettings().totalTimeoutMs);
   let send = async (chunk: Uint8Array) => {
     if (clientGone()) {
       return;

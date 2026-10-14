@@ -30,6 +30,10 @@ import {
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import {
+  configureClientStall,
+  resetClientStall,
+} from '../lib/proxy-forward.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 
 module(basename(import.meta.filename), function () {
@@ -2168,11 +2172,10 @@ module(basename(import.meta.filename), function () {
         }
       });
 
-      test('a charged call whose caller stops reading without leaving is still charged once the read times out', async function (assert) {
-        configureOutbound({
-          devAllowlist: ['127.0.0.1'],
-          totalTimeoutMs: 3000,
-        });
+      test('a charged call whose caller stops reading without leaving is given up on, read to its end and charged', async function (assert) {
+        configureClientStall(500);
+        // Any generation lookup would mean the usage at the end was never
+        // read.
         let lookups = stubGenerationCost(0.003);
         let forward: ReturnType<typeof request.post> | undefined;
         try {
@@ -2198,20 +2201,21 @@ module(basename(import.meta.filename), function () {
             () => undefined,
           );
 
-          // 0.003 USD × 1000 = 3 credits, priced from the generation id
-          // when the outbound timeout ends the stalled read.
-          await waitUntil(async () => (await extraCredits()) === 47, {
+          // 0.004 USD × 1000 = 4 credits, from the usage at the end of the
+          // body, read once the stalled caller was given up on.
+          await waitUntil(async () => (await extraCredits()) === 46, {
             timeout: 20000,
             timeoutMessage:
-              'the stalled generation should be charged from its id (50 - 3 = 47)',
+              'the stalled call should be charged from its usage (50 - 4 = 46)',
           });
-          assert.deepEqual(lookups, ['gen-completion']);
+          assert.deepEqual(lookups, [], 'no generation was looked up');
           await waitUntil(async () => (await inFlightReservations()) === 0, {
             timeoutMessage: 'the slot should be given back',
           });
         } finally {
           forward?.abort();
           sinon.restore();
+          resetClientStall();
         }
       });
 
