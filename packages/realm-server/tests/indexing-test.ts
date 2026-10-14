@@ -22,6 +22,7 @@ import type {
   ExecuteOptions,
   Expression,
   LooseSingleCardDocument,
+  Query,
   Prerenderer,
   Realm,
   RealmPermissions,
@@ -1448,6 +1449,68 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
+      );
+    });
+
+    // `random-image.png` is not a PNG, so `PngDef`'s extractor throws and the
+    // extractor falls back up the class chain to the first ancestor whose
+    // extraction succeeds (`RasterImageDef`). The row is indexed as that
+    // ancestor: its `types` are the ancestor's full chain, so type filters on
+    // any class above it match and a filter on the failed class does not.
+    test('a file whose extraction errored is a member of the ancestor it fell back to', async function (assert) {
+      let imageURL = `${testRealm}random-image.png`;
+      let idsMatching = async (filter: Query['filter']) =>
+        (
+          await searchCardsForTest(realm.realmIndexQueryEngine, { filter })
+        ).data.map((resource) => String(resource.id));
+      let imageDef = {
+        module: rri('@cardstack/base/card-api'),
+        name: 'ImageDef',
+      };
+
+      assert.deepEqual(
+        await idsMatching({ type: imageDef }),
+        [imageURL],
+        'a type filter on an intermediate class of the fallback chain matches the file',
+      );
+      assert.deepEqual(
+        await idsMatching({
+          type: {
+            module: rri('@cardstack/base/image-file-def'),
+            name: 'RasterImageDef',
+          },
+        }),
+        [imageURL],
+        'a type filter on the class it fell back to matches the file',
+      );
+      assert.deepEqual(
+        await idsMatching({
+          type: {
+            module: rri('@cardstack/base/png-image-def'),
+            name: 'PngDef',
+          },
+        }),
+        [],
+        'a type filter on the class whose extraction failed does not match the file',
+      );
+      let nonImageFileIds = await idsMatching({
+        every: [
+          {
+            type: {
+              module: rri('@cardstack/base/card-api'),
+              name: 'FileDef',
+            },
+          },
+          { not: { type: imageDef } },
+        ],
+      });
+      assert.true(
+        nonImageFileIds.includes(`${testRealm}random-file.txt`),
+        'the exclusion keeps files outside the excluded class',
+      );
+      assert.false(
+        nonImageFileIds.includes(imageURL),
+        'excluding an intermediate class of the fallback chain drops the file',
       );
     });
 

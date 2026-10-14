@@ -4,11 +4,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { dropTask, restartableTask } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -18,11 +18,12 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
+import { CredentialFields } from '@cardstack/host/lib/credential-fields';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
 import AuthContainer from './auth-container';
-import AuthFormField from './auth-form-field';
+import CredentialFieldsFrame from './credential-fields';
 import ForgotPassword from './forgot-password';
 import RegisterUser from './register-user';
 
@@ -129,30 +130,10 @@ export default class CliAuth extends Component {
               <span class='divider-label'>or use your email</span>
             </div>
           {{/if}}
-          <AuthFormField @label='Email Address or Username'>
-            <BoxelInput
-              data-test-cli-auth-username
-              type='text'
-              id='boxel-cli-auth-username'
-              name='username'
-              autocomplete='username'
-              @value={{this.username}}
-              @onInput={{this.setUsername}}
-              @onKeyPress={{this.handleEnter}}
-            />
-          </AuthFormField>
-          <AuthFormField @label='Password'>
-            <BoxelInput
-              data-test-cli-auth-password
-              type='password'
-              id='boxel-cli-auth-password'
-              name='password'
-              autocomplete='current-password'
-              @value={{this.password}}
-              @onInput={{this.setPassword}}
-              @onKeyPress={{this.handleEnter}}
-            />
-          </AuthFormField>
+          <CredentialFieldsFrame
+            @form='cli-login'
+            @fields={{this.credentials}}
+          />
           <Button
             type='button'
             class='forgot-password'
@@ -277,8 +258,9 @@ export default class CliAuth extends Component {
 
   @service declare private matrixService: MatrixService;
 
-  @tracked private username = '';
-  @tracked private password = '';
+  // The username and password are typed into a frame on the secure origin,
+  // which signs in and hands back only the session.
+  private credentials = new CredentialFields();
   @tracked private error: string | undefined;
   @tracked private googleSsoAvailable = false;
   @tracked private completed = false;
@@ -308,8 +290,10 @@ export default class CliAuth extends Component {
     // be given: it is what mints the CLI a device of its own.
     let localpart = this.signedInUserId?.replace(/^@/, '').split(':')[0];
     if (localpart) {
-      this.username = localpart;
+      this.credentials.setContext({ username: localpart });
     }
+    this.credentials.onInput = () => (this.error = undefined);
+    this.credentials.onSubmitRequest = () => this.doPasswordLogin.perform();
 
     // A reset email links back to this same page, carrying the callback port and
     // nonce it was requested with — so finishing a reset can hand the waiting
@@ -447,24 +431,9 @@ export default class CliAuth extends Component {
   }
 
   private get isSubmitDisabled() {
-    return !this.username || !this.password;
-  }
-
-  @action private handleEnter(ev: KeyboardEvent) {
-    if (ev.key === 'Enter') {
-      ev.preventDefault();
-      this.submitPassword(ev);
-    }
-  }
-
-  @action private setUsername(value: string) {
-    this.username = value;
-    this.error = undefined;
-  }
-
-  @action private setPassword(value: string) {
-    this.password = value;
-    this.error = undefined;
+    return (
+      !this.credentials.filled.username || !this.credentials.filled.password
+    );
   }
 
   @action private googleSso(ev: Event) {
@@ -523,35 +492,35 @@ export default class CliAuth extends Component {
     window.location.assign(url.href);
   });
 
-  private doPasswordLogin = restartableTask(async () => {
+  // A second Enter or click while signing in is ignored: each sign-in mints
+  // the CLI a device of its own.
+  private doPasswordLogin = dropTask(async () => {
     let redirect = this.redirect;
-    if (!redirect || !this.username || !this.password) {
+    if (
+      !redirect ||
+      !this.credentials.filled.username ||
+      !this.credentials.filled.password
+    ) {
       this.error = 'Enter your username and password.';
       return;
     }
+    if (!(await this.credentials.validate())) {
+      return;
+    }
 
-    let response = await fetch(
-      new URL('_matrix/client/v3/login', matrixURL).href,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'm.login.password',
-          identifier: { type: 'm.id.user', user: this.username },
-          password: this.password,
-        }),
-      },
-    );
-    let json = (await response.json()) as MatrixLoginResponse & {
-      error?: string;
-    };
-    if (!response.ok) {
-      this.error = json.error ?? `Sign-in failed (${response.status}).`;
+    let { ok, status, body } = await this.credentials.submit({
+      operation: 'cli-login',
+    });
+    if (!ok) {
+      this.error =
+        typeof body.error === 'string'
+          ? body.error
+          : `Sign-in failed (${status}).`;
       return;
     }
 
     this.completed = true;
-    this.deliver(redirect, json);
+    this.deliver(redirect, body as MatrixLoginResponse);
   });
 
   // A form POST rather than fetch: the CLI's listener is on a private address,

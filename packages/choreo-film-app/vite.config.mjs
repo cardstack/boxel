@@ -27,9 +27,9 @@ function repoRelativePaths() {
   };
 }
 
-// Like choreo-test-app: the test suite is built in development mode into
-// dist-tests, with tests/index.html as an extra entry, and NODE_ENV follows the
-// mode so Motion's dev-only code survives the test build.
+// The test suite is built in development mode into dist-tests, with
+// tests/index.html as an extra entry, and NODE_ENV follows the mode so
+// Motion's dev-only code survives the test build.
 export default defineConfig(({ mode }) => ({
   // Relative in a production build, so it runs from whatever directory serves
   // it: the gallery realm mounts it at film-app/. The test build is served

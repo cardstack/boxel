@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -88,21 +87,27 @@ const miseValue = (key) => {
 const tools = { node: miseValue('node'), pnpm: miseValue('pnpm') };
 const miseMinVersion = miseValue('min_version');
 const rootPackage = JSON.parse(read('package.json'));
-const source = JSON.parse(read('packages/choreo-test-app/package.json'));
+// choreo-film-app is a standalone Ember/Vite app, so its build setup and
+// devDependencies are the ones the starter needs, less its tests and lint.
+const filmApp = 'packages/choreo-film-app';
+const source = JSON.parse(read(`${filmApp}/package.json`));
 const dev = { ...source.devDependencies };
 const dependencies = resolveCatalog({
-  'motion-dom': source.dependencies['motion-dom'],
-  'motion-utils': source.dependencies['motion-utils'],
+  'motion-dom': 'catalog:',
+  'motion-utils': 'catalog:',
 });
 for (const key of [
-  '@chenglou/pretext',
-  '@types/three',
+  '@cardstack/choreo-eslint-config',
+  '@ember/test-helpers',
+  '@types/qunit',
+  'concurrently',
+  'ember-qunit',
+  'ember-template-lint',
+  'eslint',
+  'prettier',
+  'prettier-plugin-ember-template-tag',
   'qunit',
   'qunit-dom',
-  '@types/qunit',
-  'ember-qunit',
-  '@ember/test-helpers',
-  'ember-cli-deprecation-workflow',
 ]) {
   delete dev[key];
 }
@@ -143,18 +148,38 @@ for (const file of [
   'babel.config.cjs',
   'ember-cli-build.js',
   'config/optional-features.json',
+  'app/app.ts',
+]) {
+  write(file, read(`${filmApp}/${file}`));
+}
+for (const file of [
+  'app/config/environment.js',
   'app/config/environment.d.ts',
 ]) {
-  write(file, read(`packages/choreo-test-app/${file}`));
+  write(
+    file,
+    read(`${filmApp}/${file}`).replaceAll(
+      'choreo-film-app',
+      'choreo-tutorial-app',
+    ),
+  );
 }
 write(
   'config/environment.js',
-  read('packages/choreo-test-app/config/environment.js').replaceAll(
-    'test-app',
-    'choreo-tutorial-app',
-  ),
+  `'use strict';
+
+module.exports = function (environment) {
+  return {
+    modulePrefix: 'choreo-tutorial-app',
+    environment,
+    rootURL: '/',
+    locationType: 'history',
+    EmberENV: { EXTEND_PROTOTYPES: false, FEATURES: {} },
+    APP: {},
+  };
+};
+`,
 );
-write('app/app.ts', read('packages/choreo-test-app/app/app.ts'));
 write(
   'tsconfig.json',
   JSON.stringify(
@@ -198,21 +223,31 @@ write(
   'app/templates/application.gts',
   `import { LinkTo } from '@ember/routing';\n<template><header><LinkTo @route="index">Task board</LinkTo> · <LinkTo @route="spatial">Spatial card</LinkTo> · <LinkTo @route="film">Recordable scene</LinkTo></header><main>{{outlet}}</main><style>body{margin:0;background:#181513;color:#f2ebe4;font-family:system-ui}header{padding:20px}a{color:#efab7a}main{max-width:960px;margin:auto;padding:24px}body:has([data-tutorial-film]) header{display:none}body:has([data-tutorial-film]) main{max-width:none;padding:0}</style></template>`,
 );
+// Each tutorial component is the guide study of the same name in the gallery
+// realm, less the card that wraps it there. Outside a realm, `<style scoped>`
+// is a plain stylesheet; the tutorials' class names are already distinct.
+const studyCard = /\nexport class \w+Study extends GuideStudy \{[^}]*\}\n$/;
 for (const [route, file, name] of [
   ['index', 'task-board', 'TaskBoard'],
   ['spatial', 'spatial-card', 'SpatialCard'],
   ['film', 'recordable-scene', 'RecordableScene'],
 ]) {
-  const destination = join(target, 'app/components', `${file}.gts`);
-  mkdirSync(dirname(destination), { recursive: true });
-  copyFileSync(
-    join(
-      root,
-      'packages/choreo-test-app/app/components/tutorials',
-      `${file}.gts`,
-    ),
-    destination,
-  );
+  const study = read(`packages/choreo-gallery/realm/studies/${file}.gts`);
+  const component = study
+    .replace("import { GuideStudy } from '../study';\n\n", '')
+    .replace(studyCard, '')
+    .replaceAll('<style scoped>', '<style>');
+  // A study that imports from the realm or Boxel's base can't run in the
+  // starter, so the generator stops here rather than at the reader's build.
+  if (
+    /GuideStudy|<style scoped>|from '\.|from '@cardstack\/base/.test(component)
+  ) {
+    rmSync(target, { recursive: true, force: true });
+    throw new Error(
+      `realm/studies/${file}.gts no longer has the shape this generator unwraps, or imports from the realm`,
+    );
+  }
+  write(`app/components/${file}.gts`, component);
   write(
     `app/templates/${route}.gts`,
     `import { ${name} } from '../components/${file}';\n<template><${name} /></template>\n`,
@@ -225,14 +260,6 @@ write(
 write(
   '.mise.toml',
   `min_version = "${miseMinVersion}"\n\n[tools]\nnode = "${tools.node}"\npnpm = "${tools.pnpm}"\n`,
-);
-
-write(
-  'app/config/environment.js',
-  read('packages/choreo-test-app/app/config/environment.js').replaceAll(
-    'test-app',
-    'choreo-tutorial-app',
-  ),
 );
 
 console.log(

@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import {
+  credentialFields,
   login,
   validateEmail,
   assertLoggedOut,
@@ -49,14 +50,18 @@ test.describe('Profile', () => {
   ) {
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await expect(async () => {
-      await page.locator('[data-test-username-field]').fill(username);
-      await page.locator('[data-test-password-field]').fill(password);
-      await expect(page.locator('[data-test-username-field]')).toHaveValue(
-        username,
-      );
-      await expect(page.locator('[data-test-password-field]')).toHaveValue(
-        password,
-      );
+      await credentialFields(page)
+        .locator('[data-test-username-field]')
+        .fill(username);
+      await credentialFields(page)
+        .locator('[data-test-password-field]')
+        .fill(password);
+      await expect(
+        credentialFields(page).locator('[data-test-username-field]'),
+      ).toHaveValue(username);
+      await expect(
+        credentialFields(page).locator('[data-test-password-field]'),
+      ).toHaveValue(password);
       await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     }).toPass({ timeout: 15_000 });
     await page.locator('[data-test-login-btn]').click();
@@ -108,13 +113,13 @@ test.describe('Profile', () => {
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
-    await page
-      .locator('[data-test-password-modal] [data-test-password-field]')
+    await credentialFields(page, 'confirm-password')
+      .locator('[data-test-password-field]')
       .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
     // pending email state
-    await expect(page.locator('[data-test-password-modal]')).toHaveCount(0);
+    await expect(page.locator('[data-test-password-modal]')).toBeHidden();
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings');
@@ -176,19 +181,30 @@ test.describe('Profile', () => {
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
-    await page
-      .locator('[data-test-password-modal] [data-test-password-field]')
+    await credentialFields(page, 'confirm-password')
+      .locator('[data-test-password-field]')
       .fill('bad pass');
     await page.locator('[data-test-confirm-password-button]').click();
     await expect(
-      page.locator('[data-test-boxel-input-error-message]'),
+      credentialFields(page, 'confirm-password').locator(
+        '[data-test-boxel-input-error-message]',
+      ),
     ).toContainText('Invalid password');
-    await page
-      .locator('[data-test-password-modal] [data-test-password-field]')
+    await expect(
+      page.locator('[data-test-confirm-password-button]'),
+      'confirming waits for a different password',
+    ).toBeDisabled();
+    await credentialFields(page, 'confirm-password')
+      .locator('[data-test-password-field]')
       .fill(user.password);
     await expect(
-      page.locator('[data-test-boxel-input-error-message]'),
+      credentialFields(page, 'confirm-password').locator(
+        '[data-test-boxel-input-error-message]',
+      ),
     ).toHaveCount(0);
+    await expect(
+      page.locator('[data-test-confirm-password-button]'),
+    ).toBeEnabled();
   });
 
   test('it can handle setting email to an already existing email when changing email', async ({
@@ -209,8 +225,8 @@ test.describe('Profile', () => {
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
-    await page
-      .locator('[data-test-password-modal] [data-test-password-field]')
+    await credentialFields(page, 'confirm-password')
+      .locator('[data-test-password-field]')
       .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
@@ -233,8 +249,8 @@ test.describe('Profile', () => {
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
-    await page
-      .locator('[data-test-password-modal] [data-test-password-field]')
+    await credentialFields(page, 'confirm-password')
+      .locator('[data-test-password-field]')
       .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
@@ -259,8 +275,8 @@ test.describe('Profile', () => {
 
     // password modal
     await expect(page.locator('[data-test-password-modal]')).toHaveCount(1);
-    await page
-      .locator('[data-test-password-modal] [data-test-password-field]')
+    await credentialFields(page, 'confirm-password')
+      .locator('[data-test-password-field]')
       .fill(user.password);
     await page.locator('[data-test-confirm-password-button]').click();
 
@@ -331,11 +347,13 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings > Password');
-    await page
+    await credentialFields(page)
       .locator('[data-test-current-password-field]')
       .fill(user.password);
-    await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page
+    await credentialFields(page)
+      .locator('[data-test-new-password-field]')
+      .fill('newpass123!');
+    await credentialFields(page)
       .locator('[data-test-confirm-password-field]')
       .fill('newpass123!');
     await expect(
@@ -376,19 +394,23 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings > Password');
-    await page
+    await credentialFields(page)
       .locator('[data-test-current-password-field]')
       .fill(user.password);
-    await page.locator('[data-test-new-password-field]').fill('newpass');
-    await page.locator('[data-test-confirm-password-field]').fill('newpass');
+    await credentialFields(page)
+      .locator('[data-test-new-password-field]')
+      .fill('newpass');
+    await credentialFields(page)
+      .locator('[data-test-confirm-password-field]')
+      .fill('newpass');
     await expect(
-      page.locator(
+      credentialFields(page).locator(
         '[data-test-new-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'new password field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      page.locator(
+      credentialFields(page).locator(
         '[data-test-new-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Password must be at least 8 characters long');
@@ -396,17 +418,23 @@ test.describe('Profile', () => {
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
 
-    await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page.locator('[data-test-confirm-password-field]').fill('newpass1');
-    await page.locator('[data-test-new-password-field]').fill('newpass123!'); //This line is only for change focus from input
+    await credentialFields(page)
+      .locator('[data-test-new-password-field]')
+      .fill('newpass123!');
+    await credentialFields(page)
+      .locator('[data-test-confirm-password-field]')
+      .fill('newpass1');
+    await credentialFields(page)
+      .locator('[data-test-new-password-field]')
+      .fill('newpass123!'); //This line is only for change focus from input
     await expect(
-      page.locator(
+      credentialFields(page).locator(
         '[data-test-confirm-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'confirm password field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      page.locator(
+      credentialFields(page).locator(
         '[data-test-confirm-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Passwords do not match');
@@ -414,8 +442,10 @@ test.describe('Profile', () => {
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
 
-    await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page
+    await credentialFields(page)
+      .locator('[data-test-new-password-field]')
+      .fill('newpass123!');
+    await credentialFields(page)
       .locator('[data-test-confirm-password-field]')
       .fill('newpass123!');
     await expect(
@@ -457,11 +487,13 @@ test.describe('Profile', () => {
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings > Password');
 
-    await page
+    await credentialFields(page)
       .locator('[data-test-current-password-field]')
       .fill('invalidpass');
-    await page.locator('[data-test-new-password-field]').fill('newpass123!');
-    await page
+    await credentialFields(page)
+      .locator('[data-test-new-password-field]')
+      .fill('newpass123!');
+    await credentialFields(page)
       .locator('[data-test-confirm-password-field]')
       .fill('newpass123!');
     await expect(
@@ -469,13 +501,13 @@ test.describe('Profile', () => {
     ).toBeEnabled();
     await page.locator('[data-test-profile-settings-save-button]').click();
     await expect(
-      page.locator(
+      credentialFields(page).locator(
         '[data-test-current-password-field][data-test-boxel-input-validation-state="invalid"]',
       ),
       'current password field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
-      page.locator(
+      credentialFields(page).locator(
         '[data-test-current-password-field] ~ [data-test-boxel-input-error-message]',
       ),
     ).toContainText('Invalid password');
@@ -483,7 +515,7 @@ test.describe('Profile', () => {
       page.locator('[data-test-profile-settings-save-button]'),
     ).toBeDisabled();
 
-    await page
+    await credentialFields(page)
       .locator('[data-test-current-password-field]')
       .fill(user.password);
     await expect(

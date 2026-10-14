@@ -278,6 +278,11 @@ else
 
 fi
 
+# Where the host test runner (testem) serves the test page. Host tests render
+# the secure origin's credential fields, so the dev realm-server lets this
+# origin frame them, alongside HOST_URL.
+export HOST_TEST_RUNNER_URL="${HOST_TEST_RUNNER_URL:-http://localhost:7357}"
+
 # Media cache (declared captures: poster/thumb/rendition).
 # Without a store the capture pipeline is disabled and every
 # `_capture/...?name=` URL 404s forever, so local dev defaults to a disk

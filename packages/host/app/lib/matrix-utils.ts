@@ -27,10 +27,6 @@ export function isMatrixError(err: any): err is MatrixError {
   );
 }
 
-export function isValidPassword(password: string): boolean {
-  return password?.length >= 8;
-}
-
 export interface InteractiveAuth {
   completed?: string[];
   session: string;

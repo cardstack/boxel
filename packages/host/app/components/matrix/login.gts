@@ -14,13 +14,13 @@ import window from 'ember-window-mock';
 
 import moment from 'moment';
 
-import {
-  Button,
-  BoxelInput,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { Button, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { GoogleColor } from '@cardstack/boxel-ui/icons';
 
+import {
+  CredentialFields,
+  credentialFieldsError,
+} from '@cardstack/host/lib/credential-fields';
 import {
   isMatrixError,
   type MatrixError,
@@ -33,7 +33,7 @@ import {
 } from '@cardstack/host/utils/login-token';
 
 import AuthButton from './auth-button';
-import AuthFormField from './auth-form-field';
+import CredentialFieldsFrame from './credential-fields';
 
 import type { AuthMode } from './auth';
 import type { LoginResponse } from 'matrix-js-sdk';
@@ -77,32 +77,7 @@ export default class Login extends Component<Signature> {
             <span class='divider-label'>or use your email</span>
           </div>
         {{/if}}
-        <AuthFormField @label='Email Address or Username'>
-          <BoxelInput
-            data-test-username-field
-            type='text'
-            id='boxel-login-username'
-            name='username'
-            autocomplete='username'
-            @placeholder='Your email address'
-            @value={{this.username}}
-            @onInput={{this.setUsername}}
-            @onKeyPress={{this.handleEnter}}
-          />
-        </AuthFormField>
-        <AuthFormField @label='Password'>
-          <BoxelInput
-            data-test-password-field
-            type='password'
-            id='boxel-login-password'
-            name='password'
-            autocomplete='current-password'
-            @placeholder='Your password'
-            @value={{this.password}}
-            @onInput={{this.setPassword}}
-            @onKeyPress={{this.handleEnter}}
-          />
-        </AuthFormField>
+        <CredentialFieldsFrame @form='login' @fields={{this.credentials}} />
         <Button
           @kind='link-muted'
           @size='extra-small'
@@ -225,8 +200,9 @@ export default class Login extends Component<Signature> {
   </template>
 
   @tracked private error: string | undefined;
-  @tracked private username: string | undefined;
-  @tracked private password: string | undefined;
+  // The username and password are typed into a frame on the secure origin,
+  // which signs in and hands back only the session.
+  private credentials = new CredentialFields();
   @tracked private googleSsoAvailable = false;
   @tracked private exchangingSsoToken = false;
   @tracked private startedFromLoginToken = false;
@@ -235,6 +211,8 @@ export default class Login extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.credentials.onInput = () => (this.error = undefined);
+    this.credentials.onSubmitRequest = () => this.submitIfReady();
     if (isTesting()) {
       // Names which isLoggedIn precondition is unmet when the login UI mounts
       // in a test (the intermittent cold-boot login-screen flake). Test-gated;
@@ -270,27 +248,14 @@ export default class Login extends Component<Signature> {
 
   private get isLoginButtonDisabled() {
     return Boolean(
-      !this.username || !this.password || this.error || this.doLogin.isRunning,
+      !this.credentials.complete || this.error || this.doLogin.isRunning,
     );
   }
 
-  @action handleEnter(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      !this.isLoginButtonDisabled && this.login(event);
+  private submitIfReady() {
+    if (!this.isLoginButtonDisabled) {
+      this.doLogin.perform();
     }
-  }
-
-  @action
-  private setUsername(username: string) {
-    this.username = username;
-    this.error = undefined;
-  }
-
-  @action
-  private setPassword(password: string) {
-    this.password = password;
-    this.error = undefined;
   }
 
   @action
@@ -372,18 +337,21 @@ export default class Login extends Component<Signature> {
   });
 
   private doLogin = restartableTask(async () => {
-    if (!this.username) {
+    if (!(await this.credentials.validate())) {
+      return;
+    }
+    if (!this.credentials.complete) {
       throw new Error(
-        `bug: should never get here: login button disabled when no username`,
-      );
-    } else if (!this.password) {
-      throw new Error(
-        `bug: should never get here: login button disabled when no password`,
+        `bug: should never get here: login button disabled when the username or password is missing`,
       );
     }
     let auth: LoginResponse;
     try {
-      auth = await this.matrixService.login(this.username, this.password);
+      let result = await this.credentials.submit({ operation: 'login' });
+      if (!result.ok) {
+        throw credentialFieldsError(result);
+      }
+      auth = result.body as LoginResponse;
     } catch (e: any) {
       if (isMatrixError(e)) {
         this.error = `Sign-in failed. ${extractMatrixErrorMessage(e)}`;

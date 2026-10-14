@@ -39,6 +39,12 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
   return requestPath.startsWith(`${destinationPath}/`);
 }
 
+// A system key is named by its endpoint's configured URL, which is what logs
+// and errors record in place of the value.
+export function systemKeyName(endpointUrl: string): string {
+  return `system:${endpointUrl}`;
+}
+
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
@@ -102,6 +108,7 @@ export class AllowedProxyDestinations {
         creditStrategy: CreditStrategyFactory.create(
           endpoint.credit_strategy as 'openrouter' | 'no-credit',
           endpoint.api_key,
+          systemKeyName(endpoint.url),
         ),
         supportsStreaming: endpoint.supports_streaming,
         authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility

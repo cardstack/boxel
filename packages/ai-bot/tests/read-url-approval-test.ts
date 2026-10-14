@@ -319,7 +319,7 @@ module('readUrl approval', () => {
     let turn: BotToolTurn = {
       needsApproval: (argumentsJson) =>
         !argumentsJson.includes('https://given.example/'),
-      fulfill: async () => [],
+      fulfill: async ({ id }) => ({ commandRequestId: id, published: true }),
     };
     let botToolTurns = new Map([[READ_URL_TOOL_NAME, turn]]);
 

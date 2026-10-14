@@ -34,6 +34,7 @@ const skillsRealmDir = resolve(
 const baseRealmDir = resolve(join(import.meta.dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(import.meta.dirname, '..'));
 export const appURL = 'https://localhost:4205/test';
+const SECURE_ORIGIN_PORT = 4208;
 export const skillsRealmURL = 'https://localhost:4205/skills/';
 
 const DEFAULT_PRERENDER_PORT = 4231;
@@ -612,6 +613,11 @@ export async function startServer({
     `--workerManagerPort=${workerManagerPort}`,
     `--prerendererUrl="${prerenderURL}"`,
     `--useRegistrationSecretFunction`,
+    // The secure origin, which serves the credential fields the app's
+    // sign-in, registration and password forms are typed into. The host build
+    // the harness serves expects it where the dev stack puts it.
+    `--securePort=${SECURE_ORIGIN_PORT}`,
+    `--secureOriginURL='https://localhost:${SECURE_ORIGIN_PORT}/secure'`,
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,

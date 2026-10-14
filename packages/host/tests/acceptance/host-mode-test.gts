@@ -1173,6 +1173,30 @@ module('Acceptance | host mode tests', function (hooks) {
         .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
         .exists();
     });
+
+    test('at the site root, an opened card is written to the URL, and Back closes it', async function (assert) {
+      let mango = `${testHostModeRealmURL}Pet/mango`;
+      let stackItem = `[data-test-host-mode-stack-item="${mango}"]`;
+
+      await visit('/');
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await waitFor(`[data-test-cards-grid-item="${mango}"]`);
+      await click(`[data-test-cards-grid-item="${mango}"]`);
+      await waitFor(stackItem);
+
+      let url = new URL(currentURL()!, 'http://localhost');
+      assert.strictEqual(url.pathname, '/', 'still the root page');
+      assert.strictEqual(
+        url.searchParams.get('hostModeStack'),
+        JSON.stringify([mango]),
+        'the URL names the opened card',
+      );
+
+      // Back is a transition to the URL before the card was opened
+      await visit('/');
+      await waitFor(stackItem, { count: 0 });
+      assert.dom(stackItem).doesNotExist('Back closes the card');
+    });
   });
 });
 

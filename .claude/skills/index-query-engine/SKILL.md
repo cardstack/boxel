@@ -197,13 +197,13 @@ So type conditions compose like ordinary boolean predicates:
   whose `types` chain contains both A and B (e.g. an instance of B where B
   extends A).
 - `not: {type: X}` is a true exclusion — it drops every row whose `types`
-  contains X. For card instances and successfully extracted files that is
-  every instance of X and of X's subclasses, since `types` is the full
-  ancestor chain. A file row whose extraction errored is the exception: the
-  file indexer stamps it with the fallback chain for its extension (the
-  extension's FileDef, `FileDef`, `BaseDef`), which skips intermediate
-  classes, so such a `.png` is not a member of `ImageDef` and survives
-  `not: {type: ImageDef}`.
+  contains X. That is every instance of X and of X's subclasses, since
+  `types` is the full ancestor chain. For a file, that chain starts at the
+  class whose extraction succeeded. When the extension's FileDef fails to
+  extract (e.g. a `.png` that isn't a PNG), the extractor falls back up the
+  class chain, and the row is indexed as the nearest ancestor that succeeded
+  (`RasterImageDef`). That row matches `{type: ImageDef}` and is dropped by
+  `not: {type: ImageDef}`, but it does not match `{type: PngDef}`.
 - The `COALESCE` keeps a row whose `types` is null a definite FALSE rather
   than SQL NULL, so `not: {type: X}` keeps such a row instead of dropping it.
   Errored instances can lack `types`; under this predicate they behave as

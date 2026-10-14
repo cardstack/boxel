@@ -144,17 +144,19 @@ export default class HostModeStateService extends Service {
   }
 
   private persist() {
-    if (!this.isStateInitialized || !this.currentRoutePath) {
+    if (!this.isStateInitialized || this.currentRoutePath === null) {
       return;
     }
 
-    let serialized = this.serialize();
     // Preserve the param if there is a stack, otherwise remove it to keep the URL clean.
-    this.router.transitionTo('index', this.currentRoutePath, {
-      queryParams: {
-        hostModeStack: serialized,
-      },
-    });
+    let queryParams = { hostModeStack: this.serialize() };
+    // A site's root page has no path: it is the index-root route, which the
+    // index route's path can't name.
+    if (this.currentRoutePath) {
+      this.router.transitionTo('index', this.currentRoutePath, { queryParams });
+    } else {
+      this.router.transitionTo('index-root', { queryParams });
+    }
   }
 }
 

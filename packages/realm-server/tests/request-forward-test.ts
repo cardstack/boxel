@@ -22,6 +22,7 @@ import {
   waitUntil,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { logger } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getUserByMatrixUserId,
@@ -29,8 +30,23 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
-import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import {
+  configureOutbound,
+  OutboundRefusedError,
+  resetOutbound,
+} from '../lib/outbound/client.ts';
+import {
+  configureClientStall,
+  resetClientStall,
+} from '../lib/proxy-forward.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
+import * as Sentry from '@sentry/node';
+import {
+  startSentryCapture,
+  type SentryCapture,
+} from './helpers/sentry-capture.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { leaksCredential } from './helpers/credential-leaks.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -1839,6 +1855,85 @@ module(basename(import.meta.filename), function () {
         );
       }
 
+      // Answers OpenRouter generation-cost lookups with `costInUsd` and lets
+      // every other request through, returning the ids looked up.
+      function stubGenerationCost(costInUsd: number): string[] {
+        let lookups: string[] = [];
+        let realFetch = global.fetch.bind(globalThis);
+        sinon
+          .stub(global, 'fetch')
+          .callsFake(
+            async (input: string | URL | Request, init?: RequestInit) => {
+              let url =
+                typeof input === 'string'
+                  ? input
+                  : input instanceof URL
+                    ? input.href
+                    : input.url;
+              let match = /\/api\/v1\/generation\?id=([^&]+)/.exec(url);
+              if (match) {
+                lookups.push(decodeURIComponent(match[1]));
+                return new Response(
+                  JSON.stringify({
+                    data: { id: match[1], total_cost: costInUsd },
+                  }),
+                  {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                  },
+                );
+              }
+              return realFetch(input, init);
+            },
+          );
+        return lookups;
+      }
+
+      async function extraCredits(): Promise<number> {
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        return await sumUpCreditsLedger(dbAdapter, {
+          creditType: ['extra_credit', 'extra_credit_used'],
+          userId: user!.id,
+        });
+      }
+
+      // Forwards a POST to `url` and walks away once the first of the body
+      // has arrived.
+      async function abandonMidBody(url: string): Promise<void> {
+        await new Promise<void>((resolve, reject) => {
+          let forward = request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({ url, method: 'POST', requestBody: JSON.stringify({}) })
+            .buffer(true)
+            .parse((res, callback) => {
+              res.once('data', () => {
+                forward.abort();
+                resolve();
+              });
+              // Answered once, whichever way the abandoned response ends.
+              let answered = false;
+              let answer = () => {
+                if (!answered) {
+                  answered = true;
+                  callback(null, null);
+                }
+              };
+              res.on('end', answer);
+              res.on('error', answer);
+            });
+          forward.then(
+            () => reject(new Error('the forward completed before it was left')),
+            () => resolve(),
+          );
+        });
+      }
+
       test("the incoming request's own headers never reach the vendor", async function (assert) {
         let token = jwt();
         let response = await request
@@ -1954,6 +2049,277 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(response.body, { status: 429 });
       });
 
+      test('a multi-megabyte JSON response reaches the caller as it arrives, and is charged from its usage', async function (assert) {
+        // The vendor sends everything but the usage at the end and then
+        // waits. The caller is sent megabytes before that wait ends only if
+        // the forward passes the body on as it arrives instead of holding
+        // it until it is whole.
+        const bodyBytes = 4 * 1024 * 1024;
+        const releaseAfterBytes = 2 * 1024 * 1024;
+        let receivedBytes = 0;
+        let receivedBeforeRelease: number | undefined;
+        let release = () => {
+          if (receivedBeforeRelease === undefined) {
+            receivedBeforeRelease = receivedBytes;
+            vendor.releaseHeld();
+          }
+        };
+        // If the forward buffers, nothing arrives until the vendor finishes;
+        // let it finish so the test fails on its assertion rather than
+        // timing out.
+        let fallback = setTimeout(release, 10_000);
+
+        let response;
+        try {
+          response = await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/completion?bytes=${bodyBytes}&cost=0.004&hold=1`,
+              method: 'POST',
+              requestBody: JSON.stringify({ model: 'image-model' }),
+            })
+            .buffer(true)
+            .parse((res, callback) => {
+              let chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => {
+                chunks.push(chunk);
+                receivedBytes += chunk.length;
+                if (receivedBytes >= releaseAfterBytes) {
+                  release();
+                }
+              });
+              res.on('end', () =>
+                callback(null, Buffer.concat(chunks).toString('utf8')),
+              );
+              res.on('error', (error: Error) => callback(error, null));
+            });
+        } finally {
+          clearTimeout(fallback);
+        }
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          response.headers['content-type'],
+          'application/json',
+        );
+        assert.true(
+          (receivedBeforeRelease ?? 0) >= releaseAfterBytes,
+          `the caller received ${receivedBeforeRelease} bytes before the vendor finished the body`,
+        );
+        let body = JSON.parse(response.body as string);
+        assert.strictEqual(body.id, 'gen-completion');
+        assert.strictEqual(
+          body.choices[0].message.content,
+          'A'.repeat(bodyBytes),
+          'the body arrives intact',
+        );
+        assert.deepEqual(body.usage, { cost: 0.004 });
+
+        // The response completes only once the call is settled, so the
+        // charge and the slot are read straight away, without waiting.
+        // 0.004 USD × 1000 = 4 credits.
+        assert.strictEqual(
+          await extraCredits(),
+          46,
+          'the call is charged (50 - 4 = 46) by the time its response completes',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back by the time the response completes',
+        );
+      });
+
+      test('a JSON response cut off after its generation id resets the caller and is charged for the generation', async function (assert) {
+        let lookups = stubGenerationCost(0.003);
+        try {
+          // The vendor drops the connection only once the caller has the
+          // start of the body, so the cut lands after the response began.
+          let outcome = await new Promise<string>((resolve) => {
+            request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({
+                url: `${vendor.url}/completion?bytes=${256 * 1024}&hold=1&truncate=1`,
+                method: 'POST',
+                requestBody: JSON.stringify({}),
+              })
+              .buffer(true)
+              .parse((res, callback) => {
+                res.once('data', () => vendor.releaseHeld());
+                res.on('data', () => undefined);
+                res.on('end', () => {
+                  resolve('complete');
+                  callback(null, null);
+                });
+                res.on('aborted', () => resolve('reset'));
+                res.on('error', () => resolve('reset'));
+                res.on('close', () => resolve('reset'));
+              })
+              .then(
+                () => undefined,
+                () => resolve('reset'),
+              );
+          });
+
+          assert.strictEqual(
+            outcome,
+            'reset',
+            'the caller cannot take the partial body for a whole one',
+          );
+          // The usage never arrived; the generation is priced by its id.
+          // 0.003 USD × 1000 = 3 credits.
+          await waitUntil(async () => (await extraCredits()) === 47, {
+            timeoutMessage:
+              'the generation should be charged from its id (50 - 3 = 47)',
+          });
+          assert.deepEqual(lookups, ['gen-completion']);
+        } finally {
+          sinon.restore();
+        }
+      });
+
+      test('a charged call whose caller stops reading without leaving is given up on, read to its end and charged', async function (assert) {
+        configureClientStall(500);
+        // Any generation lookup would mean the usage at the end was never
+        // read.
+        let lookups = stubGenerationCost(0.003);
+        let forward: ReturnType<typeof request.post> | undefined;
+        try {
+          // Far more than the socket buffers between the vendor and the
+          // caller hold, so a caller that never reads holds the forward up.
+          forward = request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/completion?bytes=${24 * 1024 * 1024}&cost=0.004`,
+              method: 'POST',
+              requestBody: JSON.stringify({}),
+            })
+            .buffer(true)
+            .parse((res, _callback) => {
+              // The node parser is handed the raw incoming message.
+              (res as unknown as NodeJS.ReadableStream).pause();
+            });
+          forward.then(
+            () => undefined,
+            () => undefined,
+          );
+
+          // 0.004 USD × 1000 = 4 credits, from the usage at the end of the
+          // body, read once the stalled caller was given up on.
+          await waitUntil(async () => (await extraCredits()) === 46, {
+            timeout: 20000,
+            timeoutMessage:
+              'the stalled call should be charged from its usage (50 - 4 = 46)',
+          });
+          assert.deepEqual(lookups, [], 'no generation was looked up');
+          await waitUntil(async () => (await inFlightReservations()) === 0, {
+            timeoutMessage: 'the slot should be given back',
+          });
+        } finally {
+          forward?.abort();
+          sinon.restore();
+          resetClientStall();
+        }
+      });
+
+      test('a charged call whose caller leaves mid-body is still read to its end and charged', async function (assert) {
+        let abandonedBefore = vendor.abandonedResponses();
+        await abandonMidBody(
+          `${vendor.url}/completion?bytes=${512 * 1024}&cost=0.004&hold=1`,
+        );
+        // The caller is gone; the vendor now sends the usage that prices the
+        // call.
+        vendor.releaseHeld();
+
+        await waitUntil(async () => (await extraCredits()) === 46, {
+          timeoutMessage:
+            'the call should be charged from the usage at the end (50 - 4 = 46)',
+        });
+        assert.strictEqual(
+          vendor.abandonedResponses(),
+          abandonedBefore,
+          "the vendor's response was read to its end",
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the slot should be given back',
+        });
+      });
+
+      test('an uncharged call whose caller leaves mid-body cancels the upstream body', async function (assert) {
+        // The same vendor under its other name, as a destination that is not
+        // charged for.
+        configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        await dbAdapter.execute(
+          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+           VALUES (gen_random_uuid(), '${vendor.alternateUrl}/', 'stub-vendor-free-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        );
+        AllowedProxyDestinations.reset();
+
+        // The vendor holds the rest of the body back and never sends it, so
+        // only the caller leaving can end the read.
+        let abandonedBefore = vendor.abandonedResponses();
+        await abandonMidBody(
+          `${vendor.alternateUrl}/completion?bytes=${512 * 1024}&hold=1`,
+        );
+
+        await waitUntil(
+          async () => vendor.abandonedResponses() === abandonedBefore + 1,
+          {
+            timeoutMessage:
+              "the caller leaving should cancel the vendor's held response",
+          },
+        );
+        await waitUntil(async () => (await inFlightReservations()) === 0, {
+          timeoutMessage: 'the slot should be given back',
+        });
+        assert.strictEqual(await extraCredits(), 50, 'nothing is charged');
+      });
+
+      test('a vendor answer that is not JSON is answered with a 500 and charges nothing', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/not-json`,
+            method: 'POST',
+            requestBody: JSON.stringify({}),
+          });
+
+        assert.strictEqual(response.status, 500);
+        assert.false(
+          response.text.includes('Bad gateway'),
+          "the vendor's page is not passed on",
+        );
+        let user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user!.id,
+          }),
+          50,
+          'nothing is charged',
+        );
+        assert.strictEqual(
+          await inFlightReservations(),
+          0,
+          'the slot is given back',
+        );
+      });
+
       test('an OpenRouter-shaped stream is forwarded and charged', async function (assert) {
         let response = await request
           .post('/_request-forward')
@@ -1988,6 +2354,258 @@ module(basename(import.meta.filename), function () {
             })) === 47,
           { timeoutMessage: 'the stream should be charged (50 - 3 = 47)' },
         );
+      });
+
+      test('a cost lookup whose host resolves to a private address is refused and the charge is skipped', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1'],
+          resolveHost: async (hostname) =>
+            hostname === 'openrouter.ai' ? ['10.0.0.1'] : ['127.0.0.1'],
+        });
+        // The warnings the cost lookup and the credit strategy log, with the
+        // values they were logged with.
+        let warnings: unknown[][] = [];
+        let channels = [logger('ai-billing'), logger('credit-strategies')];
+        let restore = channels.map((log) => {
+          let originalFactory = log.methodFactory;
+          let originalLevel = log.getLevel();
+          log.methodFactory = (methodName, level, loggerName) => {
+            let raw = originalFactory(methodName, level, loggerName);
+            return (...args: unknown[]) => {
+              if (methodName === 'warn') {
+                warnings.push(args);
+              }
+              raw(...args);
+            };
+          };
+          log.setLevel('warn');
+          return () => {
+            log.methodFactory = originalFactory;
+            log.setLevel(originalLevel);
+          };
+        });
+        let skipped = () =>
+          warnings.some(([message]) =>
+            String(message).includes(
+              'Failed to fetch generation cost for user @testuser:localhost (generationId: gen-stub), credit deduction skipped',
+            ),
+          );
+        try {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/sse?cost=none`,
+              method: 'POST',
+              requestBody: JSON.stringify({ stream: true }),
+              stream: true,
+            });
+
+          assert.strictEqual(response.status, 200);
+          assert.true(response.text.includes('data: [DONE]'));
+
+          await waitUntil(async () => skipped(), {
+            timeoutMessage:
+              'the refused cost lookup should skip the charge with a warning',
+          });
+          let attempts = warnings.filter(([message]) =>
+            String(message).includes('to fetch generation cost failed'),
+          );
+          assert.strictEqual(
+            attempts.length,
+            1,
+            'a refused lookup is not retried',
+          );
+          let error = attempts[0]?.[1];
+          assert.true(
+            error instanceof OutboundRefusedError,
+            'the outbound guard refused the lookup',
+          );
+          assert.strictEqual(
+            (error as OutboundRefusedError | undefined)?.reason,
+            'address',
+          );
+          let user = await getUserByMatrixUserId(
+            dbAdapter,
+            '@testuser:localhost',
+          );
+          assert.strictEqual(
+            await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            }),
+            50,
+            'nothing is charged',
+          );
+        } finally {
+          restore.forEach((undo) => undo());
+        }
+      });
+
+      // What an operator or a caller can see of a send-path failure: the
+      // proxy's log lines, the event Sentry would receive, and the response.
+      module('credentials stay out of what is recorded', function (hooks) {
+        let sentry: SentryCapture | undefined;
+        const channels = ['request-forward', 'proxy-forward', 'outbound'];
+
+        hooks.beforeEach(function () {
+          configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        });
+        hooks.afterEach(async function () {
+          await sentry?.stop();
+          sentry = undefined;
+        });
+
+        async function forward(url: string) {
+          return await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({ url, method: 'GET' });
+        }
+
+        test('a stored key Node refuses as a header value is in no log line, Sentry event or response', async function (assert) {
+          // The part of the key before the line break, which Node quotes in
+          // its error along with the rest.
+          let quoted = 'sk-planted-0123456789/abc+def=';
+          let destination = `${vendor.alternateUrl}/echo`;
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${destination}', '${quoted}' || chr(13) || chr(10) || 'Injected: 1', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          // The caller's own query string may carry a token or user content;
+          // a send failure records only the origin and path.
+          let callerToken = 'planted-caller-token-0123456789';
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await forward(
+              `${destination}?caller_token=${callerToken}`,
+            );
+          });
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(response!.status, 500);
+          assert.deepEqual(
+            JSON.parse(response!.text),
+            { errors: ['An error occurred while processing the request'] },
+            'the caller sees the same message as before',
+          );
+          assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
+          let failure = lines.find((line) =>
+            line.message.includes('Error in request forward handler'),
+          );
+          assert.ok(failure, 'the failure is logged');
+          assert.true(
+            failure!.message.includes(
+              `(key=system:${destination} url=${destination})`,
+            ),
+            'the log line names the key: ' + failure!.message,
+          );
+          assert.true(
+            failure!.message.includes('invalid header value'),
+            "the log line keeps Node's reason",
+          );
+          assert.true(
+            sent.includes('OutboundSendError'),
+            'the error reached Sentry',
+          );
+          assert.false(
+            lines.some((line) => leaksCredential(line.message, quoted)),
+            'no log line carries the key',
+          );
+          assert.false(leaksCredential(sent, quoted), 'Sentry does not');
+          assert.false(
+            lines.some((line) => line.message.includes(callerToken)),
+            "no log line carries the caller's query string",
+          );
+          assert.false(
+            sent.includes(callerToken),
+            "Sentry does not carry the caller's query string",
+          );
+          assert.false(
+            leaksCredential(response!.text, quoted),
+            'the response does not',
+          );
+        });
+
+        test('a url-parameter key a vendor echoes as malformed JSON is in no log line, breadcrumb, Sentry event or response', async function (assert) {
+          // Short enough that JSON.parse quotes it whole, and starting with a
+          // byte a bare JSON scalar can start with, so the forward hands the
+          // body to JSON.parse instead of refusing it on its first byte.
+          let key = 'tsk-0123456789';
+          let precondition = '';
+          try {
+            JSON.parse(key);
+          } catch (error) {
+            precondition = (error as Error).message;
+          }
+          assert.true(
+            precondition.includes(key),
+            'precondition: JSON.parse quotes the key it fails on',
+          );
+          let destination = `${vendor.alternateUrl}/reflect-credential`;
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${destination}', '${key}', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await forward(`${destination}?q=1`);
+          });
+          Sentry.captureException(new Error('probe for breadcrumbs'));
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(
+            new URL(vendor.requests[0].path, vendor.url).searchParams.get(
+              'key',
+            ),
+            key,
+            'the vendor received the key in the query string',
+          );
+          assert.strictEqual(response!.status, 500);
+          let failure = lines.find((line) =>
+            line.message.includes('Error in request forward handler'),
+          );
+          assert.ok(failure, 'the failure is logged');
+          assert.true(
+            failure!.message.includes('SyntaxError'),
+            "the log line keeps JSON.parse's error",
+          );
+          assert.true(
+            failure!.message.includes(
+              `(key=system:${destination} url=${destination})`,
+            ),
+            'the log line names the key and the origin and path of the URL',
+          );
+          let size = lines.find((line) =>
+            line.message.startsWith('outbound response size:'),
+          );
+          assert.true(
+            size?.message.includes(`destination=${destination} `),
+            'the size line records the URL as the caller sent it',
+          );
+          assert.false(
+            lines.some((line) => leaksCredential(line.message, key)),
+            'no log line carries the key',
+          );
+          assert.false(
+            leaksCredential(sent, key),
+            'no Sentry event or breadcrumb carries it',
+          );
+          assert.false(
+            leaksCredential(response!.text, key),
+            'the response does not',
+          );
+        });
       });
     });
   });

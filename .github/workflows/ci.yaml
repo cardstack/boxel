@@ -139,7 +139,6 @@ jobs:
               - 'packages/choreo-film-app/**'
               - 'packages/choreo-gallery/**'
               - 'packages/choreo-player/**'
-              - 'packages/choreo-test-app/**'
               - 'packages/glimmer-motion/**'
             # choreo builds on glimmer-motion's extension point, so a
             # glimmer-motion change runs choreo's suite too.

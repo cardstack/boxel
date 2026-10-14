@@ -8667,6 +8667,7 @@ module(basename(import.meta.filename), function () {
                   nonce: `nonce-${attemptCount}`,
                   status: 'ready',
                   searchDoc: { name: 'notes.txt' },
+                  types: [],
                   deps: [],
                 };
 
