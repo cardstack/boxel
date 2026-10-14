@@ -23,6 +23,7 @@ import {
   type KmsDecrypter,
   type SealedSecret,
   type SecretBinding,
+  wrappedDataKeyId,
 } from '../lib/secrets-at-rest/index.ts';
 
 // Every line logged on the `secrets-at-rest` channel while `fn` runs, at info
@@ -72,6 +73,37 @@ function fakeKms(dataKey: Buffer): {
           throw new Error('InvalidCiphertextException');
         }
         return { Plaintext: Uint8Array.from(dataKey) };
+      },
+    },
+  };
+}
+
+// Stands in for KMS holding several wrapped data keys: unwraps each blob it
+// wrapped, under the data-key encryption context, and records every call.
+function fakeKmsWithKeys(dataKeys: Buffer[]): {
+  kms: KmsDecrypter;
+  wrappedDataKeys: string[];
+  calls: Parameters<KmsDecrypter['decrypt']>[0][];
+} {
+  let blobs = dataKeys.map(() => randomBytes(64));
+  let calls: Parameters<KmsDecrypter['decrypt']>[0][] = [];
+  return {
+    wrappedDataKeys: blobs.map((blob) => blob.toString('base64')),
+    calls,
+    kms: {
+      async decrypt(input) {
+        calls.push(input);
+        let i = blobs.findIndex((blob) =>
+          Buffer.from(input.CiphertextBlob).equals(blob),
+        );
+        if (
+          i === -1 ||
+          JSON.stringify(input.EncryptionContext) !==
+            JSON.stringify(DATA_KEY_ENCRYPTION_CONTEXT)
+        ) {
+          throw new Error('InvalidCiphertextException');
+        }
+        return { Plaintext: Uint8Array.from(dataKeys[i]) };
       },
     },
   };
@@ -444,6 +476,98 @@ module(basename(import.meta.filename), function (hooks) {
             SECRETS_WRAPPED_DATA_KEY: wrappedDataKey,
           }),
         /must be set together, but only SECRETS_WRAPPED_DATA_KEY is set/,
+      );
+    });
+  });
+
+  module('additional data keys', function () {
+    const KEY_ARN = 'arn:aws:kms:us-east-1:111122223333:key/test';
+
+    test('additional data keys open what they sealed, and every new seal uses the current data key', async function (assert) {
+      let oldKey = randomBytes(32);
+      let newKey = randomBytes(32);
+      let { kms, wrappedDataKeys, calls } = fakeKmsWithKeys([oldKey, newKey]);
+      let [oldBlob, newBlob] = wrappedDataKeys;
+      let oldKeyId = wrappedDataKeyId(Buffer.from(oldBlob, 'base64'));
+      let newKeyId = wrappedDataKeyId(Buffer.from(newBlob, 'base64'));
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
+      let sealedUnderOld = new SecretsKeyring(
+        [{ keyId: oldKeyId, key: oldKey }],
+        oldKeyId,
+      ).seal(SECRET, binding);
+      let sealedUnderNew = new SecretsKeyring(
+        [{ keyId: newKeyId, key: newKey }],
+        newKeyId,
+      ).seal(SECRET, binding);
+
+      let ring = await startSecretsAtRest({
+        deployed: true,
+        env: {
+          SECRETS_KMS_KEY_ARN: KEY_ARN,
+          SECRETS_WRAPPED_DATA_KEY: newBlob,
+          SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS: ` ${oldBlob} ,`,
+        },
+        kms,
+      });
+
+      assert.strictEqual(calls.length, 2, 'KMS unwraps each data key once');
+      assert.strictEqual(ring.currentKeyId, newKeyId);
+      assert.deepEqual(ring.keyIds, [newKeyId, oldKeyId]);
+      assert.strictEqual(ring.open(sealedUnderOld, binding), SECRET);
+      assert.strictEqual(ring.open(sealedUnderNew, binding), SECRET);
+      assert.strictEqual(ring.seal(SECRET, binding).keyId, newKeyId);
+    });
+
+    test('a data key that is both current and additional fails startup', async function (assert) {
+      let { kms, wrappedDataKeys, calls } = fakeKmsWithKeys([randomBytes(32)]);
+      let error: unknown;
+      try {
+        await startSecretsAtRest({
+          deployed: true,
+          env: {
+            SECRETS_KMS_KEY_ARN: KEY_ARN,
+            SECRETS_WRAPPED_DATA_KEY: wrappedDataKeys[0],
+            SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS: wrappedDataKeys[0],
+          },
+          kms,
+        });
+      } catch (e) {
+        error = e;
+      }
+      assert.true(/is listed more than once/.test(String(error)));
+      assert.strictEqual(calls.length, 0, 'nothing is unwrapped');
+      assert.throws(() => secretsKeyring(), /not loaded/);
+    });
+
+    test('an additional data key that does not unwrap fails startup', async function (assert) {
+      let { kms, wrappedDataKeys } = fakeKmsWithKeys([randomBytes(32)]);
+      let error: unknown;
+      try {
+        await startSecretsAtRest({
+          deployed: true,
+          env: {
+            SECRETS_KMS_KEY_ARN: KEY_ARN,
+            SECRETS_WRAPPED_DATA_KEY: wrappedDataKeys[0],
+            SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS:
+              randomBytes(64).toString('base64'),
+          },
+          kms,
+        });
+      } catch (e) {
+        error = e;
+      }
+      assert.true(/InvalidCiphertextException/.test(String(error)));
+      assert.throws(() => secretsKeyring(), /not loaded/);
+    });
+
+    test('additional data keys without the KMS settings are a misconfiguration', function (assert) {
+      assert.throws(
+        () =>
+          secretsKeyProviderFromEnv({
+            SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS:
+              randomBytes(64).toString('base64'),
+          }),
+        /SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS is set, but SECRETS_KMS_KEY_ARN and SECRETS_WRAPPED_DATA_KEY are not/,
       );
     });
   });
