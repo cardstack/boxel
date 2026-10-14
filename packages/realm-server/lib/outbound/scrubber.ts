@@ -6,9 +6,9 @@
 // the response's headers and body through the scrubber. A registered value is
 // found:
 //
-// - as any run at least `MIN_PARTIAL_LENGTH` bytes long of the part after its
-//   public prefix (see `publicPrefix`), ignoring ASCII case; a value whose
-//   remainder is shorter than that is matched whole instead, at any length;
+// - in full, at any length, ignoring ASCII case;
+// - as any run at least `MIN_PARTIAL_LENGTH` bytes long of the part after a
+//   listed vendor prefix (see `publicPrefix`), ignoring ASCII case;
 // - percent-encoded (either hex case, mixed with literal characters), as JSON
 //   `\uXXXX` and short escapes, and as HTML numeric and named entities: these
 //   are decoded into a second view of the text and searched there too;
@@ -40,14 +40,38 @@ export const MIN_PARTIAL_LENGTH = 10;
 // unrelated encoded payload to be worth removing.
 const MIN_BASE64_RUN_LENGTH = 8;
 
-// A vendor's key format often opens with a fixed, public prefix made of short
-// letter-led segments, such as `sk-or-v1-`, `sk-ant-api03-` or `ghp_`. Every
-// key of that vendor shares it, and text about the vendor quotes it, so it
-// identifies no one: partial echoes are matched only in what follows it.
-const PUBLIC_PREFIX = /^(?:[A-Za-z][A-Za-z0-9]{0,5}[-_]){1,4}/;
+// Fixed prefixes vendors put on every key they issue. Every key of that vendor
+// shares one, and text about the vendor quotes it, so it identifies no one:
+// partial echoes are matched only in what follows it. These are listed rather
+// than recognized by shape, because a pattern can't tell a prefix from the
+// start of a random tail that happens to contain a `-` or `_`.
+const PUBLIC_PREFIXES = [
+  'sk-or-v1-', // OpenRouter
+  'sk-ant-api03-', // Anthropic
+  'sk-ant-',
+  'sk-proj-', // OpenAI
+  'sk-svcacct-',
+  'sk-',
+  'github_pat_', // GitHub
+  'ghp_',
+  'gho_',
+  'ghu_',
+  'ghs_',
+  'ghr_',
+  'glpat-', // GitLab
+  'xoxb-', // Slack
+  'xoxp-',
+  'xapp-',
+  'sk_live_', // Stripe
+  'sk_test_',
+  'rk_live_',
+  'rk_test_',
+  'AIza', // Google API keys
+].sort((a, b) => b.length - a.length);
 
+// The longest listed vendor prefix `value` starts with, or ''.
 export function publicPrefix(value: string): string {
-  return PUBLIC_PREFIX.exec(value)?.[0] ?? '';
+  return PUBLIC_PREFIXES.find((prefix) => value.startsWith(prefix)) ?? '';
 }
 
 // The longest escape sequence the decoded view understands, in bytes:
@@ -449,15 +473,12 @@ export class CredentialScrubber {
       return;
     }
     this.registered.add(value);
+    // The whole value, at any length, so a full echo is removed in full.
+    this.addForms(value, false);
     let secret = value.slice(publicPrefix(value).length);
     if (secret.length >= MIN_PARTIAL_LENGTH) {
-      // Every run of the secret part long enough to identify it, which covers
-      // the whole value too; its public prefix may be left showing.
+      // And every run of the secret part long enough to identify it.
       this.addForms(secret, true);
-    } else {
-      // Too short for partial runs to mean anything: matched only whole, at
-      // any length.
-      this.addForms(value, false);
     }
   }
 
@@ -523,7 +544,11 @@ export class CredentialScrubber {
       if (clippedStart >= clippedEnd) continue;
       if (clippedStart > cursor)
         parts.push(bytes.subarray(cursor, clippedStart));
-      parts.push(REDACTED_BYTES);
+      // A match that began in what was already delivered continues the
+      // marker delivered for it, so a split match reads as one.
+      if (start >= from) {
+        parts.push(REDACTED_BYTES);
+      }
       cursor = clippedEnd;
     }
     if (cursor < to) parts.push(bytes.subarray(cursor, to));

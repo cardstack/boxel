@@ -226,14 +226,19 @@ await outboundFetch({ ..., credential, scrubber });
 
 ### What it matches
 
-- any run at least `MIN_PARTIAL_LENGTH` (10) bytes long of the value after
-  its public prefix, ignoring ASCII case. A vendor's `sk-****<last 12>` hint
-  is removed; a shorter run is left alone. The public prefix is the leading
-  run of short letter-led segments a vendor puts on every key (`sk-or-v1-`,
-  `sk-ant-api03-`, `ghp_`): it identifies no one, so text about the key format
-  passes through, and a redacted key may read `sk-or-v1-[REDACTED]`;
-- a value whose remainder after that prefix is shorter than 10 bytes, matched
-  whole, at any length (base64 forms only from 8 characters up);
+- the whole value, at any length, ignoring ASCII case (base64 forms only from
+  8 characters up), so a full echo is removed in full, prefix included;
+- any run at least `MIN_PARTIAL_LENGTH` (10) bytes long of the value after its
+  vendor prefix, ignoring ASCII case. A vendor's `sk-****<last 12>` hint is
+  removed; a shorter run is left alone. Vendor prefixes are a fixed list in
+  `scrubber.ts` (`PUBLIC_PREFIXES`: `sk-or-v1-`, `sk-ant-api03-`, `sk-proj-`,
+  `ghp_`, `xoxb-`, `AIza`, …), matched longest first. They identify no one,
+  so text about a key format passes through, and a truncated echo may read
+  `sk-or-v1-[REDACTED]`. They are listed rather than recognized by shape: a
+  pattern would also take the start of a random base64url tail (`Ab3dE_…`)
+  for a prefix. A key from a vendor that isn't listed simply has no prefix,
+  so every run of it counts. To add a vendor, add its fixed prefix to the
+  list;
 - percent-encoding in either hex case (mixed with literal characters), JSON
   `\uXXXX` and short escapes, HTML numeric and named entities. These are
   decoded into a second view of the text, and that view is searched too;
@@ -243,15 +248,18 @@ await outboundFetch({ ..., credential, scrubber });
 
 A response with no match passes through byte for byte, binary included. The
 scrubber works on bytes and never decodes the body as a string. A match is
-replaced as a whole with `[REDACTED]`, so the body's length changes, and the
-returned headers drop `content-length`.
+replaced as a whole with one `[REDACTED]`, even when the stream splits it
+across chunks, so the body's length changes, and the returned headers drop
+`content-length`.
 
 ### The window
 
 At a chunk boundary the stream holds back only the tail that could still be
 the start of a match. That is the trailing run of bytes that can appear in a
 registered value (in any of its forms) or in an escape sequence, and it is
-never longer than `holdbackBytes` (about 130 bytes). A byte that can't belong
+never longer than `holdbackBytes`: 12 bytes (the longest escape sequence)
+per character of the longest registered form, plus one, which is about
+0.6–0.8 KB for a typical 40–60 character key. A byte that can't belong
 to a match releases everything before it. An SSE event ends in `\n\n`, so a
 streamed generation is delivered event by event without waiting for the next
 one. The stream also keeps the last `holdbackBytes` it delivered as lookbehind,

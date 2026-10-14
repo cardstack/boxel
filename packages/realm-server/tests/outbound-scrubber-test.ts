@@ -21,8 +21,8 @@ import {
 
 // A key with no public prefix, so every byte of it is secret.
 const KEY = 'Zq0f3a9c27b4e14d5a8e6b21c0d9f7a3e5Lm';
-// The same secret behind a vendor-style public prefix.
-const PREFIXED_KEY = `sk-test-${KEY}`;
+// The same secret behind a listed vendor prefix.
+const PREFIXED_KEY = `sk-or-v1-${KEY}`;
 
 // Every form a vendor might echo KEY back in.
 function encodedForms(value: string): Record<string, string> {
@@ -161,7 +161,7 @@ module(basename(import.meta.filename), function () {
 
     test("leaves text about a vendor's key format alone", function (assert) {
       let text =
-        'curl -H "Authorization: Bearer sk-test-proj" … keys look like sk-test-Zxxxxxxxx';
+        'curl -H "Authorization: Bearer sk-or-v1-abc" … keys look like sk-or-v1-Zxxxxxxxx';
       assert.strictEqual(
         scrubberFor(PREFIXED_KEY).scrubText(text),
         text,
@@ -169,12 +169,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("removes a prefixed key's secret part, leaving its public prefix", function (assert) {
+    test('removes a full echo of a prefixed key, prefix included', function (assert) {
       assert.strictEqual(
         scrubberFor(PREFIXED_KEY).scrubText(`{"echo":"${PREFIXED_KEY}"}`),
-        `{"echo":"sk-test-${REDACTED}"}`,
+        `{"echo":"${REDACTED}"}`,
       );
     });
+
+    test('removes a truncated echo of a prefixed key down to its public prefix', function (assert) {
+      assert.strictEqual(
+        scrubberFor(PREFIXED_KEY).scrubText(
+          `bad key ${PREFIXED_KEY.slice(0, 24)}…`,
+        ),
+        `bad key sk-or-v1-${REDACTED}…`,
+      );
+    });
+
+    // A base64url tail can open with a short letter-led segment and a `-` or
+    // `_`, which is random key material, not part of the vendor's prefix.
+    for (let key of [
+      'sk-proj-Ab3dE_xYz9-Qr75fjLp0Wm2KxT8vBn4Hc6Gd1Ys',
+      'Zq3_Ab9xY-Kp2_Lm7-Wx4Rt8Nv1Bc5Dh0Fj',
+    ]) {
+      test(`leaves no secret characters of ${key.slice(0, 12)}… showing`, function (assert) {
+        let scrubber = scrubberFor(key);
+        assert.strictEqual(
+          scrubber.scrubText(`{"echo":"${key}"}`),
+          `{"echo":"${REDACTED}"}`,
+          'a full echo is removed in full',
+        );
+        let truncated = scrubber.scrubText(`bad key ${key.slice(0, 22)}…`);
+        let secret = key.startsWith('sk-proj-') ? key.slice(8) : key;
+        assert.false(
+          leaked(truncated, secret.slice(0, 14)),
+          `a truncated echo shows none of the secret: ${truncated}`,
+        );
+      });
+    }
 
     test('leaves a run shorter than the minimum alone', function (assert) {
       let short = KEY.slice(0, MIN_PARTIAL_LENGTH - 1);
@@ -224,12 +255,12 @@ module(basename(import.meta.filename), function () {
               ),
             )
           ).toString();
-          if (leaked(output, KEY) || !output.includes(REDACTED)) {
+          if (output !== `{"echo":"${REDACTED}"}`) {
             failures.push(`${first}/${second}: ${output}`);
           }
         }
       }
-      assert.deepEqual(failures, [], 'every split is scrubbed');
+      assert.deepEqual(failures, [], 'every split is scrubbed, as one marker');
     });
 
     test('passes a body with no credential through byte for byte', async function (assert) {
@@ -472,7 +503,7 @@ module(basename(import.meta.filename), function () {
 
     test('an attached header credential is removed, and text about the key format is not', async function (assert) {
       let mention =
-        'data: {"choices":[{"delta":{"content":"curl -H \\"Authorization: Bearer sk-test-abc\\" (keys start sk-test-Z)"}}]}\n\n';
+        'data: {"choices":[{"delta":{"content":"curl -H \\"Authorization: Bearer sk-or-v1-abc\\" (keys start sk-or-v1-Z)"}}]}\n\n';
       let response = await outboundFetch({
         url: `${vendor.url}/respond`,
         method: 'POST',
