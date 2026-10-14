@@ -24,6 +24,19 @@ setMotionSpeed(previous);
 
 The scale is applied before the engine receives a transition. It does not retime an animation that has already started. Replay the interaction after editing the setting if you want to compare its full response. The playground remounts a demo where necessary to provide that explicit replay boundary.
 
+## Retiming What Is Already Running
+
+A transition is read when an animation starts, so an edited `transition` whose target is unchanged waits for the next animation: a running spring keeps its old stiffness and an infinite loop keeps its old duration. That is the right rule for an application, and the wrong one for a tuning panel, where the edit is the thing being judged. `retime(root)` asks for the edit now. Call it after the render that delivered the new transitions.
+
+```ts title="Component logic excerpt"
+import { postRender, retime } from 'glimmer-motion';
+
+// after writing the panel's values into tracked state
+postRender(() => retime(stageElement));
+```
+
+Each element at or under `root` whose timing has changed since its animation started is restarted toward the target it already has, from where it stands. An infinite loop goes back to the same point of its cycle, so it changes speed without a jump. An element whose timing is unchanged, or that is leaving, is not touched. Choreo needs no call: an edited timeline replaces its run, and the new run carries each ambient loop on from where it was. The gallery's lab does both on every edit, which is why moving a control changes a running demo at once.
+
 ## Preserving the Shape
 
 `scaleTransition(transition, divisor)` provides the same calculation directly. Time-valued properties are multiplied, including per-value transition overrides. For a physical spring, mass and damping are adjusted so the response slows while retaining its shape. Simply multiplying an arbitrary spring duration would not express the same physical configuration.
@@ -38,7 +51,7 @@ Restore global tempo when a temporary inspection tool is destroyed. Otherwise a 
 
 ## API Coverage
 
-**glimmer-motion**: `motionSpeed`, `onMotionSpeed`, `scaleTransition`, `setMotionSpeed`.
+**glimmer-motion**: `motionSpeed`, `onMotionSpeed`, `retime`, `scaleTransition`, `setMotionSpeed`.
 
 Read the implementation: [`speed.ts`](https://github.com/cardstack/boxel/blob/main/packages/glimmer-motion/src/speed.ts).
 

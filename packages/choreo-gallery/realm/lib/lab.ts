@@ -1,6 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import type { DialConfig, DialValue } from 'dialkit/vanilla';
 import { DialStore } from 'dialkit/vanilla';
+import { postRender, retime } from 'glimmer-motion';
 
 import { Dial, type DialTune } from './dial';
 import { demoPresets } from './presets';
@@ -46,6 +47,24 @@ export class LabState {
 const openLabs = new Map<string, number>();
 
 /**
+ * Retime the motion running on every stage showing a demo, once the render
+ * that delivers the demo's new values has landed. An edit reaches the stage
+ * as it renders, but motion already running reads its timing when it starts:
+ * this restarts what the edit retimed, keeping each loop's place in its
+ * cycle. A Choreo timeline needs nothing here, because an edited timeline
+ * replaces its run, and the new run carries its loops on.
+ */
+function retimeStages(slug: string) {
+  postRender(() => {
+    for (let stage of document.querySelectorAll(
+      `[data-demo-tuning="${CSS.escape(slug)}"]`,
+    )) {
+      retime(stage);
+    }
+  });
+}
+
+/**
  * A demo's tuning on a dialkit panel: the lab.
  *
  * The panel's controls are the values the demo registers through
@@ -54,6 +73,9 @@ const openLabs = new Map<string, number>();
  * demo reads it. Only the values that differ from the demo's own are written,
  * so an untouched spring comes back from `tuneMotion` as the same object and
  * never replays a scene.
+ *
+ * An edit retimes motion the stage already has running, so a loop changes
+ * speed where it is rather than on the next replay.
  *
  * Every lab open on one demo drives the same panel, so they show the same
  * values. The panel is neither persisted nor retained: closing the demo's
@@ -131,6 +153,7 @@ export class DemoLab {
       );
       if (JSON.stringify(this.state.values) !== JSON.stringify(changed)) {
         this.state.values = changed;
+        retimeStages(this.slug);
       }
     });
   };
@@ -146,7 +169,10 @@ export class DemoLab {
       openLabs.set(this.slug, open);
     } else {
       openLabs.delete(this.slug);
-      this.state.values = {};
+      if (Object.keys(this.state.values).length) {
+        this.state.values = {};
+        retimeStages(this.slug);
+      }
     }
   }
 }
