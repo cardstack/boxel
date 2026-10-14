@@ -89,6 +89,12 @@ import {
   dispatchWorkerRequest,
   WORKER_REQUEST_IPC_PREFIX,
 } from './lib/worker-request-forwarder.ts';
+import { isDeployedServerURL } from './lib/outbound/client.ts';
+import {
+  encodeSecretsKeyringIpc,
+  SECRETS_KEYRING_REQUEST,
+  unwrapDataKeys,
+} from './lib/secrets-at-rest/index.ts';
 
 /* About the Worker Manager
  *
@@ -654,6 +660,9 @@ process.on('message', (message) => {
 });
 
 let adapter: PgAdapter;
+// The answer to a worker's request for its keyring: the data keys this
+// manager unwrapped at startup. Never logged.
+let secretsKeyringMessage: string | undefined;
 
 (async () => {
   log.info(
@@ -673,6 +682,22 @@ let adapter: PgAdapter;
     let to = new URL(String(toUrls[i]));
     return [isUrlLike(from) ? new URL(from) : from, to] as [URL | string, URL];
   });
+  // Refuse to start a deployed worker task without its KMS-wrapped data key,
+  // and unwrap it once here for every worker this manager starts or respawns.
+  // A worker manager is deployed when any realm it serves is mapped to a
+  // deployed origin.
+  try {
+    let unwrapped = await unwrapDataKeys({
+      deployed: urlMappings.some(([, to]) => isDeployedServerURL(to.href)),
+    });
+    secretsKeyringMessage = encodeSecretsKeyringIpc(unwrapped);
+    for (let { key } of unwrapped.keys) {
+      key.fill(0);
+    }
+  } catch (e: any) {
+    log.error(`Secrets-at-rest self-check failed: ${e.message}`);
+    process.exit(-1);
+  }
   adapter = new PgAdapter({ autoMigrate });
   // Wire the indexing-progress write-through. The sink was constructed
   // at module load (above) so that log lines and event handling work
@@ -938,7 +963,14 @@ async function startWorker(
   let timeout = await Promise.race([
     new Promise<void>((r) => {
       worker.on('message', (message) => {
-        if (typeof message === 'string' && message.startsWith('ready:')) {
+        if (message === SECRETS_KEYRING_REQUEST) {
+          if (secretsKeyringMessage) {
+            worker.send(secretsKeyringMessage);
+          }
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith('ready:')
+        ) {
           let id = message.substring('ready:'.length);
           workerId = id;
           // Expose the workerId so the manager-level SIGTERM drain
