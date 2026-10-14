@@ -2236,7 +2236,11 @@ export class ChoreoRun implements Run {
           iterations: Infinity,
         },
       );
-      t.loopAnimation.currentTime = t.loopOffset ?? 0;
+      // where the run clock says the loop is, as a still seeks it: a loop
+      // that starts a tick after its cue is already that far round
+      t.loopAnimation.currentTime =
+        (Math.max(0, this.master - t.start) + (t.loopOffset ?? 0)) %
+        Math.max(1, cycle);
       t.loopAnimation.playbackRate = this.rate;
       if (!this.playing) {
         t.loopAnimation.pause();
