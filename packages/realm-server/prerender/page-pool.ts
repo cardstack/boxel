@@ -239,6 +239,9 @@ const CONSOLE_ERROR_LIMIT = 50;
 // unresponsive tab can hold on for minutes. Past this budget the close stays
 // queued behind that render and lands when it releases; the caller moves on.
 const DEFAULT_AFFINITY_TEARDOWN_WAIT_MS = 10_000;
+// How often callers parked on a spent pool budget re-select even without an
+// event waking them; see `#armTabWaiterRecheck`.
+const TAB_WAITER_RECHECK_MS = 1_000;
 // Budget for the responsiveness probe that gates handing a warm tab back
 // out for reuse (`PRERENDER_TAB_HEALTH_PROBE_MS`; `0` disables the gate).
 //
@@ -470,6 +473,8 @@ export class PagePool {
   // Callers that need a fresh tab while the context budget is spent, parked
   // until a tab is released or the refill settles. See `#waitForFreedTab`.
   #tabWaiters = new Set<() => void>();
+  // See `#armTabWaiterRecheck`.
+  #tabWaiterRecheck: NodeJS.Timeout | undefined;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
   // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
   // the bucket so it's cleared in lockstep on resetConsoleErrors /
@@ -1494,6 +1499,11 @@ export class PagePool {
     this.#unresponsiveTabSwaps.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
+    // Callers parked on the closed pool re-select against what comes next —
+    // a restarted browser's standbys, or a throw if nothing can be made.
+    this.#wakeTabWaiters();
+    clearInterval(this.#tabWaiterRecheck);
+    this.#tabWaiterRecheck = undefined;
   }
 
   async #ensureStandbyPool(): Promise<void> {
@@ -1665,6 +1675,7 @@ export class PagePool {
       };
       this.#tabWaiters.add(wake);
       signal?.addEventListener('abort', onAbort, { once: true });
+      this.#armTabWaiterRecheck();
     });
   }
 
@@ -1675,6 +1686,27 @@ export class PagePool {
     for (let wake of waiters) {
       wake();
     }
+  }
+
+  // Safety net under the event-driven wakes. Some paths free a tab without
+  // passing through one — a `getPage` that aborts or loses the render
+  // semaphore after taking its tab, a re-selection dropping a doomed lease,
+  // a pool close — and a parked caller would otherwise wait for an
+  // unrelated event that, on a quiet server, may never come. While anyone
+  // is parked, one shared timer wakes them every
+  // `TAB_WAITER_RECHECK_MS` to re-select. Being a timer, it can't form the
+  // microtask cycle the settle-wake guard in `#ensureStandbyPool` prevents.
+  #armTabWaiterRecheck(): void {
+    if (this.#tabWaiterRecheck) return;
+    this.#tabWaiterRecheck = setInterval(() => {
+      if (this.#tabWaiters.size === 0) {
+        clearInterval(this.#tabWaiterRecheck);
+        this.#tabWaiterRecheck = undefined;
+        return;
+      }
+      this.#wakeTabWaiters();
+    }, TAB_WAITER_RECHECK_MS);
+    this.#tabWaiterRecheck.unref?.();
   }
 
   // The context budget is `#maxPages` tabs plus one standby, counting
