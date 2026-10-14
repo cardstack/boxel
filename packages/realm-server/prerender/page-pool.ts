@@ -459,7 +459,17 @@ export class PagePool {
   // browser restart closes the pool and then keeps using it, so there is no
   // single point at which a flag could be cleared.
   #closeGeneration = 0;
+  // Set when `#ensureStandbyPool` is called while a refill is already
+  // running; the running refill makes one more pass before it settles.
+  #refillRequestedDuringRefill = false;
   #creatingStandbys = 0;
+  // Tabs an awaited `disposeAffinity` has detached from `#affinityPages`
+  // whose close hasn't landed yet. Chrome still holds them, so they stay in
+  // the context budget until it lets go.
+  #detachedClosingCount = 0;
+  // Callers that need a fresh tab while the context budget is spent, parked
+  // until a tab is released or the refill settles. See `#waitForFreedTab`.
+  #tabWaiters = new Set<() => void>();
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
   // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
   // the bucket so it's cleared in lockstep on resetConsoleErrors /
@@ -1241,6 +1251,13 @@ export class PagePool {
       entry.currentQueue = undefined;
       entry.lastUsedAt = Date.now();
       releaseAdmission?.();
+      // A caller parked on a spent budget needs this release to turn into a
+      // tab: trimming an affinity it left idle frees budget for the refill,
+      // and the release alone may leave a tab the caller can steal.
+      if (this.#tabWaiters.size > 0) {
+        this.#trimToCap();
+        this.#wakeTabWaiters();
+      }
     };
     return {
       page: entry.page,
@@ -1299,11 +1316,18 @@ export class PagePool {
       // pages has. So a teardown that outlives the bounded wait below never
       // closes a page or context out from under a live render; it finishes
       // in the background once that render lets go.
+      // Detached tabs leave `#affinityPages` now but stay in the context
+      // budget until Chrome lets them go, and each landing close kicks the
+      // refill to fill the budget it frees.
+      this.#detachedClosingCount += entries?.size ?? 0;
       let teardown = (async () => {
         if (entries) {
           await Promise.all(
             [...entries].map((entry) =>
-              this.#closeEntry(entry, retainConsoleErrors),
+              this.#closeEntry(entry, retainConsoleErrors).finally(() => {
+                this.#detachedClosingCount--;
+                this.#kickStandbyRefill('detached tab closed');
+              }),
             ),
           );
         }
@@ -1474,10 +1498,27 @@ export class PagePool {
 
   async #ensureStandbyPool(): Promise<void> {
     if (this.#ensuringStandbys) {
+      // A request that lands mid-refill may carry news the running pass has
+      // already read past — a close that freed budget after the pass found
+      // none — so it buys one more pass rather than vanishing into the dedup.
+      this.#refillRequestedDuringRefill = true;
       return await this.#ensuringStandbys;
     }
-    this.#ensuringStandbys = this.#ensureStandbyPoolInternal().finally(() => {
+    let generation = this.#closeGeneration;
+    this.#ensuringStandbys = (async () => {
+      do {
+        this.#refillRequestedDuringRefill = false;
+        await this.#ensureStandbyPoolInternal();
+      } while (
+        this.#refillRequestedDuringRefill &&
+        this.#closeGeneration === generation
+      );
+    })().finally(() => {
       this.#ensuringStandbys = null;
+      // Whether it made a standby or gave up, callers parked on a spent
+      // budget re-select: to take the standby, or to see that budget is
+      // free and the refill failed.
+      this.#wakeTabWaiters();
     });
     return await this.#ensuringStandbys;
   }
@@ -1539,13 +1580,96 @@ export class PagePool {
 
   #totalContextCount(): number {
     return (
-      this.#poolEntryCount() + this.#standbys.size + this.#creatingStandbys
+      this.#poolEntryCount() +
+      this.#detachedClosingCount +
+      this.#standbys.size +
+      this.#creatingStandbys
     );
   }
 
+  // True when a caller with no tab should wait for one rather than give up:
+  // the budget is spent, so the refill can't make a tab until something
+  // frees it (a release that leaves an affinity idle for `#trimToCap`, a
+  // close landing, a standby creation finishing), or a refill is already
+  // running and will wake waiters when it settles — including one kicked by
+  // a close that landed just after this caller's own refill found no
+  // budget. Free budget with no refill running means the refill itself
+  // failed, which callers answer by throwing.
+  #shouldAwaitFreedTab(): boolean {
+    return (
+      !this.#disableStandbyRefill &&
+      (this.#totalContextCount() >= this.#maxPages + 1 ||
+        this.#ensuringStandbys !== null)
+    );
+  }
+
+  // Parks a caller that needs a fresh tab while the budget is spent, until a
+  // tab is released or the refill settles, then re-runs selection. Without
+  // it the caller would throw — which the Prerenderer answers by restarting
+  // the whole browser — or, for a module / command sub-render, queue behind
+  // the very render it is blocking. The wait ends with the caller's signal.
+  async #selectOnceTabFrees(
+    affinityKey: string,
+    queue: PrerenderQueue,
+    signal: AbortSignal | undefined,
+    priority: number,
+    tabStartupMs: number,
+  ): Promise<{
+    entry: PoolEntry;
+    reused: boolean;
+    releaseTab: () => void;
+    tabStartupMs: number;
+  }> {
+    let startedAt = Date.now();
+    await this.#waitForFreedTab(signal);
+    let result = await this.#selectEntryForAffinityOnce(
+      affinityKey,
+      queue,
+      signal,
+      priority,
+    );
+    result.tabStartupMs += tabStartupMs + (Date.now() - startedAt);
+    return result;
+  }
+
+  // Registers the waiter synchronously, so no wake can slip in between the
+  // caller's budget check and the wait.
+  async #waitForFreedTab(signal?: AbortSignal): Promise<void> {
+    throwIfAborted(signal);
+    // An over-cap pool with an idle affinity can free budget right now.
+    this.#trimToCap();
+    await new Promise<void>((resolve, reject) => {
+      let onAbort = () => {
+        this.#tabWaiters.delete(wake);
+        reject(
+          new PrerenderCancelledError({
+            state: 'queued',
+            reason:
+              typeof signal?.reason === 'string' ? signal.reason : undefined,
+          }),
+        );
+      };
+      let wake = () => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      };
+      this.#tabWaiters.add(wake);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  #wakeTabWaiters(): void {
+    if (this.#tabWaiters.size === 0) return;
+    let waiters = [...this.#tabWaiters];
+    this.#tabWaiters.clear();
+    for (let wake of waiters) {
+      wake();
+    }
+  }
+
   // The context budget is `#maxPages` tabs plus one standby, counting
-  // standbys still being created and tabs still attached to the pool while
-  // their close is in flight. The refill only fills budget that is already
+  // standbys still being created and tabs whose close is in flight, whether
+  // or not they are still attached to the pool. The refill only fills budget that is already
   // free; it never evicts to make room. Every brand-new affinity awaits this
   // refill for its first tab, so an eviction here — and the close it waits
   // on — would stall all of them. The cap is enforced where tabs are handed
@@ -1569,16 +1693,16 @@ export class PagePool {
   // mid-render, and a render in an unresponsive tab can run for minutes.
   // When every tab is busy the pool stays over the cap — by at most the one
   // standby, since the refill can't create another while the budget is
-  // spent — and the next hand-out that finds an idle affinity trims it.
-  // Releasing a tab doesn't trim: the affinity just released is the likeliest
-  // victim, and its next caller may already be inside `getPage`, short of
-  // tab selection, about to lose the warm tab it was coming back for.
+  // spent — until an affinity goes idle. A release trims only when a caller
+  // is parked waiting for a tab (`#waitForFreedTab`): otherwise the
+  // affinity just released is the likeliest victim, and its next caller may
+  // already be inside `getPage`, short of tab selection, about to lose the
+  // warm tab it was coming back for. The next hand-out trims instead.
   //
   // Synchronous: the awaited dispose detaches the victim from the pool
-  // before its first await, so its tabs stop counting at once — toward the
-  // cap and toward the context budget — and a brand-new affinity can have
-  // the standby the refill makes in their place without waiting for Chrome
-  // to finish closing an idle tab. Nothing waits on the dispose itself.
+  // before its first await, so its tabs stop counting as live at once. They
+  // stay in the context budget until their close lands, which then kicks
+  // the refill. Nothing waits on the dispose itself.
   #trimToCap(): void {
     let evicted = false;
     while (this.#liveEntryCount() > this.#maxPages) {
@@ -1590,6 +1714,11 @@ export class PagePool {
       void this.disposeAffinity(victim).catch((e) => {
         log.warn(`Error evicting ${victim} to stay within the pool cap:`, e);
       });
+      if (this.#affinityPages.has(victim)) {
+        // The loop relies on the dispose detaching its victim synchronously;
+        // stop rather than pick the same victim again if it ever doesn't.
+        break;
+      }
     }
     if (evicted) {
       this.#kickStandbyRefill('pool cap trim');
@@ -1685,6 +1814,7 @@ export class PagePool {
         queue: new TabQueue(),
       };
       this.#standbys.add(entry);
+      this.#wakeTabWaiters();
       return entry;
     } catch (e) {
       if (isExpectedStandbyTargetNotReadyError(e)) {
@@ -2706,6 +2836,23 @@ export class PagePool {
           return { entry: after, reused: false, releaseTab, tabStartupMs };
         }
       }
+      // The refill had no budget for the tab this sub-render needs, because
+      // every tab is busy. Queueing on this affinity's own tab below would
+      // wait on the very render the sub-render is blocking, so wait for
+      // budget to free instead.
+      if (
+        queue !== 'file' &&
+        entryList.length < this.#affinityTabMax &&
+        this.#shouldAwaitFreedTab()
+      ) {
+        return await this.#selectOnceTabFrees(
+          affinityKey,
+          queue,
+          signal,
+          priority,
+          tabStartupMs,
+        );
+      }
     }
     if (entryList.length > 0) {
       let entry = this.#selectLeastPendingTab(entryList);
@@ -2860,6 +3007,18 @@ export class PagePool {
           entry.transitioning = false;
           throw error;
         }
+      }
+      // Nothing to steal either: every other tab already has a holder and a
+      // waiter. With the budget spent that is a wait, not a failure — a
+      // release or a landing close frees a tab for this caller.
+      if (this.#shouldAwaitFreedTab()) {
+        return await this.#selectOnceTabFrees(
+          affinityKey,
+          queue,
+          signal,
+          priority,
+          tabStartupMs,
+        );
       }
     }
     throw new Error('No standby page available for prerender');
@@ -3305,11 +3464,16 @@ export class PagePool {
           }
           if (closePromise) {
             // `#closeEntry` returns only after the BrowserContext is
-            // fully torn down. Awaiting here prevents the caller
-            // (e.g. `disposeAffinity`) from returning to code that
-            // starts a new render while chrome is still disposing
-            // the old context — confusing module errors during
-            // incremental re-indexing otherwise.
+            // fully torn down. Awaiting here keeps an awaited
+            // `disposeAffinity` from returning to code that starts a
+            // new render while chrome is still disposing the old
+            // context — confusing module errors during incremental
+            // re-indexing otherwise. That guarantee holds within the
+            // dispose's teardown bound (`#affinityTeardownWaitMs`). A
+            // close still parked behind a render past it lands later,
+            // and a render started in the meantime gets a fresh
+            // context: the dispose marked the old shared context
+            // `closing`, so it is never handed out again.
             await closePromise;
           }
         }

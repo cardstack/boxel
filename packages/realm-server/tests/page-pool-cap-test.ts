@@ -37,12 +37,19 @@ interface StubContext {
   pages: StubPage[];
 }
 
-function makeBrowserStub() {
+function makeBrowserStub(opts: { closeDelayMs?: number } = {}) {
   let contexts: StubContext[] = [];
+  let open = { now: 0, peak: 0 };
+  let closeDelay = () =>
+    opts.closeDelayMs
+      ? new Promise((resolve) => setTimeout(resolve, opts.closeDelayMs))
+      : Promise.resolve();
   let browser = {
     async createBrowserContext() {
       let record: StubContext = { closed: false, pages: [] };
       contexts.push(record);
+      open.now++;
+      open.peak = Math.max(open.peak, open.now);
       let context: any = {
         async newPage() {
           let pageRecord: StubPage = { closed: false };
@@ -56,6 +63,7 @@ function makeBrowserStub() {
               return fn(...args);
             },
             async close() {
+              await closeDelay();
               pageRecord.closed = true;
             },
             browserContext() {
@@ -66,7 +74,11 @@ function makeBrowserStub() {
           };
         },
         async close() {
+          if (record.closed) return;
+          await closeDelay();
+          if (record.closed) return;
           record.closed = true;
+          open.now--;
           for (let page of record.pages) {
             page.closed = true;
           }
@@ -81,7 +93,7 @@ function makeBrowserStub() {
     },
     async cleanupUserDataDirs() {},
   };
-  return { browserManager, contexts };
+  return { browserManager, contexts, open };
 }
 
 // Poll for a condition instead of sleeping a guessed interval, so a test that
@@ -460,6 +472,90 @@ module(basename(import.meta.filename), function (hooks) {
           'live tabs never exceeded the cap while it was lowered',
         );
       },
+    );
+  });
+
+  test('a brand-new affinity waits for a tab, rather than throwing, when every tab is busy and spoken for', async function (assert) {
+    let { browserManager } = makeBrowserStub();
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    let a = await pool.getPage('A');
+    let b = await pool.getPage('B');
+    await pool.warmStandbys();
+    let c = await pool.getPage('C');
+    // A waiter behind every holder leaves nothing to steal, and the budget
+    // is spent, so the refill can't make a tab either.
+    let waiters = ['A', 'B', 'C'].map((key) => pool.getPage(key));
+
+    let settled: 'pending' | 'resolved' | 'rejected' = 'pending';
+    let d = pool.getPage('D').then(
+      (page) => {
+        settled = 'resolved';
+        return page;
+      },
+      (error) => {
+        settled = 'rejected';
+        throw error;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.strictEqual(settled, 'pending', 'D waits instead of throwing');
+
+    a.release();
+    b.release();
+    c.release();
+    for (let waiter of waiters) {
+      (await waiter).release();
+    }
+    let page = await within(d);
+    assert.notStrictEqual(page, 'timeout', 'D got a tab once others freed');
+    if (page !== 'timeout') {
+      page.release();
+    }
+  });
+
+  test('a module sub-render with every tab busy waits for budget instead of queueing behind its own parent render', async function (assert) {
+    let { browserManager } = makeBrowserStub();
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    let b = await pool.getPage('B');
+    let parent = await hold(pool, 'A');
+    await pool.warmStandbys();
+    await hold(pool, 'C');
+
+    let sub = pool.getPage('A', 'module');
+    b.release();
+
+    let page = await within(sub);
+    assert.notStrictEqual(
+      page,
+      'timeout',
+      'the sub-render got a tab while its parent still held the affinity’s own',
+    );
+    if (page !== 'timeout') {
+      assert.notStrictEqual(
+        page.pageId,
+        parent.pageId,
+        'on a tab other than the parent render’s',
+      );
+      page.release();
+    }
+  });
+
+  test('evicted tabs stay in the context budget until their close lands', async function (assert) {
+    let { browserManager, open } = makeBrowserStub({ closeDelayMs: 100 });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    for (let key of ['A', 'B', 'C', 'D', 'E', 'F']) {
+      let page = await within(pool.getPage(key));
+      assert.notStrictEqual(page, 'timeout', `${key} got a tab`);
+      if (page !== 'timeout') {
+        page.release();
+      }
+    }
+    assert.true(
+      open.peak <= 3,
+      `open contexts never exceeded maxPages + 1 (peak ${open.peak})`,
     );
   });
 });
