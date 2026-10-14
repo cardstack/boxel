@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
-import { AllowedProxyDestinations } from './allowed-proxy-destinations.ts';
-import { proxyEndpointKeyBinding } from './proxy-endpoint-keys.ts';
+import {
+  AllowedProxyDestinations,
+  destinationsOverlap,
+} from './allowed-proxy-destinations.ts';
+import {
+  PROXY_ENDPOINT_KEY_COLUMNS,
+  proxyEndpointKeyBinding,
+  readProxyEndpointKey,
+  type ProxyEndpointKeyRow,
+} from './proxy-endpoint-keys.ts';
 import {
   secretsKeyring,
   type SealedSecret,
@@ -210,6 +218,26 @@ async function history(
   }));
 }
 
+// A replace or delete is refused when its note contains the value the key
+// holds now, so a note can't carry the old value into the history or the log
+// either.
+async function refuseNoteWithCurrentValue(
+  dbAdapter: DBAdapter,
+  id: string,
+  note: string,
+): Promise<void> {
+  let [row] = await dbAdapter.execute(
+    `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints WHERE id = $1`,
+    { bind: [id] },
+  );
+  let current = row
+    ? readProxyEndpointKey(row as unknown as ProxyEndpointKeyRow)
+    : null;
+  if (current && note.includes(current)) {
+    throw new SystemKeyError(400, 'the note must not contain the value');
+  }
+}
+
 function sealedBindings(sealed: SealedSecret) {
   return [
     sealed.ciphertext.toString('base64'),
@@ -258,6 +286,25 @@ export async function addSystemKey(
   }
   if (key.paramName != null && !/^[A-Za-z0-9_.-]{1,128}$/.test(key.paramName)) {
     throw new SystemKeyError(400, 'the parameter name is not a valid name');
+  }
+  // The proxy attaches the key of the first destination a request falls
+  // under, so two destinations that one request URL can match would make
+  // which key it gets depend on row order.
+  let existing = await dbAdapter.execute(`SELECT url FROM proxy_endpoints`);
+  let overlapping = existing
+    .map((row) => String(row.url))
+    .find((url) => destinationsOverlap(url, destination));
+  if (overlapping === destination) {
+    throw new SystemKeyError(
+      409,
+      `a system key for ${destination} already exists; replace it instead`,
+    );
+  }
+  if (overlapping) {
+    throw new SystemKeyError(
+      409,
+      `the destination overlaps the system key for ${overlapping}: a request under both would match either`,
+    );
   }
   let id = randomUUID();
   let sealed = keyring.seal(
@@ -316,6 +363,7 @@ export async function replaceSystemKey(
 ): Promise<SystemKey> {
   validateValueAndNote(value, note);
   let { key: existing } = await getSystemKey(dbAdapter, id);
+  await refuseNoteWithCurrentValue(dbAdapter, id, note);
   let sealed = keyring.seal(
     value,
     proxyEndpointKeyBinding({ id, url: existing.destination }),
@@ -360,6 +408,7 @@ export async function deleteSystemKey(
 ): Promise<SystemKey> {
   validateNote(note);
   let { key: existing } = await getSystemKey(dbAdapter, id);
+  await refuseNoteWithCurrentValue(dbAdapter, id, note);
   let [row] = await dbAdapter.execute(
     `WITH deleted AS (
        DELETE FROM proxy_endpoints WHERE id = $1

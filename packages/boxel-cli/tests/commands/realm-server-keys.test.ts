@@ -215,6 +215,16 @@ describe('boxel realm-server keys', () => {
       expect(written).not.toContain(VALUE.slice(-5));
     });
 
+    it('strips bracketed-paste markers but keeps the same text typed without their escape', async () => {
+      let terminal = fakeTerminal();
+      let reading = readKeyValue(
+        {},
+        { input: terminal.input, output: terminal.output },
+      );
+      terminal.type('\u001b[200~sk-a[201~bcdefgh\u001b[201~\r');
+      expect(await reading).toBe('sk-a[201~bcdefgh');
+    });
+
     it('reveals nothing of a short value', async () => {
       let terminal = fakeTerminal();
       let reading = readKeyValue(

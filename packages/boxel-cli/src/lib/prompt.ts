@@ -90,9 +90,9 @@ export function promptPassword(
         // Ctrl+C inside a paste still work.
         const raw = chunk
           .toString()
-          .split('[200~')
+          .split('\u001b[200~')
           .join('')
-          .split('[201~')
+          .split('\u001b[201~')
           .join('');
         for (const c of raw) {
           if (c === '\n' || c === '\r') {

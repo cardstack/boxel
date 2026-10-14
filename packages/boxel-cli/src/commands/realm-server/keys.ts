@@ -407,7 +407,7 @@ export function registerKeysCommand(realmServer: Command): void {
       )
       .option(
         '--param-name <name>',
-        'The header (default Authorization, as a Bearer token) or URL parameter (default key) that carries the key',
+        'The header (default Authorization) or URL parameter (default key) that carries the key. A header always carries it as a Bearer token',
       )
       .option('--streaming', 'The destination supports streamed responses'),
   )

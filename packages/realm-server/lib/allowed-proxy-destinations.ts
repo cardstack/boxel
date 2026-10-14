@@ -46,6 +46,24 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
 
 // A system key is named by its endpoint's configured URL, which is what logs
 // and errors record in place of the value.
+// Whether two destinations can match the same request URL: one's path lies
+// under the other's on the same origin.
+export function destinationsOverlap(a: string, b: string): boolean {
+  let parse = (url: string) => {
+    try {
+      return new URL(url);
+    } catch {
+      return undefined;
+    }
+  };
+  let urlA = parse(a);
+  let urlB = parse(b);
+  if (!urlA || !urlB) {
+    return false;
+  }
+  return matchesDestination(urlA, b) || matchesDestination(urlB, a);
+}
+
 export function systemKeyName(endpointUrl: string): string {
   return `system:${endpointUrl}`;
 }
@@ -77,36 +95,40 @@ export class AllowedProxyDestinations {
     this.dbAdapter = dbAdapter;
   }
 
-  private async loadFromDatabase() {
+  // Bumped by every `invalidate()`. A reload applies its rows, and extends the
+  // cache, only if no invalidation happened while it ran, so a reload that
+  // read the table before a change can't put the old rows back.
+  private generation = 0;
+
+  private async loadFromDatabase(): Promise<
+    Record<string, AllowedProxyDestination>
+  > {
     try {
       const result = await this.dbAdapter.execute(
         `SELECT id, url, credit_strategy, supports_streaming, auth_method,
            auth_parameter_name, ${PROXY_ENDPOINT_KEY_COLUMNS}
          FROM proxy_endpoints`,
       );
-
-      if (result.length === 0) {
-        this.destinations = {};
-        return;
-      }
-
-      const endpoints = result as unknown as ProxyEndpointRow[];
-      this.initializeFromEndpoints(endpoints);
+      return this.destinationsFromEndpoints(
+        result as unknown as ProxyEndpointRow[],
+      );
     } catch (error) {
       log.error(
         'Failed to load allowed proxy destinations from database:',
         error,
       );
-      this.destinations = {};
+      return {};
     }
   }
 
-  private initializeFromEndpoints(endpoints: ProxyEndpointRow[]) {
-    this.destinations = {};
+  private destinationsFromEndpoints(
+    endpoints: ProxyEndpointRow[],
+  ): Record<string, AllowedProxyDestination> {
+    const destinations: Record<string, AllowedProxyDestination> = {};
     for (const endpoint of endpoints) {
       // A row with no key passes its null through, as the column allows.
       const apiKey = readProxyEndpointKey(endpoint) as string;
-      this.destinations[endpoint.url] = {
+      destinations[endpoint.url] = {
         url: endpoint.url,
         apiKey,
         creditStrategy: CreditStrategyFactory.create(
@@ -119,13 +141,21 @@ export class AllowedProxyDestinations {
         authParameterName: endpoint.auth_parameter_name,
       };
     }
+    return destinations;
   }
 
   private async ensureCacheValid() {
     const now = Date.now();
     if (now > this.cacheExpiry) {
-      await this.loadFromDatabase();
-      this.cacheExpiry = now + this.CACHE_DURATION;
+      const generation = this.generation;
+      const destinations = await this.loadFromDatabase();
+      if (generation === this.generation) {
+        this.destinations = destinations;
+        this.cacheExpiry = now + this.CACHE_DURATION;
+      } else {
+        // The table changed while this reload ran; read it again.
+        await this.ensureCacheValid();
+      }
     }
   }
 
@@ -173,8 +203,10 @@ export class AllowedProxyDestinations {
   // The next lookup reloads the endpoints, so a change written by this
   // process applies to its next request.
   static invalidate(): void {
-    if (AllowedProxyDestinations.instance) {
-      AllowedProxyDestinations.instance.cacheExpiry = 0;
+    let instance = AllowedProxyDestinations.instance;
+    if (instance) {
+      instance.generation++;
+      instance.cacheExpiry = 0;
     }
   }
 }

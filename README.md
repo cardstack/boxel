@@ -605,12 +605,12 @@ Typically, it is needed for our openrouter setup which is used widely throughout
 
 #### Options for `keys add`
 
-- **`--destination <url>`**: The URL the key is sent to. Requests to that origin, under that path, get the key.
+- **`--destination <url>`**: The URL the key is sent to. Requests to that origin, under that path, get the key. A destination that overlaps an existing one (same origin, one path under the other) is refused.
 - **`--credit-strategy <strategy>`**: How calls are charged
   - `openrouter`: Uses OpenRouter credit system (for paid AI APIs)
   - `none`: No credit system (for free APIs or APIs with their own billing)
 - **`--auth <method>`**: `header` (the default) sends the key as a Bearer token in the `Authorization` header; `url-parameter` sends it as a query parameter
-- **`--param-name <name>`**: The header or query parameter that carries the key (default `Authorization` for `header`, `key` for `url-parameter`)
+- **`--param-name <name>`**: The header or query parameter that carries the key (default `Authorization` for `header`, `key` for `url-parameter`). A header always carries it as `Bearer <key>`, whatever its name
 - **`--streaming`**: The destination supports streaming responses
 
 #### Security Notes

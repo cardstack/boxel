@@ -7,6 +7,7 @@ import { dirSync } from 'tmp';
 import fsExtra from 'fs-extra';
 const { copySync, ensureDirSync } = fsExtra;
 import jsonwebtoken from 'jsonwebtoken';
+import sinon from 'sinon';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   addToCreditsLedger,
@@ -32,6 +33,7 @@ import {
   readProxyEndpointKey,
   type ProxyEndpointKeyRow,
 } from '../lib/proxy-endpoint-keys.ts';
+import { replaceSystemKey } from '../lib/system-keys.ts';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
@@ -281,6 +283,11 @@ module(basename(import.meta.filename), function () {
 
     test('a key deleted through the endpoint stops being attached, and keeps its history', async function (assert) {
       let { key } = (await addKey()).body;
+      assert.strictEqual(
+        (await forwardedCredential(vendor.alternateUrl)).authorization,
+        `Bearer ${ADDED_KEY}`,
+        'the key is attached, and the endpoints are cached',
+      );
       let response = await request
         .delete(`/_system-keys/${key.id}`)
         .set('Authorization', `Bearer ${operatorToken()}`)
@@ -392,6 +399,11 @@ module(basename(import.meta.filename), function () {
           { destination: `${vendor.url}/` },
           409,
         ],
+        [
+          'a destination under one that already has a key',
+          { destination: `${vendor.url}/v1/` },
+          409,
+        ],
       ];
       for (let [label, overrides, status] of cases) {
         let response = await addKey(overrides);
@@ -421,6 +433,86 @@ module(basename(import.meta.filename), function () {
         `Bearer ${SEEDED_KEY}`,
         'the existing system key is attached as it was',
       );
+    });
+
+    test('a replace or delete whose note contains the current value is refused', async function (assert) {
+      let { key } = (await addKey()).body;
+      let replaced = await request
+        .patch(`/_system-keys/${key.id}`)
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ value: REPLACED_KEY, note: `was ${ADDED_KEY}` });
+      assert.strictEqual(replaced.status, 400);
+      let deleted = await request
+        .delete(`/_system-keys/${key.id}`)
+        .set('Authorization', `Bearer ${operatorToken()}`)
+        .send({ note: `was ${ADDED_KEY}` });
+      assert.strictEqual(deleted.status, 400);
+      assert.strictEqual(
+        readProxyEndpointKey(await storedRow(key.id)),
+        ADDED_KEY,
+        'the key is unchanged',
+      );
+      assert.deepEqual(
+        (await historyRows()).map(({ action }) => action),
+        ['add'],
+      );
+    });
+
+    test('a reload that read the endpoints before a change does not put the old key back', async function (assert) {
+      let { key } = (await addKey()).body;
+      let destinations = AllowedProxyDestinations.getInstance(dbAdapter);
+      AllowedProxyDestinations.invalidate();
+
+      // Hold the next endpoint reload after it has read the table, so the
+      // replace lands while it is in flight.
+      let release!: () => void;
+      let gate = new Promise<void>((resolve) => (release = resolve));
+      let held!: () => void;
+      let holding = new Promise<void>((resolve) => (held = resolve));
+      let execute = dbAdapter.execute.bind(dbAdapter);
+      let hold = true;
+      let stub = sinon
+        .stub(dbAdapter, 'execute')
+        .callsFake(async (sql: any, opts?: any) => {
+          let result = await execute(sql, opts);
+          if (
+            hold &&
+            typeof sql === 'string' &&
+            sql.includes('auth_parameter_name, api_key')
+          ) {
+            hold = false;
+            held();
+            await gate;
+          }
+          return result;
+        });
+      try {
+        let inFlight = destinations.getDestinationConfig(
+          `${vendor.alternateUrl}/echo`,
+        );
+        await holding;
+        await replaceSystemKey(dbAdapter, key.id, {
+          value: REPLACED_KEY,
+          note: 'rotating the vendor key',
+        });
+        release();
+        assert.strictEqual(
+          (await inFlight)?.apiKey,
+          REPLACED_KEY,
+          'the reload in flight reads the table again',
+        );
+        assert.strictEqual(
+          (
+            await destinations.getDestinationConfig(
+              `${vendor.alternateUrl}/echo`,
+            )
+          )?.apiKey,
+          REPLACED_KEY,
+          'the cache holds the new key',
+        );
+      } finally {
+        stub.restore();
+      }
     });
 
     test('only an operator token for system-keys reaches the endpoints', async function (assert) {

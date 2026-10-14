@@ -40,15 +40,20 @@ the commands.
 - `--realm-server` is the realm server's own URL: `https://localhost:4201`
   locally, the environment's realm server URL elsewhere.
 - `add` refuses a destination that already has a key (409); use `replace`.
+  It also refuses (409) a destination that overlaps an existing one, on the
+  same origin with one path under the other: a request under both would match
+  either, and which key it got would depend on row order.
   It keeps the destination and settings and swaps only the value. To change a
   destination or its settings, `delete` it and `add` it again.
 - `--destination` names a key as the server stores it: the URL as the URL
   parser spells it (`https://VENDOR.test` is `https://vendor.test/`). A
   destination is an http(s) URL with no credentials, query string or
   fragment.
-- `--auth header` (the default) sends the key as `Authorization: Bearer <key>`,
-  or in the header `--param-name` names. `--auth url-parameter` sends it as
-  the query parameter `--param-name` (default `key`).
+- `--auth header` (the default) sends the key as `Authorization: Bearer <key>`.
+  With `--param-name`, it goes in that header instead, still as
+  `Bearer <key>`: a vendor that wants the bare key in a custom header can't be
+  served. `--auth url-parameter` sends it as the query parameter
+  `--param-name` (default `key`).
 - `--credit-strategy openrouter` charges the caller's credits from OpenRouter's
   reported cost; `none` charges nothing.
 
@@ -168,10 +173,11 @@ skill:
 
 ## Troubleshooting
 
-| Symptom                                          | Meaning                                                                                                   |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `HTTP 401` on every command                      | The seed is not this environment's, or the machine's clock is far ahead. Check `BOXEL_REALM_SECRET_SEED`. |
-| `HTTP 409 … already exists`                      | `add` on a destination that has a key; use `replace`.                                                     |
-| `HTTP 409 … changed while it was being replaced` | Someone changed the row (its destination) mid-replace. Run it again.                                      |
-| `No system key has the destination …`            | Compare with `keys list`; the destination must match as stored, path included.                            |
-| `stdin is not a terminal`                        | Run from a terminal, or pass `--stdin` / `--key-file`, and `--note`.                                      |
+| Symptom                                          | Meaning                                                                                                                                                                                                                           |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HTTP 401` on every command                      | The seed is not this environment's, or the machine's clock is off: more than a minute ahead of the server's, or more than five minutes behind (the token arrives already expired). Check `BOXEL_REALM_SECRET_SEED` and the clock. |
+| `HTTP 409 … overlaps the system key for …`       | The destination shares an origin with an existing key and one path lies under the other. Pick a destination that doesn't, or replace the existing key.                                                                            |
+| `HTTP 409 … already exists`                      | `add` on a destination that has a key; use `replace`.                                                                                                                                                                             |
+| `HTTP 409 … changed while it was being replaced` | Someone changed the row (its destination) mid-replace. Run it again.                                                                                                                                                              |
+| `No system key has the destination …`            | Compare with `keys list`; the destination must match as stored, path included.                                                                                                                                                    |
+| `stdin is not a terminal`                        | Run from a terminal, or pass `--stdin` / `--key-file`, and `--note`.                                                                                                                                                              |
