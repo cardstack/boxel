@@ -59,7 +59,92 @@ function roomOwner(el: Element): HTMLElement | null {
   }
 }
 
-/** Room focus overrides viewport visibility; the ordinary 2D gallery is unchanged. */
+/** The element, then each frame element it renders inside, outward. */
+function* outward(el: Element): Generator<Element> {
+  let node: Element | null = el;
+  while (node) {
+    yield node;
+    try {
+      node = node.ownerDocument.defaultView?.frameElement ?? null;
+    } catch {
+      node = null;
+    }
+  }
+}
+
+/**
+ * Whether something the stage cannot see past covers it.
+ *
+ * An intersection observer answers "is it in the scrolled-to part of the
+ * page", which is not "can anyone see it": on a published site, a card opened
+ * from the gallery is a stack item over it, and the grid stays rendered
+ * underneath, in view, behind the scrim. The host makes a card it covers
+ * `inert`. That is the platform's word for "not part of what the user is
+ * working with", it reaches every engine, and it changes nothing about the
+ * box, so it is read directly rather than inferred from geometry. (The
+ * occlusion test that `IntersectionObserver`'s `trackVisibility` offers is
+ * Chromium's alone, and it also calls a stage hidden for any transform or
+ * opacity on the way up, which the 3D room is made of.)
+ */
+function covered(el: Element): boolean {
+  for (const node of outward(el)) {
+    if (node.closest('[inert]')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * One watcher per document for `inert` coming and going, shared by every
+ * stage in it: a page of forty-odd stages is otherwise forty-odd observers
+ * on the same subtree, each consulted on every attribute any of them writes.
+ */
+const inertWatchers = new Map<
+  Document,
+  { listeners: Set<() => void>; observer: MutationObserver }
+>();
+
+function watchCover(el: Element, listener: () => void): () => void {
+  const docs = [...outward(el)].map((node) => node.ownerDocument);
+  for (const doc of docs) {
+    let watcher = inertWatchers.get(doc);
+    if (!watcher) {
+      const listeners = new Set<() => void>();
+      const observer = new MutationObserver(() => {
+        for (const fn of [...listeners]) {
+          fn();
+        }
+      });
+      observer.observe(doc.documentElement, {
+        attributes: true,
+        attributeFilter: ['inert'],
+        subtree: true,
+      });
+      watcher = { observer, listeners };
+      inertWatchers.set(doc, watcher);
+    }
+    watcher.listeners.add(listener);
+  }
+  return () => {
+    for (const doc of docs) {
+      const watcher = inertWatchers.get(doc);
+      if (!watcher) {
+        continue;
+      }
+      watcher.listeners.delete(listener);
+      if (watcher.listeners.size === 0) {
+        watcher.observer.disconnect();
+        inertWatchers.delete(doc);
+      }
+    }
+  };
+}
+
+/**
+ * Room focus overrides viewport visibility; the ordinary 2D gallery is
+ * unchanged. Either way, a covered stage is off.
+ */
 export function observeStage(
   el: Element,
   tell: (visible: boolean) => void,
@@ -69,9 +154,9 @@ export function observeStage(
   let intersecting = false;
   let previous: boolean | undefined;
   const update = () => {
-    const visible = owner
-      ? owner.dataset.widgetActive === 'true'
-      : intersecting;
+    const visible =
+      !covered(el) &&
+      (owner ? owner.dataset.widgetActive === 'true' : intersecting);
     if (visible !== previous) {
       previous = visible;
       tell(visible);
@@ -91,6 +176,7 @@ export function observeStage(
       attributeFilter: ['data-widget-active'],
     });
   }
+  const unwatchCover = watchCover(el, update);
   let connected = true;
   io.observe(el);
   // Visibility may update tracked demo state; run after Glimmer's render pass.
@@ -104,6 +190,7 @@ export function observeStage(
       connected = false;
       io.disconnect();
       changes.disconnect();
+      unwatchCover();
     },
   };
 }
