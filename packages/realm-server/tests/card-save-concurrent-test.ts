@@ -9,18 +9,17 @@ import {
   type RealmRequest,
 } from './helpers/index.ts';
 
-// Where two writers of one card stop excluding each other, and why a removal
-// is the exception.
+// Where two writers of one card stop excluding each other: once the first
+// one's bytes are durable, removal or not.
 //
-// The write locks order the read-merge-write of the files a write touches. For
-// a write that ordering is settled once its bytes are durable — everything
-// after it is indexing, which reads the files back off disk and is correct
-// whatever another writer does meanwhile. For a REMOVAL it is not settled
-// there: an index pass resolves a removal and a write of one url as the
-// removal whichever reached it first, and then skips the visit without asking
-// whether the file came back. A writer that recreated the path while the
-// removal's pass was still pending would be folded into it, and the row
-// dropped for a file that is on disk.
+// The write locks order the read-merge-write of the files a write touches.
+// That ordering is settled once the bytes are durable — everything after it is
+// indexing, which reads the files back off disk and is correct whatever
+// another writer does meanwhile. A removal is no exception: a writer that
+// recreates the path while the removal's pass is still pending is merged into
+// that pass, and the queue marks the url contested so the pass indexes it by
+// whether the file is on disk (covered in queue-test and the operations
+// endpoint's index-wait tests).
 //
 // Each pass is held open below so that no pass is ever in flight from the
 // pre-staging drain's point of view. That is deliberate: the drain waits on
@@ -177,12 +176,10 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a removal holds the card against the next writer until its pass has run', async function (assert) {
+    test('a removal frees the card for the next writer once its bytes are gone', async function (assert) {
       assert.timeout(30000);
-      // The carve-out, and the contrast with the save above is what gives it
-      // its meaning: the same harness, the same window, a different answer.
-      // A writer that reached its own pass while the removal's was still
-      // pending would have that pass fold its write into the removal.
+      // The same harness and window as the save above, and the same answer:
+      // the next writer is not held behind the removal's index pass.
       let passes = stubIndexPasses(realm);
       try {
         let removalSettled = false;
@@ -202,46 +199,30 @@ module(basename(import.meta.filename), function () {
         );
         assert.false(removalSettled, 'and has not answered');
 
-        let recreateSettled = false;
-        let recreateDone = patch(request, 'Recreated').then((response) => {
-          recreateSettled = true;
-          return response;
-        });
-
-        await resolveAfter(WAIT_OBSERVATION_MS);
-        assert.strictEqual(
-          passes.reached(),
-          1,
-          'the next writer is queued on the files rather than reaching a ' +
-            'pass the removal could absorb it into',
-        );
-        assert.false(recreateSettled, 'so it has answered nothing either');
-
-        // Letting the removal's pass finish frees the files, and the writer
-        // behind it proceeds — which is what says it was queued rather than
-        // wedged.
-        passes.releaseAll();
-        await removalDone;
-        await resolveAfter(WAIT_OBSERVATION_MS);
-        assert.true(
-          recreateSettled,
-          'the writer behind the removal proceeds once it has been indexed',
-        );
-
-        // And it is ordered after the removal rather than racing it: by the
-        // time it holds the files the card is gone, so it refuses instead of
-        // writing a row back for a card the realm no longer stores. That
-        // refusal is the ordering, stated from the other end — it is only
-        // possible because the removal went first and completely.
-        let recreate = await recreateDone;
+        // It takes the files while the removal's pass is still held, and
+        // finds the card already gone: the removal's bytes are what the
+        // locks ordered it after.
+        let recreate = await patch(request, 'Recreated');
         assert.true(
           recreate.status >= 400,
           `the write behind a removal finds the card gone — status ${recreate.status}`,
         );
+        assert.false(
+          removalSettled,
+          "and answered while the removal's pass was still pending",
+        );
         assert.strictEqual(
           passes.reached(),
           1,
-          'and never reached an index pass, having nothing to index',
+          'having written nothing, it reached no index pass of its own',
+        );
+
+        passes.releaseAll();
+        let removal = await removalDone;
+        assert.strictEqual(
+          removal.status,
+          204,
+          `the removal answers once its pass is let through — ${JSON.stringify(removal.body)}`,
         );
       } finally {
         passes.releaseAll();
