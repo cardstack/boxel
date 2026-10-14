@@ -21,6 +21,7 @@
 // parameter; the app page's origin by `origin`.
 
 import { isListedOrigin } from './app-origins.js';
+import { redactResponse } from './redact.js';
 
 const MATRIX_CLIENT_PREFIX = '_matrix/client/v3/';
 const MIN_PASSWORD_LENGTH = 8;
@@ -614,24 +615,7 @@ function start(form) {
       .filter((entry) => entry.field.type === 'password')
       .map((entry) => entry.input.value)
       .filter((secret) => secret.length >= MIN_REDACTED_LENGTH);
-    let clean = (value) => {
-      if (typeof value === 'string') {
-        return secrets.reduce(
-          (text, secret) => text.split(secret).join('[redacted]'),
-          value,
-        );
-      }
-      if (Array.isArray(value)) {
-        return value.map(clean);
-      }
-      if (value && typeof value === 'object') {
-        return Object.fromEntries(
-          Object.entries(value).map(([key, item]) => [key, clean(item)]),
-        );
-      }
-      return value;
-    };
-    return clean(result);
+    return redactResponse(result, secrets);
   }
 
   window.addEventListener('message', (event) => {

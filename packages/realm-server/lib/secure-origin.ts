@@ -57,6 +57,10 @@ const CREDENTIALS_ASSETS: Record<
     file: join(SHELL_DIR, 'app-origins.js'),
     contentType: 'text/javascript; charset=utf-8',
   },
+  'redact.js': {
+    file: join(SHELL_DIR, 'redact.js'),
+    contentType: 'text/javascript; charset=utf-8',
+  },
   'credentials.css': {
     file: join(SHELL_DIR, 'credentials.css'),
     contentType: 'text/css; charset=utf-8',

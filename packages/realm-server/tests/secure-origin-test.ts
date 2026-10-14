@@ -15,6 +15,7 @@ import {
   secureOriginHeaders,
 } from '../lib/secure-origin.ts';
 import { isListedOrigin } from '../secure-origin/app-origins.js';
+import { redactResponse } from '../secure-origin/redact.js';
 import {
   registerSecureOriginHost,
   scrubSecureOriginEvent,
@@ -206,6 +207,55 @@ module(basename(import.meta.filename), function () {
           '<meta name="boxel-app-origins" content="https://app.example.test https://*.preview.example.test" />',
         ),
         'the page lists both',
+      );
+    });
+  });
+
+  module('credential fields response redaction', function () {
+    test('a password echoed in a failed response is cut out', function (assert) {
+      let result = redactResponse(
+        {
+          ok: false,
+          status: 403,
+          body: {
+            errcode: 'M_FORBIDDEN',
+            error: 'Wrong password: hunter2hunter2',
+            user_id: '@hunter2hunter2:localhost',
+          },
+        },
+        ['hunter2hunter2'],
+      );
+      assert.deepEqual(result, {
+        ok: false,
+        status: 403,
+        body: {
+          errcode: 'M_FORBIDDEN',
+          error: 'Wrong password: [redacted]',
+          user_id: '@[redacted]:localhost',
+        },
+      });
+    });
+
+    test("a successful sign-in keeps its session when the password is part of the user's ID", function (assert) {
+      let session = {
+        user_id: '@samepassword:localhost',
+        access_token: 'syt_samepassword_token',
+        device_id: 'SAMEPASSWORD',
+        home_server: 'localhost',
+        well_known: { 'm.homeserver': { base_url: 'http://localhost:8008' } },
+      };
+      let result = redactResponse(
+        {
+          ok: true,
+          status: 200,
+          body: { ...session, note: 'echoed samepassword' },
+        },
+        ['samepassword'],
+      );
+      assert.deepEqual(
+        result.body,
+        { ...session, note: 'echoed [redacted]' },
+        'session fields are untouched; anything else is still redacted',
       );
     });
   });
@@ -465,6 +515,7 @@ module(basename(import.meta.filename), function () {
       for (let [path, type] of [
         ['/secure/credentials.js', 'text/javascript'],
         ['/secure/app-origins.js', 'text/javascript'],
+        ['/secure/redact.js', 'text/javascript'],
         ['/secure/credentials.css', 'text/css'],
         ['/secure/IBMPlexSansVar-Roman.woff2', 'font/woff2'],
       ]) {
