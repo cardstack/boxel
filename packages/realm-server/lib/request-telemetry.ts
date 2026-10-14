@@ -32,10 +32,14 @@ const proxyRoutePaths = new Set([
 ]);
 
 // The headers whose value is a credential: the caller's session token, its
-// cookies, and the HMAC signatures that authenticate a worker request
+// cookies, the HMAC signatures that authenticate a worker request
 // (`WORKER_REQUEST_SIGNATURE_HEADER`) and a session delegation
-// (`DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER`). A signature is replayable
-// within its timestamp window, so it is treated like a token. The names are
+// (`DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER`), and any header whose name
+// marks it as a signature, token, secret or API key. That last rule covers the
+// webhook routes: `/_stripe-webhook` checks `Stripe-Signature`, and an
+// incoming webhook checks whichever header its configuration names (such as
+// `X-Hub-Signature-256`), which no fixed list can know. A signature is
+// replayable with its body, so it is treated like a token. The names are
 // spelled out here, not imported, to keep this module free of imports. The
 // request log's header line masks these, and an event's request context drops
 // them.
@@ -48,8 +52,12 @@ const credentialHeaders = new Set([
   'x-boxel-delegation-signature',
 ]);
 
+const credentialHeaderName = /signature|token|secret|api-?key/i;
+
 export function isCredentialHeader(name: string): boolean {
-  return credentialHeaders.has(name.toLowerCase());
+  return (
+    credentialHeaders.has(name.toLowerCase()) || credentialHeaderName.test(name)
+  );
 }
 
 const secureOriginHosts = new Set<string>();
@@ -223,6 +231,20 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
   return { ...kept, headers: keptHeaders };
 }
 
+// Whether telemetry about this request keeps only its method and path: a
+// request to the secure origin or to a proxy route. `url` is the full request
+// URL; `headers` supply the host when they carry one.
+export function keepsMethodAndPathOnly(request: {
+  url?: string;
+  headers?: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (isSecureOriginRequestData(request)) {
+    return true;
+  }
+  let parsed = parseURL(request.url);
+  return parsed !== undefined && isProxyRoutePath(parsed.pathname);
+}
+
 // Sentry `beforeSend` / `beforeSendTransaction` hook.
 export function scrubRequestTelemetry<
   E extends { request?: SentryRequestData; breadcrumbs?: Breadcrumb[] },
@@ -237,9 +259,7 @@ export function scrubRequestTelemetry<
     return event;
   }
   let parsed = parseURL(request.url);
-  let methodAndPathOnly =
-    isSecureOriginRequestData(request) ||
-    (parsed !== undefined && isProxyRoutePath(parsed.pathname));
+  let methodAndPathOnly = keepsMethodAndPathOnly(request);
   (event as { request?: SentryRequestData }).request = methodAndPathOnly
     ? {
         ...(request.method ? { method: request.method } : {}),

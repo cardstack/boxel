@@ -160,6 +160,8 @@ module(basename(import.meta.filename), function () {
       [WORKER_REQUEST_SIGNATURE_HEADER]: 'worker-signature-6c2d90',
       [DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER]:
         'delegation-signature-3f81ab',
+      'stripe-signature': 't=1,v1=stripe-signature-8d0e47',
+      'x-hub-signature-256': 'sha256=webhook-signature-a19c5e',
     };
 
     test('keeps credential header values out of the log and Sentry', async function (assert) {
@@ -221,16 +223,69 @@ module(basename(import.meta.filename), function () {
         );
       }
     });
+
+    test('lists only header names on a proxy route', async function (assert) {
+      sentry = startSentryCapture({ tracing: false, incomingRequests: true });
+      let origin = await startLoggedServer();
+      let response: Response | undefined;
+      let lines = await withLogDefinition('realm:requests', 'debug', () =>
+        logLinesDuring(['realm:requests'], async () => {
+          response = await fetch(`${origin}/_request-forward`, {
+            method: 'POST',
+            headers: {
+              authorization: 'Bearer session-jwt-0c5f72',
+              'x-boxel-client-request-id': 'request-id-unlisted-4be1d8',
+              referer: 'https://app.telemetry.test/referer-marker-97a3c0/',
+            },
+            body: '{}',
+          });
+          await response.text();
+        }),
+      );
+      let sent = await sentry.flushed();
+      let events = await sentry.flushedEvents();
+
+      assert.strictEqual(response!.status, 200);
+      let headerLine = lines.find(
+        (line) =>
+          line.level === 'debug' &&
+          line.message.includes('x-boxel-client-request-id'),
+      );
+      assert.ok(headerLine, 'the debug line lists the header names');
+      let logged = JSON.parse(headerLine!.message) as unknown;
+      assert.true(Array.isArray(logged), 'the debug line is a list of names');
+      assert.true(
+        (logged as string[]).includes('authorization'),
+        'the Authorization header is named',
+      );
+      assert.strictEqual(events.length, 1, 'the error reached Sentry');
+      for (let value of [
+        'session-jwt-0c5f72',
+        'request-id-unlisted-4be1d8',
+        'referer-marker-97a3c0',
+      ]) {
+        assert.false(
+          lines.some((line) => line.message.includes(value)),
+          `no log line carries ${value}`,
+        );
+        assert.false(sent.includes(value), `no envelope carries ${value}`);
+      }
+    });
   });
 
   module('scrubRequestTelemetry', function () {
-    test('the request-signature headers are credential headers', function (assert) {
+    test('signature, token, secret and API-key headers are credential headers', function (assert) {
       assert.true(isCredentialHeader(WORKER_REQUEST_SIGNATURE_HEADER));
       assert.true(
         isCredentialHeader(DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER),
       );
       assert.true(isCredentialHeader('Set-Cookie'));
+      assert.true(isCredentialHeader('Stripe-Signature'));
+      assert.true(isCredentialHeader('X-Hub-Signature-256'));
+      assert.true(isCredentialHeader('X-Gitlab-Token'));
+      assert.true(isCredentialHeader('X-Api-Key'));
       assert.false(isCredentialHeader('x-boxel-client-request-id'));
+      assert.false(isCredentialHeader('x-boxel-assume-user'));
     });
 
     test('a proxy route is recognised with a trailing slash', function (assert) {

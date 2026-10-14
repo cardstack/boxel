@@ -99,18 +99,28 @@ one that does: Sentry's console integration keeps each log line written during
 a request as a breadcrumb on that request's events.
 
 The credential headers are `Authorization`, `Proxy-Authorization`, `Cookie`,
-`Set-Cookie`, and the two request signatures, `X-Boxel-Worker-Request-Signature`
-and `X-Boxel-Delegation-Signature`. A signature is replayable within its
-timestamp window, so it counts as a credential. One list,
-`isCredentialHeader` in `lib/request-telemetry.ts`, decides both what an
-event's request context drops and what the request log masks.
+`Set-Cookie`, the two request signatures (`X-Boxel-Worker-Request-Signature`
+and `X-Boxel-Delegation-Signature`), and any header whose name contains
+`signature`, `token`, `secret` or `api-key`. The name rule covers the webhook
+routes: `/_stripe-webhook` checks `Stripe-Signature`, and an incoming webhook
+checks whichever header its configuration names, such as
+`X-Hub-Signature-256`. A signature is replayable with its body, so it counts
+as a credential. One predicate, `isCredentialHeader` in
+`lib/request-telemetry.ts`, decides both what an event's request context drops
+and what the request log masks.
 
 With `realm:requests` at debug, the request log also writes each request's
-headers as a JSON line when the response finishes. That line names every
-header but prints each credential header's value as `REDACTED`. It is masked
-when it is written, not by the `beforeSend` hook, so the token and cookies
-never reach Loki, or a breadcrumb on an event raised after the line.
-`request-telemetry-test.ts` pins this for the log and for Sentry.
+headers as a JSON line when the response finishes. That line carries no more
+than an event raised during the request may:
+
+- On the secure origin and the proxy routes it lists the header names only.
+  `keepsMethodAndPathOnly` decides this for both the line and the event.
+- Elsewhere it names every header, and prints each credential header's value
+  as `REDACTED`.
+
+The line is masked when it is written, not by the `beforeSend` hook, so the
+token and cookies never reach Loki, or a breadcrumb on an event raised after
+the line. `request-telemetry-test.ts` pins this for the log and for Sentry.
 
 Why: a proxy route's body is the caller's own content — a forwarded request's
 URL (query string included), headers and body, or a whole prompt — and its
