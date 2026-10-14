@@ -249,4 +249,55 @@ module('Integration | Choreo gallery | presentation', function (hooks) {
       'back shows the title slide already built',
     );
   });
+
+  test("the bar takes Tab, and a key on a bar control is that control's own", async function (assert) {
+    await gallery.renderStage(Presentation);
+    await waitUntil(
+      () => {
+        const r = run();
+        return Boolean(r?.parked && r.segment === 1);
+      },
+      { timeout: 4000 },
+    );
+
+    const deck = document.querySelector<HTMLElement>('[data-test-pres]')!;
+    const controls = [
+      '[data-test-pres-seg="0"]',
+      '[data-test-pres-xfade]',
+      '[data-test-pres-restart]',
+      '[data-test-pres-back]',
+      '[data-test-pres-fwd]',
+    ].map((selector) => document.querySelector<HTMLElement>(selector)!);
+    for (const control of controls) {
+      assert.strictEqual(control.tabIndex, 0, 'a bar control is a tab stop');
+    }
+
+    const restart = document.querySelector<HTMLElement>(
+      '[data-test-pres-restart]',
+    )!;
+    await focus(restart);
+    await triggerKeyEvent(restart, 'keydown', ' ');
+    await triggerKeyEvent(restart, 'keydown', 'ArrowRight');
+    await frames(1);
+    assert.true(run()!.parked, 'the deck did not take the keys');
+    assert.strictEqual(run()!.segment, 1, 'no build moved');
+
+    // a keyboard press is a click with no pointer count
+    const fwd = document.querySelector<HTMLElement>('[data-test-pres-fwd]')!;
+    await click(fwd);
+    assert.strictEqual(
+      document.activeElement,
+      fwd,
+      'a keyboard press leaves focus on the control',
+    );
+    await animationsSettled();
+
+    await click(fwd, { detail: 1 });
+    assert.strictEqual(
+      document.activeElement,
+      deck,
+      'a pointer press hands focus to the deck',
+    );
+    await animationsSettled();
+  });
 });

@@ -1060,7 +1060,11 @@ export class Grip extends Component {
 
       .tp-field:focus {
         border-color: var(--line-strong);
-        outline: none;
+      }
+
+      /* the site's focus ring, held close: the field sits in a dense card */
+      .tp-field:focus-visible {
+        outline-offset: 1px;
       }
 
       .tp-phone {

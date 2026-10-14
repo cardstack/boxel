@@ -683,7 +683,6 @@ export class Wires extends Component {
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
         cursor: pointer;
-        outline: none;
       }
 
       .wires[data-hot='gauge'] .wires-mark[data-thread='gauge'],
@@ -713,7 +712,6 @@ export class Wires extends Component {
         border: 0;
         background: transparent;
         cursor: pointer;
-        outline: none;
       }
 
       .wires-hue {
