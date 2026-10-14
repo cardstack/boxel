@@ -274,8 +274,15 @@ module('Choreo gallery | demo page', function (hooks) {
       Array.from(root().querySelectorAll('.pager a')).map((a) =>
         a.textContent?.replace(/\s+/g, ' ').trim(),
       ),
-      ['← Title alpha', 'Title charlie →'],
+      ['← Previous: Title alpha', 'Next: Title charlie →'],
       'and either side of it at the foot',
+    );
+    assert.deepEqual(
+      Array.from(root().querySelectorAll('.pager a [aria-hidden="true"]')).map(
+        (arrow) => arrow.textContent?.trim(),
+      ),
+      ['←', '→'],
+      'the arrows are drawn, not read; the words say which way',
     );
 
     await click('.next-demo');
@@ -376,7 +383,10 @@ module('Choreo gallery | formats', function (hooks) {
       'the usage example',
     );
     assert.ok(one('.topbar .brand'), 'the site’s brand');
-    assert.ok(one('summary[aria-label="Appearance"]'), 'and its theme picker');
+    assert.ok(
+      one('[role="radiogroup"][aria-label="Appearance"]'),
+      'and its theme picker',
+    );
     assert.notOk(one('.pager'), 'no gallery lists it, so no pager');
   });
 
