@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { inspect } from 'node:util';
+import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import { addressPolicyCases } from '@cardstack/runtime-common/address-policy-cases';
 import {
@@ -14,13 +16,22 @@ import {
   isDeployedServerURL,
   outboundFetch,
   OutboundRefusedError,
+  OutboundSendError,
+  type OutboundCredential,
   outboundSettingsFromEnv,
   OutboundSettingsError,
   OutboundTimeoutError,
   resetOutbound,
   startOutboundGuard,
 } from '../lib/outbound/client.ts';
+import { scrubError } from '../lib/outbound/scrub-error.ts';
+import { CredentialScrubber, REDACTED } from '../lib/outbound/scrubber.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
+import {
+  startSentryCapture,
+  type SentryCapture,
+} from './helpers/sentry-capture.ts';
+import { leaksCredential } from './helpers/credential-leaks.ts';
 
 // Every line logged on the `outbound` channel while `fn` runs, at info and
 // louder whatever LOG_LEVELS says.
@@ -264,12 +275,17 @@ module(basename(import.meta.filename), function () {
     });
 
     test('follows a same-origin redirect with the credential, and drops it on another origin', async function (assert) {
+      let credential: OutboundCredential = {
+        name: 'vendor',
+        value: 'vendor-key',
+        placement: { in: 'header', header: 'Authorization', scheme: 'Bearer' },
+      };
       let sameOrigin = await outboundFetch({
         url: `${vendor.url}/redirect?to=/echo`,
         method: 'GET',
-        headers: { Authorization: 'Bearer vendor-key' },
+        headers: {},
         sizePath: 'system-key',
-        credentialHeaders: ['Authorization'],
+        credential,
       });
       assert.strictEqual(
         (await sameOrigin.json()).headers.authorization,
@@ -280,9 +296,9 @@ module(basename(import.meta.filename), function () {
       let crossOrigin = await outboundFetch({
         url: `${vendor.url}/redirect?to=${encodeURIComponent(`${vendor.alternateUrl}/echo`)}`,
         method: 'GET',
-        headers: { Authorization: 'Bearer vendor-key', 'x-vendor': 'kept' },
+        headers: { 'x-vendor': 'kept' },
         sizePath: 'system-key',
-        credentialHeaders: ['Authorization'],
+        credential,
       });
       let echoed = await crossOrigin.json();
       assert.notOk(
@@ -473,6 +489,299 @@ module(basename(import.meta.filename), function () {
         'the size logged is the decompressed size',
       );
       assert.true(size?.message.includes('overCap=true'));
+    });
+  });
+
+  module('credentials on the send path', function (hooks) {
+    let vendor: StubVendor;
+    // Characters that every encoding changes, so each encoded form differs
+    // from the raw value.
+    const key = 'sk-planted/Key+value=0123456789abcdef';
+
+    hooks.before(async function () {
+      vendor = await startStubVendor();
+    });
+    hooks.after(async function () {
+      await vendor.close();
+    });
+    hooks.beforeEach(function () {
+      vendor.requests.length = 0;
+      configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+    });
+    hooks.afterEach(function () {
+      resetOutbound();
+    });
+
+    function queryCredential(value = key): OutboundCredential {
+      return {
+        name: 'stub-vendor-key',
+        value,
+        placement: { in: 'query', parameter: 'key' },
+      };
+    }
+
+    test('the scrubber removes a credential raw, percent-encoded, form-encoded, base64 at every alignment, and JSON-escaped', function (assert) {
+      let scrubber = new CredentialScrubber();
+      scrubber.register(key);
+      let embedded = [
+        key,
+        encodeURIComponent(key),
+        encodeURIComponent(key).replace(/%[0-9A-F]{2}/g, (e) =>
+          e.toLowerCase(),
+        ),
+        new URLSearchParams({ k: key }).toString(),
+        Buffer.from(key).toString('base64'),
+        Buffer.from(key).toString('base64url'),
+        Buffer.from(`u:${key}`).toString('base64'),
+        Buffer.from(`us:${key}`).toString('base64'),
+        Buffer.from(`user:${key}`).toString('base64url'),
+        JSON.stringify({ quoted: `${key}"` }),
+      ];
+      for (let text of embedded) {
+        let scrubbed = scrubber.scrubText(`before ${text} after`);
+        assert.false(
+          leaksCredential(scrubbed, key),
+          `nothing of ${text} survives: ${scrubbed}`,
+        );
+        assert.true(scrubbed.includes(REDACTED), 'it is marked as removed');
+      }
+      assert.strictEqual(
+        scrubber.scrubText('nothing secret here'),
+        'nothing secret here',
+        'text without the credential is left alone',
+      );
+    });
+
+    // The three Node errors that quote their input. Each is raised for real
+    // with a credential planted in it, so the test fails if Node stops
+    // quoting (the precondition) or the scrub stops removing it. JSON.parse
+    // quotes only a short input whole, so its credential is short.
+    const shortKey = 'sk-0123456789';
+    const nodeErrors: [string, string, () => unknown][] = [
+      [
+        'new Headers with an invalid value',
+        key,
+        () => new Headers({ Authorization: `Bearer ${key}\r\nInjected: 1` }),
+      ],
+      ['new URL', key, () => new URL(`https://vendor example/?key=${key}`)],
+      ['JSON.parse', shortKey, () => JSON.parse(`{"a": ${shortKey}}`)],
+    ];
+    for (let [label, planted, raise] of nodeErrors) {
+      test(`scrubbing removes the credential from ${label}: message, stack, cause and own properties`, function (assert) {
+        let original: unknown;
+        try {
+          raise();
+        } catch (error) {
+          original = error;
+        }
+        let wrapped = new Error('while sending', { cause: original });
+        assert.true(
+          leaksCredential(inspect(wrapped, { depth: 10 }), planted),
+          'precondition: Node quotes the credential in the error',
+        );
+
+        let scrubber = new CredentialScrubber();
+        scrubber.register(planted);
+        let scrubbed = scrubError(wrapped, scrubber);
+
+        assert.strictEqual(scrubbed, wrapped, 'the same error, scrubbed');
+        assert.strictEqual(
+          scrubbed.cause,
+          original,
+          'its cause keeps its identity',
+        );
+        assert.true(original instanceof Error, 'and its class');
+        assert.false(
+          leaksCredential(inspect(scrubbed, { depth: 10 }), planted),
+          'nothing a logger prints carries it',
+        );
+        assert.false(
+          leaksCredential(String((original as Error).stack), planted),
+          'the stack does not carry it',
+        );
+      });
+    }
+
+    test('attaches a query credential the caller never puts in the URL, and records only the URL it was given', async function (assert) {
+      let lines = await outboundLogDuring(async () => {
+        let response = await outboundFetch({
+          url: `${vendor.url}/echo?q=1`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: queryCredential(),
+        });
+        await response.text();
+      });
+      assert.strictEqual(
+        new URL(vendor.requests[0].path, vendor.url).searchParams.get('key'),
+        key,
+        'the vendor receives the credential',
+      );
+      let size = lines.find((line) =>
+        line.message.startsWith('outbound response size:'),
+      );
+      assert.true(
+        size?.message.includes(`destination=${vendor.url}/echo `),
+        'the size line names the URL as given',
+      );
+      assert.false(
+        lines.some((line) => leaksCredential(line.message, key)),
+        'no log line carries the credential',
+      );
+    });
+
+    test('a credential Node refuses as a header value fails with an error that names the key and the URL as given, never the value', async function (assert) {
+      let value = `${key}\r\nInjected: 1`;
+      let error = await refusal(
+        outboundFetch({
+          url: `${vendor.url}/echo`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: {
+            name: 'stub-vendor-key',
+            value,
+            placement: {
+              in: 'header',
+              header: 'Authorization',
+              scheme: 'Bearer',
+            },
+          },
+        }),
+      );
+      assert.true(error instanceof OutboundSendError, 'a send error');
+      let sendError = error as OutboundSendError;
+      assert.deepEqual(sendError.context, {
+        keyName: 'stub-vendor-key',
+        url: `${vendor.url}/echo`,
+      });
+      assert.true(sendError.message.includes('stub-vendor-key'));
+      assert.true(sendError.message.includes(`${vendor.url}/echo`));
+      assert.true(
+        inspect(sendError.cause).includes('invalid header value'),
+        "the cause is Node's own error",
+      );
+      assert.false(
+        leaksCredential(inspect(sendError, { depth: 10 }), key),
+        'nothing a logger prints carries the credential',
+      );
+      assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
+    });
+
+    test('a header credential with whitespace around it is scrubbed in the trimmed form Node quotes', async function (assert) {
+      // A key pasted with a line break inside it and one at the end. fetch
+      // strips the trailing whitespace before quoting the value it refuses.
+      let error = await refusal(
+        outboundFetch({
+          url: `${vendor.url}/echo`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: {
+            name: 'stub-vendor-key',
+            value: `\t${key}\nabcdef\r\n`,
+            placement: {
+              in: 'header',
+              header: 'Authorization',
+              scheme: 'Bearer',
+            },
+          },
+        }),
+      );
+      assert.true(error instanceof OutboundSendError, 'a send error');
+      assert.true(
+        inspect((error as OutboundSendError).cause).includes(
+          'invalid header value',
+        ),
+        "the cause is Node's own error",
+      );
+      assert.false(
+        leaksCredential(inspect(error, { depth: 10 }), key),
+        'nothing a logger prints carries the credential',
+      );
+    });
+
+    test("a refusal after the credential is attached keeps its message and carries the key's name and the origin and path of the URL", async function (assert) {
+      configureOutbound({ maxRedirects: 1 });
+      let url = `${vendor.url}/redirect?to=${encodeURIComponent('/redirect?to=/echo')}`;
+      let error = await refusal(
+        outboundFetch({
+          url,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: queryCredential(),
+        }),
+      );
+      assert.strictEqual(
+        (error as OutboundRefusedError)?.reason,
+        'too-many-redirects',
+      );
+      assert.strictEqual(
+        (error as OutboundRefusedError).message,
+        '127.0.0.1 redirected more than 1 times',
+        'the message callers see is unchanged',
+      );
+      assert.deepEqual(
+        (error as OutboundRefusedError).context,
+        { keyName: 'stub-vendor-key', url: `${vendor.url}/redirect` },
+        "the caller's query string is not recorded",
+      );
+      assert.false(leaksCredential(inspect(error, { depth: 10 }), key));
+    });
+
+    module('with Sentry', function (hooks) {
+      let sentry: SentryCapture | undefined;
+      hooks.afterEach(async function () {
+        await sentry?.stop();
+        sentry = undefined;
+      });
+
+      test('a guarded request leaves no breadcrumb, while any other fetch still does', async function (assert) {
+        sentry = startSentryCapture({ tracing: true });
+        let control = 'control-value-for-an-unguarded-fetch';
+        await (await fetch(`${vendor.url}/echo?key=${control}`)).text();
+        let response = await outboundFetch({
+          url: `${vendor.url}/echo`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: queryCredential(),
+        });
+        await response.text();
+        Sentry.captureException(new Error('probe'));
+        let sent = await sentry.flushed();
+
+        assert.true(
+          sent.includes(control),
+          'precondition: the instrumentation records an unguarded fetch',
+        );
+        assert.false(
+          leaksCredential(sent, key),
+          'the guarded request is in no breadcrumb',
+        );
+      });
+
+      test('a guarded request carries no trace headers, while any other fetch still does', async function (assert) {
+        sentry = startSentryCapture({ tracing: false });
+        await (await fetch(`${vendor.url}/echo`)).text();
+        let response = await outboundFetch({
+          url: `${vendor.url}/echo`,
+          method: 'GET',
+          headers: {},
+          sizePath: 'system-key',
+          credential: queryCredential(),
+        });
+        await response.text();
+
+        assert.ok(
+          vendor.requests[0].headers['sentry-trace'],
+          'precondition: the instrumentation adds trace headers to an unguarded fetch',
+        );
+        assert.notOk(vendor.requests[1].headers['sentry-trace']);
+        assert.notOk(vendor.requests[1].headers.baggage);
+      });
     });
   });
 

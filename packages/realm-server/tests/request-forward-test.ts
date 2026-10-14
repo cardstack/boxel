@@ -40,6 +40,13 @@ import {
   resetClientStall,
 } from '../lib/proxy-forward.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
+import * as Sentry from '@sentry/node';
+import {
+  startSentryCapture,
+  type SentryCapture,
+} from './helpers/sentry-capture.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
+import { leaksCredential } from './helpers/credential-leaks.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -2435,6 +2442,170 @@ module(basename(import.meta.filename), function () {
         } finally {
           restore.forEach((undo) => undo());
         }
+      });
+
+      // What an operator or a caller can see of a send-path failure: the
+      // proxy's log lines, the event Sentry would receive, and the response.
+      module('credentials stay out of what is recorded', function (hooks) {
+        let sentry: SentryCapture | undefined;
+        const channels = ['request-forward', 'proxy-forward', 'outbound'];
+
+        hooks.beforeEach(function () {
+          configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+        });
+        hooks.afterEach(async function () {
+          await sentry?.stop();
+          sentry = undefined;
+        });
+
+        async function forward(url: string) {
+          return await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({ url, method: 'GET' });
+        }
+
+        test('a stored key Node refuses as a header value is in no log line, Sentry event or response', async function (assert) {
+          // The part of the key before the line break, which Node quotes in
+          // its error along with the rest.
+          let quoted = 'sk-planted-0123456789/abc+def=';
+          let destination = `${vendor.alternateUrl}/echo`;
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${destination}', '${quoted}' || chr(13) || chr(10) || 'Injected: 1', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          // The caller's own query string may carry a token or user content;
+          // a send failure records only the origin and path.
+          let callerToken = 'planted-caller-token-0123456789';
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await forward(
+              `${destination}?caller_token=${callerToken}`,
+            );
+          });
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(response!.status, 500);
+          assert.deepEqual(
+            JSON.parse(response!.text),
+            { errors: ['An error occurred while processing the request'] },
+            'the caller sees the same message as before',
+          );
+          assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
+          let failure = lines.find((line) =>
+            line.message.includes('Error in request forward handler'),
+          );
+          assert.ok(failure, 'the failure is logged');
+          assert.true(
+            failure!.message.includes(
+              `(key=system:${destination} url=${destination})`,
+            ),
+            'the log line names the key: ' + failure!.message,
+          );
+          assert.true(
+            failure!.message.includes('invalid header value'),
+            "the log line keeps Node's reason",
+          );
+          assert.true(
+            sent.includes('OutboundSendError'),
+            'the error reached Sentry',
+          );
+          assert.false(
+            lines.some((line) => leaksCredential(line.message, quoted)),
+            'no log line carries the key',
+          );
+          assert.false(leaksCredential(sent, quoted), 'Sentry does not');
+          assert.false(
+            lines.some((line) => line.message.includes(callerToken)),
+            "no log line carries the caller's query string",
+          );
+          assert.false(
+            sent.includes(callerToken),
+            "Sentry does not carry the caller's query string",
+          );
+          assert.false(
+            leaksCredential(response!.text, quoted),
+            'the response does not',
+          );
+        });
+
+        test('a url-parameter key a vendor echoes as malformed JSON is in no log line, breadcrumb, Sentry event or response', async function (assert) {
+          // Short enough that JSON.parse quotes it whole, and starting with a
+          // byte a bare JSON scalar can start with, so the forward hands the
+          // body to JSON.parse instead of refusing it on its first byte.
+          let key = 'tsk-0123456789';
+          let precondition = '';
+          try {
+            JSON.parse(key);
+          } catch (error) {
+            precondition = (error as Error).message;
+          }
+          assert.true(
+            precondition.includes(key),
+            'precondition: JSON.parse quotes the key it fails on',
+          );
+          let destination = `${vendor.alternateUrl}/reflect-credential`;
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${destination}', '${key}', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+          sentry = startSentryCapture({ tracing: true });
+
+          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let lines = await logLinesDuring(channels, async () => {
+            response = await forward(`${destination}?q=1`);
+          });
+          Sentry.captureException(new Error('probe for breadcrumbs'));
+          let sent = await sentry.flushed();
+
+          assert.strictEqual(
+            new URL(vendor.requests[0].path, vendor.url).searchParams.get(
+              'key',
+            ),
+            key,
+            'the vendor received the key in the query string',
+          );
+          assert.strictEqual(response!.status, 500);
+          let failure = lines.find((line) =>
+            line.message.includes('Error in request forward handler'),
+          );
+          assert.ok(failure, 'the failure is logged');
+          assert.true(
+            failure!.message.includes('SyntaxError'),
+            "the log line keeps JSON.parse's error",
+          );
+          assert.true(
+            failure!.message.includes(
+              `(key=system:${destination} url=${destination})`,
+            ),
+            'the log line names the key and the origin and path of the URL',
+          );
+          let size = lines.find((line) =>
+            line.message.startsWith('outbound response size:'),
+          );
+          assert.true(
+            size?.message.includes(`destination=${destination} `),
+            'the size line records the URL as the caller sent it',
+          );
+          assert.false(
+            lines.some((line) => leaksCredential(line.message, key)),
+            'no log line carries the key',
+          );
+          assert.false(
+            leaksCredential(sent, key),
+            'no Sentry event or breadcrumb carries it',
+          );
+          assert.false(
+            leaksCredential(response!.text, key),
+            'the response does not',
+          );
+        });
       });
     });
   });

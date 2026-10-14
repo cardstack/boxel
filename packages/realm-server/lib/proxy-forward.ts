@@ -2,11 +2,21 @@ import type Koa from 'koa';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 import {
+  systemKeyName,
+  type AllowedProxyDestination,
+} from './allowed-proxy-destinations.ts';
+import {
+  describeOutboundError,
   OutboundRefusedError,
   OutboundTimeoutError,
   outboundFetch,
   outboundSettings,
+  sendContext,
+  type OutboundCredential,
+  type OutboundErrorContext,
 } from './outbound/client.ts';
+import { scrubError } from './outbound/scrub-error.ts';
+import type { CredentialScrubber } from './outbound/scrubber.ts';
 import { TopLevelJsonFieldScanner } from './top-level-json-fields.ts';
 
 const log = logger('proxy-forward');
@@ -150,6 +160,46 @@ export function isClientDisconnectError(
     cursor = (cursor as { cause?: unknown }).cause;
   }
   return false;
+}
+
+// The system key a proxy endpoint attaches, and where.
+export function systemKeyCredential(
+  destination: AllowedProxyDestination,
+): OutboundCredential {
+  let name = systemKeyName(destination.url);
+  if (destination.authMethod === 'url-parameter') {
+    return {
+      name,
+      value: destination.apiKey,
+      placement: {
+        in: 'query',
+        parameter: destination.authParameterName || 'key',
+      },
+    };
+  }
+  return {
+    name,
+    value: destination.apiKey,
+    placement: {
+      in: 'header',
+      header:
+        destination.authMethod === 'header' && destination.authParameterName
+          ? destination.authParameterName
+          : 'Authorization',
+      scheme: 'Bearer',
+    },
+  };
+}
+
+// The suffix a proxy's log line carries to identify a send-path failure: the
+// key's name and the recorded URL (see `recordedURL`). `call` covers a failure
+// after the outbound client returned, such as a vendor body that isn't JSON.
+export function outboundLogContext(
+  error: unknown,
+  call?: OutboundErrorContext,
+): string {
+  let described = describeOutboundError(error, call);
+  return described ? ` (${described})` : '';
 }
 
 // How a proxy answers its caller when the outbound guard stops a call: a
@@ -499,7 +549,10 @@ export async function handleStreamingRequest(
   requestBody: BodyInit | undefined,
   matrixUserId: string,
   signal: AbortSignal,
-  credentialHeaders: string[] = [],
+  {
+    credential,
+    scrubber,
+  }: { credential: OutboundCredential; scrubber: CredentialScrubber },
 ): Promise<StreamUsage | undefined> {
   let usage: StreamUsage | undefined;
   try {
@@ -512,11 +565,12 @@ export async function handleStreamingRequest(
       body: requestBody,
       signal,
       sizePath: 'system-key',
-      credentialHeaders,
+      credential,
+      scrubber,
     });
 
     if (!externalResponse.ok) {
-      const errorData = await externalResponse.text();
+      const errorData = scrubber.scrubText(await externalResponse.text());
       log.error(
         `Streaming request failed: ${externalResponse.status} - ${errorData}`,
       );
@@ -567,7 +621,10 @@ export async function handleStreamingRequest(
             costInUsd = dataObj.usage.cost;
           }
         } catch {
-          log.warn('Invalid JSON in streaming response:', data);
+          log.warn(
+            'Invalid JSON in streaming response:',
+            scrubber.scrubText(data),
+          );
         }
 
         ctxt.res.write(`data: ${data}\n\n`);
@@ -583,6 +640,7 @@ export async function handleStreamingRequest(
     );
     return usage;
   } catch (error) {
+    scrubError(error, scrubber);
     if (isClientDisconnectError(error, signal)) {
       // The read failed because the client hung up and we cancelled the
       // upstream call ourselves. There is no socket left to write the error
@@ -595,7 +653,7 @@ export async function handleStreamingRequest(
     let failure = outboundFailureResponse(error);
     if (failure) {
       log.warn(
-        `Streaming request stopped by the outbound guard: ${failure.message}`,
+        `Streaming request stopped by the outbound guard: ${failure.message}${outboundLogContext(error, sendContext(credential.name, url))}`,
       );
       if (!ctxt.res.headersSent) {
         ctxt.status = failure.status;
@@ -604,7 +662,10 @@ export async function handleStreamingRequest(
       ctxt.res.write('data: [DONE]\n\n');
       return undefined;
     }
-    log.error('Error in streaming request:', error);
+    log.error(
+      `Error in streaming request${outboundLogContext(error, sendContext(credential.name, url))}:`,
+      error,
+    );
     Sentry.captureException(error);
     ctxt.res.write(
       `data: ${JSON.stringify({ error: 'Streaming error occurred' })}\n\n`,

@@ -3,16 +3,27 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
-import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import {
+  AllowedProxyDestinations,
+  systemKeyName,
+} from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
   forwardJsonResponse,
   handleStreamingRequest,
   isClientDisconnectError,
   outboundFailureResponse,
+  outboundLogContext,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
-import { outboundFetch } from '../lib/outbound/client.ts';
+import {
+  outboundFetch,
+  sendContext,
+  type OutboundCredential,
+  type OutboundErrorContext,
+} from '../lib/outbound/client.ts';
+import { scrubError } from '../lib/outbound/scrub-error.ts';
+import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
 import {
   fetchRequestFromContext,
@@ -58,6 +69,12 @@ export default function handleOpenRouterPassthrough({
     // endpoint until the upstream one finishes. Cancelling it is what gives
     // the slot back.
     let clientGone = clientDisconnectSignal(ctxt);
+    // Holds every form of the credential the outbound client attaches. No
+    // error from this call is logged, reported or answered with until it has
+    // been scrubbed with it.
+    let scrubber = new CredentialScrubber();
+    // The key and the URL, once the call has a key.
+    let call: OutboundErrorContext | undefined;
 
     try {
       const token = ctxt.state.token;
@@ -129,9 +146,20 @@ export default function handleOpenRouterPassthrough({
         async () => {
           const headers: Record<string, string> = {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${destinationConfig.apiKey}`,
+          };
+          // OpenRouter always takes its key as a bearer token, whatever the
+          // endpoint's configured auth method.
+          const credential: OutboundCredential = {
+            name: systemKeyName(destinationConfig.url),
+            value: destinationConfig.apiKey,
+            placement: {
+              in: 'header',
+              header: 'Authorization',
+              scheme: 'Bearer',
+            },
           };
           const finalBody = JSON.stringify(openAIBody);
+          call = sendContext(credential.name, OPENROUTER_CHAT_URL);
 
           if (isStreaming) {
             return await handleStreamingRequest(
@@ -142,7 +170,7 @@ export default function handleOpenRouterPassthrough({
               finalBody,
               matrixUserId,
               clientGone,
-              ['Authorization'],
+              { credential, scrubber },
             );
           }
 
@@ -157,7 +185,8 @@ export default function handleOpenRouterPassthrough({
             body: finalBody,
             signal: upstreamCall.signal,
             sizePath: 'system-key',
-            credentialHeaders: ['Authorization'],
+            credential,
+            scrubber,
           });
           upstreamCall.release();
           return await forwardJsonResponse(ctxt, externalResponse, {
@@ -167,6 +196,7 @@ export default function handleOpenRouterPassthrough({
         },
       );
     } catch (error) {
+      scrubError(error, scrubber);
       if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to
         // answer and nothing to page anyone about.
@@ -178,7 +208,7 @@ export default function handleOpenRouterPassthrough({
       let failure = outboundFailureResponse(error);
       if (failure) {
         log.warn(
-          `OpenRouter passthrough stopped by the outbound guard: ${failure.message}`,
+          `OpenRouter passthrough stopped by the outbound guard: ${failure.message}${outboundLogContext(error, call)}`,
         );
         await sendResponseForError(
           ctxt,
@@ -188,7 +218,10 @@ export default function handleOpenRouterPassthrough({
         );
         return;
       }
-      log.error('Error in openrouter-passthrough handler:', error);
+      log.error(
+        `Error in openrouter-passthrough handler${outboundLogContext(error, call)}:`,
+        error,
+      );
       Sentry.captureException(error);
       await sendResponseForSystemError(
         ctxt,

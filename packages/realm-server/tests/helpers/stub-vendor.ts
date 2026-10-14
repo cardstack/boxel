@@ -17,6 +17,9 @@ import zlib from 'node:zlib';
 //   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE];
 //                           cost=none leaves the cost out, as a cancelled
 //                           stream does
+//   /reflect-credential     200 whose body is the credential it received, bare
+//                           and not JSON: the `key` query parameter, else the
+//                           Authorization header without its scheme
 //   /completion?bytes=N&cost=<usd>&hold=1&truncate=1
 //                           an OpenRouter-shaped JSON completion whose message
 //                           carries N bytes of base64, with the generation id
@@ -113,6 +116,12 @@ export async function startStubVendor(): Promise<StubVendor> {
           numberParam(url, 'ms', 1000),
         );
         res.on('close', () => clearTimeout(timer));
+      } else if (url.pathname === '/reflect-credential') {
+        let credential =
+          url.searchParams.get('key') ??
+          String(req.headers.authorization ?? '').replace(/^Bearer /, '');
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(credential);
       } else if (url.pathname === '/sse') {
         let omitCost = url.searchParams.get('cost') === 'none';
         let cost = numberParam(url, 'cost', 0.002);

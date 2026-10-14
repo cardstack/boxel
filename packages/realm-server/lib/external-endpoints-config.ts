@@ -1,5 +1,6 @@
 import type { CreditStrategy } from './credit-strategies.ts';
 import { CreditStrategyFactory } from './credit-strategies.ts';
+import { systemKeyName } from './allowed-proxy-destinations.ts';
 
 export interface ExternalEndpointConfig {
   url: string;
@@ -34,6 +35,7 @@ export class allowedProxyDestinations {
         creditStrategy: CreditStrategyFactory.create(
           config.creditStrategy,
           config.apiKey,
+          systemKeyName(config.url),
         ),
         supportsStreaming: config.supportsStreaming,
       };
