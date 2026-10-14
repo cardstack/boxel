@@ -19,6 +19,7 @@
     "@koa/cors": "catalog:",
     "@koa/router": "catalog:",
     "@octokit/rest": "catalog:",
+    "@opentelemetry/api": "catalog:",
     "@sentry/node": "catalog:",
     "@types/archiver": "catalog:",
     "@types/flat": "catalog:",
