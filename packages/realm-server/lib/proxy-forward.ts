@@ -7,6 +7,7 @@ import {
   OutboundRefusedError,
   OutboundTimeoutError,
   outboundFetch,
+  sendContext,
   type OutboundCredential,
   type OutboundErrorContext,
 } from './outbound/client.ts';
@@ -162,8 +163,8 @@ export function systemKeyCredential(
 }
 
 // The suffix a proxy's log line carries to identify a send-path failure: the
-// key's name and the pre-substitution URL. `call` covers a failure after the
-// outbound client returned, such as a vendor body that isn't JSON.
+// key's name and the recorded URL (see `recordedURL`). `call` covers a failure
+// after the outbound client returned, such as a vendor body that isn't JSON.
 export function outboundLogContext(
   error: unknown,
   call?: OutboundErrorContext,
@@ -324,7 +325,7 @@ export async function handleStreamingRequest(
     let failure = outboundFailureResponse(error);
     if (failure) {
       log.warn(
-        `Streaming request stopped by the outbound guard: ${failure.message}${outboundLogContext(error, { keyName: credential.name, url })}`,
+        `Streaming request stopped by the outbound guard: ${failure.message}${outboundLogContext(error, sendContext(credential.name, url))}`,
       );
       if (!ctxt.res.headersSent) {
         ctxt.status = failure.status;
@@ -334,7 +335,7 @@ export async function handleStreamingRequest(
       return undefined;
     }
     log.error(
-      `Error in streaming request${outboundLogContext(error, { keyName: credential.name, url })}:`,
+      `Error in streaming request${outboundLogContext(error, sendContext(credential.name, url))}:`,
       error,
     );
     Sentry.captureException(error);

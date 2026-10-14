@@ -2032,9 +2032,14 @@ module(basename(import.meta.filename), function () {
           AllowedProxyDestinations.reset();
           sentry = startSentryCapture({ tracing: true });
 
+          // The caller's own query string may carry a token or user content;
+          // a send failure records only the origin and path.
+          let callerToken = 'planted-caller-token-0123456789';
           let response: Awaited<ReturnType<typeof forward>> | undefined;
           let lines = await logLinesDuring(channels, async () => {
-            response = await forward(destination);
+            response = await forward(
+              `${destination}?caller_token=${callerToken}`,
+            );
           });
           let sent = await sentry.flushed();
 
@@ -2050,7 +2055,9 @@ module(basename(import.meta.filename), function () {
           );
           assert.ok(failure, 'the failure is logged');
           assert.true(
-            failure!.message.includes(`key=system:${destination}`),
+            failure!.message.includes(
+              `(key=system:${destination} url=${destination})`,
+            ),
             'the log line names the key: ' + failure!.message,
           );
           assert.true(
@@ -2066,6 +2073,14 @@ module(basename(import.meta.filename), function () {
             'no log line carries the key',
           );
           assert.false(leaksCredential(sent, quoted), 'Sentry does not');
+          assert.false(
+            lines.some((line) => line.message.includes(callerToken)),
+            "no log line carries the caller's query string",
+          );
+          assert.false(
+            sent.includes(callerToken),
+            "Sentry does not carry the caller's query string",
+          );
           assert.false(
             leaksCredential(response!.text, quoted),
             'the response does not',
@@ -2118,9 +2133,9 @@ module(basename(import.meta.filename), function () {
           );
           assert.true(
             failure!.message.includes(
-              `(key=system:${destination} url=${destination}?q=1)`,
+              `(key=system:${destination} url=${destination})`,
             ),
-            'the log line names the key and the URL as the caller sent it',
+            'the log line names the key and the origin and path of the URL',
           );
           let size = lines.find((line) =>
             line.message.startsWith('outbound response size:'),
