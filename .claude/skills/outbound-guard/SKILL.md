@@ -1,15 +1,17 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
 ---
 
 # Outbound guard (operators)
 
 Every realm-server call that carries a stored credential to an outside vendor
 goes through `outboundFetch` in `packages/realm-server/lib/outbound/client.ts`.
-Today that is `POST /_request-forward` (including streamed calls) and
-`POST /_openrouter/chat/completions`. The guard is always on, in every
-environment; local development gets a short allowlist, never an off switch.
+Today that is `POST /_request-forward` (including streamed calls),
+`POST /_openrouter/chat/completions`, and the generation-cost lookup either of
+them makes when a response carried a generation id but no inline cost
+(`OpenRouterCreditStrategy` in `lib/credit-strategies.ts`). The guard is
+always on, in every environment; local development gets a short allowlist, never an off switch.
 
 ## What it refuses
 
@@ -110,17 +112,28 @@ stored value itself is malformed — most often a key pasted with a trailing
 line break inside it. Re-enter the key; the scrubbed message is all you get,
 by design.
 
+The generation-cost lookup runs after the response has gone back to the
+client, so a refusal there reaches nobody and logs differently. It is not
+retried, and the usage goes uncharged. Search for these, in order:
+
+- `Attempt 1 to fetch generation cost failed (generationId: gen-…)` at `warn`
+  on `ai-billing`, with the `OutboundRefusedError` naming the host;
+- `Fetching generation cost failed in a way retrying cannot fix` at `error` on
+  `ai-billing`;
+- `Failed to fetch generation cost for user … credit deduction skipped` at
+  `warn` on `credit-strategies`.
+
 ## Settings
 
 Read once at startup from the environment by `startOutboundGuard` in `main.ts`:
 
-| Variable                                 | Default  | Meaning                                                                    |
-| ---------------------------------------- | -------- | -------------------------------------------------------------------------- |
-| `OUTBOUND_DEV_ALLOWLIST`                 | empty    | comma-separated host names that may use `http:` and resolve locally        |
-| `OUTBOUND_CONNECT_TIMEOUT_MS`            | 10000    | per connection                                                             |
-| `OUTBOUND_TOTAL_TIMEOUT_MS`              | 600000   | whole exchange, body included                                              |
-| `OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` | 33554432 | observe-mode cap for the system-key path (`_request-forward`, passthrough) |
-| `OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`   | 10485760 | observe-mode cap for `callApi`                                             |
+| Variable                                 | Default  | Meaning                                                                                            |
+| ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `OUTBOUND_DEV_ALLOWLIST`                 | empty    | comma-separated host names that may use `http:` and resolve locally                                |
+| `OUTBOUND_CONNECT_TIMEOUT_MS`            | 10000    | per connection                                                                                     |
+| `OUTBOUND_TOTAL_TIMEOUT_MS`              | 600000   | whole exchange, body included                                                                      |
+| `OUTBOUND_RESPONSE_CAP_SYSTEM_KEY_BYTES` | 33554432 | observe-mode cap for the system-key path (`_request-forward`, passthrough, generation-cost lookup) |
+| `OUTBOUND_RESPONSE_CAP_CALL_API_BYTES`   | 10485760 | observe-mode cap for `callApi`                                                                     |
 
 The boot log carries one line with the effective settings:
 

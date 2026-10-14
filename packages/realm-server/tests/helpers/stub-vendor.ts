@@ -14,7 +14,9 @@ import zlib from 'node:zlib';
 //   /redirect?to=<url>&status=<3xx>
 //                           a redirect to <url> (default 302)
 //   /slow?ms=N              200 after N milliseconds
-//   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE]
+//   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE];
+//                           cost=none leaves the cost out, as a cancelled
+//                           stream does
 //   /reflect-credential     200 whose body is the credential it received, bare
 //                           and not JSON: the `key` query parameter, else the
 //                           Authorization header without its scheme
@@ -164,13 +166,14 @@ export async function startStubVendor(): Promise<StubVendor> {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(credential);
       } else if (url.pathname === '/sse') {
+        let omitCost = url.searchParams.get('cost') === 'none';
         let cost = numberParam(url, 'cost', 0.002);
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         res.write(
           `data: ${JSON.stringify({ id: 'gen-stub', choices: [{ delta: { content: 'Hello' } }] })}\n\n`,
         );
         res.write(
-          `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }], usage: { cost } })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }], ...(omitCost ? {} : { usage: { cost } }) })}\n\n`,
         );
         res.end('data: [DONE]\n\n');
       } else {

@@ -357,8 +357,14 @@ export interface ToolDefinitionSchema {
 
 // 'approved' is not an outcome: the user approved a call ai-bot holds for
 // approval (see ToolRequest.approvalRequired), and ai-bot answers it with the
-// call's real result.
-export type ToolResultStatus = 'applied' | 'failed' | 'invalid' | 'approved';
+// call's real result. 'canceled' is the outcome of a call that never ran
+// because the user stopped the assistant first.
+export type ToolResultStatus =
+  | 'applied'
+  | 'failed'
+  | 'invalid'
+  | 'approved'
+  | 'canceled';
 
 // One tool definition the bot discovered by reading a skill markdown file
 // (readRealmFile): the entry from the skill's indexed frontmatter, tagged
@@ -388,6 +394,11 @@ export interface ToolResultWithOutputContent {
   // some of its files, or a skill read whose declared tools lack usable
   // indexed definitions and so cannot be offered).
   failureReason?: string;
+  // Present on a result of a call the user asked to go ahead (Run, Retry,
+  // Accept All, Approve). It lifts a stop the user pressed, as a message from
+  // them would (see runtime-common/ai/stop.ts). A decline or a result the
+  // host sent on its own never carries it.
+  resumesAssistant?: true;
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
@@ -412,6 +423,8 @@ export interface ToolResultWithNoOutputContent {
   msgtype: ToolResultWithNoOutputMsgtype;
   commandRequestId: string;
   failureReason?: string; // only present if status is 'failed' or 'invalid'
+  // See ToolResultWithOutputContent.resumesAssistant.
+  resumesAssistant?: true;
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];

@@ -5,7 +5,7 @@ description: >-
   bars, reveal-on-scroll, hide-on-scroll headers, in-view triggers. Use when
   motion is driven by scroll position or by an element entering the viewport,
   in glimmer-motion / Choreo code in this repo (packages/glimmer-motion,
-  packages/choreo, the Choreo gallery and test app, host UI that animates with
+  packages/choreo, the Choreo gallery, host UI that animates with
   them).
 ---
 
@@ -68,5 +68,5 @@ new code against them.
   timing. Don't wrap them in springs unless you want lag on purpose
   (sometimes you do: smoothed parallax).
 
-Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
-`parallax.gts`, `reveal.gts`, `hide-header.gts`.
+Canonical demos, in `packages/choreo-gallery/realm/stages/`:
+`parallax.gts`, `reveal.gts`, `header.gts`.

@@ -114,7 +114,7 @@ describe('changed files → does either artifact move', () => {
     // Neighbouring packages are not these packages.
     ['packages/choreo-player/src/index.ts', false],
     ['packages/choreo-gallery/src/index.ts', false],
-    ['packages/choreo-test-app/app/app.ts', false],
+    ['packages/choreo-film-app/app/app.ts', false],
     ['packages/host/app/lib/externals.ts', false],
   ];
   for (const [file, expected] of cases) {

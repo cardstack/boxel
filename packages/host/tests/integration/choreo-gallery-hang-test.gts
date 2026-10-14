@@ -10,6 +10,7 @@
  */
 import { settled } from '@ember/test-helpers';
 
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -39,38 +40,136 @@ const seat = () => parseFloat(pucks()[0]!.style.left) / 100;
 const note = () => $('.hang-note').textContent!.trim();
 
 /**
- * A throw, in the only terms the component understands: a pointer that is
- * moving when it is lifted. `ms` sets the speed and nothing else — every
- * throw here starts and ends at the same two points, so the only variable
- * between them is how fast the hand was going.
+ * Press on the puck in the pen, after whatever the last throw or rack set
+ * moving has finished: a re-keyed cradle puck can still be leaving while its
+ * replacement arrives, and a press on the leaving one starts no throw at all.
+ * A Choreo flight advances by a capped step per frame, so on a starved
+ * machine it takes longer than its authored length — the settle is given
+ * room for that rather than the default.
  *
  * `trigger` measures its x/y from the element's CURRENT top-left, and the
- * element moves under the drag, so the coordinates go through `init` as
- * absolute clientX instead.
- *
- * `onDragEnd` is dispatched through `frame.update`, so it runs on Motion's
- * frameloop rather than in the pointerup handler — and `settled()` knows
- * nothing about that loop. So every release is followed by real frames, or
- * the assertion would read the board from before the throw landed.
+ * element moves under the drag, so every throw here goes through `init` with
+ * absolute clientX instead — and starts and ends at the same two points, so
+ * the only variable between two throws is how fast the hand was going.
  */
-async function flick(ms: number, steps = 6) {
+async function press() {
+  await animationsSettled({ timeout: 15000 });
   const el = $(SHOT);
   const r = el.getBoundingClientRect();
   const y = r.top + r.height / 2;
   const from = r.left + r.width / 2;
   const to = lane().left + lane().width * (RUNWAY - 0.02);
+  const trace = traceDrag();
+  trace.mark(`down(shots=${document.querySelectorAll(SHOT).length})`);
   trigger(el, 'pointerdown', 0, 0, { clientX: from, clientY: y });
-  await sleep(20);
-  for (let i = 1; i <= steps; i++) {
-    trigger(el, 'pointermove', 0, 0, {
-      clientX: from + ((to - from) * i) / steps,
-      clientY: y,
-    });
-    await sleep(ms / steps);
-  }
-  trigger(el, 'pointerup', 0, 0, { clientX: to, clientY: y });
+  const at = (clientX: number) => ({ clientX, clientY: y });
+  return { el, from, to, at, trace };
+}
+
+/**
+ * `onDragEnd` is dispatched on Motion's frameloop rather than in the pointerup
+ * handler — and `settled()` knows nothing about that loop. So every release is
+ * followed by real frames, or the assertion would read the board from before
+ * the throw landed.
+ */
+async function release({
+  el,
+  to,
+  at,
+  trace,
+}: Awaited<ReturnType<typeof press>>) {
+  trigger(el, 'pointerup', 0, 0, at(to));
+  trace.mark('up');
   await frames(3);
   await settled();
+  return trace.stop();
+}
+
+/**
+ * A fast throw: the hand is pressed and still, then crosses the whole drag
+ * and lets go in the same instant.
+ *
+ * Motion reads a release from the pointer samples of the last 100ms, and once
+ * a drag is under way it takes one EVERY frame — a pointer that has not moved
+ * still lays down a sample where it is. So a throw paced by timers measures
+ * the machine: under load a frame can land between the last move and the
+ * lift, and a hand that was still for 100ms before letting go threw nothing.
+ * Here the final move and the lift go out in one task, so no frame can fall
+ * between them, and the velocity is the whole drag over a little more than
+ * the 100ms window — fast unless a single frame stalls for most of a second
+ * just before the lift, which the trace shows as a large jump in ms with no
+ * jump in frames between `nudge` and `move`.
+ *
+ * The opening nudge takes the pointer past Motion's 3px start threshold, so
+ * the drag is live and sampling while the hand waits out that window.
+ */
+async function flick() {
+  const shot = await press();
+  trigger(shot.el, 'pointermove', 0, 0, shot.at(shot.from + 4));
+  shot.trace.mark('nudge');
+  await frames(1);
+  await sleep(120);
+  trigger(shot.el, 'pointermove', 0, 0, shot.at(shot.to));
+  shot.trace.mark('move');
+  return release(shot);
+}
+
+/**
+ * A slow push over the same drag: `steps` moves `ms` apart in all, and the
+ * hand comes to rest at the wall before it lets go.
+ */
+async function push(ms: number, steps = 6) {
+  const shot = await press();
+  for (let i = 1; i <= steps; i++) {
+    trigger(
+      shot.el,
+      'pointermove',
+      0,
+      0,
+      shot.at(shot.from + ((shot.to - shot.from) * i) / steps),
+    );
+    shot.trace.mark(`move${i}`);
+    await sleep(ms / steps);
+  }
+  return release(shot);
+}
+
+/**
+ * When each pointer event went out, and how many animation frames had run by
+ * then. A failing comparison prints it, so the next reader can tell a throw
+ * the machine stretched from one the stage misread.
+ */
+function traceDrag() {
+  const start = performance.now();
+  let ticks = 0;
+  let running = true;
+  /* eslint-disable @cardstack/boxel/no-raf-for-state -- counting frames is the point */
+  const tick = () => {
+    ticks++;
+    if (running) {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+  /* eslint-enable @cardstack/boxel/no-raf-for-state */
+  const marks: string[] = [];
+  return {
+    mark(name: string) {
+      marks.push(
+        `${name}@${Math.round(performance.now() - start)}ms/f${ticks}`,
+      );
+    },
+    stop() {
+      running = false;
+      return marks.join(' ');
+    },
+  };
+}
+
+/** what the stage said about the throw it just read, and how it was paced */
+function report(trace: string) {
+  const speed = $('.hang-speed').textContent!.trim();
+  return `speed="${speed}" note="${note()}" pucks=${pucks().length} [${trace}]`;
 }
 
 /**
@@ -87,11 +186,12 @@ function outcome() {
   return note().startsWith('too soft') ? RUNWAY : 1.2;
 }
 
-async function takeShot(ms: number, steps: number) {
-  await flick(ms, steps);
+async function takeShot(throwIt: () => Promise<string>) {
+  const trace = await throwIt();
   return {
     rest: outcome(),
     speed: parseInt($('.hang-speed').textContent!.trim(), 10) || 0,
+    report: report(trace),
   };
 }
 
@@ -109,17 +209,17 @@ module('Integration | Choreo gallery | hang', function (hooks) {
     await gallery.renderStage(Hang);
     assert.strictEqual(pucks().length, 0, 'the board starts empty');
 
-    await flick(60, 4);
+    const trace = await flick();
 
     /**
-     * How FAR it went is a function of the machine's timer resolution and is
+     * How FAR it went is a function of the machine's frame pacing and is
      * not this test's business — the claim is only that a flick gets the puck
      * out of a pen the drag itself cannot leave. Whether it stopped in a band
      * or carried into the gutter, the coast is what took it there.
      */
     assert.ok(
       outcome() > RUNWAY,
-      `it left the pen under its own speed: ${note()} (${$('.hang-speed').textContent!.trim()})`,
+      `it left the pen under its own speed: ${report(trace)}`,
     );
     assert.strictEqual(
       $('.hang-tally').textContent!.trim(),
@@ -137,22 +237,22 @@ module('Integration | Choreo gallery | hang', function (hooks) {
      * let go, which is the whole claim the stage makes.
      *
      * The assertion is made against the velocity the component actually
-     * REPORTS rather than against the sleep budget that produced it: a
+     * REPORTS rather than against the pacing that produced it: a
      * `setTimeout(5)` in a busy CI browser is not five milliseconds, and a
      * test that assumed it was would be measuring the machine, not the code.
      */
-    const quick = await takeShot(30, 3);
+    const quick = await takeShot(flick);
     $('.chip').click();
     await settled();
-    const gentle = await takeShot(1200, 6);
+    const gentle = await takeShot(() => push(1200));
 
     assert.ok(
       quick.speed > gentle.speed,
-      `the first throw was the faster one (${quick.speed} vs ${gentle.speed} px/s)`,
+      `the first throw was the faster one (${quick.speed} vs ${gentle.speed} px/s) — quick: ${quick.report}; gentle: ${gentle.report}`,
     );
     assert.ok(
       quick.rest > gentle.rest + 0.05,
-      `and it rested further along (${quick.rest.toFixed(3)} vs ${gentle.rest.toFixed(3)})`,
+      `and it rested further along (${quick.rest.toFixed(3)} vs ${gentle.rest.toFixed(3)}) — quick: ${quick.report}; gentle: ${gentle.report}`,
     );
   });
 
@@ -160,7 +260,7 @@ module('Integration | Choreo gallery | hang', function (hooks) {
     await gallery.renderStage(Hang);
 
     /** slow enough that the projection never clears the wall */
-    await flick(2400);
+    await push(2400);
 
     assert.strictEqual(pucks().length, 0, 'nothing reached the board');
     assert.ok(note().startsWith('too soft'), `the note says so: "${note()}"`);
