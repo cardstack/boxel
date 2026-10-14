@@ -649,6 +649,16 @@ export class ChoreoRun implements Run {
   isDone(): boolean {
     return this.ended || this.cancelled;
   }
+  /**
+   * A text delivery is still standing in for its sprite's text. The clock
+   * can end first: a delivery lands on its own platform animations, and the
+   * run leaves it to finish its tail rather than cutting it short.
+   */
+  get delivering(): boolean {
+    return (
+      !this.cancelled && this.tracks.some((t) => t.delivery?.inFlight === true)
+    );
+  }
 
   loopPhases(): LoopPhases {
     const out: LoopPhases = new Map();

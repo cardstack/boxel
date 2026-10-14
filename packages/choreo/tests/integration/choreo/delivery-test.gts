@@ -10,10 +10,11 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { motion } from 'glimmer-motion';
-import { animationsSettled } from 'glimmer-motion/test-support';
+import { animationsSettled, whatIsBusy } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
+import { nextFrame } from '../../helpers/motion';
 
 let app: { toggle(): void };
 
@@ -37,6 +38,13 @@ class Fixture extends Component<{ Args: { by: 'character' | 'word' } }> {
       />
     </Choreo>
   </template>
+}
+
+/** step frames until `done()` holds, giving up after a bounded number */
+async function framesUntil(done: () => boolean) {
+  for (let i = 0; i < 600 && !done(); i++) {
+    await nextFrame();
+  }
 }
 
 module('Integration | choreo | delivery', function (hooks) {
@@ -65,6 +73,41 @@ module('Integration | choreo | delivery', function (hooks) {
       1,
       'the sprite sits at the delivery end value',
     );
+  });
+
+  test('the region stays busy until a delivery has given its text back, even after the clock ends', async function (assert) {
+    await render(<template><Fixture @by='character' /></template>);
+    await animationsSettled();
+    app.toggle();
+    const line = () => find('#line') as HTMLElement | null;
+    await framesUntil(() => !!line()?.querySelector('span'));
+    const spans = Array.from(line()!.querySelectorAll('span'));
+    assert.ok(spans.length > 0, 'the delivery has split the line');
+    // hold the slots' platform animations short of their landing while the
+    // run's own clock plays out
+    const held = spans.flatMap((span) => span.getAnimations());
+    held.forEach((a) => a.pause());
+    const runBusy = () =>
+      whatIsBusy().some((reason) => /run in flight|pass pending/.test(reason));
+    await framesUntil(() => !runBusy());
+    assert.notOk(runBusy(), "the run's clock has ended");
+    assert.strictEqual(
+      line()!.querySelectorAll('span').length,
+      spans.length,
+      'the stand-in spans are still up',
+    );
+    assert.ok(
+      whatIsBusy().some((reason) => reason.includes('delivery in flight')),
+      'the region reports the delivery as busy',
+    );
+    held.forEach((a) => a.play());
+    await animationsSettled();
+    assert.strictEqual(
+      line()!.querySelectorAll('span').length,
+      0,
+      'settled only once the spans are gone',
+    );
+    assert.strictEqual(line()!.textContent, 'Pour 42 complete');
   });
 
   test('a word delivery keeps whitespace and accessibility whole mid-flight', async function (assert) {
