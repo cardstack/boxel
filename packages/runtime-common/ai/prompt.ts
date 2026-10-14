@@ -56,6 +56,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
+  CAPTURE_SOURCE_URL_PREFIX,
 } from '../matrix-constants.ts';
 import {
   buildToolFunctionNameFromResolvedRef,
@@ -86,11 +87,6 @@ import {
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
-
-// Leads the source URL of an image a tool captured for the model, such as one
-// `realm.capture` took in a run-realm-code script. The capture is a picture of
-// a render, not a file in a workspace.
-export const CAPTURE_SOURCE_URL_PREFIX = 'boxel-local://capture/';
 
 // Leads the trailing context message. That message is the last user message
 // of every prompt, so without this a model can take the context as the

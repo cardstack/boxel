@@ -24,6 +24,7 @@ import {
   TOOL_CALL_DESCRIPTION_SCHEMA,
   TOOL_CALL_REQUIRED_PROPERTIES,
 } from '@cardstack/runtime-common/helpers/ai';
+import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
@@ -48,7 +49,6 @@ interface CacheEntry {
 }
 
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
-const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 export interface FileDefManager {
   /**

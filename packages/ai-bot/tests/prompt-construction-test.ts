@@ -18,6 +18,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  CAPTURE_SOURCE_URL_PREFIX,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -44,7 +45,6 @@ import {
 import {
   absolutizeSkillLinks,
   buildPromptForModel,
-  CAPTURE_SOURCE_URL_PREFIX,
   constructHistory,
   currentTurnToolResultMedia,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
@@ -4357,8 +4357,10 @@ ${patchedFileSource}
                 name: 'dune (isolated).png',
                 contentType: 'image/png',
               },
-              // A capture that names no content type, which the content-type
-              // filter alone would take for a checkable file.
+              // The host always uploads a capture as an image, so it never
+              // sends one without a content type. This entry checks that the
+              // source URL alone keeps a capture out, which the content-type
+              // filter would not.
               {
                 sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}b27e44/dune%20(embedded).png`,
                 url: 'mxc://mock-server/dune-embedded',
