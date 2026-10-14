@@ -144,6 +144,11 @@ function watchCover(el: Element, listener: () => void): () => void {
 /**
  * Room focus overrides viewport visibility; the ordinary 2D gallery is
  * unchanged. Either way, a covered stage is off.
+ *
+ * Inside the 3D room, cover is asked of the room's tile rather than of the
+ * stage: the room makes a tile's own content `inert` while it is not ready
+ * for input, and some stages must run to become ready (the guided Mockup
+ * stop waits for its model to enter 3D).
  */
 export function observeStage(
   el: Element,
@@ -155,7 +160,7 @@ export function observeStage(
   let previous: boolean | undefined;
   const update = () => {
     const visible =
-      !covered(el) &&
+      !covered(owner ?? el) &&
       (owner ? owner.dataset.widgetActive === 'true' : intersecting);
     if (visible !== previous) {
       previous = visible;
