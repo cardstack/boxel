@@ -36,8 +36,9 @@ import { setupApplicationTest } from '../helpers/setup';
 
 /**
  * Crossing first, so its tile is in view: its tape scrolls itself in a frame
- * loop for as long as the stage is on. Circle loop's score repeats forever,
- * so nothing but resting stops it.
+ * loop for as long as the stage is on. Circle loop's score and Keyframes'
+ * morph repeat forever, one as Web Animations a Choreo pass starts by script,
+ * the other written by Motion frame by frame.
  */
 const DEMOS = ['crossing', 'circle-loop', 'keyframes', 'enter'];
 
@@ -106,6 +107,32 @@ async function framesAskedBy(module: string, count = 10) {
   return asked;
 }
 
+/**
+ * How many changes the tiles' DOM takes over a run of painted frames. A loop
+ * Motion or Choreo runs by script writes styles and paths every frame; a grid
+ * at rest writes nothing.
+ */
+async function tileWrites(count = 10) {
+  let writes = 0;
+  let observer = new MutationObserver((records) => {
+    writes += records.length;
+  });
+  for (let tile of findAll('[data-gallery-tile]')) {
+    observer.observe(tile, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  }
+  try {
+    await frames(count);
+  } finally {
+    observer.disconnect();
+  }
+  return writes;
+}
+
 module('Acceptance | Choreo gallery | covered by a demo', function () {
   module('in interact mode', function (hooks) {
     setupApplicationTest(hooks);
@@ -164,6 +191,11 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         await framesAskedBy(TAPE),
         0,
         'and its own loop asks for no frames',
+      );
+      assert.strictEqual(
+        await tileWrites(),
+        0,
+        'and nothing in the grid is written to, frame after frame',
       );
 
       await click(`${stackCard(1)} [data-test-close-button]`);
@@ -247,6 +279,11 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         await framesAskedBy(TAPE),
         0,
         'and its own loop asks for no frames',
+      );
+      assert.strictEqual(
+        await tileWrites(),
+        0,
+        'and nothing in the grid is written to, frame after frame',
       );
 
       await click('[data-test-host-stack-item-close-button]');
