@@ -26,7 +26,7 @@ export class GuideLink extends Component<Signature> {
         class='guide-link'
         data-demo-guide={{@demo.lesson.guide}}
         ...attributes
-      >Read the guide →</a>
+      >Read the guide <span aria-hidden='true'>→</span></a>
     {{/if}}
     <style scoped>
       .guide-link {

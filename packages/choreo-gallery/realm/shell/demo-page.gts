@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 
 import type { GalleryDemo, Near } from '../demo';
 import { FilmLink } from '../lib/film-link';
+import { passFocus, takesFocus } from '../lib/focus';
 import { labSlug, LabState } from '../lib/lab';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
@@ -63,7 +64,11 @@ export class DemoPage extends Component<Signature> {
     return this.args.demo.theater === true && this.args.theater.on;
   }
 
-  leaveTheater = () => this.args.theater.enter(false);
+  /** the way out goes with theater; the door back in takes focus */
+  leaveTheater = () => {
+    passFocus('theater-enter');
+    this.args.theater.enter(false);
+  };
 
   /** whether there is a neighbour for the pager to open */
   get paged(): boolean {
@@ -105,7 +110,7 @@ export class DemoPage extends Component<Signature> {
                 >
                   Next
                   <b>{{@near.next.title}}</b>
-                  →
+                  <span aria-hidden='true'>→</span>
                 </DemoLink>
               </div>
             {{/if}}
@@ -166,6 +171,7 @@ export class DemoPage extends Component<Signature> {
                 class='theater-mark'
                 data-test-theater-exit
                 {{on 'click' this.leaveTheater}}
+                {{takesFocus 'theater-exit'}}
               >
                 <ChoreoMark />
                 <span class='theater-built'>How this is built</span>
@@ -202,7 +208,8 @@ export class DemoPage extends Component<Signature> {
             <nav class='pager' aria-label='More demos'>
               {{#if @near.prev}}
                 <DemoLink @demo={{@near.prev}} @onOpen={{@onOpen}}>
-                  ←
+                  <span aria-hidden='true'>←</span>
+                  <span class='sr-only'>Previous:</span>
                   {{@near.prev.title}}
                 </DemoLink>
               {{else}}
@@ -210,8 +217,9 @@ export class DemoPage extends Component<Signature> {
               {{/if}}
               {{#if @near.next}}
                 <DemoLink @demo={{@near.next}} @onOpen={{@onOpen}}>
+                  <span class='sr-only'>Next:</span>
                   {{@near.next.title}}
-                  →
+                  <span aria-hidden='true'>→</span>
                 </DemoLink>
               {{/if}}
             </nav>
