@@ -31,9 +31,9 @@ import {
 const log = logger('outbound');
 
 // Which platform setting a response is measured against. The system-key path
-// (`_request-forward` and the OpenRouter passthrough) carries image
-// generation, whose responses run to megabytes; `callApi` is a card's own
-// declared request.
+// (`_request-forward`, the OpenRouter passthrough, and the generation-cost
+// lookup either of them makes) carries image generation, whose responses run
+// to megabytes; `callApi` is a card's own declared request.
 export type ResponseSizePath = 'system-key' | 'call-api';
 
 export interface OutboundSettings {
