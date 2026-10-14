@@ -279,6 +279,40 @@ export function announceRestartedAnimations(el: Element) {
   el.dispatchEvent(new CustomEvent(RESTARTED, { bubbles: true }));
 }
 
+/**
+ * Resting stages look again, every so often, for animations that started
+ * since they last looked.
+ *
+ * A subtree change, a CSS animation starting and a retime the lab announces
+ * each make a resting stage look again. A Web Animation started by script is
+ * not announced: every pass of a Choreo score starts its effects that way, and
+ * a pass can run while its stage rests: a tile below the fold whose score
+ * starts after it first looked, or a tile under a demo page whose score passes
+ * again as the page opens over it. An endless effect that starts like that
+ * would play on where nobody can see it. One timer serves every resting stage,
+ * and runs only while one does.
+ */
+const RECHECK_MS = 1000;
+const resting = new Set<() => void>();
+let recheck: ReturnType<typeof setInterval> | undefined;
+function rest(settle: () => void, on: boolean) {
+  if (on) {
+    resting.add(settle);
+  } else {
+    resting.delete(settle);
+  }
+  if (resting.size && !recheck) {
+    recheck = setInterval(() => {
+      for (const again of resting) {
+        again();
+      }
+    }, RECHECK_MS);
+  } else if (!resting.size && recheck) {
+    clearInterval(recheck);
+    recheck = undefined;
+  }
+}
+
 export const restWhenOff = modifier((el: HTMLElement) => {
   const room = !!roomOwner(el);
   let active = false;
@@ -310,6 +344,7 @@ export const restWhenOff = modifier((el: HTMLElement) => {
   const settle = () => scheduleRest(el, apply);
   const observer = observeStage(el, (visible) => {
     active = visible;
+    rest(settle, !visible);
     settle();
   });
   // Catch animations created by a pending render while this card is frozen.
@@ -332,6 +367,7 @@ export const restWhenOff = modifier((el: HTMLElement) => {
     changes.disconnect();
     el.removeEventListener('animationstart', settle);
     el.removeEventListener(RESTARTED, settle);
+    rest(settle, false);
     pendingRest.delete(el);
     active = true;
     apply([]);
