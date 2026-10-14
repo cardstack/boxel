@@ -4,10 +4,14 @@ import type {
 } from 'openai/resources';
 import { readRealmFileBotTool } from './read-realm-file/index.ts';
 import { readUrlBotTool } from './read-url/index.ts';
+import { publishCanceledResult } from './results.ts';
 import type {
   BotTool,
+  BotToolCall,
+  BotToolOutcome,
   BotToolRoom,
   BotToolRoomFacts,
+  BotToolTarget,
   BotToolTurn,
 } from './types.ts';
 
@@ -43,6 +47,77 @@ export async function startBotToolTurns(
     ),
   );
   return new Map(turns);
+}
+
+// One bot-tool call to run: the call, the tool's turn that runs it, and
+// where its result goes.
+export interface BotToolCallEntry {
+  call: BotToolCall;
+  turn: BotToolTurn;
+  target: BotToolTarget;
+}
+
+// Runs bot-tool calls and publishes each one's result, one at a time, in
+// order. Sequential on purpose: every published result re-triggers the bot,
+// and that handler decides whether the turn is complete from the room
+// history it fetches; publishing in sequence means that by the time result N
+// triggers its handler, results 1..N-1 are on the server.
+//
+// This is the one place a stop reaches bot-tool calls. `stopped` is asked
+// before each call starts: a call already running finishes, and every call
+// after it is answered as canceled, so no tool has to know about stops.
+// Returns each call's outcome by its id.
+export async function fulfillBotToolCalls(
+  entries: BotToolCallEntry[],
+  stopped: () => boolean,
+): Promise<Map<string, BotToolOutcome>> {
+  let outcomes = new Map<string, BotToolOutcome>();
+  for (let { call, turn, target } of entries) {
+    let outcome = stopped()
+      ? await publishCanceledResult(call, target)
+      : await turn.fulfill(call, target);
+    outcomes.set(call.id, outcome);
+  }
+  return outcomes;
+}
+
+// The bot-tool calls an answer had streamed when it was canceled (a stop, or
+// a newer message interrupting it). None of them runs, but each still needs
+// a result: the next prompt carries the answer's calls, and the provider
+// rejects a call with no result after it. Includes a call whose arguments
+// were cut off mid-stream, and one that would have waited for approval.
+export function abandonedBotToolCalls(
+  toolCalls: {
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }[],
+): BotToolCall[] {
+  let calls: BotToolCall[] = [];
+  for (let toolCall of toolCalls) {
+    let name = toolCall?.function?.name;
+    if (toolCall?.id && name && botToolNamed(name)) {
+      calls.push({
+        id: toolCall.id,
+        type: 'function',
+        function: { name, arguments: toolCall.function?.arguments ?? '' },
+      });
+    }
+  }
+  return calls;
+}
+
+// Answers each call with a 'canceled' result, one at a time, in order (see
+// fulfillBotToolCalls for why in sequence). Returns each call's outcome by id.
+export async function cancelBotToolCalls(
+  calls: BotToolCall[],
+  target: BotToolTarget,
+  reason: string,
+): Promise<Map<string, BotToolOutcome>> {
+  let outcomes = new Map<string, BotToolOutcome>();
+  for (let call of calls) {
+    outcomes.set(call.id, await publishCanceledResult(call, target, reason));
+  }
+  return outcomes;
 }
 
 export interface ClassifiedToolCalls {
