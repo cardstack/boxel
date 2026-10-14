@@ -287,8 +287,11 @@ module(basename(import.meta.filename), function () {
         sizePath: 'system-key',
         credential,
       });
+      await sameOrigin.text();
+      // What the vendor received, not what it echoed back: the response is
+      // scrubbed of the credential.
       assert.strictEqual(
-        (await sameOrigin.json()).headers.authorization,
+        vendor.requests.at(-1)?.headers.authorization,
         'Bearer vendor-key',
         'the credential follows a redirect on the same origin',
       );

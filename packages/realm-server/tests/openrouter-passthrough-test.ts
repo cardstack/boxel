@@ -223,6 +223,51 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test('an OpenRouter error echoing the key reaches the caller without it', async function (assert) {
+        const originalFetch = global.fetch;
+        const mockFetch = sinon.stub(global, 'fetch');
+        mockFetch.callsFake(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 401,
+                  message:
+                    'No auth credentials found for Bearer openrouter-api-key',
+                },
+              }),
+              { status: 401, headers: { 'content-type': 'application/json' } },
+            ),
+        );
+
+        try {
+          const jwt = createRealmServerJWT(
+            { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+            realmSecretSeed,
+          );
+          const response = await request
+            .post('/_openrouter/chat/completions')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt}`)
+            .send({
+              model: 'anthropic/claude-opus-4-7',
+              messages: [{ role: 'user', content: 'Hello' }],
+            });
+
+          assert.strictEqual(response.status, 401);
+          assert.deepEqual(response.body, {
+            error: {
+              code: 401,
+              message: 'No auth credentials found for Bearer [REDACTED]',
+            },
+          });
+        } finally {
+          mockFetch.restore();
+          global.fetch = originalFetch;
+        }
+      });
+
       test('streams the upstream SSE response when stream: true is in the body', async function (assert) {
         const originalFetch = global.fetch;
         const mockFetch = sinon.stub(global, 'fetch');
