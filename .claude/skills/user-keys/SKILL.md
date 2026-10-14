@@ -56,6 +56,11 @@ its destination; from then on it opens only
 with that destination, and its destination can't change. Setting the
 destination it already has is a no-op.
 
+`user_keys.value` is registered in `SEALED_COLUMNS`
+(`lib/secrets-at-rest/rotation.ts`), so rotating the data key re-seals every
+key, with or without a destination, and the sealed census counts them as
+`sealed census: user_keys.value rowsByKeyId=…`.
+
 A value moved to another row, owner or destination by a database writer does
 not open: `SecretDecryptionError`, which names none of the inputs.
 

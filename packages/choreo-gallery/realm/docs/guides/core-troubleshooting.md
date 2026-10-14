@@ -22,7 +22,7 @@ Profile the number of active renderers and layout updates. Freeze or unmount off
 
 Check the media request, content type, and playback rejection before changing timeline durations. Browser playback must begin from an allowed user gesture. For separate clips, retain the clip identity and local time, remove listeners when replacing a clip, and distinguish natural completion from cancellation. A resumed clip needs an explicit seek; assigning the same source alone may not restart it.
 
-The gallery keeps a checkpoint for the full tour and uses the media clock for the short tour. Its exported MP4 has separate encoded audio. Passing a browser playback check does not verify that the exported mix is aligned, and an offline encoder cannot validate Safari's sound-start permissions.
+The [3D gallery](../../widget-room) keeps a checkpoint for the full tour and uses the media clock for the short tour. Its exported MP4 has separate encoded audio. Passing a browser playback check does not verify that the exported mix is aligned, and an offline encoder cannot validate Safari's sound-start permissions.
 
 ## A recorded frame depends on how you reached it
 

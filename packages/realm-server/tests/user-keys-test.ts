@@ -16,15 +16,21 @@ import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
+import { randomBytes } from 'node:crypto';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
   resetSecretsAtRest,
   SecretDecryptionError,
+  SecretsKeyring as Keyring,
   type SealedSecret,
   type SecretBinding,
   type SecretsKeyring,
 } from '../lib/secrets-at-rest/index.ts';
+import {
+  resealUnderCurrentKey,
+  SEALED_COLUMNS,
+} from '../lib/secrets-at-rest/rotation.ts';
 import {
   addUserKey,
   mintKeyWriteTicket,
@@ -754,6 +760,75 @@ module(basename(import.meta.filename), function () {
       );
       assert.throws(
         () => keyring.open(row.sealed, bindingFor(OWNER, key.id)),
+        SecretDecryptionError,
+      );
+    });
+
+    test('rotating the data key re-seals keys with and without a destination', async function (assert) {
+      let oldBytes = randomBytes(32);
+      let oldKey = new Keyring(
+        [{ keyId: 'rotation-old', key: Buffer.from(oldBytes) }],
+        'rotation-old',
+      );
+      let { ticket: first } = await mintKeyWriteTicket(dbAdapter, OWNER);
+      let bare = await addUserKey(dbAdapter, oldKey, {
+        owner: OWNER,
+        name: 'bare',
+        value: VALUE,
+        ticket: first,
+      });
+      let { ticket: second } = await mintKeyWriteTicket(dbAdapter, OWNER);
+      let bound = await addUserKey(dbAdapter, oldKey, {
+        owner: OWNER,
+        name: 'bound',
+        value: NEW_VALUE,
+        ticket: second,
+        destination: DESTINATION,
+      });
+
+      // The old data key stays loaded; a new one becomes current.
+      assert.strictEqual(
+        (await sealedRow(dbAdapter, bare.id)).sealed.keyId,
+        'rotation-old',
+      );
+      let during = new Keyring(
+        [
+          { keyId: 'rotation-old', key: Buffer.from(oldBytes) },
+          { keyId: 'rotation-new', key: randomBytes(32) },
+        ],
+        'rotation-new',
+      );
+      let report = await resealUnderCurrentKey(dbAdapter, during, {
+        columns: SEALED_COLUMNS.filter(
+          (column) => column.field === USER_KEY_VALUE_FIELD,
+        ),
+      });
+      assert.deepEqual(
+        report.columns.map(({ field, resealed, unopenable }) => ({
+          field,
+          resealed,
+          unopenable,
+        })),
+        [{ field: USER_KEY_VALUE_FIELD, resealed: 2, unopenable: 0 }],
+        'both keys are re-sealed',
+      );
+
+      let bareRow = await sealedRow(dbAdapter, bare.id);
+      assert.strictEqual(bareRow.sealed.keyId, 'rotation-new');
+      assert.strictEqual(
+        during.open(bareRow.sealed, bindingFor(OWNER, bare.id)),
+        VALUE,
+        'a key with no destination still opens without one',
+      );
+      let boundRow = await sealedRow(dbAdapter, bound.id);
+      assert.strictEqual(boundRow.sealed.keyId, 'rotation-new');
+      assert.strictEqual(
+        during.open(boundRow.sealed, bindingFor(OWNER, bound.id, DESTINATION)),
+        NEW_VALUE,
+        'a key with a destination opens only with it',
+      );
+      assert.throws(
+        () => during.open(boundRow.sealed, bindingFor(OWNER, bound.id)),
         SecretDecryptionError,
       );
     });

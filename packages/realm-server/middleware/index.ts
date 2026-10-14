@@ -19,6 +19,10 @@ import {
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
+import {
+  verifyOperatorToken,
+  type OperatorScope,
+} from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import { isKeyRoutePath } from '../lib/request-telemetry.ts';
 import {
@@ -661,6 +665,34 @@ export async function sendResponseForForbiddenRequest(
   message: string,
 ) {
   await sendResponseForError(ctxt, 403, 'Forbidden Request', message);
+}
+
+// Admits only an operator token for `scope`, signed with the realm secret
+// seed (see utils/operator-token.ts).
+export function operatorAuthorization(
+  secretSeed: string,
+  scope: OperatorScope,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let authorization = ctxt.req.headers['authorization'];
+    if (!authorization) {
+      await sendResponseForUnauthorizedRequest(
+        ctxt,
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
+      return;
+    }
+    try {
+      verifyOperatorToken(authorization, secretSeed, scope);
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        await sendResponseForUnauthorizedRequest(ctxt, e.message);
+        return;
+      }
+      throw e;
+    }
+    await next();
+  };
 }
 
 export async function sendResponseForUnauthorizedRequest(
