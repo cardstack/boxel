@@ -7,6 +7,7 @@
  * plus `presence` (from <Presence>) instead of React context.
  */
 import type {
+  AnimationDefinition,
   IProjectionNode,
   MotionNodeOptions,
   MotionValue,
@@ -14,7 +15,9 @@ import type {
   VisualElement,
 } from 'motion-dom';
 import {
+  animateVisualElement,
   frame,
+  getValueTransition,
   HTMLProjectionNode,
   HTMLVisualElement,
   isAnimationControls,
@@ -24,6 +27,7 @@ import {
   isVariantLabel,
   isVariantNode,
   resolveMotionValue,
+  resolveVariant,
   resolveVariantFromProps,
   scrapeHTMLMotionValuesFromProps,
   scrapeSVGMotionValuesFromProps,
@@ -372,6 +376,104 @@ function describe(el: Element | undefined): string {
 
 let layoutPresenceId = 0;
 
+/** the props that say what an element animates to, and how */
+const ANIMATION_PROPS = [
+  'animate',
+  'custom',
+  'transition',
+  'variants',
+  'whileDrag',
+  'whileFocus',
+  'whileHover',
+  'whileInView',
+  'whileTap',
+] as const;
+
+/** the animation types an element can be running, lowest priority first */
+const ACTIVE_TYPES = [
+  'animate',
+  'whileInView',
+  'whileFocus',
+  'whileHover',
+  'whileTap',
+  'whileDrag',
+] as const;
+
+const printIds = new WeakMap<object, number>();
+let nextPrintId = 0;
+
+/**
+ * An element's animation props as a string, every `transition` in them
+ * included. Functions, motion values and animation controls print by
+ * identity. Undefined when the props cannot be printed at all, which retime
+ * takes as "unknown" and leaves alone.
+ */
+function timingPrint(props: MotionNodeOptions): string | undefined {
+  const picked: Record<string, unknown> = {};
+  for (const key of ANIMATION_PROPS) {
+    picked[key] = (props as Record<string, unknown>)[key];
+  }
+  try {
+    return JSON.stringify(picked, (_key, value: unknown) => {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return String(value);
+      }
+      if (
+        typeof value === 'function' ||
+        isMotionValue(value) ||
+        isAnimationControls(value)
+      ) {
+        let id = printIds.get(value as object);
+        if (id === undefined) {
+          printIds.set(value as object, (id = ++nextPrintId));
+        }
+        return `#${id}`;
+      }
+      return value;
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/** a running animation's clock, when it has one: a value following a target does not */
+function timelineOf(value: MotionValue) {
+  const animation = value.animation as
+    | { duration?: number; time?: number }
+    | undefined;
+  return animation &&
+    typeof animation.duration === 'number' &&
+    typeof animation.time === 'number' &&
+    animation.duration > 0 &&
+    Number.isFinite(animation.duration)
+    ? (animation as { duration: number; time: number })
+    : undefined;
+}
+
+/**
+ * Retime the motion already running at and under `root`.
+ *
+ * Motion reads a transition when an animation starts, so an element whose
+ * `transition` changes while its target stays put keeps running on the old
+ * timing: a spring keeps its old stiffness, an infinite loop its old
+ * duration. That is right for an app and wrong for a tuning tool, where the
+ * edit is the point. `retime` restarts each element whose timing has changed
+ * since it mounted or was last retimed, toward the target it is already
+ * headed for, and puts every infinite loop back at the point of its cycle it
+ * had reached. An element whose timing is unchanged, or that is leaving, is
+ * not touched.
+ *
+ * Call it after the render that delivered the new transitions.
+ */
+export function retime(root: Element) {
+  for (const element of [root, ...root.querySelectorAll('*')]) {
+    const ve = visualElementStore.get(element);
+    if (ve) {
+      nodeOf.get(ve)?.retime();
+    }
+  }
+}
+
 export class MotionNode implements MotionParticipant, PopMeasurable {
   private ve?: HTMLVisualElement;
   private destroyed = false;
@@ -381,6 +483,11 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   private latest?: { ownPresence?: PresenceHandle; props: MotionNodeOptions };
   private lastPresent?: boolean;
   private config: MotionConfigContext = {};
+  /**
+   * The props this element was mounted or last retimed under. Kept as they
+   * are and printed only by retime, so an element nobody retimes pays nothing.
+   */
+  private timedBy?: MotionNodeOptions;
 
   /** React: configAndProps = { ...MotionConfigContext, ...props }. Looked up when used, not when the args
    *  arrive: modifiers install children-first, so a <MotionConfig> above has not registered yet at update time */
@@ -678,6 +785,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
       }
       // React: useEffect right after commit — synchronous here, the DOM is already in place
       ve.animationState?.animateChanges();
+      this.timedBy = props;
       ve.enteringChildren = undefined;
       if (mountContext !== presenceContext) {
         // …and now the flip that happened while we were waiting to mount
@@ -932,6 +1040,75 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     }
     this.ve = undefined;
     ve.unmount();
+  }
+
+  /** restart this element's running animation under its current timing, when that has changed (see retime) */
+  retime() {
+    const ve = this.ve;
+    if (!ve?.current || this.destroyed || !this.timedBy) {
+      return;
+    }
+    const props = ve.getProps() as MotionNodeOptions;
+    const timing = timingPrint(props);
+    if (timing === undefined || timing === timingPrint(this.timedBy)) {
+      return;
+    }
+    const state = ve.animationState?.getState();
+    if (this.lastPresent === false || state?.exit?.isActive) {
+      return;
+    }
+    this.timedBy = props;
+    const phases = new Map<string, number>();
+    ve.values.forEach((value, key) => {
+      const clock = timelineOf(value);
+      // still inside its delay, a loop has no phase yet
+      if (clock && clock.time >= 0) {
+        phases.set(key, (clock.time / clock.duration) % 1);
+      }
+    });
+    // every active type, lowest priority first, so a gesture's targets win
+    // over `animate`'s on the values both name, as they do in the engine
+    for (const type of ACTIVE_TYPES) {
+      const definition = props[type] as
+        | AnimationDefinition
+        | boolean
+        | undefined;
+      if (
+        !state?.[type]?.isActive ||
+        !definition ||
+        typeof definition === 'boolean' ||
+        isAnimationControls(definition)
+      ) {
+        continue;
+      }
+      // a label resolves to its own target here, so this element restarts
+      // alone: its children retime by their own timing, not by orchestration
+      const resolved = (
+        Array.isArray(definition) ? definition : [definition]
+      ).map((each) =>
+        resolveVariant(ve, each as AnimationDefinition, props.custom),
+      );
+      for (const target of resolved) {
+        if (!target) {
+          continue;
+        }
+        void animateVisualElement(ve, target);
+        const transition = target.transition ?? props.transition;
+        for (const key of Object.keys(target)) {
+          const phase = phases.get(key);
+          const clock = ve.values.has(key)
+            ? timelineOf(ve.values.get(key)!)
+            : undefined;
+          if (
+            phase !== undefined &&
+            clock &&
+            getValueTransition(transition, key)?.repeat === Infinity
+          ) {
+            clock.time = phase * clock.duration;
+          }
+        }
+      }
+    }
   }
 
   /** re-run the update pass with the latest args (a context or presence change above us) */
