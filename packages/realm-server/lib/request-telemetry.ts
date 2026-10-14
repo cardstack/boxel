@@ -4,11 +4,12 @@
 // listeners, and attaches them to any event raised while that request is in
 // flight. Sentry keeps up to `maxValueLength` characters of each value. So:
 //
-// - An event raised during a request to the secure origin or to a proxy route
-//   keeps only the method and the URL's origin and path. The secure origin is
-//   where credentials are typed. A proxy route's body is the caller's own
-//   content (a forwarded request's URL, headers and body, or a whole prompt),
-//   and its query string can carry a token.
+// - An event raised during a request to the secure origin, to a proxy route or
+//   to a key route keeps only the method and the URL's origin and path. The
+//   secure origin is where credentials are typed. A proxy route's body is the
+//   caller's own content (a forwarded request's URL, headers and body, or a
+//   whole prompt), and its query string can carry a token. A key route's body
+//   can carry a key's value or the ticket that authorizes writing one.
 // - An event raised during any other request keeps its request context, minus
 //   the `Authorization` / `Proxy-Authorization` and `Cookie` headers and the
 //   parsed cookies, and with any `token` query parameter masked. The caller's
@@ -28,6 +29,13 @@ const proxyRoutePaths = new Set([
   REQUEST_FORWARD_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
 ]);
+
+// The routes that manage a user's own keys: `/_user-keys`, each key beneath
+// it, and the key write tickets.
+export const USER_KEYS_PATH = '/_user-keys';
+export const KEY_WRITE_TICKETS_PATH = '/_key-write-tickets';
+
+const keyRoutePaths = [USER_KEYS_PATH, KEY_WRITE_TICKETS_PATH];
 
 const credentialHeaders = new Set([
   'authorization',
@@ -103,6 +111,15 @@ function isProxyRoutePath(pathname: string): boolean {
     path = path.slice(0, -1);
   }
   return proxyRoutePaths.has(path);
+}
+
+// Matches a key route, or any path beneath one, in any case and with or
+// without a trailing slash.
+function isKeyRoutePath(pathname: string): boolean {
+  let path = pathname.toLowerCase();
+  return keyRoutePaths.some(
+    (keyPath) => path === keyPath || path.startsWith(`${keyPath}/`),
+  );
 }
 
 // A proxy route's URL followed by a query string, wherever it is written: the
@@ -222,7 +239,8 @@ export function scrubRequestTelemetry<
   let parsed = parseURL(request.url);
   let methodAndPathOnly =
     isSecureOriginRequestData(request) ||
-    (parsed !== undefined && isProxyRoutePath(parsed.pathname));
+    (parsed !== undefined &&
+      (isProxyRoutePath(parsed.pathname) || isKeyRoutePath(parsed.pathname)));
   (event as { request?: SentryRequestData }).request = methodAndPathOnly
     ? {
         ...(request.method ? { method: request.method } : {}),

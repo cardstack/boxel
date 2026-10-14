@@ -90,9 +90,19 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_WRITE_TICKETS_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
+  USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
+import {
+  handleAddUserKey,
+  handleDeleteUserKey,
+  handleListUserKeys,
+  handleMintKeyWriteTicket,
+  handleReplaceUserKey,
+  handleShowUserKey,
+} from './handlers/handle-user-keys.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -152,6 +162,9 @@ export type CreateRoutesArgs = {
   liveSearchCache?: LiveSearchCache;
   // Decides how much of each result's link graph a live search carries.
   linkShapePolicy?: LinkShapePolicy;
+  // The secure origin's shell URL, when this server serves one. Key write
+  // tickets are minted for requests from its origin and for the CLI.
+  secureOriginURL?: URL;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -231,6 +244,36 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateUserRequest(args),
+  );
+  router.post(
+    KEY_WRITE_TICKETS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMintKeyWriteTicket(args),
+  );
+  router.get(
+    USER_KEYS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListUserKeys(args),
+  );
+  router.post(
+    USER_KEYS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleAddUserKey(args),
+  );
+  router.get(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleShowUserKey(args),
+  );
+  router.patch(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleReplaceUserKey(args),
+  );
+  router.delete(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleDeleteUserKey(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,

@@ -1023,6 +1023,7 @@ export class RealmServer {
           searchCache: this.searchCache,
           liveSearchCache: this.liveSearchCache,
           linkShapePolicy: this.linkShapePolicy,
+          secureOriginURL: this.secureOrigin?.url,
         }),
       )
       .use(

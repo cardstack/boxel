@@ -212,6 +212,49 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
+    test('a key route keeps only its method and path, whatever its case and however deep', function (assert) {
+      for (let url of [
+        'https://app.telemetry.test/_user-keys',
+        'https://app.telemetry.test/_user-keys/',
+        'https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+        'https://app.telemetry.test/_USER-KEYS/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+        'https://app.telemetry.test/_key-write-tickets',
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: `${url}?a=b`,
+            headers: {
+              host: 'app.telemetry.test',
+              'x-other': 'kept elsewhere',
+            },
+            data: '{"data":{"attributes":{"value":"sk-value-marker"}},"meta":{"ticket":"ticket-marker"}}',
+            query_string: 'a=b',
+          },
+        });
+        assert.deepEqual(
+          event.request as unknown,
+          { method: 'POST', url },
+          `${url} keeps only its method and path`,
+        );
+      }
+    });
+
+    test('a path that only starts with a key route keeps its context', function (assert) {
+      let event = scrubRequestTelemetry({
+        request: {
+          method: 'GET',
+          url: 'https://app.telemetry.test/_user-keys-status',
+          query_string: 'a=b',
+        },
+      });
+      assert.deepEqual(event.request as unknown, {
+        method: 'GET',
+        url: 'https://app.telemetry.test/_user-keys-status',
+        query_string: 'a=b',
+      });
+    });
+
     test('an event with no request is left alone', function (assert) {
       let event: { message: string; request?: undefined } = {
         message: 'no request',
