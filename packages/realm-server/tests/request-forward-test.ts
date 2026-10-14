@@ -2031,9 +2031,9 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('the key is read from the sealed columns, not the plain-text column', async function (assert) {
+        test('a key edited by hand reaches the vendor before the backfill seals it again', async function (assert) {
           await dbAdapter.execute(
-            `UPDATE proxy_endpoints SET api_key = 'stale-plain-text' WHERE url = $1`,
+            `UPDATE proxy_endpoints SET api_key = 'stub-vendor-key-edited' WHERE url = $1`,
             { bind: [`${vendor.url}/`] },
           );
           AllowedProxyDestinations.reset();
@@ -2043,7 +2043,7 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(response.status, 200);
           assert.strictEqual(
             vendor.requests[0].headers.authorization,
-            'Bearer stub-vendor-key',
+            'Bearer stub-vendor-key-edited',
           );
         });
       });

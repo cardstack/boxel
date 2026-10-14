@@ -522,6 +522,12 @@ export class PgAdapter implements DBAdapter {
       });
       return rows;
     } catch (e: any) {
+      if (opts?.redactBindings) {
+        // Postgres quotes the offending row or value in `detail` (and the
+        // statement context in `where`) for constraint and type errors.
+        delete e.detail;
+        delete e.where;
+      }
       console.error(
         `Error executing SQL ${e.message} (${e.hint}):\n${sql}${
           opts?.bind ? ' with bindings: ' + loggableBindings(opts) : ''

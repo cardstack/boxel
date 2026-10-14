@@ -107,7 +107,7 @@ export class KmsKeyProvider implements SecretsKeyProvider {
 
 // A fixed development data key. It is public, so nothing sealed under it is
 // secret; a deployed server refuses to start with this provider.
-const LOCAL_DATA_KEY_ID = 'local-development';
+export const LOCAL_DATA_KEY_ID = 'local-development';
 const LOCAL_DATA_KEY = createHash('sha256')
   .update('boxel local development secrets data key', 'utf8')
   .digest();

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import {
+  LOCAL_DATA_KEY_ID,
   PLATFORM_SECRET_OWNER,
   secretsKeyring,
   type SealedSecret,
@@ -95,11 +96,29 @@ function sealedBindings(sealed: SealedSecret | undefined) {
   ];
 }
 
-// The key a row holds: its sealed value, or the plain-text value of a row the
-// backfill hasn't sealed yet. A sealed value that doesn't open (sealed under a
-// data key this process hasn't loaded, or on a row whose id or url was changed
-// outside the application) is reported, and the plain-text value is served in
-// its place.
+// Each row whose sealed key disagrees with its plain-text key is reported
+// once per sealed value, not on every reload of the endpoint cache.
+const reportedDrift = new Set<string>();
+
+function reportDrift(row: ProxyEndpointKeyRow, reason: string): void {
+  let drift = `${row.id}|${row.api_key_nonce}|${reason}`;
+  if (reportedDrift.has(drift)) {
+    return;
+  }
+  reportedDrift.add(drift);
+  log.warn(
+    `the sealed key for proxy endpoint ${row.url} ${reason}, so its plain-text key is used until the backfill seals it again`,
+  );
+}
+
+// The key a row holds. A sealed key that opens to the plain-text key is served
+// from the sealed columns. The plain-text column is the source while it
+// exists, so when the two disagree it wins: a row the backfill hasn't sealed
+// yet, a sealed key that doesn't open (sealed under a data key this process
+// hasn't loaded, or on a row whose id or url was edited outside the
+// application), and a plain-text key edited outside the application are all
+// served from `api_key`, and an operator's edit reaches the proxy without a
+// restart. Each disagreement is reported.
 export function readProxyEndpointKey(
   row: ProxyEndpointKeyRow,
   keyring?: SecretsKeyring,
@@ -108,17 +127,21 @@ export function readProxyEndpointKey(
   if (!sealed) {
     return row.api_key;
   }
+  let opened: string;
   try {
-    return (keyring ?? secretsKeyring()).open(
+    opened = (keyring ?? secretsKeyring()).open(
       sealed,
       proxyEndpointKeyBinding(row),
     );
   } catch (e: any) {
-    log.error(
-      `the sealed key for proxy endpoint ${row.url} could not be opened, so its plain-text key is used: ${e?.message ?? e}`,
-    );
+    reportDrift(row, `could not be opened (${e?.message ?? e})`);
     return row.api_key;
   }
+  if (opened !== row.api_key) {
+    reportDrift(row, 'differs from its plain-text key');
+    return row.api_key;
+  }
+  return opened;
 }
 
 export interface ProxyEndpoint {
@@ -189,7 +212,8 @@ export async function saveProxyEndpoint(
 }
 
 export interface ProxyEndpointKeySealing {
-  // Rows whose key was sealed.
+  // Rows whose key was sealed, including rows sealed under the public local
+  // development key by a process that seals with another key.
   sealed: number;
   // Rows with no plain-text key whose sealed columns were emptied.
   cleared: number;
@@ -212,7 +236,9 @@ export interface ProxyEndpointKeySealing {
 //
 // A row sealed under a data key this process hasn't loaded is left alone and
 // reported: re-sealing it under this process's current key would move it back
-// onto an older data key than the one a rotation put it under.
+// onto an older data key than the one a rotation put it under. The one
+// exception is the public local development key: a process sealing with any
+// other key seals such a row again, since anyone can open it.
 //
 // Each update applies only while the row still holds the key and the nonce
 // that were read, so it never overwrites a concurrent write or re-seal, and
@@ -251,7 +277,14 @@ export async function sealProxyEndpointKeys(
       continue;
     }
     let sealed = sealedKey(row);
-    if (sealed) {
+    if (
+      sealed?.keyId === LOCAL_DATA_KEY_ID &&
+      keyring.currentKeyId !== LOCAL_DATA_KEY_ID
+    ) {
+      log.warn(
+        `the key for proxy endpoint ${row.url} is sealed under the public local development key, so it is sealed again under data key ${keyring.currentKeyId}`,
+      );
+    } else if (sealed) {
       if (!keyring.keyIds.includes(sealed.keyId)) {
         log.warn(
           `the key for proxy endpoint ${row.url} is sealed under data key ${sealed.keyId}, which this process has not loaded, so it is left as it is`,

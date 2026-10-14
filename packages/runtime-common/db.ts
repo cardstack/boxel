@@ -11,7 +11,8 @@ export interface ExecuteOptions {
   bind?: PgPrimitive[];
   coerceTypes?: TypeCoercion;
   // The bindings carry a secret, so the adapter's statement and error logs
-  // print a placeholder in their place.
+  // print a placeholder in their place, and an error it throws drops the
+  // detail in which Postgres quotes the offending row or value.
   redactBindings?: boolean;
 }
 

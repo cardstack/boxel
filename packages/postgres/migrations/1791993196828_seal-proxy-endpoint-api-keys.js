@@ -5,10 +5,11 @@
 // working against this schema.
 //
 // The table holds the platform's own vendor keys, so the read-only role used
-// by dashboards and read-only database access loses SELECT on it. That role
-// exists only where it was provisioned (staging and production), so the
-// revoke is skipped wherever it doesn't. Every statement is idempotent, so
-// running `up` again changes nothing.
+// by dashboards and read-only database access loses SELECT on it, and so does
+// every role that is a member of it, in case one was also granted SELECT
+// directly. That role exists only where it was provisioned (staging and
+// production), so the revoke is skipped wherever it doesn't. Every statement
+// is idempotent, so running `up` again changes nothing.
 
 exports.up = (pgm) => {
   pgm.sql(`
@@ -20,9 +21,23 @@ exports.up = (pgm) => {
   `);
   pgm.sql(`
     DO $$
+    DECLARE
+      member_name name;
     BEGIN
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_role') THEN
         REVOKE SELECT ON TABLE proxy_endpoints FROM readonly_role;
+        FOR member_name IN
+          SELECT member.rolname
+          FROM pg_auth_members membership
+          JOIN pg_roles grp ON grp.oid = membership.roleid
+          JOIN pg_roles member ON member.oid = membership.member
+          WHERE grp.rolname = 'readonly_role'
+        LOOP
+          EXECUTE format(
+            'REVOKE SELECT ON TABLE proxy_endpoints FROM %I',
+            member_name
+          );
+        END LOOP;
       END IF;
     END
     $$

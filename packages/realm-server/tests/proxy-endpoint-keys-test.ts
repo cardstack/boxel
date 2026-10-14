@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, dirname, join } from 'path';
 import { createRequire } from 'module';
+import { inspect } from 'util';
 import { loggableBindings } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 import { logLinesDuring } from './helpers/log-capture.ts';
@@ -180,17 +181,22 @@ module(basename(import.meta.filename), function () {
         { bind: [movedUrl, OPENROUTER_URL] },
       );
 
-      let served: string | undefined;
+      let served: (string | undefined)[] = [];
       let lines = await logLinesDuring(['proxy-endpoint-keys'], async () => {
-        served = await apiKeyServedFor(movedUrl);
+        served.push(await apiKeyServedFor(movedUrl));
+        served.push(await apiKeyServedFor(movedUrl));
       });
 
-      assert.strictEqual(served, OPENROUTER_KEY);
-      let errors = lines.filter(({ level }) => level === 'error');
-      assert.strictEqual(errors.length, 1, 'the failure is reported');
-      assert.true(errors[0].message.includes(movedUrl));
+      assert.deepEqual(served, [OPENROUTER_KEY, OPENROUTER_KEY]);
+      let warnings = lines.filter(({ level }) => level === 'warn');
+      assert.strictEqual(
+        warnings.length,
+        1,
+        'the failure is reported once, not on every reload',
+      );
+      assert.true(warnings[0].message.includes(movedUrl));
       assert.false(
-        errors[0].message.includes(OPENROUTER_KEY),
+        warnings[0].message.includes(OPENROUTER_KEY),
         'the report never carries the key',
       );
 
@@ -236,7 +242,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('the backfill seals again a key whose plain text was edited outside the application', async function (assert) {
+    test('a key whose plain text was edited outside the application is served at once, and the backfill seals it again', async function (assert) {
       await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
       await sealProxyEndpointKeys(dbAdapter);
       await dbAdapter.execute(
@@ -244,12 +250,51 @@ module(basename(import.meta.filename), function () {
         { bind: [OPENROUTER_URL] },
       );
 
+      let served: string | undefined;
+      let lines = await logLinesDuring(['proxy-endpoint-keys'], async () => {
+        served = await apiKeyServedFor(OPENROUTER_URL);
+      });
+      assert.strictEqual(
+        served,
+        'sk-or-v1-edited-by-hand',
+        'the edit reaches the proxy without waiting for the backfill',
+      );
+      let warnings = lines.filter(({ level }) => level === 'warn');
+      assert.strictEqual(warnings.length, 1, 'the disagreement is reported');
+      assert.false(warnings[0].message.includes('sk-or-v1-edited-by-hand'));
+      assert.false(warnings[0].message.includes(OPENROUTER_KEY));
+
       let result = await sealProxyEndpointKeys(dbAdapter);
 
       assert.strictEqual(result.sealed, 1);
+      let row = await keyRow(OPENROUTER_URL);
       assert.strictEqual(
-        await apiKeyServedFor(OPENROUTER_URL),
+        keyring.open(sealedOf(row), proxyEndpointKeyBinding(row)),
         'sk-or-v1-edited-by-hand',
+      );
+    });
+
+    test('a process sealing with another data key seals again a key sealed under the public local development key', async function (assert) {
+      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
+      await sealProxyEndpointKeys(dbAdapter);
+      assert.strictEqual(
+        (await keyRow(OPENROUTER_URL)).api_key_key_id,
+        'local-development',
+      );
+      let deployed = new SecretsKeyring(
+        [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
+        'kms-deployed',
+      );
+
+      let result = await sealProxyEndpointKeys(dbAdapter, deployed);
+
+      assert.strictEqual(result.sealed, 1);
+      assert.strictEqual(result.unloadedKey, 0);
+      let row = await keyRow(OPENROUTER_URL);
+      assert.strictEqual(row.api_key_key_id, 'kms-deployed');
+      assert.strictEqual(
+        deployed.open(sealedOf(row), proxyEndpointKeyBinding(row)),
+        OPENROUTER_KEY,
       );
     });
 
@@ -341,6 +386,45 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a key in a statement that fails never reaches the error or its log', async function (assert) {
+      let secret = 'sk-or-v1-never-logged';
+      let logged: string[] = [];
+      let originalConsoleError = console.error;
+      console.error = (...args: unknown[]) => {
+        logged.push(args.map((arg) => inspect(arg, { depth: 10 })).join(' '));
+      };
+      let thrown: unknown;
+      try {
+        // A missing credit strategy violates its NOT NULL constraint, and
+        // Postgres quotes the whole failing row in the error.
+        await saveProxyEndpoint(dbAdapter, {
+          url: OPENROUTER_URL,
+          apiKey: secret,
+          creditStrategy: null as unknown as string,
+          supportsStreaming: false,
+        });
+      } catch (e) {
+        thrown = e;
+      } finally {
+        console.error = originalConsoleError;
+      }
+
+      assert.ok(thrown, 'the statement fails');
+      assert.true(
+        /null value in column "credit_strategy"/.test(String(thrown)),
+        String(thrown),
+      );
+      assert.false(
+        inspect(thrown, { depth: 10 }).includes(secret),
+        'the error carries no key',
+      );
+      assert.true(logged.length > 0, 'the failure is logged');
+      assert.false(
+        logged.some((line) => line.includes(secret)),
+        'the log carries no key',
+      );
+    });
+
     test('a saved key never appears in the bindings a statement logs', function (assert) {
       assert.strictEqual(
         loggableBindings({ bind: ['sk-secret'], redactBindings: true }),
@@ -363,6 +447,22 @@ module(basename(import.meta.filename), function () {
       await dbAdapter.execute(
         `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
       );
+      // A user that inherits the role and was also granted SELECT on the
+      // table directly.
+      await dbAdapter.execute(
+        `DO $$
+         BEGIN
+           CREATE ROLE readonly_member_for_proxy_endpoints_test;
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END
+         $$`,
+      );
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_member_for_proxy_endpoints_test`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE proxy_endpoints TO readonly_member_for_proxy_endpoints_test`,
+      );
       let statements: string[] = [];
       require(SEAL_MIGRATION).up({
         sql: (statement: string) => statements.push(statement),
@@ -372,9 +472,9 @@ module(basename(import.meta.filename), function () {
       }
       await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
 
-      async function selectAsReadOnly(sql: string) {
+      async function selectAsReadOnly(sql: string, role = 'readonly_role') {
         return await dbAdapter.withTransaction(async (query: any) => {
-          await query(['SET LOCAL ROLE readonly_role']);
+          await query([`SET LOCAL ROLE ${role}`]);
           return await query([sql]);
         });
       }
@@ -386,6 +486,14 @@ module(basename(import.meta.filename), function () {
       await assert.rejects(
         selectAsReadOnly('SELECT url FROM proxy_endpoints'),
         /permission denied for table proxy_endpoints/,
+      );
+      await assert.rejects(
+        selectAsReadOnly(
+          'SELECT api_key FROM proxy_endpoints',
+          'readonly_member_for_proxy_endpoints_test',
+        ),
+        /permission denied for table proxy_endpoints/,
+        'a member granted SELECT directly is denied too',
       );
       assert.deepEqual(
         await selectAsReadOnly('SELECT COUNT(*) >= 0 AS readable FROM plans'),
