@@ -712,8 +712,8 @@ class RealmFsSession {
         };
       }
       case 'capture': {
-        let url = this.resolve(method, args[0]);
-        return await this.captures.take(url, this.relative(url), args[1]);
+        let { url, path } = this.captureTarget(args[0]);
+        return await this.captures.take(url, path, args[1]);
       }
       case 'images.generate':
         return await this.generateAndSaveImage(args[0]);
@@ -1178,6 +1178,29 @@ class RealmFsSession {
     return this.resolve('show', path).replace(/\.json$/, '');
   }
 
+  // What `realm.capture` captures. A relative path resolves inside this realm,
+  // as for every other call. A full URL or a prefixed card id (`@scope/...`)
+  // may name a card or file in any workspace: the capture itself refuses one
+  // the user cannot read. The result names a target in this realm by its
+  // path, and any other by what the script gave.
+  private captureTarget(path: unknown): { url: string; path: string } {
+    if (
+      typeof path === 'string' &&
+      (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('@'))
+    ) {
+      let reference = path.trim();
+      return {
+        url: reference,
+        path:
+          reference.startsWith(this.realmURL) && reference !== this.realmURL
+            ? this.relative(reference)
+            : reference,
+      };
+    }
+    let url = this.resolve('capture', path);
+    return { url, path: this.relative(url) };
+  }
+
   private relative(url: string): string {
     return url.slice(this.realmURL.length);
   }
@@ -1484,13 +1507,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'Run safe Realm code that reads and edits realm source files, finds ' +
     'cards with realm.cards.search, reads cards as JSON data with ' +
     'realm.cards.get, finds cards, specs and files across realms with ' +
-    'realm.entries.search, can look at what it made with realm.capture, can ' +
-    'generate images into the realm with realm.images.generate, can save a ' +
-    'file from a URL with realm.fs.download, can create workspaces with ' +
-    'realm.workspaces.create, can change the skills and model of this room ' +
-    'with room.*, and can refresh the index of the workspace with ' +
-    'realm.index.*. In a workspace the user can only read, reads work and ' +
-    'each write is refused. Return ' +
+    'realm.entries.search, can look at cards and files with realm.capture ' +
+    '(a path in the realm, or the URL of a card or file in any workspace ' +
+    'the user can read), can generate images into the realm with ' +
+    'realm.images.generate, can save a file from a URL with ' +
+    'realm.fs.download, can create workspaces with realm.workspaces.create, ' +
+    'can change the skills and model of this room with room.*, and can ' +
+    'refresh the index of the workspace with realm.index.*. In a workspace ' +
+    'the user can only read, reads work and each write is refused. Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets

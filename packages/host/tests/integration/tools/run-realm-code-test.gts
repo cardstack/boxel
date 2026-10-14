@@ -59,6 +59,9 @@ function recipeJSON(
   )}\n`;
 }
 
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -70,8 +73,6 @@ module('Integration | tools | run-realm-code', function (hooks) {
   // `realm.capture` captures through the realm server; this answers every
   // capture with a 1×1 PNG and records what was asked for.
   let captureRequests: any[] = [];
-  const PNG_BASE64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   setupRealmServerEndpoints(hooks, [
     {
       route: '_capture',
@@ -448,7 +449,44 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(captureRequests.length, 3, 'three captures were taken');
   });
 
-  test('realm.capture refuses a path outside the realm', async function (assert) {
+  test('realm.capture captures a card by its path or its id, with the options it is given', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return [
+  await realm.capture('Pet/mango'),
+  await realm.capture('${testRealmURL}Pet/mango', {
+    format: 'embedded',
+    viewportWidth: 600,
+    viewportHeight: 400,
+  }),
+];`,
+    });
+
+    assert.strictEqual(captureRequests.length, 2, 'two capture requests');
+    let [byPath, byId] = captureRequests.map((r) => r.data.attributes);
+    assert.strictEqual(byPath.cardId, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(byId.cardId, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(byId.format, 'embedded');
+    assert.deepEqual(byId.captureSpec, {
+      viewport: { width: 600, height: 400 },
+    });
+    let [first, second] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(first.path, 'Pet/mango');
+    assert.strictEqual(first.kind, 'card');
+    assert.strictEqual(
+      second.path,
+      'Pet/mango',
+      'a URL in the run realm is named by its path',
+    );
+    assert.strictEqual(second.format, 'embedded');
+    assert.strictEqual(result.captures.length, 2);
+  });
+
+  test('realm.capture refuses a URL outside every workspace', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
 
@@ -458,7 +496,7 @@ return { show: 'Pet/missing' };`,
         roomId: '!room:example.com',
         code: `await realm.capture('https://example.com/page.html');`,
       }),
-      /Path is outside this realm/,
+      /not in a workspace the user can read/,
     );
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
   });
@@ -2473,6 +2511,8 @@ return found;`);
   });
 });
 
+const readOnlyRealmURL = 'http://test-realm/other/';
+
 module(
   'Integration | tools | run-realm-code | read-only workspace',
   function (hooks) {
@@ -2480,11 +2520,52 @@ module(
     setupLocalIndexing(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
       autostart: true,
-      realmPermissions: { [testRealmURL]: ['read'] },
+      activeRealms: [testRealmURL, readOnlyRealmURL],
+      realmPermissions: {
+        [testRealmURL]: ['read'],
+        [readOnlyRealmURL]: ['read'],
+      },
     });
+    let captureRequests: any[] = [];
+    setupRealmServerEndpoints(hooks, [
+      {
+        route: '_capture',
+        getResponse: async (req: Request) => {
+          captureRequests.push(await req.clone().json());
+          return new Response(
+            JSON.stringify({
+              data: {
+                type: 'capture-result',
+                attributes: {
+                  status: 'ready',
+                  base64: PNG_BASE64,
+                  width: 1,
+                  height: 1,
+                  contentType: 'image/png',
+                },
+              },
+            }),
+            {
+              status: 201,
+              headers: { 'Content-Type': 'application/vnd.api+json' },
+            },
+          );
+        },
+      },
+    ]);
     setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
+      captureRequests = [];
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: readOnlyRealmURL,
+        enforcePermissions: true,
+        permissions: { '*': ['read'] },
+        contents: {
+          'brand.md': '# Brand\n',
+        },
+      });
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         enforcePermissions: true,
@@ -2511,6 +2592,37 @@ module(
         },
       });
       await getService('realm').login(testRealmURL);
+      await getService('realm').login(readOnlyRealmURL);
+    });
+
+    test('realm.capture captures in a workspace the user can only read, and in another workspace by URL', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return [
+  await realm.capture('notes/first.md'),
+  await realm.capture('${readOnlyRealmURL}brand.md'),
+];`,
+      });
+
+      assert.deepEqual(
+        captureRequests.map((r) => r.data.attributes.fileURL),
+        [`${testRealmURL}notes/first.md`, `${readOnlyRealmURL}brand.md`],
+      );
+      assert.deepEqual(
+        captureRequests.map((r) => r.data.attributes.realmURL),
+        [testRealmURL, readOnlyRealmURL],
+        'each capture is asked of the workspace that holds it',
+      );
+      assert.deepEqual(
+        JSON.parse(result.scriptResult!).map((c: { path: string }) => c.path),
+        ['notes/first.md', `${readOnlyRealmURL}brand.md`],
+        'a capture in another workspace is named by its URL',
+      );
+      assert.strictEqual(result.captures.length, 2);
     });
 
     test('a script reads a workspace the user can only read', async function (assert) {
