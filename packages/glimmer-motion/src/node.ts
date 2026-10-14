@@ -28,6 +28,7 @@ import {
   isSVGElement,
   isVariantLabel,
   isVariantNode,
+  NativeAnimation,
   resolveMotionValue,
   resolveVariant,
   resolveVariantFromProps,
@@ -478,6 +479,38 @@ function periodOf(iteration: number, timing: ValueTiming) {
   return timing.repeatType === 'reverse' || timing.repeatType === 'mirror'
     ? turn * 2
     : turn;
+}
+
+/** a finite animation's whole length, in seconds: every play and the repeat delays between */
+function totalOf(iteration: number, timing: ValueTiming) {
+  const repeats = timing.repeat ?? 0;
+  return iteration * (repeats + 1) + (timing.repeatDelay ?? 0) * repeats;
+}
+
+/**
+ * How long a value's animation has been past its delay, in seconds, or
+ * undefined while it is still waiting out the delay.
+ *
+ * The two drivers report time differently. A platform animation's time is
+ * its browser animation's, which counts the delay. A JS animation rebases
+ * its time on the delay every frame, so it reads from zero once the delay
+ * is over and holds at zero through it.
+ */
+function elapsedOf(
+  value: MotionValue,
+  clock: { time: number },
+  timing: ValueTiming,
+): number | undefined {
+  const delay = timing.delay ?? 0;
+  const animation = value.animation as { animation?: unknown } | undefined;
+  const platform =
+    animation instanceof NativeAnimation ||
+    animation?.animation instanceof NativeAnimation;
+  if (platform) {
+    const elapsed = clock.time - delay;
+    return elapsed < 0 ? undefined : elapsed;
+  }
+  return delay > 0 && clock.time <= 0 ? undefined : clock.time;
 }
 
 /** the transition a target animates under: its own, else the element's */
@@ -1145,8 +1178,11 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   /**
    * Restart the values of `target` that are still animating, under the
    * timing they have now. A value already past its delay starts again
-   * without one, and an infinite loop goes back to the same point of its
-   * turn. A value that has finished is left where it settled.
+   * without one. An infinite loop goes back to the same point of its turn,
+   * and a keyframe path to the same point of its whole length, since a new
+   * animation would start it at its first keyframe; a single target simply
+   * carries on from the value it stands at. A value that has finished is
+   * left where it settled.
    */
   private restart(
     target: TargetAndTransition | undefined,
@@ -1164,17 +1200,19 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     >;
     const restarted: Record<string, unknown> = {};
     const timed: Record<string, unknown> = { ...transition };
-    const phases = new Map<string, number>();
+    /** where each value stood, as a fraction of its turn or of its whole length */
+    const places = new Map<string, { fraction: number; loop: boolean }>();
     for (const key of Object.keys(values)) {
       const value = ve.values.get(key);
       if (!value?.isAnimating()) {
         continue;
       }
-      restarted[key] = values[key as keyof typeof values];
+      const goal = values[key as keyof typeof values];
+      restarted[key] = goal;
       const clock = timelineOf(value);
       const was = (getValueTransition(previous, key) ?? {}) as ValueTiming;
-      const elapsed = clock ? clock.time - (was.delay ?? 0) : -1;
-      if (!clock || elapsed < 0) {
+      const elapsed = clock && elapsedOf(value, clock, was);
+      if (!clock || elapsed === undefined) {
         // not started yet: it begins again, delay and all
         continue;
       }
@@ -1182,7 +1220,18 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
       timed[key] = { ...now, delay: 0 };
       if (was.repeat === Infinity && now.repeat === Infinity) {
         const period = periodOf(clock.duration, was);
-        phases.set(key, (elapsed % period) / period);
+        places.set(key, { fraction: (elapsed % period) / period, loop: true });
+      } else if (
+        Array.isArray(goal) &&
+        goal.length > 1 &&
+        was.repeat !== Infinity &&
+        now.repeat !== Infinity
+      ) {
+        const total = totalOf(clock.duration, was);
+        places.set(key, {
+          fraction: Math.min(elapsed / total, 1),
+          loop: false,
+        });
       }
     }
     if (!Object.keys(restarted).length) {
@@ -1193,11 +1242,13 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
       transition: timed,
       transitionEnd,
     } as TargetAndTransition);
-    for (const [key, phase] of phases) {
+    for (const [key, { fraction, loop }] of places) {
       const clock = timelineOf(ve.values.get(key)!);
       if (clock) {
         const now = getValueTransition(transition, key) as ValueTiming;
-        clock.time = phase * periodOf(clock.duration, now);
+        clock.time =
+          fraction *
+          (loop ? periodOf(clock.duration, now) : totalOf(clock.duration, now));
       }
     }
   }

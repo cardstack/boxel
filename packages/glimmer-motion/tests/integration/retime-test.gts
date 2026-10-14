@@ -11,6 +11,7 @@ import { motionValue, retime } from 'glimmer-motion';
 import motion from 'glimmer-motion/motion';
 import { setupMotion } from 'glimmer-motion/test-support';
 import type { Variants as MotionVariants } from 'motion-dom';
+import { visualElementStore } from 'motion-dom';
 import { module, test } from 'qunit';
 
 import { nextFrame, sleep } from '../helpers/motion';
@@ -141,8 +142,10 @@ module('Integration | retime', function (hooks) {
   });
 
   /**
-   * A loop on `x` parked `time` seconds in, then edited from `from` to `to`
-   * and retimed: where its new clock stands. Wrapped, because playback
+   * A loop on `x` parked `time` seconds in and run a frame from there, then
+   * edited from `from` to `to` and retimed: where its new clock stands.
+   * The frame matters: `x` is driven in JS, whose clock reads net of its
+   * delay only once a frame has rebased it. Wrapped, because playback
    * controls are thenable and an async function would wait out the loop.
    */
   async function retimedLoop(
@@ -165,6 +168,7 @@ module('Integration | retime', function (hooks) {
     );
     await nextFrame();
     running(x)!.time = time;
+    await nextFrame();
     timing.transition = to;
     await settled();
     retime(find('#stage')!);
@@ -301,5 +305,86 @@ module('Integration | retime', function (hooks) {
     await settled();
     retime(find('#stage')!);
     assert.strictEqual(running(x)!.duration, 8);
+  });
+
+  test('a platform-driven loop past its delay does not wait for it again', async function (assert) {
+    const animate = { opacity: [0, 1] };
+    const timing = new Timing({
+      delay: 0.5,
+      duration: 4,
+      ease: 'linear',
+      repeat: Infinity,
+    });
+    await render(
+      <template>
+        <div id='stage'>
+          <div
+            id='pulse'
+            {{motion animate=animate transition=timing.transition}}
+          ></div>
+        </div>
+      </template>,
+    );
+    await nextFrame();
+    // its own value, not one handed in through style, so the engine may
+    // give it to the platform
+    const opacity = visualElementStore
+      .get(find('#pulse')!)!
+      .values.get('opacity')!;
+    assert.ok(
+      find('#pulse')!.getAnimations().length,
+      'opacity runs on the platform',
+    );
+    // 1.5s in, behind a 0.5s delay: a quarter of the way round a 4s loop
+    running(opacity)!.time = 1.5;
+    await nextFrame();
+    timing.transition = {
+      delay: 0.5,
+      duration: 8,
+      ease: 'linear',
+      repeat: Infinity,
+    };
+    await settled();
+    retime(find('#stage')!);
+    const loop = running(opacity)!;
+    assert.ok(
+      Math.abs(loop.time - 2) < 0.1,
+      `a quarter of the way round, with no delay ahead of it (${loop.time}s)`,
+    );
+  });
+
+  test('a keyframe path in flight carries on from where it is', async function (assert) {
+    const x = motionValue(0);
+    const style = { x };
+    const animate = { x: [0, 100, 0, 100] };
+    const timing = new Timing({ duration: 4, ease: 'linear' });
+    await render(
+      <template>
+        <div id='stage'>
+          <div
+            {{motion animate=animate transition=timing.transition style=style}}
+          ></div>
+        </div>
+      </template>,
+    );
+    await nextFrame();
+    running(x)!.time = 2;
+    await nextFrame();
+    const midway = x.get();
+
+    timing.transition = { duration: 8, ease: 'linear' };
+    await settled();
+    retime(find('#stage')!);
+    const path = running(x)!;
+    assert.strictEqual(path.duration, 8, 'retimed onto an 8s path');
+    assert.ok(
+      Math.abs(path.time - 4) < 0.1,
+      `halfway along the path, not back at its start (${path.time}s)`,
+    );
+    await nextFrame();
+    assert.ok(
+      Math.abs(x.get() - midway) < 5,
+      `from where it stood (${midway} then ${x.get()})`,
+    );
   });
 });
