@@ -153,6 +153,8 @@ spawn_cleanup_guardian() {
       sleep 1
     done
     echo \"[guardian \$(date +%H:%M:%S)] dev-all pid $_scg_parent_pid is gone; running cleanup\"
+    BOXEL_DEV_COMMON_CLEANUP_ONLY=1
+    BOXEL_DEV_ALL_PIDFILE='$PIDFILE'
     . '$_scg_lib'
     kill_from_pidfile
     sweep_orphaned_services
@@ -362,8 +364,10 @@ PHASE1_URLS="${PHASE1_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}
 # Phase 2 readiness URL
 NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
-# In environment mode, bootstrap infra before starting services
-if [ -n "$BOXEL_ENVIRONMENT" ]; then
+# In environment mode, bootstrap infra before starting services. The cleanup
+# guardian loads this file only for its functions, after the stack has exited,
+# and must not bring the environment's database, index or Synapse back up.
+if [ -n "$BOXEL_ENVIRONMENT" ] && [ -z "${BOXEL_DEV_COMMON_CLEANUP_ONLY:-}" ]; then
   ./scripts/start-pg.sh
   echo "Waiting for Postgres to accept connections…"
   until boxel_pg_is_ready; do sleep 1; done

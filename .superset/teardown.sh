@@ -23,27 +23,52 @@ fi
 
 # Shared resources are recognised the way the agent-peer-collaboration skill
 # defines them: a listener on one of the fixed-port test stack's ports, or a
-# realm-server test run, whose process was launched from this worktree.
-in_workspace() {
-  case "$(readlink "/proc/$1/cwd" 2>/dev/null || true)" in
-    "$WORKSPACE_PATH" | "$WORKSPACE_PATH"/*) return 0 ;;
+# realm-server test run, whose process was launched from this worktree. Linux
+# answers through /proc and ss, macOS through lsof. Without either, nothing
+# can be ruled out, so teardown refuses rather than passing blind.
+WORKSPACE_REAL="$(cd "$WORKSPACE_PATH" && pwd -P)"
+under_workspace() {
+  case "$1" in
+    "$WORKSPACE_REAL" | "$WORKSPACE_REAL"/* | "$WORKSPACE_PATH" | "$WORKSPACE_PATH"/*) return 0 ;;
   esac
   return 1
 }
-describe() {
-  tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | cut -c -160
+process_cwd() {
+  if [ -d "/proc/$1" ]; then
+    readlink "/proc/$1/cwd" 2>/dev/null || true
+  else
+    lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p'
+  fi
 }
+listeners_on() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u
+  else
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | sort -u
+  fi
+}
+describe() {
+  ps -ww -o command= -p "$1" 2>/dev/null | cut -c -160
+}
+
+if ! { [ -d /proc/self ] || command -v lsof >/dev/null 2>&1; } \
+  || ! { command -v ss >/dev/null 2>&1 || command -v lsof >/dev/null 2>&1; }; then
+  log "cannot inspect processes here (neither /proc and ss nor lsof is available), so"
+  log "cannot rule out that this workspace hosts the shared test stack. Install lsof,"
+  log "or confirm with the other agents that nothing runs from this workspace and delete anyway."
+  exit 1
+fi
 
 hosted=""
 for port in 4200 4201 4202 4206 4208 4210 4211 4213 4221 4222; do
-  for pid in $(ss -ltnpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do
-    if in_workspace "$pid"; then
+  for pid in $(listeners_on "$port"); do
+    if under_workspace "$(process_cwd "$pid")"; then
       hosted="${hosted}  :$port (pid $pid) $(describe "$pid")"$'\n'
     fi
   done
 done
 for pid in $(pgrep -f '^node .*tests/index\.ts' 2>/dev/null || true); do
-  if in_workspace "$pid"; then
+  if under_workspace "$(process_cwd "$pid")"; then
     hosted="${hosted}  realm-server test run (pid $pid) $(describe "$pid")"$'\n'
   fi
 done
@@ -53,11 +78,9 @@ done
 for container in $(docker ps --format '{{.Names}}' 2>/dev/null); do
   case "$container" in boxel-synapse-"$BOXEL_ENVIRONMENT") continue ;; esac
   while IFS= read -r src; do
-    case "$src" in
-      "$WORKSPACE_PATH" | "$WORKSPACE_PATH"/*)
-        hosted="${hosted}  container $container mounts $src"$'\n'
-        ;;
-    esac
+    if under_workspace "$src"; then
+      hosted="${hosted}  container $container mounts $src"$'\n'
+    fi
   done < <(docker inspect "$container" --format '{{range .Mounts}}{{println .Source}}{{end}}' 2>/dev/null || true)
 done
 
@@ -74,6 +97,8 @@ fi
 
 log "stopping environment $BOXEL_ENVIRONMENT"
 mise exec -- ./scripts/stop-environment.sh "$BOXEL_ENVIRONMENT" --drop-db
+# The index went with the database, so the next run imports CI's again.
+rm -f "$STATE_DIR/index-imported"
 
 # The dev cert carries a SAN for every slug in this list; dropping the slug
 # keeps the list from growing with every workspace. The cert itself is left

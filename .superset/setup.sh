@@ -31,9 +31,12 @@ copy_from_root() {
 if ! is_root_checkout; then
   copy_from_root .claude/settings.local.json
   copy_from_root packages/software-factory/.claude/settings.local.json
+  # Worktrees nested in the root checkout (`.claude/worktrees`) hold their
+  # own env files, which are not the root checkout's to hand on.
   while IFS= read -r env_file; do
     copy_from_root "${env_file#"$ROOT_PATH"/}"
-  done < <(find "$ROOT_PATH" \( -name node_modules -o -name .git -o -name realms -o -name contents \) -prune \
+  done < <(find "$ROOT_PATH" \( -name node_modules -o -name .git -o -name realms -o -name contents \
+    -o -path "$ROOT_PATH/.claude/worktrees" \) -prune \
     -o -type f \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' ! -name '.env.sample' -print 2>/dev/null)
 
   # Realm content the dev realm-server serves comes from separate repositories
@@ -49,30 +52,55 @@ fi
 log "installing dependencies"
 mise exec -- pnpm install --frozen-lockfile
 
-# boxel-icons is consumed through its `dist` exports, which install does not
-# build; without it the host build fails on unresolved icon imports. Building
-# takes a couple of minutes, so each build is cached under the git tree hash
-# of the package's committed sources and reused by every workspace whose
-# sources hash the same. Uncommitted edits to the package bypass the cache.
+# boxel-icons is consumed through its built `dist` (code) and `declarations`
+# (types), which install does not produce; without them the host build and
+# type checks fail on unresolved icon imports. Building takes a couple of
+# minutes, so each build is cached under the git tree hash of the package's
+# committed sources and reused by every workspace whose sources hash the same.
+# A package with uncommitted or untracked changes is built and never cached.
 ICONS=packages/boxel-icons
 ICONS_TREE="$(git rev-parse "HEAD:$ICONS")"
-ICONS_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/boxel-superset/boxel-icons/$ICONS_TREE"
-if [ ! -d "$ICONS/dist" ]; then
-  if [ -d "$ICONS_CACHE/dist" ] && git diff --quiet HEAD -- "$ICONS"; then
-    cp -a "$ICONS_CACHE/dist" "$ICONS/dist"
-    log "copied cached $ICONS/dist ($ICONS_TREE)"
+ICONS_CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/boxel-superset/boxel-icons"
+ICONS_CACHE="$ICONS_CACHE_ROOT/$ICONS_TREE"
+# Written once this workspace holds a complete build of this tree, so output
+# left by an interrupted build or copy is redone rather than trusted.
+ICONS_DONE="$STATE_DIR/boxel-icons-$ICONS_TREE"
+icons_pristine() {
+  [ -z "$(git status --porcelain -- "$ICONS")" ]
+}
+icons_cache_complete() {
+  [ -d "$ICONS_CACHE/dist" ] && [ -d "$ICONS_CACHE/declarations" ]
+}
+if [ ! -f "$ICONS_DONE" ]; then
+  rm -rf "$ICONS/dist" "$ICONS/declarations"
+  if icons_cache_complete && icons_pristine; then
+    cp -a "$ICONS_CACHE/dist" "$ICONS_CACHE/declarations" "$ICONS/"
+    log "copied cached boxel-icons build ($ICONS_TREE)"
   else
     log "building boxel-icons"
     mise exec -- pnpm --filter @cardstack/boxel-icons build
-    if git diff --quiet HEAD -- "$ICONS"; then
-      mkdir -p "$ICONS_CACHE"
-      rm -rf "$ICONS_CACHE/dist.tmp"
-      cp -a "$ICONS/dist" "$ICONS_CACHE/dist.tmp"
-      mv -T "$ICONS_CACHE/dist.tmp" "$ICONS_CACHE/dist" 2>/dev/null || rm -rf "$ICONS_CACHE/dist.tmp"
+    if icons_pristine; then
+      # Each writer fills a private directory and publishes it with one
+      # rename, so a concurrent setup never sees a half-written entry. When
+      # another setup has published the same tree first, this copy is dropped.
+      mkdir -p "$ICONS_CACHE_ROOT"
+      ICONS_TMP="$(mktemp -d "$ICONS_CACHE_ROOT/.tmp.XXXXXX")"
+      cp -a "$ICONS/dist" "$ICONS/declarations" "$ICONS_TMP/"
+      if [ -e "$ICONS_CACHE" ] && ! icons_cache_complete; then
+        rm -rf "$ICONS_CACHE"
+      fi
+      if [ -e "$ICONS_CACHE" ] || ! mv "$ICONS_TMP" "$ICONS_CACHE" 2>/dev/null; then
+        rm -rf "$ICONS_TMP"
+      fi
+      # A rename that raced another writer's lands inside its entry instead.
+      rm -rf "$ICONS_CACHE/$(basename "$ICONS_TMP")"
       # Keep the three most recent builds.
-      ls -1dt "$(dirname "$ICONS_CACHE")"/*/ | tail -n +4 | xargs -r rm -rf
+      ls -1dt "$ICONS_CACHE_ROOT"/*/ | tail -n +4 | while IFS= read -r stale; do
+        rm -rf "$stale"
+      done
     fi
   fi
+  touch "$ICONS_DONE"
 fi
 
 case "$WORKSPACE_PATH" in
