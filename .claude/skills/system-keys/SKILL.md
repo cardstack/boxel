@@ -71,7 +71,7 @@ or longer than 8 KiB.
 ### The operator note
 
 Every `add`, `replace` and `delete` carries a note: who is making the change
-and why ("rotating the OpenRouter key after the vendor's incident — alex").
+and why ("rotating the OpenRouter key after the vendor's incident — <your name>").
 The command prompts for it at a terminal; with `--stdin` or without a
 terminal, pass `--note`. The server refuses a change with no note, and a note
 that contains the value.
@@ -135,7 +135,7 @@ ORDER BY changed_at DESC;
 Each change is also logged on the `system-keys` channel:
 
 ```
-system key replace: https://openrouter.ai/api/v1/chat/completions (id …, data key kms-…). Note: "rotating after the incident — alex"
+system key replace: https://openrouter.ai/api/v1/chat/completions (id …, data key kms-…). Note: "rotating after the incident — <your name>"
 ```
 
 ## How a change reaches the proxy
