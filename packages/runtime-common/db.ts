@@ -10,6 +10,14 @@ export interface ExecuteOptions {
   // types into values that match pg using this option
   bind?: PgPrimitive[];
   coerceTypes?: TypeCoercion;
+  // The bindings carry a secret, so the adapter's statement and error logs
+  // print a placeholder in their place.
+  redactBindings?: boolean;
+}
+
+// The bindings as an adapter's statement and error logs print them.
+export function loggableBindings(opts?: ExecuteOptions): string {
+  return opts?.redactBindings ? '[redacted]' : JSON.stringify(opts?.bind);
 }
 
 export interface TransactionOptions {

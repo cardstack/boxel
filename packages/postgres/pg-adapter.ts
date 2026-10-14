@@ -7,6 +7,7 @@ import {
   type TransactionOptions,
   Deferred,
   expressionToSql,
+  loggableBindings,
   logger,
   param,
 } from '@cardstack/runtime-common';
@@ -512,7 +513,7 @@ export class PgAdapter implements DBAdapter {
     // event lands unheard.
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     log.debug(
-      `executing sql: ${sql}, with bindings: ${JSON.stringify(opts?.bind)}`,
+      `executing sql: ${sql}, with bindings: ${loggableBindings(opts)}`,
     );
     try {
       let { rows } = await client.query({
@@ -523,7 +524,7 @@ export class PgAdapter implements DBAdapter {
     } catch (e: any) {
       console.error(
         `Error executing SQL ${e.message} (${e.hint}):\n${sql}${
-          opts?.bind ? ' with bindings: ' + JSON.stringify(opts?.bind) : ''
+          opts?.bind ? ' with bindings: ' + loggableBindings(opts) : ''
         }`,
         e,
       );

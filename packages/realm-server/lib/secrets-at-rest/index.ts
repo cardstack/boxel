@@ -202,7 +202,16 @@ export interface PlaintextCensusEntry {
 
 // Each table that adopts the helper adds its column here, and removes it once
 // no plain-text value can remain.
-export const PLAINTEXT_CENSUS: PlaintextCensusEntry[] = [];
+export const PLAINTEXT_CENSUS: PlaintextCensusEntry[] = [
+  // A key is in plain text until the backfill seals it. The plain-text column
+  // is kept in step alongside the sealed one, so it isn't counted.
+  {
+    table: 'proxy_endpoints',
+    column: 'api_key',
+    query: `SELECT COUNT(*) AS count FROM proxy_endpoints
+            WHERE api_key IS NOT NULL AND api_key_ciphertext IS NULL`,
+  },
+];
 
 // Logs how many rows of each adopting table still hold their secret in plain
 // text. A count that fails to run is logged and doesn't stop startup.
