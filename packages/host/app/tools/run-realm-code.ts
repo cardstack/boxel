@@ -43,13 +43,18 @@ import {
   type ViewOptions,
 } from '../lib/visual-capture';
 import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
-
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import LintAndFixTool from './lint-and-fix';
 import OpenWorkspaceTool from './open-workspace';
 import PreviewFormatTool from './preview-format';
-import { composeSearchEntriesQuery } from './search-entries';
+import {
+  composeSearchEntriesQuery,
+  resolveSearchEntryScope,
+  SEARCH_ENTRY_PROJECTION_FIELDS,
+  summarizeEntries,
+  type EntrySummary,
+} from './search-entries';
 import SetActiveLLMTool from './set-active-llm';
 import ShowCardTool from './show-card';
 import ShowFileTool from './show-file';
@@ -95,6 +100,15 @@ const MAX_SEARCH_RESULTS = 100;
 // with the page size that fits, rather than cut: a cut page's remaining cards
 // would be out of reach of every page number.
 const MAX_SEARCH_RESULT_SIZE = 1_000_000;
+// How many entries one `realm.entries.search` answers with when the options
+// name no limit, and the most it answers with whatever they ask for. A script
+// does not put each answer into the model's context, so these are wider than
+// the search-entries tool's.
+const DEFAULT_ENTRY_RESULTS = 20;
+const MAX_ENTRY_RESULTS = 50;
+// An answer is parsed inside the sandbox, within its memory limit, and each
+// entry carries its full readMe, so it is bounded by size as well as count.
+const MAX_ENTRY_RESULT_SIZE = 1_000_000;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -121,6 +135,13 @@ type WriteFile = (
   expected: string | undefined,
   options?: { lint?: boolean },
 ) => Promise<string>;
+
+// Runs one entry search across `realms`, or across every realm the user can
+// read when `realms` is undefined.
+type SearchEntries = (
+  query: SearchEntryWireQuery,
+  realms: string[] | undefined,
+) => Promise<EntryCollectionDocument>;
 
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
@@ -192,6 +213,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.writeBytes': true,
   'cards.search': false,
   'cards.get': false,
+  'entries.search': false,
   capture: false,
   'workspaces.create': false,
   'workspaces.delete': false,
@@ -275,6 +297,7 @@ class RealmFsSession {
     private search: SearchCards,
     private resolveURL: ResolveURL,
     private readCard: ReadCard,
+    private searchEntries: SearchEntries,
     captureURL: CaptureURL,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
@@ -493,6 +516,8 @@ class RealmFsSession {
           relationships,
         };
       }
+      case 'entries.search':
+        return await this.searchEntriesFor(args[0], args[1]);
       case 'capture': {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
@@ -679,6 +704,106 @@ class RealmFsSession {
   // A directory path takes the same forms as a file path, with or without a
   // trailing slash. No path, or an empty one, is the realm root; a missing
   // argument arrives as null, since the call's arguments cross as JSON.
+  // Finds cards, specs and files across realms, the catalog among them, and
+  // answers with a summary of each: no live card and no file content.
+  private async searchEntriesFor(
+    rawQuery: unknown,
+    rawOptions: unknown,
+  ): Promise<{
+    entries: EntrySummary[];
+    total: number;
+    truncated: boolean;
+    incomplete: boolean;
+  }> {
+    if (
+      rawQuery === null ||
+      typeof rawQuery !== 'object' ||
+      Array.isArray(rawQuery)
+    ) {
+      throw new TypeError('realm.entries.search expects a query object');
+    }
+    if ('page' in rawQuery) {
+      throw new Error(
+        'realm.entries.search does not page; pass { limit } in the options and narrow the query to see other entries',
+      );
+    }
+    let options = (rawOptions ?? {}) as Record<string, unknown>;
+    if (typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError(
+        'realm.entries.search expects an options object: { realms, scope, limit }',
+      );
+    }
+    let { realms, scope, limit } = options;
+    if (
+      realms !== undefined &&
+      (!Array.isArray(realms) ||
+        realms.some((realm) => typeof realm !== 'string'))
+    ) {
+      throw new TypeError('realms must be an array of realm URLs');
+    }
+    if (scope !== undefined && typeof scope !== 'string') {
+      throw new TypeError("scope must be one of 'cards', 'files', 'all'");
+    }
+    if (
+      limit !== undefined &&
+      (typeof limit !== 'number' || !Number.isFinite(limit))
+    ) {
+      throw new TypeError('limit must be a number');
+    }
+    let size =
+      limit === undefined
+        ? DEFAULT_ENTRY_RESULTS
+        : Math.min(Math.max(Math.floor(limit), 1), MAX_ENTRY_RESULTS);
+    let query = pruneEmptyQueryParts(rawQuery as Query);
+    assertQuery(query);
+    let resolvedScope = resolveSearchEntryScope(scope);
+    let composed = composeSearchEntriesQuery(query, resolvedScope);
+    let wireQuery = searchEntryWireQueryFromQuery(composed.query, {
+      fields: SEARCH_ENTRY_PROJECTION_FIELDS,
+      scope: resolvedScope,
+    });
+    wireQuery.page = { ...wireQuery.page, size };
+    let doc = await this.searchEntries(
+      wireQuery,
+      (realms as string[] | undefined)?.length
+        ? [...(realms as string[])]
+        : undefined,
+    );
+
+    let rows = summarizeEntries(doc);
+    if (composed.addedRelevanceSort) {
+      // Each realm ranks its own rows; the merged rows are ranked again so the
+      // best match across realms comes first.
+      rows = [...rows].sort(
+        (a, b) => (b.matchRelevance ?? -1) - (a.matchRelevance ?? -1),
+      );
+    }
+    // Each realm answers with up to `size` rows, so the merged rows are cut to
+    // the limit the script asked for.
+    rows = rows.slice(0, size);
+    let resultSize = 0;
+    for (let [index, row] of rows.entries()) {
+      resultSize += JSON.stringify(row).length;
+      if (resultSize > MAX_ENTRY_RESULT_SIZE) {
+        throw new Error(
+          index > 0
+            ? `These entries are too large to return; search again with limit ${index} or less`
+            : `The entry ${row.url} is too large to return from a search`,
+        );
+      }
+    }
+    let total = doc.meta.page.total;
+    return {
+      entries: rows,
+      total,
+      // More entries match than this answer holds.
+      truncated: rows.length < total,
+      // A realm that failed to answer is reported here, not thrown: the realms
+      // that answered still count, and this keeps their answer marked partial.
+      incomplete: doc.meta.incomplete === true,
+    };
+  }
+
   private resolveDirectory(path: unknown): string {
     if (path === undefined || path === null || path === '') {
       return this.realmURL;
@@ -947,7 +1072,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, finds ' +
     'cards with realm.cards.search, reads cards as JSON data with ' +
-    'realm.cards.get, can look at what it made with realm.capture, can ' +
+    'realm.cards.get, finds cards, specs and files across realms with ' +
+    'realm.entries.search, can look at what it made with realm.capture, can ' +
     'create workspaces with realm.workspaces.create, and can change the ' +
     'skills and model of this room with room.*. In a workspace the user ' +
     'can only read, reads work and each write is refused. Return ' +
@@ -1019,6 +1145,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       (id) => this.readCard(id),
+      (query, realms) => this.store.searchEntries(query, realms),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
       (workspaceInput) =>

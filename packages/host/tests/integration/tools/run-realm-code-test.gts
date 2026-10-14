@@ -152,6 +152,21 @@ boxel:
               meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
             },
           },
+          'Spec/pet.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Pet',
+                cardDescription: 'A pet with a name',
+                specType: 'card',
+                readMe: '# Pet\n\nUse Pet for any animal with a name.',
+                ref: { module: '../pet', name: 'Pet' },
+              },
+              meta: {
+                adoptsFrom: { module: '@cardstack/base/spec', name: 'Spec' },
+              },
+            },
+          },
           'Plain/base-typed.json': {
             data: {
               type: 'card',
@@ -1086,6 +1101,104 @@ return found;`,
         code: `await realm.fs.list('missing');`,
       }),
       /Directory not found/,
+    );
+  });
+
+  test('realm.entries.search runs several searches in one script and returns only what the script keeps', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const found = {};
+for (const title of ['Pet', 'Unicorn']) {
+  const { entries, total, truncated, incomplete } = await realm.entries.search(
+    {
+      filter: {
+        on: { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+        eq: { cardTitle: title },
+      },
+    },
+    { realms: [realm.current.url] },
+  );
+  found[title] = {
+    total,
+    truncated,
+    incomplete,
+    entries: entries.map((entry) => ({
+      url: entry.url,
+      kind: entry.kind,
+      specType: entry.specType,
+      refName: entry.ref?.name,
+      readMe: entry.readMe,
+    })),
+  };
+}
+return found;`,
+    });
+
+    assert.deepEqual(result.files, [], 'a search saves nothing');
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      Pet: {
+        total: 1,
+        truncated: false,
+        incomplete: false,
+        entries: [
+          {
+            url: `${testRealmURL}Spec/pet`,
+            kind: 'card',
+            specType: 'card',
+            refName: 'Pet',
+            readMe: '# Pet\n\nUse Pet for any animal with a name.',
+          },
+        ],
+      },
+      Unicorn: { total: 0, truncated: false, incomplete: false, entries: [] },
+    });
+  });
+
+  test('realm.entries.search caps the entries at the limit and reports the rest', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const { entries, total, truncated } = await realm.entries.search(
+  {},
+  { realms: [realm.current.url], scope: 'cards', limit: 1 },
+);
+return { count: entries.length, kind: entries[0].kind, more: total > 1, truncated };`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      count: 1,
+      kind: 'card',
+      more: true,
+      truncated: true,
+    });
+  });
+
+  test('realm.entries.search refuses a page and an unknown scope', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({ page: { number: 1 } });`,
+      }),
+      /does not page; pass \{ limit \}/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { scope: 'modules' });`,
+      }),
+      /Invalid scope "modules"/,
     );
   });
 

@@ -32,7 +32,7 @@ const SCOPES: SearchEntryScope[] = ['cards', 'files', 'all'];
 // judge a candidate rides the row itself (including the full readMe), so no
 // per-hit follow-up read is required; the fieldset stays internal so a caller
 // can never request full serializations that blow up the result size.
-const PROJECTION_FIELDS = [
+export const SEARCH_ENTRY_PROJECTION_FIELDS = [
   'item.cardTitle',
   'item.cardDescription',
   'item.specType',
@@ -44,7 +44,7 @@ const PROJECTION_FIELDS = [
   'item.name',
 ];
 
-interface EntrySummary {
+export interface EntrySummary {
   url: string;
   kind: 'card' | 'file';
   ref?: unknown;
@@ -56,7 +56,9 @@ interface EntrySummary {
   matchRelevance?: number;
 }
 
-function resolveScope(scope: string | undefined): SearchEntryScope {
+export function resolveSearchEntryScope(
+  scope: string | undefined,
+): SearchEntryScope {
   if (scope == null || scope === '') {
     return 'all';
   }
@@ -104,7 +106,7 @@ export function composeSearchEntriesQuery(
   };
 }
 
-function summarizeEntries(doc: EntryCollectionDocument): EntrySummary[] {
+export function summarizeEntries(doc: EntryCollectionDocument): EntrySummary[] {
   let itemsByIdentity = new Map<
     string,
     CardResource<Saved> | FileMetaResource
@@ -183,7 +185,7 @@ export default class SearchEntriesTool extends HostBaseTool<
   ): Promise<BaseToolModule.SearchEntriesResult> {
     let requestQuery = pruneEmptyQueryParts(input.query);
     assertQuery(requestQuery);
-    let scope = resolveScope(input.scope);
+    let scope = resolveSearchEntryScope(input.scope);
     let limit = Math.min(
       Math.max(Math.floor(input.limit ?? DEFAULT_LIMIT), 1),
       MAX_LIMIT,
@@ -194,7 +196,7 @@ export default class SearchEntriesTool extends HostBaseTool<
       scope,
     );
     let wireQuery = searchEntryWireQueryFromQuery(query, {
-      fields: PROJECTION_FIELDS,
+      fields: SEARCH_ENTRY_PROJECTION_FIELDS,
       scope,
     });
     wireQuery.page = { ...wireQuery.page, size: limit };
