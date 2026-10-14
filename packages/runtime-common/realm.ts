@@ -6219,6 +6219,22 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
+      // A caller who isn't signed in is counted one unit per entry, once every
+      // entry is admitted: a batch that writes, as its commit begins, and one
+      // that only reads, once its reads have run. A batch that doesn't fit is
+      // refused whole, with nothing written. A batch that sends a request
+      // outside the realm is counted before it sends, since a request that
+      // has gone cannot be refused afterwards.
+      let anonymousCommit = this.#anonymous.commitOptions(
+        request,
+        requestContext,
+        scope,
+        () => entries.length,
+      );
+      if (sendsOutside) {
+        await anonymousCommit.beforeCommit?.();
+      }
+
       // Resolved once, and only for a batch that explains or validates: it can
       // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
@@ -6249,7 +6265,7 @@ export class Realm {
               gated: { definition, decision },
               ...this.#anonymousReadOptions(requestContext),
               ...(definition.base === 'callApi' &&
-              isDuringPrerenderRequest(request)
+              this.#duringRender(request, requestContext)
                 ? { duringPrerender: true }
                 : {}),
             },
@@ -6262,16 +6278,6 @@ export class Realm {
 
       let writes = resolved.filter(({ definition }) =>
         isWrite(definition.base),
-      );
-      // A caller who isn't signed in is counted one unit per entry, once every
-      // entry is admitted: a batch that writes, as its commit begins, and one
-      // that only reads, once its reads have run. A batch that doesn't fit is
-      // refused whole, with nothing written.
-      let anonymousCommit = this.#anonymous.commitOptions(
-        request,
-        requestContext,
-        scope,
-        () => entries.length,
       );
       if (writes.length === 0) {
         await anonymousCommit.beforeCommit?.();
@@ -6377,6 +6383,17 @@ export class Realm {
       { 'atomic:results': resultsTree(tree, results) },
       200,
       requestContext,
+    );
+  }
+
+  // Whether a request is part of a render: one marked as a prerender's own
+  // fetch, or one made on a realm-authority session, which only a realm
+  // rendering its own cards holds. A render's operations batches carry the
+  // session and not always the mark.
+  #duringRender(request: Request, requestContext: RequestContext): boolean {
+    return (
+      isDuringPrerenderRequest(request) ||
+      requestContext.realmAuthority === true
     );
   }
 

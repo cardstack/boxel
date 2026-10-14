@@ -332,8 +332,9 @@ export interface RunOperationOptions {
   skipLinkAssemblyBudget?: boolean;
   // The request this invocation arrived in is part of a render, which a
   // `callApi` refuses: a render is replayed and its output shared, so it may
-  // not send requests on anyone's behalf. Read from the same signal as
-  // `skipQueryBackedExpansion`.
+  // not send requests on anyone's behalf. The realm sets it for a request
+  // marked as a prerender's own fetch and for one made on a realm-authority
+  // session, which only a realm rendering its own cards holds.
   duringPrerender?: boolean;
   // Report a stored-bytes read's `version` only where the realm already
   // recorded one, rather than reading the file to fingerprint it.
@@ -1458,12 +1459,14 @@ function transformContext(
 
 // The `output` stage over what the behavior answered.
 //
-// A read is the only behavior that reaches this carrying a declaration today —
-// `readSource` is resolved without one, a `query` is refused before it runs,
-// and the writes are the coordinator's — so the two read shapes are the two
-// arms. A headers-only read projects nothing and says that the full read
-// would, because a `HEAD` states the headers a `GET` would send and a
-// projected body is not cacheable the way an unprojected one is.
+// The behaviors that reach this carrying an `output` are a read and a callApi
+// — `readSource` is resolved without a declaration, a `query` is refused
+// before it runs, an explain and a validate refuse an `output` where they are
+// lowered, and the writes are the coordinator's. So the arms are the two read
+// shapes and a callApi's response. A headers-only read projects nothing and
+// says that the full read would, because a `HEAD` states the headers a `GET`
+// would send and a projected body is not cacheable the way an unprojected one
+// is.
 async function projectResult(
   core: OperationCore,
   request: OperationRequest,

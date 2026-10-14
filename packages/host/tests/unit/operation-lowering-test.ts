@@ -2489,6 +2489,25 @@ module('Unit | operation lowering', function (hooks) {
     });
     assert.deepEqual(codes(inQueryName), ['slot-out-of-place']);
 
+    let inBodyKey = await lowerRequest({
+      url: 'https://api.example.com/items',
+      json: { auth: { '{{apiKey}}': 'x' } },
+    });
+    assert.deepEqual(
+      codes(inBodyKey),
+      ['slot-out-of-place'],
+      "a member's name is sent as written",
+    );
+
+    let inVariableName = await lowerRequest({
+      url: 'https://api.example.com/graphql',
+      graphql: {
+        document: 'query { viewer { id } }',
+        variables: { '{{apiKey}}': 'x' },
+      },
+    });
+    assert.deepEqual(codes(inVariableName), ['slot-out-of-place']);
+
     let inDocument = await lowerRequest({
       url: 'https://api.example.com/graphql',
       graphql: { document: 'query { viewer(token: "{{apiKey}}") { id } }' },

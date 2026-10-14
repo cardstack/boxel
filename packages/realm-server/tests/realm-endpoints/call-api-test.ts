@@ -17,6 +17,7 @@ import { configureOutbound, resetOutbound } from '../../lib/outbound/client.ts';
 import {
   createJWT,
   setupPermissionedRealmCached,
+  testCreatePrerenderAuth,
   withRealmPath,
   type RealmRequest,
 } from '../helpers/index.ts';
@@ -36,6 +37,8 @@ const VENDOR_PORT = 4519;
 const VENDOR = `http://127.0.0.1:${VENDOR_PORT}`;
 const OPERATIONS = SupportedMimeType.BoxelOperations;
 const TESTER = '@tester:localhost';
+const READER = '@reader:localhost';
+const OWNER = '@node-test_realm:localhost';
 const REPO = { module: rri(`${testRealm.href}repo`), name: 'Repo' };
 
 function envelope(...operations: unknown[]) {
@@ -139,8 +142,10 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     mode: 'before',
     realmURL: testRealm,
     permissions: {
-      '*': ['read', 'write'],
-      '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
+      '*': ['read'],
+      [TESTER]: ['read', 'write'],
+      [READER]: ['read'],
+      [OWNER]: ['read', 'write', 'realm-owner'],
     },
     fileSystem: makeFileSystem(),
     onRealmSetup(args) {
@@ -262,12 +267,27 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.strictEqual(vendor.requests.length, 0);
   });
 
-  test('a caller who is not signed in is refused a request with a credential slot', async function (assert) {
+  test('a caller only permitted to read the realm is refused, and nothing is sent', async function (assert) {
     let response = await anonymousPost(
-      envelope(invoke('withKey', { href: '/repo' })),
-    );
-    assert.strictEqual(response.status, 401);
-    assert.strictEqual(response.body.errors[0].code, 'actor-required');
+      envelope(invoke('failing', { href: '/repo' })),
+    ).set('Authorization', `Bearer ${createJWT(realm, READER, ['read'])}`);
+    assert.strictEqual(response.status, 403, JSON.stringify(response.body));
+    assert.strictEqual(vendor.requests.length, 0);
+  });
+
+  test('a request made on the session a render runs under is refused, with or without the prerender mark', async function (assert) {
+    let sessions = JSON.parse(
+      testCreatePrerenderAuth(
+        OWNER,
+        { [testRealm.href]: ['read', 'write', 'realm-owner'] },
+        { realmAuthority: true },
+      ),
+    ) as Record<string, string>;
+    let response = await anonymousPost(
+      envelope(invoke('failing', { href: '/repo' })),
+    ).set('Authorization', `Bearer ${sessions[testRealm.href]}`);
+    assert.strictEqual(response.status, 403, JSON.stringify(response.body));
+    assert.strictEqual(response.body.errors[0].code, 'not-during-render');
     assert.strictEqual(vendor.requests.length, 0);
   });
 

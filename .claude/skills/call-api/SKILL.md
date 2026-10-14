@@ -95,13 +95,15 @@ placement, at}` — so dispatch knows what a request needs without walking it.
 refusal also writes a key-use line.
 
 1. **`not-during-render`** (403) — the batch arrived with
-   `x-boxel-during-prerender`. A render is replayed and shared; it may not act
-   for anyone. The host also refuses a POST batch inside a prerender
+   `x-boxel-during-prerender`, or on a realm-authority session, which only a
+   realm rendering its own cards holds (`#duringRender` in `realm.ts`; a
+   render's operations batch carries the session and not always the header).
+   A render is replayed and shared; it may not act for anyone. The host also refuses a POST batch inside a prerender
    (`assertMayWrite` in `services/operations.ts`), so this is the server's own
    copy of that rule.
 2. **`actor-required`** (401) — the request has a slot and no signed-in caller.
-3. **`binding-not-approved`** (403) — the request has a slot. Nothing binds a
-   key to a slot yet, so every slotted request stops here, with
+3. **`binding-not-approved`** (403) — the request has a slot. No binding
+   fills a slot, so every slotted request stops here, with
    `meta.slots: [{name, key}]`. A keyless request continues.
 4. **Build** (`buildCallApiRequest`): markers filled from the payload, the
    caller, the realm's settings and — on an instance target — the card's

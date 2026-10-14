@@ -169,6 +169,9 @@ export function lowerCallApi(
     placement: CallApiSlotPlacement | undefined,
   ): OperationTemplate => {
     let lowered = template(value, path);
+    // A member's name is sent as written and is never filled, so a slot in
+    // one would go out as text.
+    walkKeys(lowered, path, (key, at) => readSlots(key, at, undefined));
     walkStrings(lowered, path, (text, at) => {
       if (text.includes(SPLICED_MARKER)) {
         fail(
@@ -510,6 +513,7 @@ function lowerGraphql(
     } else {
       lowered = {};
       for (let [name, value] of Object.entries(variables)) {
+        readSlots(name, 'graphql.variables', undefined);
         lowered[name] = lowerValue(value, `graphql.variables.${name}`, 'body');
       }
     }
@@ -561,6 +565,25 @@ function walkStrings(
       node as Record<string, OperationTemplate>,
     )) {
       walkStrings(value, `${path}.${key}`, visit);
+    }
+  }
+}
+
+function walkKeys(
+  node: OperationTemplate,
+  path: string,
+  visit: (key: string, path: string) => void,
+) {
+  if (Array.isArray(node)) {
+    node.forEach((entry, index) => walkKeys(entry, `${path}[${index}]`, visit));
+    return;
+  }
+  if (node !== null && typeof node === 'object' && !isMarker(node)) {
+    for (let [key, value] of Object.entries(
+      node as Record<string, OperationTemplate>,
+    )) {
+      visit(key, path);
+      walkKeys(value, `${path}.${key}`, visit);
     }
   }
 }
