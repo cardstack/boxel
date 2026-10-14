@@ -970,7 +970,14 @@ export class ChoreoRun implements Run {
         }
       });
       if (t.delivery) {
-        (run ? t.delivery.play : t.delivery.pause)();
+        if (paused && now >= t.end) {
+          // a tail still playing behind the clock: a still past the cue's
+          // window is one in which it has landed, and nothing would resume
+          // a held tail, which would leave its stand-in spans up for good
+          t.delivery.complete();
+        } else {
+          (run ? t.delivery.play : t.delivery.pause)();
+        }
       }
       if (t.loopAnimation) {
         if (run) {

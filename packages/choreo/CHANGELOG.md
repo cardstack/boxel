@@ -19,7 +19,8 @@ versions may change behavior until `1.0.0`.
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`
   or `@by='word'` delivery lands on its own platform animations, which can finish after the run's
   clock has ended. The region now reports `delivery in flight` until the sprite's original text is
-  restored, so a settled page no longer has stand-in spans in it.
+  restored, so a settled page no longer has stand-in spans in it. Pausing a run whose clock is
+  past a delivery's cue lands that delivery instead of freezing its spans in place.
 - **An ambient loop keeps its place when its run is replaced.** A `@repeat={{Infinity}}` Tween's
   loop restarted from the top of its cycle whenever its region compiled a new run — an edited
   `@duration`, or any arrival in the region. The new run now carries the same loop on the same
