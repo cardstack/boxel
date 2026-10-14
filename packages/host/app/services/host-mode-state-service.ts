@@ -35,8 +35,9 @@ export default class HostModeStateService extends Service {
   // Stack card IDs: [https://user.example.com/cards/456, https://user.example.com/cards/789]
   @tracked private primaryCardItem: string | null = null;
   private readonly stackCardItems: TrackedArray<string> = new TrackedArray();
+  // null until the stack is read from the URL, and again after a session
+  // ends: the state is initialized exactly when there is a route path
   private currentRoutePath: string | null = null;
-  private isStateInitialized = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -49,7 +50,10 @@ export default class HostModeStateService extends Service {
     // the stack keeps the array it read
     this.stackCardItems.splice(0, this.stackCardItems.length);
     this.currentRoutePath = null;
-    this.isStateInitialized = false;
+  }
+
+  private get isStateInitialized(): boolean {
+    return this.currentRoutePath !== null;
   }
 
   restore({
@@ -78,9 +82,8 @@ export default class HostModeStateService extends Service {
   private initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
     // a tracked write invalidates even when the value is the same, and the
     // primary card's resources rebuild on it, so only a change is written
-    let primaryCard = primaryCardId ?? null;
-    if (this.primaryCardItem !== primaryCard) {
-      this.primaryCardItem = primaryCard;
+    if (this.primaryCardItem !== primaryCardId) {
+      this.primaryCardItem = primaryCardId;
     }
     if (
       this.stackCardItems.length !== stack.length ||
@@ -89,7 +92,6 @@ export default class HostModeStateService extends Service {
       this.stackCardItems.splice(0, this.stackCardItems.length, ...stack);
     }
     this.currentRoutePath = routePath;
-    this.isStateInitialized = true;
   }
 
   get stackItems() {
@@ -109,12 +111,21 @@ export default class HostModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // Before the stack has been read from the URL there is nothing to change:
+  // the URL's stack replaces it as soon as it is read, so a change made now
+  // would show for a moment and then vanish.
   pushCard(cardId: string) {
+    if (!this.isStateInitialized) {
+      return;
+    }
     unwindOrPush(this.stackCardItems, cardId, this.primaryCardItem);
     this.schedulePersist();
   }
 
   removeCardFromStack(cardId: string) {
+    if (!this.isStateInitialized) {
+      return;
+    }
     if (removeTopmost(this.stackCardItems, cardId)) {
       this.schedulePersist();
     }
@@ -125,8 +136,16 @@ export default class HostModeStateService extends Service {
       return [];
     }
 
+    // a stack from a hand-edited or mangled URL that isn't a list of card
+    // ids is no stack
     try {
-      return JSON.parse(serialized) as SerializedStack;
+      let parsed: unknown = JSON.parse(serialized);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((id): id is string => typeof id === 'string')
+      ) {
+        return parsed as SerializedStack;
+      }
     } catch (error) {
       // Ignore malformed data and reset stack
     }
@@ -151,7 +170,8 @@ export default class HostModeStateService extends Service {
   }
 
   private persist() {
-    if (!this.isStateInitialized || this.currentRoutePath === null) {
+    let routePath = this.currentRoutePath;
+    if (routePath === null) {
       return;
     }
 
@@ -159,8 +179,8 @@ export default class HostModeStateService extends Service {
     let queryParams = { hostModeStack: this.serialize() };
     // A site's root page has no path: it is the index-root route, which the
     // index route's path can't name.
-    if (this.currentRoutePath) {
-      this.router.transitionTo('index', this.currentRoutePath, { queryParams });
+    if (routePath) {
+      this.router.transitionTo('index', routePath, { queryParams });
     } else {
       this.router.transitionTo('index-root', { queryParams });
     }
