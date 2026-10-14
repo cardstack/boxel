@@ -5,7 +5,13 @@
  * the demo page's pager opens its neighbours the same way.
  */
 import { getOwner } from '@ember/owner';
-import { click, currentURL, visit, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  currentURL,
+  settled,
+  visit,
+  waitFor,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -29,6 +35,19 @@ import { setupApplicationTest } from '../helpers/setup';
 const DEMOS = ['keyframes', 'enter', 'stagger'];
 
 const tile = (slug: string) => `[data-gallery-tile="${slug}"] .tile-title`;
+
+/** the element the gallery scrolls in, as the stage-resting code finds it */
+function scrollerOf(selector: string): HTMLElement {
+  let node = document.querySelector(selector)?.parentElement ?? null;
+  while (node) {
+    let { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return document.scrollingElement as HTMLElement;
+}
 
 module(
   'Acceptance | Choreo gallery | navigation in interact mode',
@@ -195,6 +214,29 @@ module(
       await waitFor(stackItem('enter'), { count: 0 });
       assert.strictEqual(stackParam(), null, 'the URL is the gallery again');
       assert.dom(tile('enter')).exists('and the grid is what shows');
+    });
+
+    test('Back returns to the grid at the place it was left', async function (assert) {
+      await visit('/test');
+      await waitFor(tile('stagger'));
+      // down to the tile, so the click lands on what the viewer can see
+      document
+        .querySelector(tile('stagger'))!
+        .scrollIntoView({ block: 'center' });
+      let left = scrollerOf('[data-gallery-tile]').scrollTop;
+      assert.true(left > 0, `the grid is scrolled (${left}px)`);
+
+      await click(tile('stagger'));
+      await waitFor(`${stackItem('stagger')} .demo-head h1`);
+      await visit('/test');
+      await waitFor(stackItem('stagger'), { count: 0 });
+      await settled();
+
+      assert.strictEqual(
+        scrollerOf('[data-gallery-tile]').scrollTop,
+        left,
+        'the grid is where it was left',
+      );
     });
 
     test("a demo's URL loads that demo directly, and its pager opens the next", async function (assert) {
