@@ -7,6 +7,7 @@ import { modifier } from 'ember-modifier';
 import { motion, spring } from 'glimmer-motion';
 
 import { GalleryDemo } from '../demo';
+import { observeStage } from '../lib/onstage';
 import { tuneSeconds, tuneSpring } from '../lib/tuning';
 import WiresNotes from '../notes/wires';
 
@@ -267,17 +268,31 @@ export class Wires extends Component {
       paintRest(el);
       pin();
     };
+    // The rest wires follow the live tethers frame by frame, but only while
+    // someone can see them: scrolled away or covered, the board holds still
+    // and is drawn again when it comes back.
+    let onStage = false;
     const followDraw = () => {
       draw();
-      follow = root?.querySelector('[data-choreo-tether]')
-        ? requestAnimationFrame(followDraw)
-        : 0;
+      follow =
+        onStage && root?.querySelector('[data-choreo-tether]')
+          ? requestAnimationFrame(followDraw)
+          : 0;
     };
     const startFollow = () => {
-      if (!follow) {
+      if (!follow && onStage) {
         follow = requestAnimationFrame(followDraw);
       }
     };
+    const stage = observeStage(root ?? el, (visible) => {
+      onStage = visible;
+      if (visible) {
+        startFollow();
+      } else {
+        cancelAnimationFrame(follow);
+        follow = 0;
+      }
+    });
     const id = requestAnimationFrame(() => requestAnimationFrame(draw));
     const ro =
       root && typeof ResizeObserver !== 'undefined'
@@ -294,6 +309,7 @@ export class Wires extends Component {
       mo?.observe(layer, { childList: true });
     }
     return () => {
+      stage.disconnect();
       cancelAnimationFrame(id);
       cancelAnimationFrame(follow);
       ro?.disconnect();
