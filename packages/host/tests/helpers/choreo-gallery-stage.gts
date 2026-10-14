@@ -170,6 +170,7 @@ export function setupChoreoGalleryTest(
           >(module.replace(/^\.\.\//, ''));
           let { lesson, walkthrough, ...attributes } = data.attributes;
           return new classes[name]!({
+            id: `${testRealmURL}demos/${slug}`,
             ...attributes,
             lesson: lesson ? new DemoLesson(lesson) : undefined,
             walkthrough: (walkthrough ?? []).map(

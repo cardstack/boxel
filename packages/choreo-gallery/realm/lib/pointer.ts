@@ -58,3 +58,25 @@ export const ownControlClicks = modifier((element: HTMLElement) => {
     element.removeEventListener('click', click);
   };
 });
+
+/**
+ * The click handler for a link to the card it sits in, where the host opens
+ * the card. A plain click is the host's: the link's own navigation is
+ * stopped and the click goes on to the host (its overlay in interact mode,
+ * the gallery's grid on a published site). A modified click (new tab, new
+ * window) is the browser's, and the host never hears of it.
+ */
+export function openThroughHost(event: Event): void {
+  if (
+    event instanceof MouseEvent &&
+    (event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey)
+  ) {
+    event.stopPropagation();
+    return;
+  }
+  event.preventDefault();
+}

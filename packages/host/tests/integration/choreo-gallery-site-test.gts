@@ -4,7 +4,7 @@
  * the theme switch, and each tile handing its demo card to the host to open.
  */
 import { htmlSafe } from '@ember/template';
-import { click, render, triggerKeyEvent, waitFor } from '@ember/test-helpers';
+import { click, render, waitFor } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
 import { modifier } from 'ember-modifier';
@@ -16,7 +16,7 @@ import {
   GALLERY_DEMOS,
   setupChoreoGalleryTest,
 } from '../helpers/choreo-gallery-stage';
-import { provideConsumeContext } from '../helpers/index';
+import { provideConsumeContext, testRealmURL } from '../helpers/index';
 
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
 import type * as CardAPI from '@cardstack/base/card-api';
@@ -127,16 +127,38 @@ module('Integration | Choreo gallery | site', function (hooks) {
     await click(guide);
     assert.strictEqual(opened.length, 2, 'the guide link keeps its click');
 
-    await triggerKeyEvent(
-      live("[data-gallery-tile='enter']")!,
-      'keydown',
-      'Enter',
+    // the title is the tile's link: a real one, for the keyboard, whose
+    // activation is a click the host takes like any other
+    let link = live<HTMLAnchorElement>(
+      "[data-gallery-tile='enter'] a.tile-title",
+    )!;
+    assert.strictEqual(link.textContent?.trim(), 'Enter', 'named for its demo');
+    assert.strictEqual(
+      link.getAttribute('href'),
+      `${testRealmURL}demos/enter`,
+      'and pointing at its card',
     );
+    let navigated: boolean | undefined;
+    link.addEventListener('click', (event) => {
+      navigated = !event.defaultPrevented;
+    });
+    await click(link);
     assert.deepEqual(
       opened,
       ['keyframes', 'keyframes', 'enter'],
-      'Enter on a focused tile opens it too',
+      'following the link opens the card through the host',
     );
+    assert.false(navigated, 'and the link does not navigate the page itself');
+    assert
+      .dom(
+        '[data-gallery-tile] [role="link"], [data-gallery-tile][role="link"]',
+      )
+      .doesNotExist(
+        'the tile holds its links side by side, none inside another',
+      );
+    assert
+      .dom('[data-gallery-tile][tabindex]')
+      .doesNotExist('and the tile is one stop, its link, not a second');
     assert
       .dom('.demo-head')
       .doesNotExist('the gallery never shows a demo page itself');

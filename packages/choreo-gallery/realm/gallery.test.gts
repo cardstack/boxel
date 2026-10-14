@@ -18,6 +18,7 @@ import { module, test } from 'qunit';
 
 import { GalleryDemo, WalkthroughStep } from './demo';
 import { ChoreoGallery } from './gallery';
+import { openThroughHost } from './lib/pointer';
 import { Theater } from './lib/theater';
 import { DemoPage } from './shell/demo-page';
 
@@ -132,6 +133,29 @@ module('Choreo gallery | site', function (hooks) {
       ['alpha', 'bravo', 'charlie', 'delta'],
       'the grid stays: opening the demo card is the host’s to do',
     );
+  });
+});
+
+module('Choreo gallery | tile link', function () {
+  // called directly rather than dispatched: a dispatched click on a link
+  // that is not stopped navigates the test page
+  test('a plain click is the host’s, a modified one the browser’s', function (assert) {
+    let plain = new MouseEvent('click', { bubbles: true, cancelable: true });
+    openThroughHost(plain);
+    assert.true(plain.defaultPrevented, 'the link does not navigate itself');
+    assert.false(plain.cancelBubble, 'and the click goes on to the host');
+
+    let modified = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      metaKey: true,
+    });
+    openThroughHost(modified);
+    assert.false(
+      modified.defaultPrevented,
+      'a new-tab click opens the card’s URL',
+    );
+    assert.true(modified.cancelBubble, 'and the host never hears of it');
   });
 });
 

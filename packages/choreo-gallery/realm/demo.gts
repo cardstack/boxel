@@ -13,6 +13,7 @@ import TextAreaField from '@cardstack/base/text-area';
 import type { Join } from '@cardstack/choreo/film';
 import { rri } from '@cardstack/runtime-common';
 import { array } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
@@ -21,7 +22,7 @@ import type { ChoreoGallery } from './gallery';
 import type { FilmLink } from './lib/film-link';
 import { labSlug, LabState } from './lib/lab';
 import { restWhenOff } from './lib/onstage';
-import { ownClicks, ownControlClicks } from './lib/pointer';
+import { openThroughHost, ownClicks, ownControlClicks } from './lib/pointer';
 import { realmFile } from './lib/realm-url';
 import { requestTheater, takeTheaterRequest, Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
@@ -331,7 +332,13 @@ class Fitted extends Component<typeof GalleryDemo> {
             <span class='tile-badge'>Deep Dive</span>
           {{/if}}
         </span>
-        <span class='tile-title'>{{@model.title}}</span>
+        {{! the tile's one link, to the demo card: its name, and the way in for
+          a keyboard, whose Enter the host takes as it takes a click }}
+        <a
+          class='tile-title'
+          href={{@model.id}}
+          {{on 'click' openThroughHost}}
+        >{{@model.title}}</a>
         {{#if this.roomy}}
           <span class='tile-lede'>{{@model.lede}}</span>
           <span class='tile-links' {{ownClicks}}>
@@ -423,6 +430,8 @@ class Fitted extends Component<typeof GalleryDemo> {
       }
 
       .tile-title {
+        color: inherit;
+        text-decoration: none;
         font-family: var(--font-display);
         font-weight: 700;
         font-size: 1rem;
@@ -440,6 +449,17 @@ class Fitted extends Component<typeof GalleryDemo> {
         .tile:hover .tile-title {
           color: var(--ember-hot);
         }
+      }
+
+      /* the link is the tile's focus, and the whole tile wears the ring: the
+         tile clips what falls outside it, so the ring is drawn inside */
+      .tile-title:focus-visible {
+        outline: none;
+      }
+
+      .tile:has(.tile-title:focus-visible) {
+        outline: 2px solid var(--ember-hot);
+        outline-offset: -2px;
       }
 
       .tile-lede {

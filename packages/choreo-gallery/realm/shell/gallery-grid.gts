@@ -208,14 +208,11 @@ export class GalleryGrid extends Component<Signature> {
     this.code = !this.code;
   };
 
-  /** a click the tile's card did not keep for itself, or Enter on the tile */
-  open = (demo: GalleryDemo, event: Event) => {
-    if (
-      event instanceof KeyboardEvent &&
-      (event.key !== 'Enter' || event.target !== event.currentTarget)
-    ) {
-      return;
-    }
+  /**
+   * A click on a tile that nothing inside it kept: where the host has an
+   * overlay, the overlay has already opened the card and kept the click.
+   */
+  open = (demo: GalleryDemo) => {
     this.args.onOpen(demo);
   };
 
@@ -289,15 +286,14 @@ export class GalleryGrid extends Component<Signature> {
           as |tile h|
         >
           {{! The tile is the demo card itself, in its fitted format: the host
-            renders it, so a click anywhere on it opens the demo card. }}
+            renders it, so a click anywhere on it opens the demo card. The
+            card's title is its link, and the keyboard's way in; the click
+            here is the mouse's, for a host with no overlay to take it. }}
           <article
+            {{! template-lint-disable no-invalid-interactive }}
             class='card'
-            role='link'
-            tabindex='0'
-            aria-label={{tile.demo.title}}
             data-gallery-tile={{tile.demo.slug}}
             {{on 'click' (fn this.open tile.demo)}}
-            {{on 'keydown' (fn this.open tile.demo)}}
             {{! a leaving tile is on its way out: it takes no pointer, focus or
               screen reader, so nothing reaches a tile that is fading away }}
             inert={{unless h.isPresent true}}
@@ -580,11 +576,6 @@ export class GalleryGrid extends Component<Signature> {
         .card:hover {
           border-color: var(--line-strong);
         }
-      }
-
-      .card:focus-visible {
-        outline: 2px solid var(--ember-hot);
-        outline-offset: 2px;
       }
 
       @media (max-width: 720px) {
