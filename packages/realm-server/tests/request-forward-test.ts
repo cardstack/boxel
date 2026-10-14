@@ -2660,9 +2660,10 @@ module(basename(import.meta.filename), function () {
         });
 
         test('a url-parameter key a vendor echoes as malformed JSON is in no log line, breadcrumb, Sentry event or response', async function (assert) {
-          // Short enough that JSON.parse quotes it whole, and starting with a
-          // byte a bare JSON scalar can start with, so the forward hands the
-          // body to JSON.parse instead of refusing it on its first byte.
+          // Short enough that JSON.parse would quote it whole, and starting
+          // with a byte a bare JSON scalar can start with, so the forward
+          // would hand the body to JSON.parse. The response is scrubbed before
+          // the forward reads it, so what it reads is the marker instead.
           let key = 'tsk-0123456789';
           let precondition = '';
           try {
@@ -2682,9 +2683,24 @@ module(basename(import.meta.filename), function () {
           AllowedProxyDestinations.reset();
           sentry = startSentryCapture({ tracing: true });
 
-          let response: Awaited<ReturnType<typeof forward>> | undefined;
+          let response: { status: number; text: string } | undefined;
           let lines = await logLinesDuring(channels, async () => {
-            response = await forward(`${destination}?q=1`);
+            let answer = await request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({ url: `${destination}?q=1`, method: 'GET' })
+              // The marker is passed on as the vendor's body, which is not a
+              // JSON document, so it is read as text.
+              .buffer(true)
+              .parse((res, callback) => {
+                let text = '';
+                res.setEncoding('utf8');
+                res.on('data', (chunk: string) => (text += chunk));
+                res.on('end', () => callback(null, text));
+              });
+            response = { status: answer.status, text: answer.body as string };
           });
           Sentry.captureException(new Error('probe for breadcrumbs'));
           let sent = await sentry.flushed();
@@ -2696,20 +2712,16 @@ module(basename(import.meta.filename), function () {
             key,
             'the vendor received the key in the query string',
           );
-          assert.strictEqual(response!.status, 500);
-          let failure = lines.find((line) =>
-            line.message.includes('Error in request forward handler'),
+          assert.strictEqual(
+            response!.text,
+            '[REDACTED]',
+            'the key was replaced before the forward read the body',
           );
-          assert.ok(failure, 'the failure is logged');
-          assert.true(
-            failure!.message.includes('SyntaxError'),
-            "the log line keeps JSON.parse's error",
-          );
-          assert.true(
-            failure!.message.includes(
-              `(key=system:${destination} url=${destination})`,
+          assert.false(
+            lines.some((line) =>
+              line.message.includes('Error in request forward handler'),
             ),
-            'the log line names the key and the origin and path of the URL',
+            'nothing is left for JSON.parse to fail on and quote',
           );
           let size = lines.find((line) =>
             line.message.startsWith('outbound response size:'),
