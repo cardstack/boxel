@@ -24,6 +24,7 @@ import {
   type OperatorScope,
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
+import { isCredentialHeader } from '../lib/request-telemetry.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -210,6 +211,21 @@ function loggableRequestURL(ctxt: Koa.Context): string {
   return masked.href;
 }
 
+// The request's headers as the debug line prints them: a credential header
+// (the session token, cookies, a request signature) keeps its name with its
+// value masked, so the line still shows what the caller sent without carrying
+// anything that authenticates. The line goes to Loki, and Sentry's console
+// integration keeps it as a breadcrumb on any event raised during the request.
+function loggableRequestHeaders(
+  headers: http.IncomingHttpHeaders,
+): http.IncomingHttpHeaders {
+  let loggable: http.IncomingHttpHeaders = {};
+  for (let [name, value] of Object.entries(headers)) {
+    loggable[name] = isCredentialHeader(name) ? 'REDACTED' : value;
+  }
+  return loggable;
+}
+
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
   // Stamp `[job: J.R]` onto the request log lines when the upstream
@@ -244,7 +260,7 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
         ctxt,
       )}: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
-    logger.debug(JSON.stringify(ctxt.req.headers));
+    logger.debug(JSON.stringify(loggableRequestHeaders(ctxt.req.headers)));
   });
   return next();
 }

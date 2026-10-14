@@ -88,21 +88,35 @@ kept up to 8,192 characters. The realm server's `beforeSend` /
 `beforeSendTransaction` hook (`scrubRequestTelemetry` in
 `lib/request-telemetry.ts`, installed by `instrument.ts`) cuts that down:
 
-| Request                                                                       | What the event keeps                                                                                                                                                           |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /_request-forward`, `POST /_openrouter/chat/completions`, secure origin | The method, and the URL's origin and path. No body, headers, cookies or query string.                                                                                          |
-| Any other route                                                               | Everything Sentry records, except the `Authorization`, `Proxy-Authorization` and `Cookie` headers and the parsed cookies, with a `token` query parameter masked as `REDACTED`. |
+| Request                                                                       | What the event keeps                                                                                                                  |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /_request-forward`, `POST /_openrouter/chat/completions`, secure origin | The method, and the URL's origin and path. No body, headers, cookies or query string.                                                 |
+| Any other route                                                               | Everything Sentry records, except the credential headers and the parsed cookies, with a `token` query parameter masked as `REDACTED`. |
 
 On every event, a breadcrumb that names a proxy route's URL loses that URL's
 query string. The request log line (`<-- POST … /_request-forward?…`) is the
 one that does: Sentry's console integration keeps each log line written during
 a request as a breadcrumb on that request's events.
 
+The credential headers are `Authorization`, `Proxy-Authorization`, `Cookie`,
+`Set-Cookie`, and the two request signatures, `X-Boxel-Worker-Request-Signature`
+and `X-Boxel-Delegation-Signature`. A signature is replayable within its
+timestamp window, so it counts as a credential. One list,
+`isCredentialHeader` in `lib/request-telemetry.ts`, decides both what an
+event's request context drops and what the request log masks.
+
+With `realm:requests` at debug, the request log also writes each request's
+headers as a JSON line when the response finishes. That line names every
+header but prints each credential header's value as `REDACTED`. It is masked
+when it is written, not by the `beforeSend` hook, so the token and cookies
+never reach Loki, or a breadcrumb on an event raised after the line.
+`request-telemetry-test.ts` pins this for the log and for Sentry.
+
 Why: a proxy route's body is the caller's own content — a forwarded request's
 URL (query string included), headers and body, or a whole prompt — and its
 `Authorization` header is the caller's realm-server session token. A token in
 Sentry is no help in triage and a liability once stored, so it is dropped on
-every route, along with the `?token=` a capture URL or a `_download-realm`
+every route, whatever level the request log runs at, along with the `?token=` a capture URL or a `_download-realm`
 link carries (the request log masks the same parameter). The secure origin is
 where credentials are typed.
 

@@ -10,12 +10,14 @@
 //   content (a forwarded request's URL, headers and body, or a whole prompt),
 //   and its query string can carry a token.
 // - An event raised during any other request keeps its request context, minus
-//   the `Authorization` / `Proxy-Authorization` and `Cookie` headers and the
-//   parsed cookies, and with any `token` query parameter masked. The caller's
-//   session token is no help in triage and is a liability once stored.
+//   the credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`,
+//   `Set-Cookie` and the request-signature headers) and the parsed cookies,
+//   and with any `token` query parameter masked. The caller's session token
+//   is no help in triage and is a liability once stored.
 // - On every event, a breadcrumb that names a proxy route's URL (the request
 //   log line, kept by Sentry's console integration) loses that URL's query
-//   string.
+//   string. Nothing here looks for header values in a breadcrumb: the request
+//   log's header line masks the credential headers before it is written.
 //
 // Kept free of imports so `instrument.ts`, which runs before anything else,
 // can install it.
@@ -29,11 +31,26 @@ const proxyRoutePaths = new Set([
   OPENROUTER_PASSTHROUGH_PATH,
 ]);
 
+// The headers whose value is a credential: the caller's session token, its
+// cookies, and the HMAC signatures that authenticate a worker request
+// (`WORKER_REQUEST_SIGNATURE_HEADER`) and a session delegation
+// (`DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER`). A signature is replayable
+// within its timestamp window, so it is treated like a token. The names are
+// spelled out here, not imported, to keep this module free of imports. The
+// request log's header line masks these, and an event's request context drops
+// them.
 const credentialHeaders = new Set([
   'authorization',
   'proxy-authorization',
   'cookie',
+  'set-cookie',
+  'x-boxel-worker-request-signature',
+  'x-boxel-delegation-signature',
 ]);
+
+export function isCredentialHeader(name: string): boolean {
+  return credentialHeaders.has(name.toLowerCase());
+}
 
 const secureOriginHosts = new Set<string>();
 
@@ -199,7 +216,7 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
   }
   let keptHeaders: Record<string, string | string[] | undefined> = {};
   for (let [name, value] of Object.entries(headers)) {
-    if (!credentialHeaders.has(name.toLowerCase())) {
+    if (!isCredentialHeader(name)) {
       keptHeaders[name] = value;
     }
   }
