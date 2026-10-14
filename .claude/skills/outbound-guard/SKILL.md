@@ -150,9 +150,11 @@ needs that name added there. Any other string attribute only loses a proxy
 route's query string, the same as a breadcrumb message.
 
 `tests/helpers/sentry-capture.ts` with `tracing: true` and
-`incomingRequests: true` records real incoming transactions in a test; it
-registers OpenTelemetry's tracer provider for that capture and removes it
-again in `stop`.
+`incomingRequests: true` records real incoming transactions in a test. The
+tracer provider it needs is registered once per process and stays: the HTTP
+instrumentation keeps the first tracer it is given. Its sampler samples only
+while a capture with both options is running, so every other capture, before
+or after, still records no spans.
 
 ## Finding a send-path error by key name
 

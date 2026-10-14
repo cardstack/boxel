@@ -205,12 +205,17 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
   return { ...kept, headers: keptHeaders };
 }
 
-function isMethodAndPathOnly(request: SentryRequestData): boolean {
+// Whether an event for this request keeps only its method and the origin and
+// path of its URLs: a request to the secure origin or to a proxy route.
+export function keepsMethodAndPathOnly(request: {
+  url?: string;
+  headers?: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (isSecureOriginRequestData(request)) {
+    return true;
+  }
   let parsed = parseURL(request.url);
-  return (
-    isSecureOriginRequestData(request) ||
-    (parsed !== undefined && isProxyRoutePath(parsed.pathname))
-  );
+  return parsed !== undefined && isProxyRoutePath(parsed.pathname);
 }
 
 type SpanData = Record<string, unknown>;
@@ -276,7 +281,7 @@ function scrubURLAttributes(
   data: SpanData,
   methodAndPathOnly: boolean,
 ): SpanData {
-  let pathOnly = methodAndPathOnly || isMethodAndPathOnly(spanRequest(data));
+  let pathOnly = methodAndPathOnly || keepsMethodAndPathOnly(spanRequest(data));
   let scrubbed: SpanData = {};
   for (let [name, value] of Object.entries(data)) {
     if (typeof value !== 'string') {
@@ -364,9 +369,9 @@ export function scrubRequestTelemetry<
   // A transaction need not carry the request: its root span records it.
   let rootSpanData = event.contexts?.trace?.data;
   let methodAndPathOnly = request
-    ? isMethodAndPathOnly(request)
+    ? keepsMethodAndPathOnly(request)
     : rootSpanData !== undefined &&
-      isMethodAndPathOnly(spanRequest(rootSpanData));
+      keepsMethodAndPathOnly(spanRequest(rootSpanData));
   if (Array.isArray(event.breadcrumbs)) {
     (event as { breadcrumbs?: Breadcrumb[] }).breadcrumbs = scrubBreadcrumbs(
       event.breadcrumbs,

@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { context, propagation, trace } from '@opentelemetry/api';
+import { context, propagation } from '@opentelemetry/api';
 import { createRequire } from 'module';
 import { guardedFetchIntegration } from '../../lib/outbound/sentry.ts';
 import { scrubRequestTelemetry } from '../../lib/request-telemetry.ts';
@@ -23,13 +23,17 @@ import { scrubRequestTelemetry } from '../../lib/request-telemetry.ts';
 //
 // With `tracing` as well, each incoming request is also recorded as a
 // transaction whose server span carries the request's URL, as a deployed
-// server records it once tracing is on. That needs OpenTelemetry's tracer
-// provider and propagator, which are registered for that case only.
+// server records it once tracing is on.
 //
-// Everything registered with OpenTelemetry's global API is removed again by
-// `stop`. The HTTP instrumentation stays patched into `http` for the life of
-// the process, as in a deployed server, and does nothing once `stop` has
-// removed the client and the tracer provider.
+// That needs OpenTelemetry's tracer provider, which is registered once per
+// process, on the first such capture, and never removed: the HTTP
+// instrumentation caches the tracer it gets on its first span, so a provider
+// registered later would never be used. Its sampler samples only while the
+// current capture has both `tracing` and `incomingRequests`, at that client's
+// rate, so no other capture, before or after, records a span through it. The context
+// manager is registered per capture and removed again by `stop`. The HTTP
+// instrumentation stays patched into `http` for the life of the process, as
+// in a deployed server.
 
 export interface SentryCapture {
   envelopes: string[];
@@ -57,13 +61,10 @@ export function startSentryCapture({
   scrub?: boolean;
 }): SentryCapture {
   let envelopes: string[] = [];
-  let incomingTransactions = tracing && incomingRequests;
-  // `initOpenTelemetry` registers its own context manager along with the
-  // tracer provider.
-  if (incomingRequests && !incomingTransactions) {
+  if (incomingRequests) {
     context.setGlobalContextManager(new Sentry.SentryContextManager().enable());
   }
-  let client = Sentry.init({
+  Sentry.init({
     dsn: 'https://public@sentry.example.invalid/1',
     defaultIntegrations: false,
     skipOpenTelemetrySetup: true,
@@ -114,8 +115,9 @@ export function startSentryCapture({
     }
     return items;
   }
-  if (incomingTransactions && client) {
-    Sentry.initOpenTelemetry(client);
+  if (tracing && incomingRequests) {
+    registerTracerProviderOnce();
+    recordingTransactions = true;
   }
   if (incomingRequests) {
     createRequire(import.meta.url)('http');
@@ -133,19 +135,45 @@ export function startSentryCapture({
       return await flushedItems('transaction');
     },
     async stop() {
+      recordingTransactions = false;
       await Sentry.close(2000);
       Sentry.getCurrentScope().setClient(undefined);
       Sentry.getIsolationScope().setClient(undefined);
       Sentry.getGlobalScope().setClient(undefined);
       Sentry.getIsolationScope().clearBreadcrumbs();
       Sentry.getCurrentScope().clearBreadcrumbs();
-      if (incomingTransactions) {
-        trace.disable();
-        propagation.disable();
-      }
       if (incomingRequests) {
         context.disable();
       }
     },
   };
+}
+
+let tracerProviderRegistered = false;
+let recordingTransactions = false;
+
+// Registers Sentry's tracer provider for the rest of the process. Its sampler
+// uses only `getOptions()` and `emit()` of the client it is given, so it is
+// given one that answers with the current client's options while a capture is
+// recording transactions, and with options that sample nothing otherwise, and
+// that passes its sampling hooks on to the current client. The
+// context manager it registers along the way is the one the capture has just
+// set, and the propagator, which would add trace headers to the tests' own
+// outgoing requests, is removed straight away.
+function registerTracerProviderOnce(): void {
+  if (tracerProviderRegistered) {
+    return;
+  }
+  tracerProviderRegistered = true;
+  let samplingClient = {
+    getOptions: () =>
+      (recordingTransactions ? Sentry.getClient()?.getOptions() : undefined) ??
+      {},
+    emit: (...args: unknown[]) =>
+      (
+        Sentry.getClient()?.emit as ((...args: unknown[]) => void) | undefined
+      )?.apply(Sentry.getClient(), args),
+  };
+  Sentry.initOpenTelemetry(samplingClient as unknown as Sentry.NodeClient);
+  propagation.disable();
 }
