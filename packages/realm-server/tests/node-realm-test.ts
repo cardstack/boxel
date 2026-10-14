@@ -183,6 +183,44 @@ module(`${basename(import.meta.filename)} | file stat probing`, function () {
     }
   });
 
+  test('lastModified and openFile report the second mtimeMs falls in, even in its last half-millisecond', async function (assert) {
+    let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+    try {
+      let path = join(dir, 'late.txt');
+      fsExtra.writeFileSync(path, 'hello');
+      // An mtime 0.4ms before the next second, which `Stats.mtime` rounds up
+      // into that next second and `mtimeMs` does not.
+      let seconds = 1791998271;
+      fsExtra.utimesSync(path, seconds + 0.9996, seconds + 0.9996);
+      let stat = fsExtra.statSync(path);
+      assert.strictEqual(
+        Math.floor(stat.mtime.getTime() / 1000),
+        seconds + 1,
+        `the file system keeps sub-millisecond mtimes (mtimeMs ${stat.mtimeMs}), so the rounded Date lands in the next second`,
+      );
+
+      let adapter = new NodeAdapter(dir);
+      assert.strictEqual(
+        await adapter.lastModified('late.txt'),
+        seconds,
+        'lastModified reports the second mtimeMs falls in',
+      );
+      let ref = await adapter.openFile('late.txt');
+      assert.strictEqual(
+        ref?.lastModified,
+        seconds,
+        'openFile reports the second mtimeMs falls in',
+      );
+      assert.strictEqual(
+        ref?.lastModified,
+        Math.floor(ref!.lastModifiedMs! / 1000),
+        'openFile’s whole-second time agrees with its own lastModifiedMs',
+      );
+    } finally {
+      fsExtra.removeSync(dir);
+    }
+  });
+
   test('readdir treats a directory that vanished before it is read as empty', async function (assert) {
     let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
     try {
