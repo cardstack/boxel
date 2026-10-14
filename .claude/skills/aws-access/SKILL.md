@@ -700,7 +700,22 @@ aws --profile $P cloudtrail lookup-events \
 - `date -d` is GNU. On macOS use `date -u -v-1d +%Y-%m-%dT%H:%M:%SZ`.
 - The history covers the whole account's management events, not just KMS. Use it to answer a question about the key, not to browse.
 
-`kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`. A denied `Decrypt` attempt is itself a CloudTrail event, recorded under the role's session ARN (`assumed-role/boxel-claude-readonly/...`) with an access-denied `errorCode`.
+`kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
+
+A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Find denied attempts by event name instead, one call per action, and keep the ones with an `errorCode`. The caller is a session ARN for an assumed role (`assumed-role/boxel-claude-readonly/...` for this role), and the code is `AccessDenied`:
+
+```sh
+for action in Decrypt Encrypt GenerateDataKey GenerateDataKeyWithoutPlaintext ReEncrypt; do
+  aws --profile $P cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=EventName,AttributeValue=$action \
+    --start-time "$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ)" \
+    --query 'Events[].CloudTrailEvent' --output json \
+    | jq -r '.[] | fromjson | select(.errorCode) | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), .errorCode] | @tsv'
+  sleep 1   # stay under the two-requests-a-second limit
+done
+```
+
+These lookups cover every KMS key in the account, including the AWS-managed `aws/ssm` key that SSM reads decrypt through, so the `Decrypt` one returns more than the secrets key's events. A denied call doesn't name its key, so a denial can't be tied to the secrets key from the record alone. Read it alongside the caller and the time.
 
 ## Future skill / scripting room
 
