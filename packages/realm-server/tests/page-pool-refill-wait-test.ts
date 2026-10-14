@@ -12,8 +12,10 @@ import { PrerenderCancelledError } from '../prerender/prerender-cancel.ts';
 //
 //   1. Past its budget, a brand-new affinity takes an idle tab from another
 //      affinity rather than waiting out the stalled refill.
-//   2. A module sub-render past its budget does the same, taking only an
-//      idle tab, rather than parking for a release that never comes.
+//   2. A module sub-render past its budget does the same, rather than
+//      parking for a release that never comes. It takes only an idle tab:
+//      with every other tab busy it parks until one frees, since a busy tab
+//      may be held by the render it is blocking.
 //   3. A caller's abort rejects its wait at once, while the refill runs on
 //      and hands its standby to a caller that is still waiting.
 
@@ -230,6 +232,42 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       [a.pageId, b.pageId, c.pageId].includes(d.pageId),
       'D took an idle tab from another affinity',
+    );
+  });
+
+  test('a brand-new module sub-render past a stalled refill never queues on a busy tab', async function (assert) {
+    assert.timeout(10_000);
+    let stub = makeBrowserStub();
+    let pool = makePool({
+      maxPages: 2,
+      browserManager: stub.browserManager,
+      gate: stub.gate,
+      standbyRefillWaitMs: 50,
+    });
+
+    let a = await pool.getPage('A');
+    let b = await pool.getPage('B');
+    b.release();
+    await pool.warmStandbys();
+
+    // C takes the warm standby and the refill that follows hangs. B is the
+    // idle affinity the cap evicts, leaving A and C, both mid-render.
+    stub.hangNext();
+    let c = await pool.getPage('C');
+
+    let pending = pool.getPage('D', 'module');
+    // A is the older of the two busy tabs, so it is the one a steal that
+    // took busy tabs would queue on, and it never frees.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    c.release();
+
+    let d = settled(await within(pending), "D's tab");
+    d.release();
+    a.release();
+    assert.strictEqual(
+      d.pageId,
+      c.pageId,
+      'D waited for a tab to free and took it, rather than queueing on a busy one',
     );
   });
 
