@@ -1621,6 +1621,137 @@ await workspaces['del' + 'ete']('${oldWorkspace}');`;
     assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
   });
 
+  // The realm server does the indexing; these record what the run asked for.
+  function stubIndexing() {
+    let calls: { action: string; realm: string; urls?: string[] }[] = [];
+    let realmService = getService('realm');
+    realmService.invalidateUrls = async (realm, urls) => {
+      calls.push({ action: 'invalidate', realm, urls });
+    };
+    realmService.reindex = async (realm) => {
+      calls.push({ action: 'reindex', realm });
+    };
+    realmService.fullReindex = async (realm) => {
+      calls.push({ action: 'fullReindex', realm });
+    };
+    realmService.cancelIndexingJob = async (realm) => {
+      calls.push({ action: 'cancelJob', realm });
+    };
+    return calls;
+  }
+
+  test('realm.index.invalidate and realm.index.reindex refresh the index of the run realm without a click', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `return {
+  invalidated: await realm.index.invalidate(['Pet/mango.json', '${testRealmURL}pet.gts']),
+  one: await realm.index.invalidate('task.json'),
+  reindex: await realm.index.reindex(),
+};`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'the run keeps the room mode',
+    );
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code,
+    });
+
+    assert.deepEqual(calls, [
+      {
+        action: 'invalidate',
+        realm: testRealmURL,
+        urls: [`${testRealmURL}Pet/mango.json`, `${testRealmURL}pet.gts`],
+      },
+      {
+        action: 'invalidate',
+        realm: testRealmURL,
+        urls: [`${testRealmURL}task.json`],
+      },
+      { action: 'reindex', realm: testRealmURL },
+    ]);
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      invalidated: { invalidated: ['Pet/mango.json', 'pet.gts'] },
+      one: { invalidated: ['task.json'] },
+      reindex: { reindex: 'started' },
+    });
+  });
+
+  test('realm.index.invalidate refuses a path outside the realm and an empty list', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let refused = [];
+try { await realm.index.invalidate(['http://other-realm/a.json']); } catch (e) { refused.push(e.message); }
+try { await realm.index.invalidate([]); } catch (e) { refused.push(e.message); }
+return refused;`,
+    });
+
+    let [outside, empty] = JSON.parse(result.scriptResult!);
+    assert.true(/Path is outside this realm/.test(outside), outside);
+    assert.true(/expects a path or an array/.test(empty), empty);
+    assert.deepEqual(calls, [], 'nothing is invalidated');
+  });
+
+  test('a script that starts a full reindex or cancels an indexing job always waits for the user', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    for (let code of [
+      `await realm.index.fullReindex();`,
+      `await realm.index.cancelJob();`,
+    ]) {
+      assert.true(
+        RunRealmCodeTool.neverAutoExecutesFor({ code }),
+        `waits for a click: ${code}`,
+      );
+    }
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return {
+  cancel: await realm.index.cancelJob(),
+  full: await realm.index.fullReindex(),
+};`,
+    });
+
+    assert.deepEqual(calls, [
+      { action: 'cancelJob', realm: testRealmURL },
+      { action: 'fullReindex', realm: testRealmURL },
+    ]);
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      cancel: { cancelled: true },
+      full: { fullReindex: 'started' },
+    });
+  });
+
+  test('a script that reaches realm.index.fullReindex another way is refused', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `let index = realm.index;
+await index['full' + 'Reindex']();`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'this run would not wait for a click',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      }),
+      /realm\.index\.fullReindex must be called by that name/,
+    );
+    assert.deepEqual(calls, [], 'no reindex starts');
+  });
+
   module('room actions', function (hooks) {
     let roomId: string;
     let skillId = `${testRealmURL}skills/test-skill/SKILL.md`;
@@ -2199,6 +2330,29 @@ return { refused, text: await realm.fs.readText('task.json') };`,
         }),
         /You can only read this workspace.*No file was saved/,
       );
+    });
+
+    test('realm.index calls are refused', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `let refused = [];
+try { await realm.index.invalidate('task.json'); } catch (e) { refused.push(e.message); }
+try { await realm.index.reindex(); } catch (e) { refused.push(e.message); }
+return refused;`,
+      });
+
+      let refused = JSON.parse(result.scriptResult!);
+      assert.strictEqual(refused.length, 2, 'both calls are refused');
+      for (let message of refused) {
+        assert.true(
+          /You can only read this workspace/.test(message),
+          `the refusal says why: ${message}`,
+        );
+      }
     });
   },
 );

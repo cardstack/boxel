@@ -86,6 +86,12 @@ const BOOTSTRAP = `
           call('ui.previewFormat', [path, format]),
         openWorkspace: () => call('ui.openWorkspace', []),
       }),
+      index: Object.freeze({
+        invalidate: (paths) => call('index.invalidate', [paths]),
+        reindex: () => call('index.reindex', []),
+        fullReindex: () => call('index.fullReindex', []),
+        cancelJob: () => call('index.cancelJob', []),
+      }),
     });
     globalThis.room = Object.freeze({
       enableSkills: (ids) => call('room.enableSkills', [ids]),
@@ -168,6 +174,10 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'ui.openFile',
   'ui.previewFormat',
   'ui.openWorkspace',
+  'index.invalidate',
+  'index.reindex',
+  'index.fullReindex',
+  'index.cancelJob',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a
