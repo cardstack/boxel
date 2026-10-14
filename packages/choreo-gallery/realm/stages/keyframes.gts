@@ -1,6 +1,10 @@
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
 
 import { GalleryDemo } from '../demo';
+import { observeStage } from '../lib/onstage';
 import { tuneMotion, tuneNumber } from '../lib/tuning';
 
 function morph() {
@@ -33,81 +37,118 @@ const transition = {
   repeat: Infinity,
 } as const;
 
-export const Keyframes = <template>
-  <div class='ex'>
-    <div class='morph-stage'>
-      <div
-        class='morph-glow'
-        {{motion
-          animate=glow
-          transition=(tuneMotion 'keyframes' transition 'transition')
-        }}
-      ></div>
-      <div
-        class='morph'
-        {{motion
-          animate=(morph)
-          transition=(tuneMotion 'keyframes' transition 'transition')
-        }}
-      ></div>
+/** each value at its first keyframe */
+function firstOf<T extends object>(frames: T) {
+  return Object.fromEntries(
+    Object.entries(frames).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value[0] : value,
+    ]),
+  ) as { [K in keyof T]: T[K] extends readonly (infer V)[] ? V : T[K] };
+}
+const STILL = { duration: 0 } as const;
+
+/**
+ * The loop repeats forever and Motion runs it by script, frame by frame, so
+ * nothing the stage's resting reaches can pause it. Off stage (scrolled away,
+ * or under a demo page) it settles on its first keyframe, where every pass of
+ * the loop begins, and the loop stops; it starts again from there when the
+ * stage comes back.
+ */
+export class Keyframes extends Component {
+  @tracked private onStage = false;
+
+  watch = modifier((el: HTMLElement) => {
+    const stage = observeStage(el, (visible) => {
+      this.onStage = visible;
+    });
+    return () => stage.disconnect();
+  });
+
+  get morph() {
+    return this.onStage ? morph() : firstOf(morph());
+  }
+
+  get glow() {
+    return this.onStage ? glow : firstOf(glow);
+  }
+
+  get transition() {
+    return this.onStage
+      ? tuneMotion('keyframes', transition, 'transition')
+      : STILL;
+  }
+
+  <template>
+    <div class='ex'>
+      <div class='morph-stage' {{this.watch}}>
+        <div
+          class='morph-glow'
+          {{motion animate=this.glow transition=this.transition}}
+        ></div>
+        <div
+          class='morph'
+          {{motion animate=this.morph transition=this.transition}}
+        ></div>
+      </div>
     </div>
-  </div>
-  <style scoped>
-    .ex {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      width: 100%;
-      max-width: 100%;
-      /* every stage keeps air on all four sides. A demo that runs edge to edge
+    <style scoped>
+      .ex {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        width: 100%;
+        max-width: 100%;
+        /* every stage keeps air on all four sides. A demo that runs edge to edge
            reads as a layout bug rather than as a stage, and the ones sized
            `min(Npx, 100%)` hit the frame exactly when the card is narrow.
            The block padding matters as much as the inline: on a stage tall
            enough to fill the platter, content flush against the top and bottom
            of the recess reads as overflowed rather than placed. */
-      padding-block: 10px;
-      padding-inline: 16px;
-      overflow: hidden;
-      container-type: size;
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-      -webkit-user-drag: none;
-    }
+        padding-block: 10px;
+        padding-inline: 16px;
+        overflow: hidden;
+        container-type: size;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-user-drag: none;
+      }
 
-    .morph-stage {
-      position: relative;
-      width: 160px;
-      height: 160px;
-      display: grid;
-      place-items: center;
-    }
+      .morph-stage {
+        position: relative;
+        width: 160px;
+        height: 160px;
+        display: grid;
+        place-items: center;
+      }
 
-    .morph-glow {
-      position: absolute;
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      background: radial-gradient(
-        circle,
-        rgba(255, 59, 31, 0.45),
-        transparent 68%
-      );
-      filter: blur(8px);
-    }
+      .morph-glow {
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(255, 59, 31, 0.45),
+          transparent 68%
+        );
+        filter: blur(8px);
+      }
 
-    .morph {
-      position: relative;
-      width: 92px;
-      height: 92px;
-      background: var(--ember-hot);
-      box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.12) inset,
-        0 22px 50px var(--glow);
-    }
-  </style>
-</template>;
+      .morph {
+        position: relative;
+        width: 92px;
+        height: 92px;
+        background: var(--ember-hot);
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+          0 22px 50px var(--glow);
+      }
+    </style>
+  </template>
+}
 
 // Declare the demo variables before the first interactive Choreo pass.
 tuneMotion('keyframes', transition, 'transition');
