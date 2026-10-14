@@ -2297,4 +2297,264 @@ module('Unit | operation lowering', function (hooks) {
       'on the base the name means, whatever base the entry named',
     );
   });
+  // -------------------------------------------------------------------------
+  // callApi: a declared request to a service outside the realm
+  //
+  // Lowered from plain data, as the stored entry it becomes: every check here
+  // is lowering's, and holds for an entry whatever produced it.
+  // -------------------------------------------------------------------------
+
+  async function lowerRequest(
+    request: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+  ): Promise<LowerOperationDeclarationsResult> {
+    let { field, contains, CardDef } = api;
+    class Repo extends CardDef {
+      static displayName = 'Repo';
+      @field owner = contains(StringField);
+    }
+    shim({ Repo });
+    return await lowerOperationDeclarations(
+      {
+        fetch: { base: 'callApi', ...request, ...extra },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Repo),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+  }
+
+  const ownerParam = { $ref: 'params', key: 'owner' };
+
+  test('a keyless request lowers to the request it sends, its values still markers', async function (assert) {
+    let result = await lowerRequest(
+      {
+        url: 'https://api.example.com/repos/{owner}/{repo}/issues',
+        path: { owner: ownerParam, repo: { $ref: 'instance', key: 'owner' } },
+        query: { state: 'open' },
+        headers: { accept: 'application/json' },
+      },
+      { params: { owner: StringField } },
+    );
+    assert.deepEqual(codes(result), []);
+    assert.deepEqual(result.operations.fetch, {
+      base: 'callApi',
+      params: { owner: { kind: 'field', codeRef: identifyCard(StringField)! } },
+      callApi: {
+        method: 'GET',
+        url: 'https://api.example.com/repos/{owner}/{repo}/issues',
+        path: { owner: ownerParam, repo: { $ref: 'instance', key: 'owner' } },
+        headers: { accept: 'application/json' },
+        query: { state: 'open' },
+        slots: [],
+      },
+      deterministic: true,
+    });
+  });
+
+  test('a request with a body defaults to POST, and a GraphQL document travels with its variables', async function (assert) {
+    let result = await lowerRequest(
+      {
+        url: 'https://api.example.com/graphql',
+        graphql: {
+          document: 'query($owner: String!) { repo(owner: $owner) { id } }',
+          variables: { owner: ownerParam },
+        },
+      },
+      { params: { owner: StringField } },
+    );
+    assert.deepEqual(codes(result), []);
+    assert.strictEqual(result.operations.fetch.callApi?.method, 'POST');
+    assert.deepEqual(result.operations.fetch.callApi?.body, {
+      kind: 'graphql',
+      document: 'query($owner: String!) { repo(owner: $owner) { id } }',
+      variables: { owner: ownerParam },
+    });
+  });
+
+  test('each slot is indexed with its key, its name, its transform and where it is sent', async function (assert) {
+    let result = await lowerRequest({
+      url: 'https://api.example.com/hooks/{secret}',
+      path: { secret: '{{apiKey:hook}}' },
+      headers: { authorization: 'Basic {{userKey|basic}}' },
+      query: { key: '{{apiKey}}' },
+      json: { auth: { token: 'tok {{ apiKey : body }}' } },
+    });
+    assert.deepEqual(codes(result), []);
+    assert.deepEqual(result.operations.fetch.callApi?.slots, [
+      { name: 'hook', key: 'apiKey', placement: 'path', at: 'path.secret' },
+      {
+        name: 'userKey',
+        key: 'userKey',
+        transform: 'basic',
+        placement: 'header',
+        at: 'headers.authorization',
+      },
+      { name: 'apiKey', key: 'apiKey', placement: 'query', at: 'query.key' },
+      {
+        name: 'body',
+        key: 'apiKey',
+        placement: 'body',
+        at: 'json.auth.token',
+      },
+    ]);
+    assert.strictEqual(
+      result.operations.fetch.callApi?.headers?.authorization,
+      'Basic {{userKey|basic}}',
+      'the slot stays where it was written, for the sender to fill',
+    );
+  });
+
+  test('a slot placed twice is refused', async function (assert) {
+    let result = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Bearer {{apiKey}}' },
+      query: { key: '{{apiKey|basic}}' },
+    });
+    assert.deepEqual(codes(result), ['slot-placed-twice']);
+    assert.true(result.operations.fetch.invalid, 'stored invalid');
+    assert.strictEqual(result.operations.fetch.callApi, undefined);
+  });
+
+  test('a slot name reused for a different key is refused', async function (assert) {
+    let result = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: {
+        authorization: 'Bearer {{apiKey:token}}',
+        'x-user': '{{userKey:token}}',
+      },
+    });
+    assert.deepEqual(codes(result), ['slot-name-reused']);
+  });
+
+  test('a path parameter that is not filled through `path` is refused', async function (assert) {
+    let unfilled = await lowerRequest({
+      url: 'https://api.example.com/repos/{owner}',
+    });
+    assert.deepEqual(codes(unfilled), ['unencoded-path-parameter']);
+
+    let partial = await lowerRequest({
+      url: 'https://api.example.com/v{version}/items',
+      path: { version: '2' },
+    });
+    assert.deepEqual(
+      codes(partial),
+      ['unencoded-path-parameter', 'invalid-request'],
+      'part of a segment is not a segment the request fills, so `path` has nothing to fill',
+    );
+
+    let inHost = await lowerRequest({
+      url: 'https://{tenant}.example.com/items',
+      path: { tenant: 'acme' },
+    });
+    assert.deepEqual(
+      codes(inHost),
+      ['unencoded-path-parameter', 'invalid-request'],
+      'a parameter in the host is refused',
+    );
+
+    let spliced = await lowerRequest({
+      url: `https://api.example.com/repos/${String({})}`,
+    });
+    assert.deepEqual(
+      codes(spliced),
+      ['unencoded-path-parameter'],
+      'a reference spliced into the URL text is refused',
+    );
+
+    let splicedValue = await lowerRequest({
+      url: 'https://api.example.com/repos/{owner}',
+      path: { owner: `team-${String({})}` },
+    });
+    assert.deepEqual(codes(splicedValue), ['unencoded-path-parameter']);
+  });
+
+  test('a slot outside a header value, a query value, a path value and the body is refused', async function (assert) {
+    let inURL = await lowerRequest({
+      url: 'https://api.example.com/items?key={{apiKey}}',
+    });
+    assert.deepEqual(codes(inURL), ['slot-out-of-place']);
+
+    let inHeaderName = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { '{{apiKey}}': 'x' },
+    });
+    assert.true(codes(inHeaderName).includes('slot-out-of-place'));
+
+    let inQueryName = await lowerRequest({
+      url: 'https://api.example.com/items',
+      query: { '{{apiKey}}': 'x' },
+    });
+    assert.deepEqual(codes(inQueryName), ['slot-out-of-place']);
+
+    let inDocument = await lowerRequest({
+      url: 'https://api.example.com/graphql',
+      graphql: { document: 'query { viewer(token: "{{apiKey}}") { id } }' },
+    });
+    assert.deepEqual(codes(inDocument), ['slot-out-of-place']);
+  });
+
+  test('a GraphQL document built from values is refused', async function (assert) {
+    let computed = await lowerRequest(
+      {
+        url: 'https://api.example.com/graphql',
+        graphql: { document: ownerParam },
+      },
+      { params: { owner: StringField } },
+    );
+    assert.deepEqual(codes(computed), ['string-built-graphql']);
+
+    let spliced = await lowerRequest({
+      url: 'https://api.example.com/graphql',
+      graphql: { document: `query { repo(owner: "${String({})}") { id } }` },
+    });
+    assert.deepEqual(codes(spliced), ['string-built-graphql']);
+  });
+
+  test('a malformed slot is refused rather than sent as text', async function (assert) {
+    let result = await lowerRequest({
+      url: 'https://api.example.com/items',
+      headers: { authorization: 'Bearer {{apiKey|rot13}}' },
+    });
+    assert.deepEqual(codes(result), ['invalid-slot']);
+
+    let foreign = await lowerRequest({
+      url: 'https://api.example.com/items',
+      json: { template: 'Hello {{name}}' },
+    });
+    assert.deepEqual(
+      codes(foreign),
+      [],
+      "a vendor's own template text is not a slot",
+    );
+  });
+
+  test('a callApi runs no program', async function (assert) {
+    let result = await lowerRequest(
+      { url: 'https://api.example.com/items' },
+      { transformations: { $bxl: '.x=1;' } },
+    );
+    assert.deepEqual(codes(result), ['unrunnable-program']);
+  });
+
+  test('a callApi is built on a card, not on a file', async function (assert) {
+    let { FileDef } = api;
+    class Notes extends FileDef {
+      static displayName = 'Notes';
+    }
+    shim({ Notes });
+    let result = await lowerOperationDeclarations(
+      {
+        fetch: { base: 'callApi', url: 'https://api.example.com/items' },
+      } as unknown as Record<string, OperationsModule.OperationDeclaration>,
+      {
+        definition: buildDefinition(Notes),
+        lookupDefinition,
+        identifyCard: (target) => identifyCard(target),
+      },
+    );
+    assert.deepEqual(codes(result), ['base-not-carried']);
+  });
 });

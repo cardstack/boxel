@@ -1984,6 +1984,32 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(vendor.requests[0].body, '{"hello":"vendor"}');
       });
 
+      test('a credential slot in a forward is sent as the text it is, never filled', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ token: '{{apiKey}}' }),
+            headers: { 'X-Vendor-Key': '{{userKey}}' },
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0].headers['x-vendor-key'],
+          '{{userKey}}',
+          'the header carries the slot as written',
+        );
+        assert.strictEqual(
+          vendor.requests[0].body,
+          '{"token":"{{apiKey}}"}',
+          'the body carries the slot as written',
+        );
+      });
+
       test('an X-Boxel header in the forwarded headers is refused', async function (assert) {
         let response = await request
           .post('/_request-forward')

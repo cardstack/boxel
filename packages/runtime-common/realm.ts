@@ -331,6 +331,7 @@ import {
   assertWithinExplainCap,
   type TargetRealm,
 } from './card-operations/explain.ts';
+import type { CallApiSender } from './card-operations/call-api.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -2673,6 +2674,7 @@ export class Realm {
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
+  #callApi: CallApiSender | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
@@ -2851,6 +2853,7 @@ export class Realm {
       cardDocumentCache,
       realmFor,
       anonymousRateLimiter,
+      callApi,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -2890,6 +2893,10 @@ export class Realm {
       // without a session. Unset, the realm's database, which every process
       // serving the realm shares.
       anonymousRateLimiter?: AnonymousRateLimiter;
+      // Sends a `callApi` operation's request through the server's guarded
+      // outbound client. Without it, the realm sends no request outside
+      // itself and refuses every `callApi`.
+      callApi?: CallApiSender;
     },
     opts?: Options,
   ) {
@@ -2900,6 +2907,7 @@ export class Realm {
     this.#queue = queue;
     this.#virtualNetwork = virtualNetwork;
     this.#realmFor = realmFor;
+    this.#callApi = callApi;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
@@ -6108,6 +6116,45 @@ export class Realm {
             meta: { entry: write.entry.position },
           });
         }
+        // A request sent outside the realm is made on the realm's behalf,
+        // which needs the authority a write does.
+        let outbound = resolved.find(
+          ({ definition }) => definition.base === 'callApi',
+        );
+        if (outbound) {
+          throw new OperationFailure({
+            ...(outbound.entry.href ? { id: outbound.entry.href } : {}),
+            status: 400,
+            code: 'wrong-entry-point',
+            title: 'Outside request in a read-only batch',
+            detail:
+              `operation "${outbound.entry.name}" sends a request to an ` +
+              `outside service on the realm's behalf, and a QUERY batch is ` +
+              `authorized to read; send it as a POST`,
+            meta: { entry: outbound.entry.position },
+          });
+        }
+      }
+
+      // A request sent outside the realm cannot be taken back, so it travels in
+      // a batch of its own: alongside any other entry, a refusal after it had
+      // been sent would answer the batch as not having happened when part of
+      // it had.
+      let sendsOutside = resolved.find(
+        ({ definition }) => definition.base === 'callApi',
+      );
+      if (sendsOutside && entries.length > 1) {
+        throw new OperationFailure({
+          ...(sendsOutside.entry.href ? { id: sendsOutside.entry.href } : {}),
+          status: 400,
+          code: 'invalid-params',
+          title: 'Outside request in a batch',
+          detail:
+            `operation "${sendsOutside.entry.name}" sends a request to an ` +
+            `outside service, which cannot be undone, so it is sent in a ` +
+            `batch of its own`,
+          meta: { entry: sendsOutside.entry.position },
+        });
       }
 
       // An anonymous caller on a realm anyone may read or write has no identity
@@ -6201,6 +6248,10 @@ export class Realm {
             {
               gated: { definition, decision },
               ...this.#anonymousReadOptions(requestContext),
+              ...(definition.base === 'callApi' &&
+              isDuringPrerenderRequest(request)
+                ? { duringPrerender: true }
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -7132,6 +7183,7 @@ export class Realm {
         compilePolicyCard: (card) =>
           compilePolicyCard(card.href, this.#policyCompileEnvironment()),
         readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
+        ...(this.#callApi ? { callApi: this.#callApi } : {}),
       };
     }
     return this.#operationCore;

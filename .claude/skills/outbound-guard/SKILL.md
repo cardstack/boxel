@@ -1,6 +1,6 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and `callApi` card operations). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
 ---
 
 # Outbound guard (operators)
@@ -8,9 +8,13 @@ description: Operate and diagnose the realm server's guarded outbound client (`p
 Every realm-server call that carries a stored credential to an outside vendor
 goes through `outboundFetch` in `packages/realm-server/lib/outbound/client.ts`.
 Today that is `POST /_request-forward` (including streamed calls),
-`POST /_openrouter/chat/completions`, and the generation-cost lookup either of
+`POST /_openrouter/chat/completions`, the generation-cost lookup either of
 them makes when a response carried a generation id but no inline cost
-(`OpenRouterCreditStrategy` in `lib/credit-strategies.ts`). The guard is
+(`OpenRouterCreditStrategy` in `lib/credit-strategies.ts`), and every `callApi`
+card operation (`lib/outbound/call-api-sender.ts`; see the `call-api` skill).
+A `callApi` carries no `credential`: its credentials are `substitutions`,
+filled into the request after the destination check and never followed across
+a redirect to another origin. The guard is
 always on, in every environment; local development gets a short allowlist, never an off switch.
 
 ## What it refuses
