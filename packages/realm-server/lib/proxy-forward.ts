@@ -35,13 +35,28 @@ export interface StreamUsage {
 export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
   let controller = new AbortController();
   ctxt.res.once('close', () => {
-    if (!ctxt.res.writableEnded) {
+    // A reset the server made itself (see `resetResponse`) is not the client
+    // leaving.
+    if (!ctxt.res.writableEnded && !ctxt.state[SERVER_RESET]) {
       controller.abort(
         new Error('Client disconnected before the response was finished'),
       );
     }
   });
   return controller.signal;
+}
+
+// The `ctxt.state` key `resetResponse` sets.
+const SERVER_RESET = 'serverResetResponse';
+
+// Resets a response whose body has started, so the client sees it fail rather
+// than end. The reset carries an error: over HTTP/2, a reset without one ends
+// the stream as a normal close, and the client would take the partial body as
+// whole. It is marked as the server's own so `clientDisconnectSignal` does
+// not report it as the client leaving.
+function resetResponse(ctxt: Koa.Context, error: Error): void {
+  ctxt.state[SERVER_RESET] = true;
+  ctxt.res.destroy(error);
 }
 
 /**
@@ -171,7 +186,10 @@ const MAX_BILLING_FIELD_BYTES = 64 * 1024;
  * Resolves with `{ id, usage }` in the shape of a response body, for the
  * credit strategy to price, once the whole body has been read; or undefined
  * when there is nothing to charge for: `chargesForUsage` is false, or the body
- * turned out not to be a complete JSON document.
+ * failed or turned out not to be a complete JSON document before its
+ * generation id was read. A charged body that fails
+ * after its generation id has been read resolves with just the id, which the
+ * credit strategy prices by looking the generation up.
  *
  * A body that is plainly not JSON is refused before anything is sent, with
  * the `SyntaxError` the handler answers with a 500, as it does for any
@@ -294,11 +312,18 @@ export async function forwardJsonResponse(
     if (clientGone() && !chargesForUsage) {
       return undefined;
     }
-    // Reset with an error: over HTTP/2, a reset without one ends the stream
-    // as a normal close, and the client would take the partial body as whole.
-    res.destroy(
+    resetResponse(
+      ctxt,
       error instanceof Error ? error : new Error('The upstream body failed'),
     );
+    let generation = chargedGeneration(scanner, chargesForUsage);
+    if (generation) {
+      log.warn(
+        `Forwarded upstream body failed after generation ${generation.id} began; charging for the generation`,
+        error,
+      );
+      return generation;
+    }
     throw error;
   } finally {
     signal.removeEventListener('abort', cancelUncharged);
@@ -310,15 +335,21 @@ export async function forwardJsonResponse(
   }
   scanner.finish();
   if (scanner.error) {
-    log.warn(
-      `Forwarded upstream response was not a complete JSON document (${scanner.error}); nothing is charged for it`,
-    );
-    res.destroy(
+    resetResponse(
+      ctxt,
       new Error(
         `The upstream body was not a complete document: ${scanner.error}`,
       ),
     );
-    return undefined;
+    let generation = chargedGeneration(scanner, chargesForUsage);
+    log.warn(
+      `Forwarded upstream response was not a complete JSON document (${scanner.error}); ${
+        generation
+          ? `charging for generation ${generation.id}`
+          : 'nothing is charged for it'
+      }`,
+    );
+    return generation;
   }
   if (!chargesForUsage) {
     return undefined;
@@ -327,6 +358,23 @@ export async function forwardJsonResponse(
     id: scanner.values.get('id') as string | undefined,
     usage: scanner.values.get('usage') as { cost: number | undefined },
   };
+}
+
+// What a charged call whose body failed partway is priced from. The
+// generation id leads an OpenRouter body, so once it has been read the
+// provider has started, and billed for, that generation: the credit strategy
+// prices it from the id even though the usage at the end never arrived. This
+// holds whatever cut the body short — the upstream failing, or the outbound
+// timeout ending a read held up by a client that stopped reading.
+function chargedGeneration(
+  scanner: TopLevelJsonFieldScanner,
+  chargesForUsage: boolean,
+): StreamUsage | undefined {
+  let id = scanner.values.get('id');
+  if (!chargesForUsage || typeof id !== 'string' || id === '') {
+    return undefined;
+  }
+  return { id, usage: { cost: undefined } };
 }
 
 async function forwardJsonScalar(

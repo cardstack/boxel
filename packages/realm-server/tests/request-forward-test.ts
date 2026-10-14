@@ -1839,6 +1839,40 @@ module(basename(import.meta.filename), function () {
         );
       }
 
+      // Answers OpenRouter generation-cost lookups with `costInUsd` and lets
+      // every other request through, returning the ids looked up.
+      function stubGenerationCost(costInUsd: number): string[] {
+        let lookups: string[] = [];
+        let realFetch = global.fetch.bind(globalThis);
+        sinon
+          .stub(global, 'fetch')
+          .callsFake(
+            async (input: string | URL | Request, init?: RequestInit) => {
+              let url =
+                typeof input === 'string'
+                  ? input
+                  : input instanceof URL
+                    ? input.href
+                    : input.url;
+              let match = /\/api\/v1\/generation\?id=([^&]+)/.exec(url);
+              if (match) {
+                lookups.push(decodeURIComponent(match[1]));
+                return new Response(
+                  JSON.stringify({
+                    data: { id: match[1], total_cost: costInUsd },
+                  }),
+                  {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                  },
+                );
+              }
+              return realFetch(input, init);
+            },
+          );
+        return lookups;
+      }
+
       async function extraCredits(): Promise<number> {
         let user = await getUserByMatrixUserId(
           dbAdapter,
@@ -2083,47 +2117,102 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a JSON response cut off after it started resets the caller and charges nothing', async function (assert) {
-        // The vendor drops the connection only once the caller has the
-        // start of the body, so the cut lands after the response began.
-        let outcome = await new Promise<string>((resolve) => {
-          request
+      test('a JSON response cut off after its generation id resets the caller and is charged for the generation', async function (assert) {
+        let lookups = stubGenerationCost(0.003);
+        try {
+          // The vendor drops the connection only once the caller has the
+          // start of the body, so the cut lands after the response began.
+          let outcome = await new Promise<string>((resolve) => {
+            request
+              .post('/_request-forward')
+              .set('Accept', 'application/json')
+              .set('Content-Type', 'application/json')
+              .set('Authorization', `Bearer ${jwt()}`)
+              .send({
+                url: `${vendor.url}/completion?bytes=${256 * 1024}&hold=1&truncate=1`,
+                method: 'POST',
+                requestBody: JSON.stringify({}),
+              })
+              .buffer(true)
+              .parse((res, callback) => {
+                res.once('data', () => vendor.releaseHeld());
+                res.on('data', () => undefined);
+                res.on('end', () => {
+                  resolve('complete');
+                  callback(null, null);
+                });
+                res.on('aborted', () => resolve('reset'));
+                res.on('error', () => resolve('reset'));
+                res.on('close', () => resolve('reset'));
+              })
+              .then(
+                () => undefined,
+                () => resolve('reset'),
+              );
+          });
+
+          assert.strictEqual(
+            outcome,
+            'reset',
+            'the caller cannot take the partial body for a whole one',
+          );
+          // The usage never arrived; the generation is priced by its id.
+          // 0.003 USD × 1000 = 3 credits.
+          await waitUntil(async () => (await extraCredits()) === 47, {
+            timeoutMessage:
+              'the generation should be charged from its id (50 - 3 = 47)',
+          });
+          assert.deepEqual(lookups, ['gen-completion']);
+        } finally {
+          sinon.restore();
+        }
+      });
+
+      test('a charged call whose caller stops reading without leaving is still charged once the read times out', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1'],
+          totalTimeoutMs: 3000,
+        });
+        let lookups = stubGenerationCost(0.003);
+        let forward: ReturnType<typeof request.post> | undefined;
+        try {
+          // Far more than the socket buffers between the vendor and the
+          // caller hold, so a caller that never reads holds the forward up.
+          forward = request
             .post('/_request-forward')
             .set('Accept', 'application/json')
             .set('Content-Type', 'application/json')
             .set('Authorization', `Bearer ${jwt()}`)
             .send({
-              url: `${vendor.url}/completion?bytes=${256 * 1024}&hold=1&truncate=1`,
+              url: `${vendor.url}/completion?bytes=${24 * 1024 * 1024}&cost=0.004`,
               method: 'POST',
               requestBody: JSON.stringify({}),
             })
             .buffer(true)
-            .parse((res, callback) => {
-              res.once('data', () => vendor.releaseHeld());
-              res.on('data', () => undefined);
-              res.on('end', () => {
-                resolve('complete');
-                callback(null, null);
-              });
-              res.on('aborted', () => resolve('reset'));
-              res.on('error', () => resolve('reset'));
-              res.on('close', () => resolve('reset'));
-            })
-            .then(
-              () => undefined,
-              () => resolve('reset'),
-            );
-        });
+            .parse((res, _callback) => {
+              // The node parser is handed the raw incoming message.
+              (res as unknown as NodeJS.ReadableStream).pause();
+            });
+          forward.then(
+            () => undefined,
+            () => undefined,
+          );
 
-        assert.strictEqual(
-          outcome,
-          'reset',
-          'the caller cannot take the partial body for a whole one',
-        );
-        await waitUntil(async () => (await inFlightReservations()) === 0, {
-          timeoutMessage: 'the call should settle and give back its slot',
-        });
-        assert.strictEqual(await extraCredits(), 50, 'nothing is charged');
+          // 0.003 USD × 1000 = 3 credits, priced from the generation id
+          // when the outbound timeout ends the stalled read.
+          await waitUntil(async () => (await extraCredits()) === 47, {
+            timeout: 20000,
+            timeoutMessage:
+              'the stalled generation should be charged from its id (50 - 3 = 47)',
+          });
+          assert.deepEqual(lookups, ['gen-completion']);
+          await waitUntil(async () => (await inFlightReservations()) === 0, {
+            timeoutMessage: 'the slot should be given back',
+          });
+        } finally {
+          forward?.abort();
+          sinon.restore();
+        }
       });
 
       test('a charged call whose caller leaves mid-body is still read to its end and charged', async function (assert) {
