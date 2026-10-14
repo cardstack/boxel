@@ -82,10 +82,11 @@ What enforces it:
 ## What a Sentry event carries of the incoming request
 
 Sentry's HTTP instrumentation attaches the request in flight to every event
-raised while it is: by default its body (buffered up to 1 MB), headers,
-cookies, query string and URL, each kept up to 8,192 characters. The realm
-server's `beforeSend` / `beforeSendTransaction` hook (`scrubRequestTelemetry`
-in `lib/request-telemetry.ts`, installed by `instrument.ts`) cuts that down:
+raised while it is: by default its headers, cookies, query string, URL and
+body (up to 1 MB, when the handler reads it through `data` listeners), each
+kept up to 8,192 characters. The realm server's `beforeSend` /
+`beforeSendTransaction` hook (`scrubRequestTelemetry` in
+`lib/request-telemetry.ts`, installed by `instrument.ts`) cuts that down:
 
 | Request                                                                       | What the event keeps                                                                                                      |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -98,10 +99,12 @@ URL (query string included), headers and body, or a whole prompt — and its
 Sentry is no help in triage and a liability once stored, so it is dropped on
 every route. The secure origin is where credentials are typed.
 
-The proxy routes also stop Sentry buffering their body at all
-(`stopRequestBodyCapture`, run ahead of the handler in `routes.ts`): the body
-would be dropped anyway, and it can be a multi-megabyte image or a prompt held
-for the whole of a streamed completion.
+Sentry buffers a request body only when the handler reads it through `data`
+listeners. The proxy handlers read theirs through the stream's async iterator
+(`nodeStreamToText` in `stream.ts`), which Sentry doesn't see, so a forwarded
+image or a prompt is never copied into Sentry's buffer, even for the length of
+a streamed completion. `request-forward-test.ts` pins this; a change to how
+those handlers read their body has to keep it.
 
 So an event from a failed forward still has the route, the method and the
 stack, but not what the caller sent. The log line logged with it

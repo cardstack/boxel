@@ -1,8 +1,8 @@
 // Decides what of an incoming request a Sentry event carries. Sentry's HTTP
-// instrumentation records the body of every incoming request a handler reads
-// (up to 1 MB), along with its headers, cookies and query string, and attaches
-// them to any event raised while that request is in flight. Sentry keeps up to
-// `maxValueLength` characters of each value. So:
+// instrumentation records an incoming request's headers, cookies, query string
+// and URL, plus up to 1 MB of any body a handler reads through `data`
+// listeners, and attaches them to any event raised while that request is in
+// flight. Sentry keeps up to `maxValueLength` characters of each value. So:
 //
 // - An event raised during a request to the secure origin or to a proxy route
 //   keeps only the method and the URL's origin and path. The secure origin is
@@ -14,10 +14,8 @@
 //   parsed cookies. The caller's session token is no help in triage and is a
 //   liability once stored.
 //
-// Kept free of runtime imports so `instrument.ts`, which runs before anything
-// else, can install it.
-
-import type { IncomingMessage } from 'http';
+// Kept free of imports so `instrument.ts`, which runs before anything else,
+// can install it.
 
 // The routes that pass a caller's request on to an outside vendor.
 export const REQUEST_FORWARD_PATH = '/_request-forward';
@@ -136,21 +134,4 @@ export function scrubRequestTelemetry<
       }
     : withoutCredentials(request);
   return event;
-}
-
-// Sentry's HTTP instrumentation buffers an incoming request's body by
-// replacing the request's own `on` / `off` with wrappers that copy each `data`
-// chunk, up to 1 MB, and hold the joined body as a string until the request
-// ends. A proxy route's body never reaches an event (see
-// `scrubRequestTelemetry`), and it can be a multi-megabyte image or a prompt
-// held open for a whole streamed completion, so a proxy route removes the
-// wrappers before reading it. The request falls back to the
-// `IncomingMessage` methods, which is all the wrappers delegate to; with no
-// wrapper installed this does nothing.
-export function stopRequestBodyCapture(req: IncomingMessage): void {
-  for (let name of ['on', 'off'] as const) {
-    if (Object.prototype.hasOwnProperty.call(req, name)) {
-      delete (req as unknown as Record<string, unknown>)[name];
-    }
-  }
 }

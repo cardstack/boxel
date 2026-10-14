@@ -92,7 +92,6 @@ import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts
 import {
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
-  stopRequestBodyCapture,
 } from './lib/request-telemetry.ts';
 
 export type CreateRoutesArgs = {
@@ -154,13 +153,6 @@ export type CreateRoutesArgs = {
   // Decides how much of each result's link graph a live search carries.
   linkShapePolicy?: LinkShapePolicy;
 };
-
-// A proxy route's body is never in a Sentry event, so Sentry has no reason to
-// buffer it.
-async function withoutRequestBodyCapture(ctxt: Koa.Context, next: Koa.Next) {
-  stopRequestBodyCapture(ctxt.req);
-  await next();
-}
 
 export function createRoutes(args: CreateRoutesArgs) {
   let createPrerenderAuth = buildCreatePrerenderAuth(
@@ -242,7 +234,6 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     REQUEST_FORWARD_PATH,
-    withoutRequestBodyCapture,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
@@ -259,7 +250,6 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.post(
     OPENROUTER_PASSTHROUGH_PATH,
-    withoutRequestBodyCapture,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,

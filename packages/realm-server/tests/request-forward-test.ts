@@ -2898,6 +2898,9 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        // Sentry copies a body only from `data` listeners. The forward reads
+        // its body through the stream's async iterator, so a multi-megabyte
+        // body is never buffered for Sentry at all.
         test("the forward's body is not buffered for Sentry", async function (assert) {
           // Without the hook, to see what the instrumentation itself recorded.
           sentry = startSentryCapture({

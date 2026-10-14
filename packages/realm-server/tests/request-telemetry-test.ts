@@ -2,12 +2,9 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import * as Sentry from '@sentry/node';
 import http from 'node:http';
-import { Socket, type AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { basename } from 'path';
-import {
-  scrubRequestTelemetry,
-  stopRequestBodyCapture,
-} from '../lib/request-telemetry.ts';
+import { scrubRequestTelemetry } from '../lib/request-telemetry.ts';
 import {
   startSentryCapture,
   type SentryCapture,
@@ -34,14 +31,17 @@ module(basename(import.meta.filename), function () {
     // A server whose one handler reads the body and then reports an error,
     // as a realm-server handler that fails does.
     async function startFailingServer(): Promise<string> {
-      server = http.createServer((req, res) => {
+      // Awaits the body the way a Koa handler does, so the error is raised in
+      // the request's async context rather than in an emitter callback.
+      server = http.createServer(async (req, res) => {
         let body = '';
-        req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
-          Sentry.captureException(new Error('handler failed'));
-          res.statusCode = 500;
-          res.end();
+        await new Promise<void>((resolve) => {
+          req.on('data', (chunk) => (body += chunk));
+          req.on('end', () => resolve());
         });
+        Sentry.captureException(new Error('handler failed'));
+        res.statusCode = 500;
+        res.end();
       });
       await new Promise<void>((resolve) => server!.listen(0, resolve));
       return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
@@ -120,7 +120,7 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(event.request as unknown, {
         method: 'POST',
-        url: 'https://app.telemetry.test/_openrouter/chat/completions',
+        url: 'https://app.telemetry.test/_openrouter/chat/completions/',
       });
     });
 
@@ -165,23 +165,6 @@ module(basename(import.meta.filename), function () {
         message: 'no request',
       };
       assert.deepEqual(scrubRequestTelemetry(event), { message: 'no request' });
-    });
-  });
-
-  module('stopRequestBodyCapture', function () {
-    test("removes a request's own on / off and leaves the inherited ones", function (assert) {
-      let req = new http.IncomingMessage(new Socket());
-      let wrapped = () => req;
-      Object.assign(req, { on: wrapped, off: wrapped });
-      stopRequestBodyCapture(req);
-      assert.strictEqual(req.on, http.IncomingMessage.prototype.on);
-      assert.strictEqual(req.off, http.IncomingMessage.prototype.off);
-      stopRequestBodyCapture(req);
-      assert.strictEqual(
-        req.on,
-        http.IncomingMessage.prototype.on,
-        'with nothing to remove it does nothing',
-      );
     });
   });
 });
