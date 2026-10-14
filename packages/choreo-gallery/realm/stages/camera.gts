@@ -197,6 +197,20 @@ export class Camera extends Component {
       }
     }
     this.focus = opening ? id : null;
+    // The open print holds focus, so Escape reaches this stage's handler
+    // after a pointer dive as well as a keyboard one. preventScroll leaves
+    // the page where it is, which is what quellFocus keeps the mousedown's
+    // own focus from doing, and focusVisible: false keeps a pointer dive
+    // ringless. A print already focused from the keyboard keeps its ring.
+    if (opening) {
+      // `focusVisible` is a standard FocusOptions member the DOM lib
+      // doesn't type yet
+      const options: FocusOptions & { focusVisible?: boolean } = {
+        preventScroll: true,
+        focusVisible: false,
+      };
+      (event.currentTarget as HTMLElement).focus(options);
+    }
   };
 
   /** a print half past the crop is still a focusable button, and focusing
@@ -615,8 +629,8 @@ export class Camera extends Component {
 
       /* the print itself: radius and shadow of a cover/shot. No selection ring —
          the cursor and the dive already say which tile is in play. A keyboard
-         still gets the site's focus ring: a pointer press never focuses a
-         print (quellFocus), so the ring only ever answers Tab. */
+         still gets the site's focus ring; a pointer dive focuses its print
+         without one (see loupe). */
       .cam-frame {
         position: relative;
         display: block;

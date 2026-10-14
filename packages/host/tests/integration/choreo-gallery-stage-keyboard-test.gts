@@ -72,6 +72,29 @@ module('Integration | Choreo gallery | stage keyboard', function (hooks) {
     );
   });
 
+  test('a pointer dive leaves focus on the print, so Escape backs out of it', async function (assert) {
+    await gallery.renderStage(await gallery.stage('camera', 'Camera'));
+    let print = document.querySelector<HTMLElement>('[data-test-cam-print]')!;
+    // a bare click, as a pointer lands it: nothing focuses the print first
+    print.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    await waitUntil(() => document.querySelector('[data-test-cam-love]'));
+    assert.strictEqual(
+      document.activeElement,
+      print,
+      'the open print has focus',
+    );
+
+    assert.false(
+      print.matches(':focus-visible'),
+      'a pointer dive draws no focus ring',
+    );
+
+    let reached = await keyAtDocument(print, 'Escape');
+    await animationsSettled();
+    assert.strictEqual(reached, undefined, 'the stage kept the key');
+    assert.dom('[data-test-cam-love]').doesNotExist('the dive closed');
+  });
+
   test('Escape with no dive open is left for the host', async function (assert) {
     await gallery.renderStage(await gallery.stage('camera', 'Camera'));
     let print = document.querySelector<HTMLElement>('[data-test-cam-print]')!;
