@@ -909,6 +909,8 @@ module(basename(import.meta.filename), function () {
       };
       let targetTrimmed = stripExecExt(moduleURL);
       let flakyPatch = installFlakyDepFetchPatch({
+        // Pause only the module's own fetches, in any of the shapes above.
+        urlPattern: `${targetTrimmed}*`,
         matcher: (url) => stripExecExt(url) === targetTrimmed,
         failuresBeforeSuccess: 1,
       });
@@ -927,17 +929,18 @@ module(basename(import.meta.filename), function () {
           renderOptions: { clearCache: true },
         });
         let elapsedMs = Date.now() - started;
+        let trace = `requests the patch saw:\n${flakyPatch.trace()}`;
 
         assert.strictEqual(
           flakyPatch.failuresInjected(),
           1,
-          'patch injected exactly one transient 502 for the dep fetch',
+          `patch injected exactly one transient 502 for the dep fetch\n${trace}`,
         );
         assert.notOk(
           result.response.error,
           `render recovered from transient 502 (error: ${JSON.stringify(
             result.response.error?.error ?? null,
-          )})`,
+          )})\n${trace}`,
         );
         assert.false(
           result.pool.timedOut,
