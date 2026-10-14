@@ -5,6 +5,7 @@ import {
   OutboundRefusedError,
   OutboundTimeoutError,
   outboundFetch,
+  outboundSettings,
 } from './outbound/client.ts';
 import { TopLevelJsonFieldScanner } from './top-level-json-fields.ts';
 
@@ -45,6 +46,10 @@ export function clientDisconnectSignal(ctxt: Koa.Context): AbortSignal {
   });
   return controller.signal;
 }
+
+// How long a forward waits on a client that has stopped reading its response
+// before giving up on it.
+const CLIENT_STALL_MS = 30_000;
 
 // The `ctxt.state` key `resetResponse` sets.
 const SERVER_RESET = 'serverResetResponse';
@@ -206,7 +211,10 @@ const MAX_BILLING_FIELD_BYTES = 64 * 1024;
  * the rest of the body is still read, and dropped, because the cost it
  * reports comes at the end and the provider has already billed for it. When
  * it is not, the upstream body is cancelled, including a read waiting on an
- * upstream that has paused mid-body.
+ * upstream that has paused mid-body. A client that keeps its connection open
+ * but stops reading is treated the same way once it has taken nothing for
+ * `CLIENT_STALL_MS` (or the outbound timeout, if shorter): its response is
+ * reset and it counts as gone.
  */
 export async function forwardJsonResponse(
   ctxt: Koa.Context,
@@ -278,7 +286,10 @@ export async function forwardJsonResponse(
     ctxt.set('Transfer-Encoding', 'chunked');
   }
   let res = ctxt.res;
-  let clientGone = () => signal.aborted || res.destroyed;
+  // Set once the server gives up on the client itself. An HTTP/2 response
+  // has no `destroyed` to say so.
+  let abandoned = false;
+  let clientGone = () => signal.aborted || res.destroyed || abandoned;
   // An uncharged body has no reason to be read once its client is gone, so
   // the client leaving cancels it, even while a read is waiting on the
   // upstream.
@@ -289,9 +300,28 @@ export async function forwardJsonResponse(
     signal.addEventListener('abort', cancelUncharged, { once: true });
   }
 
+  // A client that keeps its connection open but stops reading is given up on
+  // after this long. Waiting on it would hold up the upstream read, which
+  // the outbound timeout then fails, so a charged call would lose the usage
+  // that prices it; giving up lets the rest of the body be read for the
+  // charge, or an uncharged body be cancelled.
+  let stallMs = Math.min(CLIENT_STALL_MS, outboundSettings().totalTimeoutMs);
+  let send = async (chunk: Uint8Array) => {
+    if (clientGone()) {
+      return;
+    }
+    if ((await writeChunk(res, chunk, signal, stallMs)) === 'stalled') {
+      log.warn(
+        `Client stopped reading a forwarded response for ${stallMs}ms; resetting it`,
+      );
+      abandoned = true;
+      resetResponse(ctxt, new Error('The client stopped reading the response'));
+    }
+  };
+
   try {
     for (let chunk of held) {
-      await writeChunk(res, chunk, signal);
+      await send(chunk);
     }
     held = [];
     for (;;) {
@@ -304,9 +334,7 @@ export async function forwardJsonResponse(
         break;
       }
       scanner.feed(value);
-      if (!clientGone()) {
-        await writeChunk(res, value, signal);
-      }
+      await send(value);
     }
   } catch (error) {
     if (clientGone() && !chargesForUsage) {
@@ -405,26 +433,32 @@ async function forwardJsonScalar(
   return undefined;
 }
 
-// Writes one chunk to the client, waiting out backpressure. Returns early,
-// without writing, once the client has gone.
+// Writes one chunk to the client, waiting out backpressure for at most
+// `stallMs`. Returns early, without writing, once the client has gone, and
+// returns 'stalled' when the client took no more of the response in that
+// time.
 async function writeChunk(
   res: Koa.Context['res'],
   chunk: Uint8Array,
   signal: AbortSignal,
-): Promise<void> {
+  stallMs: number,
+): Promise<'written' | 'stalled'> {
   if (signal.aborted || res.destroyed) {
-    return;
+    return 'written';
   }
   if (res.write(chunk)) {
-    return;
+    return 'written';
   }
-  await new Promise<void>((resolve) => {
-    let done = () => {
+  return await new Promise<'written' | 'stalled'>((resolve) => {
+    let finish = (outcome: 'written' | 'stalled') => {
+      clearTimeout(timer);
       res.off('drain', done);
       res.off('close', done);
       signal.removeEventListener('abort', done);
-      resolve();
+      resolve(outcome);
     };
+    let done = () => finish('written');
+    let timer = setTimeout(() => finish('stalled'), stallMs);
     res.once('drain', done);
     res.once('close', done);
     signal.addEventListener('abort', done, { once: true });
