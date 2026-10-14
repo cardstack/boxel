@@ -20,6 +20,14 @@ import zlib from 'node:zlib';
 //   /reflect-credential     200 whose body is the credential it received, bare
 //                           and not JSON: the `key` query parameter, else the
 //                           Authorization header without its scheme
+//   /completion?bytes=N&cost=<usd>&hold=1&truncate=1
+//                           an OpenRouter-shaped JSON completion whose message
+//                           carries N bytes of base64, with the generation id
+//                           first and the usage last. With `hold`, everything
+//                           up to the usage is sent and the rest waits for
+//                           `releaseHeld()`. With `truncate`, the connection
+//                           is dropped where the usage would start
+//   /not-json               502 with an HTML body
 
 export interface StubVendorRequest {
   method: string;
@@ -33,6 +41,10 @@ export interface StubVendor {
   // The same server under its other loopback name, a different origin.
   alternateUrl: string;
   requests: StubVendorRequest[];
+  // Sends the rest of every response `hold` is keeping back.
+  releaseHeld(): void;
+  // How many responses the receiving side closed before they were finished.
+  abandonedResponses(): number;
   close(): Promise<void>;
 }
 
@@ -47,6 +59,8 @@ function numberParam(url: URL, name: string, fallback: number): number {
 
 export async function startStubVendor(): Promise<StubVendor> {
   let requests: StubVendorRequest[] = [];
+  let held: (() => void)[] = [];
+  let abandoned = 0;
   let server = http.createServer((req, res) => {
     let chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -119,6 +133,40 @@ export async function startStubVendor(): Promise<StubVendor> {
           `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }], ...(omitCost ? {} : { usage: { cost } }) })}\n\n`,
         );
         res.end('data: [DONE]\n\n');
+      } else if (url.pathname === '/completion') {
+        let bytes = numberParam(url, 'bytes', 1024);
+        let cost = numberParam(url, 'cost', 0.002);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        let truncated = false;
+        res.on('close', () => {
+          if (!res.writableEnded && !truncated) {
+            abandoned++;
+          }
+        });
+        res.write('{"id":"gen-completion","choices":[{"message":{"content":"');
+        // Truncation waits until the body so far has left, so the receiving
+        // side gets the response started before the connection drops.
+        let flushed = new Promise<void>((resolve) =>
+          res.write(Buffer.alloc(bytes, 'A'), () => resolve()),
+        );
+        let finish = () => {
+          if (url.searchParams.has('truncate')) {
+            void flushed.then(() => {
+              truncated = true;
+              res.destroy();
+            });
+          } else {
+            res.end(`"}}],"usage":{"cost":${JSON.stringify(cost)}}}`);
+          }
+        };
+        if (url.searchParams.has('hold')) {
+          held.push(finish);
+        } else {
+          finish();
+        }
+      } else if (url.pathname === '/not-json') {
+        res.writeHead(502, { 'content-type': 'text/html' });
+        res.end('<html><body>Bad gateway</body></html>');
       } else {
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));
@@ -133,6 +181,12 @@ export async function startStubVendor(): Promise<StubVendor> {
     url: `http://127.0.0.1:${port}`,
     alternateUrl: `http://localhost:${port}`,
     requests,
+    abandonedResponses: () => abandoned,
+    releaseHeld: () => {
+      for (let finish of held.splice(0)) {
+        finish();
+      }
+    },
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();

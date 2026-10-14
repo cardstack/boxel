@@ -1,17 +1,17 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 import {
   sendResponseForBadRequest,
   sendResponseForError,
   sendResponseForSystemError,
   sendResponseForForbiddenRequest,
-  setContextResponse,
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
+  forwardJsonResponse,
   handleStreamingRequest,
   isClientDisconnectError,
   outboundFailureResponse,
@@ -330,9 +330,11 @@ export default function handleRequestForward({
           // Cancelling the upstream call is what frees the user's in-flight
           // slot: without it the slot is held until a response the client
           // will never read finally arrives. The signal is released once that
-          // response exists, so reading it and recording its cost cannot be
-          // cancelled — by then the provider has already generated and billed
-          // for the tokens, and abandoning the read only loses the charge.
+          // response exists, so a client leaving does not stop the read of a
+          // charged response or the recording of its cost — by then the
+          // provider has already generated and billed for the tokens, and
+          // abandoning the read only loses the charge. forwardJsonResponse
+          // cancels the read only when nothing is charged.
           const upstreamCall = upstreamCallSignal(clientGone);
           const externalResponse = await outboundFetch({
             url: json.url,
@@ -347,18 +349,10 @@ export default function handleRequestForward({
           });
           upstreamCall.release();
 
-          const responseData = await externalResponse.json();
-
-          const response = new Response(JSON.stringify(responseData), {
-            status: externalResponse.status,
-            statusText: externalResponse.statusText,
-            headers: {
-              'content-type': SupportedMimeType.JSON,
-            },
+          return await forwardJsonResponse(ctxt, externalResponse, {
+            chargesForUsage: destinationConfig.creditStrategy.chargesForUsage,
+            signal: clientGone,
           });
-
-          await setContextResponse(ctxt, response);
-          return responseData;
         },
       );
     } catch (error) {
