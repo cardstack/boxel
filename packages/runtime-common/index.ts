@@ -2315,7 +2315,9 @@ export interface Store {
     id: string,
     opts?: { type?: K },
   ): Promise<InstanceForReadType[K] | CardErrorJSONAPI>;
-  delete(id: string): Promise<void>;
+  // `skipIndexWait` answers once the removal is durable rather than once it is
+  // indexed, with the same trade `CreateOptions.skipIndexWait` describes.
+  delete(id: string, opts?: { skipIndexWait?: boolean }): Promise<void>;
   patch(
     id: string,
     patchData: PatchData,

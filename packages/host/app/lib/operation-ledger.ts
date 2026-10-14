@@ -76,11 +76,14 @@ export interface LedgerEnvironment {
   recordVersion(instance: CardDef, version: string): void;
   // Serializes against the store's own writes of the same card.
   withLock<T>(localId: string, fn: () => Promise<T>): Promise<T>;
-  // The realm round trip.
+  // The realm round trip. `skipIndexWait` is the caller's own choice, carried
+  // through unchanged: the realm answers once the write is durable rather
+  // than once it is indexed.
   send(
     realmURL: string,
     envelope: OperationsEnvelope,
     clientRequestId: string,
+    opts?: { skipIndexWait?: boolean },
   ): Promise<OperationsAnswer>;
   // Names the base version on an envelope's single entry.
   stamp(envelope: OperationsEnvelope, baseVersion: string): OperationsEnvelope;
@@ -104,6 +107,7 @@ export interface LoweredOperation {
 
 interface LedgerEntry {
   clientRequestId: string;
+  skipIndexWait?: boolean;
   realmURL: string;
   envelope: OperationsEnvelope;
   operation: LoweredOperation;
@@ -178,6 +182,7 @@ export default class OperationLedger {
     envelope: OperationsEnvelope;
     candidate: OptimisticCandidate;
     clientRequestId: string;
+    skipIndexWait?: boolean;
   }): Promise<OperationsAnswer | undefined> {
     let instance = this.#env.held(args.candidate.id);
     if (!instance) {
@@ -209,6 +214,7 @@ export default class OperationLedger {
       envelope: OperationsEnvelope;
       candidate: OptimisticCandidate;
       clientRequestId: string;
+      skipIndexWait?: boolean;
     },
   ): Promise<LedgerEntry | undefined> {
     let operation: LoweredOperation | undefined;
@@ -239,6 +245,7 @@ export default class OperationLedger {
     }
     let entry: LedgerEntry = {
       clientRequestId: args.clientRequestId,
+      ...(args.skipIndexWait ? { skipIndexWait: true } : {}),
       realmURL: args.realmURL,
       envelope: args.envelope,
       operation,
@@ -359,6 +366,7 @@ export default class OperationLedger {
           entry.realmURL,
           envelope,
           entry.clientRequestId,
+          entry.skipIndexWait ? { skipIndexWait: true } : undefined,
         );
       } catch (err: unknown) {
         // The realm said nothing about what it now holds, so there is no
@@ -381,8 +389,11 @@ export default class OperationLedger {
       //
       // The version rides through the re-read. A write that is not confirmed
       // still wrote, and the realm reported the version of the bytes it
-      // stored — which is exactly what the re-read then brings back, since a
-      // write resolves only once its indexing has settled. Dropping it would
+      // stored — which is exactly what the re-read then brings back. The
+      // realm answers a write once its indexing has settled or, past a few
+      // seconds, with that indexing still pending; either way the re-read is
+      // a card read, which the realm holds until the reader's own pending
+      // indexing has landed. Dropping it would
       // leave the next operation with no base to name either, and a card
       // whose first unconfirmed write is its last confirmable one: the chain
       // could never start.

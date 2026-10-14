@@ -1101,6 +1101,14 @@ export class InvokeCardOperationInput extends CardDef {
   @field payload = contains(JsonField);
   @field realm = contains(StringField);
   @field relationships = contains(JsonField);
+  // The same opt-out `SaveCardInput.skipIndexWait` is, for a write made
+  // through an operation: the realm answers once the write is durable rather
+  // than once it is indexed. Opt-in for the same reason, so an unset field
+  // keeps the waiting behavior.
+  @field skipIndexWait = contains(BooleanField, {
+    description:
+      'Leave unset normally. Set true only to make a write return without waiting for the realm to index it — the written card may briefly not appear in searches. Do not set this when a search for the written card follows.',
+  });
 }
 
 // What an operation answers, in the two shapes an answer takes. A write
@@ -1116,6 +1124,9 @@ export class InvokeCardOperationResult extends CardDef {
   @field cardId = contains(StringField);
   @field version = contains(StringField);
   @field generation = contains(NumberField);
+  // True when the realm answered the write before indexing it, which is why
+  // `generation` is empty: a search may not show the write until it lands.
+  @field indexPending = contains(BooleanField);
   @field lastModified = contains(NumberField);
   @field document = contains(JsonField);
 }

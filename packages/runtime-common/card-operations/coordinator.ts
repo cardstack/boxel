@@ -38,6 +38,7 @@ import {
   type StoredMeta,
 } from './executors.ts';
 import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
+import { Deferred } from '../deferred.ts';
 import { emitOperationPerf } from './telemetry.ts';
 import {
   OperationFailure,
@@ -174,6 +175,8 @@ export interface BatchCore {
       clientRequestId?: string | null;
       clientAuthored?: string[];
       waitForIndex?: boolean;
+      // See `CommitBatchOptions.indexWaitBudgetMs`.
+      indexWaitBudgetMs?: number;
       initiatingUser?: string | null;
       // Where the commit stamps the stages it owns. The durable write, the
       // index enqueue, the wait for the worker and the invalidation that
@@ -198,6 +201,12 @@ export interface BatchCore {
       contentHash: string;
     }[];
     generation: number | null;
+    // The commit answered ahead of its index pass, by not waiting for it or
+    // by stopping at `indexWaitBudgetMs`, so the pass is still to land.
+    indexPending?: true;
+    // Beside `indexPending`: settles, without rejecting, once that pass has
+    // landed and been announced.
+    landed?: Promise<void>;
   }>;
   serializeCard(
     doc: LooseSingleCardDocument,
@@ -277,6 +286,20 @@ export interface CommitBatchOptions {
   // requirement rather than a preference: the job it would wait on needs the
   // render slot that caller is holding, so waiting deadlocks.
   waitForIndex?: boolean;
+  // The longest a batch that waits for its own indexing waits for it, in
+  // milliseconds. Past it the batch answers with its writes durable and each
+  // entry's generation `null`, meaning the pass is still to land; the pass and
+  // its index event follow. Absent, a waiting batch waits for as long as the
+  // pass takes.
+  //
+  // The pass renders every file it visits, so how long it takes is up to the
+  // prerender pool rather than the batch. A caller answering a person over
+  // HTTP bounds it, so a stalled pool costs them a pending generation rather
+  // than a write that never answers. It bounds only the batch's own pass: the
+  // drain ahead of staging is what the batch's serialization resolves
+  // against. A batch that removes anything waits regardless: a removal keeps
+  // its file locks until its pass has run.
+  indexWaitBudgetMs?: number;
   // A caller's own precondition, run inside the write lock and before
   // anything is staged. It exists because a precondition evaluated before
   // `commitBatch` is not binding: the lock is acquired here, so a request
@@ -420,9 +443,12 @@ export async function commitBatch(
   // the only reader in the system that did not.
   let settings: Promise<Record<string, JsonValue>> | undefined;
   let realmConfig = () => (settings ??= core.realmConfig());
-  return await core.withWriteLocks(
-    lockPaths(entries, paths, lids),
-    async (releaseLocks) => {
+  // The caller's answer, which can come before the locked section ends: a
+  // batch that removed something and answered ahead of its index pass keeps
+  // its locks until that pass has landed (see `commitStaged`).
+  let answer = new Deferred<BatchEntryResult[]>();
+  core
+    .withWriteLocks(lockPaths(entries, paths, lids), async (releaseLocks) => {
       timings?.add('lock', Date.now() - lockRequestedAt);
       // Drained inside the lock, before anything is staged. Staging serializes
       // each card against its type's definition, and a module written moments
@@ -509,8 +535,10 @@ export async function commitBatch(
       // nothing — a caller standing in for the realm — leaves the whole commit
       // here.
       let cursor = timings?.cursor();
+      let heldUntil: Promise<void> | undefined;
+      let results: BatchEntryResult[];
       try {
-        return await commitStaged(
+        results = await commitStaged(
           core,
           entries,
           staged,
@@ -519,12 +547,18 @@ export async function commitBatch(
           opts,
           cursor,
           releaseLocks,
+          (landed) => {
+            heldUntil = landed;
+          },
         );
       } finally {
         cursor?.mark('commit');
       }
-    },
-  );
+      answer.fulfill(results);
+      await heldUntil;
+    })
+    .then(undefined, (err: unknown) => answer.reject(err));
+  return await answer.promise;
 }
 
 // Stage a batch the way `commitBatch` does, without taking its write locks or
@@ -2239,6 +2273,12 @@ async function commitStaged(
   // and reads nothing off them: the results are assembled from what this batch
   // staged and what the commit returned.
   releaseLocks: () => void,
+  // Handed the pass a commit that removed something answered ahead of. Such
+  // a commit never calls `releaseLocks` — a removal's locks have to outlast
+  // its pass, or a writer recreating the path is folded into the pending
+  // removal — so the batch keeps them until this settles, after its caller
+  // already has the answer.
+  holdLocksUntil: (landed: Promise<void>) => void,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
   // the second built on the first rather than racing it — it merged over the
@@ -2401,6 +2441,9 @@ async function commitStaged(
       clientRequestId: opts.clientRequestId ?? null,
       ...(clientAuthored === undefined ? {} : { clientAuthored }),
       waitForIndex: opts.waitForIndex ?? true,
+      ...(opts.indexWaitBudgetMs === undefined
+        ? {}
+        : { indexWaitBudgetMs: opts.indexWaitBudgetMs }),
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
@@ -2409,6 +2452,9 @@ async function commitStaged(
       onDurable: releaseLocks,
     },
   );
+  if (deletes.length > 0 && committed.landed) {
+    holdLocksUntil(committed.landed);
+  }
   // Emitted here rather than where the record was built: a staged entry is not
   // a write yet, and until the commit returns there is nothing to say a program
   // did. Every entry that carries a record is one the commit landed, so the
@@ -2456,6 +2502,7 @@ async function commitStaged(
       meta: {
         version: written.contentHash,
         generation: committed.generation,
+        ...(committed.indexPending ? { indexPending: true as const } : {}),
         lastModified: written.lastModified,
         created: written.created,
         // Whether this entry left the file holding something other than what

@@ -1097,6 +1097,7 @@ export function writeResult(
       meta: {
         version: result.meta.version,
         generation: result.meta.generation,
+        ...(result.meta.indexPending ? { indexPending: true } : {}),
         lastModified: result.meta.lastModified,
         ...(result.meta.baseMatched === undefined
           ? {}

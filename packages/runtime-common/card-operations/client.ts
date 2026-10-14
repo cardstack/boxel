@@ -137,6 +137,9 @@ export interface OperationsTransport {
       // to apply it locally before the realm answers. Not a decision — half of
       // one. See `OptimisticCandidate`.
       optimistic?: OptimisticCandidate;
+      // Ask the realm to answer once the batch's writes are durable rather than
+      // once its index pass has landed. See `OperationsOptions.skipIndexWait`.
+      skipIndexWait?: boolean;
     },
   ): Promise<OperationsAnswer>;
   defaultWritableRealm(): string | undefined;
@@ -316,7 +319,16 @@ export class OperationsError extends Error {
 export interface OperationWriteResult {
   id: string;
   version: string;
-  generation: number;
+  // The index-data generation the write landed on. Null when it is not known:
+  // the realm answered before the write's index pass landed (`indexPending`),
+  // or the write left the bytes as they were and queued no pass. Neither a
+  // number nor a missing `indexPending` says the index is current for the
+  // card; the index event is what says that.
+  generation: number | null;
+  // The realm answered once the write was durable but before its index pass
+  // landed. The cards are written; a read of them can still see the state
+  // before the write until the index event for it arrives.
+  indexPending?: true;
   lastModified: number;
   // The caller's own id for a card the batch minted, beside the id the realm
   // gave it. Present only for a create that named one, which is every create
@@ -439,8 +451,30 @@ export interface TypeSubject extends SubjectCommon {
 
 export type OperationsSubject = InstanceSubject | TypeSubject;
 
+// How the calls a bucket makes are sent. Chosen once, where the bucket is
+// built, so it covers every write the bucket makes — a single call and an
+// `atomic` batch alike — and so a write with no payload needs no placeholder
+// to reach an options argument.
+export interface OperationsOptions {
+  // Answer a write once its bytes are durable instead of once the realm has
+  // indexed it. The write still lands and is still indexed; what the caller
+  // gives up is reading it back through the index straight away. A read of
+  // the card itself still sees it — the realm holds a card read until the
+  // reader's own pending indexing has landed — but a search can miss it until
+  // its index event arrives. Each written entry's result reports its
+  // `generation` as null and `indexPending` as true.
+  //
+  // Worth it for a write whose caller does not read the cards back, or reads
+  // them only by id; not for one that searches for what it just wrote. Off by
+  // default, in which case the realm waits for the write's own pass — for a
+  // few seconds at most, past which it answers as if this were set.
+  skipIndexWait?: boolean;
+}
+
 export interface OperationsEnvironment {
   transport: OperationsTransport;
+  // See `OperationsOptions`.
+  options?: OperationsOptions;
   // What a def or an instance is, in this module's terms. Throws when handed
   // something that is neither.
   subject(target: unknown): OperationsSubject;
@@ -600,11 +634,17 @@ async function invokeOne(
     assertNoHandles(entry.data, name);
   }
   let optimistic = optimisticCandidate(subject, info, name, entry);
+  let skipIndexWait = isWrite(info.base) && env.options?.skipIndexWait;
   let answer = await env.transport.send(
     realmURL,
     isWrite(info.base) ? 'POST' : 'QUERY',
     { 'boxel:operations': [entry] },
-    optimistic ? { optimistic } : undefined,
+    optimistic || skipIndexWait
+      ? {
+          ...(optimistic ? { optimistic } : {}),
+          ...(skipIndexWait ? { skipIndexWait: true } : {}),
+        }
+      : undefined,
   );
   return valueResult(
     answer['atomic:results']?.[0],
@@ -1179,7 +1219,8 @@ function writeResult(
   return {
     id: data.id,
     version: String(meta.version ?? ''),
-    generation: Number(meta.generation ?? 0),
+    generation: typeof meta.generation === 'number' ? meta.generation : null,
+    ...(meta.indexPending === true ? { indexPending: true as const } : {}),
     lastModified: Number(meta.lastModified ?? 0),
     ...(typeof data.lid === 'string' ? { lid: data.lid } : {}),
   };
@@ -1309,12 +1350,18 @@ async function sendBatch(
   // results the caller wants, and a batch that writes should not commit
   // because the caller asked for its answer in a shape nothing can read.
   let projection = projectionOf(root.batch, returned, 'an atomic() builder');
+  let skipIndexWait = root.writes && env.options?.skipIndexWait;
   let answer = await env.transport.send(
     root.batch.realmURL,
     root.writes ? 'POST' : 'QUERY',
     { 'boxel:operations': root.members.map((member) => member.wire) },
-    root.batch.adopted.length
-      ? { adopted: [...root.batch.adopted] }
+    root.batch.adopted.length || skipIndexWait
+      ? {
+          ...(root.batch.adopted.length
+            ? { adopted: [...root.batch.adopted] }
+            : {}),
+          ...(skipIndexWait ? { skipIndexWait: true } : {}),
+        }
       : undefined,
   );
   let results = answer['atomic:results'] ?? [];

@@ -1242,9 +1242,14 @@ export default class StoreService extends Service implements StoreInterface {
     return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
-  // `opts.type` is host-only: the card-facing `Store` interface declares
-  // `delete(id)` alone, so card code reaches the card route and nothing else.
-  async delete(id: string, opts?: { type?: StoreReadType }): Promise<void> {
+  // `opts.type` is host-only: the card-facing `Store` interface does not
+  // declare it, so card code reaches the card route and nothing else.
+  // `opts.skipIndexWait` asks the realm to answer a card's removal once it is
+  // durable rather than once it is indexed (see SKIP_INDEX_WAIT_HEADER).
+  async delete(
+    id: string,
+    opts?: { type?: StoreReadType; skipIndexWait?: boolean },
+  ): Promise<void> {
     id = asURL(id, this.network.virtualNetwork);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
@@ -1278,7 +1283,12 @@ export default class StoreService extends Service implements StoreInterface {
         api.notifyLinksToTargetDeleted(consumer, id);
       }
     }
-    await this.cardService.fetchJSON(id, { method: 'DELETE' });
+    await this.cardService.fetchJSON(id, {
+      method: 'DELETE',
+      ...(opts?.skipIndexWait
+        ? { headers: { [SKIP_INDEX_WAIT_HEADER]: '1' } }
+        : {}),
+    });
     // Notify direct-reference holders (e.g. MatrixService's `_systemCard`)
     // only AFTER the server DELETE completes — these subscribers typically
     // re-evaluate by calling `store.get(id)`, which is cache-first and would
