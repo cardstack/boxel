@@ -674,7 +674,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a batch that writes skips it too', async function (assert) {
-      let { sent, env } = harness({ answer: { 'atomic:results': [null] } });
+      let { sent, env } = harness({ answer: writeAnswer(`${REALM}notes.txt`) });
       let bucket = buildOperations(reportInstance(), {
         ...env,
         options: { skipIndexWait: true },

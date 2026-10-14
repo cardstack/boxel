@@ -1382,9 +1382,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         });
       }
 
-      // A card to remove, written and indexed before the swap is slowed.
-      async function storedPerson(firstName: string): Promise<string> {
-        let response = await post(envelope(createPerson('stored', firstName)));
+      // A card to remove, written and indexed before the swap is slowed. Its
+      // local id names its path, so each test's cards take their own.
+      async function storedPerson(
+        lid: string,
+        firstName: string,
+      ): Promise<string> {
+        let response = await post(envelope(createPerson(lid, firstName)));
         let id: string = response.body['atomic:results'][0].data.id;
         await realm.incrementalIndexing();
         return id;
@@ -1523,7 +1527,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test("a removal that answers ahead of its pass holds the file's locks until the pass lands", async function (assert) {
-        let id = await storedPerson('Removed');
+        let id = await storedPerson('removed', 'Removed');
         let path = `${localPath(id)}.json`;
         let stored = readFileSync(realmFile(path), 'utf8');
         await installSlowSwap();
@@ -1570,8 +1574,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('a card DELETE answers within the budget and honors the skip header', async function (assert) {
-        let bounded = await storedPerson('Bounded');
-        let skipped = await storedPerson('Skipped');
+        let bounded = await storedPerson('bounded', 'Bounded');
+        let skipped = await storedPerson('skipped', 'Skipped');
         await installSlowSwap();
 
         let since = Date.now();
