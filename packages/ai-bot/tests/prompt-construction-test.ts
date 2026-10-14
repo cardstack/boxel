@@ -44,6 +44,7 @@ import {
 import {
   absolutizeSkillLinks,
   buildPromptForModel,
+  CAPTURE_SOURCE_URL_PREFIX,
   constructHistory,
   currentTurnToolResultMedia,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
@@ -4278,6 +4279,111 @@ ${patchedFileSource}
       pendingCodePatchCorrectnessChecks?.cards,
       [{ cardId }],
       'Patched cards should be surfaced',
+    );
+  });
+
+  test('getPromptParts does not check the captures a run-realm-code result attaches', async function () {
+    const roomId = 'room-checks-captures';
+    const aiMessageId = 'ai-message';
+    const savedFile = 'http://localhost:4201/test/reading-list/dune.json';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the book and looking at it.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'save-and-capture',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Save the book and capture it',
+                attributes: {
+                  code: "await realm.fs.write(...); await realm.capture('reading-list/dune')",
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'save-and-capture-result',
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          commandRequestId: 'save-and-capture',
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: savedFile,
+                url: 'mxc://mock-server/dune-json',
+                name: 'dune.json',
+                contentType: 'application/vnd.card+json',
+              },
+              {
+                sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}3f9a1c/dune%20(isolated).png`,
+                url: 'mxc://mock-server/dune-isolated',
+                name: 'dune (isolated).png',
+                contentType: 'image/png',
+              },
+              {
+                sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}b27e44/dune%20(embedded).png`,
+                url: 'mxc://mock-server/dune-embedded',
+                name: 'dune (embedded).png',
+                contentType: '',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'save-and-capture-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files.map((file) => file.sourceUrl),
+      [savedFile],
+      'Only the saved file is checked, whether or not a capture names its content type',
     );
   });
 

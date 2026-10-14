@@ -1,5 +1,8 @@
 import { rri, urlNamesFile } from '@cardstack/runtime-common';
-import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
+import {
+  CAPTURE_SOURCE_URL_PREFIX,
+  MAX_TOOL_RESULT_MEDIA_FILE_BYTES,
+} from '@cardstack/runtime-common/ai';
 
 import type { ResultAttachment } from './host-base-tool';
 import type LoaderService from '../services/loader-service';
@@ -319,7 +322,7 @@ export async function captureForAgent(
     image.contentType,
   )}`;
   let local = matrixService.fileAPI.createFileDef({
-    sourceUrl: `${LOCAL_SOURCE_PREFIX}capture/${await shortHash(
+    sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}${await shortHash(
       image.bytes,
     )}/${encodeURIComponent(name)}`,
     name,
