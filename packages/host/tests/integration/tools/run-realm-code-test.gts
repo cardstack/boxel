@@ -697,6 +697,113 @@ return { saved, exists: await realm.fs.exists('images/dot.png') };`,
     );
   });
 
+  test('realm.fs.delete deletes a file the same run created, and the result reports it', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('plan.md', '# Plan\\n');
+await realm.fs.writeText('kept.md', '# Kept\\n');
+await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});
+let deleted = [
+  await realm.fs.delete('plan.md'),
+  await realm.fs.delete('dot.png'),
+];
+return {
+  deleted,
+  planExists: await realm.fs.exists('plan.md'),
+  dotExists: await realm.fs.exists('dot.png'),
+};`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      deleted: [
+        { path: 'plan.md', deleted: true },
+        { path: 'dot.png', deleted: true },
+      ],
+      planExists: false,
+      dotExists: false,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [
+        [`${testRealmURL}kept.md`, 'saved'],
+        [`${testRealmURL}plan.md`, 'deleted'],
+        [`${testRealmURL}dot.png`, 'deleted'],
+      ],
+    );
+    assert.deepEqual(
+      command
+        .resultAttachments(result)
+        .map((attachment) => attachment.sourceUrl),
+      [`${testRealmURL}kept.md`],
+      'a deleted file is not attached to the result',
+    );
+    for (let path of ['plan.md', 'dot.png']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 404, `${path} is not in the realm`);
+    }
+  });
+
+  test('realm.fs.delete refuses a file the run did not create', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let refused = [];
+try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
+await realm.fs.replace('task.json', '"Old title"', '"New title"');
+try { await realm.fs.delete('task.json'); } catch (e) { refused.push(e.message); }
+await realm.fs.writeText('scratch.md', 'x');
+await realm.fs.delete('scratch.md');
+try { await realm.fs.delete('scratch.md'); } catch (e) { refused.push(e.message); }
+return refused;`,
+    });
+
+    let refused: string[] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(refused.length, 3, 'each delete is refused');
+    assert.true(
+      /deletes only a file this run created: .*notes\/first\.md/.test(
+        refused[0]!,
+      ),
+      `a file the run did not touch: ${refused[0]}`,
+    );
+    assert.true(
+      /deletes only a file this run created: .*task\.json/.test(refused[1]!),
+      `a file the run edited but did not create: ${refused[1]}`,
+    );
+    assert.true(
+      /this run already deleted it/.test(refused[2]!),
+      `a file the run already deleted: ${refused[2]}`,
+    );
+    for (let path of ['notes/first.md', 'task.json']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 200, `${path} is still in the realm`);
+    }
+  });
+
+  test('a failed run names the files it created and deleted', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeText('plan.md', 'x');
+await realm.fs.delete('plan.md');
+await realm.fs.readText('missing.md');`,
+      }),
+      /No file was saved\. Files this run created and already deleted: .*plan\.md/,
+    );
+  });
+
   test('realm.fs.copy copies a file and leaves the source as it was', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');

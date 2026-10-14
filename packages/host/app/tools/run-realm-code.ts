@@ -138,6 +138,11 @@ type WriteFile = (
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
 
+// Deletes one file. `expected` is the text the run last saved to it, or
+// undefined for a binary file; the delete refuses if the realm no longer
+// matches it.
+type DeleteFile = (url: string, expected: string | undefined) => Promise<void>;
+
 // What `lookup` finds for a file that is not UTF-8 text.
 const BINARY = Symbol('binary');
 
@@ -206,6 +211,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'cards.search': false,
   'cards.get': false,
   'entries.search': false,
+  'fs.delete': true,
   capture: false,
   'workspaces.create': false,
   'workspaces.delete': false,
@@ -251,8 +257,15 @@ class RealmFsSession {
   // url -> content as the realm now holds it, as far as this run knows;
   // undefined means the file does not exist.
   private known = new Map<string, string | undefined>();
-  // Files saved by this run, in the order of their first save.
+  // Files saved by this run, in the order of their first save. A file the
+  // run deleted is no longer here.
   readonly saved = new Set<string>();
+  // Files this run created that still exist: the only files realm.fs.delete
+  // may delete, so a script can undo its own mistake but cannot remove a file
+  // that was there before the run.
+  private created = new Set<string>();
+  // Files this run created and then deleted, in the order of their delete.
+  readonly deleted = new Set<string>();
   // Workspaces created by this run, in order.
   readonly createdWorkspaces: string[] = [];
   // Workspaces deleted by this run, in order.
@@ -285,6 +298,7 @@ class RealmFsSession {
     private readSource: ReadSource,
     private writeFile: WriteFile,
     private writeBinaryFile: WriteBinaryFile,
+    private deleteFile: DeleteFile,
     private listDirectory: ListDirectory,
     private search: SearchCards,
     private resolveURL: ResolveURL,
@@ -470,7 +484,7 @@ class RealmFsSession {
         // The lookup above recorded the file as missing.
         this.known.delete(url);
         this.binary.add(url);
-        this.saved.add(url);
+        this.markCreated(url);
         return {
           path: this.relative(url),
           size: bytes.byteLength,
@@ -510,6 +524,30 @@ class RealmFsSession {
       }
       case 'entries.search':
         return await this.searchEntriesFor(args[0], args[1]);
+      case 'fs.delete': {
+        let url = this.resolve(method, args[0]);
+        if (!this.created.has(url)) {
+          throw new Error(
+            this.deleted.has(url)
+              ? `File not found; this run already deleted it: ${url}`
+              : `realm.fs.delete deletes only a file this run created: ${url}`,
+          );
+        }
+        if (this.closed) {
+          this.refused += 1;
+          throw new Error(`The run has ended; ${url} was not deleted`);
+        }
+        await this.deleteFile(
+          url,
+          this.binary.has(url) ? undefined : this.known.get(url),
+        );
+        this.created.delete(url);
+        this.saved.delete(url);
+        this.binary.delete(url);
+        this.known.set(url, undefined);
+        this.deleted.add(url);
+        return { path: this.relative(url), deleted: true };
+      }
       case 'capture': {
         let url = this.resolve(method, args[0]);
         return await this.captures.take(url, this.relative(url), args[1]);
@@ -986,7 +1024,18 @@ class RealmFsSession {
     }
     let saved = await this.writeFile(url, content, expected, options);
     this.known.set(url, saved);
+    if (expected === undefined) {
+      this.markCreated(url);
+    } else {
+      this.saved.add(url);
+    }
+  }
+
+  private markCreated(url: string) {
+    this.created.add(url);
     this.saved.add(url);
+    // A file created again after a delete is reported as saved.
+    this.deleted.delete(url);
   }
 }
 
@@ -1108,6 +1157,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url, content, expected, options) =>
         this.writeFile(roomId, url, content, expected, options),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
+      (url, expected) => this.deleteFile(url, expected),
       (url) => this.listDirectory(url),
       // The run reads only the rows' own data, so the linked cards' resources
       // are not asked for.
@@ -1188,6 +1238,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
         saved.length > 0
           ? `${message}. Files already saved by this run: ${saved.join(', ')}`
           : `${message}. No file was saved.`;
+      if (session.deleted.size > 0) {
+        report += ` Files this run created and already deleted: ${[...session.deleted].join(', ')}`;
+      }
       // Workspaces stay created too. Name them, so a retry does not create
       // them again. The run failed, so none of them is opened.
       if (session.createdWorkspaces.length > 0) {
@@ -1232,16 +1285,26 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return new commandModule.RunRealmCodeResult({
       uiActions,
       ...shown,
-      files: [...session.saved].map(
-        (fileUrl) =>
-          new commandModule.RealmCodeFileResult({
-            fileUrl,
-            status: 'saved',
-            detail: session.binary.has(fileUrl)
-              ? 'Binary file saved.'
-              : 'Source saved; correctness validation will run after this tool result.',
-          }),
-      ),
+      files: [
+        ...[...session.saved].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'saved',
+              detail: session.binary.has(fileUrl)
+                ? 'Binary file saved.'
+                : 'Source saved; correctness validation will run after this tool result.',
+            }),
+        ),
+        ...[...session.deleted].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'deleted',
+              detail: 'Created by this run and then deleted.',
+            }),
+        ),
+      ],
       scriptResult: runnerResult.scriptResult,
       captures: session.captures.taken.map(
         (viewed) =>
@@ -1647,6 +1710,21 @@ export default class RunRealmCodeTool extends HostBaseTool<
       useAbsoluteURL: true,
       includeComputeds: true,
     });
+  }
+
+  // Checks the realm still holds what the run saved, and deletes the file.
+  private async deleteFile(
+    url: string,
+    expected: string | undefined,
+  ): Promise<void> {
+    let current = await this.readSource(url);
+    if (
+      current.status !== 200 ||
+      (expected !== undefined && current.content !== expected)
+    ) {
+      throw new Error(`File changed while the script ran: ${url}`);
+    }
+    await this.cardService.deleteSource(new URL(url));
   }
 
   private async listDirectory(
