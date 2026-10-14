@@ -41,6 +41,12 @@ export interface SecretBinding {
   destination?: string;
 }
 
+// The owner of a secret the platform itself holds rather than a user or a
+// realm, such as a vendor key `_request-forward` attaches. Matrix user ids
+// start with `@` and realms are named by URL, so no user- or realm-owned
+// secret can share this owner.
+export const PLATFORM_SECRET_OWNER = 'boxel-platform';
+
 // What a table stores for one secret.
 export interface SealedSecret {
   keyId: string;

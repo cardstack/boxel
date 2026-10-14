@@ -63,8 +63,21 @@ echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 # Then walk the process tree to find child processes.
 # Exclude this script itself and grep.
 
-# Build a pattern that matches the slug in various contexts
-MATCH_PATTERN="${SLUG}\.localhost|realms/${SLUG}|boxel_${DB_SLUG}|BOXEL_ENVIRONMENT=${BRANCH}"
+# Build a pattern that matches the slug in various contexts. Each alternative
+# ends at a slug boundary, so stopping `cs-123` leaves `cs-1234`, `cs-123-foo`
+# and `foo-cs-123` running.
+BRANCH_RE=$(printf '%s' "$BRANCH" | sed 's/[][\.*^$+?(){}|/]/\\&/g')
+MATCH_PATTERN="[./]${SLUG}\.localhost|realms/${SLUG}(_test)?([^a-z0-9_-]|$)|boxel_${DB_SLUG}([^a-z0-9_]|$)|BOXEL_ENVIRONMENT=${BRANCH_RE}([^A-Za-z0-9_./-]|$)"
+
+# This environment's Traefik configs. Files are named `<slug>-<service>.yml`,
+# so the name alone can't tell `cs-123`'s apart from `cs-123-foo`'s; a file
+# belongs to this environment when the hosts it routes are this slug's.
+env_traefik_files() {
+  for _etf in "$1/${SLUG}"-*.yml; do
+    [ -f "$_etf" ] || continue
+    grep -qE "[.\`]${SLUG}\.localhost" "$_etf" 2>/dev/null && echo "$_etf"
+  done
+}
 
 # Extract dynamic ports from Traefik configs so we can match processes by port.
 # Iterate via IFS=newline rather than `echo | while`, so MATCH_PATTERN updates
@@ -74,8 +87,7 @@ IFS='
 '
 for DIR in $TRAEFIK_DIRS; do
   [ -d "$DIR" ] || continue
-  for f in "$DIR/${SLUG}"-*.yml; do
-    [ -f "$f" ] || continue
+  for f in $(env_traefik_files "$DIR"); do
     PORT=$(grep -oE 'host\.docker\.internal:[0-9]+' "$f" 2>/dev/null | head -1 | sed 's/.*://')
     if [ -n "$PORT" ]; then
       MATCH_PATTERN="${MATCH_PATTERN}|--port ${PORT}([^0-9]|$)"
@@ -169,8 +181,7 @@ IFS='
 '
 for DIR in $TRAEFIK_DIRS; do
   [ -d "$DIR" ] || continue
-  for f in "$DIR/${SLUG}"-*.yml; do
-    [ -f "$f" ] || continue
+  for f in $(env_traefik_files "$DIR"); do
     if [ "$DRY_RUN" = true ]; then
       echo "  Would remove $f"
     else
