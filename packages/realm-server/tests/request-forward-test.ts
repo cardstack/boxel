@@ -47,6 +47,12 @@ import {
 } from './helpers/sentry-capture.ts';
 import { logLinesDuring } from './helpers/log-capture.ts';
 import { leaksCredential } from './helpers/credential-leaks.ts';
+import {
+  installSecretsKeyring,
+  LocalKeyProvider,
+  resetSecretsAtRest,
+} from '../lib/secrets-at-rest/index.ts';
+import { sealProxyEndpointKeys } from '../lib/proxy-endpoint-keys.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -1982,6 +1988,64 @@ module(basename(import.meta.filename), function () {
           "the body's own headers are sent",
         );
         assert.strictEqual(vendor.requests[0].body, '{"hello":"vendor"}');
+      });
+
+      // The same forward with the endpoint's key sealed into its sealed
+      // columns, as the startup backfill leaves it.
+      module('with the key sealed', function (hooks) {
+        hooks.beforeEach(async function () {
+          installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
+          await sealProxyEndpointKeys(dbAdapter);
+          AllowedProxyDestinations.reset();
+        });
+        hooks.afterEach(function () {
+          resetSecretsAtRest();
+        });
+
+        function forwardToEcho() {
+          return request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/echo`,
+              method: 'POST',
+              requestBody: JSON.stringify({ hello: 'vendor' }),
+            });
+        }
+
+        test('the vendor receives the sealed key', async function (assert) {
+          let [row] = await dbAdapter.execute(
+            `SELECT api_key_ciphertext IS NOT NULL AS sealed FROM proxy_endpoints WHERE url = $1`,
+            { bind: [`${vendor.url}/`] },
+          );
+          assert.true(row.sealed, 'the endpoint key is sealed');
+
+          let response = await forwardToEcho();
+
+          assert.strictEqual(response.status, 200);
+          assert.strictEqual(
+            vendor.requests[0].headers.authorization,
+            'Bearer stub-vendor-key',
+          );
+        });
+
+        test('a key edited by hand reaches the vendor before the backfill seals it again', async function (assert) {
+          await dbAdapter.execute(
+            `UPDATE proxy_endpoints SET api_key = 'stub-vendor-key-edited' WHERE url = $1`,
+            { bind: [`${vendor.url}/`] },
+          );
+          AllowedProxyDestinations.reset();
+
+          let response = await forwardToEcho();
+
+          assert.strictEqual(response.status, 200);
+          assert.strictEqual(
+            vendor.requests[0].headers.authorization,
+            'Bearer stub-vendor-key-edited',
+          );
+        });
       });
 
       test('an X-Boxel header in the forwarded headers is refused', async function (assert) {

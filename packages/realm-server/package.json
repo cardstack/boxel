@@ -149,6 +149,7 @@
     "clear-modules-cache": "NODE_NO_WARNINGS=1 PGDATABASE=${PGDATABASE:-boxel} PGPORT=${PGPORT:-5435} node scripts/clear-modules-cache.ts",
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-stripe-products.ts",
+    "seal-proxy-endpoint-keys": "NODE_NO_WARNINGS=1 PGDATABASE=${PGDATABASE:-boxel} PGPORT=${PGPORT:-5435} node scripts/seal-proxy-endpoint-keys.ts",
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-openrouter-models.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },

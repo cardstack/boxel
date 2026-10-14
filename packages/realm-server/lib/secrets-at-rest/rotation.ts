@@ -1,6 +1,7 @@
 import { logger } from '@cardstack/runtime-common';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import {
+  PLATFORM_SECRET_OWNER,
   SecretDecryptionError,
   type SealedSecret,
   type SecretBinding,
@@ -36,7 +37,26 @@ export interface SealedColumn {
   binding(row: Record<string, unknown>): SecretBinding;
 }
 
-export const SEALED_COLUMNS: SealedColumn[] = [];
+export const SEALED_COLUMNS: SealedColumn[] = [
+  // The platform's own vendor keys, bound to their row and the endpoint url
+  // they are sent to (`lib/proxy-endpoint-keys.ts` seals them the same way).
+  {
+    field: 'proxy_endpoints.api_key',
+    table: 'proxy_endpoints',
+    idColumn: 'id',
+    keyIdColumn: 'api_key_key_id',
+    nonceColumn: 'api_key_nonce',
+    ciphertextColumn: 'api_key_ciphertext',
+    tagColumn: 'api_key_tag',
+    bindingColumns: ['url'],
+    binding: (row) => ({
+      field: 'proxy_endpoints.api_key',
+      owner: PLATFORM_SECRET_OWNER,
+      id: String(row.id),
+      destination: String(row.url),
+    }),
+  },
+];
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
