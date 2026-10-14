@@ -22,7 +22,7 @@ On a touch device (`pointer: coarse`) the segments give way to a native `<input 
 
 **An incomplete time reports `''`, not a partial string.** A caller never receives `'14:'`.
 
-**On touch, the platform picker owns the display.** The native control shows 12- or 24-hour time by the device locale, not `@hourCycle`, and seeds itself rather than from `@now`. What it reports goes through the same path as a keystroke, so `@onValueChange` receives the same wire string either way — and `''` when the platform's Reset clears it.
+**On touch, the platform picker owns the display.** The native control shows 12- or 24-hour time by the device locale, not `@hourCycle`, and seeds itself rather than from `@now`. What it reports goes through the same path as a keystroke, so `@onValueChange` receives the same wire string either way — and `''` when the platform's Reset clears it. A picker with no seconds column (iOS has none) changes only the hour and minute; with `@withSeconds`, the seconds the field already holds are kept.
 
 ## Prior art
 

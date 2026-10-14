@@ -403,8 +403,10 @@ export class TimeInput extends Component<TimeInputSignature> {
     return this.wireOf(this.effective);
   }
   // A native time input may report seconds (or fractions of one) the field
-  // isn't showing, or omit seconds that are zero; normalize to the wire
-  // shape before committing. '' (the platform's Reset) clears every segment.
+  // isn't showing, or omit seconds entirely — iOS Safari's picker has no
+  // seconds column and always writes HH:mm — so normalize to the wire shape
+  // before committing, keeping the seconds the field already holds when the
+  // platform reports none. '' (the platform's Reset) clears every segment.
   // Wired to both input and change so whichever the platform fires commits.
   // An event carrying the value the control already shows is the second of
   // that pair (or the change after a controlled reset below), not a pick.
@@ -415,7 +417,7 @@ export class TimeInput extends Component<TimeInputSignature> {
     this.clearBufferState();
     let s = parseWire(input.value.replace(/\.\d+$/, ''));
     if (s.hh !== null) {
-      s.ss = this.args.withSeconds ? (s.ss ?? 0) : null;
+      s.ss = this.args.withSeconds ? (s.ss ?? this.effective.ss ?? 0) : null;
     }
     this.commit(s);
     // a controlled owner that keeps its @value gets it back on screen, the

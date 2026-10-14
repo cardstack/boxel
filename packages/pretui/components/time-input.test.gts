@@ -165,6 +165,21 @@ module('Pretui | components/time-input', function (hooks) {
     assert.deepEqual(seen, ['08:15:00']);
   });
 
+  test('TimeInput keeps its seconds when the native control reports none', async function (assert) {
+    let seen: string[] = [];
+    const record = (v: string) => seen.push(v);
+    await render(
+      <template><TimeInput @withSeconds={{true}} @defaultValue='08:15:42' @onValueChange={{record}} /></template>,
+    );
+    await fillIn(nativeInput(), '09:30');
+    assert.deepEqual(
+      seen,
+      ['09:30:42'],
+      'a picker with no seconds column (iOS) changes the hour and minute only',
+    );
+    assert.strictEqual(timeText(), '09|30|42');
+  });
+
   test('TimeInput native control returns to a controlled @value the owner keeps', async function (assert) {
     let seen: string[] = [];
     const record = (v: string) => seen.push(v);
