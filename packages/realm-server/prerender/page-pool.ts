@@ -1515,10 +1515,20 @@ export class PagePool {
       );
     })().finally(() => {
       this.#ensuringStandbys = null;
-      // Whether it made a standby or gave up, callers parked on a spent
-      // budget re-select: to take the standby, or to see that budget is
-      // free and the refill failed.
-      this.#wakeTabWaiters();
+      // Parked callers re-select when the settle changed something they can
+      // act on: a standby to take, or free budget meaning the refill failed
+      // (they then throw). A settle that found the budget still spent
+      // changed nothing, and waking on it would livelock. A woken caller's
+      // re-select starts a fresh refill that settles at once with no budget,
+      // which would wake the next parked caller, and so on — a microtask
+      // cycle that never yields to the release or landing close that would
+      // end it. Those events wake waiters themselves.
+      if (
+        this.#standbys.size > 0 ||
+        this.#totalContextCount() < this.#maxPages + 1
+      ) {
+        this.#wakeTabWaiters();
+      }
     });
     return await this.#ensuringStandbys;
   }

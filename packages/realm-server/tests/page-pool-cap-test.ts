@@ -514,6 +514,84 @@ module(basename(import.meta.filename), function (hooks) {
     }
   });
 
+  // Callers parked on a spent budget are woken by a release, a landing close,
+  // or a refill that produced something. A woken caller's re-select starts a
+  // refill of its own, so if a refill that found nothing woke the others,
+  // callers arriving even a millisecond apart would keep waking one another
+  // in a microtask cycle that starves every timer — the release that would
+  // end it included. A timer firing at all is the first assertion.
+  for (let callers of [2, 5]) {
+    test(`${callers} brand-new affinities arriving a moment apart all wait for a tab without starving the event loop`, async function (assert) {
+      let { browserManager } = makeBrowserStub();
+      let pool = makePool({ maxPages: 2, browserManager });
+
+      let a = await pool.getPage('A');
+      let b = await pool.getPage('B');
+      await pool.warmStandbys();
+      let c = await pool.getPage('C');
+      let waiters = ['A', 'B', 'C'].map((key) => pool.getPage(key));
+
+      let arrivals: Promise<Awaited<ReturnType<PagePool['getPage']>>>[] = [];
+      for (let i = 0; i < callers; i++) {
+        arrivals.push(pool.getPage(`new-${i}`));
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.ok(true, 'timers still fire while the callers wait');
+
+      a.release();
+      b.release();
+      c.release();
+      for (let waiter of waiters) {
+        (await waiter).release();
+      }
+      for (let [i, arrival] of arrivals.entries()) {
+        let page = await within(arrival);
+        assert.notStrictEqual(page, 'timeout', `new-${i} got a tab`);
+        if (page !== 'timeout') {
+          page.release();
+        }
+      }
+    });
+  }
+
+  test('a module sub-render and a brand-new affinity arriving a moment apart both wait without starving the event loop', async function (assert) {
+    let { browserManager } = makeBrowserStub();
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    let b = await pool.getPage('B');
+    let parent = await pool.getPage('A');
+    await pool.warmStandbys();
+    let c = await pool.getPage('C');
+
+    let sub = pool.getPage('A', 'module');
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    let d = pool.getPage('D');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.ok(true, 'timers still fire while both wait');
+
+    // Two tabs free up while the parent still holds A's; either waiter may
+    // win the first, so both are released before either is awaited.
+    b.release();
+    c.release();
+    let subPage = await within(sub);
+    assert.notStrictEqual(subPage, 'timeout', 'the sub-render got a tab');
+    if (subPage !== 'timeout') {
+      assert.notStrictEqual(
+        subPage.pageId,
+        parent.pageId,
+        'on a tab other than the parent render’s',
+      );
+      subPage.release();
+    }
+    let dPage = await within(d);
+    assert.notStrictEqual(dPage, 'timeout', 'the brand-new affinity got a tab');
+    if (dPage !== 'timeout') {
+      dPage.release();
+    }
+    parent.release();
+  });
+
   test('a module sub-render with every tab busy waits for budget instead of queueing behind its own parent render', async function (assert) {
     let { browserManager } = makeBrowserStub();
     let pool = makePool({ maxPages: 2, browserManager });
