@@ -290,11 +290,13 @@ class InnerScene extends Component<{
  *
  * Click the plate to open the next gate on this slide. Mash mid-build and the
  * segment completes rather than skipping. When the slide is done, the same
- * click turns the page. The arrows in the imprint change slides outright; they
- * do not play builds. Back shows the previous slide already built.
+ * click turns the page. ‹ › in the imprint step one build back or forward,
+ * turning the page past a slide's last build; the segments change slides
+ * outright. Back shows the previous slide already built.
  *
- * Keys (once the deck is focused — the copper hairline): Space is a click,
- * < / > (and the arrow keys) turn the page.
+ * Keys (once the deck itself is focused — the copper hairline): Space is a
+ * click, < / > and the arrow keys step a build. Every control in the imprint
+ * is a tab stop, and a key on one is that control's own.
  *
  * Slides crossfade through Presence (sync — leaver and newcomer together).
  * The fade kind is a control on the imprint. Slides 02 and 04 keep a nested
