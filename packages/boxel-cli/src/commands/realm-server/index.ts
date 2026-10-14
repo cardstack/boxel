@@ -1,0 +1,14 @@
+import type { Command } from 'commander';
+import { registerDataKeysCommand } from './data-keys.ts';
+
+// Operator commands for a realm server, authorized with its realm secret
+// seed. The namespace stays out of the general help.
+export function registerRealmServerCommand(program: Command): void {
+  let realmServer = program
+    .command('realm-server', { hidden: true })
+    .description(
+      'Operate a realm server with its realm secret seed (env: BOXEL_REALM_SECRET_SEED)',
+    );
+
+  registerDataKeysCommand(realmServer);
+}

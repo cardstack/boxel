@@ -11,6 +11,7 @@ import {
 
 export * from './envelope.ts';
 export * from './providers.ts';
+export * from './rotation.ts';
 
 const log = logger('secrets-at-rest');
 
