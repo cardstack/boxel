@@ -95,6 +95,10 @@ import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import {
+  OPENROUTER_PASSTHROUGH_PATH,
+  REQUEST_FORWARD_PATH,
+} from './lib/request-telemetry.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -235,7 +239,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.post(
-    '/_request-forward',
+    REQUEST_FORWARD_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
@@ -251,7 +255,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleClientTelemetry(),
   );
   router.post(
-    '/_openrouter/chat/completions',
+    OPENROUTER_PASSTHROUGH_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,

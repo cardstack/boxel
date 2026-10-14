@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { createRequire } from 'module';
 import { dirname, join } from 'path';
 import { logger } from '@cardstack/runtime-common';
-import { registerSecureOriginHost } from './secure-origin-telemetry.ts';
+import { registerSecureOriginHost } from './request-telemetry.ts';
 
 // The secure origin is where a user types a credential: a page on an origin
 // that card code can't reach, so the same-origin policy keeps what is typed
