@@ -80,3 +80,37 @@ export const takesFocus = modifier((element: HTMLElement, [name]: [string]) => {
     element.focus();
   }
 });
+
+/** what a keyboard can reach inside a live stage */
+const FOCUSABLE =
+  'a[href], area[href], button, input, select, textarea, summary, iframe, audio[controls], video[controls], [contenteditable], [tabindex]';
+
+/**
+ * A live picture for the pointer alone: nothing inside it is a Tab stop or
+ * read by a screen reader, while a click or a drag still reaches it. A
+ * gallery tile's stage is this, so the keyboard goes from one demo's name to
+ * the next rather than through every control of every demo on the page; the
+ * demo's own page is where a keyboard uses the stage.
+ *
+ * The stage renders as it likes, so the modifier watches it and takes each
+ * focusable element it adds out of the Tab order.
+ */
+export const pointerOnly = modifier((element: HTMLElement) => {
+  element.setAttribute('aria-hidden', 'true');
+  let untab = () => {
+    for (let node of element.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+      if (node.getAttribute('tabindex') !== '-1') {
+        node.setAttribute('tabindex', '-1');
+      }
+    }
+  };
+  untab();
+  let observer = new MutationObserver(untab);
+  observer.observe(element, {
+    attributeFilter: ['tabindex', 'href', 'contenteditable', 'controls'],
+    attributes: true,
+    childList: true,
+    subtree: true,
+  });
+  return () => observer.disconnect();
+});
