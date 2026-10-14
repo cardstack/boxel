@@ -88,7 +88,9 @@ module(basename(import.meta.filename), function () {
       );
       return lines
         .map(({ message }) => message)
-        .filter((message) => message.startsWith('plaintext census:'));
+        .filter((message) =>
+          message.startsWith('plaintext census: proxy_endpoints.'),
+        );
     }
 
     async function apiKeyServedFor(url: string) {
