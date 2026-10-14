@@ -95,6 +95,14 @@ async function within<T>(
   }
 }
 
+// Unwraps a `within` result, failing the test when the wait timed out.
+function settled<T>(value: T | 'timeout', what: string): T {
+  if (value === 'timeout') {
+    throw new Error(`timed out waiting for ${what}`);
+  }
+  return value;
+}
+
 module(basename(import.meta.filename), function (hooks) {
   let pools: PagePool[] = [];
   let gates: Gate[] = [];
@@ -171,25 +179,13 @@ module(basename(import.meta.filename), function (hooks) {
       standbyRefillWaitMs: 50,
     });
 
-    let a = await within(pool.getPage('A'));
-    if (a === 'timeout') {
-      assert.ok(false, 'A got a ready standby while the refill was stalled');
-      return;
-    }
+    let a = settled(await within(pool.getPage('A')), "A's standby");
     a.release();
-    let b = await within(pool.getPage('B'));
-    if (b === 'timeout') {
-      assert.ok(false, 'B got a ready standby while the refill was stalled');
-      return;
-    }
+    let b = settled(await within(pool.getPage('B')), "B's standby");
     b.release();
 
     let startedAt = Date.now();
-    let c = await within(pool.getPage('C'));
-    if (c === 'timeout') {
-      assert.ok(false, 'C got a tab while the refill was stalled');
-      return;
-    }
+    let c = settled(await within(pool.getPage('C')), "C's tab");
     let elapsedMs = Date.now() - startedAt;
     c.release();
     assert.true(
@@ -227,11 +223,7 @@ module(basename(import.meta.filename), function (hooks) {
     let c = await pool.getPage('C');
     c.release();
 
-    let d = await within(pool.getPage('D', 'module'));
-    if (d === 'timeout') {
-      assert.ok(false, 'D got a tab while the refill was stalled');
-      return;
-    }
+    let d = settled(await within(pool.getPage('D', 'module')), "D's tab");
     d.release();
     assert.true(
       [a.pageId, b.pageId, c.pageId].includes(d.pageId),
@@ -289,11 +281,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     // The refill is still running for E, and the standby it makes is E's.
     stub.gate.open();
-    let e = await within(patient);
-    if (e === 'timeout') {
-      assert.ok(false, 'E got the standby the refill made');
-      return;
-    }
+    let e = settled(await within(patient), "E's standby");
     e.release();
     assert.false(e.reused, 'E got a fresh standby rather than a stolen tab');
     assert.false(
