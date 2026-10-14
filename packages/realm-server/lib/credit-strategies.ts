@@ -7,9 +7,26 @@ import {
   validateAICredits,
   spendUsageCost as spendUsageCostFromBilling,
   fetchGenerationCostWithBackoff,
+  type GenerationCostLookupOptions,
 } from '@cardstack/billing/ai-billing';
+import { OutboundRefusedError, outboundFetch } from './outbound/client.ts';
 
 const log = logger('credit-strategies');
+
+// The cost lookup sends the system key, so it goes out through the guarded
+// outbound client like every other call that does. A refused destination is
+// refused the same way on every attempt, so it is not retried.
+const guardedCostLookup: GenerationCostLookupOptions = {
+  fetch: (url, { headers }) =>
+    outboundFetch({
+      url,
+      method: 'GET',
+      headers,
+      sizePath: 'system-key',
+      credentialHeaders: ['Authorization'],
+    }),
+  isRetryable: (error) => !(error instanceof OutboundRefusedError),
+};
 
 export interface CreditStrategy {
   name: string;
@@ -86,6 +103,7 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
       const fetchedCost = await fetchGenerationCostWithBackoff(
         generationId,
         this.openRouterApiKey,
+        guardedCostLookup,
       );
       if (fetchedCost !== null) {
         return fetchedCost;

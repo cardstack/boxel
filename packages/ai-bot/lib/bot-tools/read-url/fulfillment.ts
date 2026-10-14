@@ -5,7 +5,6 @@ import {
   APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixClient } from 'matrix-js-sdk';
-import type { ChatCompletionMessageToolCall } from 'openai/resources';
 import {
   executeReadUrl,
   READ_URL_MAX_CALLS_PER_RESPONSE,
@@ -14,6 +13,7 @@ import {
   type ReadUrlResult,
 } from './read.ts';
 import { publishToolResult, uploadToMatrix } from '../results.ts';
+import type { BotToolCall } from '../types.ts';
 
 let log = logger('ai-bot:read-url');
 
@@ -28,6 +28,10 @@ export interface ReadUrlFulfillmentDeps {
   // to it.
   requestEventId: string;
   agentId: string | undefined;
+  // How many URLs the calls of one response have read so far. The caller
+  // keeps it across the response's calls, so READ_URL_MAX_CALLS_PER_RESPONSE
+  // holds over all of them.
+  reads: ReadUrlResponseReads;
   readOptions: ReadUrlOptions;
   // Why a call's URL must not be read at all, if it must not.
   refusal?: (url: string) => string | undefined;
@@ -39,6 +43,10 @@ export interface ReadUrlFulfillmentDeps {
   ) => Promise<string>;
 }
 
+export interface ReadUrlResponseReads {
+  count: number;
+}
+
 export interface ReadUrlFulfillmentOutcome {
   commandRequestId: string;
   ok: boolean;
@@ -47,47 +55,33 @@ export interface ReadUrlFulfillmentOutcome {
   published: boolean;
 }
 
-// Runs each readUrl call ai-bot owns and publishes its outcome as a
+// Runs one readUrl call ai-bot owns and publishes its outcome as a
 // tool-result event. A read page or text file is uploaded to Matrix and
 // attached as text, so its content is inlined into the tool message; a read
 // image (or other media) is uploaded under its own content type and
 // attached as media, so the prompt embeds it for the model on the turn the
-// result starts. A failed read publishes the reason instead, and calls past
-// READ_URL_MAX_CALLS_PER_RESPONSE are answered without a read. Calls are
-// handled one at a time: each published result re-triggers the bot, and
-// publishing in sequence keeps every earlier result on the server before the
-// handler a later one triggers reads the room history.
-export async function fulfillReadUrlCalls(
-  calls: ChatCompletionMessageToolCall[],
+// result starts. A failed read publishes the reason instead, and a call past
+// READ_URL_MAX_CALLS_PER_RESPONSE is answered without a read.
+export async function fulfillReadUrlCall(
+  call: BotToolCall,
   deps: ReadUrlFulfillmentDeps,
-): Promise<ReadUrlFulfillmentOutcome[]> {
-  let outcomes: ReadUrlFulfillmentOutcome[] = [];
-  let read = 0;
-  for (let call of calls) {
-    if (call.type !== 'function') {
-      continue;
-    }
-    // Calls past the cap still get a result, so the turn settles and the
-    // model learns which reads to ask for again.
-    if (read >= READ_URL_MAX_CALLS_PER_RESPONSE) {
-      let url = urlFromReadUrlArguments(call.function.arguments);
-      outcomes.push(
-        await publishFailure(
-          call.id,
-          `${url ?? 'This URL'} was not read: one response reads at most ${READ_URL_MAX_CALLS_PER_RESPONSE} URLs. Read it on a later turn if you still need it.`,
-          deps,
-        ),
-      );
-      continue;
-    }
-    read++;
-    outcomes.push(await fulfillOne(call, deps));
+): Promise<ReadUrlFulfillmentOutcome> {
+  // A call past the cap still gets a result, so the turn settles and the
+  // model learns which reads to ask for again.
+  if (deps.reads.count >= READ_URL_MAX_CALLS_PER_RESPONSE) {
+    let url = urlFromReadUrlArguments(call.function.arguments);
+    return await publishFailure(
+      call.id,
+      `${url ?? 'This URL'} was not read: one response reads at most ${READ_URL_MAX_CALLS_PER_RESPONSE} URLs. Read it on a later turn if you still need it.`,
+      deps,
+    );
   }
-  return outcomes;
+  deps.reads.count++;
+  return await fulfillOne(call, deps);
 }
 
 async function fulfillOne(
-  call: ChatCompletionMessageToolCall & { type: 'function' },
+  call: BotToolCall,
   deps: ReadUrlFulfillmentDeps,
 ): Promise<ReadUrlFulfillmentOutcome> {
   let url = urlFromReadUrlArguments(call.function.arguments);

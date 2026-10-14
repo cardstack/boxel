@@ -148,7 +148,7 @@ module('bot tools', () => {
     assert.false(readUrl.needsApproval(JSON.stringify({ url })));
 
     let sent: any[] = [];
-    let outcomes = await readUrl.fulfill([readUrlCall(url)], {
+    let outcome = await readUrl.fulfill(readUrlCall(url), {
       client: {
         sendEvent: async (_roomId: string, _type: string, content: any) => {
           sent.push(content);
@@ -159,7 +159,7 @@ module('bot tools', () => {
       requestEventId: '$bot',
       agentId: undefined,
     });
-    assert.true(outcomes[0].published);
+    assert.true(outcome.published);
     assert.ok(sent[0].failureReason.includes('looks like encoded data'));
   });
 

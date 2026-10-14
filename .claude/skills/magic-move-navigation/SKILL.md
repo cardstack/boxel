@@ -20,10 +20,7 @@ host's URL or title. `animateView` is for transitions where a snapshot is
 the point (`motion-page-transition`); it is not part of this crossing.
 
 The tiles and their stages are in `packages/choreo-gallery/realm/shell/gallery-grid.gts`,
-the demo page in `packages/choreo-gallery/realm/shell/demo-page.gts`. The standalone Ember
-gallery in `packages/choreo-test-app` has a route-driven copy
-(`app/templates/application.gts`, `app/lib/crossing.ts`); the realm's is
-the one to change.
+the demo page in `packages/choreo-gallery/realm/shell/demo-page.gts`.
 
 ## The cast (Keynote's grammar, spoken by the region)
 
@@ -147,8 +144,8 @@ other demos mount, once, latched permanently. All three acts are in
 6. **Assert COMPUTED style and geometry.** Accelerated flights paint
    through WAAPI; the style attribute never hears of it. The crossing
    contract suite (`packages/choreo/tests/integration/choreo/crossing-test.gts`)
-   and the gallery's acceptance suite
-   (`packages/choreo-test-app/tests/acceptance/crossing-test.ts`) measure
+   and the gallery's crossing suite
+   (`packages/host/tests/integration/choreo-gallery-crossing-test.gts`) measure
    boxes.
 
 ## Still true from the old system
@@ -160,7 +157,7 @@ other demos mount, once, latched permanently. All three acts are in
   `crossing.isCrossing` and mount already-at-rest.
 - **With live demos on the page, the gallery-wide settle never comes** —
   several demos never go idle, so a test waits on the crossing standing
-  down (`crossingActive()` in the test app's suites), not on
+  down (`crossingActive()` in the gallery's crossing suite), not on
   `animationsSettled()`.
 
 ## Died with animateView

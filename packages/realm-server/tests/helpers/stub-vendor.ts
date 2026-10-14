@@ -14,7 +14,9 @@ import zlib from 'node:zlib';
 //   /redirect?to=<url>&status=<3xx>
 //                           a redirect to <url> (default 302)
 //   /slow?ms=N              200 after N milliseconds
-//   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE]
+//   /sse?cost=<usd>         an OpenRouter-shaped event stream ending in [DONE];
+//                           cost=none leaves the cost out, as a cancelled
+//                           stream does
 //   /completion?bytes=N&cost=<usd>&hold=1&truncate=1
 //                           an OpenRouter-shaped JSON completion whose message
 //                           carries N bytes of base64, with the generation id
@@ -112,13 +114,14 @@ export async function startStubVendor(): Promise<StubVendor> {
         );
         res.on('close', () => clearTimeout(timer));
       } else if (url.pathname === '/sse') {
+        let omitCost = url.searchParams.get('cost') === 'none';
         let cost = numberParam(url, 'cost', 0.002);
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         res.write(
           `data: ${JSON.stringify({ id: 'gen-stub', choices: [{ delta: { content: 'Hello' } }] })}\n\n`,
         );
         res.write(
-          `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }], usage: { cost } })}\n\n`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: ' world' } }], ...(omitCost ? {} : { usage: { cost } }) })}\n\n`,
         );
         res.end('data: [DONE]\n\n');
       } else if (url.pathname === '/completion') {

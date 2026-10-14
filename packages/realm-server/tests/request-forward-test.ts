@@ -22,6 +22,7 @@ import {
   waitUntil,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { logger } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getUserByMatrixUserId,
@@ -29,7 +30,11 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
-import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import {
+  configureOutbound,
+  OutboundRefusedError,
+  resetOutbound,
+} from '../lib/outbound/client.ts';
 import {
   configureClientStall,
   resetClientStall,
@@ -2342,6 +2347,94 @@ module(basename(import.meta.filename), function () {
             })) === 47,
           { timeoutMessage: 'the stream should be charged (50 - 3 = 47)' },
         );
+      });
+
+      test('a cost lookup whose host resolves to a private address is refused and the charge is skipped', async function (assert) {
+        configureOutbound({
+          devAllowlist: ['127.0.0.1'],
+          resolveHost: async (hostname) =>
+            hostname === 'openrouter.ai' ? ['10.0.0.1'] : ['127.0.0.1'],
+        });
+        // The warnings the cost lookup and the credit strategy log, with the
+        // values they were logged with.
+        let warnings: unknown[][] = [];
+        let channels = [logger('ai-billing'), logger('credit-strategies')];
+        let restore = channels.map((log) => {
+          let originalFactory = log.methodFactory;
+          let originalLevel = log.getLevel();
+          log.methodFactory = (methodName, level, loggerName) => {
+            let raw = originalFactory(methodName, level, loggerName);
+            return (...args: unknown[]) => {
+              if (methodName === 'warn') {
+                warnings.push(args);
+              }
+              raw(...args);
+            };
+          };
+          log.setLevel('warn');
+          return () => {
+            log.methodFactory = originalFactory;
+            log.setLevel(originalLevel);
+          };
+        });
+        let skipped = () =>
+          warnings.some(([message]) =>
+            String(message).includes(
+              'Failed to fetch generation cost for user @testuser:localhost (generationId: gen-stub), credit deduction skipped',
+            ),
+          );
+        try {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'text/event-stream')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/sse?cost=none`,
+              method: 'POST',
+              requestBody: JSON.stringify({ stream: true }),
+              stream: true,
+            });
+
+          assert.strictEqual(response.status, 200);
+          assert.true(response.text.includes('data: [DONE]'));
+
+          await waitUntil(async () => skipped(), {
+            timeoutMessage:
+              'the refused cost lookup should skip the charge with a warning',
+          });
+          let attempts = warnings.filter(([message]) =>
+            String(message).includes('to fetch generation cost failed'),
+          );
+          assert.strictEqual(
+            attempts.length,
+            1,
+            'a refused lookup is not retried',
+          );
+          let error = attempts[0]?.[1];
+          assert.true(
+            error instanceof OutboundRefusedError,
+            'the outbound guard refused the lookup',
+          );
+          assert.strictEqual(
+            (error as OutboundRefusedError | undefined)?.reason,
+            'address',
+          );
+          let user = await getUserByMatrixUserId(
+            dbAdapter,
+            '@testuser:localhost',
+          );
+          assert.strictEqual(
+            await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            }),
+            50,
+            'nothing is charged',
+          );
+        } finally {
+          restore.forEach((undo) => undo());
+        }
       });
     });
   });

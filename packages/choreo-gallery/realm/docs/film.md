@@ -770,10 +770,6 @@ frame is the from-texture, the live render is the to-texture.
 `@secs` counts for a named seam. It is how a seam the film does not know
 gets its length, and it also lets a score retime one of the film's own.
 
-The reel at `/_seams` is the proof: a picture that is five images rather
-than a scene, declaring four seams after the shapes in hyperframes, and a
-score reaching them exactly as it reaches a dip.
-
 #### The wipe is an edge, not a moving box
 
 Worth knowing because it was wrong for a long time. The wipe used to be a
@@ -805,7 +801,7 @@ Two are worth calling out because the edit depends on them:
 - **`snapshot(): string`** reads the frame back as a data URL. Every
   still join and every seek into a seam gets its outgoing frame this way.
   It is also how the gallery posters are made: one frame of each film,
-  captured headless at a named shot (`scripts/film-poster.mjs`).
+  captured headless at a named shot (`packages/choreo-gallery/tools/film-poster.mjs`).
 - **`seam(spec)`** and **`PictureSpec.seams`** (optional) are half of a
   seam — see §5.6. `seams` names the transitions this picture can run in
   its own glass; `seam` is written every frame with a `SeamSpec` and
@@ -853,13 +849,13 @@ hoping — and it is, but the hook had to be reachable.
 
 `<Film>` publishes itself on `window.__choreo[name]` while it is mounted:
 `renderAt`, `seek`, `seconds()`, `runtime()` and whether it is `exact`.
-`scripts/film-render.mjs` is the consumer. It never lets the film run: it
+`packages/choreo-gallery/tools/film-render.mjs` is the consumer. It never lets the film run: it
 calls `renderAt(t)` for every frame in turn, forces the delivery size
 through the debugger rather than inheriting the headless window's, and
 writes one JPEG per frame.
 
 ```bash
-node scripts/film-render.mjs 'http://localhost:4201/_seams?from=1' out reel 60 0 50 9540 1920x1080
+node packages/choreo-gallery/tools/film-render.mjs 'http://localhost:5173/?film=towers&seek=exact&from=1' out towers 60 0 50 9540 1920x1080
 ```
 
 The output is reproducible: the same URL and frame numbers give the same

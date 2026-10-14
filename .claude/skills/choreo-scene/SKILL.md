@@ -3,7 +3,7 @@ name: choreo-scene
 description: >-
   Scene-level choreography with <Choreo>: changeset-driven timelines over a
   whole render pass. Use in glimmer-motion / Choreo code in this repo
-  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery,
   host UI that animates with them) when several elements must be sequenced
   ("fade out, THEN move, THEN fade in"), when z-index must hold for the span
   of a step, when one element's motion derives from another's measured bounds,
@@ -110,7 +110,7 @@ One element, no ordering, no cross-element measurement → `motion-element` /
 `motion-presence`. A pure layout move → `motion-layout`. Live route crossings → `magic-move-navigation`; intentional snapshots →
 `motion-page-transition`.
 
-Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
+Canonical demos, in `packages/choreo-gallery/realm/stages/`:
 `inbox.gts` (beacons), `sequence.gts`, `interrupt.gts`,
-`slides.gts`, `far-match.gts`, `split-view.gts` (function values),
+`slides.gts`, `far.gts`, `split.gts` (function values),
 `lists.gts`. Design doc: `packages/choreo-gallery/realm/docs/choreography.md`.
