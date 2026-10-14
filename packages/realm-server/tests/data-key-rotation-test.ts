@@ -27,7 +27,12 @@ import {
   setupDB,
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
-import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import {
+  createJWT as createRealmServerJWT,
+  retrieveTokenClaim,
+} from '../utils/jwt.ts';
+import { verifyJWT } from '../jwt.ts';
+import { verifyOperatorToken } from '../utils/operator-token.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
@@ -398,6 +403,32 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('operator tokens', function () {
+    test('neither the realm token verifier nor the realm-server session verifier accepts an operator token', function (assert) {
+      let token = jsonwebtoken.sign(
+        { operator: 'data-keys' },
+        realmSecretSeed,
+        {
+          expiresIn: '5m',
+        },
+      );
+      assert.throws(
+        () => verifyJWT(token, realmSecretSeed),
+        /an operator token is not a realm session/,
+      );
+      assert.throws(
+        () => retrieveTokenClaim(`Bearer ${token}`, realmSecretSeed),
+        /Token invalid/,
+      );
+      assert.strictEqual(
+        verifyOperatorToken(`Bearer ${token}`, realmSecretSeed, 'data-keys')
+          .operator,
+        'data-keys',
+        'the same token is good on its own endpoints',
+      );
+    });
+  });
+
   module('the data-keys operator endpoints', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: any;
@@ -552,6 +583,16 @@ module(basename(import.meta.filename), function () {
           operatorToken({ operator: 'data-keys' }, '1h'),
         ],
         [
+          'an operator token dated in the future',
+          (() => {
+            let iat = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+            return jsonwebtoken.sign(
+              { operator: 'data-keys', iat, exp: iat + 5 * 60 },
+              realmSecretSeed,
+            );
+          })(),
+        ],
+        [
           'an operator token signed with another seed',
           jsonwebtoken.sign({ operator: 'data-keys' }, 'another seed', {
             expiresIn: '5m',
@@ -561,7 +602,7 @@ module(basename(import.meta.filename), function () {
       for (let [label, token] of refused) {
         for (let call of [
           request.get('/_data-keys'),
-          request.post('/_data-keys/reseal'),
+          request.post('/_data-keys/reseal?currentKeyId=new'),
         ]) {
           let response = await (token
             ? call.set('Authorization', `Bearer ${token}`)
@@ -585,6 +626,27 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 401);
     });
 
+    test('a server whose current data key is not the one the operator names refuses to start a pass', async function (assert) {
+      let mismatched = await request
+        .post('/_data-keys/reseal?currentKeyId=old')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(mismatched.status, 409);
+      assert.strictEqual(mismatched.body.currentKeyId, 'new');
+
+      let unnamed = await request
+        .post('/_data-keys/reseal')
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      assert.strictEqual(unnamed.status, 400);
+
+      assert.false(currentResealPass().state.running);
+      assert.strictEqual(
+        (await dataKeyStatus(dbAdapter, keyrings.during, [COLUMN]))
+          .rowsToReseal,
+        6,
+        'no row was re-sealed',
+      );
+    });
+
     test('a pass started through the endpoint re-seals every row, and _request-forward keeps working while it runs', async function (assert) {
       let release!: () => void;
       let gate = new Promise<void>((resolve) => (release = resolve));
@@ -602,14 +664,14 @@ module(basename(import.meta.filename), function () {
       });
 
       let response = await request
-        .post('/_data-keys/reseal')
+        .post('/_data-keys/reseal?currentKeyId=new')
         .set('Authorization', `Bearer ${operatorToken()}`);
       assert.strictEqual(response.status, 202);
       assert.true(response.body.started);
       await holding;
 
       let again = await request
-        .post('/_data-keys/reseal')
+        .post('/_data-keys/reseal?currentKeyId=new')
         .set('Authorization', `Bearer ${operatorToken()}`);
       assert.strictEqual(again.status, 202);
       assert.false(again.body.started, 'one pass runs at a time');

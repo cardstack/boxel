@@ -76,21 +76,38 @@ export async function dataKeysStatus(
   return operatorFetch(options, '_data-keys', 'GET');
 }
 
-// Starts a re-seal pass on the realm server that answers. With `wait`, polls
-// that server until its pass finishes and returns the final status. Behind a
-// load balancer a poll can reach another task, whose pass state is its own;
-// the row counts are the same from every task, so the wait ends once no row is
-// left to re-seal or the pass that answers has finished.
+// Starts a re-seal pass on the realm server that answers, which refuses (409)
+// unless its current data key is `currentKeyId`. With `wait`, polls until the
+// pass finishes and returns the final status. Behind a load balancer a poll can
+// reach another task: one on another revision reports against another current
+// key, and any task reports its own pass, so the wait reads only answers made
+// under `currentKeyId`, and ends when no row is left to re-seal or when the
+// pass it started (known by its start time) reports finished.
 export async function dataKeysReseal(
-  options: DataKeysOptions & { wait?: boolean; pollIntervalMs?: number },
+  options: DataKeysOptions & {
+    currentKeyId: string;
+    wait?: boolean;
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+  },
 ): Promise<{ started: boolean; status: DataKeyStatus }> {
-  let { started } = (await operatorFetch(
+  let { started, pass } = (await operatorFetch(
     options,
-    '_data-keys/reseal',
+    `_data-keys/reseal?currentKeyId=${encodeURIComponent(options.currentKeyId)}`,
     'POST',
-  )) as { started: boolean };
+  )) as { started: boolean; pass: ResealPassState };
+  let deadline = Date.now() + (options.timeoutMs ?? 60 * 60 * 1000);
   let status = await dataKeysStatus(options);
-  while (options.wait && status.pass.running && status.rowsToReseal > 0) {
+  let finished = (status: DataKeyStatus) =>
+    status.currentKeyId === options.currentKeyId &&
+    (status.rowsToReseal === 0 ||
+      (status.pass.startedAt === pass.startedAt && !status.pass.running));
+  while (options.wait && !finished(status)) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        `the re-seal pass did not finish in time; ${status.rowsToReseal} rows were left. Run status to see where it stands`,
+      );
+    }
     await new Promise((resolve) =>
       setTimeout(resolve, options.pollIntervalMs ?? 2000),
     );
@@ -141,6 +158,7 @@ function printStatus(status: DataKeyStatus): void {
 
 interface DataKeysCliOptions {
   realmServer: string;
+  currentKey?: string;
   json?: boolean;
   wait?: boolean;
 }
@@ -195,24 +213,33 @@ export function registerDataKeysCommand(realmServer: Command): void {
       'Start a background pass that re-seals every stored row under the current data key. Safe to run again: it resumes where a stopped pass left off and changes nothing once every row is under the current key',
     )
     .requiredOption('--realm-server <url>', 'The realm server to run it on')
+    .requiredOption(
+      '--current-key <key-id>',
+      'The data key every server should have as current (status shows it); a server whose current key differs refuses',
+    )
     .option('--wait', 'Wait for the pass to finish and report it')
     .option('--json', 'Output JSON')
     .action(async (options: DataKeysCliOptions) =>
       run(async () => {
         let { started, status } = await dataKeysReseal({
           ...(await seedOptions(options)),
+          currentKeyId: options.currentKey!,
           wait: options.wait,
         });
         if (options.json) {
           cliLog.output(JSON.stringify({ started, ...status }, null, 2));
-          return;
+        } else {
+          console.log(
+            started
+              ? `${FG_GREEN}Started a re-seal pass.${RESET}`
+              : 'A re-seal pass is already running on this server.',
+          );
+          printStatus(status);
         }
-        console.log(
-          started
-            ? `${FG_GREEN}Started a re-seal pass.${RESET}`
-            : 'A re-seal pass is already running on this server.',
-        );
-        printStatus(status);
+        // A finished wait that leaves rows behind needs the operator.
+        if (options.wait && status.rowsToReseal > 0) {
+          process.exitCode = 1;
+        }
       }),
     );
 }

@@ -17,6 +17,9 @@ export const OPERATOR_CLAIM = 'operator';
 
 export const OPERATOR_TOKEN_MAX_LIFETIME_SEC = 15 * 60;
 
+// How far ahead of the server's clock a signer's clock may run.
+export const OPERATOR_TOKEN_CLOCK_SKEW_SEC = 60;
+
 export type OperatorScope = 'data-keys';
 
 export interface OperatorTokenClaim {
@@ -50,13 +53,19 @@ export function verifyOperatorToken(
     }
     throw e;
   }
+  // The lifetime is bounded against the server's clock, not only against the
+  // token's own `iat`, so a token dated in the future is no longer-lived than
+  // one dated now.
   let { iat, exp } = claims;
+  let now = Math.floor(Date.now() / 1000);
   if (
     claims[OPERATOR_CLAIM] !== scope ||
     'user' in claims ||
     typeof iat !== 'number' ||
     typeof exp !== 'number' ||
-    exp - iat > OPERATOR_TOKEN_MAX_LIFETIME_SEC
+    iat > now + OPERATOR_TOKEN_CLOCK_SKEW_SEC ||
+    exp - iat > OPERATOR_TOKEN_MAX_LIFETIME_SEC ||
+    exp > now + OPERATOR_TOKEN_MAX_LIFETIME_SEC + OPERATOR_TOKEN_CLOCK_SKEW_SEC
   ) {
     throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
   }

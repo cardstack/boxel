@@ -58,12 +58,32 @@ export function handleDataKeyStatus({
 }
 
 // Starts a re-seal pass in the background on this process, unless one is
-// running, and answers straight away.
+// running, and answers straight away. The caller names the data key it expects
+// to be current (`?currentKeyId=`). A process whose current key differs, such
+// as one still on the previous revision mid-deploy, answers 409 rather than
+// re-sealing rows under the key the rotation is moving away from.
 export function handleDataKeyReseal({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context) {
-    let started = resealPass.start(dbAdapter, secretsKeyring(), resealOptions);
+    let keyring = secretsKeyring();
+    let expected = ctxt.URL.searchParams.get('currentKeyId');
+    if (!expected) {
+      await respond(ctxt, 400, {
+        errors: ['name the data key expected to be current as ?currentKeyId='],
+      });
+      return;
+    }
+    if (expected !== keyring.currentKeyId) {
+      await respond(ctxt, 409, {
+        errors: [
+          `this server's current data key is ${keyring.currentKeyId}, not ${expected}`,
+        ],
+        currentKeyId: keyring.currentKeyId,
+      });
+      return;
+    }
+    let started = resealPass.start(dbAdapter, keyring, resealOptions);
     await respond(ctxt, 202, { started, pass: resealPass.state });
   };
 }

@@ -71,20 +71,22 @@ describe('boxel realm-server data-keys', () => {
     expect(requests[0].authorization).not.toContain(SEED);
   });
 
-  it('starts a pass and, with --wait, polls until no row is left to re-seal', async () => {
+  it('starts a pass on a server whose current key is the one named and, with --wait, polls until no row is left', async () => {
+    let ours = { running: true, startedAt: '2026-01-01T00:00:00.000Z' };
     let { fetch, requests } = fakeServer([
-      { started: true, pass: { running: true } },
-      status({ pass: { running: true } }),
-      status({ rowsToReseal: 1, pass: { running: true } }),
+      { started: true, pass: ours },
+      status({ pass: ours }),
+      status({ rowsToReseal: 1, pass: ours }),
       status({
         rowsToReseal: 0,
         retirableKeyIds: ['kms-old'],
-        pass: { running: false },
+        pass: { running: false, startedAt: ours.startedAt },
       }),
     ]);
     let { started, status: final } = await dataKeysReseal({
       realmServerUrl: 'https://realms.example.test/',
       realmSecretSeed: SEED,
+      currentKeyId: 'kms-new',
       fetch,
       wait: true,
       pollIntervalMs: 1,
@@ -94,11 +96,78 @@ describe('boxel realm-server data-keys', () => {
     expect(final.rowsToReseal).toBe(0);
     expect(final.retirableKeyIds).toEqual(['kms-old']);
     expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
-      'POST https://realms.example.test/_data-keys/reseal',
+      'POST https://realms.example.test/_data-keys/reseal?currentKeyId=kms-new',
       'GET https://realms.example.test/_data-keys',
       'GET https://realms.example.test/_data-keys',
       'GET https://realms.example.test/_data-keys',
     ]);
+  });
+
+  it('keeps waiting through polls answered by other tasks, and stops when its own pass finishes', async () => {
+    let ours = { running: true, startedAt: '2026-01-01T00:00:00.000Z' };
+    let { fetch, requests } = fakeServer([
+      { started: true, pass: ours },
+      // Another task on this revision, running no pass of its own.
+      status({ rowsToReseal: 2, pass: { running: false } }),
+      // A task still on the previous revision, reporting against the old key.
+      status({
+        currentKeyId: 'kms-old',
+        rowsToReseal: 0,
+        pass: { running: false },
+      }),
+      // The pass finished, leaving a row it could not open.
+      status({
+        rowsToReseal: 1,
+        pass: {
+          running: false,
+          startedAt: ours.startedAt,
+          report: {
+            currentKeyId: 'kms-new',
+            interrupted: false,
+            columns: [
+              {
+                field: 'proxy_endpoints.api_key',
+                resealed: 1,
+                changedConcurrently: 0,
+                unopenable: 1,
+              },
+            ],
+          },
+        },
+      }),
+    ]);
+    let { status: final } = await dataKeysReseal({
+      realmServerUrl: 'https://realms.example.test/',
+      realmSecretSeed: SEED,
+      currentKeyId: 'kms-new',
+      fetch,
+      wait: true,
+      pollIntervalMs: 1,
+    });
+
+    expect(requests).toHaveLength(4);
+    expect(final.rowsToReseal).toBe(1);
+    expect(final.pass.report?.columns[0].unopenable).toBe(1);
+  });
+
+  it('gives up waiting after its timeout', async () => {
+    let ours = { running: true, startedAt: '2026-01-01T00:00:00.000Z' };
+    let answers: unknown[] = [{ started: true, pass: ours }];
+    for (let i = 0; i < 50; i++) {
+      answers.push(status({ pass: ours }));
+    }
+    let { fetch } = fakeServer(answers);
+    await expect(
+      dataKeysReseal({
+        realmServerUrl: 'https://realms.example.test/',
+        realmSecretSeed: SEED,
+        currentKeyId: 'kms-new',
+        fetch,
+        wait: true,
+        pollIntervalMs: 1,
+        timeoutMs: 0,
+      }),
+    ).rejects.toThrow(/did not finish in time; 2 rows were left/);
   });
 
   it('reports a refused call with its status', async () => {

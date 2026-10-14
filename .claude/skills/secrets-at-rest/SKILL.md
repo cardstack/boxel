@@ -117,6 +117,11 @@ every running process can open every row at every point, a rolling deploy
 included. Nothing reads or writes a sealed value any differently during or
 after a rotation.
 
+Start each step only once the previous step's deploy has fully rolled out, on
+the realm server and the worker alike: every boot line from the new revision,
+none from the old. A step taken mid-rollout reaches tasks the previous step
+hasn't, which is exactly the state the order of the steps exists to avoid.
+
 1. **Mint the new wrapped data key.** An admin-capable operator (the task roles
    can only `Decrypt`):
 
@@ -139,10 +144,16 @@ after a rotation.
 4. **Re-seal the stored rows.**
 
    ```sh
-   boxel realm-server data-keys reseal --realm-server <url> --wait
+   boxel realm-server data-keys reseal --realm-server <url> \
+     --current-key <new key id> --wait
    ```
 
-   The command asks for the realm secret seed (or reads
+   `--current-key` names the data key step 3 made current. A task whose current
+   key is different, such as one still on the previous revision, refuses with
+   409 instead of re-sealing rows back under the old key. With `--wait` the
+   command waits for the pass it started (polls that land on other tasks are
+   read for their row counts only) and exits non-zero if rows are left. The
+   command asks for the realm secret seed (or reads
    `BOXEL_REALM_SECRET_SEED`) and signs a five-minute operator token locally;
    the seed never leaves the machine. The realm server that answers runs the
    pass in the background: a batch at a time, every row of every column in
@@ -155,7 +166,9 @@ after a rotation.
 
 5. **Retire the old key.** `boxel realm-server data-keys status --realm-server
 <url>` lists the rows each data key sealed and `Retirable data keys`: loaded,
-   not current, and referenced by no row. Remove a retirable key's blob from
+   not current, and referenced by no row. Check that its `Current data key` is
+   the new one, since a task on another revision reports against its own
+   current key. Then remove a retirable key's blob from
    `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS` and deploy.
 
 `unopenable` rows (and a status that names `Rows reference data keys this
@@ -177,10 +190,11 @@ sealed census: proxy_endpoints.api_key rowsByKeyId=kms-3f9c0a1b2c4d5e6f=12
 `boxel realm-server` holds commands authorized only by the realm secret seed;
 it is left out of the CLI's general help. The token they sign carries an
 `operator` claim naming one family of endpoints (`data-keys` here), no user,
-and lives at most 15 minutes. The server never mints one, accepts it only on
-that family's endpoints (`GET /_data-keys`, `POST /_data-keys/reseal`), and
-refuses it everywhere a user or realm session is expected. The endpoints report
-key ids and row counts, never a value.
+and lives at most 15 minutes, measured against the server's clock. The server
+never mints one, accepts it only on that family's endpoints
+(`GET /_data-keys`, `POST /_data-keys/reseal?currentKeyId=<id>`), and refuses
+it everywhere a user or realm session is expected. The endpoints report key
+ids and row counts, never a value.
 
 ### Adding a sealed column
 
