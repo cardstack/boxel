@@ -6,7 +6,15 @@
  * from where they were when the demo closes.
  */
 import { getOwner } from '@ember/owner';
-import { click, find, visit, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  find,
+  findAll,
+  triggerEvent,
+  visit,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -27,21 +35,33 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 /**
- * Crossing first, so its tile is in view: its tape scrolls itself every
- * frame for as long as the stage is on, which makes the loop observable.
+ * Crossing first, so its tile is in view: its tape scrolls itself in a frame
+ * loop for as long as the stage is on. Circle loop's score repeats forever,
+ * so nothing but resting stops it.
  */
-const DEMOS = ['crossing', 'keyframes', 'enter'];
+const DEMOS = ['crossing', 'circle-loop', 'keyframes', 'enter'];
+
+/** the module that runs the tape's loop */
+const TAPE = '/lib/xstress-live';
 
 const stageOf = (slug: string) => `[data-gallery-tile="${slug}"] .tile-stage`;
 
 const resting = (stage: Element) => stage.classList.contains('is-resting');
 
-const runningIn = (stage: Element) =>
-  stage
-    .getAnimations({ subtree: true })
+/** animations playing in any tile's stage */
+const runningInStages = () =>
+  findAll('.tile-stage')
+    .flatMap((stage) => stage.getAnimations({ subtree: true }))
     .filter((animation) => animation.playState === 'running').length;
 
-/** painted frames, counted: a stopped loop is one that misses them */
+/**
+ * A click on a tile's title as a pointer makes it. The `click` helper also
+ * focuses the link first, and focusing a link scrolls it into view, which in
+ * the test's small container scrolls the tile being watched out of it.
+ */
+const openTile = (scope: string, slug: string) =>
+  triggerEvent(`${scope}[data-gallery-tile="${slug}"] .tile-title`, 'click');
+
 const frames = (count: number) =>
   new Promise<void>((resolve) => {
     let left = count;
@@ -51,6 +71,29 @@ const frames = (count: number) =>
     // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- counting painted frames is the point
     requestAnimationFrame(step);
   });
+
+/**
+ * How many frames a module's code asks for over a run of painted frames. A
+ * running loop asks for every one; a stopped loop asks for none. (The tape's
+ * own position is no measure: it moves under a pixel a frame, and at a device
+ * pixel ratio of 1 the browser rounds that back to where it was.)
+ */
+async function framesAskedBy(module: string, count = 10) {
+  let asked = 0;
+  let original = window.requestAnimationFrame;
+  window.requestAnimationFrame = (callback) => {
+    if (new Error().stack?.includes(module)) {
+      asked++;
+    }
+    return original.call(window, callback);
+  };
+  try {
+    await frames(count);
+  } finally {
+    window.requestAnimationFrame = original;
+  }
+  return asked;
+}
 
 module('Acceptance | Choreo gallery | covered by a demo', function () {
   module('in interact mode', function (hooks) {
@@ -88,8 +131,9 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
       await waitFor(`${stackCard(0)} ${stageOf('crossing')}`);
       let stage = find(`${stackCard(0)} ${stageOf('crossing')}`)!;
       await waitUntil(() => !resting(stage));
+      assert.true((await framesAskedBy(TAPE)) > 0, 'the tape runs in view');
 
-      await click(`${stackCard(0)} [data-gallery-tile="enter"] .tile-title`);
+      await openTile(`${stackCard(0)} `, 'enter');
       await waitFor(
         `${stackCard(1)}[data-test-stack-card="${demo('enter')}"] .demo-head h1`,
       );
@@ -100,7 +144,16 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         'the covered stage is the one that was running, still mounted',
       );
       await frames(2);
-      assert.strictEqual(runningIn(stage), 0, 'nothing in it plays');
+      assert.strictEqual(
+        runningInStages(),
+        0,
+        'nothing in any tile’s stage plays',
+      );
+      assert.strictEqual(
+        await framesAskedBy(TAPE),
+        0,
+        'and its own loop asks for no frames',
+      );
 
       await click(`${stackCard(1)} [data-test-close-button]`);
       await waitFor(stackCard(1), { count: 0 });
@@ -110,6 +163,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         stage,
         'the same stage wakes, rather than a new one starting over',
       );
+      assert.true((await framesAskedBy(TAPE)) > 0, 'its tape runs again');
     });
   });
 
@@ -163,23 +217,25 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
       await visit('/test');
       await waitFor(stageOf('crossing'));
       let stage = find(stageOf('crossing'))!;
-      let tape = stage.querySelector<HTMLElement>('[data-test-scroll]')!;
-      await waitUntil(() => !resting(stage) && tape.scrollTop > 0);
+      await waitUntil(() => !resting(stage));
+      assert.true((await framesAskedBy(TAPE)) > 0, 'the tape runs in view');
 
-      await click('[data-gallery-tile="enter"] .tile-title');
+      await openTile('', 'enter');
       await waitFor(`${stackItem('enter')} .demo-head h1`);
       assert
         .dom('.current-card')
         .hasAttribute('inert', '', 'the gallery under the stack is inert');
       await waitUntil(() => resting(stage));
       await frames(2);
-      assert.strictEqual(runningIn(stage), 0, 'nothing in the stage plays');
-      let held = tape.scrollTop;
-      await frames(10);
       assert.strictEqual(
-        tape.scrollTop,
-        held,
-        'the stage’s own loop is stopped: its tape holds its line',
+        runningInStages(),
+        0,
+        'nothing in any tile’s stage plays',
+      );
+      assert.strictEqual(
+        await framesAskedBy(TAPE),
+        0,
+        'and its own loop asks for no frames',
       );
 
       await click('[data-test-host-stack-item-close-button]');
@@ -188,12 +244,12 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         .dom('.current-card')
         .doesNotHaveAttribute('inert', 'the gallery is live again');
       await waitUntil(() => !resting(stage));
-      await waitUntil(() => tape.scrollTop !== held);
       assert.strictEqual(
         find(stageOf('crossing')),
         stage,
         'the same stage carries on',
       );
+      assert.true((await framesAskedBy(TAPE)) > 0, 'its tape runs again');
     });
   });
 });
