@@ -198,8 +198,9 @@ To run it on demand, use `pnpm seal-proxy-endpoint-keys` from
 5435; `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` and `PGPASSWORD` point it
 elsewhere. It takes the data key from the environment, as the realm server
 does. It accepts the local development key only for the development
-database, on this machine at port 5435, because a tunnel to a deployed
-database also answers on `localhost`. Against a deployed database it needs
+database, on this machine's loopback or a local socket at port 5435. A
+private address can be another machine, and a tunnel to a deployed database
+also answers on `localhost`. Against a deployed database it needs
 `SECRETS_KMS_KEY_ARN` and `SECRETS_WRAPPED_DATA_KEY`, and a role that can
 decrypt with that key, which in practice means running it inside a
 realm-server task. If rows do end up sealed under the local key, the next

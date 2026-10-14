@@ -3,7 +3,8 @@
 // The data key comes from the environment as it does for the realm server:
 // KMS when SECRETS_KMS_KEY_ARN and SECRETS_WRAPPED_DATA_KEY are set, otherwise
 // the local development key. The local key is accepted only for the
-// development database, on this machine at port 5435: a tunnel to a deployed
+// development database, on this machine's loopback or a local socket at port
+// 5435: a private address can be another machine, a tunnel to a deployed
 // database also answers on localhost, and a key sealed under the public local
 // key is no secret.
 
@@ -14,13 +15,14 @@ import {
   startSecretsAtRest,
 } from '../lib/secrets-at-rest/index.ts';
 import { sealProxyEndpointKeys } from '../lib/proxy-endpoint-keys.ts';
-import { isDeployedServerURL } from '../lib/outbound/client.ts';
 
 const DEVELOPMENT_DATABASE_PORT = '5435';
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 function isDevelopmentDatabase(): boolean {
+  let host = process.env.PGHOST || 'localhost';
   return (
-    !isDeployedServerURL(`postgres://${process.env.PGHOST || 'localhost'}`) &&
+    (LOOPBACK_HOSTS.has(host) || host.startsWith('/')) &&
     (process.env.PGPORT || DEVELOPMENT_DATABASE_PORT) ===
       DEVELOPMENT_DATABASE_PORT
   );
