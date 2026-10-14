@@ -128,6 +128,7 @@ module('Integration | tools | check-correctness', function (hooks) {
             static displayName = 'Ticket';
             @field status = contains(StatusField);
             @field customer = linksTo(Pet);
+            @field reference = linksTo(CardDef);
             @field timers = containsMany(SlaTimerField);
           }
         `,
@@ -616,6 +617,25 @@ module('Integration | tools | check-correctness', function (hooks) {
         `"customer" links to ${testRealmURL}Pet/missing, which does not exist`,
       ),
       'warning names the field and the resolved target',
+    );
+  });
+
+  test('does not flag a prefix-form link to a card that exists', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        reference: {
+          links: { self: '@cardstack/base/cards/welcome-to-boxel' },
+        },
+      },
+    });
+
+    assert.true(result.correct, 'the instance is correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.deepEqual(
+      result.warnings,
+      [],
+      'the prefix-form link resolves to an existing card',
     );
   });
 

@@ -186,6 +186,10 @@ export default class CheckCorrectnessTool extends HostBaseTool<
 
   private async checkLinkTarget(targetId: string): Promise<LinkTargetStatus> {
     try {
+      let cached = this.store.peek(targetId);
+      if (cached && !isCardErrorJSONAPI(cached)) {
+        return 'found';
+      }
       let error = this.store.peekError(targetId);
       if (!error) {
         let result = await this.store.getWithoutCache(targetId);

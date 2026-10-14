@@ -4,6 +4,8 @@ import {
   getField,
   primitive,
   relationshipEntries,
+  resolveRRIReference,
+  rri,
   type CardFields,
   type Loader,
   type LooseSingleCardDocument,
@@ -200,7 +202,12 @@ async function validateRelationships(opts: {
   checkLinkTarget: (targetId: string) => Promise<LinkTargetStatus>;
 }) {
   let { sink, instance, cardId, relationships, checkLinkTarget } = opts;
+  // Links resolve against the instance's own id, exactly as deserialization
+  // resolves them, so prefix-form (`@scope/realm/...`) and `$REALM/` links
+  // land on the same target the card itself loads.
+  let relativeTo = (instance.id as string | undefined) ?? cardId;
   let targetStatuses = new Map<string, Promise<LinkTargetStatus>>();
+  let linkChecks: { key: string; target: string }[] = [];
   for (let entry of relationshipEntries(relationships)) {
     let resolved = resolveRelationshipField(instance, entry.fieldName);
     if (resolved.kind === 'ambiguous') {
@@ -245,29 +252,51 @@ async function validateRelationships(opts: {
       );
     }
     if (typeof self === 'string' && self.length > 0) {
-      let target: string;
-      try {
-        target = new URL(self, cardId).href;
-      } catch {
+      let target = resolveLinkTarget(self, relativeTo);
+      if (!target) {
         continue;
       }
-      let status = targetStatuses.get(target);
-      if (!status) {
-        status = checkLinkTarget(target);
-        targetStatuses.set(target, status);
+      if (!targetStatuses.has(target)) {
+        targetStatuses.set(target, checkLinkTarget(target));
       }
-      let result = await status;
-      if (result === 'not-found') {
-        sink.add(
-          `"${entry.key}" links to ${target}, which does not exist; create that card or correct the link`,
-        );
-      } else if (result === 'error') {
-        sink.add(
-          `"${entry.key}" links to ${target}, which is currently in an error state`,
-        );
-      }
+      linkChecks.push({ key: entry.key, target });
     }
   }
+
+  // probe distinct targets concurrently, then report in document order
+  let results = await Promise.all(
+    linkChecks.map(({ target }) => targetStatuses.get(target)!),
+  );
+  linkChecks.forEach(({ key, target }, index) => {
+    if (results[index] === 'not-found') {
+      sink.add(
+        `"${key}" links to ${target}, which does not exist; create that card or correct the link`,
+      );
+    } else if (results[index] === 'error') {
+      sink.add(
+        `"${key}" links to ${target}, which is currently in an error state`,
+      );
+    }
+  });
+}
+
+// Returns the absolute target a link names, or undefined when it can't be
+// resolved to one (e.g. a `$REALM/` link against a URL-form base), in which
+// case nothing is judged.
+function resolveLinkTarget(
+  reference: string,
+  relativeTo: string,
+): string | undefined {
+  let target: string;
+  try {
+    target = resolveRRIReference(reference, rri(relativeTo));
+  } catch {
+    return undefined;
+  }
+  if (target.startsWith('@') || /^https?:\/\//.test(target)) {
+    return target;
+  }
+  return undefined;
 }
 
 type ResolvedRelationshipField =

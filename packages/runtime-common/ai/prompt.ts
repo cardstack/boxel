@@ -1270,6 +1270,7 @@ type CheckCorrectnessResultContent = {
 type FormattedCorrectnessSummary = {
   summary: string;
   hasErrors: boolean;
+  hasWarnings: boolean;
 };
 
 // Sent after a correctness check fails. The runner can edit source immediately
@@ -1279,7 +1280,18 @@ const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing 
 2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
-  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Mention any warnings if they exist, and if a warning points at a mistake in what you just wrote — a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist — fix it now in the same reply. Do not mention correctness or automated checks or tool calls.';
+  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Do not mention correctness or automated checks or tool calls.';
+
+// Warnings never fail the check, but they often name a mistake in what was
+// just written (a misnamed field, an invalid option, a dangling link) that
+// left the card silently incomplete. Ask for the fix, and let these rounds
+// count toward MAX_CORRECTNESS_FIX_ATTEMPTS so a warning that survives the
+// fix cannot re-ask on every write.
+const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
+  'The target passed, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool; if none are, say so in one short sentence. Do not mention correctness or automated checks or tool calls.';
+
+const CORRECTNESS_WARNINGS_LIMIT_INSTRUCTION =
+  'Summarize the results above in one short sentence, and mention the remaining warnings so the user can decide whether they matter. Do not attempt further automated fixes for them. Do not mention correctness or automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
@@ -1360,6 +1372,7 @@ function formatCorrectnessResultSummary(
   return {
     summary,
     hasErrors: errorLines.length > 0,
+    hasWarnings: warningLines.length > 0,
   };
 }
 
@@ -1476,11 +1489,13 @@ function getLatestCorrectnessCheckAttemptInfo(
     );
     let resultCard = extractCorrectnessResultCard(toolResult);
     let status = toolResult.content['m.relates_to']?.key;
+    // A pass that still carries warnings asks for a fix, so it keeps the
+    // attempt count running rather than resetting it.
     let succeeded =
       status === 'applied' &&
       Boolean(resultCard) &&
       resultCard!.correct === true &&
-      resultCard!.errors.filter(
+      [...resultCard!.errors, ...resultCard!.warnings].filter(
         (entry) => typeof entry === 'string' && entry.trim().length,
       ).length === 0;
     return { attempt, succeeded };
@@ -1515,9 +1530,18 @@ function toCheckCorrectnessResultContent(
     .join('\n\n');
 
   if (!formattedSummary.hasErrors) {
+    if (!formattedSummary.hasWarnings) {
+      return {
+        toolMessage,
+        followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      };
+    }
     return {
       toolMessage,
-      followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      followUpUserMessage:
+        attemptNumber >= MAX_CORRECTNESS_FIX_ATTEMPTS
+          ? CORRECTNESS_WARNINGS_LIMIT_INSTRUCTION
+          : CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
     };
   }
 
