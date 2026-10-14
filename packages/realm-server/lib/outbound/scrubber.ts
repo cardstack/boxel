@@ -6,7 +6,7 @@
 // the response's headers and body through the scrubber. A registered value is
 // found:
 //
-// - in full, at any length, ignoring ASCII case;
+// - in full, at any length, ignoring ASCII case, its vendor prefix included;
 // - as any run at least `MIN_PARTIAL_LENGTH` bytes long of the part after a
 //   listed vendor prefix (see `publicPrefix`), ignoring ASCII case;
 // - percent-encoded (either hex case, mixed with literal characters), as JSON
@@ -473,11 +473,15 @@ export class CredentialScrubber {
       return;
     }
     this.registered.add(value);
-    // The whole value, at any length, so a full echo is removed in full.
-    this.addForms(value, false);
-    let secret = value.slice(publicPrefix(value).length);
+    let prefix = publicPrefix(value);
+    // The prefix and enough of the secret to identify it, so an echo is
+    // removed prefix included; a short value is matched whole, at any length.
+    // Only this much, so the stream's hold-back doesn't grow with the key.
+    this.addForms(value.slice(0, prefix.length + MIN_PARTIAL_LENGTH), false);
+    let secret = value.slice(prefix.length);
     if (secret.length >= MIN_PARTIAL_LENGTH) {
-      // And every run of the secret part long enough to identify it.
+      // And every run of the secret part long enough to identify it, which
+      // overlaps the needle above, so a full echo is one match.
       this.addForms(secret, true);
     }
   }

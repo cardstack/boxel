@@ -226,15 +226,18 @@ await outboundFetch({ ..., credential, scrubber });
 
 ### What it matches
 
-- the whole value, at any length, ignoring ASCII case (base64 forms only from
-  8 characters up), so a full echo is removed in full, prefix included;
+- the value's vendor prefix plus its first 10 secret bytes, matched whole and
+  ignoring ASCII case (a short value is matched whole, at any length; base64
+  forms only from 8 characters up). This overlaps the partial runs below, so
+  any echo with at least 10 secret bytes is removed in one piece, prefix
+  included;
 - any run at least `MIN_PARTIAL_LENGTH` (10) bytes long of the value after its
   vendor prefix, ignoring ASCII case. A vendor's `sk-****<last 12>` hint is
   removed; a shorter run is left alone. Vendor prefixes are a fixed list in
   `scrubber.ts` (`PUBLIC_PREFIXES`: `sk-or-v1-`, `sk-ant-api03-`, `sk-proj-`,
   `ghp_`, `xoxb-`, `AIza`, …), matched longest first. They identify no one,
-  so text about a key format passes through, and a truncated echo may read
-  `sk-or-v1-[REDACTED]`. They are listed rather than recognized by shape: a
+  so text about a key format passes through. They are listed rather than
+  recognized by shape: a
   pattern would also take the start of a random base64url tail (`Ab3dE_…`)
   for a prefix. A key from a vendor that isn't listed simply has no prefix,
   so every run of it counts. To add a vendor, add its fixed prefix to the
@@ -258,8 +261,9 @@ At a chunk boundary the stream holds back only the tail that could still be
 the start of a match. That is the trailing run of bytes that can appear in a
 registered value (in any of its forms) or in an escape sequence, and it is
 never longer than `holdbackBytes`: 12 bytes (the longest escape sequence)
-per character of the longest registered form, plus one, which is about
-0.6–0.8 KB for a typical 40–60 character key. A byte that can't belong
+times one more than the longest whole needle, which is at most the longest
+vendor prefix plus 10 characters, so about 170–300 bytes whatever the key's
+length. A byte that can't belong
 to a match releases everything before it. An SSE event ends in `\n\n`, so a
 streamed generation is delivered event by event without waiting for the next
 one. The stream also keeps the last `holdbackBytes` it delivered as lookbehind,

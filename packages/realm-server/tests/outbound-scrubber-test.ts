@@ -176,13 +176,26 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('removes a truncated echo of a prefixed key down to its public prefix', function (assert) {
+    test('removes a truncated echo of a prefixed key, prefix included', function (assert) {
       assert.strictEqual(
         scrubberFor(PREFIXED_KEY).scrubText(
           `bad key ${PREFIXED_KEY.slice(0, 24)}…`,
         ),
-        `bad key sk-or-v1-${REDACTED}…`,
+        `bad key ${REDACTED}…`,
       );
+    });
+
+    test("holds back the same short window whatever the key's length", function (assert) {
+      let short = scrubberFor(PREFIXED_KEY).holdbackBytes;
+      let long = scrubberFor(
+        `sk-or-v1-${'Zq0f3a9c27'.repeat(200)}`,
+      ).holdbackBytes;
+      assert.strictEqual(
+        long,
+        short,
+        'a 2,000-character key holds back no more',
+      );
+      assert.true(short < 512, `${short} bytes`);
     });
 
     // A base64url tail can open with a short letter-led segment and a `-` or
