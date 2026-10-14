@@ -38,7 +38,6 @@ import {
   type StoredMeta,
 } from './executors.ts';
 import { isSplicedSource, type SplicedSource } from '../spliced-content.ts';
-import { Deferred } from '../deferred.ts';
 import { emitOperationPerf } from './telemetry.ts';
 import {
   OperationFailure,
@@ -204,9 +203,6 @@ export interface BatchCore {
     // The commit answered ahead of its index pass, by not waiting for it or
     // by stopping at `indexWaitBudgetMs`, so the pass is still to land.
     indexPending?: true;
-    // Beside `indexPending`: settles, without rejecting, once that pass has
-    // landed and been announced.
-    landed?: Promise<void>;
   }>;
   serializeCard(
     doc: LooseSingleCardDocument,
@@ -297,8 +293,7 @@ export interface CommitBatchOptions {
   // HTTP bounds it, so a stalled pool costs them a pending generation rather
   // than a write that never answers. It bounds only the batch's own pass: the
   // drain ahead of staging is what the batch's serialization resolves
-  // against. A batch that removes anything waits regardless: a removal keeps
-  // its file locks until its pass has run.
+  // against.
   indexWaitBudgetMs?: number;
   // A caller's own precondition, run inside the write lock and before
   // anything is staged. It exists because a precondition evaluated before
@@ -443,12 +438,9 @@ export async function commitBatch(
   // the only reader in the system that did not.
   let settings: Promise<Record<string, JsonValue>> | undefined;
   let realmConfig = () => (settings ??= core.realmConfig());
-  // The caller's answer, which can come before the locked section ends: a
-  // batch that removed something and answered ahead of its index pass keeps
-  // its locks until that pass has landed (see `commitStaged`).
-  let answer = new Deferred<BatchEntryResult[]>();
-  core
-    .withWriteLocks(lockPaths(entries, paths, lids), async (releaseLocks) => {
+  return await core.withWriteLocks(
+    lockPaths(entries, paths, lids),
+    async (releaseLocks) => {
       timings?.add('lock', Date.now() - lockRequestedAt);
       // Drained inside the lock, before anything is staged. Staging serializes
       // each card against its type's definition, and a module written moments
@@ -535,10 +527,8 @@ export async function commitBatch(
       // nothing — a caller standing in for the realm — leaves the whole commit
       // here.
       let cursor = timings?.cursor();
-      let heldUntil: Promise<void> | undefined;
-      let results: BatchEntryResult[];
       try {
-        results = await commitStaged(
+        return await commitStaged(
           core,
           entries,
           staged,
@@ -547,18 +537,12 @@ export async function commitBatch(
           opts,
           cursor,
           releaseLocks,
-          (landed) => {
-            heldUntil = landed;
-          },
         );
       } finally {
         cursor?.mark('commit');
       }
-      answer.fulfill(results);
-      await heldUntil;
-    })
-    .then(undefined, (err: unknown) => answer.reject(err));
-  return await answer.promise;
+    },
+  );
 }
 
 // Stage a batch the way `commitBatch` does, without taking its write locks or
@@ -2273,12 +2257,6 @@ async function commitStaged(
   // and reads nothing off them: the results are assembled from what this batch
   // staged and what the commit returned.
   releaseLocks: () => void,
-  // Handed the pass a commit that removed something answered ahead of. Such
-  // a commit never calls `releaseLocks` — a removal's locks have to outlast
-  // its pass, or a writer recreating the path is folded into the pending
-  // removal — so the batch keeps them until this settles, after its caller
-  // already has the answer.
-  holdLocksUntil: (landed: Promise<void>) => void,
 ): Promise<BatchEntryResult[]> {
   // One entry per file, in batch order. Two entries may name one card, and
   // the second built on the first rather than racing it — it merged over the
@@ -2452,9 +2430,6 @@ async function commitStaged(
       onDurable: releaseLocks,
     },
   );
-  if (deletes.length > 0 && committed.landed) {
-    holdLocksUntil(committed.landed);
-  }
   // Emitted here rather than where the record was built: a staged entry is not
   // a write yet, and until the commit returns there is nothing to say a program
   // did. Every entry that carries a record is one the commit landed, so the

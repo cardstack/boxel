@@ -581,7 +581,11 @@ export class IndexRunner {
     {
       changes,
     }: {
-      changes: { url: URL; operation: 'update' | 'delete' }[];
+      changes: {
+        url: URL;
+        operation: 'update' | 'delete';
+        contested?: boolean;
+      }[];
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
@@ -593,11 +597,28 @@ export class IndexRunner {
     let swapMs: number | undefined;
     let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
-    for (let { url, operation } of changes) {
+    let contested = new Set<string>();
+    for (let { url, operation, contested: isContested } of changes) {
       if (operation === 'delete') {
         operations.set(url.href, 'delete');
       } else if (!operations.has(url.href)) {
         operations.set(url.href, 'update');
+      }
+      if (isContested) {
+        contested.add(url.href);
+      }
+    }
+    // A removal the queue merged with a write of the same url is decided by
+    // what the realm holds now: a file written again after its removal is on
+    // disk, and indexing it as removed would drop the row of a card that
+    // exists. So a writer recreating a path never has to wait for the
+    // removal's pass, and a removal releases its locks once its bytes are gone.
+    for (let href of contested) {
+      if (operations.get(href) !== 'delete') {
+        continue;
+      }
+      if (await current.#reader.readFile(new URL(href))) {
+        operations.set(href, 'update');
       }
     }
     let urls = [...operations.keys()].map((href) => new URL(href));

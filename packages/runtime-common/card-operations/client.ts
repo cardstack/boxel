@@ -458,14 +458,16 @@ export type OperationsSubject = InstanceSubject | TypeSubject;
 export interface OperationsOptions {
   // Answer a write once its bytes are durable instead of once the realm has
   // indexed it. The write still lands and is still indexed; what the caller
-  // gives up is reading it back through the index straight away. A read of
-  // the card itself still sees it — the realm holds a card read until the
-  // reader's own pending indexing has landed — but a search can miss it until
-  // its index event arrives. Each written entry's result reports its
-  // `generation` as null and `indexPending` as true.
+  // gives up is reading it back through the index straight away. A card+json
+  // GET by the writer waits for the writer's own pending indexing on the
+  // replica it reaches, for at most `READ_INDEX_DRAIN_BUDGET_MS`; a `read()`
+  // through this bucket and any search can miss the write until its index
+  // event arrives. Each written entry's result reports its `generation` as
+  // null and `indexPending` as true.
   //
   // Worth it for a write whose caller does not read the cards back, or reads
-  // them only by id; not for one that searches for what it just wrote. Off by
+  // them only from the index event that follows; not for one that reads or
+  // searches for what it just wrote. Off by
   // default, in which case the realm waits for the write's own pass — for a
   // few seconds at most, past which it answers as if this were set.
   skipIndexWait?: boolean;

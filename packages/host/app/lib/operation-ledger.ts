@@ -387,17 +387,26 @@ export default class OperationLedger {
       // entries queued behind it, which were computed on top of state that
       // is now gone, are rejected.
       //
-      // The version rides through the re-read. A write that is not confirmed
-      // still wrote, and the realm reported the version of the bytes it
-      // stored — which is exactly what the re-read then brings back. The
-      // realm answers a write once its indexing has settled or, past a few
-      // seconds, with that indexing still pending; either way the re-read is
-      // a card read, which the realm holds until the reader's own pending
-      // indexing has landed. Dropping it would
-      // leave the next operation with no base to name either, and a card
-      // whose first unconfirmed write is its last confirmable one: the chain
-      // could never start.
-      await this.#abort(chain, entry, result?.version);
+      // The version rides through the re-read when the realm answered after
+      // indexing the write. A write that is not confirmed still wrote, and
+      // the realm reported the version of the bytes it stored — which is
+      // exactly what the re-read then brings back. Dropping it would leave
+      // the next operation with no base to name either, and a card whose
+      // first unconfirmed write is its last confirmable one: the chain could
+      // never start.
+      //
+      // Not when the realm answered with the write's indexing still pending.
+      // The re-read can then bring back the card as it was before the write,
+      // and recording the write's version over that state would also have the
+      // store take the write's own index event as already held — the one
+      // event that would correct it. Left unrecorded, the event re-reads the
+      // card once the write is indexed, and the next operation names no base
+      // until then.
+      await this.#abort(
+        chain,
+        entry,
+        result?.indexPending ? undefined : result?.version,
+      );
       return answer;
     })();
   }

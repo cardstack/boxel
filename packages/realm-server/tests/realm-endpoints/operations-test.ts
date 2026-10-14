@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
 import fsExtra from 'fs-extra';
-const { existsSync, readFileSync } = fsExtra;
+const { existsSync, readFileSync, removeSync } = fsExtra;
 import type { Test, SuperTest } from 'supertest';
 import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -15,12 +15,20 @@ import {
   codeRefFromInternalKey,
   rri,
   SupportedMimeType,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
+  QueuePublisher,
   Realm,
 } from '@cardstack/runtime-common';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  indexingWriterLane,
+  makeIncrementalArgsWithCallerMetadata,
+  mapIncrementalDoneResult,
+} from '@cardstack/runtime-common/jobs/indexing';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
@@ -500,6 +508,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     let serverRequest: SuperTest<Test>;
     let testRealmHttpServer: Server;
     let dir: DirResult;
+    let publisher: QueuePublisher;
 
     setupPermissionedRealmCached(hooks, {
       mode: 'before',
@@ -517,6 +526,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         serverRequest = args.request;
         testRealmHttpServer = args.testRealmHttpServer;
         dir = args.dir;
+        publisher = args.publisher;
       },
     });
 
@@ -1526,50 +1536,61 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(read.status, 200, 'the card is indexed afterwards');
       });
 
-      test("a removal that answers ahead of its pass holds the file's locks until the pass lands", async function (assert) {
-        let id = await storedPerson('removed', 'Removed');
-        let path = `${localPath(id)}.json`;
-        let stored = readFileSync(realmFile(path), 'utf8');
-        await installSlowSwap();
-
-        let since = Date.now();
-        let response = await post(envelope(invoke('delete', { href: id })));
-        let answeredMs = Date.now() - since;
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.true(
-          answeredMs < SLOW_SWAP_SECONDS * 1000,
-          `the removal answered in ${answeredMs} ms, before its pass could land`,
-        );
-        assert.false(existsSync(realmFile(path)), 'the file is gone');
-
-        // Writing the same path again while the removal's pass is pending: if
-        // the removal had let its locks go, this write would join the pending
-        // pass, which resolves the path as removed and drops its row.
-        let recreated = false;
-        let recreating = realm.write(path, stored).then(() => {
-          recreated = true;
+      // An index pass the queue merged a removal and a write of the same file
+      // into, published the way the queue leaves it: the removal marked
+      // contested.
+      async function indexContestedRemoval(fileURL: string) {
+        let job = await publisher.publish({
+          jobType: 'incremental-index',
+          ...indexingWriterLane(realm.url, undefined),
+          timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          priority: userInitiatedPriority,
+          args: makeIncrementalArgsWithCallerMetadata(
+            {
+              realmURL: realm.url,
+              realmUsername: await realm.getRealmOwnerUsername(),
+              ignoreData: {},
+              changes: [{ url: fileURL, operation: 'delete', contested: true }],
+            },
+            null,
+          ),
+          mapResult: mapIncrementalDoneResult(null),
         });
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        assert.false(
-          recreated,
-          "a write of the removed path waits for the removal's pass",
-        );
+        await job.done;
+      }
 
-        await removeSlowSwap();
-        await recreating;
-        await realm.incrementalIndexing();
-        let read = await request
-          .get(`/${localPath(id)}`)
-          .set('Accept', SupportedMimeType.CardJson);
-        assert.strictEqual(
-          read.status,
-          200,
-          'the recreated card is indexed rather than lost to the removal',
+      async function indexedAsRemoved(fileURL: string): Promise<boolean> {
+        let [row] = (await testDbAdapter.execute(
+          `select is_deleted from boxel_index where url = $1 and type = 'instance'`,
+          { bind: [fileURL] },
+        )) as { is_deleted: boolean | null }[];
+        return !row || Boolean(row.is_deleted);
+      }
+
+      test('a contested removal of a file that is on disk indexes the file', async function (assert) {
+        // A writer recreated the path while the removal's pass sat in the
+        // queue, so the pass carries both, and the file is there.
+        let id = await storedPerson('contested-kept', 'Kept');
+        let fileURL = `${id}.json`;
+
+        await indexContestedRemoval(fileURL);
+
+        assert.false(
+          await indexedAsRemoved(fileURL),
+          'the card stays in the index, as the file it describes is on disk',
         );
-        assert.strictEqual(
-          read.body.data.attributes.firstName,
-          'Removed',
-          'with the content written after the removal',
+      });
+
+      test('a contested removal of a file that is gone removes it', async function (assert) {
+        let id = await storedPerson('contested-gone', 'Gone');
+        let fileURL = `${id}.json`;
+        removeSync(realmFile(`${localPath(id)}.json`));
+
+        await indexContestedRemoval(fileURL);
+
+        assert.true(
+          await indexedAsRemoved(fileURL),
+          'the card leaves the index, as its file is gone',
         );
       });
 

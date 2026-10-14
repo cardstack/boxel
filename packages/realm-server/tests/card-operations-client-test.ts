@@ -220,7 +220,11 @@ interface Sent {
   realmURL: string;
   method: OperationsMethod;
   envelope: OperationsEnvelope;
-  opts?: { clientRequestId?: string; adopted?: string[] };
+  opts?: {
+    clientRequestId?: string;
+    adopted?: string[];
+    skipIndexWait?: boolean;
+  };
 }
 
 // One search a query asked the session for: the wire query it resolved to, the

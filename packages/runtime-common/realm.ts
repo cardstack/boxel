@@ -883,10 +883,6 @@ function maskLoggedURL(urlString: string): string {
 // Definitions, skipQueryBackedExpansion) that header also triggers, so an
 // ordinary interactive save can take it safely.
 //
-// A removal answers early too, but keeps its file locks until its pass has
-// run, so a writer recreating the path waits for the removal to land rather
-// than being folded into it.
-//
 // Motivation: the default synchronous-indexing contract makes a single-card
 // save wait twice on the realm's indexing — once before it stages and once for
 // its own pass — and the second of those is the whole fan-out of the card
@@ -2199,12 +2195,6 @@ export interface CommitBatchResult {
   // changed nothing on disk queues no pass, and another writer's pass for the
   // same files may still be in flight.
   indexPending?: true;
-  // Present beside `indexPending`: settles once that pass has landed and its
-  // index event has been broadcast, and never rejects (a failure there is
-  // logged where it happens). A caller holding the write locks of a commit
-  // that removed something keeps them until this settles — see `onDurable`
-  // for why a removal's locks have to outlast its pass.
-  landed?: Promise<void>;
 }
 
 export interface WriteOptions {
@@ -2238,11 +2228,6 @@ export interface WriteOptions {
   // invalidations are still broadcast, and `realm.incrementalIndexing()` still
   // covers it until that broadcast is sent. Absent, the wait is unbounded.
   // Ignored when `waitForIndex` is false, which does not wait at all.
-  //
-  // A write that removes anything is bounded too. Its caller keeps the
-  // removal's file locks past the answer, until `CommitBatchResult.landed`,
-  // so a writer recreating the path still cannot be folded into the pending
-  // removal.
   //
   // Only the write's own final pass is bounded. The drain ahead of staging and
   // a mixed batch's module flush are what the write's serialization resolves
@@ -5407,27 +5392,17 @@ export class Realm {
     // the caller may or may not be waiting for — so this is the boundary that
     // says how much of a slow write was the write.
     stageCursor?.mark('persist');
-    // And the boundary the write locks end at, for a commit that only wrote.
-    // Indexing reads the files back off disk rather than from anything this
-    // commit is holding, so the pass below indexes whatever the last write
-    // left — which is what the realm should hold however the writers
-    // interleaved.
+    // And the boundary the write locks end at. Indexing reads the files back
+    // off disk rather than from anything this commit is holding, so the pass
+    // below indexes whatever the last write left — which is what the realm
+    // should hold however the writers interleaved.
     //
-    // A commit that REMOVED something keeps its locks to the end instead,
-    // because a removal's place in the order is not settled when its bytes are
-    // gone. An index pass resolves a removal and a write of one url as the
-    // removal, whichever reached it first — `mergeIncrementalChanges` at the
-    // queue and the visit loop's own `operations` map both give `delete`
-    // precedence, and the visit is then skipped without asking whether the
-    // file came back. So a writer that recreated the path while this pass was
-    // still pending would have its write folded into this removal and the row
-    // dropped for a file that is on disk. Holding until the pass has run is
-    // what keeps the two ordered; the durable write alone does not, and
-    // neither would holding until the job is merely enqueued, since the
-    // absorption happens for as long as that job sits unclaimed.
-    if (deleteURLs.length === 0) {
-      options?.onDurable?.();
-    }
+    // That holds for a removal too. A writer that recreates a removed path
+    // while the removal's pass is still pending is absorbed into that pass,
+    // and the queue marks the url contested (`mergeIncrementalChanges`); the
+    // pass then indexes it by whether the file is on disk, rather than by
+    // which publish reached the queue first.
+    options?.onDurable?.();
     // What each file this commit wrote now holds, named the way the event's
     // `invalidations` names a card. That spelling is not a second opinion about
     // it: the index reports its own row keys and `RealmIndexUpdater` maps them
@@ -5459,10 +5434,9 @@ export class Realm {
     // the pass and everything that follows it, which the write no longer
     // waits for.
     let landingAfterAnswer: Promise<void> | undefined;
-    // Set whenever the write answers ahead of its own pass, whether it stopped
-    // waiting or never waited: settles once the pass has landed and been
-    // announced. See `CommitBatchResult.landed`.
-    let landed: Promise<void> | undefined;
+    // Whether the write answers ahead of its own pass, whether it stopped
+    // waiting or never waited.
+    let answeredAhead = false;
     if (changes.length > 0) {
       if (waitForIndex) {
         let landing = (async () => {
@@ -5499,7 +5473,8 @@ export class Realm {
               initiatingUser,
             ),
           );
-          landed = this.#trackLandingAfterAnswer(
+          answeredAhead = true;
+          this.#trackLandingAfterAnswer(
             landingAfterAnswer,
             changes,
             clientRequestId,
@@ -5571,7 +5546,8 @@ export class Realm {
         // caller has its answer, so they are nobody's latency and this write
         // reports no wait for them.
         stageCursor?.mark('enqueue');
-        landed = settled.catch((err: unknown) => {
+        answeredAhead = true;
+        settled.catch((err: unknown) => {
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
@@ -5629,7 +5605,7 @@ export class Realm {
         created: createdMap.get(path)?.createdAt ?? null,
       })),
       generation: indexGeneration ?? null,
-      ...(landed ? { indexPending: true as const, landed } : {}),
+      ...(answeredAhead ? { indexPending: true as const } : {}),
     };
   }
 
