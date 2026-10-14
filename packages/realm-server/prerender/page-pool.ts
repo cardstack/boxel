@@ -226,6 +226,9 @@ export type ConsoleErrorEntry = {
   revoked?: boolean;
 };
 
+// How one refill settled, as reported to the callers waiting on it.
+type RefillOutcome = { failed: false } | { failed: true; error: unknown };
+
 const log = logger('prerenderer');
 const chromeLog = logger('prerenderer-chrome');
 const STANDBY_CREATION_RETRIES = 3;
@@ -569,6 +572,11 @@ export class PagePool {
   // Bound on one caller's wait for the shared standby refill; see
   // `DEFAULT_STANDBY_REFILL_WAIT_MS`.
   #standbyRefillWaitMs: number;
+  // Callers waiting on each refill promise; see `#onRefillSettled`.
+  #refillWaiters = new WeakMap<
+    Promise<void>,
+    Set<(outcome: RefillOutcome) => void>
+  >();
 
   constructor(options: {
     maxPages: number;
@@ -1208,11 +1216,13 @@ export class PagePool {
       throwIfAborted(signal);
     }
     if (entry.affinityKey !== affinityKey) {
-      // The only path that returns an entry tagged for a different
-      // affinity is the brand-new-affinity cross-affinity-steal
-      // fallback in `#selectEntryForAffinity`. It runs only when
-      // `#ensureStandbyPool` couldn't produce a standby — usually a
-      // transient browser-context creation failure. The reassignment
+      // The only paths that return an entry tagged for a different
+      // affinity are the cross-affinity steals in
+      // `#selectEntryForAffinityOnce`: a brand-new affinity's fallback,
+      // and a module / command sub-render's idle-tab steal past a
+      // stalled refill. Both run only when the standby refill didn't
+      // produce a standby in time — a browser-context creation failure,
+      // or a refill hung on the browser. The reassignment
       // below keeps the donor entry's `pageId`, so callers that ask
       // "did I get a distinct page from the previous render?" will
       // observe equality across two different affinities. Surfacing
@@ -1223,7 +1233,7 @@ export class PagePool {
       log.warn(
         `cross-affinity steal: reassigning pageId=${entry.pageId} ` +
           `from ${entry.affinityKey} to ${affinityKey} ` +
-          `(standby refill failed to produce a fresh tab; ` +
+          `(standby refill produced no fresh tab in time; ` +
           `standbys=${this.#standbys.size} creating=${this.#creatingStandbys} ` +
           `active=${this.#poolEntryCount()} maxPages=${this.#maxPages})`,
       );
@@ -1513,16 +1523,22 @@ export class PagePool {
     this.#creatingStandbys = 0;
   }
 
-  async #ensureStandbyPool(): Promise<void> {
+  // Returns the shared refill promise itself, never a wrapper around it. A
+  // refill can hang on a browser call that never answers, and every reaction
+  // attached to it is then retained for as long as it hangs, so a wrapper
+  // per call would grow with the request rate. Callers that only kick the
+  // refill attach nothing; the one rejection handler is attached here, when
+  // the refill starts.
+  #ensureStandbyPool(): Promise<void> {
     if (this.#ensuringStandbys) {
       // A request that lands mid-refill may carry news the running pass has
       // already read past — a close that freed budget after the pass found
       // none — so it buys one more pass rather than vanishing into the dedup.
       this.#refillRequestedDuringRefill = true;
-      return await this.#ensuringStandbys;
+      return this.#ensuringStandbys;
     }
     let generation = this.#closeGeneration;
-    this.#ensuringStandbys = (async () => {
+    let refill = (async () => {
       do {
         this.#refillRequestedDuringRefill = false;
         await this.#ensureStandbyPoolInternal();
@@ -1537,72 +1553,118 @@ export class PagePool {
       // free and the refill failed.
       this.#wakeTabWaiters();
     });
-    return await this.#ensuringStandbys;
+    // A refill nobody awaits — e.g. one kicked while the browser is
+    // unreachable — must not surface as an unhandled rejection, which
+    // crashes the process under Node's `--unhandled-rejections=strict`.
+    refill.catch((e) => {
+      log.debug('standby refill failed:', e);
+    });
+    this.#ensuringStandbys = refill;
+    return refill;
   }
 
   // Fire-and-forget kick used by call sites that don't need to await
   // refill completion (post-acquire warming, post-eviction warming,
-  // pre-acquire warming inside `getPage`). Always attaches `.catch`
-  // so an unhandled rejection from `#ensureStandbyPool` — e.g. when
-  // the browser is unreachable — can't crash the process under
-  // Node's `--unhandled-rejections=strict` mode.
+  // pre-acquire warming inside `getPage`). The refill's failure handler
+  // is attached once by `#ensureStandbyPool`.
   #kickStandbyRefill(reason: string): void {
-    void this.#ensureStandbyPool().catch((e) => {
-      log.debug(`background standby refill failed (${reason}):`, e);
-    });
+    log.trace(`kicking standby refill (${reason})`);
+    void this.#ensureStandbyPool();
   }
 
   // One caller's wait on the shared standby refill, bounded by that caller's
   // signal and by `#standbyRefillWaitMs`. Only the wait is per caller: the
   // refill keeps running past either bound, with its extra pass and its
   // wake of parked callers intact, because other callers are counting on the
-  // standby it makes. Resolves `true` once the refill settles, so a standby
-  // it made is ready to commandeer, and `false` when the budget runs out
-  // first. The caller then carries on down its selection path to the
-  // cross-affinity steal or the freed-tab wait, which the refill wakes when
-  // it settles. Rejects with `PrerenderCancelledError` the moment the signal
-  // aborts, and with the refill's own error if it fails within the budget.
-  async #awaitStandbyRefill(signal?: AbortSignal): Promise<boolean> {
+  // standby it makes. Resolves `undefined` once the refill settles, so a
+  // standby it made is ready to commandeer. When the budget runs out first it
+  // resolves to `{ stalled }`, the stalled refill, boxed so the outer promise
+  // doesn't adopt it and hang along with it. The caller carries it through
+  // re-selection (`#refillStillStalled`) so it never waits on that refill
+  // twice. The caller then carries on down its selection path to the
+  // cross-affinity steal or the freed-tab wait. Rejects with
+  // `PrerenderCancelledError` the moment the signal aborts, and with the
+  // refill's own error if it fails within the budget.
+  async #awaitStandbyRefill(
+    signal?: AbortSignal,
+  ): Promise<{ stalled: Promise<void> } | undefined> {
     throwIfAborted(signal);
     let refill = this.#ensureStandbyPool();
-    return await new Promise<boolean>((resolve, reject) => {
-      let onAbort = () => {
-        cleanup();
-        reject(
-          new PrerenderCancelledError({
-            state: 'queued',
-            reason:
-              typeof signal?.reason === 'string' ? signal.reason : undefined,
-          }),
-        );
-      };
-      let timer = setTimeout(() => {
-        cleanup();
-        log.warn(
-          `standby refill did not settle within ${this.#standbyRefillWaitMs}ms; ` +
-            `selecting a tab without it`,
-        );
-        resolve(false);
-      }, this.#standbyRefillWaitMs);
-      let cleanup = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-      // Both handlers stay attached after the caller stops waiting, so a
-      // refill that fails later is absorbed here rather than surfacing as
-      // an unhandled rejection.
+    return await new Promise<{ stalled: Promise<void> } | undefined>(
+      (resolve, reject) => {
+        let onAbort = () => {
+          cleanup();
+          reject(
+            new PrerenderCancelledError({
+              state: 'queued',
+              reason:
+                typeof signal?.reason === 'string' ? signal.reason : undefined,
+            }),
+          );
+        };
+        let timer = setTimeout(() => {
+          cleanup();
+          log.warn(
+            `standby refill did not settle within ${this.#standbyRefillWaitMs}ms; ` +
+              `selecting a tab without it`,
+          );
+          resolve({ stalled: refill });
+        }, this.#standbyRefillWaitMs);
+        let stopWaiting = this.#onRefillSettled(refill, (outcome) => {
+          cleanup();
+          if (outcome.failed) {
+            reject(outcome.error);
+          } else {
+            resolve(undefined);
+          }
+        });
+        let cleanup = () => {
+          clearTimeout(timer);
+          signal?.removeEventListener('abort', onAbort);
+          stopWaiting();
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+      },
+    );
+  }
+
+  // Registers `waiter` for the settlement of one refill, and returns the
+  // function that unregisters it. Each refill gets a single reaction, which
+  // fans out to the waiters registered at the time it settles. Waiters are
+  // removed when they stop waiting, so callers that time out or abort on a
+  // refill that never settles leave nothing behind.
+  #onRefillSettled(
+    refill: Promise<void>,
+    waiter: (outcome: RefillOutcome) => void,
+  ): () => void {
+    let waiters = this.#refillWaiters.get(refill);
+    if (!waiters) {
+      let registered = new Set<typeof waiter>();
+      waiters = registered;
+      this.#refillWaiters.set(refill, registered);
       refill.then(
         () => {
-          cleanup();
-          resolve(true);
+          for (let settle of [...registered]) settle({ failed: false });
         },
         (error) => {
-          cleanup();
-          reject(error);
+          for (let settle of [...registered]) settle({ failed: true, error });
         },
       );
-    });
+    }
+    let registered = waiters;
+    registered.add(waiter);
+    return () => {
+      registered.delete(waiter);
+    };
+  }
+
+  // True when `stalledRefill` is a refill this caller already waited out its
+  // budget on and it is still the one running. A refill started since then is
+  // a fresh attempt and is worth waiting on.
+  #refillStillStalled(stalledRefill: Promise<void> | undefined): boolean {
+    return (
+      stalledRefill !== undefined && stalledRefill === this.#ensuringStandbys
+    );
   }
 
   async #ensureStandbyPoolInternal(): Promise<void> {
@@ -1678,12 +1740,16 @@ export class PagePool {
   // it the caller would throw — which the Prerenderer answers by restarting
   // the whole browser — or, for a module / command sub-render, queue behind
   // the very render it is blocking. The wait ends with the caller's signal.
+  // `stalledRefill` is a refill this caller already waited out its budget
+  // on; re-selection skips waiting on it again, so a freed tab is taken at
+  // once rather than lost to its own affinity during a second wait.
   async #selectOnceTabFrees(
     affinityKey: string,
     queue: PrerenderQueue,
     signal: AbortSignal | undefined,
     priority: number,
     tabStartupMs: number,
+    stalledRefill: Promise<void> | undefined,
   ): Promise<{
     entry: PoolEntry;
     reused: boolean;
@@ -1697,6 +1763,7 @@ export class PagePool {
       queue,
       signal,
       priority,
+      stalledRefill,
     );
     result.tabStartupMs += tabStartupMs + (Date.now() - startedAt);
     return result;
@@ -2757,6 +2824,9 @@ export class PagePool {
     queue: PrerenderQueue,
     signal?: AbortSignal,
     priority: number = 0,
+    // A refill this caller already waited out its budget on, carried in
+    // from a parked selection; see `#selectOnceTabFrees`.
+    stalledRefillFromParked?: Promise<void>,
   ): Promise<{
     entry: PoolEntry;
     reused: boolean;
@@ -2770,11 +2840,11 @@ export class PagePool {
     tabStartupMs: number;
   }> {
     let tabStartupMs = 0;
-    // Set once this caller's wait on the shared refill runs out its budget
-    // (`#awaitStandbyRefill`). The refill waits further down would be waits
-    // on that same refill, so they are skipped and the caller moves on to the
-    // steal or the freed-tab wait.
-    let refillStalled = false;
+    // The refill this caller waited out its budget on
+    // (`#awaitStandbyRefill`). While it is still the one running, every
+    // refill wait in this selection would be a wait on it again, so they are
+    // skipped and the caller moves on to the steal or the freed-tab wait.
+    let stalledRefill = stalledRefillFromParked;
     // The two standby-refill await sites below are intentionally
     // INLINED as `if (current < desired) { await ... }` rather than
     // pulled into a helper. `await asyncHelper()` yields one
@@ -2881,9 +2951,11 @@ export class PagePool {
       // produce the right shape: no spurious creation when not needed,
       // wait when needed.
       if (queue !== 'file' && entryList.length < this.#affinityTabMax) {
-        let startedAt = Date.now();
-        refillStalled = !(await this.#awaitStandbyRefill(signal));
-        tabStartupMs += Date.now() - startedAt;
+        if (!this.#refillStillStalled(stalledRefill)) {
+          let startedAt = Date.now();
+          stalledRefill = (await this.#awaitStandbyRefill(signal))?.stalled;
+          tabStartupMs += Date.now() - startedAt;
+        }
         let refilled = this.#commandeerDormantTab(affinityKey, {
           standbyOnly: true,
         });
@@ -2899,11 +2971,11 @@ export class PagePool {
       // it's blocking.
       if (canExpandPastAffinityCap && this.#tryExpand(priority)) {
         if (
-          !refillStalled &&
+          !this.#refillStillStalled(stalledRefill) &&
           this.#currentStandbyCount() < this.#desiredStandbyCount()
         ) {
           let startedAt = Date.now();
-          refillStalled = !(await this.#awaitStandbyRefill(signal));
+          stalledRefill = (await this.#awaitStandbyRefill(signal))?.stalled;
           tabStartupMs += Date.now() - startedAt;
         }
         let after = this.#commandeerDormantTab(affinityKey, {
@@ -2919,22 +2991,34 @@ export class PagePool {
       // wait on the very render the sub-render is blocking, so wait for
       // budget to free instead.
       //
-      // A brand-new affinity whose refill wait ran out goes on to the
-      // cross-affinity steal below instead. A stalled refill never settles
-      // to wake a parked caller, and with every other tab idle no release
-      // comes either, so parking here would hold it until its abort.
+      // When the refill this caller waited on is stalled, an idle tab of
+      // another affinity is taken first. Parking wakes on a release or on
+      // the refill settling, and with every other tab idle and the refill
+      // hung, neither comes until it does. Only an idle tab: a busy one may
+      // be held by the very render this sub-render is blocking.
       if (
         queue !== 'file' &&
         entryList.length < this.#affinityTabMax &&
-        !(refillStalled && entryList.length === 0) &&
         this.#shouldAwaitFreedTab()
       ) {
+        if (this.#refillStillStalled(stalledRefill)) {
+          let stolen = await this.#stealCrossAffinityTab(
+            affinityKey,
+            0,
+            signal,
+            priority,
+          );
+          if (stolen) {
+            return { ...stolen, tabStartupMs };
+          }
+        }
         return await this.#selectOnceTabFrees(
           affinityKey,
           queue,
           signal,
           priority,
           tabStartupMs,
+          stalledRefill,
         );
       }
     }
@@ -2992,11 +3076,11 @@ export class PagePool {
       // `queues same-realm request when tab is transitioning` test in
       // `prerendering-test.ts` pins.
       if (
-        !refillStalled &&
+        !this.#refillStillStalled(stalledRefill) &&
         this.#currentStandbyCount() < this.#desiredStandbyCount()
       ) {
         let startedAt = Date.now();
-        refillStalled = !(await this.#awaitStandbyRefill(signal));
+        stalledRefill = (await this.#awaitStandbyRefill(signal))?.stalled;
         tabStartupMs += Date.now() - startedAt;
       }
       throwIfAborted(signal);
@@ -3060,9 +3144,9 @@ export class PagePool {
         // this caller already waited out its budget on is the same shared
         // refill, so the caller goes straight to the steal instead of
         // waiting on it twice.
-        if (!refillStalled) {
+        if (!this.#refillStillStalled(stalledRefill)) {
           let startedAt = Date.now();
-          refillStalled = !(await this.#awaitStandbyRefill(signal));
+          stalledRefill = (await this.#awaitStandbyRefill(signal))?.stalled;
           tabStartupMs += Date.now() - startedAt;
         }
         let expandedCommandeered = this.#commandeerDormantTab(affinityKey, {
@@ -3086,32 +3170,14 @@ export class PagePool {
       // size). Fall back to cross-affinity steal so the caller has
       // *some* path to a tab — better than throwing while there are
       // idle tabs on other affinities.
-      //
-      // A module / command sub-render that reaches the steal past a stalled
-      // refill takes only an idle tab. Its parent render may hold one of
-      // the busy tabs, and queueing behind that is the self-referential
-      // deadlock; with no idle tab it parks for a freed one below.
-      let maxDonorPending = queue !== 'file' && refillStalled ? 0 : 1;
-      let crossAffinityEntries: PoolEntry[] = [];
-      for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
-        if (assignedAffinity === affinityKey) continue;
-        for (let entry of entries) {
-          if (entry.closing || entry.transitioning) continue;
-          if (entry.queue.pendingCount > maxDonorPending) continue;
-          if (this.#contextHostsAnotherTab(entry)) continue;
-          crossAffinityEntries.push(entry);
-        }
-      }
-      if (crossAffinityEntries.length > 0) {
-        let entry = this.#selectLeastPendingTab(crossAffinityEntries);
-        entry.transitioning = true;
-        try {
-          let releaseTab = await entry.queue.acquire(signal, priority);
-          return { entry, reused: false, releaseTab, tabStartupMs };
-        } catch (error) {
-          entry.transitioning = false;
-          throw error;
-        }
+      let stolen = await this.#stealCrossAffinityTab(
+        affinityKey,
+        1,
+        signal,
+        priority,
+      );
+      if (stolen) {
+        return { ...stolen, tabStartupMs };
       }
       // Nothing to steal either: every other tab already has a holder and a
       // waiter. With the budget spent that is a wait, not a failure — a
@@ -3123,10 +3189,48 @@ export class PagePool {
           signal,
           priority,
           tabStartupMs,
+          stalledRefill,
         );
       }
     }
     throw new Error('No standby page available for prerender');
+  }
+
+  // Takes a tab another affinity holds, leaving it tagged with the donor's
+  // key; `getPage` re-tags it once the caller holds it. A donor qualifies
+  // with at most `maxDonorPending` holders and waiters: 1 lets a caller queue
+  // behind one render on the donor tab, 0 takes only an idle tab. Returns
+  // `undefined` when no tab qualifies.
+  async #stealCrossAffinityTab(
+    affinityKey: string,
+    maxDonorPending: number,
+    signal: AbortSignal | undefined,
+    priority: number,
+  ): Promise<
+    { entry: PoolEntry; reused: boolean; releaseTab: () => void } | undefined
+  > {
+    let crossAffinityEntries: PoolEntry[] = [];
+    for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
+      if (assignedAffinity === affinityKey) continue;
+      for (let entry of entries) {
+        if (entry.closing || entry.transitioning) continue;
+        if (entry.queue.pendingCount > maxDonorPending) continue;
+        if (this.#contextHostsAnotherTab(entry)) continue;
+        crossAffinityEntries.push(entry);
+      }
+    }
+    if (crossAffinityEntries.length === 0) {
+      return undefined;
+    }
+    let entry = this.#selectLeastPendingTab(crossAffinityEntries);
+    entry.transitioning = true;
+    try {
+      let releaseTab = await entry.queue.acquire(signal, priority);
+      return { entry, reused: false, releaseTab };
+    } catch (error) {
+      entry.transitioning = false;
+      throw error;
+    }
   }
 
   // A stolen tab takes its BrowserContext, and the localStorage its renders

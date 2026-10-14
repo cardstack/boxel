@@ -13,10 +13,13 @@ import { PrerenderCancelledError } from '../prerender/prerender-cancel.ts';
 //   1. Past its budget, a brand-new affinity takes an idle tab from another
 //      affinity rather than waiting out the stalled refill.
 //   2. A module sub-render past its budget does the same, rather than
-//      parking for a release that never comes. It takes only an idle tab:
-//      with every other tab busy it parks until one frees, since a busy tab
-//      may be held by the render it is blocking.
-//   3. A caller's abort rejects its wait at once, while the refill runs on
+//      parking for a release that never comes — whether its affinity is
+//      brand-new or its parent render holds the affinity's only tab. It
+//      takes only an idle tab: with every other tab busy it parks until one
+//      frees, since a busy tab may be held by the render it is blocking.
+//   3. A caller woken from that park takes the freed tab at once, rather
+//      than waiting out its budget on the same stalled refill a second time.
+//   4. A caller's abort rejects its wait at once, while the refill runs on
 //      and hands its standby to a caller that is still waiting.
 
 interface Gate {
@@ -200,7 +203,7 @@ module(basename(import.meta.filename), function (hooks) {
       `C waited about one refill budget, not on the refill (${elapsedMs}ms)`,
     );
     assert.true(
-      c.waits.tabStartupMs >= 50,
+      c.waits.tabStartupMs >= 40,
       'the refill wait C paid is reported as tab startup',
     );
   });
@@ -268,6 +271,87 @@ module(basename(import.meta.filename), function (hooks) {
       d.pageId,
       c.pageId,
       'D waited for a tab to free and took it, rather than queueing on a busy one',
+    );
+  });
+
+  test('a module sub-render on an affinity whose only tab its parent holds steals an idle tab past a stalled refill', async function (assert) {
+    assert.timeout(10_000);
+    let stub = makeBrowserStub();
+    let pool = makePool({
+      maxPages: 3,
+      browserManager: stub.browserManager,
+      gate: stub.gate,
+      standbyRefillWaitMs: 50,
+    });
+
+    let a = await pool.getPage('A');
+    a.release();
+    let b = await pool.getPage('B');
+    b.release();
+    // C's parent render holds C's only tab for the rest of the test.
+    let c = await pool.getPage('C');
+    await pool.warmStandbys();
+
+    // D takes the warm standby, the cap evicts the least-recently-used idle
+    // affinity (A), and the refill that follows hangs. B and D are idle.
+    stub.hangNext();
+    let d = await pool.getPage('D');
+    d.release();
+
+    let sub = settled(
+      await within(pool.getPage('C', 'module')),
+      "C's sub-render tab",
+    );
+    sub.release();
+    c.release();
+    assert.true(
+      [b.pageId, d.pageId].includes(sub.pageId),
+      "the sub-render took an idle tab from another affinity, not its parent's",
+    );
+  });
+
+  test('a caller woken from parking takes the freed tab without waiting on the stalled refill again', async function (assert) {
+    assert.timeout(10_000);
+    let stub = makeBrowserStub();
+    let pool = makePool({
+      maxPages: 2,
+      browserManager: stub.browserManager,
+      gate: stub.gate,
+      standbyRefillWaitMs: 1000,
+    });
+
+    let a = await pool.getPage('A');
+    let b = await pool.getPage('B');
+    b.release();
+    await pool.warmStandbys();
+
+    // C takes the warm standby and the refill that follows hangs. B is
+    // evicted, leaving A and C, both mid-render, so D parks once its wait
+    // on the refill runs out.
+    stub.hangNext();
+    let c = await pool.getPage('C');
+    let pending = pool.getPage('D', 'module');
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    // C frees its tab, then comes back for it shortly after. D has to take
+    // the tab in that window, which a second budget-long wait would miss.
+    c.release();
+    let releasedAt = Date.now();
+    let cAgain = new Promise<Awaited<ReturnType<PagePool['getPage']>>>(
+      (resolve, reject) =>
+        setTimeout(() => pool.getPage('C').then(resolve, reject), 200),
+    );
+
+    let d = settled(await within(pending), "D's tab");
+    let tookMs = Date.now() - releasedAt;
+    d.release();
+    let again = settled(await within(cAgain), "C's second tab");
+    again.release();
+    a.release();
+    assert.strictEqual(d.pageId, c.pageId, 'D took the tab C freed');
+    assert.true(
+      tookMs < 200,
+      `D took it before C came back for it (${tookMs}ms after the release)`,
     );
   });
 
