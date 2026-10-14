@@ -12,10 +12,12 @@ import type {
 // is sealed by the secrets-at-rest helper before it reaches the database and
 // is never returned by anything here: what callers get back is metadata.
 //
-// A value is written only with a key write ticket: short-lived, single-use,
-// minted for the signed-in user, and consumed in the same transaction as the
-// write it authorizes. The routes mint tickets only for the secure origin and
-// the CLI, so the app page, where card code runs, can't write a value.
+// A key is added, replaced or deleted only with a key write ticket:
+// short-lived, single-use, minted for the signed-in user, and consumed in the
+// same transaction as the change it authorizes. The routes mint tickets only
+// for requests from the secure origin and for clients that send no `Origin`,
+// as the CLI does, so card code in the app page can't change a key from inside
+// the browser.
 
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
 
@@ -79,9 +81,9 @@ export const resolveKeyDestination: KeyDestinationResolver = async () => {
 // A refusal the caller can act on. `status` is the HTTP status the routes
 // answer with; `message` never carries a key's value or a ticket.
 export class UserKeyError extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 422;
+  readonly status: 400 | 403 | 404 | 409 | 413 | 422;
 
-  constructor(status: 400 | 403 | 404 | 409 | 422, message: string) {
+  constructor(status: 400 | 403 | 404 | 409 | 413 | 422, message: string) {
     super(message);
     this.name = 'UserKeyError';
     this.status = status;
@@ -396,9 +398,9 @@ export async function replaceUserKeyValue(
 }
 
 // Gives a key that has no destination its destination, re-sealing the value
-// so that from then on it opens only with that destination. Run by a key's
-// first approval. Setting the destination a key already has changes nothing;
-// a key's destination never changes once set.
+// so that from then on it opens only with that destination. Setting the
+// destination a key already has changes nothing; a key's destination never
+// changes once set.
 export async function setUserKeyDestination(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -458,22 +460,24 @@ export async function setUserKeyDestination(
   });
 }
 
-// Deletes a key. No key is shared into a realm, so nothing else refers to
-// one; sharing adds the shares a deletion has to answer for.
+// Deletes a key. Nothing else refers to a key: no table records a key shared
+// into a realm or approved for an operation.
 export async function deleteUserKey(
   dbAdapter: DBAdapter,
-  owner: string,
-  id: string,
+  { owner, id, ticket }: { owner: string; id: string; ticket: unknown },
 ): Promise<void> {
   assertKeyId(id);
-  let rows = await query(dbAdapter, [
-    `DELETE FROM user_keys WHERE id = `,
-    param(id),
-    ` AND owner = `,
-    param(owner),
-    ` RETURNING id`,
-  ]);
-  if (rows.length === 0) {
-    throw notFound();
-  }
+  await dbAdapter.withTransaction(async (txQuery) => {
+    await consumeKeyWriteTicket(txQuery, owner, ticket);
+    let rows = await txQuery([
+      `DELETE FROM user_keys WHERE id = `,
+      param(id),
+      ` AND owner = `,
+      param(owner),
+      ` RETURNING id`,
+    ]);
+    if (rows.length === 0) {
+      throw notFound();
+    }
+  });
 }

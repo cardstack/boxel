@@ -14,9 +14,9 @@
 //   the `Authorization` / `Proxy-Authorization` and `Cookie` headers and the
 //   parsed cookies, and with any `token` query parameter masked. The caller's
 //   session token is no help in triage and is a liability once stored.
-// - On every event, a breadcrumb that names a proxy route's URL (the request
-//   log line, kept by Sentry's console integration) loses that URL's query
-//   string.
+// - On every event, a breadcrumb that names a proxy route's or a key route's
+//   URL (the request log line, kept by Sentry's console integration) loses
+//   that URL's query string.
 //
 // Kept free of imports so `instrument.ts`, which runs before anything else,
 // can install it.
@@ -115,26 +115,36 @@ function isProxyRoutePath(pathname: string): boolean {
 
 // Matches a key route, or any path beneath one, in any case and with or
 // without a trailing slash.
-function isKeyRoutePath(pathname: string): boolean {
+export function isKeyRoutePath(pathname: string): boolean {
   let path = pathname.toLowerCase();
   return keyRoutePaths.some(
     (keyPath) => path === keyPath || path.startsWith(`${keyPath}/`),
   );
 }
 
+function escapeRegExp(path: string): string {
+  return path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // A proxy route's URL followed by a query string, wherever it is written: the
 // request log line names the incoming URL, and Sentry keeps that line as a
 // breadcrumb on every event raised during the request.
 const proxyRouteQuery = new RegExp(
-  `(${[...proxyRoutePaths]
-    .map((path) => path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|')})(/?)\\?[^\\s"'<>]*`,
+  `(${[...proxyRoutePaths].map(escapeRegExp).join('|')})(/?)\\?[^\\s"'<>]*`,
+  'gi',
+);
+
+// The same for a key route or any path beneath one.
+const keyRouteQuery = new RegExp(
+  `(${keyRoutePaths.map(escapeRegExp).join('|')})((?:/[^\\s?#"'<>]*)?)\\?[^\\s"'<>]*`,
   'gi',
 );
 
 function withoutProxyRouteQueries(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') {
-    return value.replace(proxyRouteQuery, '$1$2');
+    return value
+      .replace(proxyRouteQuery, '$1$2')
+      .replace(keyRouteQuery, '$1$2');
   }
   if (depth > 4 || value === null || typeof value !== 'object') {
     return value;

@@ -1,7 +1,6 @@
 import type Koa from 'koa';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import {
-  fetchRequestFromContext,
   sendResponseForError,
   setContextResponse,
 } from '../middleware/index.ts';
@@ -22,9 +21,10 @@ import {
 } from '../lib/user-keys.ts';
 
 // The management API for the signed-in user's own keys. Every route answers
-// for the token's user alone, and no route returns a key's value. A request
-// body here can carry a value or a ticket, so nothing here logs a body, and
-// the request telemetry keeps only the method and path of these routes.
+// for the token's user alone, and no route returns a key's value. Adding,
+// replacing and deleting a key each take a key write ticket. A request body
+// here can carry a value or a ticket, so nothing here logs a body, and the
+// request log and telemetry keep only the method and path of these routes.
 
 const log = logger('realm:user-keys');
 
@@ -42,7 +42,8 @@ interface KeyRequestBody {
 }
 
 // The keys a request may set. A destination is never among them: it comes
-// from the operation a key is added for, or from the key's first approval.
+// from the operation a key is added for, or is set later by
+// `setUserKeyDestination`.
 const ADD_ATTRIBUTES = new Set(['name', 'kind', 'value']);
 const REPLACE_ATTRIBUTES = new Set(['value']);
 
@@ -79,18 +80,50 @@ function ownerOf(ctxt: Koa.Context): string {
   return token.user;
 }
 
-async function readBody(ctxt: Koa.Context): Promise<KeyRequestBody> {
-  let request = await fetchRequestFromContext(ctxt);
-  let raw = await request.text();
-  if (raw.length > MAX_BODY_LENGTH) {
-    throw new UserKeyError(400, 'the request body is too large');
+// Reads the body, refusing one larger than MAX_BODY_LENGTH as soon as its
+// declared length or the bytes received so far exceed it, so an oversized
+// body is never buffered whole.
+async function readRawBody(ctxt: Koa.Context): Promise<string> {
+  let declared = Number(ctxt.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > MAX_BODY_LENGTH) {
+    throw new UserKeyError(413, 'the request body is too large');
   }
+  let chunks: Buffer[] = [];
+  let received = 0;
+  for await (let chunk of ctxt.req) {
+    let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    received += buffer.length;
+    if (received > MAX_BODY_LENGTH) {
+      throw new UserKeyError(413, 'the request body is too large');
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readJSON(ctxt: Koa.Context): Promise<Record<string, unknown>> {
+  let raw = await readRawBody(ctxt);
   let json: unknown;
   try {
     json = JSON.parse(raw);
   } catch {
     throw new UserKeyError(400, 'the request body is not valid JSON');
   }
+  if (!json || typeof json !== 'object' || Array.isArray(json)) {
+    throw new UserKeyError(400, 'the request body is not a JSON object');
+  }
+  return json as Record<string, unknown>;
+}
+
+function ticketOf(body: { meta?: unknown }): unknown {
+  let meta = body.meta;
+  return meta && typeof meta === 'object'
+    ? (meta as Record<string, unknown>).ticket
+    : undefined;
+}
+
+async function readBody(ctxt: Koa.Context): Promise<KeyRequestBody> {
+  let json = await readJSON(ctxt);
   if (
     !json ||
     typeof json !== 'object' ||
@@ -188,15 +221,23 @@ function statusText(status: UserKeyError['status']): string {
     403: 'Forbidden',
     404: 'Not Found',
     409: 'Conflict',
+    413: 'Payload Too Large',
     422: 'Unprocessable Entity',
   }[status];
 }
 
-// Whether this request may mint a key write ticket: only the secure origin
-// and the CLI may. A browser always sends `Origin` on a POST, and page script
-// can't change it, so a request from the app page, where card code runs,
-// names the app's origin and is refused. The CLI is not a browser and sends
-// none.
+// Whether this request may mint a key write ticket: one from the secure
+// origin, or one with no `Origin` at all, as the CLI sends. A browser always
+// sends `Origin` on a POST and page script can't change it, so a request made
+// from the app page, where card code runs, names the app's origin and is
+// refused: card code can't get a ticket, or write a key, from inside the
+// browser.
+//
+// This is not a defence against a session that has left the browser. Card
+// code can read the user's realm-server session, and a client outside a
+// browser can send any `Origin` or none, so a stolen session can mint a
+// ticket exactly as the CLI does. Nothing the server sees tells the two apart;
+// closing that needs card code that can't reach the user's session at all.
 export function mayMintKeyWriteTicket(
   ctxt: Koa.Context,
   secureOriginURL: URL | undefined,
@@ -260,7 +301,7 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       name: attributes.name,
       kind: attributes.kind,
       value: attributes.value,
-      ticket: body.meta?.ticket,
+      ticket: ticketOf(body),
       destination: resolved?.destination ?? null,
       placementHints: resolved?.placementHints ?? null,
     });
@@ -277,7 +318,7 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
       owner,
       id: ctxt.params.keyId,
       value: attributes.value,
-      ticket: body.meta?.ticket,
+      ticket: ticketOf(body),
     });
     await sendJSON(ctxt, 200, { data: serialize(key) });
   });
@@ -286,7 +327,12 @@ export function handleReplaceUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
 export function handleDeleteUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let owner = ownerOf(ctxt);
-    await deleteUserKey(dbAdapter, owner, ctxt.params.keyId);
+    let body = await readJSON(ctxt);
+    await deleteUserKey(dbAdapter, {
+      owner,
+      id: ctxt.params.keyId,
+      ticket: ticketOf(body),
+    });
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }

@@ -255,6 +255,28 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test("a breadcrumb loses a key route's query string", function (assert) {
+      let event = scrubRequestTelemetry({
+        breadcrumbs: [
+          {
+            message:
+              '<-- GET */* https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11?ticket=ticket-marker',
+          },
+          {
+            message:
+              '<-- POST */* https://app.telemetry.test/_KEY-WRITE-TICKETS?value=value-marker [job: 1]',
+          },
+        ],
+      });
+      assert.deepEqual(
+        event.breadcrumbs?.map((breadcrumb) => breadcrumb.message),
+        [
+          '<-- GET */* https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+          '<-- POST */* https://app.telemetry.test/_KEY-WRITE-TICKETS [job: 1]',
+        ],
+      );
+    });
+
     test('an event with no request is left alone', function (assert) {
       let event: { message: string; request?: undefined } = {
         message: 'no request',

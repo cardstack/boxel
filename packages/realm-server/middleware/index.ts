@@ -20,6 +20,7 @@ import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
+import { isKeyRoutePath } from '../lib/request-telemetry.ts';
 import {
   AuthenticationError,
   AuthenticationErrorMessages,
@@ -198,6 +199,11 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 // the mitigation there.)
 function loggableRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
+  // A key route takes nothing in its query string, so whatever a client put
+  // there (a misplaced ticket or value) is left out.
+  if (url.search && isKeyRoutePath(url.pathname)) {
+    return `${url.origin}${url.pathname}`;
+  }
   if (!url.searchParams.has('token')) {
     return url.href;
   }

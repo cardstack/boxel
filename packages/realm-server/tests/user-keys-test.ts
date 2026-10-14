@@ -263,7 +263,9 @@ module(basename(import.meta.filename), function () {
 
       let deleted = await request
         .delete(`/_user-keys/${id}`)
-        .set('Authorization', auth());
+        .set('Authorization', auth())
+        .set('Content-Type', 'application/json')
+        .send({ meta: { ticket: await ticketFor() } });
       responses.push(deleted.text);
       assert.strictEqual(deleted.status, 204, 'the key is deleted');
       let gone = await request
@@ -304,7 +306,9 @@ module(basename(import.meta.filename), function () {
 
       let deleted = await request
         .delete(`/_user-keys/${id}`)
-        .set('Authorization', auth(OTHER_USER));
+        .set('Authorization', auth(OTHER_USER))
+        .set('Content-Type', 'application/json')
+        .send({ meta: { ticket: await ticketFor(OTHER_USER) } });
       assert.strictEqual(deleted.status, 404, 'delete answers as for no key');
 
       let row = await sealedRow(dbAdapter, id);
@@ -412,6 +416,57 @@ module(basename(import.meta.filename), function () {
         ['weather'],
         'only the ticketed write stored a key',
       );
+    });
+
+    test('a key is deleted only with a valid ticket', async function (assert) {
+      let id = await addKey();
+      let unticketed = await request
+        .delete(`/_user-keys/${id}`)
+        .set('Authorization', auth());
+      assert.strictEqual(
+        unticketed.status,
+        400,
+        'a delete with no body is refused',
+      );
+      let noTicket = await request
+        .delete(`/_user-keys/${id}`)
+        .set('Authorization', auth())
+        .set('Content-Type', 'application/json')
+        .send({ meta: {} });
+      assert.strictEqual(
+        noTicket.status,
+        403,
+        'a delete without a ticket is refused',
+      );
+      let shown = await request
+        .get(`/_user-keys/${id}`)
+        .set('Authorization', auth());
+      assert.strictEqual(shown.status, 200, 'the key is still there');
+    });
+
+    test('of two concurrent uses of one ticket, exactly one succeeds', async function (assert) {
+      let ticket = await ticketFor();
+      let responses = await Promise.all([
+        add({ name: 'weather', value: VALUE }, { ticket }),
+        add({ name: 'news', value: NEW_VALUE }, { ticket }),
+      ]);
+      assert.deepEqual(
+        responses.map((response) => response.status).sort(),
+        [201, 403],
+        'one write succeeds and the other is refused',
+      );
+      let keys = await request.get('/_user-keys').set('Authorization', auth());
+      assert.strictEqual(keys.body.data.length, 1, 'one key is stored');
+    });
+
+    test('an oversized body is refused before it is read', async function (assert) {
+      let response = await add(
+        { name: 'weather', value: 'x'.repeat(70 * 1024) },
+        { ticket: await ticketFor() },
+      );
+      assert.strictEqual(response.status, 413, 'the body is refused');
+      let keys = await request.get('/_user-keys').set('Authorization', auth());
+      assert.deepEqual(keys.body.data, [], 'nothing was stored');
     });
 
     test('tickets are minted for the secure origin and the CLI, never the app page', async function (assert) {
@@ -548,6 +603,9 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(response.status, 201);
           await add({ name: 'weather', value: NEW_VALUE }, { ticket });
+          await request
+            .get(`/_user-keys?ticket=${ticket}&value=${VALUE}`)
+            .set('Authorization', auth());
         }),
       );
       assert.true(lines.length > 0, 'the requests are logged');

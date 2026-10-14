@@ -6,11 +6,11 @@
 // the data key that sealed it), bound to the field `user_keys.value`, the
 // owner, the row's id and, once it has one, the destination. No plain-text
 // value is ever stored. `destination` is null for a key added with no
-// operation in hand; its first approval sets it and re-seals the value.
+// operation in hand; setting it later re-seals the value.
 //
-// `key_write_tickets` holds the short-lived, single-use tickets that a value
-// write must present. Only a ticket's SHA-256 is stored; a write consumes its
-// ticket by deleting the row.
+// `key_write_tickets` holds the short-lived, single-use tickets that adding,
+// replacing or deleting a key must present. Only a ticket's SHA-256 is stored;
+// a change consumes its ticket by deleting the row.
 //
 // Both tables are withheld from the read-only role used by dashboards and
 // read-only database access, and from every role that is a member of it, in
