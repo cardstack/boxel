@@ -2,6 +2,7 @@ import { expect, test } from './fixtures.ts';
 import { getAccountData } from '../support/synapse/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
+  credentialFields,
   validateEmail,
   getUniqueUsername,
   getUniquePassword,
@@ -51,8 +52,12 @@ test.describe('boxel-cli browser sign-up', () => {
         await page.locator('[data-test-name-field]').fill(displayName);
         await page.locator('[data-test-email-field]').fill(email);
         await page.locator('[data-test-username-field]').fill(username);
-        await page.locator('[data-test-password-field]').fill(password);
-        await page.locator('[data-test-confirm-password-field]').fill(password);
+        await credentialFields(page)
+          .locator('[data-test-password-field]')
+          .fill(password);
+        await credentialFields(page)
+          .locator('[data-test-confirm-password-field]')
+          .fill(password);
         await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
         await page.locator('[data-test-register-btn]').click();
 
@@ -125,8 +130,12 @@ test.describe('boxel-cli browser sign-up', () => {
     // re-injects the session on every navigation in the context, which would put
     // back the very session this flow has to shed.
     await page.goto(appURL);
-    await page.locator('[data-test-username-field]').fill(existingUsername);
-    await page.locator('[data-test-password-field]').fill(existingPassword);
+    await credentialFields(page)
+      .locator('[data-test-username-field]')
+      .fill(existingUsername);
+    await credentialFields(page)
+      .locator('[data-test-password-field]')
+      .fill(existingPassword);
     await page.locator('[data-test-login-btn]').click();
     await expect(
       page.locator('[data-test-operator-mode-stack="0"]'),
@@ -168,8 +177,12 @@ test.describe('boxel-cli browser sign-up', () => {
         await page.locator('[data-test-name-field]').fill(displayName);
         await page.locator('[data-test-email-field]').fill(email);
         await page.locator('[data-test-username-field]').fill(username);
-        await page.locator('[data-test-password-field]').fill(password);
-        await page.locator('[data-test-confirm-password-field]').fill(password);
+        await credentialFields(page)
+          .locator('[data-test-password-field]')
+          .fill(password);
+        await credentialFields(page)
+          .locator('[data-test-confirm-password-field]')
+          .fill(password);
         await expect(page.locator('[data-test-register-btn]')).toBeEnabled();
         await page.locator('[data-test-register-btn]').click();
 

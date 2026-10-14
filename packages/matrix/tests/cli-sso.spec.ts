@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures.ts';
 import { getAccountData, updateAccountData } from '../support/synapse/index.ts';
 import {
+  credentialFields,
   createSubscribedUser,
   getMatrixTestContext,
   getUniqueUsername,
@@ -43,8 +44,12 @@ test.describe('boxel-cli browser authorization', () => {
       log: () => {},
       openBrowserFn: async (authUrl) => {
         await page.goto(authUrl);
-        await page.locator('[data-test-cli-auth-username]').fill(username);
-        await page.locator('[data-test-cli-auth-password]').fill(password);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-username]')
+          .fill(username);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-password]')
+          .fill(password);
         await page.locator('[data-test-cli-auth-submit]').click();
         return true;
       },

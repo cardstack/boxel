@@ -5,8 +5,17 @@ import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type { RealmServer, RealmHttpServer } from '../server.ts';
-import { closeServer, setupPermissionedRealmCached } from './helpers/index.ts';
-import { secureOriginHeaders } from '../lib/secure-origin.ts';
+import {
+  closeServer,
+  matrixURL,
+  setupPermissionedRealmCached,
+} from './helpers/index.ts';
+import {
+  createSecureOrigin,
+  secureOriginHeaders,
+} from '../lib/secure-origin.ts';
+import { isListedOrigin } from '../secure-origin/app-origins.js';
+import { redactResponse } from '../secure-origin/redact.js';
 import {
   registerSecureOriginHost,
   scrubSecureOriginEvent,
@@ -51,6 +60,8 @@ const NON_SHELL_PATHS: { path: string; accept: string }[] = [
   { path: '/', accept: 'text/html' },
   { path: '/secure/other', accept: 'text/html' },
   { path: '/secure/index.html', accept: 'text/html' },
+  { path: '/secure/credentials/', accept: 'text/html' },
+  { path: '/secure/credentials.html', accept: 'text/html' },
 ];
 
 function assertSecureOriginHeaders(
@@ -87,6 +98,22 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(headers['Referrer-Policy'], 'no-referrer');
     });
 
+    test('a page that talks to another server names only that server', function (assert) {
+      let csp = secureOriginHeaders({
+        connectSrc: ['https://matrix.example.test'],
+      })['Content-Security-Policy'];
+      assert.ok(
+        csp.includes(`connect-src 'self' https://matrix.example.test`),
+        'connect-src names the server',
+      );
+      assert.notOk(
+        secureOriginHeaders()['Content-Security-Policy'].includes(
+          'connect-src',
+        ),
+        'by default a page talks to nothing but its own origin',
+      );
+    });
+
     test('a route framed by the app names only that origin', function (assert) {
       let headers = secureOriginHeaders({
         frameAncestors: ['https://app.example.test'],
@@ -101,6 +128,134 @@ module(basename(import.meta.filename), function () {
         headers['X-Frame-Options'],
         undefined,
         'X-Frame-Options, which cannot name an origin, is left out',
+      );
+    });
+  });
+
+  module('credential fields app origins', function () {
+    const listed = [
+      'https://app.example.test',
+      'https://*.preview.example.test',
+      'http://*.dev.example.test:4200',
+    ];
+
+    test('an origin the realm server lists is talked to', function (assert) {
+      assert.true(isListedOrigin('https://app.example.test', listed));
+    });
+
+    test('a subdomain of a wildcard origin is talked to', function (assert) {
+      assert.true(
+        isListedOrigin('https://my-branch.preview.example.test', listed),
+      );
+      assert.true(
+        isListedOrigin('https://a.b.preview.example.test', listed),
+        'at any depth, as frame-ancestors allows',
+      );
+      assert.true(
+        isListedOrigin('http://branch.dev.example.test:4200', listed),
+        'with the port it names',
+      );
+    });
+
+    test('anything else is not', function (assert) {
+      for (let origin of [
+        'https://preview.example.test',
+        'https://evilpreview.example.test',
+        'https://preview.example.test.evil.test',
+        'http://my-branch.preview.example.test',
+        'https://my-branch.preview.example.test:8443',
+        'http://branch.dev.example.test',
+        'https://app.example.test.evil.test',
+        'https://app.example.test/',
+        'null',
+        '',
+      ]) {
+        assert.false(isListedOrigin(origin, listed), origin || '(empty)');
+      }
+    });
+
+    test('a wildcard origin is named in frame-ancestors and in the page', async function (assert) {
+      let origin = createSecureOrigin(
+        new URL('https://secure-wildcard.example.test/secure'),
+        {
+          matrixURL: new URL(matrixURL),
+          appOrigins: [
+            'https://app.example.test',
+            'https://*.preview.example.test',
+          ],
+        },
+      );
+      let headers: Record<string, string> = {};
+      let ctx = {
+        path: '/secure/credentials',
+        method: 'GET',
+        host: 'secure-wildcard.example.test',
+        set(values: Record<string, string>) {
+          Object.assign(headers, values);
+        },
+      } as any;
+      await origin.handle(ctx);
+      assert.strictEqual(ctx.status, 200, 'status');
+      assert.ok(
+        headers['Content-Security-Policy'].includes(
+          'frame-ancestors https://app.example.test https://*.preview.example.test',
+        ),
+        headers['Content-Security-Policy'],
+      );
+      assert.ok(
+        String(ctx.body).includes(
+          '<meta name="boxel-app-origins" content="https://app.example.test https://*.preview.example.test" />',
+        ),
+        'the page lists both',
+      );
+    });
+  });
+
+  module('credential fields response redaction', function () {
+    test('a password echoed in a failed response is cut out', function (assert) {
+      let result = redactResponse(
+        {
+          ok: false,
+          status: 403,
+          body: {
+            errcode: 'M_FORBIDDEN',
+            error: 'Wrong password: hunter2hunter2',
+            user_id: '@hunter2hunter2:localhost',
+          },
+        },
+        ['hunter2hunter2'],
+      );
+      assert.deepEqual(result, {
+        ok: false,
+        status: 403,
+        body: {
+          errcode: 'M_FORBIDDEN',
+          error: 'Wrong password: [redacted]',
+          user_id: '@[redacted]:localhost',
+        },
+      });
+    });
+
+    test("a successful sign-in keeps its session when the password is part of the user's ID", function (assert) {
+      let session = {
+        user_id: '@samepassword:localhost',
+        access_token: 'syt_samepassword_token',
+        device_id: 'SAMEPASSWORD',
+        home_server: 'localhost',
+        well_known: { 'm.homeserver': { base_url: 'http://localhost:8008' } },
+      };
+      let result = redactResponse(
+        {
+          ok: true,
+          status: 200,
+          body: { ...session, note: 'echoed samepassword' },
+        },
+        ['samepassword'],
+      );
+      assert.deepEqual(
+        result.body,
+        { ...session, note: 'echoed [redacted]' },
+        'session fields are untouched; anything else is still redacted',
       );
     });
   });
@@ -295,6 +450,102 @@ module(basename(import.meta.filename), function () {
       assert.notOk(
         shellPath.text.includes('/secure/shell.js'),
         'the shell is not served on the realm origin',
+      );
+    });
+
+    test('serves the credential fields to be framed by the app alone', async function (assert) {
+      let response = await request
+        .get('/secure/credentials')
+        .query({ form: 'login', origin: realmURL.origin })
+        .set('Host', secureHost)
+        .set('Accept', 'text/html');
+      assert.strictEqual(response.status, 200, 'status');
+      assert.ok(
+        response.headers['content-type'].startsWith('text/html'),
+        'content type',
+      );
+      let csp: string = response.headers['content-security-policy'];
+      assert.ok(
+        csp.includes(`frame-ancestors ${realmURL.origin}`),
+        `only the app's origin may frame it (${csp})`,
+      );
+      assert.ok(
+        csp.includes(`connect-src 'self' ${matrixURL.origin}`),
+        `it may talk to the Matrix server and nothing else (${csp})`,
+      );
+      assert.ok(csp.includes(`default-src 'self'`), 'default-src is self');
+      assert.notOk(csp.includes('unsafe-inline'), 'no inline script');
+      assert.strictEqual(
+        response.headers['x-frame-options'],
+        undefined,
+        'no X-Frame-Options, which would refuse the framing',
+      );
+      assert.strictEqual(response.headers['cache-control'], 'no-store');
+      assert.strictEqual(response.headers['referrer-policy'], 'no-referrer');
+      assert.strictEqual(
+        response.headers['access-control-allow-origin'],
+        undefined,
+        'no CORS headers',
+      );
+      assert.ok(
+        response.text.includes(
+          `<meta name="boxel-matrix-url" content="${matrixURL.href}" />`,
+        ),
+        'names the Matrix server a password is sent to',
+      );
+      assert.ok(
+        response.text.includes(
+          `<meta name="boxel-app-origins" content="${realmURL.origin}" />`,
+        ),
+        'names the app origins it talks to',
+      );
+      assert.ok(
+        response.text.includes(
+          '<script type="module" src="/secure/credentials.js">',
+        ),
+        "loads the fields' entry point",
+      );
+      assert.notOk(
+        /<script(?![^>]*\bsrc=)[^>]*>/.test(response.text),
+        'has no inline script',
+      );
+    });
+
+    test("serves the credential fields' script, stylesheet and font, framable by no one", async function (assert) {
+      for (let [path, type] of [
+        ['/secure/credentials.js', 'text/javascript'],
+        ['/secure/app-origins.js', 'text/javascript'],
+        ['/secure/redact.js', 'text/javascript'],
+        ['/secure/credentials.css', 'text/css'],
+        ['/secure/IBMPlexSansVar-Roman.woff2', 'font/woff2'],
+      ]) {
+        let response = await request.get(path).set('Host', secureHost);
+        assert.strictEqual(response.status, 200, `${path}: status`);
+        assert.ok(
+          response.headers['content-type'].startsWith(type),
+          `${path}: content type`,
+        );
+        assertSecureOriginHeaders(assert, response, path);
+      }
+    });
+
+    test('refuses other methods on the credential fields', async function (assert) {
+      let response = await request
+        .post('/secure/credentials')
+        .set('Host', secureHost)
+        .set('Content-Type', 'application/json')
+        .send({ password: 'hunter22' });
+      assert.strictEqual(response.status, 405);
+      assert.strictEqual(response.headers['allow'], 'GET, HEAD');
+    });
+
+    test('the credential fields are not served on the realm origin', async function (assert) {
+      let response = await request
+        .get('/secure/credentials')
+        .set('Accept', 'text/html');
+      assert.notOk(
+        response.text.includes('/secure/credentials.js'),
+        'the realm origin does not serve the fields',
       );
     });
 

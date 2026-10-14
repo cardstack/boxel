@@ -757,6 +757,7 @@ export class RealmServer {
     linkShapePolicy,
     clientAddress: clientAddressSettings,
     secureOriginURL,
+    secureOriginAppOrigins = [],
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -810,6 +811,9 @@ export class RealmServer {
     // `lib/secure-origin.ts`). Requests to its host are answered by the
     // secure origin alone. Unset, this server has no secure origin.
     secureOriginURL?: URL;
+    // Origins of app pages, besides `serverURL`'s, that may frame the secure
+    // origin's credential fields (the host's own dev server, in development).
+    secureOriginAppOrigins?: string[];
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -865,7 +869,15 @@ export class RealmServer {
     this.clientAddress =
       clientAddressSettings ?? clientAddressSettingsFromEnv(process.env);
     this.secureOrigin = secureOriginURL
-      ? createSecureOrigin(secureOriginURL)
+      ? createSecureOrigin(secureOriginURL, {
+          matrixURL: matrixClient.matrixURL,
+          appOrigins: [
+            ...new Set([
+              serverURL.origin,
+              ...secureOriginAppOrigins.map((origin) => new URL(origin).origin),
+            ]),
+          ],
+        })
       : undefined;
   }
 
