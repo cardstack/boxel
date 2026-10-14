@@ -91,6 +91,9 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --eyebrow: var(--ember-ink);
       /* a focus indicator needs 3:1 against whatever it is drawn over */
       --focus-ring: var(--ember-hot);
+      /* the host's reset paints this on a focused button or link, and it
+         out-ranks the :where() rule below, so it is the gallery's ring too */
+      --boxel-outline: 2px solid var(--focus-ring);
       --glow: rgba(255, 59, 31, 0.38);
       /* the mark's fading tail and its inner orbit */
       --mark-tail: rgba(255, 59, 31, 0.35);
