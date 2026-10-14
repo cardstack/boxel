@@ -702,20 +702,25 @@ aws --profile $P cloudtrail lookup-events \
 
 `kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
 
-A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Find denied attempts by event name instead, one call per action, and keep the ones with an `errorCode`. The caller is a session ARN for an assumed role (`assumed-role/boxel-claude-readonly/...` for this role), and the code is `AccessDenied`:
+A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
 
 ```sh
-for action in Decrypt Encrypt GenerateDataKey GenerateDataKeyWithoutPlaintext ReEncrypt; do
+for action in Decrypt Encrypt ReEncrypt GenerateDataKey GenerateDataKeyWithoutPlaintext \
+              GenerateDataKeyPair GenerateDataKeyPairWithoutPlaintext; do
   aws --profile $P cloudtrail lookup-events \
     --lookup-attributes AttributeKey=EventName,AttributeValue=$action \
-    --start-time "$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ)" \
+    --start-time "$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)" \
     --query 'Events[].CloudTrailEvent' --output json \
-    | jq -r '.[] | fromjson | select(.errorCode) | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), .errorCode] | @tsv'
-  sleep 1   # stay under the two-requests-a-second limit
+    | jq -r --arg key "$KEY_ARN" '.[] | fromjson
+        | select(.errorCode == "AccessDenied" and ((.errorMessage // "") | contains($key)))
+        | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), .errorCode] | @tsv'
 done
 ```
 
-These lookups cover every KMS key in the account, including the AWS-managed `aws/ssm` key that SSM reads decrypt through, so the `Decrypt` one returns more than the secrets key's events. A denied call doesn't name its key, so a denial can't be tied to the secrets key from the record alone. Read it alongside the caller and the time.
+- Each event-name lookup covers every KMS key in the account, including the AWS-managed keys behind S3, SSM and Lambda, so the `Decrypt` one is large: a day of it can run to tens of thousands of events and many minutes of paging. Keep the window to hours and widen it only if you need to. The CLI retries when it's throttled, so the loop needs no pacing of its own.
+- The key match reads AWS's error-message wording. If a lookup that should find something returns nothing, drop the `contains` test and read the messages.
+- KMS logs a denied request from another AWS account only in that account, so these lookups see same-account denials only.
+- This covers cryptographic calls. Key-administration calls (`PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion`) that succeed show up in the lookup by the key's ARN above.
 
 ## Future skill / scripting room
 
