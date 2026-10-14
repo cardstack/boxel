@@ -4,6 +4,7 @@ import { DialStore } from 'dialkit/vanilla';
 import { postRender, retime } from 'glimmer-motion';
 
 import { Dial, type DialTune } from './dial';
+import { announceRestartedAnimations } from './onstage';
 import { demoPresets } from './presets';
 import { demoTuning } from './tuning';
 
@@ -46,6 +47,9 @@ export class LabState {
 /** how many labs are open on each demo, by its slug */
 const openLabs = new Map<string, number>();
 
+/** the demos with a retime already waiting for the render to land */
+const retiming = new Set<string>();
+
 /**
  * Retime the motion running on every stage showing a demo, once the render
  * that delivers the demo's new values has landed. An edit reaches the stage
@@ -53,13 +57,23 @@ const openLabs = new Map<string, number>();
  * this restarts what the edit retimed, keeping each loop's place in its
  * cycle. A Choreo timeline needs nothing here, because an edited timeline
  * replaces its run, and the new run carries its loops on.
+ *
+ * A dragged control edits many times a second; the edits that land in one
+ * render share one retime. A stage at rest offscreen is told, so it can rest
+ * the animations the retime started.
  */
 function retimeStages(slug: string) {
+  if (retiming.has(slug)) {
+    return;
+  }
+  retiming.add(slug);
   postRender(() => {
+    retiming.delete(slug);
     for (let stage of document.querySelectorAll(
       `[data-demo-tuning="${CSS.escape(slug)}"]`,
     )) {
       retime(stage);
+      announceRestartedAnimations(stage);
     }
   });
 }
