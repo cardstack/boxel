@@ -7,10 +7,11 @@ import {
 
 // Seals a secret with AES-256-GCM under a data key the process holds in
 // memory, so sealing and opening never leave the process. Each sealed value is
-// bound to the row that owns it: the owner, the row id and, once it has one,
-// the destination the secret is sent to go into the additional authenticated
-// data. A database writer who moves a ciphertext to another row, or re-pairs it
-// with another destination, gets a value that no longer opens.
+// bound to where it is stored and where it goes: the field it lives in, the
+// owner, the row id and, once it has one, the destination the secret is sent
+// to go into the additional authenticated data. A database writer who moves a
+// ciphertext to another column or row, or re-pairs it with another
+// destination, gets a value that no longer opens.
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_BYTES = 32;
@@ -26,11 +27,15 @@ export interface DataKey {
   key: Buffer;
 }
 
-// What a sealed value is bound to. `destination` is the place the secret is
-// sent (for example an endpoint's URL); a secret that has no destination yet,
-// such as a key added before its first approval, is bound to owner and id only
-// and is re-sealed with its destination later.
+// What a sealed value is bound to. `field` names the column the value lives
+// in, as `<table>.<column>`, so two secrets on one row (an OAuth client secret
+// and its refresh token, say) can't be swapped for each other. `destination`
+// is the place the secret is sent (for example an endpoint's URL); a secret
+// that has no destination yet, such as a key added before its first approval,
+// is bound to field, owner and id only and is re-sealed with its destination
+// later.
 export interface SecretBinding {
+  field: string;
   owner: string;
   id: string;
   destination?: string;
@@ -48,6 +53,7 @@ export interface SealedSecret {
 // SHA-256, so the context is safe to log or to hand to a service that records
 // it, such as CloudTrail.
 export interface SecretEncryptionContext {
+  field: string;
   owner: string;
   id: string;
   destination_sha256?: string;
@@ -57,6 +63,7 @@ export function secretEncryptionContext(
   binding: SecretBinding,
 ): SecretEncryptionContext {
   let context: SecretEncryptionContext = {
+    field: binding.field,
     owner: binding.owner,
     id: binding.id,
   };
@@ -112,6 +119,9 @@ export class SecretsKeyring {
 
   // Seals under the current data key with a fresh random nonce.
   seal(plaintext: string, binding: SecretBinding): SealedSecret {
+    if (!binding.field) {
+      throw new Error('A secret binding must name the field it is stored in');
+    }
     let keyId = this.#currentKeyId;
     let nonce = randomBytes(NONCE_BYTES);
     let cipher = createCipheriv(ALGORITHM, this.#keys.get(keyId)!, nonce, {
@@ -153,7 +163,7 @@ export class SecretsKeyring {
       ]).toString('utf8');
     } catch {
       throw new SecretDecryptionError(
-        'The secret could not be decrypted: it was altered, or it is bound to a different owner, row or destination',
+        'The secret could not be decrypted: it was altered, or it is bound to a different field, owner, row or destination',
       );
     }
   }
@@ -176,6 +186,7 @@ function additionalData(keyId: string, binding: SecretBinding): Buffer {
     JSON.stringify([
       AAD_LABEL,
       keyId,
+      context.field,
       context.owner,
       context.id,
       context.destination_sha256 ?? null,

@@ -97,6 +97,7 @@ function openError(
 }
 
 const SECRET = 'sk-live-correct-horse-battery-staple';
+const FIELD = 'oauth_clients.refresh_token';
 const OWNER = '@secret-owner:example.test';
 const ROW_ID = 'b1f0c9a2-7f0e-4f53-9d2a-2c9e3f1d8a11';
 const DESTINATION = 'https://api.vendor.example/v1/';
@@ -113,7 +114,12 @@ module(basename(import.meta.filename), function (hooks) {
   module('sealing and opening', function () {
     test('a sealed secret opens under the binding it was sealed with', function (assert) {
       let ring = keyring();
-      let binding = { owner: OWNER, id: ROW_ID, destination: DESTINATION };
+      let binding = {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+        destination: DESTINATION,
+      };
       let sealed = ring.seal(SECRET, binding);
 
       assert.strictEqual(sealed.keyId, 'k1');
@@ -128,7 +134,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('sealing the same secret twice uses a fresh nonce', function (assert) {
       let ring = keyring();
-      let binding = { owner: OWNER, id: ROW_ID };
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
       let first = ring.seal(SECRET, binding);
       let second = ring.seal(SECRET, binding);
       assert.false(first.nonce.equals(second.nonce));
@@ -137,7 +143,12 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('tampering with the ciphertext, tag or nonce stops it opening', function (assert) {
       let ring = keyring();
-      let binding = { owner: OWNER, id: ROW_ID, destination: DESTINATION };
+      let binding = {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+        destination: DESTINATION,
+      };
       let sealed = ring.seal(SECRET, binding);
 
       for (let [label, tampered] of [
@@ -154,16 +165,22 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
-    test('a secret moved to another owner, row or destination does not open', function (assert) {
+    test('a secret moved to another field, owner, row or destination does not open', function (assert) {
       let ring = keyring();
-      let binding = { owner: OWNER, id: ROW_ID, destination: DESTINATION };
+      let binding = {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+        destination: DESTINATION,
+      };
       let sealed = ring.seal(SECRET, binding);
 
       for (let [label, other] of [
+        ['field', { ...binding, field: 'oauth_clients.client_secret' }],
         ['owner', { ...binding, owner: '@other-owner:example.test' }],
         ['id', { ...binding, id: 'another-row' }],
         ['destination', { ...binding, destination: 'https://evil.example/' }],
-        ['no destination', { owner: OWNER, id: ROW_ID }],
+        ['no destination', { field: FIELD, owner: OWNER, id: ROW_ID }],
       ] as const) {
         let error = openError(ring, sealed, other);
         assert.true(
@@ -177,9 +194,55 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test('two secrets on one row with the same destination cannot be swapped between columns', function (assert) {
+      let ring = keyring();
+      let row = { owner: OWNER, id: ROW_ID, destination: DESTINATION };
+      let clientSecretBinding = {
+        ...row,
+        field: 'oauth_clients.client_secret',
+      };
+      let refreshTokenBinding = {
+        ...row,
+        field: 'oauth_clients.refresh_token',
+      };
+      let clientSecret = ring.seal('client-secret', clientSecretBinding);
+      let refreshToken = ring.seal('refresh-token', refreshTokenBinding);
+
+      assert.strictEqual(
+        ring.open(clientSecret, clientSecretBinding),
+        'client-secret',
+      );
+      assert.strictEqual(
+        ring.open(refreshToken, refreshTokenBinding),
+        'refresh-token',
+      );
+      assert.true(
+        openError(ring, refreshToken, clientSecretBinding) instanceof
+          SecretDecryptionError,
+        'the refresh token copied into the client secret column does not open',
+      );
+      assert.true(
+        openError(ring, clientSecret, refreshTokenBinding) instanceof
+          SecretDecryptionError,
+        'the client secret copied into the refresh token column does not open',
+      );
+    });
+
+    test('a binding must name its field', function (assert) {
+      assert.throws(
+        () => keyring().seal(SECRET, { field: '', owner: OWNER, id: ROW_ID }),
+        /must name the field/,
+      );
+    });
+
     test('a secret sealed under a data key the process has not loaded does not open', function (assert) {
-      let sealed = keyring('k1').seal(SECRET, { owner: OWNER, id: ROW_ID });
+      let sealed = keyring('k1').seal(SECRET, {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+      });
       let error = openError(keyring('k2'), sealed, {
+        field: FIELD,
         owner: OWNER,
         id: ROW_ID,
       });
@@ -196,7 +259,7 @@ module(basename(import.meta.filename), function (hooks) {
         ],
         'k1',
       );
-      let binding = { owner: OWNER, id: ROW_ID };
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
       let sealed = ring.seal(SECRET, binding);
       let error = openError(ring, { ...sealed, keyId: 'k1-alias' }, binding);
       assert.true(error instanceof SecretDecryptionError);
@@ -213,7 +276,7 @@ module(basename(import.meta.filename), function (hooks) {
   module('binding a destination later', function () {
     test('a secret sealed without a destination opens under owner and id, and only under its destination once re-sealed', function (assert) {
       let ring = keyring();
-      let pending = { owner: OWNER, id: ROW_ID };
+      let pending = { field: FIELD, owner: OWNER, id: ROW_ID };
       let sealed = ring.seal(SECRET, pending);
       assert.strictEqual(ring.open(sealed, pending), SECRET);
 
@@ -235,13 +298,18 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('re-sealing refuses a value that does not open under the binding it is said to have', function (assert) {
       let ring = keyring();
-      let sealed = ring.seal(SECRET, { owner: OWNER, id: ROW_ID });
+      let sealed = ring.seal(SECRET, {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+      });
       assert.throws(
         () =>
           ring.reseal(
             sealed,
-            { owner: '@other-owner:example.test', id: ROW_ID },
+            { field: FIELD, owner: '@other-owner:example.test', id: ROW_ID },
             {
+              field: FIELD,
               owner: '@other-owner:example.test',
               id: ROW_ID,
               destination: DESTINATION,
@@ -252,7 +320,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('re-sealing moves the value onto the current data key', function (assert) {
-      let binding = { owner: OWNER, id: ROW_ID };
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
       let oldKey = { keyId: 'old', key: randomBytes(32) };
       let newKey = { keyId: 'new', key: randomBytes(32) };
       let sealed = new SecretsKeyring([oldKey], 'old').seal(SECRET, binding);
@@ -268,13 +336,15 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('encryption context', function () {
-    test('the context carries owner, id and the SHA-256 of the destination, never the destination', function (assert) {
+    test('the context carries field, owner, id and the SHA-256 of the destination, never the destination', function (assert) {
       let context = secretEncryptionContext({
+        field: FIELD,
         owner: OWNER,
         id: ROW_ID,
         destination: DESTINATION,
       });
       assert.deepEqual(context, {
+        field: FIELD,
         owner: OWNER,
         id: ROW_ID,
         destination_sha256: createHash('sha256')
@@ -288,10 +358,14 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('a secret with no destination yet has no destination in its context', function (assert) {
-      assert.deepEqual(secretEncryptionContext({ owner: OWNER, id: ROW_ID }), {
-        owner: OWNER,
-        id: ROW_ID,
-      });
+      assert.deepEqual(
+        secretEncryptionContext({ field: FIELD, owner: OWNER, id: ROW_ID }),
+        {
+          field: FIELD,
+          owner: OWNER,
+          id: ROW_ID,
+        },
+      );
     });
   });
 
@@ -315,7 +389,7 @@ module(basename(import.meta.filename), function (hooks) {
         purpose: 'boxel-secrets-data-key',
       });
 
-      let binding = { owner: OWNER, id: ROW_ID };
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
       let sealed = ring.seal(SECRET, binding);
       assert.strictEqual(sealed.keyId, provider.keyId);
       assert.strictEqual(
@@ -398,7 +472,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(lines, [
         'secrets at rest: provider=local deployed=false keyIds=local-development currentKeyId=local-development',
       ]);
-      let binding = { owner: OWNER, id: ROW_ID };
+      let binding = { field: FIELD, owner: OWNER, id: ROW_ID };
       assert.strictEqual(
         secretsKeyring().open(secretsKeyring().seal(SECRET, binding), binding),
         SECRET,
@@ -484,7 +558,12 @@ module(basename(import.meta.filename), function (hooks) {
       });
       let managerAnswer = encodeSecretsKeyringIpc(unwrapped);
 
-      let binding = { owner: OWNER, id: ROW_ID, destination: DESTINATION };
+      let binding = {
+        field: FIELD,
+        owner: OWNER,
+        id: ROW_ID,
+        destination: DESTINATION,
+      };
       let sealed = new SecretsKeyring(
         [{ keyId: unwrapped.currentKeyId, key: dataKey }],
         unwrapped.currentKeyId,

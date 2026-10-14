@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and every worker run and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, and the plaintext census. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, or when a table starts sealing its secrets with the helper.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, and the plaintext census. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, or when a table starts sealing its secrets with the helper.
 ---
 
 # Secrets at rest (operators)
@@ -29,16 +29,19 @@ four things a table stores: `keyId` (which data key sealed it), `nonce`
 
 ## Binding
 
-Each value is bound, as GCM additional authenticated data, to the owner, the
-row id and the destination the secret is sent to. A value moved to another
-row, owner or destination by a database writer doesn't open: the caller gets
-`SecretDecryptionError`, whose message names none of the inputs.
+Each value is bound, as GCM additional authenticated data, to the field it is
+stored in (`<table>.<column>`, required), the owner, the row id and the
+destination the secret is sent to. A value moved to another column, row, owner
+or destination by a database writer doesn't open: the caller gets
+`SecretDecryptionError`, whose message names none of the inputs. Naming the
+field is what keeps two secrets on one row, such as an OAuth client secret and
+its refresh token sent to the same token endpoint, from being swapped.
 
 - A secret with no destination yet (a key added before its first approval) is
-  sealed under owner and id only. `keyring.reseal(sealed, from, to)` binds it
+  sealed under field, owner and id only. `keyring.reseal(sealed, from, to)` binds it
   to its destination; after that it opens only with that destination.
 - `secretEncryptionContext(binding)` is the context a value is bound to:
-  `owner`, `id` and `destination_sha256`. The destination appears only as its
+  `field`, `owner`, `id` and `destination_sha256`. The destination appears only as its
   SHA-256, so the context is safe to log or to hand to a service that records
   it.
 - Destinations are compared exactly as given. A caller passes the same
