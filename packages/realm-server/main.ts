@@ -58,6 +58,8 @@ import {
 } from './lib/outbound/client.ts';
 import {
   reportPlaintextCensus,
+  reportSealedCensus,
+  secretsKeyring,
   startSecretsAtRest,
 } from './lib/secrets-at-rest/index.ts';
 import { sealProxyEndpointKeys } from './lib/proxy-endpoint-keys.ts';
@@ -622,6 +624,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     );
   }
   await reportPlaintextCensus(dbAdapter);
+  await reportSealedCensus(dbAdapter, secretsKeyring());
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a

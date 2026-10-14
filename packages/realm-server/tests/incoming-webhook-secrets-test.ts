@@ -9,7 +9,9 @@ import {
   installSecretsKeyring,
   LocalKeyProvider,
   reportPlaintextCensus,
+  resealUnderCurrentKey,
   resetSecretsAtRest,
+  SEALED_COLUMNS,
   sealedFromColumns,
   SecretsKeyring,
 } from '../lib/secrets-at-rest/index.ts';
@@ -393,6 +395,54 @@ module(basename(import.meta.filename), function () {
       assert.false(
         logged.some((line) => line.includes(secret)),
         'the log carries no secret',
+      );
+    });
+
+    test('a data-key rotation re-seals signing secrets under the new data key, and they still verify', async function (assert) {
+      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
+      await insertPlainTextRow(SECOND_ID, SECOND_SECRET);
+      await sealIncomingWebhookSecrets(dbAdapter);
+      let column = SEALED_COLUMNS.find(
+        ({ field }) => field === INCOMING_WEBHOOK_SECRET_FIELD,
+      );
+      assert.ok(column, 'the column is registered with the re-seal pass');
+      let local = await new LocalKeyProvider().loadDataKeys();
+      let rotated = new SecretsKeyring(
+        [...local.keys, { keyId: 'kms-new', key: Buffer.alloc(32, 5) }],
+        'kms-new',
+      );
+
+      let report = await resealUnderCurrentKey(dbAdapter, rotated, {
+        columns: [column!],
+      });
+
+      assert.deepEqual(report.columns, [
+        {
+          field: INCOMING_WEBHOOK_SECRET_FIELD,
+          resealed: 2,
+          changedConcurrently: 0,
+          unopenable: 0,
+        },
+      ]);
+      let row = await secretRow(FIRST_ID);
+      assert.strictEqual(row.signing_secret_key_id, 'kms-new');
+      let warnings = (
+        await logLinesDuring(['incoming-webhook-secrets'], async () => {
+          assert.strictEqual(
+            readIncomingWebhookSecret(row, rotated),
+            FIRST_SECRET,
+          );
+        })
+      ).filter(({ level }) => level === 'warn');
+      assert.strictEqual(
+        warnings.length,
+        0,
+        'the re-sealed secret opens under the binding its writes use',
+      );
+      assert.strictEqual(
+        (await sealIncomingWebhookSecrets(dbAdapter, rotated)).unchanged,
+        2,
+        'the backfill agrees with the re-sealed rows',
       );
     });
 

@@ -1,6 +1,6 @@
 # DOM and WebGL Compositing
 
-A live interface does not need to be painted into a texture to appear inside a 3D environment. The mockup and gallery examples combine WebGL geometry with DOM placed through the same projection. This keeps text and controls in the browser's native interface system while the surrounding scene supplies depth, lighting, and atmosphere.
+A live interface does not need to be painted into a texture to appear inside a 3D environment. The mockup and [3D gallery](../../widget-room) examples combine WebGL geometry with DOM placed through the same projection. This keeps text and controls in the browser's native interface system while the surrounding scene supplies depth, lighting, and atmosphere.
 
 ::card[../../demos/mockup]
 
