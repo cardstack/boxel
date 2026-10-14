@@ -964,6 +964,19 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.strictEqual(stackParam(), JSON.stringify([second, third]));
   });
 
+  test('a hostModeStack that is not a list of card ids is no stack', async function (assert) {
+    let mango = `[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`;
+    for (let value of ['{}', '5', '"abc"', '[1, 2]']) {
+      await visit(
+        `/test/Pet/mango.json?hostModeStack=${encodeURIComponent(value)}`,
+      );
+      assert.dom(mango).exists(`${value}: the page loads`);
+      assert
+        .dom('[data-test-host-mode-stack-item]')
+        .doesNotExist(`${value}: with no stack`);
+    }
+  });
+
   test('clicking on a stack card does not close it', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),
