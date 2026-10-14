@@ -9,6 +9,10 @@ import { realmPassword } from '../helpers/realm-credentials.ts';
 //   COMMAND_URL             - override the command URL registered with the webhook
 //   SUBMISSION_REALM_URL    - realm URL where GithubEventCards are saved
 //   REALM_SECRET_SEED       - seed used to derive submission_realm password (required)
+//   ROTATE_SIGNING_SECRET   - "true" to issue a new signing secret for an existing
+//                             webhook. The realm server returns a signing secret
+//                             only when it issues one, so without this a re-run
+//                             reuses the webhook and its secret is not shown.
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
@@ -141,6 +145,35 @@ async function createWebhookCommand(
   return json?.data;
 }
 
+// Issue a new signing secret for an existing webhook. The response is the only
+// one that carries it.
+async function rotateSigningSecret(jwt: string, incomingWebhookId: string) {
+  const response = await fetch(
+    `${realmServerURL}/_incoming-webhooks/rotate-signing-secret`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: jwt,
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+      },
+      body: JSON.stringify({
+        data: { type: 'incoming-webhook', id: incomingWebhookId },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Failed to rotate incoming webhook signing secret: ${response.status} ${text}`,
+    );
+  }
+
+  const json = await response.json();
+  return json?.data;
+}
+
 // Idempotent: ensure webhook exists with given config
 async function ensureIncomingWebhook(
   jwt: string,
@@ -158,6 +191,10 @@ async function ensureIncomingWebhook(
 
   if (existing) {
     console.log(`Found existing webhook: ${existing.id}`);
+    if (process.env.ROTATE_SIGNING_SECRET === 'true') {
+      console.log('Rotating its signing secret...');
+      return await rotateSigningSecret(jwt, existing.id);
+    }
     return existing;
   }
 
@@ -221,11 +258,14 @@ async function main() {
   const webhookBaseURL = realmServerURL;
   const webhookURL = `${webhookBaseURL}/_webhooks/${webhook.attributes.webhookPath}`;
   const localWebhookURL = `${realmServerURL}/_webhooks/${webhook.attributes.webhookPath}`;
+  const signingSecret =
+    webhook.attributes.signingSecret ??
+    `(shown only when issued; issued ${webhook.attributes.signingSecretCreatedAt}. Re-run with ROTATE_SIGNING_SECRET=true for a new one)`;
 
   console.log('Webhook details:');
   console.log(`  ID:             ${webhook.id}`);
   console.log(`  Path:           ${webhook.attributes.webhookPath}`);
-  console.log(`  Signing secret: ${webhook.attributes.signingSecret}`);
+  console.log(`  Signing secret: ${signingSecret}`);
   console.log(`  Local URL:      ${localWebhookURL}`);
   console.log('');
 
@@ -264,7 +304,7 @@ async function main() {
   console.log('');
   console.log('Add this webhook to your GitHub repository:');
   console.log(`  URL:          ${webhookURL}`);
-  console.log(`  Secret:       ${webhook.attributes.signingSecret}`);
+  console.log(`  Secret:       ${signingSecret}`);
   console.log(`  Content type: application/json`);
   console.log(
     `  Events:       Pull requests, Pull request reviews, Pull request review comments, Check runs, Commit comments, Discussion comments`,

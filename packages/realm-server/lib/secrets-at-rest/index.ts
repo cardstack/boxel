@@ -11,6 +11,7 @@ import {
 
 export * from './envelope.ts';
 export * from './providers.ts';
+export * from './sealed-columns.ts';
 
 const log = logger('secrets-at-rest');
 
@@ -210,6 +211,12 @@ export const PLAINTEXT_CENSUS: PlaintextCensusEntry[] = [
     column: 'api_key',
     query: `SELECT COUNT(*) AS count FROM proxy_endpoints
             WHERE api_key IS NOT NULL AND api_key_ciphertext IS NULL`,
+  },
+  {
+    table: 'incoming_webhooks',
+    column: 'signing_secret',
+    query: `SELECT COUNT(*) AS count FROM incoming_webhooks
+            WHERE signing_secret_ciphertext IS NULL`,
   },
 ];
 

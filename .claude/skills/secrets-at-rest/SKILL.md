@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, the plaintext census, and sealing the proxy endpoint (system) keys in `proxy_endpoints`, with the backfill that seals them and how to run it on demand. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, or when the census reports `proxy_endpoints.api_key` rows still in plain text.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, the plaintext census, sealing the proxy endpoint (system) keys in `proxy_endpoints` and the incoming webhook signing secrets in `incoming_webhooks`, with the backfills that seal them and how to run them on demand, and why a webhook's signing secret is shown only once. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, or when the census reports `proxy_endpoints.api_key` or `incoming_webhooks.signing_secret` rows still in plain text.
 ---
 
 # Secrets at rest (operators)
@@ -113,6 +113,7 @@ at startup:
 
 ```
 plaintext census: proxy_endpoints.api_key plaintextRows=0
+plaintext census: incoming_webhooks.signing_secret plaintextRows=0
 ```
 
 With no entries it logs `plaintext census: no table seals its secrets with
@@ -122,6 +123,17 @@ Reading the census: `plaintextRows` is the number of rows whose secret
 hasn't been sealed yet. It should read 0 on every startup after the first
 one following a deploy. A row added by hand reads 1 until the next startup
 or until the backfill is run on demand.
+
+## Tables that seal alongside a plain-text column
+
+`lib/secrets-at-rest/sealed-columns.ts` holds what every such table shares.
+The sealed value lives in four columns named after the plain-text one:
+`<column>_ciphertext`, `<column>_nonce`, `<column>_tag` and `<column>_key_id`.
+Every write keeps the plain-text column in step, so it is the source the
+sealed columns are checked against. Reads go through
+`openWithPlainTextFallback`, which serves the plain-text value whenever the
+two disagree. Backfills go through `backfillDecision`, which decides
+seal / unchanged / unloadedKey the same way for every table.
 
 ## Proxy endpoint keys
 
@@ -206,3 +218,57 @@ decrypt with that key, which in practice means running it inside a
 realm-server task. If rows do end up sealed under the local key, the next
 realm-server start seals them again under KMS. The command logs the
 backfill line, then the census.
+
+## Incoming webhook signing secrets
+
+`incoming_webhooks.signing_secret` verifies the signature on each webhook
+Boxel receives at `/_webhooks/<webhook_path>`. Each secret is sealed into
+`signing_secret_ciphertext`, `signing_secret_nonce`, `signing_secret_tag` and
+`signing_secret_key_id` (`packages/realm-server/lib/incoming-webhook-secrets.ts`),
+bound to:
+
+| Binding       | Value                                                        |
+| ------------- | ------------------------------------------------------------ |
+| `field`       | `incoming_webhooks.signing_secret`                           |
+| `owner`       | the row's `username`, the Matrix user who registered it      |
+| `id`          | the row's `id`                                               |
+| `destination` | none: Boxel never sends the secret, it only verifies with it |
+
+The plain-text `signing_secret` column is kept in step by every write, as for
+proxy endpoint keys, and `readonly_role` and its members have no `SELECT` on
+the table.
+
+- **Shown once.** The API returns a secret only in the response that issues
+  it: `POST /_incoming-webhooks` (create) and
+  `POST /_incoming-webhooks/rotate-signing-secret` with
+  `{"data": {"type": "incoming-webhook", "id": "<id>"}}` (rotate). Every
+  other read, `GET /_incoming-webhooks` included, reports
+  `signingSecretCreatedAt` instead, from `signing_secret_created_at`, or
+  from `created_at` for a row written without it. A user who has lost a
+  secret rotates it. A signature made with the old secret stops verifying
+  as soon as the rotation responds.
+- **Reads.** Only the webhook receiver opens a secret, to check a signature.
+  Whenever the sealed and plain-text secrets disagree, it verifies against
+  `signing_secret` and logs a warning once per sealed value on the
+  `incoming-webhook-secrets` channel:
+  `the sealed signing secret of incoming webhook <id> … so its plain-text secret is used until the backfill seals it again`.
+  A changed `username` or `id`, a data key this process hasn't loaded, or a
+  secret edited by hand all lead here.
+- **The backfill.** `sealIncomingWebhookSecrets` runs at every realm-server
+  start, right after the proxy endpoint backfill and before the census, and
+  logs one line:
+
+  ```
+  incoming webhook secrets: sealed=0 unchanged=12 unloadedKey=0 skipped=0
+  ```
+
+  The counts mean what they do for proxy endpoint keys. There is no
+  `cleared`, since the plain-text column is `NOT NULL`. A row rotated
+  between the backfill's read and its update counts as `skipped` and keeps
+  the rotation's secret. A failure is reported to Sentry and logged as
+  `Sealing incoming webhook signing secrets failed: …`. It doesn't stop
+  startup: the receiver keeps verifying with `signing_secret`.
+
+- **On demand.** `pnpm seal-incoming-webhook-secrets` in
+  `packages/realm-server` runs the same pass and then the census. It takes
+  its database and data key exactly as `pnpm seal-proxy-endpoint-keys` does.

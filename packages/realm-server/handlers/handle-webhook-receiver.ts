@@ -11,6 +11,11 @@ import {
 } from '../middleware/index.ts';
 import { getFilterHandler } from './webhook-filter-handlers.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import {
+  INCOMING_WEBHOOK_SECRET_COLUMNS,
+  readIncomingWebhookSecret,
+  type IncomingWebhookSecretRow,
+} from '../lib/incoming-webhook-secrets.ts';
 
 export default function handleWebhookReceiverRequest({
   dbAdapter,
@@ -26,7 +31,7 @@ export default function handleWebhookReceiverRequest({
     let rows;
     try {
       rows = await query(dbAdapter, [
-        `SELECT id, username, webhook_path, verification_type, verification_config, signing_secret`,
+        `SELECT id, username, webhook_path, verification_type, verification_config, ${INCOMING_WEBHOOK_SECRET_COLUMNS}`,
         `FROM incoming_webhooks WHERE webhook_path = `,
         param(webhookPath),
         ` LIMIT 1`,
@@ -51,7 +56,9 @@ export default function handleWebhookReceiverRequest({
       verified = verifyWebhookSignature(
         webhook.verification_type as string,
         webhook.verification_config as Record<string, string>,
-        webhook.signing_secret as string,
+        readIncomingWebhookSecret(
+          webhook as unknown as IncomingWebhookSecretRow,
+        ),
         rawBody,
         ctxt.req.headers,
       );

@@ -3,9 +3,14 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { createHmac } from 'crypto';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { realmSecretSeed, insertUser } from '../helpers/index.ts';
+import {
+  realmSecretSeed,
+  insertUser,
+  setupSecretsKeyring,
+} from '../helpers/index.ts';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers.ts';
+import { sealIncomingWebhookSecrets } from '../../lib/incoming-webhook-secrets.ts';
 import {
   extractRealmFromPrBody,
   extractBranchNameFromPayload,
@@ -14,6 +19,7 @@ import {
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Webhook Receiver Endpoint', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
 
     test('returns 404 for unknown webhook path', async function (assert) {
       let response = await context.request
@@ -124,6 +130,87 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         response.body,
         { status: 'received', commandsExecuted: 0 },
         'response indicates receipt with no commands executed',
+      );
+    });
+
+    test('a webhook registered before its secret was sealed verifies before, between and after the backfill', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      // Two rows as a server running the previous revision writes them:
+      // plain text only.
+      let signingSecret = 'a'.repeat(64);
+      for (let webhookPath of ['whk_unsealed_first', 'whk_unsealed_second']) {
+        await query(context.dbAdapter, [
+          `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
+          param(uuidv4()),
+          `,`,
+          param(matrixUserId),
+          `,`,
+          param(webhookPath),
+          `,`,
+          param('HMAC_SHA256_HEADER'),
+          `,`,
+          `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
+          `,`,
+          param(signingSecret),
+          `, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        ]);
+      }
+      let payload = JSON.stringify({ event: 'push' });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+      async function deliver(webhookPath: string) {
+        let response = await context.request
+          .post(`/_webhooks/${webhookPath}`)
+          .set('Content-Type', 'application/json')
+          .set('X-Hub-Signature-256', signature)
+          .send(payload);
+        return response.status;
+      }
+
+      assert.strictEqual(
+        await deliver('whk_unsealed_first'),
+        200,
+        'verifies before the backfill',
+      );
+
+      // Between: the first row sealed, the second not yet.
+      await sealIncomingWebhookSecrets(context.dbAdapter);
+      await context.dbAdapter.execute(
+        `UPDATE incoming_webhooks SET signing_secret_ciphertext = NULL,
+           signing_secret_nonce = NULL, signing_secret_tag = NULL,
+           signing_secret_key_id = NULL
+         WHERE webhook_path = 'whk_unsealed_second'`,
+      );
+      assert.strictEqual(
+        await deliver('whk_unsealed_first'),
+        200,
+        'the sealed row verifies',
+      );
+      assert.strictEqual(
+        await deliver('whk_unsealed_second'),
+        200,
+        'the row not yet sealed verifies',
+      );
+
+      let result = await sealIncomingWebhookSecrets(context.dbAdapter);
+      assert.deepEqual(
+        { sealed: result.sealed, unchanged: result.unchanged },
+        { sealed: 1, unchanged: 1 },
+      );
+      assert.strictEqual(await deliver('whk_unsealed_first'), 200);
+      assert.strictEqual(
+        await deliver('whk_unsealed_second'),
+        200,
+        'verifies after the backfill',
       );
     });
 
@@ -555,6 +642,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
   module('Origin-based filtering', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
 
     test('rejects event when PR origin does not match filter realm', async function (assert) {
       let matrixUserId = '@user:localhost';
@@ -819,6 +907,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
   module('check_run DB lookup routing', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
 
     test('check_run event matches via PrCard DB lookup', async function (assert) {
       let matrixUserId = '@user:localhost';
