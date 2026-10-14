@@ -1,6 +1,6 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and `callApi` card operations). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and `callApi` card operations). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), what a Sentry event keeps of the incoming request (only the method and path on the proxy routes, and never the Authorization header or cookies on any route), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
 ---
 
 # Outbound guard (operators)
@@ -82,6 +82,45 @@ What enforces it:
   the server makes is instrumented as before.
 - A vendor's error body on a streamed call is scrubbed before it is logged or
   framed back to the caller.
+
+## What a Sentry event carries of the incoming request
+
+Sentry's HTTP instrumentation attaches the request in flight to every event
+raised while it is: by default its headers, cookies, query string, URL and
+body (up to 1 MB, when the handler reads it through `data` listeners), each
+kept up to 8,192 characters. The realm server's `beforeSend` /
+`beforeSendTransaction` hook (`scrubRequestTelemetry` in
+`lib/request-telemetry.ts`, installed by `instrument.ts`) cuts that down:
+
+| Request                                                                       | What the event keeps                                                                                                                                                           |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /_request-forward`, `POST /_openrouter/chat/completions`, secure origin | The method, and the URL's origin and path. No body, headers, cookies or query string.                                                                                          |
+| Any other route                                                               | Everything Sentry records, except the `Authorization`, `Proxy-Authorization` and `Cookie` headers and the parsed cookies, with a `token` query parameter masked as `REDACTED`. |
+
+On every event, a breadcrumb that names a proxy route's URL loses that URL's
+query string. The request log line (`<-- POST … /_request-forward?…`) is the
+one that does: Sentry's console integration keeps each log line written during
+a request as a breadcrumb on that request's events.
+
+Why: a proxy route's body is the caller's own content — a forwarded request's
+URL (query string included), headers and body, or a whole prompt — and its
+`Authorization` header is the caller's realm-server session token. A token in
+Sentry is no help in triage and a liability once stored, so it is dropped on
+every route, along with the `?token=` a capture URL or a `_download-realm`
+link carries (the request log masks the same parameter). The secure origin is
+where credentials are typed.
+
+Sentry buffers a request body only when the handler reads it through `data`
+listeners. The proxy handlers read theirs through the stream's async iterator
+(`nodeStreamToText` in `stream.ts`), which Sentry doesn't see, so a forwarded
+image or a prompt is never copied into Sentry's buffer, even for the length of
+a streamed completion. `request-forward-test.ts` pins this; a change to how
+those handlers read their body has to keep it.
+
+So an event from a failed forward still has the route, the method and the
+stack, but not what the caller sent. The log line logged with it
+(`Error in request forward handler (key=<name> url=<url>)`) names the key and
+the origin and path of the destination.
 
 ## Finding a send-path error by key name
 

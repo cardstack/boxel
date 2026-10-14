@@ -18,8 +18,8 @@ import { isListedOrigin } from '../secure-origin/app-origins.js';
 import { redactResponse } from '../secure-origin/redact.js';
 import {
   registerSecureOriginHost,
-  scrubSecureOriginEvent,
-} from '../lib/secure-origin-telemetry.ts';
+  scrubRequestTelemetry,
+} from '../lib/request-telemetry.ts';
 
 const realmURL = new URL('http://127.0.0.1:4444/test/');
 const secureOriginURL = new URL('https://secure.example.test/secure');
@@ -263,7 +263,7 @@ module(basename(import.meta.filename), function () {
   module('secure origin telemetry', function () {
     test('an event raised during a secure-origin request keeps only its method and path', function (assert) {
       registerSecureOriginHost('secure.telemetry.test');
-      let event = scrubSecureOriginEvent({
+      let event = scrubRequestTelemetry({
         request: {
           method: 'POST',
           url: 'https://secure.telemetry.test/secure?ticket=abc',
@@ -281,7 +281,7 @@ module(basename(import.meta.filename), function () {
 
     test('the explicit default port does not hide a secure-origin request', function (assert) {
       registerSecureOriginHost('secure.telemetry.test');
-      let event = scrubSecureOriginEvent({
+      let event = scrubRequestTelemetry({
         request: {
           method: 'POST',
           headers: { ':authority': 'secure.telemetry.test:443' },
@@ -299,7 +299,7 @@ module(basename(import.meta.filename), function () {
         headers: { host: 'app.telemetry.test' },
         data: '{"attributes":{}}',
       };
-      let event = scrubSecureOriginEvent({ request: { ...request } });
+      let event = scrubRequestTelemetry({ request: { ...request } });
       assert.deepEqual(event.request, request);
     });
   });
