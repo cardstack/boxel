@@ -361,6 +361,13 @@ export class GalleryGrid extends Component<Signature> {
         }
       }
 
+      /* for a viewer who asked for less movement, the rule is simply there */
+      @media (prefers-reduced-motion: reduce) {
+        .kicker::before {
+          animation: none;
+        }
+      }
+
       h1 {
         margin: 0;
         max-width: 14ch;

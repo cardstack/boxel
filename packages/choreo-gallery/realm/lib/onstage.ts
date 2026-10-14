@@ -142,8 +142,17 @@ function watchCover(el: Element, listener: () => void): () => void {
 }
 
 /**
+ * The container holding a stage's motion, if any: see `lib/motion-hold.ts`.
+ * A held stage counts as off, wherever it is, until its holder lets go.
+ */
+function motionHolder(el: Element): HTMLElement | null {
+  return el.closest<HTMLElement>('[data-motion-hold]');
+}
+
+/**
  * Room focus overrides viewport visibility; the ordinary 2D gallery is
- * unchanged. Either way, a covered stage is off.
+ * unchanged. Either way, a covered stage is off, and so is a stage whose
+ * motion is held.
  *
  * Inside the 3D room, cover is asked of the room's tile rather than of the
  * stage: the room makes a tile's own content `inert` while it is not ready
@@ -156,10 +165,12 @@ export function observeStage(
   options: IntersectionObserverInit = { rootMargin: '200px' },
 ) {
   const owner = roomOwner(el);
+  const holder = motionHolder(el);
   let intersecting = false;
   let previous: boolean | undefined;
   const update = () => {
     const visible =
+      holder?.dataset.motionHold !== 'held' &&
       !covered(owner ?? el) &&
       (owner ? owner.dataset.widgetActive === 'true' : intersecting);
     if (visible !== previous) {
@@ -179,6 +190,12 @@ export function observeStage(
     changes.observe(owner, {
       attributes: true,
       attributeFilter: ['data-widget-active'],
+    });
+  }
+  if (holder) {
+    changes.observe(holder, {
+      attributes: true,
+      attributeFilter: ['data-motion-hold'],
     });
   }
   const unwatchCover = watchCover(el, update);
