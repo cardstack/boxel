@@ -353,6 +353,7 @@ import {
   realmInfoExtraKeys,
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
+import { callApiSender } from '../../lib/outbound/call-api-sender.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -568,6 +569,7 @@ export function makeTestReconciler(
         matrixClient: dynamicMountDeps.matrixClient,
         realmServerURL: dynamicMountDeps.serverURL.href,
         definitionLookup: dynamicMountDeps.definitionLookup,
+        callApi: callApiSender,
       });
       realms.push(reconciledRealm);
       dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
@@ -1557,6 +1559,7 @@ export async function createRealm({
       mediaCacheAdapter,
       cardDocumentCache,
       ...(realmFor ? { realmFor } : {}),
+      callApi: callApiSender,
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

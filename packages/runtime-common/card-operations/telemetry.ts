@@ -667,6 +667,57 @@ export function emitAnonymousRequest(event: AnonymousRequestEvent): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Key use
+// ---------------------------------------------------------------------------
+
+// One line per `callApi` invocation: which operation sent what where, for
+// whom, and how it ended. It is the record of every use a request makes of a
+// credential, so it carries no value — not a key, not a filled request, not
+// the caller's query string. The URL is the origin and path of the request as
+// declared, before any credential is filled into it.
+export const KEY_USE_CHANNEL = 'boxel:key-use';
+
+// `sent`: the vendor answered, whatever its status. `refused`: the realm or
+// its outbound guard refused, and `code` says why. `failed`: the send broke
+// for a reason that is not a refusal.
+export type KeyUseOutcome = 'sent' | 'refused' | 'failed';
+
+export interface KeyUseEvent {
+  operation: string;
+  realm: string;
+  // The authenticated caller, or null for one who isn't signed in.
+  caller: string | null;
+  // Null when the invocation was refused before a URL was built.
+  url: string | null;
+  outcome: KeyUseOutcome;
+  code?: string;
+  // The vendor's status, for a request that was answered.
+  status?: number;
+}
+
+let keyUseSink: ((event: KeyUseEvent) => void) | undefined;
+
+export function setKeyUseSink(
+  sink: ((event: KeyUseEvent) => void) | undefined,
+): void {
+  keyUseSink = sink;
+}
+
+let keyUseLog: ReturnType<typeof logger> | undefined;
+
+export function emitKeyUse(event: KeyUseEvent): void {
+  recordSafely('key use', () => {
+    if (keyUseSink) {
+      keyUseSink(event);
+      return;
+    }
+    (keyUseLog ??= logger(KEY_USE_CHANNEL)).info(
+      JSON.stringify({ channel: KEY_USE_CHANNEL, ...event }),
+    );
+  });
+}
+
 // Build and write one record, logging and swallowing anything that throws on
 // the way. A record describes a decision and never changes one: a sink or a
 // log transport that throws must not turn an admitted invocation into a 500,

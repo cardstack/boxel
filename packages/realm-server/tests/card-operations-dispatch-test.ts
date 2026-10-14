@@ -651,6 +651,119 @@ module(basename(import.meta.filename), function () {
         );
       }
     });
+    test('a callApi with a credential slot is refused to a caller who is not signed in, before anything is sent', async function (assert) {
+      let sent = 0;
+      let { core } = stub({
+        operations: {
+          withKey: {
+            base: 'callApi',
+            deterministic: true,
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/items',
+              headers: { authorization: 'Bearer {{userKey}}' },
+              slots: [
+                {
+                  name: 'userKey',
+                  key: 'userKey',
+                  placement: 'header',
+                  at: 'headers.authorization',
+                },
+              ],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async send() {
+          sent++;
+          return { status: 200, headers: {}, body: null };
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, { ...invoke(CARD, 'withKey'), actor: '' }),
+      );
+      assert.strictEqual(error.code, 'actor-required');
+      assert.strictEqual(sent, 0, 'nothing was sent');
+
+      let signedIn = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'withKey')),
+      );
+      assert.strictEqual(
+        signedIn.code,
+        'binding-not-approved',
+        'a signed-in caller reaches the binding check',
+      );
+      assert.strictEqual(sent, 0, 'nothing was sent');
+    });
+    test('a keyless callApi on the type is sent through the core, filled from the payload alone', async function (assert) {
+      let sent: { url: string; credentials: number }[] = [];
+      let { core } = stub({
+        operations: {
+          lookup: {
+            base: 'callApi',
+            deterministic: true,
+            params: { name: { kind: 'field', codeRef: CARD_DEF } },
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/items/{name}',
+              path: { name: { $ref: 'params', key: 'name' } },
+              slots: [],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async send(request, credentials) {
+          sent.push({ url: request.url, credentials: credentials.length });
+          return { status: 404, headers: {}, body: { error: 'Not found' } };
+        },
+      };
+      let result = await runOperation(core, {
+        ...invoke({ kind: 'type', codeRef: PERSON, realm: REALM }, 'lookup'),
+        params: { name: 'a/b' },
+      });
+      assert.deepEqual(sent, [
+        { url: 'https://api.example.com/items/a%2Fb', credentials: 0 },
+      ]);
+      assert.deepEqual(result, {
+        callApi: { status: 404, headers: {}, body: { error: 'Not found' } },
+      });
+    });
+    test("a callApi's `output` maps the response to an object, and nothing else", async function (assert) {
+      let response = { status: 200, headers: {}, body: { id: 7 } };
+      let declare = (source: string) =>
+        stub({
+          operations: {
+            fetch: {
+              base: 'callApi',
+              deterministic: true,
+              output: { source, syntax: 'solidified' },
+              callApi: {
+                method: 'GET',
+                url: 'https://api.example.com/item',
+                slots: [],
+              },
+            },
+          },
+        });
+      let mapped = declare('{id:.body.id}');
+      mapped.core.callApi = { send: async () => response };
+      assert.deepEqual(await runOperation(mapped.core, invoke(CARD, 'fetch')), {
+        callApi: { id: 7 },
+      });
+
+      let listed = declare('[.status]');
+      listed.core.callApi = { send: async () => response };
+      let error = await refusalFrom(() =>
+        runOperation(listed.core, invoke(CARD, 'fetch')),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(
+        (error.meta as { stage?: string } | undefined)?.stage,
+        'output',
+      );
+    });
     test('a declaration lowering flagged invalid reports its findings', async function (assert) {
       let { core } = stub({
         operations: {
