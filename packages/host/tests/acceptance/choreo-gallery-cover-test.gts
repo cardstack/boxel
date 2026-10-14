@@ -55,6 +55,17 @@ const runningInStages = () =>
     .filter((animation) => animation.playState === 'running').length;
 
 /**
+ * Waits for every tile's stage to stop playing. A resting stage pauses what
+ * it finds at once, and looks again within a second for effects a score
+ * starts by script, so a tile whose score passes as the page opens over it
+ * rests a moment later than the rest.
+ */
+const stagesSettled = () =>
+  waitUntil(() => runningInStages() === 0, { timeout: 2500 }).catch(
+    () => undefined,
+  );
+
+/**
  * A click on a tile's title as a pointer makes it. The `click` helper also
  * focuses the link first, and focusing a link scrolls it into view, which in
  * the test's small container scrolls the tile being watched out of it.
@@ -143,7 +154,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         stage,
         'the covered stage is the one that was running, still mounted',
       );
-      await frames(2);
+      await stagesSettled();
       assert.strictEqual(
         runningInStages(),
         0,
@@ -226,7 +237,7 @@ module('Acceptance | Choreo gallery | covered by a demo', function () {
         .dom('.current-card')
         .hasAttribute('inert', '', 'the gallery under the stack is inert');
       await waitUntil(() => resting(stage));
-      await frames(2);
+      await stagesSettled();
       assert.strictEqual(
         runningInStages(),
         0,
