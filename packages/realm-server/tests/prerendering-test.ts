@@ -897,8 +897,8 @@ module(basename(import.meta.filename), function () {
       // (the source URL), `flaky-target` (extensionless — what the card's
       // adoptsFrom.module resolves to via rri), or the canonicalized form
       // surfaced through X-Boxel-Canonical-Path. Without this, the matcher
-      // would miss the actual fetch and the test would silently pass
-      // without exercising the retry path.
+      // would miss the actual fetch, and the test would fail on its
+      // injected-failure count without ever exercising the retry path.
       let stripExecExt = (u: string) => {
         for (let ext of executableExtensions) {
           if (u.endsWith(ext)) {
