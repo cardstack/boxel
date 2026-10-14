@@ -34,7 +34,7 @@ export default class HostModeStateService extends Service {
   // Primary card ID: https://user.example.com/cards/123
   // Stack card IDs: [https://user.example.com/cards/456, https://user.example.com/cards/789]
   @tracked private primaryCardItem: string | null = null;
-  private stackCardItems: TrackedArray<string> = new TrackedArray();
+  private readonly stackCardItems: TrackedArray<string> = new TrackedArray();
   private currentRoutePath: string | null = null;
   private isStateInitialized = false;
 
@@ -45,7 +45,9 @@ export default class HostModeStateService extends Service {
 
   resetState() {
     this.primaryCardItem = null;
-    this.stackCardItems = new TrackedArray();
+    // emptied in place: the field isn't tracked, so a template that has read
+    // the stack keeps the array it read
+    this.stackCardItems.splice(0, this.stackCardItems.length);
     this.currentRoutePath = null;
     this.isStateInitialized = false;
   }
@@ -74,7 +76,12 @@ export default class HostModeStateService extends Service {
   // browser's Back and Forward, whose URL holds a different stack that the
   // page has to follow.
   private initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
-    this.primaryCardItem = primaryCardId ?? null;
+    // a tracked write invalidates even when the value is the same, and the
+    // primary card's resources rebuild on it, so only a change is written
+    let primaryCard = primaryCardId ?? null;
+    if (this.primaryCardItem !== primaryCard) {
+      this.primaryCardItem = primaryCard;
+    }
     if (
       this.stackCardItems.length !== stack.length ||
       this.stackCardItems.some((id, index) => id !== stack[index])
