@@ -15,7 +15,7 @@ That is the whole API, and the smallness is the point. Two decisions follow from
 
 **Positioning is `position: absolute` against a `position: relative` wrapper, with no collision handling.** A tooltip on a control at the right edge of the viewport will overflow it. `@side` is a static choice, not a preference. This is a deliberate departure from the rest of the kit's overlays, which use the `anchorTo` measuring modifier — the trade is made for prerender safety and per-instance cost.
 
-The tooltip is **always dark**, in both light and dark seasons — the kit calls this "the lining". It is a deliberate constant so the affordance reads identically everywhere.
+The tooltip is **always dark**, in both light and dark mode — the kit calls this "the lining". It is a deliberate constant so the affordance reads identically everywhere.
 
 ## Prior art
 
@@ -43,7 +43,7 @@ Do not ship a tooltip as the only name for an icon button until the association 
 
 ## Theming
 
-`--tooltip` and `--tooltip-foreground` (the always-dark pair a season must define for _both_ modes, not just light), `--shadow-ink-strong`, `--text-ui-sm`. Radius (6px), padding and the 6px offset are hard-coded. A season that ships only a light palette for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
+`--tooltip` and `--tooltip-foreground` (the always-dark pair a theme must define for _both_ modes, not just light), `--shadow-ink-strong`, `--text-ui-sm`. Radius (6px), padding and the 6px offset are hard-coded. A theme that defines only a light value for `--tooltip` will produce a light-on-light tooltip in dark mode — this is the one token here that is easy to get wrong.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

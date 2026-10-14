@@ -50,20 +50,20 @@ Consumed directly: `--foreground`, `--muted-foreground` (the caret), `--hover` (
 
 The component's own knobs: `--pretui-collapsible-h` (minimum trigger height, 2.24em) and `--pretui-collapsible-px` (trigger inline padding, 0.5em — also the negative margin that keeps the label flush with the content edge).
 
-Motion is the kit's: `--pretui-dur-morph` / `--pretui-ease-morph` for the fold, `--pretui-dur-snap` / `--pretui-ease-snap` for the caret. A season retunes every Collapsible's expand by retuning the morph pair; the reduced-motion branch removes both transitions and the trigger's press scale. The 600 trigger weight, the 0.45em caret and the 0.985 press scale are fixed.
+Motion is the kit's: `--pretui-dur-morph` / `--pretui-ease-morph` for the fold, `--pretui-dur-snap` / `--pretui-ease-snap` for the caret. A theme retunes every Collapsible's expand by retuning the morph pair; the reduced-motion branch removes both transitions and the trigger's press scale. The 600 trigger weight, the 0.45em caret and the 0.985 press scale are fixed.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| `open` / `onOpenChange` / `defaultOpen` | the same names |
-| `disabled` | `@disabled` (aria-disabled, stays focusable) |
-| `isExpanded` / `onExpandedChange` (Aria) | `@open` / `@onOpenChange` |
-| `<Collapsible.Trigger>` | `@label` or `<:trigger>` |
-| `<Collapsible.Content>` | `<:default>` |
-| `unmountOnExit` / `forceMount` | not offered; the region is always mounted |
-| `data-state`, `data-disabled` | both present, both `'true'`/`'false'` strings |
+| React                                    | Pretui                                        |
+| ---------------------------------------- | --------------------------------------------- |
+| `open` / `onOpenChange` / `defaultOpen`  | the same names                                |
+| `disabled`                               | `@disabled` (aria-disabled, stays focusable)  |
+| `isExpanded` / `onExpandedChange` (Aria) | `@open` / `@onOpenChange`                     |
+| `<Collapsible.Trigger>`                  | `@label` or `<:trigger>`                      |
+| `<Collapsible.Content>`                  | `<:default>`                                  |
+| `unmountOnExit` / `forceMount`           | not offered; the region is always mounted     |
+| `data-state`, `data-disabled`            | both present, both `'true'`/`'false'` strings |
 
 **Accordion** is N of these behind boxel-ui's engine; **Disclosure** is the React Aria name for this component.

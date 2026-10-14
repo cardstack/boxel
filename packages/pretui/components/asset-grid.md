@@ -24,7 +24,7 @@ every DataArgs<MediaAssetSpec> arg — @rows or @load, @loadKey, @key,
 
 **The column count is measured after every resize rather than assumed**, which is what keeps the arrow keys correct: in a grid, ↓ means "one row down", and one row down is only knowable if you know how many columns there currently are. Change `@tileSize` at runtime and the keyboard still moves the way the eye does.
 
-**`@onOpen` is the seam to a viewer.** It fires on Enter and on double-click with the *resolved* asset, so the receiver gets the derived kind, label and aspect ratio rather than the raw spec.
+**`@onOpen` is the seam to a viewer.** It fires on Enter and on double-click with the _resolved_ asset, so the receiver gets the derived kind, label and aspect ratio rather than the raw spec.
 
 **Supply `@rows` or `@load`, never both**, and give `@key` whenever rows can reorder — both are DataComponent's rules, and they apply unchanged here.
 
@@ -49,6 +49,6 @@ Where it is thinner: there is no drag-to-reorder and no drag-out, no marquee (ru
 
 `--pretui-assets-tile` (tile geometry) and `--pretui-assets-aspect` (the thumbnail ratio), `--pretui-on-neutral` for ink over a thumbnail, `--pretui-shadow-hairline` for tile edges.
 
-The two `--pretui-assets-*` tokens are shared with **MediaInspector** in the same module, so a shelf and the panel describing its selection stay dimensionally consistent. A season that widens tiles changes the default density everywhere at once, while `@tileSize` remains the per-instance override — the token sets the product's rhythm, the arg serves the one screen that needs something else.
+The two `--pretui-assets-*` tokens are shared with **MediaInspector** in the same module, so a shelf and the panel describing its selection stay dimensionally consistent. A theme that widens tiles changes the default density everywhere at once, while `@tileSize` remains the per-instance override — the token sets the product's rhythm, the arg serves the one screen that needs something else.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

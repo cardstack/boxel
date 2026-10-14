@@ -2,7 +2,7 @@
 
 The colour face alone: a `<span>` that draws one colour, with no semantics, no accessible name and no tab stop. It is the smallest colour surface in the kit.
 
-It exists because a colour chip appears in two structurally different places — as the whole of an interactive **Swatch**, and as decoration *inside* someone else's control (the **ColorField** trigger, a row in **GradientEditor**). A `<button>` inside a `<button>` is invalid HTML and a real keyboard trap; realm lint rejects it as `no-nested-interactive`, and `tabindex='-1'` on the inner one is a workaround rather than a fix. One presentational primitive used by both is the fix.
+It exists because a colour chip appears in two structurally different places — as the whole of an interactive **Swatch**, and as decoration _inside_ someone else's control (the **ColorField** trigger, a row in **GradientEditor**). A `<button>` inside a `<button>` is invalid HTML and a real keyboard trap; realm lint rejects it as `no-nested-interactive`, and `tabindex='-1'` on the inner one is a workaround rather than a fix. One presentational primitive used by both is the fix.
 
 So: reach for **Swatch** when the colour is the thing the user acts on, and for this when the colour is decoration on something else.
 
@@ -20,7 +20,7 @@ So: reach for **Swatch** when the colour is the thing the user acts on, and for 
 
 **An unparseable colour is drawn, not hidden.** The chip switches to an empty state — a `--destructive` diagonal over the field ground — so a bad value in a record is visible as a bad value instead of silently rendering as transparent.
 
-**The checkerboard sits *under* the colour, not beside it.** A 40%-opaque colour over a checker reads as translucent; the same colour composited onto a solid ground reads as a lighter solid colour, which is a lie the eye cannot catch. This is the detail that makes alpha legible.
+**The checkerboard sits _under_ the colour, not beside it.** A 40%-opaque colour over a checker reads as translucent; the same colour composited onto a solid ground reads as a lighter solid colour, which is a lie the eye cannot catch. This is the detail that makes alpha legible.
 
 ## Prior art
 
@@ -42,6 +42,6 @@ This component is deliberately invisible to assistive technology, and that is th
 
 `--pretui-swatch-size` (18px default; `@size` overrides per instance), `--pretui-swatch-color` (the parsed colour, written per instance), `--pretui-checker` (the alpha checkerboard, defaulting to a conic gradient mixed from `--foreground` at 11%), `--foreground` (the checker and the inset hairline at 14%), `--radius` (the square shape's corner, at a 2.5 divisor), `--destructive` and `--field` (the empty state).
 
-A season changes every colour chip in the product by retuning `--pretui-swatch-size` and `--pretui-checker`. Because the checker and the hairline are both mixed from `--foreground`, a dark season inverts them automatically — but a season with a very low-contrast `--foreground` will lose the hairline, and a white swatch on a light `--card` then has no edge at all.
+A theme changes every color chip in the product by retuning `--pretui-swatch-size` and `--pretui-checker`. Because the checker and the hairline are both mixed from `--foreground`, a dark theme inverts them automatically — but a theme with a very low-contrast `--foreground` will lose the hairline, and a white swatch on a light `--card` then has no edge at all.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

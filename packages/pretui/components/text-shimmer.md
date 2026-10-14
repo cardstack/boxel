@@ -22,7 +22,7 @@ It is the kit's waiting-state voice for text — a pending lot, an in-flight job
 
 **motion-primitives' TextShimmer** and **ShimmerWave**, plus **react-bits**.
 
-Where Pretui is better: **the colours ride the token channel** — `--muted-foreground` for the base and `--foreground` for the sheen — rather than being a hardcoded gradient. So a shimmer in a dark season shimmers correctly without anyone restating the gradient, and a shimmering label sits at the same weight as the static labels around it. The sweep is also a pure CSS loop with no JavaScript driving it.
+Where Pretui is better: **the colors ride the token channel** — `--muted-foreground` for the base and `--foreground` for the sheen — rather than being a hardcoded gradient. So a shimmer in a dark theme shimmers correctly without anyone restating the gradient, and a shimmering label sits at the same weight as the static labels around it. The sweep is also a pure CSS loop with no JavaScript driving it.
 
 Where it is thinner: one sweep direction, no pause, no finite repeat count, and no way to shimmer anything but a text string — a shimmering row or card needs **Skeleton** instead. There is no wave variant either; motion-primitives' ShimmerWave animates per character, and this does not.
 
@@ -37,6 +37,6 @@ Where it is thinner: one sweep direction, no pause, no finite repeat count, and 
 
 `--pretui-shimmer-duration` (seconds per sweep, from `@duration`) and `--pretui-shimmer-spread` (the sheen half-width, from `@spread`), over `--muted-foreground` and `--foreground` for the two gradient stops.
 
-Because both colours are theme tokens rather than literals, a season retunes every shimmer in the product by retuning its foreground pair — and the sheen is always the brighter of the two, so the effect reads the same way in light and dark without a second definition.
+Because both colors are theme tokens rather than literals, a theme retunes every shimmer in the product by retuning its foreground pair — and the sheen is always the brighter of the two, so the effect reads the same way in light and dark without a second definition.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

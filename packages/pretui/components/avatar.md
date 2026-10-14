@@ -59,7 +59,7 @@ Gaps:
 
 `--pretui-chip-hue` (set per instance from the name hash, and read once into a private `--_avatar-hue` — note it reuses **Chip**'s property name, so an ancestor setting `--pretui-chip-hue` for a chip will _not_ affect an Avatar, because the inline style wins), `--pretui-avatar-size` (the diameter; inline only when `@size` is given, otherwise from the cascade; the `1.5rem` default is declared once, as a private `--_avatar-size` that width, height and the font size all read), `--card` (mix base and the group ring), `--foreground` (the initials, and the ring around a photo), `--border` (mixed into the hairline), `--primary` (the fallback hue when the name is empty), `--font-mono`.
 
-The 16% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenized — so a season cannot make avatars more or less saturated. A season or a card can set a default size through `--pretui-avatar-size`; `@size` wins over it. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
+The 16% / 28% mix ratios are fixed — unlike **Chip**, whose ratios are tokenized — so a theme cannot make avatars more or less saturated. A theme or a card can set a default size through `--pretui-avatar-size`; `@size` wins over it. As with **StatusChip**, the palette that matters is `--chart-1` … `--chart-5`, and they must work as a mutually distinguishable set at 16% tint behind small mono type.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

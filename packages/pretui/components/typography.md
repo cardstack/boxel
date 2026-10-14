@@ -57,7 +57,7 @@ No single APG pattern. These are the tags the patterns are made of.
 
 `--font-serif` (Title, Blockquote), `--font-sans` (subheading), `--font-mono` (Code), `--text-display`, `--text-heading`, `--text-body`, `--text-ui-xs` / `--text-ui-sm` / `--text-ui-md` / `--text-ui-lg`, `--weight-heading`, `--weight-strong`, `--track-heading`, `--leading-heading`, `--leading-body`, `--foreground`, `--muted-foreground`, `--success`, `--warning`, `--destructive` (tone inks mixed toward `--foreground`), `--pretui-text-mark` (the highlight, default `--warning`), `--pretui-paragraph-measure`, `--pretui-quote-rule` (default `--border`), `--pretui-link-ink` (default `--primary`), `--ring`, `--card` and `--radius-control` (Code's ground), and `--space-2` / `--space-4`.
 
-A season restyles all prose through the font, size and weight tokens it already defines for the kit.
+A theme restyles all prose through the font, size and weight tokens it already defines for the kit.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

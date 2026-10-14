@@ -214,7 +214,7 @@ const sigPadInto = modifier(
     // A `var(--token)` string means nothing to a canvas context, so the ink
     // is resolved from the element's own computed `color` — which the scoped
     // CSS points at the theme token. The pen therefore re-tints with the
-    // season without the component ever handling a token string.
+    // theme without the component ever handling a token string.
     const resolved =
       penColor ?? getComputedStyle(canvas).color ?? 'rgb(20, 22, 26)';
 
@@ -757,7 +757,7 @@ export class SignaturePad extends Component<SignaturePadSignature> {
           width: 100%;
           height: 100%;
           /* The engine reads the resolved value of this to pick its ink, so
-             the pen re-tints with the season without ever handling a token. */
+             the pen re-tints with the theme without ever handling a token. */
           color: var(--pretui-sigpad-ink);
           cursor: crosshair;
         }

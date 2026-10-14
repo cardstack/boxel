@@ -28,7 +28,7 @@ Where Pretui is better: **the gallery knows nothing.** Routing lives in one regi
 
 Where it is thinner, and one of these is a live inconsistency: **`ModelViewer` ships but is not routed here by default.** It registers through an explicit `installModelAdapter()` call, deliberately — the engine costs 292 KB gzipped and importing a component must not silently change how every other viewer in the process behaves — but the fallback message for a model asset still reads "not vendored yet", which is now stale copy rather than a true statement. A host that wants 3D has to call the installer and will not learn that from the message it sees.
 
-Beyond that: there is no loading or error state at the shell level (each adapter owns its own), no size or fit contract shared across adapters, and no way to ask the shell which adapter *would* run without rendering it, other than the exported `adapterFor`.
+Beyond that: there is no loading or error state at the shell level (each adapter owns its own), no size or fit contract shared across adapters, and no way to ask the shell which adapter _would_ run without rendering it, other than the exported `adapterFor`.
 
 ## Accessibility
 
@@ -42,6 +42,6 @@ Beyond that: there is no loading or error state at the shell level (each adapter
 
 The shell has almost no surface of its own: `--text-ui-sm` and `--pretui-primary-ink` for the fallback link, and `--pretui-shadow-hairline` shared with the adapters in this module.
 
-That is deliberate. Everything visible comes from the adapter that ran, so a season retunes **MediaPlayer**, **ImageFrame** and the rest, and the shell inherits whatever they became. A viewer that themed independently of its adapters would be a viewer that looks different depending on what you put in it.
+That is deliberate. Everything visible comes from the adapter that ran, so a theme retunes **MediaPlayer**, **ImageFrame** and the rest, and the shell inherits whatever they became. A viewer that themed independently of its adapters would be a viewer that looks different depending on what you put in it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

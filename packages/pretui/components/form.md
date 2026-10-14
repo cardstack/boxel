@@ -48,8 +48,8 @@ No APG pattern — a form is wiring. The governing criteria are WCAG **3.3.1 Err
 
 What is right, and is the point of the component:
 
-- **Focus lands somewhere useful on a refused commit.** `focusInvalid()` prefers the first invalid field *in real document order* — sorted by `compareDocumentPosition`, not by registration order, because conditionals and re-renders break that — then falls back to the summary, then to whatever the summary would have pointed at. `@focusOnInvalid='summary'` switches to the GOV.UK behaviour.
-- **Focus can reach a control inside a collapsed section.** `reveal()` walks up through every `[data-pretui-form-section]` ancestor, calls its registered open callback *and* clears the `hidden` attribute on the spot so focus lands in this tick rather than after the next render. A user is never asked to fix something they cannot see.
+- **Focus lands somewhere useful on a refused commit.** `focusInvalid()` prefers the first invalid field _in real document order_ — sorted by `compareDocumentPosition`, not by registration order, because conditionals and re-renders break that — then falls back to the summary, then to whatever the summary would have pointed at. `@focusOnInvalid='summary'` switches to the GOV.UK behaviour.
+- **Focus can reach a control inside a collapsed section.** `reveal()` walks up through every `[data-pretui-form-section]` ancestor, calls its registered open callback _and_ clears the `hidden` attribute on the spot so focus lands in this tick rather than after the next render. A user is never asked to fix something they cannot see.
 - `aria-busy` while `@busy`; `aria-label`/`aria-labelledby` for the form's name.
 - The deferred claim publish is a **microtask**, not a timer — the realm's no-`setTimeout` law holds — which sidesteps Ember's backtracking-rerender assertion when fields register mid-render, and coalesces a batch into one flush.
 
@@ -62,7 +62,7 @@ Gaps:
 
 ## Theming
 
-The `<form>` element itself carries `data-mode`, `data-dirty`, `data-submitted` and `data-busy` for season hooks, and consumes the shared layout tokens (`--space-*`). Nearly all visual tokens belong to the child components — **FormField**, **FormLayout**, **FormSection**, **ErrorSummary**, **FormFooter** — which is the intended shape: the host is behaviour, the children are dress.
+The `<form>` element itself carries `data-mode`, `data-dirty`, `data-submitted` and `data-busy` for theme hooks, and consumes the shared layout tokens (`--space-*`). Nearly all visual tokens belong to the child components — **FormField**, **FormLayout**, **FormSection**, **ErrorSummary**, **FormFooter** — which is the intended shape: the host is behavior, the children are dress.
 
 Note the invalid and readonly dresses reach caller-supplied controls **through the inherited token channel** (`--field`, `--input`), not through `:deep()` or `:global()`. That is why they work on Input, Textarea, Select and anything else that reads the Pretui control tokens, and it is why a custom control that reads those tokens gets validation styling for free.
 
@@ -70,13 +70,13 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| `<Form>` / react-hook-form / Aria Form | this tile |
-| FormField / Field / FormControl | **FormField** / **Field** |
-| FormMessage / errorMessage | **FieldError** |
-| FormDescription | help slot |
-| Fieldset / FormSection | **FormSection** / **Fieldset** stub |
-| zod resolver / validation | caller — Form routes issues |
+| React                                  | Pretui                              |
+| -------------------------------------- | ----------------------------------- |
+| `<Form>` / react-hook-form / Aria Form | this tile                           |
+| FormField / Field / FormControl        | **FormField** / **Field**           |
+| FormMessage / errorMessage             | **FieldError**                      |
+| FormDescription                        | help slot                           |
+| Fieldset / FormSection                 | **FormSection** / **Fieldset** stub |
+| zod resolver / validation              | caller — Form routes issues         |
 
 - [ ] Accept `onSubmit` prevention defaults agents expect (`event.preventDefault`).

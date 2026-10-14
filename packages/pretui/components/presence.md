@@ -40,7 +40,7 @@ The notable thing this does that the upstream does not:
 
 Gaps and cautions:
 
-- **There is no `prefers-reduced-motion` branch in this component.** Every other animated component in the kit has one; here the reduced-motion answer is presumably that the caller sets `@duration={{0}}`, or that a season zeroes `--pretui-motion-distance`. Verify — an unguarded entrance and exit on every mounted element is exactly what **2.3.3** is about, and a component whose entire purpose is motion is the one that most needs the guard.
+- **There is no `prefers-reduced-motion` branch in this component.** Every other animated component in the kit has one; here the reduced-motion answer is presumably that the caller sets `@duration={{0}}`, or that a theme zeroes `--pretui-motion-distance`. Verify — an unguarded entrance and exit on every mounted element is exactly what **2.3.3** is about, and a component whose entire purpose is motion is the one that most needs the guard.
 - **Content appearing is not announced.** Presence is a visual transition, not a live region; if the content mattering is the point (an error, a result), pair it with a `role="status"` region that already exists in the DOM.
 - **Focus is not moved into entering content**, correctly — that is the caller's decision, and moving it automatically would be wrong for most uses.
 - **`@delay` staggering means later items appear after a measurable gap**; a screen-reader user encountering the DOM does not experience the stagger at all, which is fine, but do not use stagger to convey order.
@@ -48,8 +48,8 @@ Gaps and cautions:
 
 ## Theming
 
-`--pretui-motion-distance` (default 8px, used by rise/fall/slide) and `--pretui-motion-scale` (default 0.96, used by scale) — two tokens that a season sets once to give every Presence and **InView** in the product the same travel. Duration, exit duration and delay are args in seconds rather than tokens, so a season cannot set a house pace; that is an inconsistency with the kit's `--pretui-dur-*` tokens elsewhere.
+`--pretui-motion-distance` (default 8px, used by rise/fall/slide) and `--pretui-motion-scale` (default 0.96, used by scale) — two tokens that a theme sets once to give every Presence and **InView** in the product the same travel. Duration, exit duration and delay are args in seconds rather than tokens, so a theme cannot set a house pace; that is an inconsistency with the kit's `--pretui-dur-*` tokens elsewhere.
 
-Because the presets resolve _through_ those custom properties rather than baking in pixel values, a caller can override `--pretui-motion-distance` on an ancestor and every preset inside adapts — including a season that wants near-zero travel for a calm theme, which is also the poor-man's reduced-motion switch.
+Because the presets resolve _through_ those custom properties rather than baking in pixel values, a caller can override `--pretui-motion-distance` on an ancestor and every preset inside adapts — including a theme that wants near-zero travel for a calm feel, which is also the poor-man's reduced-motion switch.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

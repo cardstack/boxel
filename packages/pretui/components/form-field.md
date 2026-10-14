@@ -30,7 +30,7 @@ The field registers itself with the form from its constructor and unregisters in
 Three improvements over SLDS, each concrete:
 
 1. **SLDS's field-level help tooltip hardcodes `id="help"`** and only renders the bubble while shown — so every field on a page points at the same id, and the reference dangles whenever the tooltip is hidden. Pretui's help ids are guid-unique and the described text is **always in the DOM**.
-2. **SLDS computes an `errorId` but never wires `aria-describedby` itself**, and its own examples routinely omit it. FormField computes the whole chain and *yields* it, so the wiring cannot be forgotten.
+2. **SLDS computes an `errorId` but never wires `aria-describedby` itself**, and its own examples routinely omit it. FormField computes the whole chain and _yields_ it, so the wiring cannot be forgotten.
 3. **SLDS's required marker is an `aria-hidden` `abbr`**, so required-ness only reaches assistive tech if the caller remembered `required` on the input. Pretui adds a visually-hidden "(required)" **inside the label**, so the accessible name always carries it — belt and braces, one authoring step.
 
 And one over React Spectrum: its `FieldError` is errors-only and unstyled by severity, while Pretui's messages are severity-tiered and fail closed.
@@ -43,15 +43,15 @@ What is right:
 
 - `<label for>` with a matching `labelId`, or a `<span>` in static display.
 - `describedBy` is **description first, then errors**, matching React Spectrum's order, and is `undefined` rather than an empty string when there is nothing — no dangling idrefs, which is exactly what `useSlotId` exists to prevent.
-- `invalid` in the control context is driven by *blocking* issues only, so the caller sets `aria-invalid` from a value that already respects severity.
+- `invalid` in the control context is driven by _blocking_ issues only, so the caller sets `aria-invalid` from a value that already respects severity.
 - The required marking reaches the accessible name, not just the pixels.
 - **The live-region policy is deliberate and correct.** `role="alert"` interrupts; a field message that re-renders on every keystroke must never be a live region or a screen-reader user is talked over while typing. So `announce` is opt-in and FormField only turns it on for `record` mode, where an error is the result of one discrete commit. In `submit` mode the **ErrorSummary** announces by taking focus; in `live` mode nothing announces, and the message is still read whenever the field is focused because its id is already in `describedBy`. Most kits get this wrong in one direction or the other.
 - `@reserveMessageSpace` (default true) keeps side-by-side fields from jumping when an error appears.
 
 Gaps and cautions:
 
-- **The wiring is yielded, not applied.** If `<:control>` ignores `ctx.describedBy` or `ctx.invalid`, nothing is wired and nothing warns. The component removes the *excuse* for forgetting, not the possibility. A dev-mode assertion that the yielded `id` was consumed would close it.
-- **The help affordance is a Tooltip**, which inherits Tooltip's gaps — no Escape dismissal and `pointer-events: none`, both WCAG 1.4.13 failures. Because the help text is always in the DOM and referenced by id, the *semantic* path is fine; the pointer path is not.
+- **The wiring is yielded, not applied.** If `<:control>` ignores `ctx.describedBy` or `ctx.invalid`, nothing is wired and nothing warns. The component removes the _excuse_ for forgetting, not the possibility. A dev-mode assertion that the yielded `id` was consumed would close it.
+- **The help affordance is a Tooltip**, which inherits Tooltip's gaps — no Escape dismissal and `pointer-events: none`, both WCAG 1.4.13 failures. Because the help text is always in the DOM and referenced by id, the _semantic_ path is fine; the pointer path is not.
 - `@labelHidden` keeps the label in the accessible tree, which is correct, but a visually hidden label plus a placeholder is still a WCAG 3.3.2 smell for sighted users.
 - `@static` produces no control at all, so `describedBy` describes nothing focusable — expected, but do not pass `@required` alongside it.
 - The `emptyText` default `'—'` is announced literally by some screen readers as "em dash"; consider a visually-hidden "not set" for record views.
@@ -60,18 +60,18 @@ Gaps and cautions:
 
 `--field` and `--input` (repointed to `transparent` in readonly, and to a `--destructive` mix when invalid — the token channel is how the dress reaches caller-supplied controls without `:deep()`), `--foreground`, `--muted-foreground`, `--destructive`, `--pretui-field-disabled-opacity` (default 0.5), `--inset`, `--border`, `--pretui-shadow-hairline`, plus the **Label** component's mono eyebrow tokens and **Token**'s tokens when `@showRuleId` is on.
 
-`data-readonly`, `data-disabled`, `data-static` and the layout/span attributes are all reflected on the root, so a season can hook any of them. Because the invalid dress travels by token, a custom control that reads `--field`/`--input` gets error styling for free — and one that hard-codes its colours will silently opt out.
+`data-readonly`, `data-disabled`, `data-static` and the layout/span attributes are all reflected on the root, so a theme can hook any of them. Because the invalid dress travels by token, a custom control that reads `--field`/`--input` gets error styling for free — and one that hard-codes its colors will silently opt out.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| shadcn Field / Aria / Chakra / SLDS | Pretui FormField |
-| --- | --- |
-| label | label slot / @label |
-| description / helperText | help slot |
-| errorMessage / FormMessage | **FieldError** |
+| shadcn Field / Aria / Chakra / SLDS | Pretui FormField                 |
+| ----------------------------------- | -------------------------------- |
+| label                               | label slot / @label              |
+| description / helperText            | help slot                        |
+| errorMessage / FormMessage          | **FieldError**                   |
 | isRequired / isInvalid / isDisabled | @required / @invalid / @disabled |
-| htmlFor / labelledby | already wired |
+| htmlFor / labelledby                | already wired                    |
 
 - [ ] Accept `errorMessage` and `description` as string-arg sugar for the slots.

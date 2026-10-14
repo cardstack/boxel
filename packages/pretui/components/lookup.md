@@ -16,7 +16,7 @@ A record search field: type, results arrive from wherever you fetch them, pick o
 
 **`PickerRecord` is a plain value, not a `CardDef` or `FieldDef` instance** — `{ id, label, meta?, icon?, search?, locked? }`. The source records the reason: a picker must be usable before a schema exists. Salesforce shapes map straight on (`id` ← the 18-char record id, `label` ← Name, `meta` ← the "Account • San Francisco" second line).
 
-**`search` is the field that stops a real bug.** The dropdown runs a *local* filter over `label meta id`; when the server matched on something the visible text does not contain — a synonym, an account number, a fuzzy hit — that local pass would hide the row the server just returned. Setting `search` on the record keeps it.
+**`search` is the field that stops a real bug.** The dropdown runs a _local_ filter over `label meta id`; when the server matched on something the visible text does not contain — a synonym, an account number, a fuzzy hit — that local pass would hide the row the server just returned. Setting `search` on the record keeps it.
 
 **Single-select is an array of length 0 or 1.** One shape for both modes.
 
@@ -29,7 +29,7 @@ The combobox behaviour is **ember-power-select's**, and the source is explicit a
 Where Pretui adds real value over both:
 
 - **A `role="status" aria-live="polite"` region announcing selections, removals and "Searching…".** That is the thing async record pickers universally omit, and it is what makes this component genuinely usable without sight. `@recordNoun` exists to make the announcements read naturally.
-- **`@loading` spins the trigger affix *and* announces**, so the async state is not colour-and-motion only.
+- **`@loading` spins the trigger affix _and_ announces**, so the async state is not colour-and-motion only.
 - **`RecordFace` is exported as its own primitive**, so a listbox option, a selection pill and a dueling-list row render records identically.
 
 One documented gap the source itself flags: **EntityDisplay was the natural composition and could not be used**, because its `@title` is a string with no title block, so the matched search term could not carry a `<mark>`. That is a real API limitation in EntityDisplay worth fixing.
@@ -54,6 +54,6 @@ Gaps:
 
 Trigger and input: `--field`, `--input`, `--primary` (via `--ring`), `--ink-3`, `--control-h`, `--radius`, `--text-ui-md`. Dropdown: `--popover`, `--hover`, `--pretui-shadow-overlay`. Rows: **RecordFace**'s tokens plus the `<mark>` highlight dress. Pills: **RecordPill**'s. Invalid: `--destructive` through the **Field** token channel.
 
-The `<mark>` on the matched term is the one thing to check per season: it must be legible against both the resting and highlighted row backgrounds, and the default `background: inherit; color: inherit` treatment means a season that does not define it produces no visible highlight at all.
+The `<mark>` on the matched term is the one thing to check per theme: it must be legible against both the resting and highlighted row backgrounds, and the default `background: inherit; color: inherit` treatment means a theme that does not define it produces no visible highlight at all.
 
 The rules for the lookup's own elements sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector. The `:deep()` rules that restyle BoxelMultiSelect's power-select markup stay unlayered, because its own rules are unlayered and would beat them from inside a layer.

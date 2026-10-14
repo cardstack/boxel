@@ -16,13 +16,13 @@ An infinite pan/zoom node graph: nodes, edges, a patterned background, zoom cont
 
 **An uncontrolled canvas seeds from `@nodes` once and then owns its own copy** — later changes to the array are ignored. Pass `@onNodesChange` and keep the array yourself whenever the graph changes from outside.
 
-**`@flow` sets the drawn handles *and* the edge endpoints together**, and it exists because of a real React Flow foot-gun: the engine defaults `sourcePosition`/`targetPosition` to bottom/top, but a custom node component draws its own handles — so every React Flow graph that forgets those two keys renders edges leaving the *bottom* of a node whose handle is on the *right*. One arg, set once, both sides.
+**`@flow` sets the drawn handles _and_ the edge endpoints together**, and it exists because of a real React Flow foot-gun: the engine defaults `sourcePosition`/`targetPosition` to bottom/top, but a custom node component draws its own handles — so every React Flow graph that forgets those two keys renders edges leaving the _bottom_ of a node whose handle is on the _right_. One arg, set once, both sides.
 
 ## Prior art
 
 A **wrap of `@cardstack/boxel-canvas`** — a Glimmer port of **xyflow / React Flow**, vendored from emberflow, shipped as a self-contained ESM bundle copied into this realm.
 
-**The stylesheet problem is worth recording**, because it is a realm constraint with no obvious workaround: boxel-canvas needs a companion CSS file, and the npm side-effect `import './styles/canvas.css'` is banned in realm code — it passes parse, remote lint *and* transpile, then fails at indexing with `Unexpected token (28:0)` because the realm loader fetches the CSS and parses it as JavaScript. A bare `<link>` to the realm-served URL 401s on a private realm. So the sheet ships as a **string module** and a modifier injects it into `document.head`, **refcounted** so N canvases share one `<style>` and the last teardown removes it.
+**The stylesheet problem is worth recording**, because it is a realm constraint with no obvious workaround: boxel-canvas needs a companion CSS file, and the npm side-effect `import './styles/canvas.css'` is banned in realm code — it passes parse, remote lint _and_ transpile, then fails at indexing with `Unexpected token (28:0)` because the realm loader fetches the CSS and parses it as JavaScript. A bare `<link>` to the realm-served URL 401s on a private realm. So the sheet ships as a **string module** and a modifier injects it into `document.head`, **refcounted** so N canvases share one `<style>` and the last teardown removes it.
 
 That same modifier injects a second sheet for the handful of engine-owned elements no custom property can reach — focus rings the engine explicitly sets to `outline: none`, and the reduced-motion fallback it never wrote. **Every selector in it is anchored under `.pretui-node-canvas`, so it cannot leak past a NodeCanvas.** Everything else is retinted through the engine's own `--xy-*` custom-property channel from `<style scoped>` — no `:global()`, no `:deep()`, no `!important`.
 
@@ -52,6 +52,6 @@ The keyboard contract, **read out of the engine bundle rather than assumed**:
 
 Retinted through the engine's `--xy-*` custom-property channel from `<style scoped>`: node surfaces, edge strokes, handle fills, background pattern, controls and minimap all map onto Pretui tokens. Node depth uses `--card`, `--border` and the kit's shadow tokens instead of the stock border. `--pretui-canvas-*` and the pattern's `@gap`/`@patternSize` are graph-space args, not tokens.
 
-The injected skin sheet covers only what the channel cannot reach — the focus ring and the reduced-motion guard — and is anchored under `.pretui-node-canvas`, so a season cannot accidentally restyle another canvas through it.
+The injected skin sheet covers only what the channel cannot reach — the focus ring and the reduced-motion guard — and is anchored under `.pretui-node-canvas`, so a theme cannot accidentally restyle another canvas through it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

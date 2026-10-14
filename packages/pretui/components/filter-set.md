@@ -15,7 +15,7 @@ The narrow, read-only face of a condition set: each condition collapsed to one l
 
 **The three callbacks are also the three affordances.** Supply `@onEdit` and each row gets an edit control; supply `@onRemove` and each gets a remove; supply `@onAdd` and the add button appears. Omit all three and it is pure display. One arg, one control — no separate `showEdit` booleans.
 
-**`@resources` exists so summaries read with field *labels*, not paths.** A condition whose `targetPath` is `"Line Item"[SKU = "COPY-04"].Quantity` should summarise as "Line item quantity is greater than 10", and the resource catalogue is what makes that possible. Without it you get the path, which is correct but unreadable.
+**`@resources` exists so summaries read with field _labels_, not paths.** A condition whose `targetPath` is `"Line Item"[SKU = "COPY-04"].Quantity` should summarise as "Line item quantity is greater than 10", and the resource catalogue is what makes that possible. Without it you get the path, which is correct but unreadable.
 
 **`@customLogic` is echoed verbatim** when `@logic` is `custom` — the component does not re-render `1 AND (2 OR 3)` into prose, because paraphrasing a grammar is how a summary starts lying about the rule.
 
@@ -55,6 +55,6 @@ Gaps:
 
 `--inset` or `--card` for the list surface, `--border` for row rules, `--foreground` and `--muted-foreground` for summary text and the joiner, `--pretui-selected` or `--hover` for `@activeId`, plus **IconButton** tokens for the row controls and **Button** for Add.
 
-A season must keep the active row distinguishable from hover — this list normally sits beside an editor, so one row is persistently active while the pointer moves over others, and if those two states collapse the connection between the list and the editor disappears.
+A theme must keep the active row distinguishable from hover — this list normally sits beside an editor, so one row is persistently active while the pointer moves over others, and if those two states collapse the connection between the list and the editor disappears.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -40,15 +40,15 @@ class ComparisonUsage extends Component {
             <:before>
               <div class='cmp-layer cmp-layer-before'>
                 <span class='cmp-tag'>Before</span>
-                <p class='cmp-copy'>The unthemed wireframe — grayscale, flat,
-                  no season on it.</p>
+                <p class='cmp-copy'>The bare wireframe — grayscale, flat, no
+                  tokens on it.</p>
               </div>
             </:before>
             <:after>
               <div class='cmp-layer cmp-layer-after'>
                 <span class='cmp-tag'>After</span>
                 <p class='cmp-copy'>The Pretui cut — tokens, ink, and the
-                  season's attention hue.</p>
+                  theme's attention hue.</p>
               </div>
             </:after>
           </Comparison>

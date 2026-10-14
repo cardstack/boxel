@@ -66,6 +66,6 @@ Gaps and cautions:
 
 `--success-ink` (the check) and `--destructive-ink` (the cross) plus **IconButton**'s and **Button**'s full token set for the button itself — `--pretui-tone`/`--pretui-tone-on` per tone, `--radius`, `--hover`, `--border`, `--control-h`.
 
-The three glyphs stay in the DOM and cross-fade (scale, opacity and blur over 300 ms) when the state changes, so the result both enters and leaves smoothly; under `prefers-reduced-motion: reduce` the swap is instant. `data-state="copied"` or `data-state="failed"` is reflected on the button, so a season can dress the confirmed state beyond the glyph swap — a tinted background, for example — without touching the component. That is the intended extension point, and it is worth using: a glyph-only-by-default confirmation on a 28px button is easy to miss.
+The three glyphs stay in the DOM and cross-fade (scale, opacity and blur over 300 ms) when the state changes, so the result both enters and leaves smoothly; under `prefers-reduced-motion: reduce` the swap is instant. `data-state="copied"` or `data-state="failed"` is reflected on the button, so a theme can dress the confirmed state beyond the glyph swap — a tinted background, for example — without touching the component. That is the intended extension point, and it is worth using: a glyph-only-by-default confirmation on a 28px button is easy to miss.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

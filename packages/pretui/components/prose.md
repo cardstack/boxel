@@ -13,7 +13,7 @@ No args. Two things happen inside it, and they are both worth stating because th
 
 **`max-width: 62ch`.** The measure — the number of characters per line — is the single largest determinant of whether body copy is comfortable to read, and 62ch sits inside the 45–75 range typography research consistently lands on. Because it is `ch`, it tracks the font actually in use rather than assuming a pixel width. A card that renders prose full-bleed across a 1600px pane is unreadable, and this is the one line that prevents it.
 
-**`line-height: calc(var(--leading-body) / var(--text-body))`.** The leading is expressed as a _ratio derived from two absolute tokens_, so a season sets a body size and a leading in pixels — the way a type scale is actually designed — and the ratio falls out. Setting `line-height` as a bare number would decouple them and let a season's leading drift when it retunes the size.
+**`line-height: calc(var(--leading-body) / var(--text-body))`.** The leading is expressed as a _ratio derived from two absolute tokens_, so a theme sets a body size and a leading in pixels — the way a type scale is actually designed — and the ratio falls out. Setting `line-height` as a bare number would decouple them and let a theme's leading drift when it retunes the size.
 
 Paragraph margins (`0 0 var(--space-4)`) and inline `<code>` styling reach the yielded content through `:deep()`, which is the narrow, legitimate use of the escape hatch: the component must style markup it did not render.
 
@@ -34,24 +34,24 @@ No pattern governs it. The relevant criteria are WCAG **1.4.8 Visual Presentatio
 What is right, and it is genuinely more than most kits:
 
 - **`max-width: 62ch` directly serves WCAG 1.4.8**, which asks for no more than 80 characters per line. Comfortably inside it.
-- **Leading derived from the type scale** rather than hardcoded means a season that increases body size gets proportional leading. WCAG **1.4.12** requires content to survive a user stylesheet setting line-height to 1.5× — since the leading here is a ratio on a `div` and paragraph margins are in `--space-4`, user overrides apply cleanly rather than fighting a fixed pixel `line-height`.
+- **Leading derived from the type scale** rather than hardcoded means a theme that increases body size gets proportional leading. WCAG **1.4.12** requires content to survive a user stylesheet setting line-height to 1.5× — since the leading here is a ratio on a `div` and paragraph margins are in `--space-4`, user overrides apply cleanly rather than fighting a fixed pixel `line-height`.
 - **Reflow**: `max-width` with no `min-width` means the surface shrinks correctly at 320px.
 
 Gaps:
 
 - **Unstyled headings are a structural risk, not just a visual one.** Because `Prose` styles nothing above the paragraph, authors are tempted to fake headings with bold paragraphs — which produces content with no heading structure at all (**WCAG 1.3.1**, and a navigation failure for screen-reader users). Styling `<h2>`–`<h4>` would remove the temptation.
-- **Links are unstyled**, so they inherit the browser's blue-and-underlined default, which will not match the season and may not meet **1.4.3** against a themed background. It also means link/non-link distinction is whatever the UA decides.
+- **Links are unstyled**, so they inherit the browser's blue-and-underlined default, which will not match the theme and may not meet **1.4.3** against a themed background. It also means link/non-link distinction is whatever the UA decides.
 - **Lists are unstyled**, so nested lists inherit default indentation that will not match the kit's spacing scale.
 - **No `text-wrap: pretty` or `balance`**, so headings and short paragraphs get orphans. Minor, and a one-line improvement.
-- **The `<code>` fill is `--inset` with a hairline**, at `0.92em`. That is small text at low contrast against a low-contrast fill; check per season.
+- **The `<code>` fill is `--inset` with a hairline**, at `0.92em`. That is small text at low contrast against a low-contrast fill; check per theme.
 - Nothing is focusable; anything interactive inside is the caller's.
 
 ## Theming
 
 `--leading-body` and `--text-body` (which together produce the line-height ratio), `--space-4` (paragraph spacing), and for inline code: `--font-mono`, `--inset`, `--border`, `--pretui-shadow-hairline`.
 
-The `62ch` measure is fixed and is the one thing a season most often wants to change — a display-face season with a wide font may want 58ch, a condensed one 68ch. There is no token for it, so changing the measure means changing the component.
+The `62ch` measure is fixed and is the one thing a theme most often wants to change — a display-face theme with a wide font may want 58ch, a condensed one 68ch. There is no token for it, so changing the measure means changing the component.
 
-Because everything else inside is unstyled, **a season's control over prose is limited to the type scale tokens**; heading, list and link appearance inside a Prose are the browser's, whatever the season says.
+Because everything else inside is unstyled, **a theme's control over prose is limited to the type scale tokens**; heading, list and link appearance inside a Prose are the browser's, whatever the theme says.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

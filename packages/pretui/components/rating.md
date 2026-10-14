@@ -50,6 +50,6 @@ Gaps:
 
 ## Theming
 
-`--pretui-rating-hue` (set per instance from `@hue`), plus the kit's ink and control tokens for the empty symbol. Season authors should define a default rating hue that reads at small sizes against both `--card` and `--canvas` — a mid-yellow that works on white commonly disappears on a light panel.
+`--pretui-rating-hue` (set per instance from `@hue`), plus the kit's ink and control tokens for the empty symbol. Theme authors should define a default rating hue that reads at small sizes against both `--card` and `--canvas` — a mid-yellow that works on white commonly disappears on a light panel.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

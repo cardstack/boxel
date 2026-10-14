@@ -33,7 +33,7 @@ Governing pattern: APG **Accordion**, and it is worth stating the pattern precis
 
 APG requires: the header title in a `button`, **wrapped in an element with `role="heading"` and an appropriate `aria-level`** (or a native `<h2>`–`<h6>`), with **the button as the only element inside the heading**; `aria-expanded` on the button (required); `aria-controls` pointing at the panel; `aria-disabled` when an open panel cannot be collapsed. `role="region"` on the panel is **optional** and should be avoided past roughly six panels, to prevent landmark proliferation.
 
-The keyboard contract is the entire list: **Enter/Space toggle; Tab and Shift+Tab move through the page tab sequence.** Down/Up/Home/End are **not** in the pattern at any optionality level — they come from APG's *example*, not the spec — and an accordion is explicitly **not a single tab stop**.
+The keyboard contract is the entire list: **Enter/Space toggle; Tab and Shift+Tab move through the page tab sequence.** Down/Up/Home/End are **not** in the pattern at any optionality level — they come from APG's _example_, not the spec — and an accordion is explicitly **not a single tab stop**.
 
 What that means here:
 
@@ -46,9 +46,9 @@ What that means here:
 
 Consumed directly: `--foreground`, `--text-ui-md`, `--track-ui`.
 
-Remapped into the boxel-ui channel: `--ring` ← `--primary` (the trigger's focus outline — note the engine *does* paint a focus ring, unlike several hand-rolled Pretui controls), `--radius` ← `--radius-surface`, `--boxel-accordion-border` and `--boxel-accordion-item-border` ← `--border`, `--boxel-accordion-item-min-height` ← `--control-h`, `--boxel-accordion-title-font-weight` (600), `--boxel-accordion-trigger-padding-block` ← `--space-3`, `--boxel-accordion-transition` ← `--pretui-dur-snap` / `--pretui-ease-snap`.
+Remapped into the boxel-ui channel: `--ring` ← `--primary` (the trigger's focus outline — note the engine _does_ paint a focus ring, unlike several hand-rolled Pretui controls), `--radius` ← `--radius-surface`, `--boxel-accordion-border` and `--boxel-accordion-item-border` ← `--border`, `--boxel-accordion-item-min-height` ← `--control-h`, `--boxel-accordion-title-font-weight` (600), `--boxel-accordion-trigger-padding-block` ← `--space-3`, `--boxel-accordion-transition` ← `--pretui-dur-snap` / `--pretui-ease-snap`.
 
-A season retunes the accordion entirely through those tokens. The one thing to verify per season is `--ring` against the header background, since the focus indicator here is the engine's and is not the same treatment as the rest of the kit's controls.
+A theme retunes the accordion entirely through those tokens. The one thing to verify per theme is `--ring` against the header background, since the focus indicator here is the engine's and is not the same treatment as the rest of the kit's controls.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

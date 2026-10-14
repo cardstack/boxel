@@ -23,7 +23,7 @@ One arg, and it sets `width` and `height` inline. Everything else is inherited.
 
 Pretui's `currentColor` inheritance is a real improvement on Web Awesome's `--indicator-color`: it needs no configuration at every call site to look right, and it _cannot_ be wrong inside a Button that changes tone.
 
-Where it is behind: **no speed, thickness or colour tokens.** The 1.5px border and 0.7s duration are hard-coded, so a season cannot make spinners slower or heavier. Web Awesome's `--speed` in particular is the knob a calm season wants.
+Where it is behind: **no speed, thickness or color tokens.** The 1.5px border and 0.7s duration are hard-coded, so a theme cannot make spinners slower or heavier. Web Awesome's `--speed` in particular is the knob a calm theme wants.
 
 Note that **Button embeds its own copy of this ring** rather than composing `Spinner` — the same CSS, duplicated. Worth consolidating.
 
@@ -44,6 +44,6 @@ Pretui uses `role="status"` with `aria-label="Loading"`, and that combination ha
 
 `currentColor` for both the track (at 25% alpha) and the indicator. That is the entire palette — there are no spinner-specific tokens at all, which is either the cleanest thing about it or the most limiting, depending on what you need.
 
-The 1.5px border width, 0.7s duration (2.8s under reduced motion), and the 13px default size are hard-coded. A season wanting a heavier or slower spinner must fork the component. Since it inherits ink, a season only needs to ensure `--foreground`, `--muted-foreground` and each Button tone's on-colour all read acceptably at 25% alpha — the track is the part that disappears first on low-contrast surfaces.
+The 1.5px border width, 0.7s duration (2.8s under reduced motion), and the 13px default size are hard-coded. A theme wanting a heavier or slower spinner must fork the component. Since it inherits ink, a theme only needs to ensure `--foreground`, `--muted-foreground` and each Button tone's on-color all read acceptably at 25% alpha — the track is the part that disappears first on low-contrast surfaces.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

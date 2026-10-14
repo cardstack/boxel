@@ -52,6 +52,6 @@ Where it is thinner: one model at a time, no scene composition, no annotations o
 
 `--pretui-model-h` (the stage height, from `@height`), `--pretui-model-ratio` (the stage ratio, from `@ratio`), `--pretui-primary-ink` (the AR and link affordances), `--pretui-destructive-ink` (the error state), `--pretui-shadow-hairline`, `--pretui-z-raised` (the overlay's layer).
 
-The environment and lighting come from the engine rather than from tokens, which is the one place in the kit where a season does not reach: a model lit by the theme would need a lighting model the component does not own. Everything around the stage — the poster, the error state, the AR button — is themed normally, so the frame follows the season even though the scene inside it does not.
+The environment and lighting come from the engine rather than from tokens, which is the one place in the kit where the theme does not reach: a model lit by the theme would need a lighting model the component does not own. Everything around the stage — the poster, the error state, the AR button — is themed normally, so the frame follows the theme even though the scene inside it does not.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

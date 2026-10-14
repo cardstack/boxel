@@ -38,12 +38,12 @@ Where it is thinner: no zoom into a region of the plane, no alternate channel pa
 - **Each axis announces a sentence**, not a coordinate.
 - **The painted surface itself is `aria-hidden`**, as is the thumb — they are the visual expression of two values that are already announced.
 - **Keyboard movement is per axis**, which is what the two-slider model buys: arrows move one channel at a time, deliberately, rather than dragging a point around a plane.
-- **A picking plane is the hardest part of any colour tool to use without sight**, and this arrangement does not make it easy — it makes it *possible*, which no single-slider or canvas-only implementation does.
+- **A picking plane is the hardest part of any colour tool to use without sight**, and this arrangement does not make it easy — it makes it _possible_, which no single-slider or canvas-only implementation does.
 
 ## Theming
 
 `--pretui-area-x` and `--pretui-area-y` (the thumb's position), `--pretui-area-thumb-size`, `--pretui-area-thumb-color` and `--pretui-area-thumb-ink`, `--pretui-area-ratio` (the plane's shape).
 
-Splitting the thumb's fill from its ink is what keeps it visible over the whole plane: the thumb sits on every colour the surface can show, so a season sets a ring and a contrasting core rather than one colour that will disappear somewhere on the gradient.
+Splitting the thumb's fill from its ink is what keeps it visible over the whole plane: the thumb sits on every color the surface can show, so a theme sets a ring and a contrasting core rather than one color that will disappear somewhere on the gradient.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

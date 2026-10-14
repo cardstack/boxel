@@ -46,7 +46,7 @@ The move buttons are the crux, and SLDS's contract is the one to hold this to:
 - **Every move must be announced.** "Region added to Selected, position 3 of 5" — without it, a keyboard user presses a button and has no idea whether anything happened, because focus stays on the button while both lists change behind them. **Lookup** in this same file has a well-designed polite live region; this component should have the same, and whether it does is the first thing to check.
 - **Focus after a move** should follow the moved item or stay predictably on the button; an unmanaged move leaves focus on a button whose enabled state may have just changed.
 - **Reorder buttons need the same treatment** — "Move up" must announce the new position, or the reorder column is unusable without sight.
-- **WCAG 2.5.7 Dragging Movements** does not apply (there is no drag), which is one place the button-based design is *more* accessible than SLDS's drag-enabled version.
+- **WCAG 2.5.7 Dragging Movements** does not apply (there is no drag), which is one place the button-based design is _more_ accessible than SLDS's drag-enabled version.
 - **`locked` records must announce as such** — a record that cannot be moved should carry `aria-disabled` and, ideally, a reason.
 - **`@required` adds "(required)" to the legend's accessible name**; the asterisk beside it is `aria-hidden`, as in **FormField**.
 - Two scrolling listboxes at `@rows={{7}}` need keyboard scrolling, which listbox arrow navigation provides.
@@ -57,7 +57,7 @@ The move buttons are the crux, and SLDS's contract is the one to hold this to:
 
 The option rows carry a `prefers-reduced-motion` branch (their transition is disabled), which is a good sign for a control with this much state change.
 
-A season must keep the two list surfaces visually equal — if Available and Selected read at different weights, the control implies a hierarchy that is not there. And `--pretui-selected` must be distinguishable from `--hover` within a list, since a user pointing at one row while another is selected is the normal state of this control.
+A theme must keep the two list surfaces visually equal — if Available and Selected read at different weights, the control implies a hierarchy that is not there. And `--pretui-selected` must be distinguishable from `--hover` within a list, since a user pointing at one row while another is selected is the normal state of this control.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

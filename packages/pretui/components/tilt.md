@@ -19,7 +19,7 @@ Stated plainly, because the kit's own rules name this component as the canonical
 
 **`@plate` is the first reason to keep it.** It makes the tilted thing an actual kit surface — card radius, `--pretui-shadow-card` at rest lifting to `--pretui-shadow-raised` on engage — so a screenshot shows an elevated card with the tilt as garnish rather than a rectangle that does nothing.
 
-**`@press` is the second, and it is the only part of Tilt that encodes anything.** It tips the plate toward the *actual* press point and sinks it, which is a real state transition: pressed, and here. If you keep one behaviour, keep this one.
+**`@press` is the second, and it is the only part of Tilt that encodes anything.** It tips the plate toward the _actual_ press point and sinks it, which is a real state transition: pressed, and here. If you keep one behaviour, keep this one.
 
 **The default max is 8 degrees, not 15.** Upstream's 15 reads as a toy.
 
@@ -27,7 +27,7 @@ Stated plainly, because the kit's own rules name this component as the canonical
 
 **motion-primitives' Tilt**, with four other kits shipping the same idea.
 
-Where Pretui is better: the resting state is a real surface rather than nothing, the press encodes the press *location*, and the rotation is dialled back to something that reads as material rather than as a gimmick.
+Where Pretui is better: the resting state is a real surface rather than nothing, the press encodes the press _location_, and the rotation is dialled back to something that reads as material rather than as a gimmick.
 
 Where it is thinner: no spring or momentum on the return, no gyroscope input on touch, no per-axis maximum, and no scale-on-hover. Upstream offers a spring config; here the motion is a transition.
 
@@ -45,6 +45,6 @@ Where it is thinner: no spring or momentum on the return, no gyroscope input on 
 
 `--pretui-tilt-max` (from `@max`), `--pretui-tilt-perspective` (from `@perspective`), `--pretui-tilt-sign` (from `@reverse`), `--pretui-tilt-radius` and `--pretui-tilt-surface` (the plate), plus `--pretui-shadow-card` at rest and `--pretui-shadow-raised` on engage.
 
-Using the kit's two shared shadow tokens rather than bespoke ones is what makes a tilting card lift to exactly the elevation every other card in the season lifts to. A season that flattens its elevation scale flattens this with it, and the tilt keeps working at whatever depth that leaves.
+Using the kit's two shared shadow tokens rather than bespoke ones is what makes a tilting card lift to exactly the elevation every other card in the theme lifts to. A theme that flattens its elevation scale flattens this with it, and the tilt keeps working at whatever depth that leaves.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

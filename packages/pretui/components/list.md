@@ -61,13 +61,13 @@ What the component does, from its rendered markup and its tests:
 - **An empty collection renders the EmptyState**, not an empty `<ul>`.
 - **`@busy` sets `aria-busy`** on the root and dims it without unmounting the rows.
 
-The caller's failures to avoid: a row whose only action is a click handler on the `<li>` is not reachable as a link and does not announce as one — put an `<a>` in the row; a row with no `@rowLabel` has selection controls named "Row 1", "Row 2"; and selection is shown by a background tint plus a rule down the inline start, so a season that removes the rule leaves colour as the only signal.
+The caller's failures to avoid: a row whose only action is a click handler on the `<li>` is not reachable as a link and does not announce as one — put an `<a>` in the row; a row with no `@rowLabel` has selection controls named "Row 1", "Row 2"; and selection is shown by a background tint plus a rule down the inline start, so a theme that removes the rule leaves color as the only signal.
 
 ## Theming
 
 Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `--primary`, `--primary-foreground`, `--ring`, `--radius-surface`, `--hover`, `--input`, `--field`, `--text-ui-md`, `--text-ui-sm`, `--track-ui`, `--space-3`, `--space-4`, `--pretui-shadow-hairline`, `--pretui-control-rest`, `--pretui-control-border`, `--pretui-edge-highlight`, `--pretui-selected`.
 
-The selection control is drawn by the same declarations **DataTable** uses (15px, 5px radius, `--primary` fill with a `--primary-foreground` check), so a season that retunes `--pretui-control-rest` and `--pretui-control-border` retunes both listings' checkboxes together. Density is one axis through `@size` on the root `font-size`. Coarse pointers get a 44px row floor and 20px controls without changing the fine-pointer rhythm.
+The selection control is drawn by the same declarations **DataTable** uses (15px, 5px radius, `--primary` fill with a `--primary-foreground` check), so a theme that retunes `--pretui-control-rest` and `--pretui-control-border` retunes both listings' checkboxes together. Density is one axis through `@size` on the root `font-size`. Coarse pointers get a 44px row floor and 20px controls without changing the fine-pointer rhythm.
 
 The expander matches DataTable's: a 1.7em ghost button with a `›` chevron that turns 90° when open (no transition under `prefers-reduced-motion`), 2.4em on coarse pointers. The detail is padded like the row, with a `--border` hairline above it.
 

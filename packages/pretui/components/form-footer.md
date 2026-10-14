@@ -27,7 +27,7 @@ Ported from **SLDS `docked-form-footer/base`** (`.slds-docked-form-footer`). Fou
 - **SLDS is `position: fixed; bottom: 0; left: 0; width: 100%` at an overlay z-index.** Inside a Boxel card that is a bug, not a style choice: the bar escapes the card's bounding box and floats over the whole host app, and `position: fixed` is lint-flagged in this codebase for exactly that reason. Pretui's is `position: sticky; bottom: 0`, docking to the bottom of the form's own scroll container and staying inside the card. `@dock='static'` returns it to normal flow.
 - **SLDS shows no count of what is pending.** A batched save that will not say how much it is about to write is asking for blind trust. Pretui states the count in an `aria-live="polite"` region, so the number is announced as fields are edited and undone.
 - **SLDS's error state is a bare icon button plus a hand-positioned Popover at a hardcoded z-index.** Pretui states the blocking-error count as text, disables Save, and points Save's `aria-describedby` at that text — so **the reason a control is disabled is actually reachable**. This is the single most useful thing in the component and the thing most disabled buttons in most design systems get wrong.
-- **SLDS's buttons are `slds-button_neutral` / `_brand` literals**; Pretui's are the kit's **Button**, so tone and appearance travel with the season.
+- **SLDS's buttons are `slds-button_neutral` / `_brand` literals**; Pretui's are the kit's **Button**, so tone and appearance travel with the theme.
 
 Deliberately dropped from upstream: the error Popover. **Popover** is the right tool and the footer should not grow a second one — a caller who wants a click-to-jump error list puts it in `<:status>`, or uses **ErrorSummary**.
 
@@ -44,7 +44,7 @@ What is right:
 
 Gaps:
 
-- **Save uses the native `disabled` attribute** (via Button), so it leaves the tab order entirely — and a control outside the tab order cannot be reached to hear its `aria-describedby`. The wiring that explains *why* Save is disabled is only announced if the user gets to Save some other way. `aria-disabled` plus a no-op handler would make the explanation reachable, and this is the component's most consequential gap given that reachable-explanation is its headline improvement.
+- **Save uses the native `disabled` attribute** (via Button), so it leaves the tab order entirely — and a control outside the tab order cannot be reached to hear its `aria-describedby`. The wiring that explains _why_ Save is disabled is only announced if the user gets to Save some other way. `aria-disabled` plus a no-op handler would make the explanation reachable, and this is the component's most consequential gap given that reachable-explanation is its headline improvement.
 - **`aria-live="polite"` on a count that changes per keystroke** will chatter in a form with per-field commits. The polite level and the coarse granularity (a whole-number count) keep it tolerable, but a debounce would be kinder.
 - **`@saving` announces nothing** beyond the button's visual spinner — Button sets no `aria-busy`.
 - **`position: sticky` and WCAG 2.4.11 Focus Not Obscured**: a docked bar can cover a focused control at the bottom of a scrolled form. Sticky is far better than SLDS's fixed here, but `scroll-margin-bottom` on the form's fields would close it properly.
@@ -54,6 +54,6 @@ Gaps:
 
 `--card` or `--inset` for the bar, `--border` and `--pretui-shadow-hairline` for its top edge, `--muted-foreground` for the clean state, `--destructive` for the error state, `--foreground` for the dirty state, plus **Button**'s full token set for the two actions.
 
-`data-dock` (`sticky`/`static`) and `data-state` (`clean`/`dirty`/`error`) are reflected on the root, so a season can tint the bar by state without reaching inside. A season that gives the bar a transparent background will let form content show through while scrolling under it — give it an opaque `--card` or a backdrop.
+`data-dock` (`sticky`/`static`) and `data-state` (`clean`/`dirty`/`error`) are reflected on the root, so a theme can tint the bar by state without reaching inside. A theme that gives the bar a transparent background will let form content show through while scrolling under it — give it an opaque `--card` or a backdrop.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -1,6 +1,6 @@
 ## What it is
 
-A settled agent turn, folded to one line with an expand affordance. Use it to keep a long transcript readable: turns the user has already dealt with collapse to a summary, and the live turn stays open. If the collapsed unit is a *step* within a turn rather than a whole turn, **Fold** is the containment primitive. If it is a diff, **DiffBlock** collapses itself.
+A settled agent turn, folded to one line with an expand affordance. Use it to keep a long transcript readable: turns the user has already dealt with collapse to a summary, and the live turn stays open. If the collapsed unit is a _step_ within a turn rather than a whole turn, **Fold** is the containment primitive. If it is a diff, **DiffBlock** collapses itself.
 
 ## The contract
 
@@ -12,7 +12,7 @@ Element: HTMLDivElement
 
 Two args, and the second is the interesting one.
 
-**It does not own its expanded state.** Unlike **Fold**, which owns open, default-open and change args, CollapsedTurn is *only* the collapsed representation — expanding calls `@onExpand` and the caller swaps in the real turn. That is the correct factoring for a transcript: an expanded turn is not "this component with more content", it is a completely different tree of **WorkItem**s, **DiffBlock**s and **ResultCard**s, and rendering both would double the transcript's cost.
+**It does not own its expanded state.** Unlike **Fold**, which owns open, default-open and change args, CollapsedTurn is _only_ the collapsed representation — expanding calls `@onExpand` and the caller swaps in the real turn. That is the correct factoring for a transcript: an expanded turn is not "this component with more content", it is a completely different tree of **WorkItem**s, **DiffBlock**s and **ResultCard**s, and rendering both would double the transcript's cost.
 
 **`@summary` is required**, the same way **Fold** requires its receipt, and for the same reason: a collapsed thing that does not say what it is turns a settled transcript into a column of chevrons.
 
@@ -43,6 +43,6 @@ Gaps:
 
 `--muted-foreground` (the summary line — collapsed turns should recede), `--border` or `--line-strong` (any rule separating it from live content), `--hover` (the expand affordance), `--text-ui-md` or `--text-ui-sm`.
 
-The territory's rule applies here more than anywhere: **settled work recedes.** A season must keep the collapsed summary visibly quieter than a live **WorkItem** — if a folded turn and a running one read at the same weight, the transcript stops showing where the agent actually is, which is the one thing it exists to do.
+The territory's rule applies here more than anywhere: **settled work recedes.** A theme must keep the collapsed summary visibly quieter than a live **WorkItem** — if a folded turn and a running one read at the same weight, the transcript stops showing where the agent actually is, which is the one thing it exists to do.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

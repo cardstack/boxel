@@ -1,6 +1,6 @@
 ## What it is
 
-The grid a form's fields sit in: one or two (or three) columns, labels above or beside, collapsing to one column when the *pane* gets narrow. Use it inside a **Form** via `form.Layout`, or stand-alone around a set of **FormField**s. For grouping fields under a heading with its own issue count, use **FormSection** — a section is a grid item and spans every column by default.
+The grid a form's fields sit in: one or two (or three) columns, labels above or beside, collapsing to one column when the _pane_ gets narrow. Use it inside a **Form** via `form.Layout`, or stand-alone around a set of **FormField**s. For grouping fields under a heading with its own issue count, use **FormSection** — a section is a grid item and spans every column by default.
 
 ## The contract
 
@@ -25,7 +25,7 @@ The improvement is specific and, in a card kit, decisive: **SLDS breaks its colu
 Two implementation details worth knowing, because they look like accidents and are not:
 
 - **The queries are unnamed.** Named container queries are forbidden in realm code: the scoped-CSS transpiler silently drops every rule after one, so a single `@container name (...)` would delete the rest of the stylesheet with no error anywhere. This is a platform trap, not a style preference.
-- **There are two nested elements** — `.pretui-formlayout` (the container) wrapping `.pretui-formlayout-grid` (what the queries restyle) — because an unnamed container query resolves against the nearest *ancestor* container, so a rule inside one can never match the container element itself. The extra div is load-bearing.
+- **There are two nested elements** — `.pretui-formlayout` (the container) wrapping `.pretui-formlayout-grid` (what the queries restyle) — because an unnamed container query resolves against the nearest _ancestor_ container, so a rule inside one can never match the container element itself. The extra div is load-bearing.
 
 ## Accessibility
 
@@ -47,6 +47,6 @@ Gaps:
 
 `--space-5` (the default gap, overridable via `@gap`), the label column width (`@labelWidth`, default `9rem`), and whatever **FormField** consumes. The layout itself paints nothing — no background, no border, no shadow.
 
-`data-direction` and `data-columns` are reflected on the container, so a season can hook either without reaching into the grid. Because the breakpoints are container queries, a season cannot retune them through tokens; changing where columns collapse means editing the component.
+`data-direction` and `data-columns` are reflected on the container, so a theme can hook either without reaching into the grid. Because the breakpoints are container queries, a theme cannot retune them through tokens; changing where columns collapse means editing the component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
