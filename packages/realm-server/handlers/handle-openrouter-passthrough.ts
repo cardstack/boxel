@@ -3,14 +3,16 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
-import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import {
+  AllowedProxyDestinations,
+  systemKeyName,
+} from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
   handleStreamingRequest,
   isClientDisconnectError,
   outboundFailureResponse,
   outboundLogContext,
-  systemKeyName,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
 import {
@@ -148,7 +150,7 @@ export default function handleOpenRouterPassthrough({
           // OpenRouter always takes its key as a bearer token, whatever the
           // endpoint's configured auth method.
           const credential: OutboundCredential = {
-            name: systemKeyName(destinationConfig),
+            name: systemKeyName(destinationConfig.url),
             value: destinationConfig.apiKey,
             placement: {
               in: 'header',

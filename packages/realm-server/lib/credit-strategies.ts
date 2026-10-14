@@ -7,9 +7,45 @@ import {
   validateAICredits,
   spendUsageCost as spendUsageCostFromBilling,
   fetchGenerationCostWithBackoff,
+  type GenerationCostLookupOptions,
 } from '@cardstack/billing/ai-billing';
+import { OutboundRefusedError, outboundFetch } from './outbound/client.ts';
 
 const log = logger('credit-strategies');
+
+// The cost lookup sends the system key, so it goes out through the guarded
+// outbound client like every other call that does. The client attaches the key
+// itself, under the name of the endpoint it belongs to, so the Authorization
+// header the billing lookup builds is left off. A refused destination is
+// refused the same way on every attempt, so it is not retried.
+function guardedCostLookup(
+  apiKey: string,
+  keyName: string,
+): GenerationCostLookupOptions {
+  return {
+    fetch: (url, { headers }) =>
+      outboundFetch({
+        url,
+        method: 'GET',
+        headers: Object.fromEntries(
+          Object.entries(headers).filter(
+            ([name]) => name.toLowerCase() !== 'authorization',
+          ),
+        ),
+        sizePath: 'system-key',
+        credential: {
+          name: keyName,
+          value: apiKey,
+          placement: {
+            in: 'header',
+            header: 'Authorization',
+            scheme: 'Bearer',
+          },
+        },
+      }),
+    isRetryable: (error) => !(error instanceof OutboundRefusedError),
+  };
+}
 
 export interface CreditStrategy {
   name: string;
@@ -42,9 +78,12 @@ export interface CreditStrategy {
 export class OpenRouterCreditStrategy implements CreditStrategy {
   name = 'openrouter-credit-strategy';
   openRouterApiKey: string;
+  // How logs and errors name the key: its proxy endpoint's system key name.
+  keyName: string;
 
-  constructor(openRouterApiKey: string) {
+  constructor(openRouterApiKey: string, keyName: string) {
     this.openRouterApiKey = openRouterApiKey;
+    this.keyName = keyName;
   }
 
   async validateCredits(dbAdapter: DBAdapter, matrixUserId: string) {
@@ -81,6 +120,7 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
       const fetchedCost = await fetchGenerationCostWithBackoff(
         generationId,
         this.openRouterApiKey,
+        guardedCostLookup(this.openRouterApiKey, this.keyName),
       );
       if (fetchedCost !== null) {
         return fetchedCost;
@@ -134,13 +174,19 @@ export class NoCreditStrategy implements CreditStrategy {
 
 // Credit Strategy Factory
 export class CreditStrategyFactory {
-  static create(strategyType: string, apiKey?: string): CreditStrategy {
+  // `keyName` is how the endpoint's system key is named in logs and errors
+  // (see `systemKeyName`).
+  static create(
+    strategyType: string,
+    apiKey: string | undefined,
+    keyName: string,
+  ): CreditStrategy {
     switch (strategyType) {
       case 'openrouter':
         if (!apiKey) {
           throw new Error('API key is required for OpenRouter credit strategy');
         }
-        return new OpenRouterCreditStrategy(apiKey);
+        return new OpenRouterCreditStrategy(apiKey, keyName);
       case 'no-credit':
         return new NoCreditStrategy();
       default:

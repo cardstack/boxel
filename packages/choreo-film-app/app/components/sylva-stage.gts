@@ -450,8 +450,8 @@ export class SylvaStage extends Component {
         /**
          * `?poster` arms the tile-photograph hook: freeze a frame, scale
          * it down, hand back a webp data URL. A dev tool, not a feature —
-         * it is how `public/sylva-poster.webp` gets refreshed when the
-         * world changes.
+         * it is how `choreo-gallery/realm/asset/sylva-poster.webp` gets
+         * refreshed when the world changes.
          */
         if (/[?&]poster\b/.test(location.search)) {
           (window as unknown as { __poster?: () => string }).__poster = () => {

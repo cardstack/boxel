@@ -29,16 +29,19 @@ export interface BotTool {
   recoversFromCutOff?(argumentsJson: string): boolean;
 }
 
+// A call of a bot tool, as the model made it.
+export type BotToolCall = ChatCompletionMessageToolCall & { type: 'function' };
+
 export interface BotToolTurn {
   // Whether a call waits for the user's approval before it runs (see
   // approval.ts). A call that doesn't runs right after the response; one
   // that does runs once the user approves it.
   needsApproval(argumentsJson: string): boolean;
-  // Runs calls and publishes each one's result, one at a time, in order.
-  fulfill(
-    calls: ChatCompletionMessageToolCall[],
-    target: BotToolTarget,
-  ): Promise<BotToolOutcome[]>;
+  // Runs one call and publishes its result. Called one call at a time, in
+  // order, by fulfillBotToolCalls (see index.ts), which is also where a stop
+  // is checked; the turn keeps whatever spans a response's calls (readUrl's
+  // read cap) and never has to know about stops.
+  fulfill(call: BotToolCall, target: BotToolTarget): Promise<BotToolOutcome>;
 }
 
 // What decides whether a room is offered a tool.

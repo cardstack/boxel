@@ -36,6 +36,7 @@ type ToolCallStatus =
   | 'applying'
   | 'invalid'
   | 'failed'
+  | 'canceled'
   | 'approved';
 
 // 'read-file-for-ai-assistant_a831' -> 'Read file for ai assistant',

@@ -5,7 +5,7 @@ description: >-
   momentum, drag controls, swipe-to-dismiss, bottom sheets, and
   ReorderGroup/ReorderItem lists and grids. Use for pointer-driven movement of
   elements in glimmer-motion / Choreo code in this repo
-  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery,
   host UI that animates with them) — including touch-action rules for mobile.
 ---
 
@@ -76,6 +76,6 @@ Reordering triggered by _state_ (not a pointer) is a layout animation →
 `motion-layout`. A drag that ends in a multi-element scene (drop → everyone
 reflows in sequence) → hand the drop to `choreo-scene`.
 
-Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
-`drag-well.gts`, `sheet.gts`, `reorder-list.gts`,
-`reorder-grid.gts`, `subdivision.gts`, `follow-pointer.gts`.
+Canonical demos, in `packages/choreo-gallery/realm/stages/`:
+`drag.gts`, `sheet.gts`, `reorder.gts`,
+`grid.gts`, `subdivision.gts`, `pointer.gts`.

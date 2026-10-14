@@ -2,16 +2,16 @@
  * THE PEEK — load a URL in headless Chrome, print what its console said,
  * and write one PNG of it. Muted, windowless, disposable.
  *
- *   node packages/choreo-gallery/tools/film-peek.mjs 'http://localhost:4200/sagrada?embed' out/peek.png
+ *   node packages/choreo-gallery/tools/film-peek.mjs 'http://localhost:5173/?film=sagrada' out/peek.png
  *   node packages/choreo-gallery/tools/film-peek.mjs <url> <png> [debug-port] [settle-ms]
  *
  * It exists because a film can pass every typecheck, lint and test in
  * the building and still throw at construction in the browser: Phase 2
  * of the film graph shipped exactly that, and nothing but loading the
  * page caught it. So no film URL is handed over without a peek of its
- * `?embed` document (the theater route mounts the film in an iframe;
- * `?embed` is the film itself), and two builds are compared for parity
- * by peeking the same `?embed&from=N` on each and reading the PNGs.
+ * document (the film app plays the film `?film=` names, the document the
+ * gallery mounts in an iframe), and two builds are compared for parity
+ * by peeking the same `?film=<name>&from=N` on each and reading the PNGs.
  *
  * Chris's standing rule — no visible browser from a session on the
  * films, because they are narrated — is why this is headless and muted.

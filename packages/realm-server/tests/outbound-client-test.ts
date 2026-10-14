@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { inspect } from 'node:util';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
+import { addressPolicyCases } from '@cardstack/runtime-common/address-policy-cases';
 import {
   guardedLookup,
   isMetadataAddress,
@@ -86,60 +87,23 @@ function lookupAddresses(
 
 module(basename(import.meta.filename), function () {
   module('outbound address policy', function () {
-    const refusedV4: [string, string][] = [
-      ['loopback', '127.0.0.1'],
-      ['private 10/8', '10.1.2.3'],
-      ['private 172.16/12', '172.20.0.5'],
-      ['private 192.168/16', '192.168.1.1'],
-      ['link-local', '169.254.10.20'],
-      ['metadata', '169.254.169.254'],
-      ['carrier-grade NAT', '100.64.0.1'],
-      ['unspecified', '0.0.0.0'],
-      ['multicast', '224.0.0.1'],
-    ];
-    const refusedV6: [string, string][] = [
-      ['loopback', '::1'],
-      ['unique local', 'fd12:3456::1'],
-      ['metadata', 'fd00:ec2::254'],
-      ['link-local', 'fe80::1'],
-      ['IPv4-mapped loopback, dotted', '::ffff:127.0.0.1'],
-      ['IPv4-mapped loopback, hex', '::ffff:7f00:1'],
-      ['IPv4-mapped metadata', '::ffff:169.254.169.254'],
-      ['IPv4-mapped private', '::ffff:10.0.0.1'],
-      ['NAT64 embedding a private address', '64:ff9b::a00:1'],
-      ['6to4', '2002:a00:1::1'],
-      ['segment-routing SID', '5f00::1'],
-      ['benchmarking', '2001:2::1'],
-      ['documentation 3fff::/20', '3fff::1'],
-      ['dummy prefix', '100:0:0:1::1'],
-    ];
-
-    for (let [label, address] of refusedV4) {
-      test(`refuses IPv4 ${label} (${address})`, async function (assert) {
-        assert.false(isPublicAddress(address), 'not a public address');
+    for (let { address, public: isPublic, label } of addressPolicyCases) {
+      test(`${isPublic ? 'allows' : 'refuses'} ${label} (${address})`, async function (assert) {
+        assert.strictEqual(
+          isPublicAddress(address),
+          isPublic,
+          `is ${isPublic ? '' : 'not '}a public address`,
+        );
         let { error } = await lookupAddresses('vendor.example', [address]);
-        assert.ok(error, 'a host resolving to it is refused');
+        assert.strictEqual(
+          error === undefined,
+          isPublic,
+          `a host resolving to it is ${isPublic ? 'allowed' : 'refused'}`,
+        );
       });
     }
 
-    for (let [label, address] of refusedV6) {
-      test(`refuses IPv6 ${label} (${address})`, async function (assert) {
-        assert.false(isPublicAddress(address), 'not a public address');
-        let { error } = await lookupAddresses('vendor.example', [address]);
-        assert.ok(error, 'a host resolving to it is refused');
-      });
-    }
-
-    test('allows public IPv4 and IPv6, and IPv4-mapped public IPv4', async function (assert) {
-      for (let address of [
-        '8.8.8.8',
-        '1.1.1.1',
-        '104.18.0.1',
-        '2606:4700::1111',
-        '::ffff:8.8.8.8',
-      ]) {
-        assert.true(isPublicAddress(address), `${address} is public`);
-      }
+    test('allows a host whose addresses are all public, and connects to exactly those', async function (assert) {
       let { error, addresses } = await lookupAddresses('vendor.example', [
         '8.8.8.8',
         '2606:4700::1111',

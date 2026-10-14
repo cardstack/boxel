@@ -30,14 +30,14 @@ The workspace catalog in `pnpm-workspace.yaml` pins `framer-motion`, `motion`, `
 
 - **One `motion-dom`.** It holds the engine's shared state: the frame loop, the drag lock, every
   `MotionValue`. A second copy on the page is a second engine that the first can't see. glimmer-motion
-  takes `motion-dom` and `motion-utils` as peers, the inlined framer-motion code imports them, and the
-  test app and gallery depend on them directly. The root `overrides` resolve `framer-motion`,
+  takes `motion-dom` and `motion-utils` as peers, the inlined framer-motion code imports them, and
+  choreo, the host and boxel-cli depend on them directly. The root `overrides` resolve `framer-motion`,
   `motion-dom` and `motion-utils` through the catalog, so no caret range pulls in a second copy.
 - **The versions framer-motion was released against.** `motion-dom` and `motion-utils` sit at the lower
   bounds of the ranges the pinned framer-motion declares. glimmer-motion's peer ranges start at the same
   versions, because its dist carries that framer-motion code.
-- **`motion` at framer-motion's version.** The test app and the gallery use `motion`, which depends on
-  the `framer-motion` release of its own version.
+- **`motion` at framer-motion's version.** glimmer-motion's tests use `motion`, which depends on the
+  `framer-motion` release of its own version.
 
 ## Adapted, not inlined
 
@@ -90,7 +90,8 @@ Run `pnpm install` after it.
 Reviewing a bump PR:
 
 1. **CI.** Red CI is the signal. The Glimmer Motion Tests job runs the ported fidelity suites, the Choreo
-   Tests and Choreo Test App Tests jobs run the choreo suites, Lint runs `ember-tsc` over the choreo
+   Addon Tests job runs the choreo suites, Glimmer Motion and Choreo Tests (built output) runs both
+   against the build, Lint runs `ember-tsc` over the choreo
    packages, and glimmer-motion's build fails if an inlined module imports React or a framer-motion path
    other than `framer-motion/dom`. A PR opened with the workflow's `GITHUB_TOKEN` starts no
    `pull_request` workflows, so the workflow dispatches `ci.yaml` and `ci-lint.yaml` on the branch

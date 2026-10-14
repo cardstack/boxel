@@ -1,7 +1,10 @@
 import type Koa from 'koa';
 import { logger } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
-import type { AllowedProxyDestination } from './allowed-proxy-destinations.ts';
+import {
+  systemKeyName,
+  type AllowedProxyDestination,
+} from './allowed-proxy-destinations.ts';
 import {
   describeOutboundError,
   OutboundRefusedError,
@@ -127,17 +130,11 @@ export function isClientDisconnectError(
   return false;
 }
 
-// A system key is named by its endpoint's configured URL, which is what logs
-// and errors record in place of the value.
-export function systemKeyName(destination: AllowedProxyDestination): string {
-  return `system:${destination.url}`;
-}
-
 // The system key a proxy endpoint attaches, and where.
 export function systemKeyCredential(
   destination: AllowedProxyDestination,
 ): OutboundCredential {
-  let name = systemKeyName(destination);
+  let name = systemKeyName(destination.url);
   if (destination.authMethod === 'url-parameter') {
     return {
       name,
