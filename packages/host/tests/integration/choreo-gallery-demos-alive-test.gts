@@ -44,6 +44,9 @@ module(
 
       const morph = document.querySelector('.morph');
       assert.ok(morph, 'the keyframes demo rendered');
+      // a stage loops only while it is on stage, so bring its tile into view
+      morph!.scrollIntoView({ block: 'center' });
+      await rest();
       const running = morph!
         .getAnimations()
         .concat([...(morph!.parentElement?.getAnimations() ?? [])]);
