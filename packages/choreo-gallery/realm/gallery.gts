@@ -4,17 +4,10 @@ import {
   field,
   linksToMany,
 } from '@cardstack/base/card-api';
-import { tracked } from '@glimmer/tracking';
-import { setMotionSpeed } from 'glimmer-motion';
 
 import { GalleryDemo, GROUPS } from './demo';
-import { Crossing } from './lib/crossing';
-import type { GalleryNavigation } from './lib/navigation';
-import { factor } from './lib/tempo';
-import { Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
-import { DemoPage } from './shell/demo-page';
-import { GalleryGrid } from './shell/gallery-grid';
+import { GalleryGrid, type GalleryTile } from './shell/gallery-grid';
 import { SiteFrame } from './shell/site-frame';
 
 /**
@@ -26,127 +19,35 @@ function loadedDemos(demos: unknown[] | undefined): GalleryDemo[] {
 }
 
 /**
- * The whole gallery site, as one card.
+ * The gallery site's front page: the hero and a grid of every demo.
  *
- * Gallery ⇄ demo is state inside this card rather than a navigation, so the
- * site frame's Choreo region sees each swap as one render pass and can fly
- * the tile into the page. Moving never touches the host's URL or title.
+ * Each tile is the demo card itself, rendered by the host in its fitted
+ * format, so the host owns the move to a demo: a click opens the demo card in
+ * the stack, or as the next page of a published site, with the URL and Back
+ * the host gives every card.
  */
 class Isolated extends Component<typeof ChoreoGallery> {
-  /** null is the gallery; a slug is that demo's page */
-  @tracked private slug: string | null = null;
-  readonly crossing = new Crossing();
-  readonly theater = new Theater();
-  /** counts moves, so a move waiting on a curtain knows it was superseded */
-  private moves = 0;
-
-  willDestroy() {
-    super.willDestroy();
-    // a swap still waiting on the curtain must not run on a torn-down card
-    this.moves++;
-    this.crossing.reset();
+  /** each loaded demo, with the host's component for its card */
+  get tiles(): GalleryTile[] {
+    let cards = this.args.fields.demos;
+    return (this.args.model.demos ?? []).flatMap((demo, index) => {
+      let Card = cards[index];
+      return demo && Card ? [{ demo: demo as GalleryDemo, Card }] : [];
+    });
   }
-
-  get demos(): GalleryDemo[] {
-    return loadedDemos(this.args.model.demos);
-  }
-
-  get current(): GalleryDemo | undefined {
-    return this.slug === null
-      ? undefined
-      : this.demos.find((demo) => demo.slug === this.slug);
-  }
-
-  get near() {
-    let index = this.demos.findIndex((demo) => demo.slug === this.slug);
-    return { next: this.demos[index + 1], prev: this.demos[index - 1] };
-  }
-
-  get homeHref() {
-    return this.args.model.id ?? '';
-  }
-
-  hrefFor = (slug: string | null) =>
-    slug === null
-      ? this.homeHref
-      : (this.demos.find((demo) => demo.slug === slug)?.id ?? this.homeHref);
-
-  go = (slug: string | null) => this.move(slug, false);
-
-  goHome = () => this.go(null);
-
-  openInTheater = (slug: string) => this.move(slug, true);
 
   /**
-   * Move to a page, in theater or not. The mode goes to the swap rather than
-   * being set after this returns, because the swap can wait a frame on the
-   * leaving page's curtain.
+   * Opens a demo card through the host. In interact mode the host's overlay
+   * takes a click on a tile before it gets here; a published site has no
+   * overlay, and this is the click's way in.
    */
-  private move(slug: string | null, theater: boolean) {
-    // a move to the page already showing is no move: it leaves one waiting
-    // on the curtain to finish, rather than superseding it and stranding
-    // the curtain down
-    if (slug === this.slug) {
-      if (slug === null) {
-        this.crossing.scrollToTop();
-      }
-      return;
-    }
-    this.moves++;
-    // A film's page drops its curtain a frame ahead of the swap, so the
-    // crossing flies the film's poster rather than a frame that reloads in
-    // flight. A newer move supersedes the one waiting on the curtain.
-    if (this.current?.theater && !this.theater.curtain && factor() !== 0) {
-      this.theater.curtain = true;
-      let move = this.moves;
-      requestAnimationFrame(() => {
-        if (move === this.moves) {
-          this.cross(slug, theater);
-        }
-      });
-      return;
-    }
-    this.cross(slug, theater);
-  }
-
-  /** the page swap itself, which the site frame's region animates */
-  private cross(slug: string | null, theater: boolean) {
-    this.crossing.begin(this.slug, slug);
-    this.slug = slug;
-    // theater belongs to the page it was entered on
-    this.theater.reset(theater);
-    // the clock is global, so it goes back to normal with every page — a
-    // stage with no speed control must never be left mysteriously slow
-    setMotionSpeed(1);
-  }
-
-  nav: GalleryNavigation = {
-    go: this.go,
-    hrefFor: this.hrefFor,
-    openInTheater: this.openInTheater,
+  open = (demo: GalleryDemo) => {
+    this.args.viewCard?.(demo, 'isolated');
   };
 
   <template>
-    <SiteFrame
-      @crossing={{this.crossing}}
-      @homeHref={{this.homeHref}}
-      @goHome={{this.goHome}}
-      @theater={{this.theater}}
-    >
-      {{#if this.current}}
-        <DemoPage
-          @demo={{this.current}}
-          @nav={{this.nav}}
-          @near={{this.near}}
-          @theater={{this.theater}}
-        />
-      {{else}}
-        <GalleryGrid
-          @crossing={{this.crossing}}
-          @demos={{this.demos}}
-          @nav={{this.nav}}
-        />
-      {{/if}}
+    <SiteFrame>
+      <GalleryGrid @tiles={{this.tiles}} @onOpen={{this.open}} />
     </SiteFrame>
   </template>
 }

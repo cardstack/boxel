@@ -645,6 +645,12 @@ export default class MatrixService extends Service {
     return this.client.getUserId();
   }
 
+  // Handed to the frame on the secure origin that changes this account's
+  // password or email, which makes those requests itself.
+  get accessToken(): string | undefined {
+    return this.client.getAccessToken() ?? undefined;
+  }
+
   get aiBotUserId() {
     let server = this.userId!.split(':')[1];
     return `@${aiBotUsername}:${server}`;
@@ -2046,6 +2052,9 @@ export default class MatrixService extends Service {
     attachedCards?: CardDef[];
     attachedFiles?: FileDef[];
     context?: BoxelContext;
+    // The result answers a call the user asked to go ahead, which lifts a
+    // stop they pressed (see runtime-common/ai/stop.ts).
+    resumesAssistant?: boolean;
   }) {
     let resultCardFileDef: FileDef | undefined;
     if (params.resultCard) {
@@ -2075,11 +2084,15 @@ export default class MatrixService extends Service {
       resultCardFileDef = undefined; // don't send the card as a result if the card is attached
     }
     let content: ToolResultWithNoOutputContent | ToolResultWithOutputContent;
+    let resumesAssistant = params.resumesAssistant
+      ? { resumesAssistant: true as const }
+      : {};
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
+        ...resumesAssistant,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
@@ -2097,6 +2110,7 @@ export default class MatrixService extends Service {
         },
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
+        ...resumesAssistant,
         data: {
           ...contentData,
           card: resultCardFileDef.serialize(),
@@ -2410,29 +2424,6 @@ export default class MatrixService extends Service {
     );
   }
 
-  async login(usernameOrEmail: string, password: string) {
-    let waiterToken = signInWaiter.beginAsync();
-    try {
-      const cred = await this.client.loginWithPassword(
-        usernameOrEmail,
-        password,
-      );
-      return cred;
-    } catch (error) {
-      try {
-        const cred = await this.client.loginWithEmail(
-          usernameOrEmail,
-          password,
-        );
-        return cred;
-      } catch (error2) {
-        throw error;
-      }
-    } finally {
-      signInWaiter.endAsync(waiterToken);
-    }
-  }
-
   async loginFlows() {
     await this.ready;
     return this.client.loginFlows();
@@ -2656,10 +2647,6 @@ export default class MatrixService extends Service {
     return await this.client.getThreePids();
   }
 
-  async addThreePidOnly(data: MatrixSDK.IAddThreePidOnlyBody) {
-    return await this.client.addThreePidOnly(data);
-  }
-
   async deleteThreePid(medium: string, address: string) {
     return await this.client.deleteThreePid(medium, address);
   }
@@ -2784,21 +2771,6 @@ export default class MatrixService extends Service {
     );
   }
 
-  async setPassword(
-    authDict: MatrixSDK.AuthDict,
-    newPassword: string,
-    logoutDevices?: boolean,
-  ) {
-    return await this.client.setPassword(authDict, newPassword, logoutDevices);
-  }
-
-  async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
-    // See requestRegisterEmailToken: registration can run before the SDK has
-    // loaded on the standalone /cli-auth route.
-    await this.ready;
-    return await this.client.registerRequest(data, kind);
-  }
-
   // Type of matrixEvent is a partial MatrixEvent because a couple of places
   // where this method is called don't have the full MatrixEvent type available
   async sendReadReceipt(
@@ -2835,7 +2807,6 @@ export default class MatrixService extends Service {
         room: {
           timeline: {
             limit: 100,
-            not_types: [APP_BOXEL_STOP_GENERATING_EVENT_TYPE],
             'org.matrix.msc3874.not_rel_types': ['m.replace'],
           },
         },
@@ -3297,7 +3268,7 @@ export default class MatrixService extends Service {
     // optimistic event with event_id `local-${cgi}`, hand that id to addEvent
     // as oldEventId so Room.addEvent replaces the synthetic in-place. Without
     // this bridge the synthetic and the real echo would both live in
-    // roomData.events and every consumer iterating `this.events` (sortedEvents,
+    // roomData.events and every consumer iterating `roomResource.events` (the stop rule,
     // usedLLMs, llmModeEvents, command/code-patch result lookups, MessageBuilder's
     // `events` argument) would double-count.
     let cgi = event.content?.clientGeneratedId as string | undefined;

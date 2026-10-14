@@ -331,6 +331,7 @@ import {
   assertWithinExplainCap,
   type TargetRealm,
 } from './card-operations/explain.ts';
+import type { CallApiSender } from './card-operations/call-api.ts';
 import {
   assertTravelsInEnvelope,
   assertVersionableEntry,
@@ -357,6 +358,7 @@ import {
 } from './card-operations/envelope.ts';
 import { resolveQueryTargets } from './card-operations/find-targets.ts';
 import {
+  admitsNothing,
   isNamedQueryPayload,
   namedQueryRendering,
   resolveNamedQuery,
@@ -2672,6 +2674,7 @@ export class Realm {
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
+  #callApi: CallApiSender | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // Shared with every realm the process serves — the cache keys on absolute
   // card URLs, and one byte cap for the process is the bound that matters.
@@ -2850,6 +2853,7 @@ export class Realm {
       cardDocumentCache,
       realmFor,
       anonymousRateLimiter,
+      callApi,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -2889,6 +2893,10 @@ export class Realm {
       // without a session. Unset, the realm's database, which every process
       // serving the realm shares.
       anonymousRateLimiter?: AnonymousRateLimiter;
+      // Sends a `callApi` operation's request through the server's guarded
+      // outbound client. Without it, the realm sends no request outside
+      // itself and refuses every `callApi`.
+      callApi?: CallApiSender;
     },
     opts?: Options,
   ) {
@@ -2899,6 +2907,7 @@ export class Realm {
     this.#queue = queue;
     this.#virtualNetwork = virtualNetwork;
     this.#realmFor = realmFor;
+    this.#callApi = callApi;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
     this.#fromScratchIndexPriority =
@@ -6107,6 +6116,45 @@ export class Realm {
             meta: { entry: write.entry.position },
           });
         }
+        // A request sent outside the realm is made on the realm's behalf,
+        // which needs the authority a write does.
+        let outbound = resolved.find(
+          ({ definition }) => definition.base === 'callApi',
+        );
+        if (outbound) {
+          throw new OperationFailure({
+            ...(outbound.entry.href ? { id: outbound.entry.href } : {}),
+            status: 400,
+            code: 'wrong-entry-point',
+            title: 'Outside request in a read-only batch',
+            detail:
+              `operation "${outbound.entry.name}" sends a request to an ` +
+              `outside service on the realm's behalf, and a QUERY batch is ` +
+              `authorized to read; send it as a POST`,
+            meta: { entry: outbound.entry.position },
+          });
+        }
+      }
+
+      // A request sent outside the realm cannot be taken back, so it travels in
+      // a batch of its own: alongside any other entry, a refusal after it had
+      // been sent would answer the batch as not having happened when part of
+      // it had.
+      let sendsOutside = resolved.find(
+        ({ definition }) => definition.base === 'callApi',
+      );
+      if (sendsOutside && entries.length > 1) {
+        throw new OperationFailure({
+          ...(sendsOutside.entry.href ? { id: sendsOutside.entry.href } : {}),
+          status: 400,
+          code: 'invalid-params',
+          title: 'Outside request in a batch',
+          detail:
+            `operation "${sendsOutside.entry.name}" sends a request to an ` +
+            `outside service, which cannot be undone, so it is sent in a ` +
+            `batch of its own`,
+          meta: { entry: sendsOutside.entry.position },
+        });
       }
 
       // An anonymous caller on a realm anyone may read or write has no identity
@@ -6171,6 +6219,22 @@ export class Realm {
       // Keyed by position rather than by index, because a position is a path
       // through the tree for an entry inside a group and there is no array for
       // one to be an index into.
+      // A caller who isn't signed in is counted one unit per entry, once every
+      // entry is admitted: a batch that writes, as its commit begins, and one
+      // that only reads, once its reads have run. A batch that doesn't fit is
+      // refused whole, with nothing written. A batch that sends a request
+      // outside the realm is counted before it sends, since a request that
+      // has gone cannot be refused afterwards.
+      let anonymousCommit = this.#anonymous.commitOptions(
+        request,
+        requestContext,
+        scope,
+        () => entries.length,
+      );
+      if (sendsOutside) {
+        await anonymousCommit.beforeCommit?.();
+      }
+
       // Resolved once, and only for a batch that explains or validates: it can
       // cost a revocation read no other operation needs.
       let principal: Promise<string | undefined> | undefined;
@@ -6200,6 +6264,10 @@ export class Realm {
             {
               gated: { definition, decision },
               ...this.#anonymousReadOptions(requestContext),
+              ...(definition.base === 'callApi' &&
+              this.#duringRender(request, requestContext)
+                ? { duringPrerender: true }
+                : {}),
             },
           );
         } catch (err: unknown) {
@@ -6210,16 +6278,6 @@ export class Realm {
 
       let writes = resolved.filter(({ definition }) =>
         isWrite(definition.base),
-      );
-      // A caller who isn't signed in is counted one unit per entry, once every
-      // entry is admitted: a batch that writes, as its commit begins, and one
-      // that only reads, once its reads have run. A batch that doesn't fit is
-      // refused whole, with nothing written.
-      let anonymousCommit = this.#anonymous.commitOptions(
-        request,
-        requestContext,
-        scope,
-        () => entries.length,
       );
       if (writes.length === 0) {
         await anonymousCommit.beforeCommit?.();
@@ -6325,6 +6383,17 @@ export class Realm {
       { 'atomic:results': resultsTree(tree, results) },
       200,
       requestContext,
+    );
+  }
+
+  // Whether a request is part of a render: one marked as a prerender's own
+  // fetch, or one made on a realm-authority session, which only a realm
+  // rendering its own cards holds. A render's operations batches carry the
+  // session and not always the mark.
+  #duringRender(request: Request, requestContext: RequestContext): boolean {
+    return (
+      isDuringPrerenderRequest(request) ||
+      requestContext.realmAuthority === true
     );
   }
 
@@ -7131,6 +7200,7 @@ export class Realm {
         compilePolicyCard: (card) =>
           compilePolicyCard(card.href, this.#policyCompileEnvironment()),
         readsRealmOf: (href, caller) => this.#readsRealmOf(href, caller),
+        ...(this.#callApi ? { callApi: this.#callApi } : {}),
       };
     }
     return this.#operationCore;
@@ -14797,6 +14867,10 @@ export class Realm {
     // ad-hoc search declares neither.
     let declaredLinks: LinkStrategy | undefined;
     let unshareableFormats: PrerenderedHtmlFormat[] = [];
+    // Whether a named query is answered with no rows without being searched:
+    // resolving it refused a caller who may not read its type's module, who
+    // is answered as a declared query that admits nothing answers them.
+    let admittingNothing = false;
     if (isNamedQueryPayload(payload)) {
       // A named query is granted by its own name, which no grant opens to a
       // caller who isn't signed in, so one is told to authenticate before the
@@ -14823,10 +14897,20 @@ export class Realm {
           let resolved = await resolveNamedQuery(this.operationCore, payload, {
             principal: this.#searchPrincipal(requestContext),
             realms: [this.url],
+            correlationId: sanitizeLoggingCorrelationId(
+              request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+            ),
           });
-          payload = resolved.query;
-          declaredLinks = resolved.links;
-          unshareableFormats = resolved.unshareableFormats;
+          if (admitsNothing(resolved)) {
+            // The rendering alone carries no filter, and is never searched:
+            // it only shapes the empty document answered below.
+            payload = namedQueryRendering(payload);
+            admittingNothing = true;
+          } else {
+            payload = resolved.query;
+            declaredLinks = resolved.links;
+            unshareableFormats = resolved.unshareableFormats;
+          }
         } catch (err: unknown) {
           if (!isOperationFailure(err)) {
             throw err;
@@ -14860,7 +14944,7 @@ export class Realm {
       // answer. A policy that did not compile is neither: the search is
       // refused with the 500 the gate gives every operation it would judge.
       let policyScope: PolicyQueryScope | undefined;
-      if (this.#coarseDeclined(requestContext) === 'all') {
+      if (!admittingNothing && this.#coarseDeclined(requestContext) === 'all') {
         try {
           policyScope = await this.#policyQueryScope(
             invocation,
@@ -14906,7 +14990,7 @@ export class Realm {
           },
           requestContext,
         });
-      if (policyScope?.kind === 'denied') {
+      if (admittingNothing || policyScope?.kind === 'denied') {
         return noRows();
       }
       if (policyScope) {

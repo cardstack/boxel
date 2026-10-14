@@ -47,11 +47,9 @@ export type FileDefModule = Record<string, FileDefExport | undefined>;
 export type FileDefConstructor = {
   extractAttributes?: FileDefExport['extractAttributes'];
 };
-export type FileDefExtractResult = {
-  status: 'ready' | 'error';
+type FileDefExtractFields = {
   searchDoc: Record<string, any> | null;
   resource?: FileMetaResource;
-  types?: string[];
   displayNames?: string[];
   deps: string[];
   error?: RenderError;
@@ -65,6 +63,11 @@ export type FileDefExtractResult = {
   // bag onto the row's `diagnostics`.
   frontmatterDiagnostics?: Partial<Diagnostics>;
 };
+// A ready result always carries `types`, the ancestor chain of the class whose
+// extraction succeeded.
+export type FileDefExtractResult =
+  | (FileDefExtractFields & { status: 'ready'; types: string[] })
+  | (FileDefExtractFields & { status: 'error'; types?: string[] });
 
 export class FileDefAttributesExtractor {
   #loaderService: LoaderService;

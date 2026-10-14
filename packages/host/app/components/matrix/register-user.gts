@@ -17,13 +17,16 @@ import {
   BoxelInputGroup,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import ENV from '@cardstack/host/config/environment';
 import {
+  CredentialFields,
+  credentialFieldsError,
+} from '@cardstack/host/lib/credential-fields';
+import {
   isMatrixError,
-  isValidPassword,
   isInteractiveAuth,
   nextUncompletedStage,
   type InteractiveAuth,
@@ -32,6 +35,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
 import AuthFormField from './auth-form-field';
+import CredentialFieldsFrame from './credential-fields';
 
 import type { AuthMode } from './auth';
 import type {
@@ -108,7 +112,14 @@ export default class RegisterUser extends Component<Signature> {
           {{on 'click' this.sendToken}}
         >Next</AuthButton>
       </div>
-    {{else if (eq this.currentPage 'registration-form')}}
+    {{/if}}
+    {{! The passwords are in a frame that sends them again at each step of
+        the registration, so the form stays mounted, hidden, while the steps
+        after it show. }}
+    <div
+      class='registration-page'
+      hidden={{not (eq this.currentPage 'registration-form')}}
+    >
       <span class='title'>Create a Boxel Account</span>
       <form data-test-register-form {{on 'submit' this.register}}>
         <AuthFormField @label='Your Name'>
@@ -162,46 +173,7 @@ export default class RegisterUser extends Component<Signature> {
               />name available</p>
           {{/if}}
         </AuthFormField>
-        <AuthFormField @label='Password'>
-          <BoxelInput
-            data-test-password-field
-            id='boxel-register-password'
-            name='password'
-            autocomplete='new-password'
-            @type='password'
-            @value={{this.password}}
-            @placeholder='Your password'
-            @state={{this.passwordInputState}}
-            @errorMessage={{this.passwordError}}
-            @onInput={{this.setPassword}}
-            @onBlur={{this.checkPassword}}
-          />
-          {{#if this.isPasswordValid}}
-            <p class='validation-hint' data-test-password-valid><CheckMark
-                class='validation-hint-icon'
-              />password is valid</p>
-          {{/if}}
-        </AuthFormField>
-        <AuthFormField @label='Confirm Password'>
-          <BoxelInput
-            data-test-confirm-password-field
-            id='boxel-register-confirm-password'
-            name='confirm-password'
-            autocomplete='new-password'
-            @type='password'
-            @value={{this.confirmPassword}}
-            @placeholder='Re-enter your password'
-            @state={{this.confirmPasswordInputState}}
-            @errorMessage={{this.confirmPasswordError}}
-            @onInput={{this.setConfirmPassword}}
-            @onBlur={{this.checkConfirmPassword}}
-          />
-          {{#if this.isConfirmPasswordValid}}
-            <p class='validation-hint' data-test-passwords-match><CheckMark
-                class='validation-hint-icon'
-              />passwords match</p>
-          {{/if}}
-        </AuthFormField>
+        <CredentialFieldsFrame @form='register' @fields={{this.credentials}} />
         {{#if this.formError}}
           <div
             class='error-message'
@@ -224,8 +196,14 @@ export default class RegisterUser extends Component<Signature> {
           >Login with an existing account</AuthButton>
         </div>
       </form>
-    {{/if}}
+    </div>
     <style scoped>
+      .registration-page {
+        display: contents;
+      }
+      .registration-page[hidden] {
+        display: none;
+      }
       .title {
         font: 600 var(--boxel-font-md);
         color: var(--foreground);
@@ -305,30 +283,27 @@ export default class RegisterUser extends Component<Signature> {
   @tracked private email = '';
   @tracked private name = '';
   @tracked private username = '';
-  @tracked private password = '';
-  @tracked private confirmPassword = '';
+  // The password and its confirmation are typed into a frame on the secure
+  // origin, which sends them with each registration request.
+  private credentials = new CredentialFields();
   @tracked private token = '';
   @tracked private formError: string | undefined;
   @tracked private emailError: string | undefined;
   @tracked private nameError: string | undefined;
   @tracked private usernameError: string | undefined;
   @tracked private tokenError: string | undefined;
-  @tracked private passwordError: string | undefined;
-  @tracked private confirmPasswordError: string | undefined;
   @tracked private isUsernameAvailable = false;
   @tracked private state:
     | { type: 'initial' }
     | {
         type: 'validateEmail';
         username: string;
-        password: string;
         email: string;
         name: string;
       }
     | {
         type: 'register';
         username: string;
-        password: string;
         email: string;
         name: string;
         clientSecret: string;
@@ -339,7 +314,6 @@ export default class RegisterUser extends Component<Signature> {
         type: 'askForToken';
         session: string;
         username: string;
-        password: string;
         email: string;
         name: string;
         clientSecret: string;
@@ -349,7 +323,6 @@ export default class RegisterUser extends Component<Signature> {
     | {
         type: 'sendToken';
         username: string;
-        password: string;
         token: string;
         session: string;
         email: string;
@@ -361,7 +334,6 @@ export default class RegisterUser extends Component<Signature> {
     | {
         type: 'waitForEmailValidation' | 'waitForAccountCreation';
         username: string;
-        password: string;
         token?: string;
         session: string;
         email: string;
@@ -377,7 +349,6 @@ export default class RegisterUser extends Component<Signature> {
     | {
         type: 'login';
         username: string;
-        password: string;
         email: string;
         name: string;
         session: string;
@@ -407,22 +378,12 @@ export default class RegisterUser extends Component<Signature> {
 
   private get hasRegistrationMissingField() {
     return (
-      !this.email ||
-      !this.name ||
-      !this.username ||
-      !this.password ||
-      !this.confirmPassword
+      !this.email || !this.name || !this.username || !this.credentials.complete
     );
   }
 
   private get hasRegistrationError() {
-    return (
-      this.emailError ||
-      this.nameError ||
-      this.usernameError ||
-      this.passwordError ||
-      this.confirmPasswordError
-    );
+    return this.emailError || this.nameError || this.usernameError;
   }
 
   private get isNextButtonDisabled() {
@@ -435,22 +396,6 @@ export default class RegisterUser extends Component<Signature> {
       !this.usernameError &&
       !this.checkUsernameAvailability.isRunning &&
       this.isUsernameAvailable
-    );
-  }
-
-  private get isPasswordValid() {
-    return (
-      Boolean(this.password) &&
-      !this.passwordError &&
-      isValidPassword(this.password)
-    );
-  }
-
-  private get isConfirmPasswordValid() {
-    return (
-      Boolean(this.confirmPassword) &&
-      !this.confirmPasswordError &&
-      this.confirmPassword === this.password
     );
   }
 
@@ -468,14 +413,6 @@ export default class RegisterUser extends Component<Signature> {
     } else {
       return 'initial';
     }
-  }
-
-  private get passwordInputState() {
-    return this.passwordError ? 'invalid' : 'initial';
-  }
-
-  private get confirmPasswordInputState() {
-    return this.confirmPasswordError ? 'invalid' : 'initial';
   }
 
   private get tokenInputState() {
@@ -508,18 +445,7 @@ export default class RegisterUser extends Component<Signature> {
   private setUsername(username: string) {
     this.username = username;
     this.usernameError = undefined;
-  }
-
-  @action
-  private setPassword(password: string) {
-    this.password = password;
-    this.passwordError = undefined;
-  }
-
-  @action
-  private setConfirmPassword(password: string) {
-    this.confirmPassword = password;
-    this.confirmPasswordError = undefined;
+    this.credentials.setContext({ username });
   }
 
   @action
@@ -566,24 +492,11 @@ export default class RegisterUser extends Component<Signature> {
   });
 
   @action
-  private checkPassword() {
-    if (!this.password) {
-      this.passwordError = 'Password is missing';
-    } else if (!isValidPassword(this.password)) {
-      this.passwordError = 'Password must be at least 8 characters long';
-    }
-  }
-
-  @action
-  private checkConfirmPassword() {
-    if (this.confirmPassword !== this.password) {
-      this.confirmPasswordError = 'Passwords do not match';
-    }
-  }
-
-  @action
-  private register(ev: Event) {
+  private async register(ev: Event) {
     ev.preventDefault();
+    if (!(await this.credentials.validate())) {
+      return;
+    }
     if (this.state.type !== 'initial') {
       throw new Error(
         `invalid state: cannot register() in state ${this.state.type}`,
@@ -592,7 +505,6 @@ export default class RegisterUser extends Component<Signature> {
     this.state = {
       type: 'validateEmail',
       username: this.username,
-      password: this.password,
       email: this.email,
       name: this.name,
     };
@@ -721,25 +633,31 @@ export default class RegisterUser extends Component<Signature> {
     let auth: RegisterResponse;
 
     try {
-      auth = await this.matrixService.registerRequest({
-        username: this.state.username,
-        password: this.state.password,
-        auth: {
-          session:
-            this.state.type !== 'register' ? this.state.session : undefined,
-          type: MATRIX_REGISTRATION_TYPES[this.state.type],
-          ...(this.state.type === 'sendToken'
-            ? { token: this.state.token }
-            : {}),
-          threepid_creds:
-            this.state.type !== 'login'
-              ? {
-                  sid: this.state.sid,
-                  client_secret: this.state.clientSecret,
-                }
-              : {},
+      let result = await this.credentials.submit({
+        operation: 'register',
+        args: {
+          username: this.state.username,
+          auth: {
+            session:
+              this.state.type !== 'register' ? this.state.session : undefined,
+            type: MATRIX_REGISTRATION_TYPES[this.state.type],
+            ...(this.state.type === 'sendToken'
+              ? { token: this.state.token }
+              : {}),
+            threepid_creds:
+              this.state.type !== 'login'
+                ? {
+                    sid: this.state.sid,
+                    client_secret: this.state.clientSecret,
+                  }
+                : {},
+          },
         },
       });
+      if (!result.ok) {
+        throw credentialFieldsError(result);
+      }
+      auth = result.body as RegisterResponse;
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
       if (

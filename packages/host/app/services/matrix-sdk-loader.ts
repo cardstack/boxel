@@ -123,7 +123,6 @@ export class ExtendedMatrixSDK {
 
 export type ExtendedClient = Pick<
   MatrixSDK.MatrixClient,
-  | 'addThreePidOnly'
   | 'baseUrl'
   | 'createRoom'
   | 'credentials'
@@ -145,13 +144,11 @@ export type ExtendedClient = Pick<
   | 'joinRoom'
   | 'leave'
   | 'loginFlows'
-  | 'loginWithPassword'
   | 'loginWithToken'
   | 'logout'
   | 'getOpenIdToken'
   | 'off'
   | 'on'
-  | 'registerRequest'
   | 'requestPasswordEmailToken'
   | 'roomState'
   | 'scrollback'
@@ -160,7 +157,6 @@ export type ExtendedClient = Pick<
   | 'sendStateEvent'
   | 'setAccountData'
   | 'setDisplayName'
-  | 'setPassword'
   | 'setPowerLevel'
   | 'setRoomName'
   | 'startClient'
@@ -180,10 +176,6 @@ export type ExtendedClient = Pick<
       clientSecret: string,
       sendAttempt: number,
     ): Promise<MatrixSDK.IRequestTokenResponse>;
-    loginWithEmail(
-      email: string,
-      password: string,
-    ): Promise<MatrixSDK.LoginResponse>;
     createRealmSession(realmURL: URL): Promise<string>;
     hashMessageWithSecret(message: string): Promise<string>;
   };
@@ -240,40 +232,6 @@ async function requestEmailToken(
   }
 }
 
-// the matrix SDK is using an old version of this API and
-// doesn't provide login using email, so we use the API directly
-async function loginWithEmail(
-  this: ExtendedClient,
-  fetch: typeof globalThis.fetch,
-  email: string,
-  password: string,
-) {
-  let response = await fetch(`${this.baseUrl}/_matrix/client/v3/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      identifier: {
-        type: 'm.id.thirdparty',
-        medium: 'email',
-        address: email,
-      },
-      password,
-      type: 'm.login.password',
-    }),
-  });
-  if (response.ok) {
-    return (await response.json()) as MatrixSDK.LoginResponse;
-  } else {
-    let data = (await response.json()) as { errcode: string; error: string };
-    let error = new Error(data.error) as any;
-    error.data = data;
-    error.status = response.status;
-    throw error;
-  }
-}
-
 function extendedClient({
   client,
   fetch,
@@ -297,8 +255,6 @@ function extendedClient({
           return hashMessageWithSecret.bind(extendedTarget, fetch);
         case 'requestEmailToken':
           return requestEmailToken.bind(extendedTarget, fetch);
-        case 'loginWithEmail':
-          return loginWithEmail.bind(extendedTarget, fetch);
         case 'createRealmSession':
           return createRealmSession.bind(extendedTarget, fetch);
         case 'getJoinedRooms':

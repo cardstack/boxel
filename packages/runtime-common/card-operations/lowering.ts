@@ -11,6 +11,12 @@ import {
   callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
+import {
+  callApiReadsActor,
+  lowerCallApi,
+  type CallApiClauses,
+} from './call-api.ts';
+import { operationLabelProblem } from './label.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
 import {
   isDefinitionFreeBaseOperation,
@@ -170,6 +176,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     // card.
     explain: ['card-def'],
     validate: ['card-def'],
+    // Reached only through a declaration: a card with a request to send says
+    // what it is.
+    callApi: ['card-def'],
   };
 
 function declarableBases(
@@ -200,6 +209,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
     base === 'appendContainsMany' ||
     base === 'explain' ||
     base === 'validate' ||
+    base === 'callApi' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -328,6 +338,27 @@ export async function lowerOperationDeclarations(
       operations[name].base === 'validate'
     ) {
       operations[name].nonGrantable = true;
+    }
+    // A label describes the operation to people and changes nothing about
+    // what it does, so it is carried onto whichever entry the declaration
+    // produced. One that is not a short line of plain text makes the entry
+    // invalid rather than being dropped, as any other refused key does.
+    let label = raw[name]?.label;
+    if (label !== undefined) {
+      let problem = operationLabelProblem(label);
+      if (problem) {
+        let issue: OperationLoweringIssue = {
+          code: 'invalid-label',
+          operation: name,
+          path: 'label',
+          message: problem,
+        };
+        operations[name].invalid = true;
+        operations[name].issues = [...(operations[name].issues ?? []), issue];
+        issues.push(issue);
+      } else {
+        operations[name].label = label;
+      }
     }
   }
   return { operations, issues };
@@ -503,7 +534,9 @@ async function lowerOperation(
           ? `an "explain" operation reports what the realm's policy decides rather than running a program over a document, so this program would never be reached`
           : base === 'validate'
             ? `a "validate" operation reports what the policy card compiles to rather than running a program over a document, so this program would never be reached`
-            : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+            : base === 'callApi'
+              ? `a "callApi" operation sends the request it declares rather than running a program over a document, so this program would never be reached`
+              : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -603,6 +636,16 @@ async function lowerOperation(
       operation.query = query;
     }
   }
+  if (base === 'callApi') {
+    let request = lowerCallApi(
+      declaration as CallApiClauses,
+      sink,
+      (value, path) => templateOf(value, { path, paramNames, sink }),
+    );
+    if (request) {
+      operation.callApi = request;
+    }
+  }
   if (
     base === 'appendContainsMany' &&
     !isBuiltInAppend(sink.operation, declaration as AppendContainsManyClauses)
@@ -644,6 +687,9 @@ function readsActor(operation: OperationDefinition): boolean {
     if (program && callsActor(program.source)) {
       return true;
     }
+  }
+  if (operation.callApi && callApiReadsActor(operation.callApi)) {
+    return true;
   }
   return [operation.fill, operation.items].some(
     (template) => template !== undefined && templateReadsActor(template),

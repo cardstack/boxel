@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadUrlCalls } from '../lib/bot-tools/read-url/fulfillment.ts';
+import {
+  fulfillReadUrlCall,
+  type ReadUrlFulfillmentDeps,
+  type ReadUrlFulfillmentOutcome,
+} from '../lib/bot-tools/read-url/fulfillment.ts';
 import {
   READ_URL_MAX_CALLS_PER_RESPONSE,
   READ_URL_TOOL_NAME,
@@ -52,6 +56,20 @@ function deps(
       return `https://localhost/_matrix/media/v3/download/upload-${uploads.length}`;
     },
   };
+}
+
+// The calls of one response, fulfilled one at a time as the bot's call loop
+// does, sharing the response's read count.
+async function fulfillReadUrlCalls(
+  calls: any[],
+  deps: Omit<ReadUrlFulfillmentDeps, 'reads'>,
+): Promise<ReadUrlFulfillmentOutcome[]> {
+  let reads = { count: 0 };
+  let outcomes: ReadUrlFulfillmentOutcome[] = [];
+  for (let call of calls) {
+    outcomes.push(await fulfillReadUrlCall(call, { ...deps, reads }));
+  }
+  return outcomes;
 }
 
 function dataOf(content: any) {

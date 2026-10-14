@@ -4,6 +4,7 @@ import { render } from '@ember/test-helpers';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
 
+import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupBaseRealm } from './base-realm';
@@ -13,6 +14,7 @@ import { renderCard } from './render-component';
 import { setupRenderingTest } from './setup';
 
 import {
+  provideConsumeContext,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -123,14 +125,44 @@ export function setupChoreoGalleryTest(
     },
 
     /**
+     * Give the cards the test renders the host's `viewCard`, which records
+     * each card it is asked to open, by its slug, in the list it returns.
+     */
+    provideViewCard(): string[] {
+      let opened: string[] = [];
+      provideConsumeContext(CardCrudFunctionsContextName, {
+        createCard: () => {},
+        saveCard: () => {},
+        editCard: () => {},
+        deleteCard: async () => {},
+        viewCard: (card: { id?: string; slug?: string } | URL | string) => {
+          opened.push(
+            typeof card === 'object' && 'slug' in card
+              ? (card.slug ?? '')
+              : String(card),
+          );
+        },
+      });
+      return opened;
+    },
+
+    /** Render one demo the index links as its card's page, isolated. */
+    async renderDemo(slug: string) {
+      let demo = (await gallery.demos([slug]))[0]!;
+      await renderCard(gallery.loader, demo, 'isolated');
+    },
+
+    /**
      * Every demo the gallery's index links, in its order, as card instances
      * built from the realm's own instance documents.
      */
-    async demos(): Promise<DemoModule.GalleryDemo[]> {
+    async demos(
+      slugs: string[] = GALLERY_DEMOS,
+    ): Promise<DemoModule.GalleryDemo[]> {
       let { DemoLesson, WalkthroughStep } =
         await gallery.import<typeof DemoModule>('demo');
       return await Promise.all(
-        GALLERY_DEMOS.map(async (slug) => {
+        slugs.map(async (slug) => {
           let { data } = galleryInstance(`demos/${slug}.json`);
           let { module, name } = data.meta.adoptsFrom;
           let classes = await gallery.import<
@@ -138,6 +170,7 @@ export function setupChoreoGalleryTest(
           >(module.replace(/^\.\.\//, ''));
           let { lesson, walkthrough, ...attributes } = data.attributes;
           return new classes[name]!({
+            id: `${testRealmURL}demos/${slug}`,
             ...attributes,
             lesson: lesson ? new DemoLesson(lesson) : undefined,
             walkthrough: (walkthrough ?? []).map(

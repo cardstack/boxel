@@ -1,10 +1,4 @@
-import {
-  click,
-  find,
-  triggerEvent,
-  waitFor,
-  waitUntil,
-} from '@ember/test-helpers';
+import { click, find, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
@@ -166,60 +160,6 @@ module('Integration | Choreo gallery | films', function (hooks) {
     assert
       .dom('[data-test-film="towers"] [role="status"]')
       .doesNotExist('the loading status goes with the poster’s turn');
-  });
-
-  test('a film’s page leaving takes its frame down before the swap, so the poster is what flies', async function (assert) {
-    let { ChoreoGallery } = (await loader.import(`${testRealmURL}gallery`)) as {
-      ChoreoGallery: new (attrs: Record<string, unknown>) => CardDefType;
-    };
-    let module = (await loader.import(`${testRealmURL}stages/towers`)) as {
-      TowersDemo: new (attrs: Record<string, unknown>) => CardDefType;
-    };
-    let gallery = new ChoreoGallery({
-      demos: [
-        new module.TowersDemo({
-          slug: 'towers',
-          title: 'towers',
-          group: 'Film',
-          lede: 'The towers film',
-          apis: [],
-          sample: '',
-          slowmo: false,
-          theater: true,
-        }),
-      ],
-    });
-    await renderCard(loader, gallery, 'isolated');
-    await click('[data-test-gallery-tile-link="towers"]');
-    await waitFor('[data-test-film="towers"] [data-test-film-frame]');
-
-    // what the page held at the moment its frame went
-    let pageWhenFrameWent: boolean | undefined;
-    let observer = new MutationObserver(() => {
-      if (
-        pageWhenFrameWent === undefined &&
-        !document.querySelector(
-          '[data-test-film="towers"] [data-test-film-frame]',
-        )
-      ) {
-        pageWhenFrameWent = Boolean(
-          document.querySelector('[data-test-demo-body]'),
-        );
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    try {
-      await triggerEvent('[data-gallery-home]', 'click');
-      await waitUntil(() => !document.querySelector('[data-test-demo-body]'), {
-        timeout: 8000,
-      });
-    } finally {
-      observer.disconnect();
-    }
-    assert.true(
-      pageWhenFrameWent,
-      'the frame was gone while the page was still showing, with its poster in its place',
-    );
   });
 
   test('the stage’s controls keep their own ink, type and cursor inside the site', async function (assert) {

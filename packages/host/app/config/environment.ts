@@ -45,6 +45,7 @@ export default config as {
   realmsServed?: string[];
   logLevels: string;
   iconsURL: string;
+  secureOriginURL: string;
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;

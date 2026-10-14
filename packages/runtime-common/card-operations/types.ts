@@ -1,5 +1,6 @@
 import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
+import type { JsonValue } from '../json-validation.ts';
 import type { CaptureManifest } from '../capture-spec.ts';
 import type {
   SingleCardDocument,
@@ -17,6 +18,7 @@ import {
 } from '../prerendered-html-format.ts';
 import type {
   BaseOperationName,
+  CallApiMethod,
   HtmlDeclaration,
   HtmlSharing,
   LinkStrategy,
@@ -309,6 +311,13 @@ export interface OperationDefinition {
   // everyone or to no one, and the response never depends on how its caller
   // was authorized.
   html?: HtmlDeclaration;
+  // The request a `callApi` sends, with the values an invocation fills still
+  // holding their markers and every credential still a slot.
+  callApi?: OperationCallApi;
+  // The author's short, plain-text phrase for people, shown wherever the
+  // operation is presented to someone. Read as data and acted on by nothing.
+  // Absent, the operation is shown under its name split into words.
+  label?: string;
   // The author's override of the client's optimistic eligibility.
   optimistic?: boolean;
   // Whether every program this operation runs yields the same result for the
@@ -404,6 +413,9 @@ export type OperationLoweringIssueCode =
   // including `none` on a `read`: `none` is a query's strategy, since a card
   // the host loads without its links would have them replaced by an edit.
   | 'invalid-link-strategy'
+  // A `label` that is not a short line of plain text: empty, longer than the
+  // limit, or carrying markup, a line break or another control character.
+  | 'invalid-label'
   // An `html` declaration on a base other than `read` or `query`. It withholds
   // prerendered HTML a read of the target or a query's rows are served with,
   // and no other base serves any: a write answers with the card's data, and a
@@ -444,7 +456,33 @@ export type OperationLoweringIssueCode =
   // card's stored bytes without ever assembling its document, which is the
   // whole reason the behavior exists, so the card's own values are not there
   // to read — an item that needs one belongs on a `transform`.
-  | 'instance-out-of-scope';
+  | 'instance-out-of-scope'
+  // A request a `callApi` declares that cannot be sent as written: a URL that
+  // is not absolute, a `{name}` segment `path` does not fill or a `path` value
+  // no segment takes, a value that is not text where text is sent, or a
+  // program where a value belongs.
+  | 'invalid-request'
+  // A `{{…}}` that is not a slot the request can fill.
+  | 'invalid-slot'
+  // One slot written in two places. A credential goes to one place in the
+  // request, so a second placement is a second copy of it to leak.
+  | 'slot-placed-twice'
+  // Two different slots under one name. A slot's name is what a binding fills
+  // it by, so two of them under one name would be filled with the same key.
+  | 'slot-name-reused'
+  // A slot outside a header value, a query value, a path value and a string in
+  // the JSON body: in the URL as written, in a header or parameter name, or in
+  // a GraphQL document. Those are recorded or routed on as they stand, so a
+  // credential there would be logged or would choose the destination.
+  | 'slot-out-of-place'
+  // A path segment filled other than through `path`: a `{name}` that is not a
+  // whole segment, or a value spliced into the URL's text. Only a value that
+  // fills a whole segment is encoded as one.
+  | 'unencoded-path-parameter'
+  // A GraphQL document assembled from values rather than written as one fixed
+  // string. Values travel as variables, so a payload can never change what the
+  // document asks for.
+  | 'string-built-graphql';
 
 // A problem found while lowering one operation. Recorded, never thrown:
 // definition build is decoupled in time from the edit that introduced the
@@ -696,10 +734,23 @@ const WRITES: Readonly<Record<BaseOperation, boolean>> = {
   appendLine: true,
   explain: false,
   validate: false,
+  // A request sent outside the realm changes nothing the realm stores.
+  callApi: false,
 };
 
 export function isWrite(base: BaseOperation): boolean {
   return WRITES[base];
+}
+
+// Whether invoking the behavior needs the realm's write authority, which is
+// what decides the method a batch carrying it travels on and the permission
+// the realm checks for it. Every write does, and so does a `callApi`: it
+// changes nothing stored, but it acts outside the realm on the realm's
+// behalf, which a caller only permitted to read the realm may not do. A
+// `callApi` is not staged or committed, so the two questions are asked
+// separately.
+export function travelsAsWrite(base: BaseOperation): boolean {
+  return WRITES[base] || base === 'callApi';
 }
 
 // What an operation runs against. An `instance` target is an existing card or
@@ -1166,7 +1217,10 @@ export type PolicyExplanationReason =
   // to match, which is what an empty path is.
   | 'unmatchable-target'
   // The operation is not one the target carries: resolving it refused before
-  // the policy could be consulted. `refusal` says how.
+  // the policy could be consulted. `refusal` says how. It is absent for a
+  // search naming a query on a type whose module the actor may not read: that
+  // search is answered with no rows, as a declared query that admits nothing
+  // is, rather than with a refusal that would describe what the type declares.
   | 'not-resolved'
   // The actor presented no credentials, and the ACL does not allow an
   // anonymous caller this lane. The policy admits only an authenticated
@@ -1383,6 +1437,72 @@ export interface ValidatedGrant {
   admitsNothing?: ValidatedGrantInertia;
 }
 
+// ============================================================================
+// callApi: a declared request to a service outside the realm.
+// ============================================================================
+
+// Whose key a slot is filled with: the invoking user's own (`userKey`), or one
+// the realm holds (`apiKey`).
+export type CallApiSlotKey = 'userKey' | 'apiKey';
+
+// Where in the request a slot stands, which is also where its value is sent.
+export type CallApiSlotPlacement = 'header' | 'query' | 'path' | 'body';
+
+// One credential the request carries, as lowering found it written. The
+// request template keeps the slot's text exactly where the author put it; this
+// is the index of them, read without walking the template.
+export interface CallApiSlot {
+  // What a binding fills it by: the name after the colon, or the key's own
+  // name for a slot written without one.
+  name: string;
+  key: CallApiSlotKey;
+  // Applied to the value before it is sent. `basic` is the base64 of the value
+  // as HTTP Basic authentication takes it.
+  transform?: 'basic';
+  placement: CallApiSlotPlacement;
+  // The dotted path to the string that carries it — `headers.authorization`,
+  // `json.auth.token`.
+  at: string;
+}
+
+export type CallApiBodyTemplate =
+  | { kind: 'json'; value: OperationTemplate }
+  | {
+      kind: 'graphql';
+      document: string;
+      variables?: Record<string, OperationTemplate>;
+    };
+
+export interface OperationCallApi {
+  method: CallApiMethod;
+  // Absolute, with each segment `path` fills still written `{name}`.
+  url: string;
+  path?: Record<string, OperationTemplate>;
+  headers?: Record<string, OperationTemplate>;
+  query?: Record<string, OperationTemplate>;
+  body?: CallApiBodyTemplate;
+  slots: CallApiSlot[];
+}
+
+// What a `callApi` answers with: the vendor's response, whatever its status.
+// A 404 or a 500 from the vendor is an answer the card reads, not a refusal
+// the realm makes.
+export interface CallApiResponse {
+  status: number;
+  // The response headers that describe the body rather than the vendor's
+  // infrastructure or session, lower-cased.
+  headers: Record<string, string>;
+  // Parsed when the vendor sends JSON, text otherwise, and null when there is
+  // no body. Every credential the request carried is removed from it.
+  body: JsonValue | string | null;
+}
+
+// A `callApi`'s answer as an operation result: the response, or what the
+// declaration's `output` maps it to.
+export interface OperationCallApiResult {
+  callApi: unknown;
+}
+
 export type ValidatedGrantInertia =
   // A grant on a query whose `where` compiled no search filter. A query is
   // authorized only by composing a grant's filter into the search, and the
@@ -1399,6 +1519,7 @@ export type OperationResult =
   | OperationExplainResult
   | OperationExplainListingResult
   | OperationValidateResult
+  | OperationCallApiResult
   | null;
 
 export function isDocumentResult(
@@ -1444,6 +1565,12 @@ export function isValidateResult(
   result: OperationResult,
 ): result is OperationValidateResult {
   return result != null && 'validation' in result;
+}
+
+export function isCallApiResult(
+  result: OperationResult,
+): result is OperationCallApiResult {
+  return result != null && 'callApi' in result;
 }
 
 export type OperationErrorCode =
@@ -1539,6 +1666,22 @@ export type OperationErrorCode =
   // it turned the caller away rather than let it through uncounted. Nothing
   // was done. Carries a 503 with `Retry-After`.
   | 'rate-limit-unavailable'
+  // A `callApi` whose request carries a credential slot that no binding the
+  // realm's owner approved fills. Nothing was sent.
+  | 'binding-not-approved'
+  // A `callApi` invoked while a card is being rendered. A render is replayed
+  // and cached, and must not send requests to the world on anyone's behalf.
+  // Nothing was sent.
+  | 'not-during-render'
+  // The realm server's outbound guard refused the destination: not https, an
+  // address that is not public, or too many redirects. Nothing reached the
+  // vendor, or nothing past the refused hop.
+  | 'guard-refused'
+  // The vendor did not connect or did not finish answering in time.
+  | 'upstream-timeout'
+  // The vendor's response was larger than the realm server carries for a
+  // `callApi`.
+  | 'response-too-large'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

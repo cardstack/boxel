@@ -22,6 +22,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_LLM_MODE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   APP_BOXEL_SYSTEM_CARD_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
@@ -282,10 +283,6 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
-  addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
   get credentials(): { userId: string | null } {
     return { userId: this.loggedInAs ?? null };
   }
@@ -319,13 +316,6 @@ export class MockClient implements ExtendedClient {
   }
 
   leave(_roomId: string): Promise<{}> {
-    throw new Error('Method not implemented.');
-  }
-
-  registerRequest(
-    _data: MatrixSDK.RegisterRequest,
-    _kind?: string | undefined,
-  ): Promise<MatrixSDK.RegisterResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -368,14 +358,6 @@ export class MockClient implements ExtendedClient {
     );
 
     return Promise.resolve({});
-  }
-
-  setPassword(
-    _authDict: MatrixSDK.AuthDict,
-    _newPassword: string,
-    _logoutDevices?: boolean | undefined,
-  ): Promise<{}> {
-    throw new Error('Method not implemented.');
   }
 
   setRoomName(
@@ -441,21 +423,6 @@ export class MockClient implements ExtendedClient {
     } as unknown as MatrixSDK.Room);
   }
 
-  // Mirrors what `loggedInAs` bootstraps at setup, so a test can drive the
-  // real login form. Any password is accepted.
-  loginWithPassword(
-    user: string,
-    _password: string,
-  ): Promise<MatrixSDK.LoginResponse> {
-    let userId = user.startsWith('@') ? user : `@${user}:localhost`;
-    this.clientOpts.userId = userId;
-    return Promise.resolve({
-      access_token: 'mock-access-token',
-      device_id: 'mock-device-id',
-      user_id: userId,
-    } as MatrixSDK.LoginResponse);
-  }
-
   loginFlows(): Promise<{ flows: MatrixSDK.LoginFlow[] }> {
     return Promise.resolve(
       this.sdkOpts.loginFlowsResponse ?? {
@@ -502,13 +469,6 @@ export class MockClient implements ExtendedClient {
     _clientSecret: string,
     _sendAttempt: number,
   ): Promise<MatrixSDK.IRequestTokenResponse> {
-    throw new Error('Method not implemented.');
-  }
-
-  loginWithEmail(
-    _email: string,
-    _password: string,
-  ): Promise<MatrixSDK.LoginResponse> {
     throw new Error('Method not implemented.');
   }
 
@@ -709,6 +669,7 @@ export class MockClient implements ExtendedClient {
       case 'm.room.name':
       case 'm.room.member':
       case APP_BOXEL_LLM_MODE:
+      case APP_BOXEL_STOP_GENERATING_EVENT_TYPE:
         return this.sdk.RoomEvent.Timeline;
       case 'm.receipt':
         return this.sdk.RoomEvent.Receipt;

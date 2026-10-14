@@ -34,9 +34,10 @@ export default class HostModeStateService extends Service {
   // Primary card ID: https://user.example.com/cards/123
   // Stack card IDs: [https://user.example.com/cards/456, https://user.example.com/cards/789]
   @tracked private primaryCardItem: string | null = null;
-  private stackCardItems: TrackedArray<string> = new TrackedArray();
+  private readonly stackCardItems: TrackedArray<string> = new TrackedArray();
+  // null until the stack is read from the URL, and again after a session
+  // ends: the state is initialized exactly when there is a route path
   private currentRoutePath: string | null = null;
-  private isStateInitialized = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -45,9 +46,14 @@ export default class HostModeStateService extends Service {
 
   resetState() {
     this.primaryCardItem = null;
-    this.stackCardItems = new TrackedArray();
+    // emptied in place: the field isn't tracked, so a template that has read
+    // the stack keeps the array it read
+    this.stackCardItems.splice(0, this.stackCardItems.length);
     this.currentRoutePath = null;
-    this.isStateInitialized = false;
+  }
+
+  private get isStateInitialized(): boolean {
+    return this.currentRoutePath !== null;
   }
 
   restore({
@@ -68,15 +74,24 @@ export default class HostModeStateService extends Service {
     });
   }
 
+  // The URL is the source of truth for the stack. Every transition into the
+  // route lands here: the first load, the transition `persist` makes for a
+  // change made here (whose URL already matches, so nothing changes), and the
+  // browser's Back and Forward, whose URL holds a different stack that the
+  // page has to follow.
   private initialize({ primaryCardId, stack, routePath }: InitializeOptions) {
-    if (this.isStateInitialized) {
-      return;
+    // a tracked write invalidates even when the value is the same, and the
+    // primary card's resources rebuild on it, so only a change is written
+    if (this.primaryCardItem !== primaryCardId) {
+      this.primaryCardItem = primaryCardId;
     }
-    this.isStateInitialized = false;
-    this.primaryCardItem = primaryCardId ?? null;
-    this.stackCardItems.push(...stack);
+    if (
+      this.stackCardItems.length !== stack.length ||
+      this.stackCardItems.some((id, index) => id !== stack[index])
+    ) {
+      this.stackCardItems.splice(0, this.stackCardItems.length, ...stack);
+    }
     this.currentRoutePath = routePath;
-    this.isStateInitialized = true;
   }
 
   get stackItems() {
@@ -96,12 +111,21 @@ export default class HostModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // Before the stack has been read from the URL there is nothing to change:
+  // the URL's stack replaces it as soon as it is read, so a change made now
+  // would show for a moment and then vanish.
   pushCard(cardId: string) {
+    if (!this.isStateInitialized) {
+      return;
+    }
     unwindOrPush(this.stackCardItems, cardId, this.primaryCardItem);
     this.schedulePersist();
   }
 
   removeCardFromStack(cardId: string) {
+    if (!this.isStateInitialized) {
+      return;
+    }
     if (removeTopmost(this.stackCardItems, cardId)) {
       this.schedulePersist();
     }
@@ -112,8 +136,16 @@ export default class HostModeStateService extends Service {
       return [];
     }
 
+    // a stack from a hand-edited or mangled URL that isn't a list of card
+    // ids is no stack
     try {
-      return JSON.parse(serialized) as SerializedStack;
+      let parsed: unknown = JSON.parse(serialized);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((id): id is string => typeof id === 'string')
+      ) {
+        return parsed as SerializedStack;
+      }
     } catch (error) {
       // Ignore malformed data and reset stack
     }
@@ -138,17 +170,20 @@ export default class HostModeStateService extends Service {
   }
 
   private persist() {
-    if (!this.isStateInitialized || !this.currentRoutePath) {
+    let routePath = this.currentRoutePath;
+    if (routePath === null) {
       return;
     }
 
-    let serialized = this.serialize();
     // Preserve the param if there is a stack, otherwise remove it to keep the URL clean.
-    this.router.transitionTo('index', this.currentRoutePath, {
-      queryParams: {
-        hostModeStack: serialized,
-      },
-    });
+    let queryParams = { hostModeStack: this.serialize() };
+    // A site's root page has no path: it is the index-root route, which the
+    // index route's path can't name.
+    if (routePath) {
+      this.router.transitionTo('index', routePath, { queryParams });
+    } else {
+      this.router.transitionTo('index-root', { queryParams });
+    }
   }
 }
 

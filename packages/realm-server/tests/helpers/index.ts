@@ -353,6 +353,7 @@ import {
   realmInfoExtraKeys,
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
+import { callApiSender } from '../../lib/outbound/call-api-sender.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -568,6 +569,7 @@ export function makeTestReconciler(
         matrixClient: dynamicMountDeps.matrixClient,
         realmServerURL: dynamicMountDeps.serverURL.href,
         definitionLookup: dynamicMountDeps.definitionLookup,
+        callApi: callApiSender,
       });
       realms.push(reconciledRealm);
       dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
@@ -1557,6 +1559,7 @@ export async function createRealm({
       mediaCacheAdapter,
       cardDocumentCache,
       ...(realmFor ? { realmFor } : {}),
+      callApi: callApiSender,
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1618,6 +1621,7 @@ export async function runTestRealmServer({
   mediaCacheAdapter,
   readIndexDrainBudgetMs,
   linkShapePolicy,
+  secureOriginURL,
   cardDocumentCache,
   published,
 }: {
@@ -1648,6 +1652,8 @@ export async function runTestRealmServer({
   // read path reads it off the realm, and the search fan-out reads it off the
   // server, so a test that sets it gets the setting on both legs.
   linkShapePolicy?: LinkShapePolicy;
+  // Gives the server a secure origin (see `lib/secure-origin.ts`).
+  secureOriginURL?: URL;
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
@@ -1738,6 +1744,7 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
+    ...(secureOriginURL ? { secureOriginURL } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
@@ -2394,6 +2401,7 @@ type InternalPermissionedRealmSetupOptions = {
   mediaCacheAdapter?: MediaCacheAdapter;
   readIndexDrainBudgetMs?: number;
   linkShapePolicy?: LinkShapePolicy;
+  secureOriginURL?: URL;
   cardDocumentCache?: CardDocumentCache;
 };
 
@@ -2416,6 +2424,7 @@ async function startPermissionedRealmFixture(
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
     linkShapePolicy,
+    secureOriginURL,
     cardDocumentCache,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
@@ -2489,6 +2498,7 @@ async function startPermissionedRealmFixture(
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
     linkShapePolicy,
+    secureOriginURL,
     cardDocumentCache,
     ...(published ? { published: true as const } : {}),
   });
@@ -2562,6 +2572,7 @@ export function setupPermissionedRealm(
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
     linkShapePolicy,
+    secureOriginURL,
     cardDocumentCache,
   }: {
     permissions: RealmPermissions;
@@ -2596,6 +2607,8 @@ export function setupPermissionedRealm(
     // Makes the realm and server this setup builds answer a live card read or
     // search with each card's relationships resolved and nothing side-loaded.
     linkShapePolicy?: LinkShapePolicy;
+    // Gives the server a secure origin (see `lib/secure-origin.ts`).
+    secureOriginURL?: URL;
     // Inject a cache configured for the test (e.g. one that holds its
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
@@ -2632,6 +2645,7 @@ export function setupPermissionedRealm(
         mediaCacheAdapter,
         readIndexDrainBudgetMs,
         linkShapePolicy,
+        secureOriginURL,
         cardDocumentCache,
       });
       testRealmServer = server;
@@ -2687,10 +2701,10 @@ function permissionedRealmTemplateCacheKey(
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
     audioSizeLimitBytes: options.audioSizeLimitBytes ?? null,
     videoSizeLimitBytes: options.videoSizeLimitBytes ?? null,
-    // `readIndexDrainBudgetMs` and `linkShapePolicy` are
-    // deliberately absent: both tune request-time behavior on the live realm
-    // and leave no trace in the template database, so keying on either would
-    // only fragment the template cache.
+    // `readIndexDrainBudgetMs`, `linkShapePolicy` and `secureOriginURL` are
+    // deliberately absent: each tunes request-time behavior on the live realm
+    // or server and leaves no trace in the template database, so keying on
+    // any of them would only fragment the template cache.
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }

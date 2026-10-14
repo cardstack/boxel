@@ -10,6 +10,7 @@ import {
   type Querier,
   upsert,
 } from '../expression.ts';
+import { aiBotUsername, submissionBotUsername } from '../constants.ts';
 import { fetchMatrixProfile, getMatrixUsername } from '../matrix-client.ts';
 import { effectiveRealmPermissions } from '../realm-permission-checker.ts';
 
@@ -157,6 +158,79 @@ export async function fetchEffectiveRealmPermissions(
     username,
     async () => !!(await fetchMatrixProfile(new URL(matrixURL), username)),
   );
+}
+
+// The permission rows that grant to many accounts at once: `*` (everyone,
+// matrix account or not) and `users` (any registered matrix user).
+const wildcardUsernames = new Set(['*', 'users']);
+
+// The platform's service accounts, by matrix localpart.
+const botLocalparts = new Set([aiBotUsername, submissionBotUsername]);
+
+// A realm's own matrix user is `@realm/…` for a published realm and
+// `@<name>_realm` for a bootstrap realm; the shared accounts that sync content
+// into bootstrap realms are `@<name>_writer`. Matching the naming convention,
+// rather than listing the accounts, keeps a newly added bootstrap realm from
+// counting as a person. Registration doesn't reserve the suffixes, so a person
+// who picks one is treated as a bot, which only ever withholds something.
+const botLocalpartSuffixes = ['_realm', '_writer'];
+
+export function isBotAccount(userId: string): boolean {
+  let localpart = getMatrixUsername(userId);
+  return (
+    localpart.startsWith('realm/') ||
+    botLocalparts.has(localpart) ||
+    botLocalpartSuffixes.some((suffix) => localpart.endsWith(suffix))
+  );
+}
+
+function isDirectWriterRow(username: string, write: boolean): boolean {
+  return write && !wildcardUsernames.has(username) && !isBotAccount(username);
+}
+
+/**
+ * Whether `userId` is a direct writer of the realm: a person whose own
+ * permission row grants `write`. It is the narrower question asked before a
+ * realm takes something on in a person's name, such as a shared key or a
+ * scheduled pipeline they pay for, so it answers for that person alone. A
+ * `*` or `users` row grants write to everyone it matches without naming
+ * anyone, a bot account acts for the platform rather than a person, and a
+ * policy grant admits a write without making its caller a writer of the
+ * realm, so none of them counts.
+ *
+ * Read fresh on each call, like every permission check, so a removed row
+ * stops counting at once.
+ */
+export async function isDirectWriter(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+  userId: string,
+): Promise<boolean> {
+  let [row] = (await query(dbAdapter, [
+    `SELECT write FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL.href),
+    `AND username =`,
+    param(userId),
+  ])) as { write: boolean }[];
+  return !!row && isDirectWriterRow(userId, row.write);
+}
+
+/**
+ * The realm's direct writers, as `isDirectWriter` answers it, in username
+ * order.
+ */
+export async function fetchDirectWriters(
+  dbAdapter: DBAdapter,
+  realmURL: URL,
+): Promise<string[]> {
+  let rows = (await query(dbAdapter, [
+    `SELECT username, write FROM realm_user_permissions WHERE write = true AND realm_url =`,
+    param(realmURL.href),
+    `ORDER BY username`,
+  ])) as { username: string; write: boolean }[];
+  return rows
+    .filter(({ username, write }) => isDirectWriterRow(username, write))
+    .map(({ username }) => username);
 }
 
 export async function fetchUserPermissions(

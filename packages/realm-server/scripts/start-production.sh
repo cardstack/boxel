@@ -47,6 +47,7 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
+  --secureOriginURL='https://secure.boxel.ai/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

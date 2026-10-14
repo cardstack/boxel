@@ -50,6 +50,7 @@ import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure.ts';
+import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 
 let log = logger('worker');
 
@@ -177,6 +178,16 @@ let createPrerenderAuth = buildCreatePrerenderAuth(
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
+  // The worker manager unwrapped the data keys and ran the self-check at its
+  // own startup; a worker takes its keyring from the manager, so starting or
+  // respawning one never calls KMS.
+  try {
+    await receiveSecretsKeyring();
+  } catch (e: any) {
+    log.error(`Could not get the secrets keyring: ${e.message}`);
+    process.exit(-1);
+  }
+
   function reportStatus({ jobId, status, realm, url, deps }: StatusArgs) {
     if (process.send) {
       process.send(

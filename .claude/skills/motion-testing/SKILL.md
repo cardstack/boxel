@@ -6,7 +6,7 @@ description: >-
   (setupChoreo, orphanCount, strandedTransforms). Use when writing or
   debugging a test that renders motion elements, Presence, layout animation,
   or Choreo in glimmer-motion / Choreo code in this repo
-  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery,
   host UI that animates with them) — and to avoid sleep()-based flake.
 ---
 
@@ -86,9 +86,12 @@ module('the inbox', function (hooks) {
   the suite in headless Chrome, compiled from source), or `pnpm start:test`
   there for interactive runs. The Choreo and film suites run the same way in
   `packages/choreo`, compiling choreo and glimmer-motion from source. The
-  tests that render gallery demos run with `pnpm test` in
-  `packages/choreo-test-app` (builds the suite, runs it in Chrome), or
-  `pnpm start:test` there for interactive runs. The gallery realm's own
+  tests that render gallery demos are the host integration modules
+  `Integration | Choreo gallery | …`
+  (`packages/host/tests/integration/choreo-gallery-*-test.{gts,ts}` and
+  `choreo-feature-reel-test.gts`); run them with
+  `ember test --path dist --filter "Choreo gallery"` from `packages/host`,
+  with the host and realm-server running. The gallery realm's own
   `*.test.gts` files run with `pnpm test` in `packages/choreo-gallery`
   (`boxel test realm`).
 

@@ -47,7 +47,7 @@ Matching the first and last values prevents a position jump. This example also h
 
 **Cycle duration** changes pace in seconds. **Scatter radius** sets the field's extent in pixels. **Field opacity** controls the background circles, while **Zoom** and **Grid spacing** reveal the coordinate relationship described above. Soft Orbit gives the composition breathing room; Punchy Mosaic makes the changes more emphatic. Editing a score may restart its cycle; it does not promise to preserve the current phase.
 
-The same study appears in the 3D gallery and its full narrated tour. The short highlight remains a separate editorial selection. It isolates a reusable idea for loading sequences, data rearrangements, and transitions between overview and detail. Preserve reduced-motion preferences, and measure performance on the target device before assuming that every transform is compositor accelerated.
+The same study appears in the [3D gallery](../../widget-room) and its full narrated tour. The short highlight remains a separate editorial selection. It isolates a reusable idea for loading sequences, data rearrangements, and transitions between overview and detail. Preserve reduced-motion preferences, and measure performance on the target device before assuming that every transform is compositor accelerated.
 
 ---
 

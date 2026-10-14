@@ -5,7 +5,7 @@ description: >-
   transitions, keyframes, variants, stagger, hover/tap/focus gestures, motion
   values, SVG. Use when one element animates on its own in glimmer-motion /
   Choreo code in this repo (packages/glimmer-motion, packages/choreo, the
-  Choreo gallery and test app, host UI that animates with them) — including
+  Choreo gallery, host UI that animates with them) — including
   the three Glimmer-specific rules that silently break motion when violated.
 ---
 
@@ -99,9 +99,9 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
 
 ## Canonical demos
 
-`packages/choreo-test-app/app/components/examples/`: `stagger.gts`, `trail.gts`,
-`keyframes.gts`, `gestures.gts`, `enter.gts`, `path-draw.gts` (SVG
-`pathLength`), `follow-pointer.gts` (motion values + springs).
+`packages/choreo-gallery/realm/stages/`: `stagger.gts`, `trail.gts`,
+`keyframes.gts`, `gestures.gts`, `enter.gts`, `path.gts` (SVG
+`pathLength`), `pointer.gts` (motion values + springs).
 
 Escalate: element leaves the DOM → `motion-presence`; position/size change
 caused by layout → `motion-layout`; multi-element ordering → `choreo-scene`.

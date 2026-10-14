@@ -24,7 +24,6 @@ import { testRealmURL } from '../helpers/index';
 import type * as DemoModule from '../../../choreo-gallery/realm/demo';
 import type * as LabModule from '../../../choreo-gallery/realm/lib/lab';
 import type * as PresetsModule from '../../../choreo-gallery/realm/lib/presets';
-import type * as TempoModule from '../../../choreo-gallery/realm/lib/tempo';
 import type * as TuningModule from '../../../choreo-gallery/realm/lib/tuning';
 import type { ComponentLike } from '@glint/template';
 
@@ -79,16 +78,6 @@ class OpensOnClick extends GlimmerComponent<{
 
 module('Integration | Choreo gallery | guides and the lab', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
-
-  hooks.beforeEach(async function () {
-    let { setTempo } = await gallery.import<typeof TempoModule>('lib/tempo');
-    setTempo('instant');
-  });
-
-  hooks.afterEach(async function () {
-    let { setTempo } = await gallery.import<typeof TempoModule>('lib/tempo');
-    setTempo('smooth');
-  });
 
   /** one demo the index links, as a card instance at its realm id */
   async function demoCard(slug: string) {
@@ -214,6 +203,13 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
 
   test('every tile and the demo page link the guide their lesson names', async function (assert) {
     await gallery.renderGallery();
+    // a tile shows its guide link once it has measured room for its stage
+    await waitUntil(
+      () =>
+        liveAll('[data-gallery-tile] .guide-link').length ===
+        GALLERY_DEMOS.length,
+      { timeout: 10_000 },
+    );
 
     let links = liveAll<HTMLAnchorElement>('[data-gallery-tile] .guide-link');
     assert.strictEqual(links.length, GALLERY_DEMOS.length, 'one per tile');
@@ -225,7 +221,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
         .hasAttribute('href', guideURL(guide), `${slug} links ${guide}`);
     }
 
-    await click(live("[data-gallery-tile='keyframes'] .card-meta")!);
+    await gallery.renderDemo('keyframes');
     await waitFor('[data-demo="keyframes"]');
     assert
       .dom('.demo-links .guide-link')
@@ -241,8 +237,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
       await gallery.import<typeof TuningModule>('lib/tuning');
     let { demoPresets } =
       await gallery.import<typeof PresetsModule>('lib/presets');
-    await gallery.renderGallery();
-    await click(live("[data-gallery-tile='enter'] .card-meta")!);
+    await gallery.renderDemo('enter');
     await waitFor('[data-demo="enter"]');
 
     assert.dom('.lab-toggle').hasAttribute('aria-expanded', 'false');
@@ -376,8 +371,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
   });
 
   test('a film has no lab: it plays in a document the lab cannot reach', async function (assert) {
-    await gallery.renderGallery();
-    await click(live("[data-gallery-tile='towers'] .card-meta")!);
+    await gallery.renderDemo('towers');
     await waitFor('[data-demo="towers"]');
     assert.dom('.lab-toggle').doesNotExist();
     assert.dom('.demo-links .guide-link').exists('the guide link still is');

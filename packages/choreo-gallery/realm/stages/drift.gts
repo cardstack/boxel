@@ -870,6 +870,7 @@ export class Drift extends Component {
             the track — which, given the camera moves under it, it does often. }}
         <div
           class='drift-view'
+          data-stage-press
           {{this.bindView}}
           {{this.start}}
           {{onStage this.watch}}
