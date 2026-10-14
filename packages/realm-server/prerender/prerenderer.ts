@@ -1093,14 +1093,31 @@ export class Prerenderer {
     return this.#restartInFlight;
   }
 
+  // Reports that arrive while a restart is in flight describe tabs of the
+  // browser being replaced, so they are dropped rather than counted against
+  // its successor.
+  //
+  // The recycle kills Chrome before tearing the pool down. The restart path
+  // closes every tab and context over CDP before closing the browser, which
+  // fails fast against a crashed browser but waits out the protocol timeout,
+  // call by call, against one that is connected and hung. Once the process
+  // is gone every pending call rejects, the renders holding tabs on it fail
+  // and release them, and the teardown runs through.
+  //
   // Not awaited by the reporter: the report comes from inside a render that
   // still holds its tab, and the restart's `closeAll` waits for that tab.
   #noteUnresponsiveTab(report: UnresponsiveTabReport): void {
-    let reason = this.#unresponsiveTabs.record(report);
-    if (!reason || this.#stopped) {
+    if (this.#stopped || this.#restartInFlight) {
       return;
     }
-    log.warn(`Recycling prerender browser: ${reason}`);
+    let reason = this.#unresponsiveTabs.record(report);
+    if (!reason) {
+      return;
+    }
+    log.warn(
+      `Recycling prerender browser (recycle ${this.#unresponsiveTabs.recycleCount}): ${reason}`,
+    );
+    this.#browserManager.killBrowserProcess();
     void this.#restartBrowser().catch((e) => {
       log.error('Failed to recycle prerender browser:', e);
     });
@@ -1109,7 +1126,6 @@ export class Prerenderer {
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
     this.#browserRestartCount++;
-    this.#unresponsiveTabs.reset();
     await this.#pagePool.closeAll();
     if (this.#stopped) {
       // `stop()` arrived while this restart was in flight. Bringing a browser
@@ -1119,6 +1135,8 @@ export class Prerenderer {
       return;
     }
     await this.#browserManager.restartBrowser();
+    // Every tab counted so far belonged to the browser just replaced.
+    this.#unresponsiveTabs.reset();
     await this.#pagePool.warmStandbys().catch((e) => {
       log.error('Failed to warm standby pages after browser restart:', e);
     });

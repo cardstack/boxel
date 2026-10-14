@@ -190,6 +190,9 @@ export const prerenderRequestTimeoutMs = parseTimeoutMs(
 // able to stretch it: whatever has been captured when the budget runs out is
 // what the error reports. Well inside the request-timeout overhead above, so
 // the caller still gets the RenderError rather than a request-level abort.
+// A hard CPU peg reports its debugger-pause outcome (and with it whether the
+// browser answered a CDP session attach) about 17 s in, so a budget below
+// that loses those signals on exactly the renders they exist for.
 const DEFAULT_RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS = 20_000;
 
 // Read on every timeout rather than once at load, so a test can shrink it.

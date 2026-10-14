@@ -21,6 +21,17 @@ import {
 // forever. That is the shape a renderer pegged by the card it is rendering
 // presents to the prerender server.
 
+// The route names a render transitions to. The evaluates before the
+// transition — session setup, the visit's host-capabilities read and its card
+// source stash — answer normally.
+const RENDER_ROUTES = new Set([
+  'module',
+  'render.html',
+  'render.meta',
+  'render.icon',
+  'render.file-extract',
+]);
+
 type StubTab = {
   pageId?: string;
   closed: boolean;
@@ -55,8 +66,8 @@ function makeBrowserStub(wedgeOn: 'everything' | 'render') {
               if (wedged) {
                 return never();
               }
-              // `transitionTo(page, 'module', …)` starts the render.
-              if (args[0] === 'module') {
+              // `transitionTo(page, <route>, …)` starts the render.
+              if (RENDER_ROUTES.has(args[0])) {
                 if (wedgeOn === 'everything') {
                   wedged = true;
                 }
@@ -196,6 +207,25 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
+  // A visit that hands the card's source along, so the render stashes it on
+  // the tab before rendering and clears it again in the visit's `finally`.
+  function renderVisitWithStash(runner: RenderRunner) {
+    return runner.prerenderVisitAttempt({
+      affinityType: 'user',
+      affinityValue: 'wedged-user',
+      realm: 'http://localhost:4201/wedged/',
+      url: 'http://localhost:4201/wedged/pegged.json',
+      auth: '{}',
+      renderOptions: { cardRender: true },
+      cardSource: {
+        source: '{"data":{}}',
+        realmURL: 'http://localhost:4201/wedged/',
+        lastModified: 0,
+      },
+      opts: { timeoutMs: RENDER_TIMEOUT_MS },
+    });
+  }
+
   async function waitFor(condition: () => boolean, label: string) {
     let deadline = Date.now() + 2000;
     while (!condition()) {
@@ -249,6 +279,32 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  // A visit that stashed render data clears it from the tab once it ends.
+  // On a tab that stopped answering, that cleanup would wait as long as any
+  // other CDP call, so it must not run on a tab the timeout evicted.
+  test('a visit whose tab stops answering CDP gives its tab back within the deadline', async function (assert) {
+    let { pool, runner, tabs } = setup('everything');
+    await pool.warmStandbys();
+
+    let startedAt = Date.now();
+    let { response, pool: poolInfo } = await renderVisitWithStash(runner);
+    let elapsedMs = Date.now() - startedAt;
+
+    assert.strictEqual(
+      response.card?.error?.error.title,
+      'Render timeout',
+      'the card render reports a timeout',
+    );
+    assert.true(
+      elapsedMs < RENDER_TIMEOUT_MS + DIAGNOSTICS_BUDGET_MS + MARGIN_MS,
+      `the visit returned within its timeout plus the diagnostics budget (took ${elapsedMs}ms)`,
+    );
+    assert.true(poolInfo.evicted, 'the timed-out tab was evicted');
+    let wedgedTab = tabs[0];
+    await waitFor(() => wedgedTab.closed, 'the wedged tab to close');
+    assert.true(wedgedTab.closed, 'the wedged tab was retired');
+  });
+
   test('a render that times out on a tab that still answers is not reported as unresponsive', async function (assert) {
     let { pool, runner, reports } = setup('render');
     await pool.warmStandbys();
@@ -272,8 +328,10 @@ module(basename(import.meta.filename), function (hooks) {
   module('UnresponsiveTabTracker', function () {
     function trackerAt(clock: { now: number }) {
       return new UnresponsiveTabTracker({
-        threshold: 3,
+        affinityThreshold: 3,
+        attachThreshold: 2,
         windowMs: 1000,
+        minRecycleIntervalMs: 5000,
         now: () => clock.now,
       });
     }
@@ -310,13 +368,7 @@ module(basename(import.meta.filename), function (hooks) {
       });
       assert.ok(reason, 'the third distinct affinity recycles the browser');
       assert.ok(reason?.includes('A, B, C'), `names the affinities: ${reason}`);
-
-      clock.now = 900;
-      assert.strictEqual(
-        tracker.record({ affinityKey: 'D', browserUnresponsive: false }),
-        null,
-        'a recycle starts the count over',
-      );
+      assert.strictEqual(tracker.recycleCount, 1, 'the recycle is counted');
     });
 
     test('affinities seen outside the window do not count', function (assert) {
@@ -333,14 +385,46 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a browser that stops answering recycles at once', function (assert) {
-      let tracker = trackerAt({ now: 0 });
+    test('one timed-out attach is not enough; a second within the window recycles', function (assert) {
+      let clock = { now: 0 };
+      let tracker = trackerAt(clock);
+      assert.strictEqual(
+        tracker.record({ affinityKey: 'A', browserUnresponsive: true }),
+        null,
+        'a single timed-out attach does not recycle',
+      );
+      clock.now = 500;
       let reason = tracker.record({
         affinityKey: 'A',
         browserUnresponsive: true,
       });
-      assert.ok(reason, 'recycles on the first report');
+      assert.ok(reason, 'the second one does');
       assert.ok(reason?.includes('CDP session attach'), `says why: ${reason}`);
+    });
+
+    test('recycles are spaced at least the minimum interval apart', function (assert) {
+      let clock = { now: 0 };
+      let tracker = trackerAt(clock);
+      let wedgeThree = (prefix: string) => {
+        let reason: string | null = null;
+        for (let key of ['A', 'B', 'C']) {
+          reason = tracker.record({
+            affinityKey: `${prefix}${key}`,
+            browserUnresponsive: false,
+          });
+        }
+        return reason;
+      };
+      assert.ok(wedgeThree('first-'), 'the first burst recycles');
+      clock.now = 2000;
+      assert.strictEqual(
+        wedgeThree('second-'),
+        null,
+        'a second burst inside the interval does not',
+      );
+      clock.now = 5500;
+      assert.ok(wedgeThree('third-'), 'one after the interval does');
+      assert.strictEqual(tracker.recycleCount, 2, 'two recycles counted');
     });
 
     test('reset forgets the affinities counted so far', function (assert) {

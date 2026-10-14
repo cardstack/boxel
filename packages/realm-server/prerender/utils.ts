@@ -65,6 +65,7 @@ import {
   type ArtifactKeyParts,
 } from './artifact-sink.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
+import { raceNodeTimeout, TIMED_OUT } from './node-race.ts';
 import { probePageResponsive } from './page-responsiveness.ts';
 
 import type { CDPSession, ElementHandle, Page } from 'puppeteer';
@@ -104,6 +105,11 @@ const TIMEOUT_PATH_CPU_SAMPLE_MS = 1500;
 // pegged thread — still run inside the overall diagnostics budget.
 const TIMEOUT_PATH_CPU_METRICS_BUDGET_MS = CPU_SAMPLE_WINDOW_MS + 1750;
 const TIMEOUT_PATH_CPU_PROFILE_BUDGET_MS = TIMEOUT_PATH_CPU_SAMPLE_MS + 2500;
+// Per-step budget for the timeout path's debugger pause (session attach, heap
+// read, `Debugger.enable`, the pause itself). A starved peg answers none of
+// the renderer-side steps, so it reports `debugger-enable-timeout` after the
+// probe plus three of these — 17 s, inside the default diagnostics budget.
+const TIMEOUT_PATH_PAUSE_STEP_BUDGET_MS = 5000;
 // Sampling interval for the affinity-scoped trigger. Finer-grained than
 // the timeout sampler's default because that trigger is opt-in on a
 // single deliberately-targeted realm, where the extra resolution is
@@ -2920,27 +2926,6 @@ async function runWithAffinityProfile<T>(
   return render;
 }
 
-const BUDGET_EXCEEDED = Symbol('budget-exceeded');
-
-// Races `work` against a Node timer. The loser is abandoned, not cancelled:
-// a CDP call left pending keeps waiting on Chrome, but nobody waits on it.
-async function raceNodeBudget<T>(
-  work: Promise<T>,
-  budgetMs: number,
-): Promise<T | typeof BUDGET_EXCEEDED> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<typeof BUDGET_EXCEEDED>((resolve) => {
-        timer = setTimeout(() => resolve(BUDGET_EXCEEDED), budgetMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 // What the host's `__boxelRenderDiagnostics` hook reports about a render in
 // progress.
 interface InPageTimeoutDiagnostics {
@@ -2978,6 +2963,11 @@ interface TimeoutPathCaptures {
   docsInFlight: number | null;
   richDiagnostics: InPageTimeoutDiagnostics | null;
   timerSummary: string | null;
+  // Set by the caller once it stops waiting. The collector checks it before
+  // starting each capture, so nothing new reaches a tab the render has
+  // already handed back — a timed-out command render keeps its tab, and the
+  // next command may already be rendering on it.
+  abandoned: boolean;
 }
 
 function emptyTimeoutPathCaptures(): TimeoutPathCaptures {
@@ -2991,6 +2981,7 @@ function emptyTimeoutPathCaptures(): TimeoutPathCaptures {
     docsInFlight: null,
     richDiagnostics: null,
     timerSummary: null,
+    abandoned: false,
   };
 }
 
@@ -2998,45 +2989,39 @@ function emptyTimeoutPathCaptures(): TimeoutPathCaptures {
 // responsiveness probe and CPU sampling do real work, so they must never
 // touch the success path. Order matters: the out-of-process / bounded
 // signals run FIRST because they survive a wedged JS thread (the probe
-// races a short timer; CPU capture reads via CDP). The in-page
-// `page.evaluate` diagnostics run LAST and only when the thread is
-// responsive — on a CPU-spinning render (exactly what this is meant to
+// races a short timer; CPU capture and the debugger pause read via CDP).
+// The in-page `page.evaluate` diagnostics run LAST and only when the thread
+// is responsive — on a CPU-spinning render (exactly what this is meant to
 // diagnose) an evaluate blocks until the protocol timeout.
 //
-// Never throws. The caller races this against the diagnostics budget, so
-// it writes each result into `out` as it lands rather than returning them.
+// Never throws. The caller races this against the diagnostics budget, so it
+// writes each result into `out` as it lands rather than returning them.
 async function captureTimeoutPathDiagnostics(
   page: Page,
-  profileContext: RenderProfileContext | undefined,
   out: TimeoutPathCaptures,
 ): Promise<void> {
-  try {
-    if (!page.isClosed()) {
-      try {
-        out.mainThreadResponsive = (
-          await probePageResponsive(page, RESPONSIVENESS_PROBE_MS)
-        ).responsive;
-      } catch {
-        out.mainThreadResponsive = null;
-      }
-      let cpuMetrics = await raceNodeBudget(
+  let wanted = () => !out.abandoned && !page.isClosed();
+
+  let captureCpu = async () => {
+    if (wanted()) {
+      let cpuMetrics = await raceNodeTimeout(
         captureCpuMetrics(page),
         TIMEOUT_PATH_CPU_METRICS_BUDGET_MS,
       );
-      out.cpuMetrics = cpuMetrics === BUDGET_EXCEEDED ? {} : cpuMetrics;
+      out.cpuMetrics = cpuMetrics === TIMED_OUT ? {} : cpuMetrics;
     }
     // Out-of-process V8 CPU sample of the still-spinning renderer. At the
     // timeout cap a wedged render is still in its hot loop, and the CDP
     // sampling profiler keeps collecting stack samples even when the JS
-    // thread is too pegged for `Performance.getMetrics` or
-    // `page.evaluate` to answer — so this names the hot function the
-    // other timeout-path signals can only point at. Runs for ALL realms
-    // (the cost lands only on a render that already failed) and never on
-    // the success path. Best-effort: resolves to null on any CDP error,
-    // and the whole capture is capped so a renderer that never answers
-    // `Profiler.enable` can't stall here.
-    if (!page.isClosed()) {
-      let summary = await raceNodeBudget(
+    // thread is too pegged for `Performance.getMetrics` or `page.evaluate`
+    // to answer — so this names the hot function the other timeout-path
+    // signals can only point at. Runs for ALL realms (the cost lands only
+    // on a render that already failed) and never on the success path.
+    // Best-effort: resolves to null on any CDP error, and the whole capture
+    // is capped so a renderer that never answers `Profiler.enable` can't
+    // stall here.
+    if (wanted()) {
+      let summary = await raceNodeTimeout(
         profileWindow(page, {
           run: () =>
             new Promise<void>((resolve) =>
@@ -3046,40 +3031,57 @@ async function captureTimeoutPathDiagnostics(
         TIMEOUT_PATH_CPU_PROFILE_BUDGET_MS,
       );
       out.cpuProfileTopFrames =
-        summary === BUDGET_EXCEEDED ? null : formatTopFrames(summary);
+        summary === TIMED_OUT ? null : formatTopFrames(summary);
     }
-    // One-shot stack capture of the still-pegged renderer via
-    // `Debugger.pause`. Where the CPU profiler above structurally can't
-    // capture a hard wedge (its `stop` needs the pegged thread to
-    // serialize the profile), a debugger pause lands inside the
-    // synchronous loop at the next V8 interrupt check and reports the
-    // call frames directly — and it adds zero overhead until the single
-    // pause, so it can't mask a timing-sensitive wedge the way continuous
-    // sampling can. Out-of-process (CDP), so it survives a pegged JS
-    // thread; only on the timeout path, so it's free on a healthy render.
-    if (!page.isClosed()) {
-      out.pausedStack = await capturePausedCallStack(page, { budgetMs: 8000 });
+  };
+
+  // One-shot stack capture of the still-pegged renderer via
+  // `Debugger.pause`. Where the CPU profiler above structurally can't
+  // capture a hard wedge (its `stop` needs the pegged thread to serialize
+  // the profile), a debugger pause lands inside the synchronous loop at the
+  // next V8 interrupt check and reports the call frames directly — and it
+  // adds zero overhead until the single pause, so it can't mask a
+  // timing-sensitive wedge the way continuous sampling can. Out-of-process
+  // (CDP), so it survives a pegged JS thread; only on the timeout path, so
+  // it's free on a healthy render.
+  let captureStack = async () => {
+    if (wanted()) {
+      out.pausedStack = await capturePausedCallStack(page, {
+        budgetMs: TIMEOUT_PATH_PAUSE_STEP_BUDGET_MS,
+      });
     }
-    // Hard-peg capture (armed only when `PRERENDER_V8_PROF=true`): ship the
-    // pegged isolate's raw kernel-sampled V8 `--prof` log to the artifact
-    // bucket, keyed by this render's realm/card/job, to be symbolized offline.
-    // This is the capture that survives a peg so hard it starves CDP — i.e.
-    // exactly when `pausedStack` comes back `debugger-enable-timeout`.
-    if (v8ProfEnabled()) {
-      out.v8ProfStatus = await uploadV8ProfLog(
-        artifactKeyPartsFor(profileContext),
-      );
+  };
+
+  try {
+    if (wanted()) {
+      try {
+        out.mainThreadResponsive = (
+          await probePageResponsive(page, RESPONSIVENESS_PROBE_MS)
+        ).responsive;
+      } catch {
+        out.mainThreadResponsive = null;
+      }
+    }
+    if (out.mainThreadResponsive === true) {
+      await captureCpu();
+      await captureStack();
+    } else {
+      // A thread that didn't answer the probe is the hard-peg case, where
+      // the CPU captures typically wait out their caps for nothing. The
+      // debugger pause is the capture built for it, so it goes first and is
+      // sure to fit the budget.
+      await captureStack();
+      await captureCpu();
     }
 
-    // In-page diagnostics last. Together with the signals above they
-    // tell apart a CPU-spinning render (unresponsive thread,
-    // scriptBusyFraction ≈ 1) from a render waiting on a resource
-    // (responsive thread, low script fraction → look at
-    // pendingNetworkRequests for the hung fetch). Gate on a responsive
-    // thread: a wedged one can't service `page.evaluate`, so these would
-    // block until the protocol timeout — skip them and lean on the
-    // out-of-process signals above.
-    if (out.mainThreadResponsive === true && !page.isClosed()) {
+    // In-page diagnostics last. Together with the signals above they tell
+    // apart a CPU-spinning render (unresponsive thread, scriptBusyFraction
+    // ≈ 1) from a render waiting on a resource (responsive thread, low
+    // script fraction → look at pendingNetworkRequests for the hung fetch).
+    // Gate on a responsive thread: a wedged one can't service
+    // `page.evaluate`, so these would block until the protocol timeout —
+    // skip them and lean on the out-of-process signals above.
+    if (out.mainThreadResponsive === true && wanted()) {
       try {
         out.dom = await page.evaluate(() => {
           let el = document.querySelector('[data-prerender]');
@@ -3089,9 +3091,9 @@ async function captureTimeoutPathDiagnostics(
           let err = document.querySelector('[data-prerender-error]');
           return err?.outerHTML ?? null;
         });
-        // Prefer the richer per-URL diagnostic hook when the host
-        // exposes it; fall back to the count-only `__docsInFlight` so the
-        // old host build path still produces a sensible log.
+        // Prefer the richer per-URL diagnostic hook when the host exposes
+        // it; fall back to the count-only `__docsInFlight` so the old host
+        // build path still produces a sensible log.
         out.richDiagnostics = await page.evaluate(() => {
           try {
             let diag = (globalThis as any).__boxelRenderDiagnostics;
@@ -3260,11 +3262,31 @@ export async function withTimeout<T>(
     // captures still pending settle on their own once the tab is retired.
     let diagnosticsStartedAt = Date.now();
     let collected = emptyTimeoutPathCaptures();
+    // Hard-peg capture (armed only when `PRERENDER_V8_PROF=true`): ship the
+    // pegged isolate's raw kernel-sampled V8 `--prof` log to the artifact
+    // bucket, keyed by this render's realm/card/job, to be symbolized
+    // offline. This is the capture that survives a peg so hard it starves
+    // CDP — i.e. exactly when `pausedStack` comes back
+    // `debugger-enable-timeout`. It reads a file and talks to S3, never to
+    // Chrome, so it starts at once beside the CDP captures rather than
+    // queueing behind them.
+    let v8ProfUpload = v8ProfEnabled()
+      ? uploadV8ProfLog(artifactKeyPartsFor(profileContext)).then((status) => {
+          collected.v8ProfStatus = status;
+        })
+      : undefined;
     let diagnosticsBudgetExceeded =
-      (await raceNodeBudget(
-        captureTimeoutPathDiagnostics(page, profileContext, collected),
+      (await raceNodeTimeout(
+        Promise.all([
+          captureTimeoutPathDiagnostics(page, collected),
+          v8ProfUpload,
+        ]),
         resolveRenderTimeoutDiagnosticsBudgetMs(),
-      )) === BUDGET_EXCEEDED;
+      )) === TIMED_OUT;
+    collected.abandoned = true;
+    if (v8ProfUpload && collected.v8ProfStatus === null) {
+      collected.v8ProfStatus = 'still uploading at the diagnostics budget';
+    }
     let diagnosticsMs = Date.now() - diagnosticsStartedAt;
     // Read once: a capture that lands after the budget must not change the
     // error already being built from these.
