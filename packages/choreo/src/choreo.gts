@@ -881,6 +881,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // replacement pass must continue the move, not snap back to framing
     const shot3d =
       prior !== undefined && !prior.isDone() ? prior.camera3d : this.resting3d;
+    // an ambient loop outlives its run's end, so a done run's loops are
+    // still going round: the replacement carries each on from where it is
+    // rather than sending it back to the top — read before cancel stops them
+    const loops = prior?.loopPhases();
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
@@ -949,6 +953,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // implicitly; a spring takes a velocity outright, so the run that is
       // being replaced hands over how fast everything was going.
       inherit: prior?.velocities,
+      loops,
       onPerform: this.args.onPerform,
       onPerformReset: this.args.onPerformReset,
       onSpriteDone: (s) => this.finish(s),

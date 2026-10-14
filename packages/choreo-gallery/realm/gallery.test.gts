@@ -9,9 +9,10 @@
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
-import { click, render } from '@ember/test-helpers';
+import { click, render, settled, waitUntil } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { getService } from '@universal-ember/test-support';
+import { DialStore } from 'dialkit/vanilla';
 import { motionSpeed } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
@@ -21,6 +22,7 @@ import { ChoreoGallery } from './gallery';
 import { openThroughHost } from './lib/pointer';
 import { Theater } from './lib/theater';
 import { DemoPage } from './shell/demo-page';
+import { KeyframesDemo } from './stages/keyframes';
 
 function root(): HTMLElement {
   return document.querySelector('#ember-testing') as HTMLElement;
@@ -331,5 +333,53 @@ module('Choreo gallery | formats', function (hooks) {
     assert.ok(root().textContent?.includes('4 demos'));
     assert.notOk(one('[data-gallery-tile]'), 'no live grid');
     assert.notOk(one('.topbar'), 'no site frame');
+  });
+});
+
+/** a running platform animation's cycle, in ms, and where it is in it */
+function cycleOf(animation: Animation) {
+  let cycle = Number(animation.effect!.getComputedTiming().duration);
+  return { cycle, phase: (Number(animation.currentTime) % cycle) / cycle };
+}
+
+module('Choreo gallery | lab', function (hooks) {
+  setupCardTest(hooks);
+  setupChoreo(hooks);
+
+  test('an edit retimes a loop that is already running, without a replay', async function (assert) {
+    let loader = getService('loader-service').loader;
+    await renderCard(
+      loader,
+      new KeyframesDemo({ slug: 'keyframes', title: 'Keyframes' }),
+      'embedded',
+    );
+    await click(one('.lab-toggle')!);
+
+    // the glow's opacity pulse runs on the platform, so its clock is readable
+    let glow = one('.morph-glow')!;
+    // Motion starts it once its keyframes resolve, a beat after mount
+    await waitUntil(() => glow.getAnimations().length > 0);
+    let loop = glow.getAnimations()[0]!;
+    assert.strictEqual(cycleOf(loop).cycle, 1350, 'the authored 1.35s loop');
+    loop.currentTime = 1350 / 4;
+
+    DialStore.updateValue('lab:keyframes', 'transition', {
+      type: 'easing',
+      duration: 2.7,
+      ease: [0.22, 1, 0.36, 1],
+    });
+    await settled();
+
+    assert.strictEqual(
+      one('.morph-glow'),
+      glow,
+      'the same stage, not a replay',
+    );
+    let retimed = cycleOf(glow.getAnimations()[0]!);
+    assert.strictEqual(retimed.cycle, 2700, 'the loop now takes 2.7s');
+    assert.ok(
+      Math.abs(retimed.phase - 0.25) < 0.05,
+      `still a quarter of the way round (${retimed.phase})`,
+    );
   });
 });
