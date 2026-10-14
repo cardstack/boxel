@@ -12,12 +12,14 @@ import type {
   MotionNodeOptions,
   MotionValue,
   PresenceContextProps,
+  TargetAndTransition,
   VisualElement,
 } from 'motion-dom';
 import {
   animateVisualElement,
   frame,
   getValueTransition,
+  getVariantContext,
   HTMLProjectionNode,
   HTMLVisualElement,
   isAnimationControls,
@@ -402,11 +404,20 @@ const ACTIVE_TYPES = [
 const printIds = new WeakMap<object, number>();
 let nextPrintId = 0;
 
+const identityPrint = (value: object) => {
+  let id = printIds.get(value);
+  if (id === undefined) {
+    printIds.set(value, (id = ++nextPrintId));
+  }
+  return `#${id}`;
+};
+
 /**
  * An element's animation props as a string, every `transition` in them
- * included. Functions, motion values and animation controls print by
- * identity. Undefined when the props cannot be printed at all, which retime
- * takes as "unknown" and leaves alone.
+ * included. Functions, motion values, animation controls and `custom` print
+ * by identity: `custom` is whatever the app hands its variants, and need not
+ * serialise. Undefined when the rest cannot be printed, which retime takes
+ * as "unknown" and leaves alone.
  */
 function timingPrint(props: MotionNodeOptions): string | undefined {
   const picked: Record<string, unknown> = {};
@@ -414,20 +425,20 @@ function timingPrint(props: MotionNodeOptions): string | undefined {
     picked[key] = (props as Record<string, unknown>)[key];
   }
   try {
-    return JSON.stringify(picked, (_key, value: unknown) => {
+    return JSON.stringify(picked, function (key, value: unknown) {
       if (typeof value === 'number' && !Number.isFinite(value)) {
         return String(value);
       }
       if (
         typeof value === 'function' ||
         isMotionValue(value) ||
-        isAnimationControls(value)
+        isAnimationControls(value) ||
+        (this === picked &&
+          key === 'custom' &&
+          value !== null &&
+          typeof value === 'object')
       ) {
-        let id = printIds.get(value as object);
-        if (id === undefined) {
-          printIds.set(value as object, (id = ++nextPrintId));
-        }
-        return `#${id}`;
+        return identityPrint(value as object);
       }
       return value;
     });
@@ -450,6 +461,33 @@ function timelineOf(value: MotionValue) {
     : undefined;
 }
 
+type ValueTiming = {
+  delay?: number;
+  repeat?: number;
+  repeatDelay?: number;
+  repeatType?: string;
+};
+
+/**
+ * One full turn of a loop, in seconds: an iteration and its repeat delay,
+ * twice over for a loop that comes back the way it went, so a point in it
+ * says which way the loop is heading as well as where it is.
+ */
+function periodOf(iteration: number, timing: ValueTiming) {
+  const turn = iteration + (timing.repeatDelay ?? 0);
+  return timing.repeatType === 'reverse' || timing.repeatType === 'mirror'
+    ? turn * 2
+    : turn;
+}
+
+/** the transition a target animates under: its own, else the element's */
+function transitionOf(
+  target: TargetAndTransition | undefined,
+  props: MotionNodeOptions,
+) {
+  return target?.transition ?? props.transition;
+}
+
 /**
  * Retime the motion already running at and under `root`.
  *
@@ -457,11 +495,13 @@ function timelineOf(value: MotionValue) {
  * `transition` changes while its target stays put keeps running on the old
  * timing: a spring keeps its old stiffness, an infinite loop its old
  * duration. That is right for an app and wrong for a tuning tool, where the
- * edit is the point. `retime` restarts each element whose timing has changed
- * since it mounted or was last retimed, toward the target it is already
- * headed for, and puts every infinite loop back at the point of its cycle it
- * had reached. An element whose timing is unchanged, or that is leaving, is
- * not touched.
+ * edit is the point. For each element whose timing has changed since it
+ * mounted or was last retimed, `retime` restarts the values still animating
+ * toward the targets they are already headed for. A value past its delay
+ * does not wait for it again, and an infinite loop goes back to the same
+ * point of its turn, direction and repeat delay included. A value that has
+ * finished stays where it settled, and an element whose timing is
+ * unchanged, or that is leaving, is not touched.
  *
  * Call it after the render that delivered the new transitions.
  */
@@ -484,10 +524,11 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   private lastPresent?: boolean;
   private config: MotionConfigContext = {};
   /**
-   * The props this element was mounted or last retimed under. Kept as they
-   * are and printed only by retime, so an element nobody retimes pays nothing.
+   * The props this element was mounted or last retimed under, and their
+   * print. Kept as they are and printed only by retime, so an element nobody
+   * retimes pays nothing.
    */
-  private timedBy?: MotionNodeOptions;
+  private timedBy?: { print?: string; props: MotionNodeOptions };
 
   /** React: configAndProps = { ...MotionConfigContext, ...props }. Looked up when used, not when the args
    *  arrive: modifiers install children-first, so a <MotionConfig> above has not registered yet at update time */
@@ -785,7 +826,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
       }
       // React: useEffect right after commit — synchronous here, the DOM is already in place
       ve.animationState?.animateChanges();
-      this.timedBy = props;
+      this.timedBy = { props };
       ve.enteringChildren = undefined;
       if (mountContext !== presenceContext) {
         // …and now the flip that happened while we were waiting to mount
@@ -1050,29 +1091,30 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     }
     const props = ve.getProps() as MotionNodeOptions;
     const timing = timingPrint(props);
-    if (timing === undefined || timing === timingPrint(this.timedBy)) {
+    const before = this.timedBy;
+    before.print ??= timingPrint(before.props);
+    if (timing === undefined || timing === before.print) {
       return;
     }
     const state = ve.animationState?.getState();
     if (this.lastPresent === false || state?.exit?.isActive) {
       return;
     }
-    this.timedBy = props;
-    const phases = new Map<string, number>();
-    ve.values.forEach((value, key) => {
-      const clock = timelineOf(value);
-      // still inside its delay, a loop has no phase yet
-      if (clock && clock.time >= 0) {
-        phases.set(key, (clock.time / clock.duration) % 1);
-      }
-    });
+    this.timedBy = { print: timing, props };
+    // a label this element does not set itself comes from the variant
+    // context above it, as the engine's own animation state resolves it
+    const context =
+      props.inherit === false
+        ? undefined
+        : (getVariantContext(ve.parent) as
+            | Record<string, AnimationDefinition | boolean | undefined>
+            | undefined);
     // every active type, lowest priority first, so a gesture's targets win
     // over `animate`'s on the values both name, as they do in the engine
     for (const type of ACTIVE_TYPES) {
-      const definition = props[type] as
-        | AnimationDefinition
-        | boolean
-        | undefined;
+      const definition = (
+        props[type] !== undefined ? props[type] : context?.[type]
+      ) as AnimationDefinition | boolean | undefined;
       if (
         !state?.[type]?.isActive ||
         !definition ||
@@ -1083,30 +1125,79 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
       }
       // a label resolves to its own target here, so this element restarts
       // alone: its children retime by their own timing, not by orchestration
-      const resolved = (
-        Array.isArray(definition) ? definition : [definition]
-      ).map((each) =>
-        resolveVariant(ve, each as AnimationDefinition, props.custom),
-      );
-      for (const target of resolved) {
-        if (!target) {
-          continue;
-        }
-        void animateVisualElement(ve, target);
-        const transition = target.transition ?? props.transition;
-        for (const key of Object.keys(target)) {
-          const phase = phases.get(key);
-          const clock = ve.values.has(key)
-            ? timelineOf(ve.values.get(key)!)
-            : undefined;
-          if (
-            phase !== undefined &&
-            clock &&
-            getValueTransition(transition, key)?.repeat === Infinity
-          ) {
-            clock.time = phase * clock.duration;
-          }
-        }
+      for (const each of Array.isArray(definition)
+        ? definition
+        : [definition]) {
+        this.restart(
+          resolveVariant(ve, each as AnimationDefinition, props.custom),
+          transitionOf(
+            typeof each === 'string'
+              ? resolveVariantFromProps(before.props, each, before.props.custom)
+              : (before.props[type] as TargetAndTransition | undefined),
+            before.props,
+          ),
+          props,
+        );
+      }
+    }
+  }
+
+  /**
+   * Restart the values of `target` that are still animating, under the
+   * timing they have now. A value already past its delay starts again
+   * without one, and an infinite loop goes back to the same point of its
+   * turn. A value that has finished is left where it settled.
+   */
+  private restart(
+    target: TargetAndTransition | undefined,
+    previous: unknown,
+    props: MotionNodeOptions,
+  ) {
+    const ve = this.ve!;
+    if (!target) {
+      return;
+    }
+    const { transition: _transition, transitionEnd, ...values } = target;
+    const transition = (transitionOf(target, props) ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const restarted: Record<string, unknown> = {};
+    const timed: Record<string, unknown> = { ...transition };
+    const phases = new Map<string, number>();
+    for (const key of Object.keys(values)) {
+      const value = ve.values.get(key);
+      if (!value?.isAnimating()) {
+        continue;
+      }
+      restarted[key] = values[key as keyof typeof values];
+      const clock = timelineOf(value);
+      const was = (getValueTransition(previous, key) ?? {}) as ValueTiming;
+      const elapsed = clock ? clock.time - (was.delay ?? 0) : -1;
+      if (!clock || elapsed < 0) {
+        // not started yet: it begins again, delay and all
+        continue;
+      }
+      const now = getValueTransition(transition, key) ?? {};
+      timed[key] = { ...now, delay: 0 };
+      if (was.repeat === Infinity && now.repeat === Infinity) {
+        const period = periodOf(clock.duration, was);
+        phases.set(key, (elapsed % period) / period);
+      }
+    }
+    if (!Object.keys(restarted).length) {
+      return;
+    }
+    void animateVisualElement(ve, {
+      ...restarted,
+      transition: timed,
+      transitionEnd,
+    } as TargetAndTransition);
+    for (const [key, phase] of phases) {
+      const clock = timelineOf(ve.values.get(key)!);
+      if (clock) {
+        const now = getValueTransition(transition, key) as ValueTiming;
+        clock.time = phase * periodOf(clock.duration, now);
       }
     }
   }

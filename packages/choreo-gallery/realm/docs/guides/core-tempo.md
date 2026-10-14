@@ -35,7 +35,7 @@ import { postRender, retime } from 'glimmer-motion';
 postRender(() => retime(stageElement));
 ```
 
-Each element at or under `root` whose timing has changed since its animation started is restarted toward the target it already has, from where it stands. An infinite loop goes back to the same point of its cycle, so it changes speed without a jump. An element whose timing is unchanged, or that is leaving, is not touched. Choreo needs no call: an edited timeline replaces its run, and the new run carries each ambient loop on from where it was. The gallery's lab does both on every edit, which is why moving a control changes a running demo at once.
+Each element at or under `root` whose timing has changed since it mounted or was last retimed restarts the values still animating, toward the targets they already have, from where they stand. A value past its delay does not wait for it again. An infinite loop goes back to the same point of its turn, including which way a reversing loop is heading and any repeat delay, so it changes speed without a jump. A value that has finished stays where it settled, and an element whose timing is unchanged, or that is leaving, is not touched. Choreo needs no call: an edited timeline replaces its run, and the new run carries each ambient loop on from where it was. The gallery's lab does both on every edit, which is why moving a control changes a running demo at once.
 
 ## Preserving the Shape
 
