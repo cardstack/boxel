@@ -169,6 +169,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   test('a brand-new affinity steals an idle tab once its wait on a stalled refill runs out', async function (assert) {
+    assert.timeout(10_000);
     // The first two standbys are made; the third hangs in
     // `createBrowserContext`, so the refill never settles.
     let { browserManager, gate } = makeBrowserStub({ hangFrom: 2 });
@@ -203,6 +204,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a brand-new module sub-render steals an idle tab instead of parking behind a stalled refill', async function (assert) {
+    assert.timeout(10_000);
     let stub = makeBrowserStub();
     let pool = makePool({
       maxPages: 2,
@@ -232,6 +234,7 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("an aborted caller stops waiting on the refill at once, and the refill still serves the callers that didn't abort", async function (assert) {
+    assert.timeout(10_000);
     let stub = makeBrowserStub();
     let pool = makePool({
       maxPages: 2,
