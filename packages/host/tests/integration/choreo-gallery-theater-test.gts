@@ -232,6 +232,50 @@ module('Integration | Choreo gallery | theater', function (hooks) {
     );
   });
 
+  test('in theater the way out is a target on screen at every width', async function (assert) {
+    await renderCard(loader, await film('towers', 'TowersDemo'), 'isolated');
+    await waitFor('[data-test-film="towers"] [data-test-theater-enter]');
+    await click('[data-test-theater-enter]');
+    await animationsSettled();
+    let page = document.querySelector('[data-test-choreo-site]')!;
+
+    for (let width of [320, 375, 600, 768, 1440]) {
+      let iframe = layOutAt(page, width, 800);
+      try {
+        let doc = iframe.contentDocument!;
+        let exit = doc.querySelector<HTMLElement>('[data-test-theater-exit]')!;
+        let words = exit.querySelector<HTMLElement>('.theater-built')!;
+        let box = exit.getBoundingClientRect();
+
+        assert.strictEqual(
+          exit.textContent?.trim(),
+          'How this is built',
+          `${width}px: the way out is named`,
+        );
+        assert.true(
+          Math.min(box.width, box.height) >= 24,
+          `${width}px: the way out is a ${box.width}×${box.height} target`,
+        );
+        assert.true(
+          box.left >= 0,
+          `${width}px: the way out starts on screen (${box.left})`,
+        );
+        assert.true(
+          box.right <= width,
+          `${width}px: the way out ends on screen (${box.right})`,
+        );
+        let wordsShown = words.getBoundingClientRect().width > 1;
+        assert.strictEqual(
+          wordsShown,
+          width > 700,
+          `${width}px: the words are ${wordsShown ? 'shown' : 'left to the name'}`,
+        );
+      } finally {
+        iframe.remove();
+      }
+    }
+  });
+
   for (let { slug, className } of FILMS) {
     test(`${slug}: in theater the stage spans the site and fills what its scroller shows`, async function (assert) {
       await renderCard(loader, await film(slug, className), 'isolated');

@@ -72,7 +72,10 @@ export class SiteFrame extends Component<Signature> {
         flex-direction: column;
       }
 
+      /* the bar is a container, so the pickers in it can ask how wide the
+         bar is rather than the window */
       .topbar {
+        container: site-bar / inline-size;
         position: sticky;
         top: 0;
         z-index: 10;

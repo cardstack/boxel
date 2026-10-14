@@ -443,8 +443,14 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-size: 1rem;
         letter-spacing: -0.03em;
         line-height: 1.1;
+        /* a long name gets two lines and an ellipsis, not a cut through a
+           letter wherever the tile happens to end */
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
         overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: break-word;
       }
 
       .tile.is-roomy .tile-title {

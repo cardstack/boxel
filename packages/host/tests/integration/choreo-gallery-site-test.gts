@@ -7,6 +7,7 @@ import { htmlSafe } from '@ember/template';
 import { click, render, waitFor } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
+
 import { modifier } from 'ember-modifier';
 import { module, test } from 'qunit';
 
@@ -21,6 +22,7 @@ import { provideConsumeContext, testRealmURL } from '../helpers/index';
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardContext } from '@cardstack/base/card-api';
+import type { ComponentLike } from '@glint/template';
 
 const THEME_KEY = 'choreo-theme';
 
@@ -102,6 +104,46 @@ module('Integration | Choreo gallery | site', function (hooks) {
 
     await click(option('Dark'));
     assert.strictEqual(site().dataset['theme'], 'dark', 'and dark again');
+  });
+
+  test('a narrow site keeps its appearance menu inside its bar, and two sites keep their own', async function (assert) {
+    let { SiteFrame } = await gallery.import<{
+      SiteFrame: ComponentLike<{ Blocks: { default: [] } }>;
+    }>('shell/site-frame');
+    let narrow = htmlSafe('width: 320px;');
+    let wide = htmlSafe('width: 1000px;');
+    await render(
+      <template>
+        <div class='narrow' style={{narrow}}><SiteFrame /></div>
+        <div class='wide' style={{wide}}><SiteFrame /></div>
+      </template>,
+    );
+    let picker = (site: string) =>
+      document.querySelector<HTMLDetailsElement>(`.${site} .header-picker`)!;
+
+    for (let site of ['narrow', 'wide']) {
+      await click(picker(site).querySelector('summary')!);
+      // positions as the screen shows them, since the test container is scaled
+      let bar = document
+        .querySelector(`.${site} .topbar`)!
+        .getBoundingClientRect();
+      let menu = picker(site)
+        .querySelector('.header-picker-menu')!
+        .getBoundingClientRect();
+      assert.true(
+        menu.left >= bar.left,
+        `${site}: the menu starts inside the bar (${menu.left} against ${bar.left})`,
+      );
+      assert.true(
+        menu.right <= bar.right,
+        `${site}: the menu ends inside the bar (${menu.right} against ${bar.right})`,
+      );
+    }
+    assert.true(
+      picker('narrow').open,
+      'opening the other site’s picker leaves this one open',
+    );
+    assert.true(picker('wide').open, 'and that one is open too');
   });
 
   test('a tile hands its demo card to the host, which opens it', async function (assert) {
@@ -203,6 +245,33 @@ module('Integration | Choreo gallery | site', function (hooks) {
     assert.dom('.small .guide-link').doesNotExist('and no guide link');
     assert.dom('.roomy .tile-lede').exists('with room, what the demo is');
     assert.dom('.roomy .guide-link').exists('and its guide');
+  });
+
+  test('a tile’s name too long for it takes two lines and ends in an ellipsis', async function (assert) {
+    let [keyframes] = await gallery.demos(['keyframes']);
+    keyframes!.title =
+      'A demo with a name far too long for any tile the host draws';
+    let { getComponent } = (await gallery.loader.import(
+      '@cardstack/base/card-api',
+    )) as typeof CardAPI;
+    let Fitted = getComponent(keyframes!);
+    let small = htmlSafe('position: relative; width: 180px; height: 120px;');
+    await render(
+      <template>
+        <div class='small' style={{small}}><Fitted @format='fitted' /></div>
+      </template>,
+    );
+
+    let title = document.querySelector<HTMLElement>('.small .tile-title')!;
+    let lineHeight = parseFloat(getComputedStyle(title).lineHeight);
+    assert.true(
+      title.scrollHeight > title.clientHeight,
+      'the name runs past what the tile shows',
+    );
+    assert.true(
+      Math.abs(title.clientHeight - 2 * lineHeight) < 2,
+      `it shows two whole lines (${title.clientHeight}px at ${lineHeight}px a line)`,
+    );
   });
 
   test('where the host opens cards on a click, the tile leaves the click to it', async function (assert) {
