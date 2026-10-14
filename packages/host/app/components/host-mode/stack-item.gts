@@ -155,10 +155,12 @@ export default class HostModeStackItem extends Component<Signature> {
       data-test-host-mode-stack-item={{@cardId}}
     >
       <div class='stack-item-card'>
+        {{! a buried item is covered by the ones above it, as the primary card is }}
         <HostModeCard
           @cardId={{@cardId}}
           @displayBoundaries={{if this.isItemFullWidth false true}}
           class='host-mode-stack-item-card'
+          inert={{this.isBuried}}
         />
         {{#if (and this.isTopCard (bool @close))}}
           <div class='close-button-container'>
