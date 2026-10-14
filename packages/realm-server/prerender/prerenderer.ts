@@ -28,6 +28,10 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import {
+  UnresponsiveTabTracker,
+  type UnresponsiveTabReport,
+} from './unresponsive-tab-tracker.ts';
 import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
 import { maybeAutoCaptureHeapSnapshot } from './heap-snapshot.ts';
 import {
@@ -76,6 +80,9 @@ export class Prerenderer {
   // visit following a cancelled render must acquire a fresh page rather
   // than detour through the restart recovery lane.
   #browserRestartCount = 0;
+  // Decides when timeouts on unresponsive tabs call for a browser recycle
+  // rather than just the tab retirements their evictions already do.
+  #unresponsiveTabs = new UnresponsiveTabTracker();
   // `clearCache` batch ownership. Maps affinityKey to the batches holding the
   // affinity's warm loader, batch id → when each last started a visit there.
   // Several at once is normal: index passes of one realm run one per writer
@@ -148,6 +155,7 @@ export class Prerenderer {
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
       boxelHostURL,
+      onUnresponsiveTab: (report) => this.#noteUnresponsiveTab(report),
     });
     this.#affinitySnapshotSampler = new AffinitySnapshotSampler({
       pagePool: this.#pagePool,
@@ -1085,9 +1093,23 @@ export class Prerenderer {
     return this.#restartInFlight;
   }
 
+  // Not awaited by the reporter: the report comes from inside a render that
+  // still holds its tab, and the restart's `closeAll` waits for that tab.
+  #noteUnresponsiveTab(report: UnresponsiveTabReport): void {
+    let reason = this.#unresponsiveTabs.record(report);
+    if (!reason || this.#stopped) {
+      return;
+    }
+    log.warn(`Recycling prerender browser: ${reason}`);
+    void this.#restartBrowser().catch((e) => {
+      log.error('Failed to recycle prerender browser:', e);
+    });
+  }
+
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
     this.#browserRestartCount++;
+    this.#unresponsiveTabs.reset();
     await this.#pagePool.closeAll();
     if (this.#stopped) {
       // `stop()` arrived while this restart was in flight. Bringing a browser

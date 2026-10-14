@@ -183,6 +183,23 @@ export const prerenderRequestTimeoutMs = parseTimeoutMs(
   defaultPrerenderRequestTimeoutMs,
 );
 
+// Ceiling on the hang diagnostics a timed-out render gathers before it hands
+// back its RenderError, counted from the moment the render timer fires. The
+// render holds its tab lease for that whole window, and every capture in it
+// talks to Chrome, so a renderer that has stopped answering CDP must not be
+// able to stretch it: whatever has been captured when the budget runs out is
+// what the error reports. Well inside the request-timeout overhead above, so
+// the caller still gets the RenderError rather than a request-level abort.
+const DEFAULT_RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS = 20_000;
+
+// Read on every timeout rather than once at load, so a test can shrink it.
+export function resolveRenderTimeoutDiagnosticsBudgetMs(): number {
+  return parseTimeoutMs(
+    process.env.RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS,
+    DEFAULT_RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS,
+  );
+}
+
 // How long an indexing batch on an affinity may go without starting a visit,
 // with nothing of its in flight there, before the prerender server takes it
 // for finished: its hold on the affinity is dropped (see
