@@ -2,6 +2,8 @@
 
 Segmented time entry — the Calendar family's clock. Hours, minutes, optionally seconds, optionally an AM/PM segment, each stepped with the arrow keys.
 
+On a touch device (`pointer: coarse`) the segments give way to a native `<input type='time'>` over the same value, so a tap opens the platform's own time picker — the iOS wheel, Android's clock dial.
+
 ## The contract
 
 ```
@@ -20,6 +22,8 @@ Segmented time entry — the Calendar family's clock. Hours, minutes, optionally
 
 **An incomplete time reports `''`, not a partial string.** A caller never receives `'14:'`.
 
+**On touch, the platform picker owns the display.** The native control shows 12- or 24-hour time by the device locale, not `@hourCycle`, and seeds itself rather than from `@now`. What it reports goes through the same path as a keystroke, so `@onValueChange` receives the same wire string either way — and `''` when the platform's Reset clears it.
+
 ## Prior art
 
 **`wa-time-input`.**
@@ -34,6 +38,7 @@ Where it is thinner: no timezone handling of any kind — this is a wall-clock t
 - **Each segment is stepped by the arrow keys**, which is the platform behaviour a reader expects from a time field and the reason a segmented control beats a free-text one here.
 - **The AM/PM segment only exists in 12-hour mode**, so a 24-hour field has no dead segment to travel through.
 - **Seeding is deterministic without `@now`.** A screen-reader user pressing Up on an empty hour segment gets 00, every time, rather than whatever the clock happened to say.
+- **Touch gets a control it can operate.** The segments answer only the keyboard; on a coarse pointer the native time input takes their place, which VoiceOver and TalkBack already know how to drive. Only one of the two is ever displayed, so neither assistive tech nor the tab order meets the field twice.
 - **Incomplete state is reported as empty rather than as a partial value**, which means a form's validation never sees a half-typed string it has to interpret.
 
 ## Theming

@@ -27,6 +27,14 @@ import { fn } from '@ember/helper';
 // them), the segments carry aria-disabled, the focus outline is
 // forced-colors-safe, and the colon separator comes from the precomputed
 // segment view.
+// Touch: the segments only answer the keyboard, and with the popup picker
+// dropped a touch device has no other way in. So the field also renders a
+// native <input type='time'> over the same segment state, and a
+// (pointer: coarse) rule swaps it in for the segments — a tap opens the
+// platform's own time picker (the iOS wheel). Hidden with display: none on
+// fine pointers, it is out of the tab order and the accessibility tree.
+// The native control's 12/24-hour display follows the device locale, not
+// @hourCycle; the wire value is 24-hour either way.
 
 export type TimeInputHourCycle = '24' | '12';
 
@@ -390,6 +398,33 @@ export class TimeInput extends Component<TimeInputSignature> {
     this.clearBufferState();
   };
 
+  // the touch control's value: the wire string, '' while incomplete
+  get nativeValue(): string {
+    return this.wireOf(this.effective);
+  }
+  // A native time input may report seconds (or fractions of one) the field
+  // isn't showing, or omit seconds that are zero; normalize to the wire
+  // shape before committing. '' (the platform's Reset) clears every segment.
+  // Wired to both input and change so whichever the platform fires commits.
+  // An event carrying the value the control already shows is the second of
+  // that pair (or the change after a controlled reset below), not a pick.
+  handleNativeInput = (ev: Event) => {
+    if (this.args.disabled) return;
+    let input = ev.target as HTMLInputElement;
+    if (input.value === this.nativeValue) return;
+    this.clearBufferState();
+    let s = parseWire(input.value.replace(/\.\d+$/, ''));
+    if (s.hh !== null) {
+      s.ss = this.args.withSeconds ? (s.ss ?? 0) : null;
+    }
+    this.commit(s);
+    // a controlled owner that keeps its @value gets it back on screen, the
+    // same way the segments stay on the held value
+    if (input.value !== this.nativeValue) {
+      input.value = this.nativeValue;
+    }
+  };
+
   <template>
     <div
       class='pretui-time'
@@ -420,6 +455,17 @@ export class TimeInput extends Component<TimeInputSignature> {
           <span class='pretui-time-literal' aria-hidden='true'>:</span>
         {{/if}}
       {{/each}}
+      <input
+        class='pretui-time-native'
+        type='time'
+        step={{if @withSeconds '1'}}
+        value={{this.nativeValue}}
+        disabled={{@disabled}}
+        aria-label={{this.label}}
+        data-test-pretui-time-native
+        {{on 'input' this.handleNativeInput}}
+        {{on 'change' this.handleNativeInput}}
+      />
     </div>
     <style scoped>
       @layer PretComponent {
@@ -469,6 +515,40 @@ export class TimeInput extends Component<TimeInputSignature> {
         }
         .pretui-time-literal {
           color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-time-native {
+          display: none;
+        }
+        /* touch: the native control replaces the segments inside the same
+           field face. 16px type keeps iOS Safari from zooming the page when
+           the input takes focus. */
+        @media (pointer: coarse) {
+          .pretui-time {
+            height: auto;
+            min-height: var(--control-h, 28px);
+            padding: 0;
+          }
+          .pretui-time-seg,
+          .pretui-time-literal {
+            display: none;
+          }
+          .pretui-time-native {
+            display: block;
+            min-width: 6.5em;
+            min-height: var(--control-h, 28px);
+            margin: 0;
+            padding: 0 7px;
+            border: 0;
+            border-radius: inherit;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: max(16px, var(--text-ui-md, 12.5px));
+          }
+          .pretui-time-native:focus-visible {
+            outline: 2px solid var(--ring);
+            outline-offset: 1px;
+          }
         }
       }
     </style>

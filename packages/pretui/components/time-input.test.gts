@@ -4,7 +4,7 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render, triggerKeyEvent } from '@ember/test-helpers';
+import { fillIn, render, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { TimeInput } from './time-input';
 
@@ -19,6 +19,10 @@ function timeSegs(): HTMLElement[] {
 }
 function timeText(): string {
   return timeSegs().map((s) => s.textContent?.trim()).join('|');
+}
+// rendered on every device; only the (pointer: coarse) CSS decides it shows
+function nativeInput(): HTMLInputElement {
+  return q('[data-test-pretui-time-native]') as HTMLInputElement;
 }
 
 module('Pretui | components/time-input', function (hooks) {
@@ -116,5 +120,57 @@ module('Pretui | components/time-input', function (hooks) {
     await render(<template><TimeInput @disabled={{true}} @value='09:30' /></template>);
     assert.deepEqual(timeSegs().map((s) => s.tabIndex), [-1, -1]);
     assert.deepEqual(timeSegs().map((s) => s.getAttribute('aria-disabled')), ['true', 'true']);
+    assert.true(nativeInput().disabled, 'the touch control is disabled too');
+  });
+
+  test('TimeInput carries its wire value on a native time control for touch', async function (assert) {
+    await render(<template><TimeInput @value='09:30' /></template>);
+    let input = nativeInput();
+    assert.strictEqual(input.type, 'time', 'a tap opens the platform time picker');
+    assert.strictEqual(input.value, '09:30');
+    assert.strictEqual(input.getAttribute('aria-label'), 'Time');
+    assert.false(input.hasAttribute('step'), 'minute granularity by default');
+  });
+
+  test('TimeInput native control shows seconds with @withSeconds', async function (assert) {
+    await render(<template><TimeInput @withSeconds={{true}} @value='13:05:09' /></template>);
+    assert.strictEqual(nativeInput().getAttribute('step'), '1');
+    assert.strictEqual(nativeInput().value, '13:05:09');
+  });
+
+  test('TimeInput native control is empty while the time is incomplete', async function (assert) {
+    await render(<template><TimeInput /></template>);
+    await triggerKeyEvent(timeSegs()[0] as HTMLElement, 'keydown', 'ArrowUp');
+    assert.strictEqual(nativeInput().value, '');
+  });
+
+  test('TimeInput reports a time picked on the native control and repaints the segments', async function (assert) {
+    let seen: string[] = [];
+    const record = (v: string) => seen.push(v);
+    await render(<template><TimeInput @hourCycle='12' @onValueChange={{record}} /></template>);
+    await fillIn(nativeInput(), '15:20');
+    assert.deepEqual(seen, ['15:20'], 'one report, in the 24-hour wire shape');
+    assert.strictEqual(timeText(), '03|20|PM', 'the segments show the picked time');
+
+    await fillIn(nativeInput(), '');
+    assert.deepEqual(seen, ['15:20', ''], 'clearing the native control reports an empty time');
+    assert.strictEqual(timeText(), '––|––|––');
+  });
+
+  test('TimeInput fills unreported seconds from the native control with zero', async function (assert) {
+    let seen: string[] = [];
+    const record = (v: string) => seen.push(v);
+    await render(<template><TimeInput @withSeconds={{true}} @onValueChange={{record}} /></template>);
+    await fillIn(nativeInput(), '08:15');
+    assert.deepEqual(seen, ['08:15:00']);
+  });
+
+  test('TimeInput native control returns to a controlled @value the owner keeps', async function (assert) {
+    let seen: string[] = [];
+    const record = (v: string) => seen.push(v);
+    await render(<template><TimeInput @value='23:59' @onValueChange={{record}} /></template>);
+    await fillIn(nativeInput(), '07:00');
+    assert.deepEqual(seen, ['07:00'], 'the owner is told what was picked');
+    assert.strictEqual(nativeInput().value, '23:59', 'and the control shows the value the owner still holds');
   });
 });
