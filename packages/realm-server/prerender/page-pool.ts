@@ -2771,7 +2771,7 @@ export class PagePool {
   }> {
     let tabStartupMs = 0;
     // Set once this caller's wait on the shared refill runs out its budget
-    // (`#awaitStandbyRefill`). The later refill waits below would be waits
+    // (`#awaitStandbyRefill`). The refill waits further down would be waits
     // on that same refill, so they are skipped and the caller moves on to the
     // steal or the freed-tab wait.
     let refillStalled = false;
