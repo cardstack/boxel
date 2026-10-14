@@ -61,14 +61,16 @@ async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
   );
 }
 
-// The signed-in user. Keys are managed only in the user's own session: a
-// delegated session or a realm-authority session acts for someone else.
+// The signed-in user. Keys are managed only in the user's own session. The
+// session check ahead of these routes already refuses a delegated session; a
+// realm-authority session is a realm acting on its own authority, not the
+// user, so it is refused here.
 function ownerOf(ctxt: Koa.Context): string {
   let token = ctxt.state.token as RealmServerTokenClaim | undefined;
   if (!token?.user) {
     throw new UserKeyError(403, 'keys are managed by a signed-in user');
   }
-  if (token.delegated || token.realmAuthority) {
+  if (token.realmAuthority) {
     throw new UserKeyError(
       403,
       'keys are managed only in their owner’s own session',

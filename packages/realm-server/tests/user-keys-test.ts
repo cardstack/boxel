@@ -12,7 +12,7 @@ import {
   closeServer,
   realmSecretSeed,
 } from './helpers/index.ts';
-import { logLinesDuring } from './helpers/log-capture.ts';
+import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -475,18 +475,22 @@ module(basename(import.meta.filename), function () {
     });
 
     test('keys are managed only in their owner’s own session', async function (assert) {
-      for (let claims of [
-        { delegated: true, realm: 'http://127.0.0.1:4444/test/' },
-        { realmAuthority: true as const },
-      ]) {
+      for (let [claims, status, kind] of [
+        [
+          { delegated: true, realm: 'http://127.0.0.1:4444/test/' },
+          401,
+          'a delegated session',
+        ],
+        [{ realmAuthority: true as const }, 403, 'a realm-authority session'],
+      ] as const) {
         let minted = await request
           .post('/_key-write-tickets')
           .set('Authorization', auth(OWNER, claims));
-        assert.strictEqual(minted.status, 403, 'no ticket is minted');
+        assert.strictEqual(minted.status, status, `${kind} mints no ticket`);
         let listed = await request
           .get('/_user-keys')
           .set('Authorization', auth(OWNER, claims));
-        assert.strictEqual(listed.status, 403, 'no key is listed');
+        assert.strictEqual(listed.status, status, `${kind} lists no key`);
       }
     });
 
@@ -536,16 +540,15 @@ module(basename(import.meta.filename), function () {
 
     test('the value never reaches the request log', async function (assert) {
       let ticket = await ticketFor();
-      let lines = await logLinesDuring(
-        ['realm:requests', 'realm:user-keys'],
-        async () => {
+      let lines = await withLogDefinition('realm:requests', 'info', () =>
+        logLinesDuring(['realm:requests', 'realm:user-keys'], async () => {
           let response = await add(
             { name: 'weather', value: VALUE },
             { ticket },
           );
           assert.strictEqual(response.status, 201);
           await add({ name: 'weather', value: NEW_VALUE }, { ticket });
-        },
+        }),
       );
       assert.true(lines.length > 0, 'the requests are logged');
       for (let line of lines) {

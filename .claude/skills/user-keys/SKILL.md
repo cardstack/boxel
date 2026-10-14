@@ -76,7 +76,8 @@ with 403 and never sees a ticket, and so can never write a value.
 ## The API
 
 All routes take the user's realm-server session (`Authorization: Bearer`),
-and refuse a delegated or realm-authority session with 403. Bodies are
+refuse a delegated session with 401 (the shared session check) and a
+realm-authority session with 403. Bodies are
 JSON:API with type `user-key`; the ticket and any operation reference go in
 `meta`.
 
@@ -95,14 +96,14 @@ A destination is never typed: an `attributes.destination` is refused with 400. A
 destination a key can be sent to; without an operation the key is stored with
 none.
 
-| Status | Means                                                                                                                                   |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set                                                    |
-| 401    | No session, or an invalid one                                                                                                           |
-| 403    | No valid ticket (missing, used, expired, or another user's); a ticket asked for by the app page; a delegated or realm-authority session |
-| 404    | No such key — also what another user's key answers                                                                                      |
-| 409    | The owner already has a key of that name                                                                                                |
-| 422    | The operation reference supplies no destination                                                                                         |
+| Status | Means                                                                                                                      |
+| ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set                                       |
+| 401    | No session, an invalid one, or a delegated one                                                                             |
+| 403    | No valid ticket (missing, used, expired, or another user's); a ticket asked for by the app page; a realm-authority session |
+| 404    | No such key — also what another user's key answers                                                                         |
+| 409    | The owner already has a key of that name                                                                                   |
+| 422    | The operation reference supplies no destination                                                                            |
 
 A failure that isn't one of these is a 500 logged on `realm:user-keys` with
 the error's name and message only, never the request.
