@@ -41,14 +41,16 @@ what `callApi` exists to prevent.
   path: { owner: params('owner'), repo: params('repo') },
   query: { state: 'open' },
   headers: { authorization: 'Bearer {{userKey}}' },
-  output: bxl`{status: .status, titles: [.body[].title]}`,
+  output: bxl`{status: .status, issues: .body}`,
 } satisfies OperationDeclaration;
 ```
 
 `method` (absent: GET without a body, POST with one), `url`, `path`,
 `headers`, `query`, and one body: `json`, or `graphql: { document, variables }`.
 `output` is the optional response mapping; it runs over `{status, headers,
-body}`. `input` works as on any operation. A `transformations` program is
+body}` and has to produce an object, since the answer stands alone in the
+batch's results, where a list reads as a group's answers and `null` as a
+removal. `input` works as on any operation. A `transformations` program is
 refused (`unrunnable-program`): there is no document to run it over.
 
 `callApi` is declaration-only (nothing implies it) and is carried only by a

@@ -1480,15 +1480,33 @@ async function projectResult(
     return { ...result, projected: true };
   }
   // A callApi's `output` maps the vendor's response — status, headers and
-  // body — to whatever the card wants back, so its projection is any value.
+  // body — to what the card wants back. The answer sits in the batch's
+  // results by itself, where a list reads as a group's answers and `null` as
+  // a removal, so the projection has to be an object.
   if (isCallApiResult(result)) {
-    return {
-      callApi: await runOutputTransform(
-        definition,
-        result.callApi,
-        transformContext(core, request),
-      ),
-    };
+    let projection = await runOutputTransform(
+      definition,
+      result.callApi,
+      transformContext(core, request),
+    );
+    if (
+      typeof projection !== 'object' ||
+      projection === null ||
+      Array.isArray(projection)
+    ) {
+      throw new OperationFailure({
+        id: targetId(request.target),
+        status: 400,
+        code: 'invalid-params',
+        title: 'Cannot run transform',
+        detail:
+          `the \`output\` stage of operation "${request.name}" maps a ` +
+          `response, which answers as an object, and this program produced ` +
+          `something else`,
+        meta: { operation: request.name, stage: 'output' },
+      });
+    }
+    return { callApi: projection };
   }
   if (isDocumentResult(result)) {
     let projection = await runOutputTransform(

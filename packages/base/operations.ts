@@ -797,7 +797,8 @@ export type CallApiMethod = (typeof CALL_API_METHODS)[number];
 // realm the request is made for is the one the invocation names. Either way
 // the answer is the vendor's response — its status, the headers that are safe
 // to carry, and its body with every credential removed — whatever the status
-// is. A 404 from the vendor is an answer, not a refusal.
+// is. A 404 from the vendor is an answer, not a refusal. An `output` maps that
+// response to an object of the card's choosing.
 //
 // A credential is written as a slot in a string where it goes:
 //

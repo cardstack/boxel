@@ -730,6 +730,40 @@ module(basename(import.meta.filename), function () {
         callApi: { status: 404, headers: {}, body: { error: 'Not found' } },
       });
     });
+    test("a callApi's `output` maps the response to an object, and nothing else", async function (assert) {
+      let response = { status: 200, headers: {}, body: { id: 7 } };
+      let declare = (source: string) =>
+        stub({
+          operations: {
+            fetch: {
+              base: 'callApi',
+              deterministic: true,
+              output: { source, syntax: 'solidified' },
+              callApi: {
+                method: 'GET',
+                url: 'https://api.example.com/item',
+                slots: [],
+              },
+            },
+          },
+        });
+      let mapped = declare('{id:.body.id}');
+      mapped.core.callApi = { send: async () => response };
+      assert.deepEqual(await runOperation(mapped.core, invoke(CARD, 'fetch')), {
+        callApi: { id: 7 },
+      });
+
+      let listed = declare('[.status]');
+      listed.core.callApi = { send: async () => response };
+      let error = await refusalFrom(() =>
+        runOperation(listed.core, invoke(CARD, 'fetch')),
+      );
+      assert.strictEqual(error.code, 'invalid-params');
+      assert.strictEqual(
+        (error.meta as { stage?: string } | undefined)?.stage,
+        'output',
+      );
+    });
     test('a declaration lowering flagged invalid reports its findings', async function (assert) {
       let { core } = stub({
         operations: {
