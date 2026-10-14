@@ -30,6 +30,10 @@ const guardedCostLookup: GenerationCostLookupOptions = {
 
 export interface CreditStrategy {
   name: string;
+  // Whether a call's cost is read from what the upstream sends back. When it
+  // is not, a proxy forwards the response without looking for usage in it,
+  // and a call whose client leaves is cancelled rather than read to the end.
+  chargesForUsage: boolean;
   validateCredits(
     dbAdapter: DBAdapter,
     matrixUserId: string,
@@ -58,6 +62,7 @@ export interface CreditStrategy {
 // Default AI Bot Credit Strategy (reused from AI bot)
 export class OpenRouterCreditStrategy implements CreditStrategy {
   name = 'openrouter-credit-strategy';
+  chargesForUsage = true;
   openRouterApiKey: string;
 
   constructor(openRouterApiKey: string) {
@@ -126,6 +131,7 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
 // No Credit Strategy (for free endpoints)
 export class NoCreditStrategy implements CreditStrategy {
   name = 'no-credit-strategy';
+  chargesForUsage = false;
 
   async validateCredits(_dbAdapter: DBAdapter, _matrixUserId: string) {
     return {
