@@ -283,6 +283,15 @@ _kill_tree_walk() {
 #     but the X-Boxel-Assume-User CORS header in the icons invocation is
 #     Boxel-specific and won't appear in unrelated http-server instances.
 sweep_orphaned_services() {
+  # In environment mode every process this session started carries the
+  # environment's slug, so the slug-scoped stop-environment finds them all.
+  # The argv regexes below can't tell this environment's realm-server,
+  # workers and prerenderers from the fixed-port stack or another
+  # environment's, so they must never run for an env-mode session.
+  if [ -n "${BOXEL_ENVIRONMENT:-}" ] && [ -z "${SWEEP_FORCE:-}" ]; then
+    "$REPO_ROOT/scripts/stop-environment.sh" "$BOXEL_ENVIRONMENT" || true
+    return 0
+  fi
   # If another dev-all/dev session is alive, the regex sweep would
   # false-positive match its child processes (vite-serve, realm-server,
   # workers, etc.) and SIGKILL them — argv patterns can't distinguish
