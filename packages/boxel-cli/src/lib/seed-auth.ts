@@ -91,7 +91,7 @@ export function mintRealmServerToken(
  */
 export function mintOperatorToken(
   seed: string,
-  scope: 'data-keys',
+  scope: 'data-keys' | 'system-keys',
   opts: { expiresIn?: jwt.SignOptions['expiresIn'] } = {},
 ): string {
   return jwt.sign({ operator: scope }, seed, {

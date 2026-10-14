@@ -124,6 +124,35 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('a system-key route, and anything beneath it, keeps only its method and path', function (assert) {
+      for (let url of [
+        'https://app.telemetry.test/_system-keys',
+        'https://app.telemetry.test/_System-Keys/0b6f6d55-6f39-4b4e-9d5e-0c3c35d1a0e1',
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url,
+            headers: { host: 'app.telemetry.test', accept: '*/*' },
+            data: '{"value":"sk-system-value"}',
+          },
+        });
+        assert.deepEqual(event.request as unknown, { method: 'POST', url });
+      }
+      let neighbour = scrubRequestTelemetry({
+        request: {
+          method: 'GET',
+          url: 'https://app.telemetry.test/_system-keys-elsewhere',
+          query_string: 'a=b',
+        },
+      });
+      assert.strictEqual(
+        (neighbour.request as { query_string?: unknown }).query_string,
+        'a=b',
+        'a path that only starts with the route keeps its context',
+      );
+    });
+
     test('a path that only starts with a proxy route keeps its context', function (assert) {
       let event = scrubRequestTelemetry({
         request: {

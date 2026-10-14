@@ -169,4 +169,12 @@ export class AllowedProxyDestinations {
   static reset(): void {
     AllowedProxyDestinations.instance = null;
   }
+
+  // The next lookup reloads the endpoints, so a change written by this
+  // process applies to its next request.
+  static invalidate(): void {
+    if (AllowedProxyDestinations.instance) {
+      AllowedProxyDestinations.instance.cacheExpiry = 0;
+    }
+  }
 }

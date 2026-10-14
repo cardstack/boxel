@@ -8,7 +8,8 @@
 //   keeps only the method and the URL's origin and path. The secure origin is
 //   where credentials are typed. A proxy route's body is the caller's own
 //   content (a forwarded request's URL, headers and body, or a whole prompt),
-//   and its query string can carry a token.
+//   and its query string can carry a token. The same holds for the system-key
+//   routes, whose bodies carry a key's value.
 // - An event raised during any other request keeps its request context, minus
 //   the `Authorization` / `Proxy-Authorization` and `Cookie` headers and the
 //   parsed cookies, and with any `token` query parameter masked. The caller's
@@ -28,6 +29,9 @@ const proxyRoutePaths = new Set([
   REQUEST_FORWARD_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
 ]);
+
+// The operator routes that store a system key, and everything beneath them.
+export const SYSTEM_KEYS_PATH = '/_system-keys';
 
 const credentialHeaders = new Set([
   'authorization',
@@ -103,6 +107,11 @@ function isProxyRoutePath(pathname: string): boolean {
     path = path.slice(0, -1);
   }
   return proxyRoutePaths.has(path);
+}
+
+function isSystemKeysPath(pathname: string): boolean {
+  let path = pathname.toLowerCase();
+  return path === SYSTEM_KEYS_PATH || path.startsWith(`${SYSTEM_KEYS_PATH}/`);
 }
 
 // A proxy route's URL followed by a query string, wherever it is written: the
@@ -222,7 +231,8 @@ export function scrubRequestTelemetry<
   let parsed = parseURL(request.url);
   let methodAndPathOnly =
     isSecureOriginRequestData(request) ||
-    (parsed !== undefined && isProxyRoutePath(parsed.pathname));
+    (parsed !== undefined &&
+      (isProxyRoutePath(parsed.pathname) || isSystemKeysPath(parsed.pathname)));
   (event as { request?: SentryRequestData }).request = methodAndPathOnly
     ? {
         ...(request.method ? { method: request.method } : {}),

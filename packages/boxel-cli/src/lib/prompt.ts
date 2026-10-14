@@ -23,23 +23,48 @@ export function prompt(question: string): Promise<string> {
   });
 }
 
+export interface PromptPasswordOptions {
+  /**
+   * After Enter, show this many of the value's last characters, so the
+   * operator can tell the value they pasted is the one they meant. Never more
+   * than a quarter of the value is shown.
+   */
+  revealLast?: number;
+  /** @internal The streams to read from and write to; tests pass their own. */
+  input?: NodeJS.ReadStream;
+  output?: NodeJS.WritableStream;
+}
+
 /**
- * Read a secret from stdin without echoing it to the TTY. Keystrokes are
- * masked with `*` and Ctrl+C exits. Intended for seeds, passwords, and other
+ * The trailing characters of `value` that `revealLast` may show: at most
+ * `revealLast`, and at most a quarter of the value.
+ */
+export function revealedSuffix(value: string, revealLast: number): string {
+  let count = Math.min(revealLast, Math.floor(value.length / 4));
+  return count > 0 ? value.slice(-count) : '';
+}
+
+/**
+ * Read a secret from stdin without echoing it to the TTY. Every character
+ * echoes as `*` and Ctrl+C exits. Intended for seeds, passwords, keys and other
  * sensitive CLI input that must not appear in shell history or `ps aux`.
  */
-export function promptPassword(question: string): Promise<string> {
+export function promptPassword(
+  question: string,
+  options: PromptPasswordOptions = {},
+): Promise<string> {
+  const stdin = options.input ?? process.stdin;
+  const stdout = options.output ?? process.stdout;
   const mutableOutput = new Writable({
     write: (_chunk, _encoding, callback) => callback(),
   });
   const rl = readline.createInterface({
-    input: process.stdin,
+    input: stdin,
     output: mutableOutput,
     terminal: true,
   });
 
   return new Promise((resolve, reject) => {
-    const stdin = process.stdin;
     const wasFlowing = stdin.readableFlowing;
 
     if (stdin.isTTY) {
@@ -65,14 +90,22 @@ export function promptPassword(question: string): Promise<string> {
         // Ctrl+C inside a paste still work.
         const raw = chunk
           .toString()
-          .split('[200~')
+          .split('[200~')
           .join('')
-          .split('[201~')
+          .split('[201~')
           .join('');
         for (const c of raw) {
           if (c === '\n' || c === '\r') {
             cleanup();
-            process.stdout.write('\n');
+            stdout.write('\n');
+            const suffix = options.revealLast
+              ? revealedSuffix(password, options.revealLast)
+              : '';
+            if (suffix) {
+              stdout.write(
+                `  (${[...password].length} characters, ending in ${suffix})\n`,
+              );
+            }
             resolve(password);
             return;
           } else if (c === '\u0003') {
@@ -82,13 +115,13 @@ export function promptPassword(question: string): Promise<string> {
           } else if (c === '\u007F' || c === '\b') {
             // Backspace
             if (password.length > 0) {
-              password = password.slice(0, -1);
-              process.stdout.write('\b \b');
+              password = [...password].slice(0, -1).join('');
+              stdout.write('\b \b');
             }
           } else if (c >= ' ') {
             // Printable character; suppress other control bytes entirely.
             password += c;
-            process.stdout.write('*');
+            stdout.write('*');
           }
         }
       } catch (e) {
@@ -99,7 +132,7 @@ export function promptPassword(question: string): Promise<string> {
 
     let password = '';
     try {
-      process.stdout.write(question);
+      stdout.write(question);
       stdin.on('data', onData);
       stdin.resume();
     } catch (e) {

@@ -583,62 +583,35 @@ You should be able to subscribe successfully after you perform the steps above.
 
 ## External API Proxy Setup
 
-The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, you need to configure your api key inside the `proxy_endpoints` db.
+The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, the realm server needs a **system key** (a row in `proxy_endpoints`) for each destination.
 
-#### Setup api key in DB locally
+#### Add a system key
 
-```sql
-INSERT INTO proxy_endpoints (
-  id, url, api_key, credit_strategy, supports_streaming,
-  auth_method, auth_parameter_name, created_at, updated_at
-) VALUES (
-  gen_random_uuid(),
-  'https://openrouter.ai/api/v1/chat/completions',
-  '<your-openrouter-api-key>',
-  'openrouter',
-  true,
-  'header',
-  'Authorization',
-  NOW(), NOW()
-);
+System keys are managed with `boxel realm-server keys`, authorized with the realm secret seed. The command signs a short-lived operator token locally, so the seed never leaves your machine, and the value is typed at a masked prompt rather than passed as an argument. Locally the seed is `shhh! it's a secret`:
+
+```sh
+export BOXEL_REALM_SECRET_SEED="shhh! it's a secret"
+boxel realm-server keys add --realm-server https://localhost:4201 \
+  --destination https://openrouter.ai/api/v1/chat/completions \
+  --credit-strategy openrouter --streaming \
+  --note "local OpenRouter key for <your name>"
 ```
 
-The realm server seals the key into the row's encrypted columns the next time it starts. To seal it straight away, run `pnpm seal-proxy-endpoint-keys` from `packages/realm-server`. If you later change a row's `api_key` or `url` by hand, start the realm server again or run that command, so the sealed key matches the edit.
+It prompts for the key value (each character shows as `*`, and only the last few are shown after Enter). Without a terminal, pipe the value in with `--stdin` or point at a file with `--key-file <path>`. The server seals the value at rest and records the change and the note, never the value, in the key's history.
+
+`boxel realm-server keys list | show | replace | delete` list the keys, show one with its history, replace a key's value, and delete a key. No command ever prints a value.
 
 Typically, it is needed for our openrouter setup which is used widely throughout our codebase. But, additionally you can add in your own proxy.
 
-#### Configuration Options
+#### Options for `keys add`
 
-- **url**: The base URL of the external API endpoint
-- **apiKey**: The API key to use for authentication (will be automatically added to requests)
-- **creditStrategy**: The credit strategy to use for this endpoint
-  - `"openrouter"`: Uses OpenRouter credit system (for paid AI APIs)
-  - `"no-credit"`: No credit system (for free APIs or APIs with their own billing)
-- **supportsStreaming**: Whether this endpoint supports streaming responses
-
-#### Examples
-
-**OpenRouter (AI API with credit system):**
-
-```json
-{
-  "url": "https://openrouter.ai/api/v1/chat/completions",
-  "apiKey": "your-openrouter-api-key",
-  "creditStrategy": "openrouter",
-  "supportsStreaming": true
-}
-```
-
-**Free API (no credit system):**
-
-```json
-{
-  "url": "https://api.example.com",
-  "apiKey": "your-example-api-key",
-  "creditStrategy": "no-credit",
-  "supportsStreaming": false
-}
-```
+- **`--destination <url>`**: The URL the key is sent to. Requests to that origin, under that path, get the key.
+- **`--credit-strategy <strategy>`**: How calls are charged
+  - `openrouter`: Uses OpenRouter credit system (for paid AI APIs)
+  - `none`: No credit system (for free APIs or APIs with their own billing)
+- **`--auth <method>`**: `header` (the default) sends the key as a Bearer token in the `Authorization` header; `url-parameter` sends it as a query parameter
+- **`--param-name <name>`**: The header or query parameter that carries the key (default `Authorization` for `header`, `key` for `url-parameter`)
+- **`--streaming`**: The destination supports streaming responses
 
 #### Security Notes
 
