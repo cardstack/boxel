@@ -211,9 +211,8 @@ export interface ProxyEndpointKeySealing {
 // to its plain-text key is left alone, so a second run changes nothing.
 //
 // A row sealed under a data key this process hasn't loaded is left alone and
-// reported. During a rolling data-key rotation a task can lack a key other
-// tasks already seal with, and re-sealing such a row under its own current key
-// would undo the rotation's progress.
+// reported: re-sealing it under this process's current key would move it back
+// onto an older data key than the one a rotation put it under.
 //
 // Each update applies only while the row still holds the key and the nonce
 // that were read, so it never overwrites a concurrent write or re-seal, and

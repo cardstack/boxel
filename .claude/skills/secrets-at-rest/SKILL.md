@@ -169,10 +169,10 @@ proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 skipped=0
 - `unchanged`: rows that were already correct. A second run reports every
   row here.
 - `unloadedKey`: rows sealed under a data key this process hasn't loaded.
-  They are left as they are, and each is logged as a warning. During a
-  rolling data-key rotation, a task on the previous revision can lack a key
-  that other tasks already seal with. Outside a rotation, this means the
-  process is missing a data key it should have.
+  Each is left as it is and logged as a warning, so the backfill never moves
+  a row back onto an older data key. A rotation loads a new data key
+  everywhere before any process seals with it, so a nonzero count means a
+  rotation step was skipped or a data key was retired too early.
 - `skipped`: rows that changed between the read and the update. Those rows
   are left to whatever changed them.
 
