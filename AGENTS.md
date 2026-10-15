@@ -291,8 +291,8 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Architecture decision records
 
-- `docs/adr/` records why the codebase is shaped as it is. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `grep -l '<path>' docs/adr/[0-9]*.md`. Don't silently contradict an `accepted` ADR: follow it, or say that the change needs a superseding ADR.
-- When a change makes a decision that outlives its PR (hard to reverse, cross-cutting, chosen between viable alternatives), load the `adr` skill and draft a `proposed` ADR in the same PR. Only a person marks an ADR `accepted`.
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, list them with `grep -H '^scope:' docs/adr/[0-9]*.md` and read the ADRs that match your paths. Don't silently break a MUST of an `accepted` ADR: follow it, or say that the change needs a superseding ADR. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. Only a person marks an ADR `accepted`.
 
 ## Linear Ticket Process (Reusable)
 

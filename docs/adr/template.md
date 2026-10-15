@@ -1,44 +1,46 @@
 ---
-status: proposed # proposed | accepted | superseded | deprecated
-date: YYYY-MM-DD # when the decision was made
-# recorded: YYYY-MM-DD   # retroactive ADRs only: when this record was written
-# retroactive: true      # retroactive ADRs only
-scope: [] # globs this decision governs, e.g. [packages/postgres/**]
-# supersedes: NNNN
-# superseded-by: NNNN
+status: proposed
+date: YYYY-MM-DD
+scope: [] # globs this decision governs, on one line, e.g. [packages/postgres/**]
+# supersedes: NNN
+# retroactive: true
+# recorded: YYYY-MM-DD
 ---
 
-# NNNN. Decision stated as an imperative ("Use X for Y")
+# NNN. Decision stated as an imperative
 
-## Context
+One paragraph that summarizes the decision and why it matters, so a reader can
+tell whether the rest is relevant.
 
-The forces at play when the decision was made: the problem, the constraints,
-what made a choice necessary. Write it as of the decision date.
+## 1. Decision
 
-## Decision
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
+"SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this
+document are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when,
+and only when, they appear in all capitals, as shown here.
 
-What we do, in a few sentences. State it as a rule someone can follow and a
-reviewer can check.
+### 1.1. First rule
 
-## Considered options
+Each requirement in its own sentence, with a BCP 14 key word.
 
-- **Chosen option**: why it won.
-- **Alternative A**: why it was rejected.
-- **Alternative B**: why it was rejected.
+## 2. Rationale
 
-## Consequences
+Why, in prose: the forces at the time of the decision.
 
-- What becomes easier, and what becomes harder.
-- The rules this imposes on future changes (the things an agent or reviewer
-  should enforce).
-- What would make us revisit this decision.
+## 3. Considered options
 
-## Open questions
+- **Chosen option.** Why it won.
+- **Alternative.** Why it was rejected.
 
-Retroactive ADRs only: each part of the rationale that no source records, and
-whom to ask. Delete the section once every item is answered.
+## 4. Consequences
 
-## Sources
+Optional. Delete unless it adds value beyond the Decision.
 
-Commit SHAs, PR numbers in this repository, and file paths that the context and
-rationale above rest on. Required for retroactive ADRs.
+## 5. Open questions
+
+Retroactive ADRs only. Each reason no source states, and whom to ask.
+
+## 6. Sources
+
+Commit SHAs, PRs in this repository, and file paths that the ADR rests on.
+Required for retroactive ADRs.

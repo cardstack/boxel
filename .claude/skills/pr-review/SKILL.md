@@ -64,13 +64,16 @@ Work through the diff as if inheriting the code, not skimming it.
 - **Docs move with contracts.** If the diff changes documented behavior, the docs are part of the diff — and doc claims get verified like code claims (a key documented as "present on both row kinds" is checked against the code that stamps it).
 - **Migrations**: paired schema regeneration, `down()` fidelity against the exact names/opclasses the original migration created, and the concurrency pattern established in the migrations directory.
 - **Decisions hold, or are superseded on purpose.** Load the `adr` skill when any of the following applies:
-  - A change contradicts an `accepted` ADR from Phase 1 without a superseding ADR in the diff. That is a blocking finding: ask the author either to conform or to add the superseding ADR.
-  - The diff makes a new decision that meets the bar in `docs/adr/README.md` (hard to reverse, cross-cutting, chosen between viable alternatives) and has no ADR. Ask for a `proposed` one. This is non-blocking unless the decision is hard to reverse.
-  - An ADR is part of the diff. Check it against the skill's rules:
-    - it is not self-marked `accepted`;
-    - its `scope` globs match the code it governs;
-    - the index row is added;
-    - in a retroactive ADR, every rationale claim cites a source or sits under Open questions. An uncited "why" is a finding even when it sounds right.
+  - A change breaks an ADR from Phase 1. Severity follows the key word (ADR 001 §1.9):
+    - Breaking a MUST or MUST NOT of an `accepted` ADR, with no superseding ADR in the diff, is blocking. Ask the author to conform or to add the superseding ADR.
+    - Departing from a SHOULD with no stated reason is non-blocking. Ask for the reason.
+    - Cite the requirement by number ("ADR 004 §1.2") rather than restating it.
+  - The diff makes a new decision that meets ADR 001 §1.1 and has no ADR. Ask for a `proposed` one. This is non-blocking unless the decision is hard to reverse.
+  - An ADR is part of the diff. Check it against ADR 001:
+    - it is not self-marked `accepted` (§1.6);
+    - its `scope` globs match the code it governs, and the index row is added (§1.2);
+    - its structure and length follow §1.3 and §1.5;
+    - in a retroactive ADR, every reason cites a source or sits under Open questions (§1.7). An uncited "why" is a finding even when it sounds right.
 
 ## Phase 3 — Classify every finding
 
