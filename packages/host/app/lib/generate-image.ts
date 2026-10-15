@@ -15,6 +15,11 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 
 export const IMAGE_EXTENSION_RE = /\.(png|jpe?g|webp|gif|svg|avif)$/i;
 
+// Every extension `imageExtension` can return.
+export const IMAGE_FILE_EXTENSIONS = [
+  ...new Set(Object.values(IMAGE_EXTENSIONS)),
+];
+
 // The file extension for an image content type; png for one it does not know.
 export function imageExtension(mimeType: string): string {
   return IMAGE_EXTENSIONS[mimeType] ?? 'png';

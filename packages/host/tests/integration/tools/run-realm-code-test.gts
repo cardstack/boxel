@@ -2218,17 +2218,32 @@ module('Integration | tools | run-realm-code | images', function (hooks) {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   // `realm.images.generate` asks the image model through the realm server's
   // proxy; this answers every request with the same PNG and records the
-  // request it forwarded.
+  // request it forwarded. A request whose prompt is `never answers` gets no
+  // answer until it is aborted, or until a fallback long after any test
+  // timing.
   let imageRequests: any[] = [];
+  let abortedImageRequests = 0;
   setupRealmServerEndpoints(hooks, [
     {
       route: '_request-forward',
       getResponse: async (req: Request) => {
         let body = await req.clone().json();
-        imageRequests.push({
-          url: body.url,
-          request: JSON.parse(body.requestBody),
-        });
+        let request = JSON.parse(body.requestBody);
+        imageRequests.push({ url: body.url, request });
+        if (request.messages[0].content[0].text === 'never answers') {
+          await new Promise<void>((resolve, reject) => {
+            let fallback = setTimeout(resolve, 20_000);
+            let onAbort = () => {
+              clearTimeout(fallback);
+              abortedImageRequests += 1;
+              reject(new DOMException('aborted', 'AbortError'));
+            };
+            if (req.signal.aborted) {
+              onAbort();
+            }
+            req.signal.addEventListener('abort', onAbort, { once: true });
+          });
+        }
         return new Response(
           JSON.stringify({
             choices: [
@@ -2255,10 +2270,12 @@ module('Integration | tools | run-realm-code | images', function (hooks) {
 
   hooks.beforeEach(async function () {
     imageRequests = [];
+    abortedImageRequests = 0;
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'task.json': '{ "title": "Old title" }\n',
+        'photos/cat.jpg': 'not really a jpeg',
       },
     });
   });
@@ -2365,6 +2382,97 @@ module('Integration | tools | run-realm-code | images', function (hooks) {
       /File already exists/,
     );
     assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('realm.images.generate refuses a path whose image may be saved over an existing file, before it asks the model', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    // The model may answer with a JPEG, which would be saved as cat.jpg.
+    for (let path of ['photos/cat', 'photos/cat.png']) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.images.generate({ prompt: 'a cat', path: '${path}' });`,
+        }),
+        /File already exists: .*photos\/cat\.jpg/,
+        `${path} is refused`,
+      );
+    }
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('realm.images.generate takes one file slot per image', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    // 16 files read plus 4 extensionless images is the 20-file limit.
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `for (let i = 1; i <= 16; i++) {
+  await realm.fs.exists('missing-' + i + '.json');
+}
+let paths = [];
+for (let i = 1; i <= 4; i++) {
+  paths.push((await realm.images.generate({ prompt: 'dot ' + i, path: 'dots/' + i })).path);
+}
+return paths;`,
+    });
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      'dots/1.png',
+      'dots/2.png',
+      'dots/3.png',
+      'dots/4.png',
+    ]);
+  });
+
+  test('realm.images.generate refuses a source image outside this realm', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.images.generate({
+  prompt: 'a dot',
+  path: 'dot.png',
+  sourceImageUrl: 'http://other-realm.example/private/photo.png',
+});`,
+      }),
+      /Path is outside this realm/,
+    );
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('an image request still in flight when the run ends is stopped', async function (assert) {
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let started = Date.now();
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `realm.images.generate({ prompt: 'never answers', path: 'late.png' });`,
+      }),
+      /await every realm call/,
+    );
+    assert.true(
+      Date.now() - started < 15_000,
+      'the run reports without waiting for the image',
+    );
+    if (imageRequests.length > 0) {
+      assert.strictEqual(
+        abortedImageRequests,
+        1,
+        'the image request was aborted',
+      );
+    }
+    await settled();
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}late.png`),
+    );
+    assert.strictEqual(source.status, 404, 'no image was saved');
   });
 
   test('a script that reaches realm.images.generate another way is refused', async function (assert) {

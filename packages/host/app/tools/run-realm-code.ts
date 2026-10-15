@@ -29,6 +29,7 @@ import {
 import {
   generateImage,
   IMAGE_EXTENSION_RE,
+  IMAGE_FILE_EXTENSIONS,
   imageExtension,
   sourceImageDataUrl,
   type GeneratedImage,
@@ -160,13 +161,14 @@ type DeleteFile = (
   expected: { content: string } | { sha256: string },
 ) => Promise<void>;
 
-// Asks the image model for one image. `sourceImageUrl` is a data URL or a
-// full URL, never a realm-relative path.
+// Asks the image model for one image. `sourceImageUrl` is a data URL or the
+// full URL of a file in this run's realm. `signal` stops both the source
+// fetch and the image request.
 type GenerateImage = (input: {
   prompt: string;
   sourceImageUrl?: string;
   llmModel?: string;
-  timeoutMs: number;
+  signal: AbortSignal;
 }) => Promise<GeneratedImage>;
 
 // What `lookup` finds for a file that is not UTF-8 text.
@@ -338,8 +340,8 @@ class RealmFsSession {
   // Calls and saves refused because the run had already ended.
   private refused = 0;
   private queue: Promise<unknown> = Promise.resolve();
-  // Aborted when the run ends, so a workspace create still in flight stops
-  // holding up the report.
+  // Aborted when the run ends, so a workspace create or an image request
+  // still in flight stops holding up the report.
   private inFlight = new AbortController();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
@@ -926,10 +928,12 @@ class RealmFsSession {
       }
     }
     let url = this.resolve('images.generate', path);
-    // A source image in this realm can be named by its path.
+    // A source image is a data URL or a file in this realm, named by its path
+    // or full URL. It is read with the user's session, so it may not come
+    // from another realm the user can read.
     let source =
       typeof sourceImageUrl === 'string' && sourceImageUrl
-        ? /^(data|https?):/i.test(sourceImageUrl)
+        ? /^data:/i.test(sourceImageUrl)
           ? sourceImageUrl
           : this.resolve('images.generate', sourceImageUrl)
         : undefined;
@@ -942,12 +946,32 @@ class RealmFsSession {
         `Realm code may spend at most ${IMAGE_TIME_BUDGET_MS / 1000} s generating images`,
       );
     }
-    // Checked before the request, so no credit is spent on an image that
-    // cannot be saved.
-    if ((await this.lookup(url)) !== undefined) {
-      throw new Error(`File already exists: ${url}`);
+    // The saved file takes one MAX_FILES slot.
+    if (this.known.size + this.binary.size >= MAX_FILES) {
+      throw new Error(`Realm code may touch at most ${MAX_FILES} files`);
+    }
+    // The file extension follows the type of image the model makes, so every
+    // name the image may be saved under is checked before the request, and no
+    // credit is spent on an image that cannot be saved. These checks read no
+    // file into the run, so they take no MAX_FILES slots.
+    let base = url.replace(IMAGE_EXTENSION_RE, '');
+    let destinations = [
+      url,
+      ...IMAGE_FILE_EXTENSIONS.map((extension) => `${base}.${extension}`),
+    ];
+    let taken = (
+      await Promise.all(
+        [...new Set(destinations)].map(async (destination) =>
+          (await this.exists(destination)) ? destination : undefined,
+        ),
+      )
+    ).filter((destination) => destination !== undefined);
+    if (taken.length > 0) {
+      throw new Error(`File already exists: ${taken.join(', ')}`);
     }
     this.imagesRequested += 1;
+    let limit = Math.min(IMAGE_TIMEOUT_MS, timeLeft);
+    let timeout = AbortSignal.timeout(limit);
     let started = Date.now();
     let image: GeneratedImage;
     try {
@@ -955,23 +979,29 @@ class RealmFsSession {
         prompt: prompt.trim(),
         sourceImageUrl: source,
         llmModel: (llmModel as string | null) ?? undefined,
-        timeoutMs: Math.min(IMAGE_TIMEOUT_MS, timeLeft),
+        signal: AbortSignal.any([this.inFlight.signal, timeout]),
       });
+    } catch (error) {
+      if (this.inFlight.signal.aborted) {
+        throw new Error('The run has ended; the image request was stopped');
+      }
+      if (timeout.aborted) {
+        throw new Error(
+          `realm.images.generate did not finish within ${Math.round(limit / 1000)} s`,
+        );
+      }
+      throw error;
     } finally {
       this.imageTimeUsed += Date.now() - started;
     }
-    // The file extension follows the type of image the model made.
-    let savedURL = `${url.replace(IMAGE_EXTENSION_RE, '')}.${imageExtension(image.mimeType)}`;
-    if (savedURL !== url && (await this.lookup(savedURL)) !== undefined) {
-      throw new Error(`File already exists: ${savedURL}`);
-    }
+    let savedURL = `${base}.${imageExtension(image.mimeType)}`;
     if (this.closed) {
       this.refused += 1;
       throw new Error(`The run has ended; ${savedURL} was not saved`);
     }
     let bytes = decodeBase64(image.base64.replace(/\s+/g, ''));
     await this.writeBinaryFile(savedURL, bytes);
-    // The lookups above recorded the file as missing.
+    // An earlier lookup may have recorded the file as missing.
     this.known.delete(savedURL);
     this.binary.add(savedURL);
     this.saved.add(savedURL);
@@ -988,6 +1018,9 @@ class RealmFsSession {
   private async exists(url: string): Promise<boolean> {
     if (this.known.has(url)) {
       return this.known.get(url) !== undefined;
+    }
+    if (this.binary.has(url)) {
+      return true;
     }
     let source = await this.readSource(url);
     if (source.status !== 200 && source.status !== 404) {
@@ -1920,14 +1953,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     prompt,
     sourceImageUrl,
     llmModel,
-    timeoutMs,
+    signal,
   }: Parameters<GenerateImage>[0]): Promise<GeneratedImage> {
     return await generateImage(
       {
         prompt,
         sourceImageDataUrl: sourceImageUrl
           ? await sourceImageDataUrl(sourceImageUrl, (url) =>
-              this.network.authedFetch(url),
+              this.network.authedFetch(url, { signal }),
             )
           : undefined,
         model: llmModel,
@@ -1937,7 +1970,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           url,
           method: 'POST',
           requestBody,
-          timeoutMs,
+          signal,
         }),
     );
   }
