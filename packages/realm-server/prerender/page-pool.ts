@@ -235,6 +235,9 @@ type FreshTabWait = {
   // `#closeGeneration` at that time. A pool close in between starts the wait
   // over, against the refill of whatever browser comes next.
   generation: number;
+  // `#refillFailures` at that time. Once it moves, the refill has failed to
+  // make a standby since the caller started waiting.
+  failures: number;
 };
 
 const log = logger('prerenderer');
@@ -485,6 +488,13 @@ export class PagePool {
   // Set when `#ensureStandbyPool` is called while a refill is already
   // running; the running refill makes one more pass before it settles.
   #refillRequestedDuringRefill = false;
+  // Bumped each time the refill gives up on a standby after its creation
+  // retries run out, with no close in between. A caller waiting for a fresh
+  // tab records it when it starts waiting (`FreshTabWait.failures`) and stops
+  // waiting once it moves. Failure has to be reported rather than inferred
+  // from pool state: waiting callers' kicks keep a failing refill running
+  // pass after pass, so "no refill running" may never be observed.
+  #refillFailures = 0;
   #creatingStandbys = 0;
   // Tabs an awaited `disposeAffinity` has detached from `#affinityPages`
   // whose close hasn't landed yet. Chrome still holds them, so they stay in
@@ -1550,7 +1560,8 @@ export class PagePool {
       return this.#ensuringStandbys;
     }
     let generation = this.#closeGeneration;
-    let refill: Promise<void> = (async () => {
+    let refill!: Promise<void>;
+    refill = (async () => {
       try {
         do {
           this.#refillRequestedDuringRefill = false;
@@ -1562,10 +1573,9 @@ export class PagePool {
       } finally {
         // Cleared in the same synchronous step as the loop's last check, so
         // no request can land between the two and be lost: it either buys
-        // another pass or finds no refill running and starts one. Parked
-        // callers rely on that when they read "no refill running and free
-        // budget" as a refill that failed. A close may already have
-        // cleared it and a new refill taken its place, which stays.
+        // another pass or finds no refill running and starts one. A close
+        // may already have cleared it and a new refill taken its place,
+        // which stays.
         if (this.#ensuringStandbys === refill) {
           this.#ensuringStandbys = null;
         }
@@ -1628,6 +1638,12 @@ export class PagePool {
       }
       let standby = await this.#createStandbyWithRetries(generation);
       if (!standby) {
+        if (this.#closeGeneration === generation) {
+          this.#refillFailures++;
+          // Waiting callers act on the failure now, rather than at the
+          // settle, which their own kicks can postpone indefinitely.
+          this.#wakeTabWaiters();
+        }
         return;
       }
     }
@@ -1664,7 +1680,8 @@ export class PagePool {
   // running and will wake waiters when it settles — including one kicked by
   // a close that landed just after this caller's own refill found no
   // budget. Free budget with no refill running means the refill itself
-  // failed, which callers answer by throwing.
+  // failed; a caller then steals or throws. A refill that failed while
+  // others' kicks keep it running is reported by `#refillFailures`.
   #shouldAwaitFreedTab(): boolean {
     return (
       !this.#disableStandbyRefill &&
@@ -1710,6 +1727,10 @@ export class PagePool {
   }> {
     let startedAt = Date.now();
     await this.#waitForFreedTab(signal, until);
+    // Only this park: a re-selection that parks again reports its own park
+    // in `result.tabStartupMs`, and the tab acquire that follows a steal is
+    // queue time, not startup.
+    let parkedMs = Date.now() - startedAt;
     let result = await this.#selectEntryForAffinityOnce(
       affinityKey,
       queue,
@@ -1717,7 +1738,7 @@ export class PagePool {
       priority,
       wait,
     );
-    result.tabStartupMs += tabStartupMs + (Date.now() - startedAt);
+    result.tabStartupMs += tabStartupMs + parkedMs;
     return result;
   }
 
@@ -2845,16 +2866,20 @@ export class PagePool {
       parkedWait.generation === this.#closeGeneration;
     let wait: FreshTabWait = parked
       ? parkedWait!
-      : { since: Date.now(), generation: this.#closeGeneration };
+      : {
+          since: Date.now(),
+          generation: this.#closeGeneration,
+          failures: this.#refillFailures,
+        };
     // "Prefer a fresh standby over taking another affinity's warm tab" is a
     // deadline on the steal: the caller may steal once it has waited this
     // long for a standby. See `DEFAULT_STANDBY_REFILL_WAIT_MS`.
     let stealAt = wait.since + this.#standbyRefillWaitMs;
-    // The refill this caller parked on settled without a standby for it, and
-    // nothing will make one: no refill is running and the budget is free, so
-    // the refill failed. The caller stops waiting and goes on to steal or
-    // throw rather than kick another refill and park again.
-    let refillGaveUp = parked && !this.#shouldAwaitFreedTab();
+    // The refill failed to make a standby since this caller started waiting.
+    // The caller stops waiting and goes on to steal or throw, rather than
+    // kick another refill and park again; the throw is what lets the
+    // Prerenderer restart a browser that can't make tabs.
+    let refillGaveUp = this.#refillFailures !== wait.failures;
     let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
       ? [...entries].filter((entry) => !entry.closing)
@@ -3069,8 +3094,9 @@ export class PagePool {
       }
       // Nothing to steal either: every other tab already has a holder and a
       // waiter. With the budget spent that is a wait, not a failure — a
-      // release or a landing close frees a tab for this caller.
-      if (this.#shouldAwaitFreedTab()) {
+      // release or a landing close frees a tab for this caller. After a
+      // failed refill it is a failure.
+      if (!refillGaveUp && this.#shouldAwaitFreedTab()) {
         return await this.#selectOnceTabFrees(
           affinityKey,
           queue,
