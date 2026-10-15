@@ -132,7 +132,8 @@ export class PreferencePicker<T extends string> extends Component<
         border: 1px solid var(--line-strong);
         border-radius: 16px;
         background: var(--bg);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.27);
+        box-shadow: 0 12px 40px
+          rgba(var(--shadow-rgb), calc(0.27 * var(--shadow-a)));
       }
 
       .header-picker-label {
@@ -155,7 +156,8 @@ export class PreferencePicker<T extends string> extends Component<
         border: 0;
         border-radius: 999px;
         padding: 9px 4px;
-        color: var(--ink-faint);
+        /* --ink-dim, not faint: the track is --bg-well, the darkest ground */
+        color: var(--ink-dim);
         background: transparent;
         font-size: 12px;
         cursor: pointer;

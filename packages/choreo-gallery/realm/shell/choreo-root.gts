@@ -54,6 +54,8 @@ export const ChoreoRoot: TOC<Signature> = <template>
          --bg-elev, a notch above this, so they lift instead of sinking. */
       --bg-page: #2e2924;
       --ink: #f3ece3;
+      /* a step between --ink and --ink-dim, for the notes' headings */
+      --ink-soft: #e6dfd6;
       --ink-dim: #d2c9bf;
       --ink-faint: #b8aea3;
       --line: rgba(var(--ink-rgb), 0.09);
@@ -72,14 +74,34 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --ember: #ff3b1f;
       --ember-hot: #ff6a3a;
       --copper: #e4a35a;
-      /* copper as running TEXT: light mode needs a darker value to stay
-         legible on cream */
-      --copper-ink: var(--copper);
       --iris: #9667f7;
       --steel: #8b969c;
       --teal: #4fb8a6;
       --azure: #6ea8f0;
+      /* An accent as TEXT. The accents above are tuned as fills and rules;
+         small type in them needs 4.5:1 on --bg, --bg-page, --bg-elev and the
+         faint tints laid over them (a code box, a tile's meta, an API pill), so
+         each one an element sets text in has an -ink twin, lifted here and
+         darkened in light mode. Text reads the -ink token; fills,
+         rules and glows keep the accent. */
+      --ember-ink: #ff7a4e;
+      --copper-ink: var(--copper);
+      --iris-ink: #af8bf9;
+      --steel-ink: #96a0a5;
+      /* the small uppercase label over a section, a tile or a code sample */
+      --eyebrow: var(--ember-ink);
+      /* ember text on an ember-tinted fill, such as a diagram's hot box */
+      --hot-ink: #ff9370;
+      /* a focus indicator needs 3:1 against whatever it is drawn over */
+      --focus-ring: var(--ember-hot);
       --glow: rgba(255, 59, 31, 0.38);
+      /* the mark's fading tail and its inner orbit. The -dark pair holds in
+         either theme, for a mark that sits on a dark ground. */
+      --mark-tail-dark: rgba(255, 59, 31, 0.35);
+      --mark-orbit-dark: rgba(139, 150, 156, 0.75);
+      --mark-tail: var(--mark-tail-dark);
+      --mark-orbit: var(--mark-orbit-dark);
+      --syn-string: #ffb36a;
       --gradient-tail: var(--ink);
       --font-display: 'Syne', 'Avenir Next', sans-serif;
       --font-display-alt: 'Archivo', 'Avenir Next Condensed', sans-serif;
@@ -114,8 +136,8 @@ export const ChoreoRoot: TOC<Signature> = <template>
         color 220ms var(--ease);
     }
 
-    /* Light mode. Every accent carries over unchanged: ember, copper and
-       iris are saturated enough to read on both grounds. */
+    /* Light mode. The accents carry over unchanged as fills and rules; every
+       ink that sets text gets a darker value that holds 4.5:1 on cream. */
     .choreo-site[data-theme='light'] {
       color-scheme: light;
       --bg-well: #e2dccf;
@@ -135,14 +157,23 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --ph-btn: var(--bg-well);
       --bg-page: #f2ece1;
       --ink: #211d18;
-      --ink-dim: #6b6255;
-      --ink-faint: #9a9082;
+      --ink-soft: #47423a;
+      --ink-dim: #5e564b;
+      --ink-faint: #6d6458;
       --line: rgba(33, 29, 24, 0.1);
       --line-strong: rgba(33, 29, 24, 0.18);
       --bg-rgb: 239, 233, 223;
       --ink-rgb: 33, 29, 24;
       --surface-tint-rgb: 33, 29, 24;
-      --copper-ink: #a8672a;
+      --ember-ink: #bf2e00;
+      --copper-ink: #905824;
+      --iris-ink: #7334f5;
+      --steel-ink: #5e686e;
+      --hot-ink: #a02600;
+      --focus-ring: var(--ember-ink);
+      --mark-tail: rgba(255, 59, 31, 0.5);
+      --mark-orbit: rgba(94, 104, 110, 0.85);
+      --syn-string: #a24f00;
       --gradient-tail: var(--copper);
       --lightbox-ring: rgba(33, 29, 24, 0.12);
     }
@@ -179,8 +210,17 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     :where(.choreo-site) :deep(:where(:focus-visible)) {
-      outline: 2px solid var(--ember-hot);
+      outline: 2px solid var(--focus-ring);
       outline-offset: 3px;
+    }
+
+    /* The operator-mode container recolors every focused button with an
+       unlayered button:focus:not(:disabled) rule, at (0,2,1). This rule
+       paints the gallery's ring one notch above that, at (0,2,2) with the
+       scope attribute, so a class rule a component sets on its own buttons,
+       at (0,3,0) or more, still wins. :not(svg) is only that notch. */
+    :where(.choreo-site) :deep(button:focus-visible:not(svg)) {
+      outline-color: var(--focus-ring);
     }
 
     /* glimmer-motion marks the document while a drag is held, so nothing in
@@ -198,7 +238,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
     .choreo-site :deep(.syn-tag),
     .choreo-site :deep(.syn-arg),
     .choreo-site :deep(.syn-keyword) {
-      color: var(--iris);
+      color: var(--iris-ink);
     }
 
     .choreo-site :deep(.syn-attr) {
@@ -206,19 +246,16 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     .choreo-site :deep(.syn-string) {
-      color: #ffb36a;
+      color: var(--syn-string);
     }
 
-    .choreo-site :deep(.syn-helper) {
-      color: var(--ember-hot);
-    }
-
+    .choreo-site :deep(.syn-helper),
     .choreo-site :deep(.syn-mustache) {
-      color: var(--ember);
+      color: var(--ember-ink);
     }
 
     .choreo-site :deep(.syn-number) {
-      color: var(--steel);
+      color: var(--steel-ink);
     }
 
     .choreo-site :deep(.syn-comment) {

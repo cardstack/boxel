@@ -28,6 +28,7 @@ import {
 import { randomUUID } from 'crypto';
 import { fromAffinityKey, toAffinityKey } from './affinity.ts';
 import type { AffinityType } from '@cardstack/runtime-common';
+import { withCredentialHeadersMasked } from '../lib/request-telemetry.ts';
 
 // Per-affinity vacancy reported by a prerender server in its heartbeat.
 // Consumed by warm-vacancy-first routing (CS-10758): `idle: true` means
@@ -1606,7 +1607,9 @@ export function buildPrerenderManagerApp(options?: {
           log.info(
             `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
           );
-          log.debug(JSON.stringify(ctxt.req.headers));
+          log.debug(
+            JSON.stringify(withCredentialHeadersMasked(ctxt.req.headers)),
+          );
         }
       });
       return next();

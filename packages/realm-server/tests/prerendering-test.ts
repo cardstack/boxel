@@ -16,6 +16,7 @@ import { toAffinityKey } from '../prerender/affinity.ts';
 import { PagePool } from '../prerender/page-pool.ts';
 import { RenderRunner } from '../prerender/render-runner.ts';
 import { BrowserManager } from '../prerender/browser-manager.ts';
+import type { RealmHttpServer } from '../server.ts';
 
 import {
   setupPermissionedRealmsCached,
@@ -37,7 +38,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
-  installFlakyDepFetchPatch,
+  installFlakyRealmFetchPatch,
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
   installThrottledRAFPatch,
@@ -368,6 +369,7 @@ module(basename(import.meta.filename), function () {
     };
     let prerenderer: Prerenderer;
     let realmAdapter: RealmAdapter;
+    let realmHttpServer: RealmHttpServer;
     let realm: RuntimeRealm;
     let auth = () => {
       let sessions = JSON.parse(
@@ -434,7 +436,7 @@ module(basename(import.meta.filename), function () {
         },
       ],
       onRealmSetup({ realms: setupRealms }) {
-        ({ realm, realmAdapter } = setupRealms[0]);
+        ({ realm, realmAdapter, realmHttpServer } = setupRealms[0]);
         permissions = {
           [realmURL]: ['read', 'write', 'realm-owner'],
         };
@@ -908,10 +910,9 @@ module(basename(import.meta.filename), function () {
         return u;
       };
       let targetTrimmed = stripExecExt(moduleURL);
-      let flakyPatch = installFlakyDepFetchPatch({
-        // Pause only the module's own fetches, in any of the shapes above.
-        urlPattern: `${targetTrimmed}*`,
-        matcher: (url) => stripExecExt(url) === targetTrimmed,
+      let flakyPatch = installFlakyRealmFetchPatch(realmHttpServer, {
+        // Fail only the module's own fetches, in any of the shapes above.
+        matcher: (url) => stripExecExt(url.split('?')[0]) === targetTrimmed,
         failuresBeforeSuccess: 1,
       });
       try {
@@ -956,7 +957,7 @@ module(basename(import.meta.filename), function () {
           'card data rendered correctly after retry',
         );
       } finally {
-        await flakyPatch.restore();
+        flakyPatch.restore();
       }
     });
   });
