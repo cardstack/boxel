@@ -33,7 +33,10 @@ export const motionPreference = new MotionPreference();
  * `observeStage` and `restWhenOff`). Touching the stage, by pointer, key or click, is
  * asking: the stage wakes, and plays under the library's own reduced-motion
  * policy, in which positions land at once and fades still play. `full` asks
- * for the demo as it was designed, reduced motion and all set aside.
+ * for the demo as it was designed: the stage's MotionConfig turns to
+ * `'never'`, which every `{{motion}}` node and `<Choreo>` region inside it
+ * follows. A stage that reads `prefers-reduced-motion` itself, in a media
+ * query or through `matchMedia`, keeps its own reduced behaviour.
  *
  * The container a hold governs wears it as `data-motion-hold`.
  */
