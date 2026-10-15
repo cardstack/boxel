@@ -2,7 +2,7 @@
 
 ## Goal
 
-No listed site names the base realm through the `https://cardstack.com/base/` alias (ADR 002 §1.4). The two comparisons that give wrong answers against prefix-form code refs — the CardDef skip in type-summaries and `Component` detection in module-contents / create-specs — compare against the prefix form and are covered by regression tests.
+No listed site names the base realm through the `https://cardstack.com/base/` alias; base references use the `@cardstack/base/…` prefix form. The two comparisons that give wrong answers against prefix-form code refs — the CardDef skip in type-summaries and `Component` detection in module-contents / create-specs — compare against the prefix form and are covered by regression tests.
 
 ## Changes
 
