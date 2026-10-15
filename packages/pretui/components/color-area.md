@@ -38,7 +38,7 @@ Where it is thinner: no zoom into a region of the plane, no alternate channel pa
 - **Each axis announces a sentence**, not a coordinate.
 - **The painted surface itself is `aria-hidden`**, as is the thumb — they are the visual expression of two values that are already announced.
 - **Keyboard movement is per axis**, which is what the two-slider model buys: arrows move one channel at a time, deliberately, rather than dragging a point around a plane.
-- **A picking plane is the hardest part of any colour tool to use without sight**, and this arrangement does not make it easy — it makes it _possible_, which no single-slider or canvas-only implementation does.
+- **A picking plane is the hardest part of any color tool to use without sight**, and this arrangement does not make it easy — it makes it _possible_, which no single-slider or canvas-only implementation does.
 
 ## Theming
 

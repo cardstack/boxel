@@ -10,7 +10,7 @@ import { Layout } from '../surfaces/layout/index.js';
 //   • boxel-layout's presets hard-code LIGHT hex values —
 //     `--boxel-layout-bg: #f8fafc`, `--boxel-layout-divider: #e2e8f0`,
 //     `--boxel-layout-border: #d1d5db` — so a notebook or tools preset
-//     goes on glowing pale grey the moment a dark theme is applied. Every
+//     goes on glowing pale grey the moment dark mode is applied. Every
 //     one of those knobs is remapped to a Pretui token here, which is the
 //     entire reason PageScaffold exists rather than "just use Layout".
 //   • boxel-layout has exactly one `{{yield}}`: there are no regions. The

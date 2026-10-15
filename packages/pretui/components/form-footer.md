@@ -54,6 +54,6 @@ Gaps:
 
 `--card` or `--inset` for the bar, `--border` and `--pretui-shadow-hairline` for its top edge, `--muted-foreground` for the clean state, `--destructive` for the error state, `--foreground` for the dirty state, plus **Button**'s full token set for the two actions.
 
-`data-dock` (`sticky`/`static`) and `data-state` (`clean`/`dirty`/`error`) are reflected on the root, so a theme can tint the bar by state without reaching inside. A theme that gives the bar a transparent background will let form content show through while scrolling under it — give it an opaque `--card` or a backdrop.
+`data-dock` (`sticky`/`static`) and `data-state` (`clean`/`dirty`/`error`) are reflected on the root, so a stylesheet can tint the bar by state without reaching inside. A theme that gives the bar a transparent background will let form content show through while scrolling under it — give it an opaque `--card` or a backdrop.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -22,7 +22,7 @@ It is the kit's waiting-state voice for text — a pending lot, an in-flight job
 
 **motion-primitives' TextShimmer** and **ShimmerWave**, plus **react-bits**.
 
-Where Pretui is better: **the colors ride the token channel** — `--muted-foreground` for the base and `--foreground` for the sheen — rather than being a hardcoded gradient. So a shimmer in a dark theme shimmers correctly without anyone restating the gradient, and a shimmering label sits at the same weight as the static labels around it. The sweep is also a pure CSS loop with no JavaScript driving it.
+Where Pretui is better: **the colors ride the token channel** — `--muted-foreground` for the base and `--foreground` for the sheen — rather than being a hardcoded gradient. So a shimmer in dark mode shimmers correctly without anyone restating the gradient, and a shimmering label sits at the same weight as the static labels around it. The sweep is also a pure CSS loop with no JavaScript driving it.
 
 Where it is thinner: one sweep direction, no pause, no finite repeat count, and no way to shimmer anything but a text string — a shimmering row or card needs **Skeleton** instead. There is no wave variant either; motion-primitives' ShimmerWave animates per character, and this does not.
 

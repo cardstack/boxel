@@ -33,7 +33,7 @@ import type { BlockHeadingLevel } from '../internal/blocks';
 //     surface that could never follow a theme → there is not one colour
 //     literal outside a `var()` fallback here, and the dark band is
 //     `@tone='neutral' @appearance='accent'`, which a theme re-dresses and
-//     a dark theme inverts for free.
+//     dark mode inverts for free.
 //   · Zero args, all copy hardcoded → everything is an arg.
 //   · Called a footer but rendered a `<section>` with an `<h3>` and no
 //     landmark → it is a `<section>` because a CTA band IS a section, and

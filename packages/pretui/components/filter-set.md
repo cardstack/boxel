@@ -15,7 +15,7 @@ The narrow, read-only face of a condition set: each condition collapsed to one l
 
 **The three callbacks are also the three affordances.** Supply `@onEdit` and each row gets an edit control; supply `@onRemove` and each gets a remove; supply `@onAdd` and the add button appears. Omit all three and it is pure display. One arg, one control — no separate `showEdit` booleans.
 
-**`@resources` exists so summaries read with field _labels_, not paths.** A condition whose `targetPath` is `"Line Item"[SKU = "COPY-04"].Quantity` should summarise as "Line item quantity is greater than 10", and the resource catalogue is what makes that possible. Without it you get the path, which is correct but unreadable.
+**`@resources` exists so summaries read with field _labels_, not paths.** A condition whose `targetPath` is `"Line Item"[SKU = "COPY-04"].Quantity` should summarize as "Line item quantity is greater than 10", and the resource catalog is what makes that possible. Without it you get the path, which is correct but unreadable.
 
 **`@customLogic` is echoed verbatim** when `@logic` is `custom` — the component does not re-render `1 AND (2 OR 3)` into prose, because paraphrasing a grammar is how a summary starts lying about the rule.
 

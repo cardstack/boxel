@@ -37,7 +37,7 @@ Gaps:
 - **`title='This reference is gone'` is the only explanation**, and `title` is unreliable: it is not shown on touch, not reachable by keyboard, and announced inconsistently. Worse, on a non-interactive `<span>` many screen readers ignore it entirely — so for most assistive-tech users the element announces as "missing card" with no indication of what that means. Making that sentence visible text, or wiring it via `aria-describedby`, would fix it.
 - **Strike-through is decorative styling, not semantic.** `text-decoration: line-through` on a `<span>` conveys nothing to assistive tech. If the strike is meant to say "this used to be a link", `<del>` or `<s>` would carry it — though `<s>` is a stretch here.
 - **The state is conveyed visually by colour, dash pattern and strike**, none of which reach assistive tech. The word "missing" in the default label is doing all the semantic work, which is why overriding `@label` with something that omits the word ("Q3 Report") silently removes the only accessible signal that anything is wrong. Prefer labels that keep it.
-- **`--ink-3` on `--inset` is the kit's quietest ink on its quietest surface**, and at 11.5px mono it is close to the WCAG **1.4.3** floor. Verify per theme; this is the component most likely to fail contrast in a light theme.
+- **`--ink-3` on `--inset` is the kit's quietest ink on its quietest surface**, and at 11.5px mono it is close to the WCAG **1.4.3** floor. Verify per theme; this is the component most likely to fail contrast in light mode.
 - `@refId` at `opacity: 0.7` on top of `--ink-3` compounds that — it is decorative-grade contrast carrying debugging information.
 - Nothing is focusable, which is correct: there is nothing to do.
 

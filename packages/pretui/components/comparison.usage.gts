@@ -41,7 +41,7 @@ class ComparisonUsage extends Component {
               <div class='cmp-layer cmp-layer-before'>
                 <span class='cmp-tag'>Before</span>
                 <p class='cmp-copy'>The bare wireframe — grayscale, flat, no
-                  tokens on it.</p>
+                  accent hue.</p>
               </div>
             </:before>
             <:after>

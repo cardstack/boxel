@@ -25,7 +25,7 @@ A QR code generated from a value, with the encoded value also present as text or
 
 **The encoded value is never removed outright.** `@valueDisplay='none'` hides it visually and keeps it in the accessibility tree, because a QR code alone is unusable to anyone who cannot point a camera at the screen they are already looking at.
 
-**`@overlay` is a flag _and_ a block, and the flag is what does the work.** Named blocks are not visible from component JavaScript, so the flag is what raises error correction to `'H'` and reserves the centre. The block renders **only** when the flag is set — so forgetting it makes the overlay visibly vanish rather than silently producing an unscannable code.
+**`@overlay` is a flag _and_ a block, and the flag is what does the work.** Named blocks are not visible from component JavaScript, so the flag is what raises error correction to `'H'` and reserves the center. The block renders **only** when the flag is set — so forgetting it makes the overlay visibly vanish rather than silently producing an unscannable code.
 
 **The quiet zone lives in the `viewBox`, not in CSS padding**, so a caller cannot style away the margin the symbol needs in order to scan — the prior version accepted `margin: 0` and stretched the symbol to fill whatever box it was in besides.
 

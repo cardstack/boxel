@@ -1,6 +1,6 @@
 ## What it is
 
-What an agent produced, as a small card: an eyebrow, a title, a few lines, and an overflow menu. Use it when a run yields an artefact worth surfacing — a file it wrote, a record it created, a summary it generated. If you are showing a _change_ rather than a product, **DiffBlock**. If you are showing progress, **WorkItem**. If the result is a real Boxel card, **FittedCard** renders the card itself and is the better choice.
+What an agent produced, as a small card: an eyebrow, a title, a few lines, and an overflow menu. Use it when a run yields an artifact worth surfacing — a file it wrote, a record it created, a summary it generated. If you are showing a _change_ rather than a product, **DiffBlock**. If you are showing progress, **WorkItem**. If the result is a real Boxel card, **FittedCard** renders the card itself and is the better choice.
 
 ## The contract
 
@@ -28,7 +28,7 @@ No pattern governs it; it is a small content card with one button.
 
 Gaps, and the menu button is the clearest:
 
-- **The `⋯` button is labelled `aria-label="More"` and nothing else.** It carries no `aria-haspopup`, no `aria-expanded`, and — because the menu is the caller's — nothing connects it to whatever it opens. "More" also does not say more _about what_: on a transcript with eight results, eight buttons all announce identically. `aria-label="More actions for {{@title}}"` would fix the second problem; `aria-haspopup="menu"` plus `aria-expanded` managed by the caller would fix the first. Note **Menu** in this kit has the same wiring gap, so composing them does not resolve it.
+- **The `⋯` button is labeled `aria-label="More"` and nothing else.** It carries no `aria-haspopup`, no `aria-expanded`, and — because the menu is the caller's — nothing connects it to whatever it opens. "More" also does not say more _about what_: on a transcript with eight results, eight buttons all announce identically. `aria-label="More actions for {{@title}}"` would fix the second problem; `aria-haspopup="menu"` plus `aria-expanded` managed by the caller would fix the first. Note **Menu** in this kit has the same wiring gap, so composing them does not resolve it.
 - **The card has no accessible name or grouping.** Eyebrow, title and lines are sibling elements, so a screen-reader user hears them as one run with no indication that they form a unit or where it ends. `role="group"` with `aria-labelledby` pointing at the title would give it a boundary — worth doing precisely because a transcript is a long series of these.
 - **The title is not a heading**, so a transcript of results has no structure to navigate by. Same gap as **Panel**, **Toolbar**, **EmptyState** and **Stat** — the kit needs an authorable heading level.
 - **The eyebrow is announced as loose text before the title**, so the title alone is often not self-describing.

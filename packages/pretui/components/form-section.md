@@ -62,6 +62,6 @@ Gaps:
 
 `--border` and `--pretui-shadow-hairline` for the fieldset edge, `--foreground` for the legend, `--muted-foreground` for the description, `--destructive` / `--warning` / `--pretui-info` for the issue count tiers, plus whatever **FormField** and **FormLayout** consume inside.
 
-`data-pretui-form-section` (carrying the section id) and `data-pretui-form-section-body` are structural hooks the form's focus routing depends on — a theme must not repurpose or remove them. `@span` defaults to spanning every column of an enclosing FormLayout, which is almost always what a section should do.
+`data-pretui-form-section` (carrying the section id) and `data-pretui-form-section-body` are structural hooks the form's focus routing depends on — no stylesheet or call site should repurpose or remove them. `@span` defaults to spanning every column of an enclosing FormLayout, which is almost always what a section should do.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

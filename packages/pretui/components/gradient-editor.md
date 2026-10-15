@@ -31,7 +31,7 @@ Where it is thinner: linear gradients only in the stop model — no radial or co
 
 - **Each stop is a **ColorStopEditor**, which carries its own trigger, name and remove control** — so the bar is a set of named controls rather than a canvas of draggable dots.
 - **The gradient preview is presentation.** The value lives in the stops, each of which is separately reachable and announced.
-- **Editing a gradient without sight is possible but not pleasant**, and honesty matters here: the component gives every stop a keyboard path, and the _result_ is still a visual artefact that cannot be perceived from its parts.
+- **Editing a gradient without sight is possible but not pleasant**, and honesty matters here: the component gives every stop a keyboard path, and the _result_ is still a visual artifact that cannot be perceived from its parts.
 - **`@lockInterpolation` removes a control**, which reduces what a reader has to travel through when the choice is not theirs to make.
 
 ## Theming

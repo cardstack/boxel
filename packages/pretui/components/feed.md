@@ -51,6 +51,6 @@ The Feed itself paints very little — it is structure plus focus management. Co
 
 Almost all visual weight belongs to what you yield into `<:item>`, which is the intent: a feed of comments and a feed of build results should look nothing alike, and the component's job is the semantics they share.
 
-The focused-article indicator is the one thing worth checking per theme. Because the feed has a roving tabindex, an article _will_ receive focus, and if the theme paints no visible focus ring on a non-interactive `role="article"` element, a keyboard user paging with Page Down sees nothing move.
+The focused-article indicator is the one thing worth checking per theme. Because the feed has a roving tabindex, an article _will_ receive focus, and the ring on it is drawn in `--ring`; if that does not stand out against `--card`, a keyboard user paging with Page Down sees nothing move.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

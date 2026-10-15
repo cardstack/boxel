@@ -31,7 +31,7 @@ At rest this is a **layout** capability rather than motion. It lives in the moti
 
 **A custom `@path` is validated against an allowlist** and falls back to the circle rather than being written through.
 
-**`@travel` defaults to off, and that is a rule rather than a preference.** Rotation reads as "something is ongoing". It is honoured only for the closed shapes, and when it is on it must be paired with a text affordance saying _what_ is ongoing — it is never the only carrier of that fact.
+**`@travel` defaults to off, and that is a rule rather than a preference.** Rotation reads as "something is ongoing". It is honored only for the closed shapes, and when it is on it must be paired with a text affordance saying _what_ is ongoing — it is never the only carrier of that fact.
 
 ## Prior art
 

@@ -61,7 +61,7 @@ What the component does, from its rendered markup and its tests:
 - **An empty collection renders the EmptyState**, not an empty `<ul>`.
 - **`@busy` sets `aria-busy`** on the root and dims it without unmounting the rows.
 
-The caller's failures to avoid: a row whose only action is a click handler on the `<li>` is not reachable as a link and does not announce as one — put an `<a>` in the row; a row with no `@rowLabel` has selection controls named "Row 1", "Row 2"; and selection is shown by a background tint plus a rule down the inline start, so a theme that removes the rule leaves color as the only signal.
+The caller's failures to avoid: a row whose only action is a click handler on the `<li>` is not reachable as a link and does not announce as one — put an `<a>` in the row; a row with no `@rowLabel` has selection controls named "Row 1", "Row 2"; and selection is shown by a background tint plus a rule down the inline start, so a stylesheet that removes the rule leaves color as the only signal.
 
 ## Theming
 

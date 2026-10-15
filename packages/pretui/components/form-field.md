@@ -60,7 +60,7 @@ Gaps and cautions:
 
 `--field` and `--input` (repointed to `transparent` in readonly, and to a `--destructive` mix when invalid — the token channel is how the dress reaches caller-supplied controls without `:deep()`), `--foreground`, `--muted-foreground`, `--destructive`, `--pretui-field-disabled-opacity` (default 0.5), `--inset`, `--border`, `--pretui-shadow-hairline`, plus the **Label** component's mono eyebrow tokens and **Token**'s tokens when `@showRuleId` is on.
 
-`data-readonly`, `data-disabled`, `data-static` and the layout/span attributes are all reflected on the root, so a theme can hook any of them. Because the invalid dress travels by token, a custom control that reads `--field`/`--input` gets error styling for free — and one that hard-codes its colors will silently opt out.
+`data-readonly`, `data-disabled`, `data-static` and the layout/span attributes are all reflected on the root, so a stylesheet can hook any of them. Because the invalid dress travels by token, a custom control that reads `--field`/`--input` gets error styling for free — and one that hard-codes its colors will silently opt out.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

@@ -35,7 +35,7 @@ No APG pattern. The relevant criteria are WCAG **1.4.1 Use of Colour**, **4.1.3 
 
 What is right, and it is unusually good for this kind of component:
 
-- **State is always text.** `1.4.1` is satisfied by construction, not by a lint rule — the tone is a colour _and_ a phrase, and the phrase is not optional. Most agent UIs fail exactly here.
+- **State is always text.** `1.4.1` is satisfied by construction, not by a lint rule — the tone is a color _and_ a phrase, and the phrase is not optional. Most agent UIs fail exactly here.
 - **The `● needs you` phrasing puts the meaning in words** rather than in the attention hue.
 - **Progress uses ProgressBar** rather than a bespoke bar, inheriting its role and value properties.
 

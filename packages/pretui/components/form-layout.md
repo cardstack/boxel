@@ -47,6 +47,6 @@ Gaps:
 
 `--space-5` (the default gap, overridable via `@gap`), the label column width (`@labelWidth`, default `9rem`), and whatever **FormField** consumes. The layout itself paints nothing — no background, no border, no shadow.
 
-`data-direction` and `data-columns` are reflected on the container, so a theme can hook either without reaching into the grid. Because the breakpoints are container queries, a theme cannot retune them through tokens; changing where columns collapse means editing the component.
+`data-direction` and `data-columns` are reflected on the container, so a stylesheet can hook either without reaching into the grid. Because the breakpoints are container queries, a theme cannot retune them through tokens; changing where columns collapse means editing the component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

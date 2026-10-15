@@ -36,7 +36,7 @@ Honest gaps:
 - **No accessible name of its own.** An `<Input>` used outside `Field`/`FormField`/`FormField`'s descendants and without an explicit `aria-label` is unlabelled. A placeholder is not a label.
 - `@required` sets the native attribute, which is correct, and suppresses the "Optional" indicator. `@optional` is a purely visual marker with no ARIA meaning — fine, but do not read it as the inverse of `@required`.
 - `@disabled` uses the native attribute, so the control leaves the tab order and its value is not submitted. If you need a read-only-but-focusable field, pass `readonly` through `...attributes` instead.
-- Focus ring is `--ring`, applied by BoxelInput. Verify it against WCAG 2.4.11 in dark themes — the default is `--primary`, which on a `--field` background can be low-contrast.
+- Focus ring is `--ring`, applied by BoxelInput. Verify it against WCAG 2.4.11 in dark mode — the default is `--primary`, which on a `--field` background can be low-contrast.
 
 ## Theming
 

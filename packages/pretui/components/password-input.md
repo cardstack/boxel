@@ -53,6 +53,6 @@ Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`
 
 Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics.
 
-`data-revealed` is reflected on the wrapper, so a theme can dress the revealed state — a tinted hairline, a changed toggle color — beyond the icon swap. Given that the revealed state has real privacy consequences and is currently signaled only by the glyph, using that hook is worth doing. Note the inline metrics differ between revealable and non-revealable modes, so a theme cannot change the toggle's reserved width through a token.
+`data-revealed` is reflected on the wrapper, so a stylesheet can dress the revealed state — a tinted hairline, a changed toggle color — beyond the icon swap. Given that the revealed state has real privacy consequences and is currently signaled only by the glyph, using that hook is worth doing. Note the inline metrics differ between revealable and non-revealable modes, so a theme cannot change the toggle's reserved width through a token.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

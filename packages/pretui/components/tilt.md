@@ -19,7 +19,7 @@ Stated plainly, because the kit's own rules name this component as the canonical
 
 **`@plate` is the first reason to keep it.** It makes the tilted thing an actual kit surface — card radius, `--pretui-shadow-card` at rest lifting to `--pretui-shadow-raised` on engage — so a screenshot shows an elevated card with the tilt as garnish rather than a rectangle that does nothing.
 
-**`@press` is the second, and it is the only part of Tilt that encodes anything.** It tips the plate toward the _actual_ press point and sinks it, which is a real state transition: pressed, and here. If you keep one behaviour, keep this one.
+**`@press` is the second, and it is the only part of Tilt that encodes anything.** It tips the plate toward the _actual_ press point and sinks it, which is a real state transition: pressed, and here. If you keep one behavior, keep this one.
 
 **The default max is 8 degrees, not 15.** Upstream's 15 reads as a toy.
 

@@ -53,7 +53,7 @@ Gaps and cautions:
 
 Severity hues: `--destructive` (error), `--warning`, `--pretui-info`, each feeding the Law 2 treatment that derives ink, glyph and any tint from the single hue. Type: `--text-ui-sm`. Provenance: **Token**'s `--font-mono`, `--inset`, `--muted-foreground`, `--pretui-shadow-hairline`.
 
-Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. A theme that removes the glyphs would break that — they are not decoration.
+Because severity is carried by **glyph and hue together**, it survives WCAG 1.4.1 (Use of Color) even in a theme whose warning and error hues are close. Removing the glyphs would break that — they are not decoration.
 
 A theme must define `--warning` and `--pretui-info` legibly at 11.5px against `--card`; amber and pale blue at small sizes are the two most common contrast failures in this territory.
 

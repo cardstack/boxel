@@ -38,7 +38,7 @@ Gaps, plainly:
 - **No accessible name of its own.** Outside `Field`/`FormField`, and without an explicit `aria-label`, the control is unnamed. A placeholder is not a label (and in a textarea it disappears the instant a character is typed, so it is worse here than on Input).
 - No `rows` arg means the initial height cannot express expected length — a one-sentence field and a five-paragraph field look identical, which is a WCAG 3.3.2 _instructions_ smell even though it is not a failure.
 - `@disabled` is the native attribute: out of the tab order, value not submitted. Use `readonly` via `...attributes` if you need focusable-but-fixed.
-- `resize: vertical` is good for 1.4.4/1.4.10 reflow; verify the focus ring (`--ring`, default `--primary`) against 2.4.11 in dark themes.
+- `resize: vertical` is good for 1.4.4/1.4.10 reflow; verify the focus ring (`--ring`, default `--primary`) against 2.4.11 in dark mode.
 
 ## Theming
 

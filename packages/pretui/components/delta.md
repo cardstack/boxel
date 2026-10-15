@@ -22,7 +22,7 @@ There is no component for this in Radix, Web Awesome, shadcn or React Spectrum �
 Where making it a component pays off:
 
 - **The sign→colour mapping is decided once.** Green-up/red-down is a convention, not a law — it is inverted in several East Asian markets, and it means the opposite for a cost metric than for a revenue metric. Having one component means changing that convention is one edit, and having it _not_ be a component means the ternary is copy-pasted into forty call sites with three different green tokens.
-- **`data-sign` is reflected**, so a theme or a call site can restyle by sign without touching the logic.
+- **`data-sign` is reflected**, so a call site can restyle by sign without touching the logic.
 - **Tabular figures by default**, so a column of deltas aligns on the decimal point. This is the detail hand-rolled deltas always miss.
 
 Where it is thinner than it should be:

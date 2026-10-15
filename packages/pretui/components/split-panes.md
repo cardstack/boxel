@@ -19,7 +19,7 @@ Two behaviours worth knowing. **Double-clicking a handle collapses a pane**, and
 
 This is a **thin runtime wrap of boxel-ui's `ResizablePanelGroup`**, per the territory's foundation rule: the machinery is boxel-ui's and only the cloth changes. The engine supplies per-panel constraint solving, pointer-captured drag (so the drag survives the pointer leaving the handle), and the double-click collapse.
 
-The dress note is the interesting implementation detail: **boxel-ui's handle declares its own `--boxel-panel-resize-handle-*` colours _from_ `--boxel-450` and `--boxel-highlight`**, so the wrapper cannot repoint the handle tokens directly — it has to remap those two upstream channel tokens for the subtree instead. That is the general shape of the retrofit pattern in this kit: when a token is derived rather than read, you re-skin one level up.
+The dress note is the interesting implementation detail: **boxel-ui's handle declares its own `--boxel-panel-resize-handle-*` colors _from_ `--boxel-450` and `--boxel-highlight`**, so the wrapper cannot repoint the handle tokens directly — it has to remap those two upstream channel tokens for the subtree instead. That is the general shape of the retrofit pattern in this kit: when a token is derived rather than read, you re-skin one level up.
 
 Against the field: **`react-resizable-panels`** (which shadcn wraps as `ResizablePanel`) is the reference — `direction`, `defaultSize`/`minSize`/`maxSize`, `collapsible`/`collapsedSize`, `onLayout`, `autoSaveId` for localStorage persistence, and `ResizableHandle withHandle`. **Web Awesome `wa-split-panel`** takes `position`/`position-in-pixels`, `vertical`, `disabled`, `primary`, `snap` and `snap-threshold`. **React Spectrum** has no equivalent.
 

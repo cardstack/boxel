@@ -15,7 +15,7 @@ That is the whole API, and the smallness is the point. Two decisions follow from
 
 **Positioning is `position: absolute` against a `position: relative` wrapper, with no collision handling.** A tooltip on a control at the right edge of the viewport will overflow it. `@side` is a static choice, not a preference. This is a deliberate departure from the rest of the kit's overlays, which use the `anchorTo` measuring modifier — the trade is made for prerender safety and per-instance cost.
 
-The tooltip is **always dark**, in both light and dark mode — the kit calls this "the lining". It is a deliberate constant so the affordance reads identically everywhere.
+The tooltip is **always dark**, in both light and dark modes — the kit calls this "the lining". It is a deliberate constant so the affordance reads identically everywhere.
 
 ## Prior art
 

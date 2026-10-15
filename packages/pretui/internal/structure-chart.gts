@@ -110,7 +110,7 @@ export const PLOT_STYLE = [
 /**
  * The categorical ramp. Ordinal scales receive these verbatim.
  *
- * Seven, not five: the theme contract compiles a seven-slot palette
+ * Seven, not five: the theme contract defines a seven-slot palette
  * (`--chart-1…7`), so stopping at five made a six-series chart silently
  * reuse color 1 for series 6 while two perfectly good theme colors went
  * unused — and it hid the top of the palette axis from anyone judging the

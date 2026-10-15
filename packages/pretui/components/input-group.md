@@ -48,7 +48,7 @@ Gaps, and the affix one is the interesting one:
 
 Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3`, `--control-h`, `--radius`, `--text-ui-md`, `--track-ui`, plus **Button**/**IconButton**/**Select** tokens for whatever accessories you place.
 
-Forwarded into boxel-ui through the `--boxel-*` channel. `data-state` (the validation enum) and `data-disabled` are reflected on the wrapper, so a theme can dress both without reaching inside.
+Forwarded into boxel-ui through the `--boxel-*` channel. `data-state` (the validation enum) and `data-disabled` are reflected on the wrapper, so a stylesheet can dress both without reaching inside.
 
 The shared hairline is the thing to check per theme: because the group's edge and its internal dividers both come from `--input`, a theme with a strong input color will see the dividers as prominently as the outline, and the assembly stops reading as one control. A theme that wants quieter dividers has no separate token for them — that is the main theming limitation here.
 
